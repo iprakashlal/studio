@@ -21,6 +21,26 @@ Built with React, TypeScript, Tailwind CSS and Vite.
 
 The data repository can be private because the Studio reads it through the GitHub API with your token.
 
+
+## Themes
+
+Every portfolio and shop can use any of **55 themes** (`src/themes/catalog.ts`). A theme sets colours, fonts and corners, plus:
+
+| Setting | Choices |
+|---|---|
+| Hero layout | split, reverse, centred, stacked (wide art band / text over a full-width image), minimal |
+| Menu | floating pill, full-width bar, transparent, centred |
+| Cards | soft, outline, elevated, bold border, frosted glass, flat |
+| Buttons | offset shadow, rounded, pill, square, outline, glow |
+| Animation | rise, fade, zoom, slide, blur, flip, none |
+| Background | blueprint grid, dots, lines, diagonal, waves, crosses, plain |
+| Decorative shapes | solid, outlined, soft blobs, none |
+| Headings / section labels / width | normal, uppercase, italic, tight · dot, plain, numbered, line, brackets, slash · normal, wide, narrow |
+| Portfolio only | About (bento / stack), Skills (3D cube / card grid), Work (card deck / timeline) |
+| Shop only | products per row (auto, 2, 3, 4), product card (classic, framed, name over image, minimal) |
+
+Pick one in **New project**, or later under **Design → Theme & layout** (also in each site's own CMS). Choosing a theme only changes `content.theme`; your content stays. Every setting stays editable after picking. The templates read these values as `data-*` attributes on `<html>` and switch their CSS, so exported sites need no extra files. Add a theme by adding one row to `ROWS` in `catalog.ts`.
+
 ## Set up (about 10 minutes)
 
 1. **Create two repositories** on GitHub:

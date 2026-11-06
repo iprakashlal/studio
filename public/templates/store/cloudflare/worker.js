@@ -105,6 +105,7 @@ async function sendEmail(d, to, subject, html, replyTo) {
     headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
     body: JSON.stringify({ from, to, subject, html, ...replyTo ? { reply_to: replyTo } : {} })
   }).catch(() => null);
+  if (r && !r.ok) console.error("Resend refused the email:", r.status, await r.text().catch(() => ""));
   return !!r && r.ok;
 }
 var owners = (d) => d.env("OWNER_EMAIL").split(",").map((s) => s.trim()).filter(emailOk);
@@ -324,7 +325,12 @@ async function admin(d, b, token) {
 function makeHandler(d, extra = {}) {
   return async (req) => {
     const site = d.env("SITE_URL");
-    const allowed = [site ? new URL(site).origin : "", ...d.env("ALLOWED_ORIGINS").split(",").map((s) => s.trim())].filter(Boolean);
+    let siteOrigin = "";
+    try {
+      siteOrigin = site ? new URL(site.trim()).origin : "";
+    } catch {
+    }
+    const allowed = [siteOrigin, ...d.env("ALLOWED_ORIGINS").split(",").map((s) => s.trim())].filter(Boolean);
     const origin = req.headers.get("origin") || "";
     const cors = {
       "Access-Control-Allow-Origin": allowed.includes(origin) ? origin : allowed[0] || "*",
@@ -680,19 +686,109 @@ function routes(d, gh, env, store) {
     }
   };
 }
+async function health(env, f, repo) {
+  const e = (k) => String(env[k] ?? "").trim();
+  const checks = [];
+  const add = (setting, ok2, detail) => checks.push({ setting, ok: ok2, detail });
+  let siteOrigin = "";
+  const site = e("SITE_URL");
+  if (!site) add("SITE_URL", false, "Missing. Set it to your shop's address, e.g. https://iprakashlal.github.io/Myshop/");
+  else if (!/^(https:\/\/[^\s]+|http:\/\/(localhost|127\.0\.0\.1)(:\d+)?\/\S*)$/.test(site)) add("SITE_URL", false, `"${site}" must start with https:// and have no spaces.`);
+  else {
+    try {
+      siteOrigin = new URL(site).origin;
+    } catch {
+    }
+    const base = site.replace(/\/?$/, "/");
+    try {
+      const r = await f(base + "content.json", { headers: { "cache-control": "no-cache" } });
+      if (!r.ok) add("SITE_URL", false, `${base}content.json returned ${r.status}. Check the address (letters are case-sensitive, e.g. /Myshop/) and that the shop is published.`);
+      else {
+        const c = await r.json().catch(() => null);
+        const be = c?.backend || {};
+        add("SITE_URL", true, `Shop found at ${base} ("${c?.brand?.name || "Shop"}").`);
+        add("Shop CMS backend", !!be.enabled && be.provider === "cloudflare", be.enabled && be.provider === "cloudflare" ? `Backend on, Cloudflare selected, customer sign-in ${be.accounts ? "on" : "off"}.` : "In the shop's admin.html \u2192 Accounts & backend: switch on the backend, choose Cloudflare Worker + GitHub files, paste this Worker's URL, then Save & publish.");
+      }
+    } catch {
+      add("SITE_URL", false, `Couldn't load ${base}content.json.`);
+    }
+  }
+  if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) add("DATA_REPO", false, `"${e("DATA_REPO")}" should look like iprakashlal/shop-data`);
+  else if (!e("GITHUB_TOKEN")) add("GITHUB_TOKEN", false, "Missing. Add the fine-grained token for the data repo as a Secret.");
+  else {
+    try {
+      const r = await f(`https://api.github.com/repos/${repo}`, { headers: { Authorization: `Bearer ${e("GITHUB_TOKEN")}`, Accept: "application/vnd.github+json", "User-Agent": "site-studio-shop" } });
+      const j = await r.json().catch(() => ({}));
+      if (r.status === 401) add("GITHUB_TOKEN", false, "GitHub rejected the token (expired, deleted or copied wrong).");
+      else if (r.status === 404) add("DATA_REPO", false, `${repo} not found, or the token doesn't include it (token \u2192 Repository access \u2192 add it).`);
+      else if (!r.ok) add("DATA_REPO", false, `GitHub answered ${r.status}.`);
+      else if (!j.private) add("DATA_REPO", false, `${repo} is public. Make it private: orders contain customer details.`);
+      else if (j.permissions && !j.permissions.push) add("GITHUB_TOKEN", false, "The token can read but not write. Set Contents: Read and write.");
+      else add("DATA_REPO + GITHUB_TOKEN", true, `${repo} is private and reachable.`);
+    } catch {
+      add("DATA_REPO", false, "Couldn't reach GitHub.");
+    }
+  }
+  add("AUTH_SECRET", e("AUTH_SECRET").length >= 32, e("AUTH_SECRET").length >= 32 ? "Set." : "Missing or shorter than 32 characters. Run crypto.randomUUID() + crypto.randomUUID() in a browser console and paste the result as a Secret.");
+  add("RESEND_API_KEY", /^re_/.test(e("RESEND_API_KEY")), /^re_/.test(e("RESEND_API_KEY")) ? "Set." : "Missing or not a Resend key (starts with re_). No emails or sign-in codes can be sent without it.");
+  const from = e("MAIL_FROM");
+  const fromOk = /^[^<>@]*<[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+>$/.test(from) || /^[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+$/.test(from);
+  add("MAIL_FROM", fromOk, !from ? "Missing. Example: My Shop <onboarding@resend.dev>" : !fromOk ? `"${from}" isn't a valid sender. Use exactly: Name <address@domain>, with nothing after the closing >. Example: My Shop <onboarding@resend.dev>` : /onboarding@resend\.dev/i.test(from) ? `${from}. Resend's test sender: emails reach ONLY your own Resend sign-up email. Verify your domain in Resend to email customers.` : from);
+  add("OWNER_EMAIL", emailOk(e("OWNER_EMAIL").split(",")[0] || ""), emailOk(e("OWNER_EMAIL").split(",")[0] || "") ? e("OWNER_EMAIL") : "Missing. Your email: gets new-order emails and signs in to Orders.");
+  const ok = checks.every((c) => c.ok);
+  const body = {
+    status: ok ? "Ready. The shop can use this Worker." : "Not ready. Fix the settings marked ok: false under Settings \u2192 Variables and Secrets, press Deploy, then reload this page.",
+    shop_pages_allowed_from: [siteOrigin, ...e("ALLOWED_ORIGINS").split(",").map((s) => s.trim())].filter(Boolean),
+    checks
+  };
+  return new Response(JSON.stringify(body, null, 2), { status: ok ? 200 : 500, headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" } });
+}
+var lastMailTest = 0;
+async function mailTest(env, f) {
+  const e = (k) => String(env[k] ?? "").trim();
+  const out = (o, status2 = 200) => new Response(JSON.stringify(o, null, 2), { status: status2, headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" } });
+  const to = e("OWNER_EMAIL").split(",")[0].trim();
+  if (!emailOk(to)) return out({ sent: false, problem: "Set OWNER_EMAIL first: the test email goes there." }, 400);
+  if (Date.now() - lastMailTest < 3e4) return out({ sent: false, problem: "Wait 30 seconds between tests." }, 429);
+  lastMailTest = Date.now();
+  const r = await f("https://api.resend.com/emails", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${e("RESEND_API_KEY")}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ from: e("MAIL_FROM"), to: [to], subject: "Shop email test", html: "<p>If you can read this, your shop can send emails.</p>" })
+  }).catch(() => null);
+  if (!r) return out({ sent: false, problem: "Couldn't reach Resend." }, 502);
+  const text = await r.text().catch(() => "");
+  let msg = text;
+  try {
+    msg = JSON.parse(text).message || text;
+  } catch {
+  }
+  const hint = r.ok ? `Sent to ${to}. Check the inbox (and spam).` : /own email|testing emails/i.test(msg) ? "Resend's test sender (onboarding@resend.dev) only delivers to the email you signed up to Resend with. Set OWNER_EMAIL to that email and sign in with it, or verify your own domain in Resend and change MAIL_FROM to an address on it." : /domain is not verified|not verified/i.test(msg) ? "The domain in MAIL_FROM isn't verified in Resend. Finish Resend \u2192 Domains, or use My Shop <onboarding@resend.dev> for testing." : /api key|unauthori|forbidden|invalid/i.test(msg) || r.status === 401 || r.status === 403 ? "RESEND_API_KEY is wrong, deleted or lacks sending access. Create a new key in Resend \u2192 API Keys (Sending access, All domains) and replace the secret." : /from/i.test(msg) ? "MAIL_FROM is malformed. Use exactly: My Shop <onboarding@resend.dev>" : "See Resend's message above.";
+  return out({ sent: r.ok, to, from: e("MAIL_FROM"), resend_status: r.status, resend_says: msg, what_to_do: hint }, r.ok ? 200 : 500);
+}
 var shop_worker_default = {
   async fetch(req, env) {
-    const e = (k) => String(env[k] ?? "");
+    const e = (k) => String(env[k] ?? "").trim();
     const f = (...a) => fetch(...a);
     const now = () => /* @__PURE__ */ new Date();
-    const repo = e("DATA_REPO").trim().replace(/^https:\/\/github\.com\//, "").replace(/\/+$/, "");
+    const repo = e("DATA_REPO").replace(/^https:\/\/github\.com\//, "").replace(/\/+$/, "");
+    const origin = req.headers.get("origin") || "*";
+    const fail = (msg) => new Response(JSON.stringify({ error: msg }), { status: 500, headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": origin, "Access-Control-Allow-Headers": "authorization, content-type", "Access-Control-Allow-Methods": "POST, OPTIONS", Vary: "Origin" } });
+    if (req.method === "GET" && new URL(req.url).searchParams.has("mailtest")) return mailTest(env, f);
+    if (req.method === "GET") return health(env, f, repo);
+    if (req.method === "POST") {
+      if (!/^(https:\/\/\S+|http:\/\/(localhost|127\.0\.0\.1)(:\d+)?\/\S*)$/.test(e("SITE_URL"))) return fail("The shop server isn't set up: SITE_URL is missing or doesn't start with https://. Open the Worker's address in a browser to see what to fix.");
+      if (!/^[\w.-]+\/[\w.-]+$/.test(repo) || !e("GITHUB_TOKEN")) return fail("The shop server isn't set up: add DATA_REPO and GITHUB_TOKEN in the Worker's settings. Open the Worker's address in a browser to see what to fix.");
+    }
     const gh = new GitHub(repo, e("GITHUB_TOKEN"), f);
     const store = githubDb(gh, env, now);
     const d = { db: store.db, env: e, fetch: f, now };
-    if (req.method === "POST" && (!/^[\w.-]+\/[\w.-]+$/.test(repo) || !e("GITHUB_TOKEN"))) {
-      return new Response(JSON.stringify({ error: "The shop server isn't set up: add DATA_REPO and GITHUB_TOKEN in the Worker's settings." }), { status: 500, headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" } });
+    try {
+      return await makeHandler(d, routes(d, gh, env, store))(req);
+    } catch (x) {
+      console.error(x);
+      return fail("The shop server hit an error. Open the Worker's address in a browser to check its settings.");
     }
-    return makeHandler(d, routes(d, gh, env, store))(req);
   }
 };
 var _test = { b64, unb64, readSession, signSession };

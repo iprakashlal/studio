@@ -1,27 +1,23 @@
 import type { Category, Field, TemplateDef } from "./types";
+import { BODY_FONTS, DISPLAY_FONTS, PORTFOLIO_AXES, portfolioThemeValues } from "../themes/catalog";
+import { themeCards } from "../themes/fields";
 
 const SECTION_NAMES: Record<string, string> = { about: "About", skills: "Skills cube", work: "Work deck", projects: "Projects", learning: "Learning", contact: "Contact" };
 const SOLIDS: [string, string][] = [["sphere", "Sphere"], ["cube", "Cube"], ["pyramid", "Pyramid"], ["torus", "Torus"], ["icosahedron", "Icosahedron"], ["octahedron", "Octahedron"], ["cylinder", "Cylinder"]];
-const FONTS_D = ["Unbounded", "Bricolage Grotesque", "Syne", "Sora", "Fraunces", "Archivo Black", "DM Serif Display"];
-const FONTS_B = ["Manrope", "Instrument Sans", "IBM Plex Sans", "DM Sans", "Work Sans"];
-
-const PRESETS = [
-  { name: "Blueprint", values: { bg: "#0A1830", surface: "#0F2142", deep: "#06101F", text: "#E9EEF6", soft: "#93A6C4", line: "#2A4A7A", c1: "#3D63FF", c2: "#FF6A3D", c3: "#FFC83A", glow: "#FFB547" } },
-  { name: "Drafting paper", values: { bg: "#E6E9EF", surface: "#F3F5F8", deep: "#121826", text: "#121826", soft: "#5B6475", line: "#B6C0D0", c1: "#2348FF", c2: "#FF6A3D", c3: "#FFC83A", glow: "#2348FF" } },
-  { name: "Forest night", values: { bg: "#0E1A16", surface: "#142621", deep: "#08110E", text: "#E8F0EA", soft: "#9FB5A8", line: "#2C4A3E", c1: "#2FBF8F", c2: "#F2A541", c3: "#E9E4D0", glow: "#F2A541" } },
-  { name: "Plum", values: { bg: "#1A1024", surface: "#251733", deep: "#10091A", text: "#F2EAF7", soft: "#B39CC4", line: "#45305A", c1: "#8A5CFF", c2: "#FF5C8A", c3: "#FFD166", glow: "#FF5C8A" } },
-  { name: "Terracotta sun", values: { bg: "#F4EDE6", surface: "#FFF9F3", deep: "#2B1D17", text: "#2B1D17", soft: "#7A6458", line: "#DCCBBE", c1: "#C8553D", c2: "#2D6A6A", c3: "#F2B134", glow: "#C8553D" } },
-  { name: "Mono steel", values: { bg: "#111315", surface: "#1A1D21", deep: "#08090A", text: "#EDEFF2", soft: "#9AA1AB", line: "#33383F", c1: "#EDEFF2", c2: "#7C8591", c3: "#C9CED6", glow: "#EDEFF2" } },
-];
+const FONTS_D = DISPLAY_FONTS;
+const FONTS_B = BODY_FONTS;
 
 const g2 = (...fields: Field[]): Field => ({ t: "grid", cols: 2, fields });
 const g3 = (...fields: Field[]): Field => ({ t: "grid", cols: 3, fields });
 
 const schema: Category[] = [
   {
+    id: "look", label: "Theme & layout", group: "Design", desc: "Choose from 55 themes, then fine-tune the layout, elements and animation.",
+    cards: themeCards([PORTFOLIO_AXES.about, PORTFOLIO_AXES.skills, PORTFOLIO_AXES.work], "Animation needs “Animations” switched on under Brand & theme. Visitors who ask their device for reduced motion always get a still page."),
+  },
+  {
     id: "theme", label: "Brand & theme", group: "Design", desc: "Colours, fonts, corner radius and background effects for the whole site.",
     cards: [
-      { title: "Quick presets", fields: [{ t: "presets", target: "theme", presets: PRESETS }] },
       { title: "Colours", fields: [g3(
         { t: "color", path: "theme.bg", label: "Background" }, { t: "color", path: "theme.surface", label: "Surface (cards)" }, { t: "color", path: "theme.deep", label: "Deep panels" },
         { t: "color", path: "theme.text", label: "Text" }, { t: "color", path: "theme.soft", label: "Secondary text" }, { t: "color", path: "theme.line", label: "Grid lines" },
@@ -129,6 +125,7 @@ export const portfolioTemplate: TemplateDef = {
   schema,
   colorKeys: [{ key: "c1", label: "Primary" }, { key: "c2", label: "Secondary" }, { key: "c3", label: "Tertiary" }, { key: "text", label: "Text" }, { key: "surface", label: "Surface" }, { key: "deep", label: "Deep" }, { key: "glow", label: "Glow" }],
   themePath: "theme",
+  themeValues: portfolioThemeValues,
   summary: (c) => [c?.hero?.firstName, c?.hero?.lastName].filter(Boolean).join(" ") || c?.brand?.logoText || "",
   checks: (c) => {
     const w: string[] = [];

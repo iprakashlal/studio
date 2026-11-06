@@ -127,6 +127,7 @@ export async function sendEmail(d: Deps, to: string[], subject: string, html: st
     headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
     body: JSON.stringify({ from, to, subject, html, ...(replyTo ? { reply_to: replyTo } : {}) }),
   }).catch(() => null);
+  if (r && !r.ok) console.error("Resend refused the email:", r.status, await r.text().catch(() => ""));
   return !!r && r.ok;
 }
 const owners = (d: Deps) => d.env("OWNER_EMAIL").split(",").map((s) => s.trim()).filter(emailOk);
@@ -363,7 +364,9 @@ export type Route = (body: any, token: string | null) => Promise<unknown>;
 export function makeHandler(d: Deps, extra: Record<string, Route> = {}) {
   return async (req: Request): Promise<Response> => {
     const site = d.env("SITE_URL");
-    const allowed = [site ? new URL(site).origin : "", ...d.env("ALLOWED_ORIGINS").split(",").map((s) => s.trim())].filter(Boolean);
+    let siteOrigin = "";
+    try { siteOrigin = site ? new URL(site.trim()).origin : ""; } catch { /* SITE_URL is malformed: no origin allowed */ }
+    const allowed = [siteOrigin, ...d.env("ALLOWED_ORIGINS").split(",").map((s) => s.trim())].filter(Boolean);
     const origin = req.headers.get("origin") || "";
     const cors: Record<string, string> = {
       "Access-Control-Allow-Origin": allowed.includes(origin) ? origin : allowed[0] || "*",

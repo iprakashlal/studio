@@ -10,7 +10,20 @@
     "sale": "#B4441B",
     "fontDisplay": "Fraunces",
     "fontBody": "Manrope",
-    "radius": 14
+    "radius": 14,
+    "preset": "ivory-classic",
+    "layout": "split",
+    "nav": "pill",
+    "cards": "soft",
+    "buttons": "rounded",
+    "motionStyle": "none",
+    "pattern": "none",
+    "ornament": "none",
+    "heading": "normal",
+    "shead": "plain",
+    "width": "normal",
+    "grid": "auto",
+    "product": "classic"
   },
   "brand": {
     "name": "Fieldnote Goods",

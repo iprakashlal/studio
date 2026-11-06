@@ -8,7 +8,8 @@
    DEFAULT CONTENT (also exported as content.json)
    ============================================================ */
 const DEFAULT = {
-  theme: { bg: "#FAF7F2", surface: "#FFFFFF", text: "#1B1A17", soft: "#6B665D", line: "#E7E1D6", accent: "#1F4D3A", accent2: "#E9B949", sale: "#B4441B", fontDisplay: "Fraunces", fontBody: "Manrope", radius: 14 },
+  theme: { bg: "#FAF7F2", surface: "#FFFFFF", text: "#1B1A17", soft: "#6B665D", line: "#E7E1D6", accent: "#1F4D3A", accent2: "#E9B949", sale: "#B4441B", fontDisplay: "Fraunces", fontBody: "Manrope", radius: 14,
+    preset: "ivory-classic", layout: "split", nav: "pill", cards: "soft", buttons: "rounded", motionStyle: "none", pattern: "none", ornament: "none", heading: "normal", shead: "plain", width: "normal", grid: "auto", product: "classic" },
   brand: { name: "Fieldnote Goods", tagline: "Small-batch goods for slow mornings", logo: null, announcement: "Free shipping on orders over ₹1,999", showAnnouncement: true },
   seo: { title: "Fieldnote Goods", description: "Small-batch ceramics, linen and paper goods." },
   nav: { home: "Home", shop: "Shop", portfolio: "Our story", cart: "Cart", account: "Account", showPortfolio: true },
@@ -66,8 +67,19 @@ const DEFAULT = {
   accountPage: { title: "Your account", signInText: "Enter your email and we'll send you a 6-digit code. No password needed." },
 };
 
-const FONTS = { "Fraunces": "Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700", "Bricolage Grotesque": "Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800", "DM Serif Display": "DM+Serif+Display", "Syne": "Syne:wght@500;700;800", "Sora": "Sora:wght@500;700;800", "Unbounded": "Unbounded:wght@500;700",
-  "Manrope": "Manrope:wght@400;500;600;700;800", "Instrument Sans": "Instrument+Sans:wght@400;500;600;700", "IBM Plex Sans": "IBM+Plex+Sans:wght@400;500;600;700", "DM Sans": "DM+Sans:wght@400;500;700", "Work Sans": "Work+Sans:wght@400;500;600;700" };
+const FONTS = {
+  "Unbounded": "Unbounded:wght@400;600;800", "Bricolage Grotesque": "Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800", "Syne": "Syne:wght@400;600;800",
+    "Sora": "Sora:wght@400;600;800", "Fraunces": "Fraunces:opsz,wght@9..144,400;9..144,600;9..144,800", "Archivo Black": "Archivo+Black", "DM Serif Display": "DM+Serif+Display",
+    "Playfair Display": "Playfair+Display:ital,wght@0,400;0,600;0,800;1,400", "Space Grotesk": "Space+Grotesk:wght@400;600;700", "Outfit": "Outfit:wght@400;500;600;800",
+    "Oswald": "Oswald:wght@400;600;700", "Bebas Neue": "Bebas+Neue", "Cormorant Garamond": "Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400", "Libre Baskerville": "Libre+Baskerville:ital,wght@0,400;0,700;1,400",
+    "Abril Fatface": "Abril+Fatface", "Righteous": "Righteous", "Lexend": "Lexend:wght@400;500;600;800", "Rubik": "Rubik:wght@400;500;700;800", "Instrument Serif": "Instrument+Serif:ital@0;1",
+    "Young Serif": "Young+Serif", "Anton": "Anton", "Chakra Petch": "Chakra+Petch:wght@400;600;700", "Orbitron": "Orbitron:wght@400;600;800", "Silkscreen": "Silkscreen:wght@400;700",
+    "Caveat": "Caveat:wght@400;700", "Josefin Sans": "Josefin+Sans:wght@400;600;700", "Poppins": "Poppins:wght@400;500;600;800", "Alfa Slab One": "Alfa+Slab+One",
+    "Manrope": "Manrope:wght@400;500;600;700;800", "Instrument Sans": "Instrument+Sans:wght@400;500;600;700", "IBM Plex Sans": "IBM+Plex+Sans:wght@400;500;600;700", "DM Sans": "DM+Sans:wght@400;500;700",
+    "Work Sans": "Work+Sans:wght@400;500;600;700", "Inter": "Inter:wght@400;500;600;700;800", "Nunito Sans": "Nunito+Sans:wght@400;600;700", "Karla": "Karla:wght@400;500;700",
+    "Lora": "Lora:ital,wght@0,400;0,500;0,600;0,700;1,400", "Source Serif 4": "Source+Serif+4:wght@400;600;700", "Figtree": "Figtree:wght@400;500;600;700", "Plus Jakarta Sans": "Plus+Jakarta+Sans:wght@400;500;600;700",
+    "Space Mono": "Space+Mono:wght@400;700", "JetBrains Mono": "JetBrains+Mono:wght@400;500;700", "Quicksand": "Quicksand:wght@400;500;600;700", "Mulish": "Mulish:wght@400;600;700",
+};
 
 /* ============================================================
    UTILITIES
@@ -248,12 +260,17 @@ function methods() {
 function applyTheme(t) {
   const r = document.documentElement.style;
   ["bg", "surface", "text", "soft", "line", "accent", "accent2", "sale"].forEach((k) => r.setProperty("--" + k, t[k]));
-  r.setProperty("--on-accent", onColor(t.accent)); r.setProperty("--on-accent2", onColor(t.accent2));
+  r.setProperty("--on-accent", onColor(t.accent)); r.setProperty("--on-accent2", onColor(t.accent2)); r.setProperty("--on-sale", onColor(t.sale));
+  const deep = t.deep || t.text; r.setProperty("--deep", deep); r.setProperty("--on-deep", onColor(deep));
+  const d = document.documentElement.dataset;
+  for (const k of ["layout", "nav", "cards", "buttons", "motionStyle", "pattern", "ornament", "heading", "shead", "width", "grid", "product"]) d[k] = String(t[k] || "");
   r.setProperty("--r", (+t.radius || 0) + "px");
   r.setProperty("--fd", `"${t.fontDisplay}",Georgia,serif`); r.setProperty("--fb", `"${t.fontBody}","Helvetica Neue",Arial,sans-serif`);
-  const href = "https://fonts.googleapis.com/css2?" + [FONTS[t.fontDisplay], FONTS[t.fontBody], "JetBrains+Mono:wght@400;500"].filter(Boolean).map((f) => "family=" + f).join("&") + "&display=swap";
-  let l = $("#fontlink"); if (!l) { l = document.createElement("link"); l.id = "fontlink"; l.rel = "stylesheet"; document.head.appendChild(l); }
-  if (l.getAttribute("href") !== href) l.setAttribute("href", href);
+  // One stylesheet per family, so a family Google can't serve never blocks the others.
+  [[FONTS[t.fontDisplay], "fontlink"], [FONTS[t.fontBody], "fontlink2"], ["JetBrains+Mono:wght@400;500", "fontlink3"]].forEach(([f, id]) => {
+    let l = document.getElementById(id); if (!l) { l = document.createElement("link"); l.id = id; l.rel = "stylesheet"; document.head.appendChild(l); }
+    const href = f ? "https://fonts.googleapis.com/css2?family=" + f + "&display=swap" : ""; if (href && l.getAttribute("href") !== href) l.setAttribute("href", href);
+  });
 }
 function header() {
   const B = C.brand, N = C.nav;
@@ -288,7 +305,7 @@ const PAGES = {
   home() {
     const H = C.home, feat = C.products.filter((p) => p.featured).slice(0, 8), list = feat.length ? feat : C.products.slice(0, 4);
     const col = C.products.slice(0, 3);
-    return `<section class="hero"><div class="wrap"><div><p class="eyebrow">${esc(H.hero.eyebrow)}</p><h1>${esc(H.hero.title)}</h1><p class="lead">${esc(H.hero.text)}</p>
+    return `<section class="hero">${C.theme.ornament && C.theme.ornament !== "none" ? `<div class="orn" aria-hidden="true"><i></i><i></i><i></i></div>` : ""}<div class="wrap"><div class="htx"><p class="eyebrow">${esc(H.hero.eyebrow)}</p><h1>${esc(H.hero.title)}</h1><p class="lead">${esc(H.hero.text)}</p>
       <div class="cta"><a class="btn pri" href="shop.html">${esc(H.hero.cta)} →</a>${C.nav.showPortfolio ? `<a class="btn" href="portfolio.html">${esc(C.nav.portfolio)}</a>` : ""}</div></div>
       <div class="art">${H.hero.image ? `<img src="${esc(imgUrl(H.hero.image))}" alt="">` : `<div class="collage">${(col.length ? col : [{ name: "A" }, { name: "B" }, { name: "C" }]).map((p) => `<div style="border-radius:calc(var(--r)*1.1);overflow:hidden">${p.images && p.images[0] ? pimg(p) : ph(p.name)}</div>`).join("")}</div>`}</div></div></section>
     ${list.length ? `<section class="sec" style="padding-top:12px"><div class="wrap"><div class="sec-h"><div><h2>${esc(H.featuredTitle)}</h2>${H.featuredText ? `<p class="soft" style="margin-top:8px">${esc(H.featuredText)}</p>` : ""}</div><a class="link" href="shop.html">View all</a></div><div class="grid">${list.map(pcard).join("")}</div></div></section>` : ""}
@@ -489,6 +506,17 @@ function render() {
   const fn = PAGES[PAGE] || PAGES.home;
   $("#app").innerHTML = `<a class="skip" href="#main">Skip to content</a>${header()}<main id="main">${fn()}</main>${footer()}`;
   bind();
+  reveal();
+}
+/* Entrance animations from the theme. In the CMS preview they play on the first render only, not on every keystroke. */
+let revealed = 0;
+function reveal() {
+  const st = C.theme.motionStyle;
+  if (!st || st === "none" || matchMedia("(prefers-reduced-motion: reduce)").matches || !("IntersectionObserver" in window)) return;
+  if (PREVIEW && revealed++ > 0) return;
+  const els = $$(".hero .htx, .hero .art, .sec-h, .pcard, .cat, .quote, .banner, .wcard, .ctaband, .page-h .wrap, .pd .gal, .pd .info, .box, .sum, .ocard");
+  const io = new IntersectionObserver((es) => es.forEach((e) => { if (e.isIntersecting) { e.target.classList.remove("wait"); io.unobserve(e.target); } }), { threshold: 0.08 });
+  els.forEach((el, i) => { el.classList.add("rv", "wait"); el.style.transitionDelay = (i % 4) * 70 + "ms"; io.observe(el); });
 }
 function bind() {
   const mb = $(".menubtn"), nav = $("#nav");

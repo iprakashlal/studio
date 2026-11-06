@@ -1,26 +1,22 @@
 import type { Category, Field, TemplateDef } from "./types";
 import { uid, vpaOk, paypalOk, httpsOk } from "../lib/util";
+import { BODY_FONTS, DISPLAY_FONTS, STORE_AXES, storeThemeValues } from "../themes/catalog";
+import { themeCards } from "../themes/fields";
 
 const CURRENCIES = ["INR", "USD", "EUR", "GBP", "AED", "SGD", "AUD", "CAD"];
-const FONTS_D = ["Fraunces", "Bricolage Grotesque", "DM Serif Display", "Syne", "Sora", "Unbounded"];
-const FONTS_B = ["Manrope", "Instrument Sans", "IBM Plex Sans", "DM Sans", "Work Sans"];
-const PRESETS = [
-  { name: "Linen", values: { bg: "#FAF7F2", surface: "#FFFFFF", text: "#1B1A17", soft: "#6B665D", line: "#E7E1D6", accent: "#1F4D3A", accent2: "#E9B949", sale: "#B4441B" } },
-  { name: "Midnight", values: { bg: "#0F1115", surface: "#171A21", text: "#F1F2F5", soft: "#A0A6B4", line: "#2A2F3A", accent: "#8AB4FF", accent2: "#F5C26B", sale: "#FF7A59" } },
-  { name: "Blueprint", values: { bg: "#0A1830", surface: "#0F2142", text: "#E9EEF6", soft: "#93A6C4", line: "#2A4A7A", accent: "#3D63FF", accent2: "#FFC83A", sale: "#FF6A3D" } },
-  { name: "Blush", values: { bg: "#FBF4F2", surface: "#FFFFFF", text: "#2A1A1D", soft: "#7C6468", line: "#EED9D6", accent: "#B0405A", accent2: "#E8A87C", sale: "#B0405A" } },
-  { name: "Citrus", values: { bg: "#FFFBEA", surface: "#FFFFFF", text: "#1E1B0E", soft: "#6E6748", line: "#EEE6C2", accent: "#E07A10", accent2: "#3A7D44", sale: "#C2410C" } },
-  { name: "Graphite", values: { bg: "#F4F4F5", surface: "#FFFFFF", text: "#18181B", soft: "#61616B", line: "#E1E1E5", accent: "#18181B", accent2: "#A3A3A3", sale: "#DC2626" } },
-];
-
+const FONTS_D = DISPLAY_FONTS;
+const FONTS_B = BODY_FONTS;
 const g2 = (...fields: Field[]): Field => ({ t: "grid", cols: 2, fields });
 const g3 = (...fields: Field[]): Field => ({ t: "grid", cols: 3, fields });
 
 const schema: Category[] = [
   {
+    id: "look", label: "Theme & layout", group: "Design", desc: "Choose from 55 themes, then fine-tune the layout, elements and animation.",
+    cards: themeCards([STORE_AXES.grid, STORE_AXES.product], "“Stacked” puts the hero text over a full-width image. Visitors who ask their device for reduced motion always get a still page."),
+  },
+  {
     id: "theme", label: "Brand & theme", group: "Design", desc: "Store name, logo, colours, fonts and the announcement bar.",
     cards: [
-      { title: "Quick presets", fields: [{ t: "presets", target: "theme", presets: PRESETS }] },
       { title: "Brand", fields: [g2({ t: "text", path: "brand.name", label: "Store name" }, { t: "text", path: "brand.tagline", label: "Tagline" }), { t: "image", path: "brand.logo", label: "Logo (square works best)" }] },
       { title: "Announcement bar", fields: [{ t: "toggle", path: "brand.showAnnouncement", label: "Show the bar above the menu" }, { t: "text", path: "brand.announcement", label: "Message" }] },
       { title: "Colours", fields: [g3(
@@ -210,6 +206,7 @@ export const storeTemplate: TemplateDef = {
   schema,
   colorKeys: [{ key: "accent", label: "Accent" }, { key: "accent2", label: "Second accent" }, { key: "sale", label: "Sale" }, { key: "text", label: "Text" }, { key: "surface", label: "Cards" }],
   themePath: "theme",
+  themeValues: storeThemeValues,
   summary: (c) => `${(c?.products || []).length} products`,
   checks: (c) => {
     const w: string[] = [];

@@ -24,7 +24,9 @@ export type Field =
   | { t: "note"; text: string; tone?: "info" | "warn" }
   /** Shows `fields` only while the value at `path` (in the whole content) is / isn't the given value. */
   | { t: "when"; path: string; is?: string; not?: string; fields: Field[] }
-  | { t: "presets"; target: string; presets: { name: string; values: Record<string, string> }[] };
+  | { t: "presets"; target: string; presets: { name: string; values: Record<string, string> }[] }
+  /** The theme gallery: picking one writes the template's themeValues into content.theme. */
+  | { t: "themes" };
 
 export type Card = { title: string; fields: Field[] };
 export type Category = { id: string; label: string; group: string; desc: string; cards: Card[] };
@@ -45,4 +47,6 @@ export type TemplateDef = {
   summary: (content: any) => string;
   /** Warnings shown before export, e.g. "No payment method is switched on". */
   checks?: (content: any) => string[];
+  /** content.theme values for a catalogue theme (see src/themes/catalog.ts). */
+  themeValues: (theme: import("../themes/catalog").Theme) => Record<string, unknown>;
 };

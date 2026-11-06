@@ -38,7 +38,7 @@ img{max-width:100%}
 
 /* ================= SITE ================= */
 #siteRoot em{font-style:normal;color:var(--c3)}
-.wrap{max-width:1200px;margin:0 auto;padding-left:var(--gl);padding-right:var(--gr);position:relative}
+.wrap{max-width:var(--maxw,1200px);margin:0 auto;padding-left:var(--gl);padding-right:var(--gr);position:relative}
 .m{font-family:var(--fm);font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--soft)}
 .s-h2{font-size:clamp(32px,5.6vw,64px);font-weight:800;letter-spacing:-.03em}
 .plane{position:fixed;inset:-50% -10%;pointer-events:none;z-index:0;will-change:transform}
@@ -58,7 +58,7 @@ img{max-width:100%}
 .shp.pill{border-radius:999px}
 
 .nav{position:fixed;top:env(safe-area-inset-top,0px);left:0;right:0;z-index:50;padding-left:var(--gl);padding-right:var(--gr)}
-.nav-in{max-width:1200px;margin:12px auto 0;display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 10px 10px 20px;background:color-mix(in srgb,var(--surface) 82%,transparent);backdrop-filter:blur(14px);border:1px solid color-mix(in srgb,var(--line) 70%,transparent);border-radius:999px}
+.nav-in{max-width:var(--maxw,1200px);margin:12px auto 0;display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 10px 10px 20px;background:color-mix(in srgb,var(--surface) 82%,transparent);backdrop-filter:blur(14px);border:1px solid color-mix(in srgb,var(--line) 70%,transparent);border-radius:999px}
 .logo{display:flex;align-items:center;gap:8px;text-decoration:none;font-family:var(--fd);font-weight:800;font-size:15px;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .logo i{display:inline-flex;gap:3px;flex:none}
 .logo i .shp{width:10px;height:10px}
@@ -209,6 +209,113 @@ img{max-width:100%}
 .foot{padding-block:30px}
 .foot .wrap{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
 
+#siteRoot{overflow-x:clip}
+/* ================= THEME STYLES (set by Design → Theme & layout) ================= */
+html[data-width=wide]{--maxw:1400px}html[data-width=narrow]{--maxw:1000px}
+/* hero layouts */
+html[data-layout=reverse] .stage-wrap{order:-1}
+html[data-layout=center] .hero-grid,html[data-layout=stacked] .hero-grid,html[data-layout=minimal] .hero-grid{grid-template-columns:1fr}
+html[data-layout=center] .h-text{text-align:center;display:flex;flex-direction:column;align-items:center}
+html[data-layout=center] .h-name{font-size:clamp(40px,12cqw,140px)}
+html[data-layout=center] .h-role{margin-inline:auto}
+html[data-layout=center] .h-cta,html[data-layout=center] .h-meta{justify-content:center}
+html[data-layout=center] .stage-wrap{max-width:460px;width:100%;margin:8px auto 0}
+html[data-layout=stacked] .h-name{font-size:clamp(40px,11cqw,150px)}
+html[data-layout=stacked] .stage-wrap{width:100%}
+html[data-layout=stacked] #stage{height:340px}
+html[data-layout=minimal] .hero{min-height:min(780px,100svh)}
+html[data-layout=minimal] .h-name{font-size:clamp(48px,14cqw,190px)}
+html[data-layout=minimal] .stage-wrap{order:-1;position:static}
+html[data-layout=minimal] #stage{display:none}
+html[data-layout=minimal] .photo,html[data-layout=minimal] .photo.on-cube{display:block;position:relative;left:auto;bottom:auto;width:132px;margin-bottom:8px}
+/* menu */
+html[data-nav=bar] .nav{padding:0}
+html[data-nav=bar] .nav-in{max-width:none;margin:0;border-radius:0;border-width:0 0 1px;padding:12px max(20px,calc((100% - var(--maxw,1200px))/2 + 20px))}
+html[data-nav=float] .nav-in{background:color-mix(in srgb,var(--bg) 55%,transparent);border-color:transparent;border-radius:0;padding-inline:4px}
+html[data-nav=center] .nav-in{width:max-content;max-width:100%;gap:18px}
+html[data-nav=center] .logo{max-width:180px}
+/* cards */
+html[data-cards=outline] :is(.tile,.proj,.edu .t):not(.stat):not(.quote){background:transparent;border:1.5px solid var(--line)}
+html[data-cards=elevated] :is(.tile,.proj,.edu .t){border-color:transparent;box-shadow:0 24px 48px -26px rgba(0,0,0,.5),0 2px 6px rgba(0,0,0,.08)}
+html[data-cards=brutal] :is(.tile,.proj,.edu .t){border:2px solid var(--text);box-shadow:6px 6px 0 var(--text)}
+html[data-cards=glass] :is(.tile,.proj,.edu .t):not(.stat):not(.quote){background:color-mix(in srgb,var(--surface) 55%,transparent);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid color-mix(in srgb,var(--text) 14%,transparent)}
+html[data-cards=flat] :is(.tile,.proj,.edu .t){border-color:transparent;box-shadow:none}
+html[data-cards=flat] .card,html[data-cards=elevated] .card,html[data-cards=glass] .card{border-color:transparent}
+html[data-cards=brutal] .card{box-shadow:8px 8px 0 var(--text)}
+/* buttons */
+html:not([data-buttons=brutal]):not([data-buttons=""]) .b{box-shadow:none}
+html:not([data-buttons=brutal]):not([data-buttons=""]) .b:hover{transform:translateY(-2px);box-shadow:none}
+html:not([data-buttons=brutal]):not([data-buttons=""]) .b:active{transform:none}
+html[data-buttons=rounded] .b{border-radius:12px;border-color:color-mix(in srgb,var(--text) 25%,transparent)}
+html[data-buttons=rounded] .b.pri{border-color:var(--c1)}
+html[data-buttons=pill] .b,html[data-buttons=pill] .pill-btn{border-radius:999px;border-color:color-mix(in srgb,var(--text) 22%,transparent)}
+html[data-buttons=pill] .b.pri{border-color:var(--c1)}
+html[data-buttons=sharp] .b,html[data-buttons=sharp] .pill-btn{border-radius:0;text-transform:uppercase;letter-spacing:.08em;font-size:13px}
+html[data-buttons=outline] .b{background:transparent;color:var(--text);border:2px solid currentColor}
+html[data-buttons=outline] .b.pri{color:var(--c1);background:transparent}
+html[data-buttons=outline] .b.pri:hover{background:var(--c1);color:var(--on-c1)}
+html[data-buttons=outline] .pill-btn{background:transparent;color:var(--text);box-shadow:inset 0 0 0 2px currentColor}
+html[data-buttons=glow] .b{border-color:transparent;border-radius:14px;box-shadow:0 0 0 1px color-mix(in srgb,var(--text) 18%,transparent)}
+html[data-buttons=glow] .b.pri{box-shadow:0 10px 34px -8px var(--c1),0 0 0 1px var(--c1)}
+html[data-buttons=glow] .b.pri:hover{box-shadow:0 14px 44px -6px var(--c1),0 0 0 1px var(--c1)}
+html[data-buttons=glow] .pill-btn{background:var(--c1);color:var(--on-c1);box-shadow:0 8px 28px -8px var(--c1)}
+/* entrance animations */
+html[data-motion-style=fade] .rv.wait{transform:none}
+html[data-motion-style=zoom] .rv.wait{transform:scale(.88)}
+html[data-motion-style=slide] .rv.wait{transform:translateX(-70px)}
+html[data-motion-style=blur] .rv{transition:transform .9s cubic-bezier(.2,.8,.2,1),opacity .9s,filter .9s}
+html[data-motion-style=blur] .rv.wait{transform:translateY(16px);filter:blur(14px)}
+html[data-motion-style=flip] .rv{transform-origin:50% 0}
+html[data-motion-style=flip] .rv.wait{transform:perspective(900px) rotateX(-24deg) translateY(30px)}
+html[data-motion-style=slide] .h-name .ln span{animation-name:fromleft}
+html[data-motion-style=fade] .h-name .ln span,html[data-motion-style=blur] .h-name .ln span{animation-name:fadein}
+html[data-motion-style=zoom] .h-name .ln span{animation-name:zoomin}
+@keyframes fromleft{from{transform:translateX(-40%);opacity:0}to{transform:none;opacity:1}}
+@keyframes fadein{from{opacity:0;filter:blur(8px)}to{opacity:1;filter:none}}
+@keyframes zoomin{from{transform:scale(.6);opacity:0}to{transform:none;opacity:1}}
+/* background patterns */
+html[data-pattern=dots] .plane.p1{background-image:radial-gradient(var(--line) 1.6px,transparent 1.8px);background-size:28px 28px;opacity:.55}
+html[data-pattern=lines] .plane.p1{background-image:linear-gradient(var(--line) 1px,transparent 1px);background-size:100% 34px;opacity:.35}
+html[data-pattern=diagonal] .plane.p1{background-image:repeating-linear-gradient(45deg,var(--line) 0 1px,transparent 1px 22px);background-size:auto;opacity:.4}
+html[data-pattern=waves] .plane.p1{background:var(--line);-webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='24'%3E%3Cpath d='M0 12c15 0 15-10 30-10s15 10 30 10' fill='none' stroke='black' stroke-width='1.4'/%3E%3C/svg%3E") repeat;mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='24'%3E%3Cpath d='M0 12c15 0 15-10 30-10s15 10 30 10' fill='none' stroke='black' stroke-width='1.4'/%3E%3C/svg%3E") repeat;opacity:.45}
+html[data-pattern=cross] .plane.p1{background:var(--line);-webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='36' height='36'%3E%3Cpath d='M18 12v12M12 18h12' stroke='black' stroke-width='1.6'/%3E%3C/svg%3E") repeat;mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='36' height='36'%3E%3Cpath d='M18 12v12M12 18h12' stroke='black' stroke-width='1.6'/%3E%3C/svg%3E") repeat;opacity:.5}
+html:not([data-pattern=grid]):not([data-pattern=""]) .plane.p2{display:none}
+/* decorative shapes */
+html[data-ornament=outline] .solids .shp,html[data-ornament=outline] .stage-fallback .shp{background:transparent!important;box-shadow:inset 0 0 0 3px var(--sc,var(--c1))}
+html[data-ornament=soft] .solids .shp{filter:blur(28px);opacity:.5;border-radius:50%;scale:1.8}
+/* headings */
+html[data-heading=upper] :is(.h-name,.s-h2,.contact-box h2,.card h3,.tile.story h3){text-transform:uppercase;letter-spacing:-.01em}
+html[data-heading=upper] .h-name{line-height:.92}
+html[data-heading=italic] :is(.s-h2,.contact-box h2,.tile.story h3,.h-role) em{font-style:italic;color:var(--c1)}
+html[data-heading=italic] .h-name .ln:nth-child(2) span{font-style:italic}
+html[data-heading=tight] :is(.h-name,.s-h2,.contact-box h2,.card h3){letter-spacing:-.065em;font-weight:800;line-height:.88}
+/* section labels */
+#siteInner{counter-reset:sec}
+.head{counter-increment:sec}
+html[data-shead=number] .head .m::before{content:counter(sec,decimal-leading-zero);width:auto;height:auto;background:none;border-radius:0;color:var(--c1);font-weight:700}
+html[data-shead=line] .head .m::before{width:30px;height:2px;border-radius:0}
+html[data-shead=plain] .head .m::before{display:none}
+html[data-shead=bracket] .head .m::before{content:"[";width:auto;height:auto;background:none;color:var(--c1)}
+html[data-shead=bracket] .head .m::after{content:"]";color:var(--c1)}
+html[data-shead=slash] .head .m::before{content:"//";width:auto;height:auto;background:none;border-radius:0;color:var(--c1);font-weight:700}
+/* about layout */
+html[data-about=stack] .bento{grid-template-columns:repeat(2,minmax(0,1fr))}
+html[data-about=stack] .tile.story,html[data-about=stack] .tile.quote,html[data-about=stack] .tile.facts{grid-column:1/-1;grid-row:auto}
+html[data-about=stack] .tile.stat{grid-column:span 1}
+/* skills layout */
+html[data-skills=grid] .cube-grid{grid-template-columns:1fr}
+html[data-skills=grid] .scene{display:none}
+html[data-skills=grid] .skill-list{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+html[data-skills=grid] .skill{grid-template-columns:1fr;gap:12px;padding:24px;border:1px solid color-mix(in srgb,var(--line) 70%,transparent);border-radius:var(--r);background:var(--surface);cursor:default}
+html[data-skills=grid] .skill:last-child{border-bottom:1px solid color-mix(in srgb,var(--line) 70%,transparent)}
+html[data-skills=grid] .skill .shp{width:30px;height:30px}
+@media (max-width:900px){html[data-skills=grid] .skill-list{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:560px){html[data-skills=grid] .skill-list{grid-template-columns:1fr}}
+/* work layout */
+html[data-work=timeline] .stack{gap:22px;padding-left:30px;border-left:2px solid var(--line);margin-left:8px}
+html[data-work=timeline] .card{position:relative;top:auto;min-height:0;box-shadow:none;overflow:visible}
+html[data-work=timeline] .card::before{content:"";position:absolute;left:-43px;top:34px;width:20px;height:20px;border-radius:50%;background:var(--c1);border:4px solid var(--bg)}
+html[data-work=timeline] .card .art{min-height:160px}
 .rv{transition:transform .9s cubic-bezier(.2,.8,.2,1),opacity .9s}
 .rv.wait{transform:translateY(40px) scale(.97);opacity:0}
 .toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom,0px));transform:translate(-50%,160px);background:var(--a-text);color:#0D1117;font-weight:700;padding:12px 20px;border-radius:14px;z-index:200;transition:transform .4s cubic-bezier(.2,.8,.2,1);max-width:calc(100% - 32px);font-family:var(--fb)}
@@ -234,7 +341,7 @@ img{max-width:100%}
 /* ============================================================
    DEFAULT CONTENT
    ============================================================ */
-const DEFAULT={"theme": {"bg": "#0A1830", "surface": "#0F2142", "deep": "#06101F", "text": "#E9EEF6", "soft": "#93A6C4", "line": "#2A4A7A", "c1": "#3D63FF", "c2": "#FF6A3D", "c3": "#FFC83A", "glow": "#FFB547", "fontDisplay": "Unbounded", "fontBody": "Manrope", "radius": 24, "showGrid": true, "showGlow": true, "showNetwork": true, "show3D": true, "showSolids": true, "showTicker": true, "motion": true}, "brand": {"logoText": "Your Name", "contactLabel": "Contact"}, "hero": {"eyebrow": "Product Designer · Your City", "firstName": "Your", "lastName": "Name", "role": "I design and build *useful things* for people who care about the details.", "ctaPrimary": "View the deck ↓", "ctaPrimaryTarget": "work", "ctaSecondary": "LinkedIn ↗", "ctaSecondaryUrl": "https://www.linkedin.com/", "photo": null, "photoShape": "circle", "meta": [{"value": "8+", "label": "Years"}, {"value": "40", "label": "Projects"}, {"value": "Your City", "label": "Based in"}], "solids": [{"type": "sphere", "color": "c1"}, {"type": "cube", "color": "c2"}, {"type": "pyramid", "color": "c3"}, {"type": "torus", "color": "text"}, {"type": "icosahedron", "color": "surface"}, {"type": "octahedron", "color": "c1"}]}, "ticker": ["Strategy", "Design", "Front-end", "Research", "Prototyping", "Delivery"], "sections": [{"id": "about", "visible": true, "navLabel": "About"}, {"id": "skills", "visible": true, "navLabel": "Skills"}, {"id": "work", "visible": true, "navLabel": "Work"}, {"id": "projects", "visible": false, "navLabel": "Projects"}, {"id": "learning", "visible": true, "navLabel": "Learning"}, {"id": "contact", "visible": true, "navLabel": "Contact"}], "about": {"eyebrow": "About", "title": "Built from the basics up.", "lede": "A short line about the path that got you here.", "storyLabel": "The story", "storyHeading": "I started with *one small project*. Now I help teams ship work they're proud of.", "story": "Write two or three short paragraphs about where you started and what you learned along the way.\n\nThen say what you care about in your work and the kind of problems you like to solve.", "stats": [{"value": 8, "suffix": "+", "label": "Years of experience", "color": "c1", "shape": "circle"}, {"value": 40, "suffix": "", "label": "Projects shipped", "color": "c2", "shape": "square"}], "quote": "“Make it simple, then make it *real*.”", "quoteLabel": "Working motto", "factsLabel": "Quick facts", "facts": [{"k": "Now", "v": "Your current role"}, {"k": "Before", "v": "Previous companies"}, {"k": "Focus", "v": "What you're known for"}, {"k": "Speaks", "v": "Your languages"}]}, "skills": {"eyebrow": "Skills", "title": "Six sides of the build.", "lede": "Drag the cube, or pick a skill to turn it to that face.", "items": [{"tag": "01 / Plan", "title": "Strategy", "body": "Turning goals into a clear plan.", "detail": "Workshops, roadmaps and priorities.", "color": "c1", "shape": "circle"}, {"tag": "02 / Shape", "title": "Design", "body": "Interfaces that feel obvious.", "detail": "Flows, wireframes and visual design.", "color": "surface", "shape": "square"}, {"tag": "03 / Build", "title": "Front-end", "body": "Fast, accessible, maintainable.", "detail": "HTML, CSS, TypeScript and React.", "color": "c2", "shape": "diamond"}, {"tag": "04 / Learn", "title": "Research", "body": "Decisions backed by real users.", "detail": "Interviews, tests and analytics.", "color": "c3", "shape": "triangle"}, {"tag": "05 / Try", "title": "Prototyping", "body": "Ideas you can click before you build.", "detail": "Quick prototypes to test ideas early.", "color": "text", "shape": "hexagon"}, {"tag": "06 / Ship", "title": "Delivery", "body": "From plan to production, on time.", "detail": "Releases, reviews and measurement.", "color": "surface", "shape": "ring"}]}, "work": {"eyebrow": "Work · 2012 → now", "title": "The deck.", "lede": "Each role stacks on the last. Scroll to deal the cards.", "items": [{"period": "2022 – Present", "title": "Senior Designer", "org": "Company One", "orgNote": "City", "current": true, "color": "surface", "image": null, "bullets": ["What you lead and the results it brought.", "A second highlight with a number if you have one."], "art": [{"type": "circle", "color": "c1"}, {"type": "square", "color": "c2"}, {"type": "triangle", "color": "c3"}]}, {"period": "2019 – 2022", "title": "Designer", "org": "Company Two", "orgNote": "City", "current": false, "color": "c1", "image": null, "bullets": ["What you built and who used it."], "art": [{"type": "ring", "color": "text"}, {"type": "diamond", "color": "c3"}]}, {"period": "2016 – 2019", "title": "Junior Designer", "org": "Company Three", "orgNote": "City", "current": false, "color": "c3", "image": null, "bullets": ["Where you started and what you learned."], "art": [{"type": "half", "color": "deep"}, {"type": "square", "color": "c2"}]}]}, "projects": {"eyebrow": "Projects", "title": "Selected work.", "lede": "A closer look at things I've built.", "items": []}, "learning": {"eyebrow": "Learning", "title": "Education & certifications.", "languagesLabel": "Speaks", "items": [{"period": "2012 – 2016", "title": "Your degree", "sub": "Your university", "shape": "circle", "color": "c1"}, {"period": "Certification", "title": "A certification", "sub": "Issuer", "shape": "square", "color": "c2"}, {"period": "Course", "title": "A course you took", "sub": "Provider", "shape": "triangle", "color": "c3"}], "languages": ["English"]}, "contact": {"eyebrow": "Contact", "title": "Have a plan? Let's *build it.*", "body": "Open to conversations on engineering leadership, front-end architecture and ambitious product work.", "email": "hello@example.com", "copyLabel": "Copy email", "links": [{"label": "LinkedIn", "url": "https://www.linkedin.com/"}, {"label": "GitHub", "url": "https://github.com/"}, {"label": "Email", "url": "mailto:hello@example.com"}], "footerLeft": "© 2026 Your Name", "footerRight": "Circle · Square · Triangle"}, "seo": {"title": "Your Name · Portfolio", "description": "Portfolio of Your Name: strategy, design and front-end."}};
+const DEFAULT={"theme": {"bg": "#0A1830", "surface": "#0F2142", "deep": "#06101F", "text": "#E9EEF6", "soft": "#93A6C4", "line": "#2A4A7A", "c1": "#3D63FF", "c2": "#FF6A3D", "c3": "#FFC83A", "glow": "#FFB547", "fontDisplay": "Unbounded", "fontBody": "Manrope", "radius": 24, "showGrid": true, "showGlow": true, "showNetwork": true, "show3D": true, "showSolids": true, "showTicker": true, "motion": true, "preset": "blueprint", "layout": "split", "nav": "pill", "cards": "soft", "buttons": "brutal", "motionStyle": "rise", "pattern": "grid", "ornament": "solid", "heading": "normal", "shead": "dot", "width": "normal", "about": "bento", "skills": "cube", "work": "stack"}, "brand": {"logoText": "Your Name", "contactLabel": "Contact"}, "hero": {"eyebrow": "Product Designer · Your City", "firstName": "Your", "lastName": "Name", "role": "I design and build *useful things* for people who care about the details.", "ctaPrimary": "View the deck ↓", "ctaPrimaryTarget": "work", "ctaSecondary": "LinkedIn ↗", "ctaSecondaryUrl": "https://www.linkedin.com/", "photo": null, "photoShape": "circle", "meta": [{"value": "8+", "label": "Years"}, {"value": "40", "label": "Projects"}, {"value": "Your City", "label": "Based in"}], "solids": [{"type": "sphere", "color": "c1"}, {"type": "cube", "color": "c2"}, {"type": "pyramid", "color": "c3"}, {"type": "torus", "color": "text"}, {"type": "icosahedron", "color": "surface"}, {"type": "octahedron", "color": "c1"}]}, "ticker": ["Strategy", "Design", "Front-end", "Research", "Prototyping", "Delivery"], "sections": [{"id": "about", "visible": true, "navLabel": "About"}, {"id": "skills", "visible": true, "navLabel": "Skills"}, {"id": "work", "visible": true, "navLabel": "Work"}, {"id": "projects", "visible": false, "navLabel": "Projects"}, {"id": "learning", "visible": true, "navLabel": "Learning"}, {"id": "contact", "visible": true, "navLabel": "Contact"}], "about": {"eyebrow": "About", "title": "Built from the basics up.", "lede": "A short line about the path that got you here.", "storyLabel": "The story", "storyHeading": "I started with *one small project*. Now I help teams ship work they're proud of.", "story": "Write two or three short paragraphs about where you started and what you learned along the way.\n\nThen say what you care about in your work and the kind of problems you like to solve.", "stats": [{"value": 8, "suffix": "+", "label": "Years of experience", "color": "c1", "shape": "circle"}, {"value": 40, "suffix": "", "label": "Projects shipped", "color": "c2", "shape": "square"}], "quote": "“Make it simple, then make it *real*.”", "quoteLabel": "Working motto", "factsLabel": "Quick facts", "facts": [{"k": "Now", "v": "Your current role"}, {"k": "Before", "v": "Previous companies"}, {"k": "Focus", "v": "What you're known for"}, {"k": "Speaks", "v": "Your languages"}]}, "skills": {"eyebrow": "Skills", "title": "Six sides of the build.", "lede": "Drag the cube, or pick a skill to turn it to that face.", "items": [{"tag": "01 / Plan", "title": "Strategy", "body": "Turning goals into a clear plan.", "detail": "Workshops, roadmaps and priorities.", "color": "c1", "shape": "circle"}, {"tag": "02 / Shape", "title": "Design", "body": "Interfaces that feel obvious.", "detail": "Flows, wireframes and visual design.", "color": "surface", "shape": "square"}, {"tag": "03 / Build", "title": "Front-end", "body": "Fast, accessible, maintainable.", "detail": "HTML, CSS, TypeScript and React.", "color": "c2", "shape": "diamond"}, {"tag": "04 / Learn", "title": "Research", "body": "Decisions backed by real users.", "detail": "Interviews, tests and analytics.", "color": "c3", "shape": "triangle"}, {"tag": "05 / Try", "title": "Prototyping", "body": "Ideas you can click before you build.", "detail": "Quick prototypes to test ideas early.", "color": "text", "shape": "hexagon"}, {"tag": "06 / Ship", "title": "Delivery", "body": "From plan to production, on time.", "detail": "Releases, reviews and measurement.", "color": "surface", "shape": "ring"}]}, "work": {"eyebrow": "Work · 2012 → now", "title": "The deck.", "lede": "Each role stacks on the last. Scroll to deal the cards.", "items": [{"period": "2022 – Present", "title": "Senior Designer", "org": "Company One", "orgNote": "City", "current": true, "color": "surface", "image": null, "bullets": ["What you lead and the results it brought.", "A second highlight with a number if you have one."], "art": [{"type": "circle", "color": "c1"}, {"type": "square", "color": "c2"}, {"type": "triangle", "color": "c3"}]}, {"period": "2019 – 2022", "title": "Designer", "org": "Company Two", "orgNote": "City", "current": false, "color": "c1", "image": null, "bullets": ["What you built and who used it."], "art": [{"type": "ring", "color": "text"}, {"type": "diamond", "color": "c3"}]}, {"period": "2016 – 2019", "title": "Junior Designer", "org": "Company Three", "orgNote": "City", "current": false, "color": "c3", "image": null, "bullets": ["Where you started and what you learned."], "art": [{"type": "half", "color": "deep"}, {"type": "square", "color": "c2"}]}]}, "projects": {"eyebrow": "Projects", "title": "Selected work.", "lede": "A closer look at things I've built.", "items": []}, "learning": {"eyebrow": "Learning", "title": "Education & certifications.", "languagesLabel": "Speaks", "items": [{"period": "2012 – 2016", "title": "Your degree", "sub": "Your university", "shape": "circle", "color": "c1"}, {"period": "Certification", "title": "A certification", "sub": "Issuer", "shape": "square", "color": "c2"}, {"period": "Course", "title": "A course you took", "sub": "Provider", "shape": "triangle", "color": "c3"}], "languages": ["English"]}, "contact": {"eyebrow": "Contact", "title": "Have a plan? Let's *build it.*", "body": "Open to conversations on engineering leadership, front-end architecture and ambitious product work.", "email": "hello@example.com", "copyLabel": "Copy email", "links": [{"label": "LinkedIn", "url": "https://www.linkedin.com/"}, {"label": "GitHub", "url": "https://github.com/"}, {"label": "Email", "url": "mailto:hello@example.com"}], "footerLeft": "© 2026 Your Name", "footerRight": "Circle · Square · Triangle"}, "seo": {"title": "Your Name · Portfolio", "description": "Portfolio of Your Name: strategy, design and front-end."}};
 const SECTION_NAMES={about:"About",skills:"Skills cube",work:"Work deck",projects:"Projects",learning:"Learning",contact:"Contact"};
 const PRESETS=[
   {name:"Blueprint",t:{bg:"#0A1830",surface:"#0F2142",deep:"#06101F",text:"#E9EEF6",soft:"#93A6C4",line:"#2A4A7A",c1:"#3D63FF",c2:"#FF6A3D",c3:"#FFC83A",glow:"#FFB547"}},
@@ -244,8 +351,8 @@ const PRESETS=[
   {name:"Terracotta sun",t:{bg:"#F4EDE6",surface:"#FFF9F3",deep:"#2B1D17",text:"#2B1D17",soft:"#7A6458",line:"#DCCBBE",c1:"#C8553D",c2:"#2D6A6A",c3:"#F2B134",glow:"#C8553D"}},
   {name:"Mono steel",t:{bg:"#111315",surface:"#1A1D21",deep:"#08090A",text:"#EDEFF2",soft:"#9AA1AB",line:"#33383F",c1:"#EDEFF2",c2:"#7C8591",c3:"#C9CED6",glow:"#EDEFF2"}}
 ];
-const FONTS_D={"Unbounded":"Unbounded:wght@400;600;800","Bricolage Grotesque":"Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800","Syne":"Syne:wght@400;600;800","Sora":"Sora:wght@400;600;800","Fraunces":"Fraunces:opsz,wght@9..144,400;9..144,600;9..144,800","Archivo Black":"Archivo+Black","DM Serif Display":"DM+Serif+Display"};
-const FONTS_B={"Manrope":"Manrope:wght@400;500;600;700","Instrument Sans":"Instrument+Sans:wght@400;500;600;700","IBM Plex Sans":"IBM+Plex+Sans:wght@400;500;600;700","DM Sans":"DM+Sans:wght@400;500;700","Work Sans":"Work+Sans:wght@400;500;600;700"};
+const FONTS={"Unbounded": "Unbounded:wght@400;600;800", "Bricolage Grotesque": "Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800", "Syne": "Syne:wght@400;600;800",  "Sora": "Sora:wght@400;600;800", "Fraunces": "Fraunces:opsz,wght@9..144,400;9..144,600;9..144,800", "Archivo Black": "Archivo+Black", "DM Serif Display": "DM+Serif+Display",  "Playfair Display": "Playfair+Display:ital,wght@0,400;0,600;0,800;1,400", "Space Grotesk": "Space+Grotesk:wght@400;600;700", "Outfit": "Outfit:wght@400;500;600;800",  "Oswald": "Oswald:wght@400;600;700", "Bebas Neue": "Bebas+Neue", "Cormorant Garamond": "Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400", "Libre Baskerville": "Libre+Baskerville:ital,wght@0,400;0,700;1,400",  "Abril Fatface": "Abril+Fatface", "Righteous": "Righteous", "Lexend": "Lexend:wght@400;500;600;800", "Rubik": "Rubik:wght@400;500;700;800", "Instrument Serif": "Instrument+Serif:ital@0;1",  "Young Serif": "Young+Serif", "Anton": "Anton", "Chakra Petch": "Chakra+Petch:wght@400;600;700", "Orbitron": "Orbitron:wght@400;600;800", "Silkscreen": "Silkscreen:wght@400;700",  "Caveat": "Caveat:wght@400;700", "Josefin Sans": "Josefin+Sans:wght@400;600;700", "Poppins": "Poppins:wght@400;500;600;800", "Alfa Slab One": "Alfa+Slab+One",  "Manrope": "Manrope:wght@400;500;600;700;800", "Instrument Sans": "Instrument+Sans:wght@400;500;600;700", "IBM Plex Sans": "IBM+Plex+Sans:wght@400;500;600;700", "DM Sans": "DM+Sans:wght@400;500;700",  "Work Sans": "Work+Sans:wght@400;500;600;700", "Inter": "Inter:wght@400;500;600;700;800", "Nunito Sans": "Nunito+Sans:wght@400;600;700", "Karla": "Karla:wght@400;500;700",  "Lora": "Lora:ital,wght@0,400;0,500;0,600;0,700;1,400", "Source Serif 4": "Source+Serif+4:wght@400;600;700", "Figtree": "Figtree:wght@400;500;600;700", "Plus Jakarta Sans": "Plus+Jakarta+Sans:wght@400;500;600;700",  "Space Mono": "Space+Mono:wght@400;700", "JetBrains Mono": "JetBrains+Mono:wght@400;500;700", "Quicksand": "Quicksand:wght@400;500;600;700", "Mulish": "Mulish:wght@400;600;700",};
+const FONTS_D=FONTS,FONTS_B=FONTS;
 const COLORS=[["c1","Primary"],["c2","Secondary"],["c3","Tertiary"],["text","Text"],["surface","Surface"],["deep","Deep"],["glow","Glow"]];
 const SHAPES=[["circle","Circle"],["square","Square"],["triangle","Triangle"],["diamond","Diamond"],["ring","Ring"],["hexagon","Hexagon"],["half","Half circle"],["pill","Pill"]];
 const SOLIDS=[["sphere","Sphere"],["cube","Cube"],["pyramid","Pyramid"],["torus","Torus"],["icosahedron","Icosahedron"],["octahedron","Octahedron"],["cylinder","Cylinder"]];
@@ -277,7 +384,7 @@ function imgUrl(img){if(!img)return "";if(img.path)return ASSETS[img.path]||img.
 function shp(type,color,size,extra=""){
   const w=type==="pill"?size*1.6:size,h=type==="half"?size/2:type==="pill"?size*.65:size;
   const bg=type==="ring"?`border:${Math.max(3,size*.12)}px solid ${color};`:`background:${color};`;
-  return `<span class="shp ${type}" style="width:${w}px;height:${h}px;${bg}${extra}"></span>`;
+  return `<span class="shp ${type}" style="--sc:${color};width:${w}px;height:${h}px;${bg}${extra}"></span>`;
 }
 let toastT;function toast(m){const t=$("#toast");t.textContent=m;t.classList.add("on");clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove("on"),2200)}
 function ls(k,v){try{if(v===undefined)return sessionStorage.getItem(k);if(v===null)sessionStorage.removeItem(k);else sessionStorage.setItem(k,v)}catch(e){return null}}
@@ -299,9 +406,12 @@ function applyTheme(t){
   r.setProperty("--r",(+t.radius||0)+"px");
   r.setProperty("--fd",`"${t.fontDisplay}","Arial Black",sans-serif`);
   r.setProperty("--fb",`"${t.fontBody}","Helvetica Neue",Arial,sans-serif`);
-  const fams=[FONTS_D[t.fontDisplay],FONTS_B[t.fontBody]].filter(Boolean).map(f=>"family="+f).join("&");
-  const href="https://fonts.googleapis.com/css2?"+fams+"&display=swap";
-  const l=$("#fontlink");if(l.getAttribute("href")!==href)l.setAttribute("href",href);
+  /* one stylesheet per family, so a family Google can't serve never blocks the other */
+  [[FONTS_D[t.fontDisplay],"fontlink"],[FONTS_B[t.fontBody],"fontlink2"]].forEach(([f,id])=>{
+    let l=document.getElementById(id);if(!l){l=document.createElement("link");l.id=id;l.rel="stylesheet";document.head.appendChild(l)}
+    const href=f?"https://fonts.googleapis.com/css2?family="+f+"&display=swap":"";if(href&&l.getAttribute("href")!==href)l.setAttribute("href",href)});
+  const d=document.documentElement.dataset;
+  for(const k of ["layout","nav","cards","buttons","motionStyle","pattern","ornament","heading","shead","width","about","skills","work"])d[k]=String(t[k]||"");
 }
 
 /* ============================================================
@@ -409,7 +519,7 @@ function initSite(c){
     $$("[data-count]",root).forEach(el=>{if(el.getBoundingClientRect().top>innerHeight)cio.observe(el)})}
   // three.js hero
   const stage=$("#stage",root);
-  if(t.show3D&&window.THREE&&stage){try{initThree(c,stage,my,motion)}catch(e){}}
+  if(t.show3D&&window.THREE&&stage&&t.layout!=="minimal"){try{initThree(c,stage,my,motion)}catch(e){}}
   // network
   const cv=$("#net",root),hero=$("#hero",root);
   if(cv&&hero){const nx=cv.getContext("2d");let W,H,pts=[],mouse={x:-999,y:-999},vis=true;const[lr,lg,lb]=hexRgb(t.line).map(v=>Math.min(255,v+60)),[gr,gg,gb]=hexRgb(t.glow),[tr,tg2,tb]=hexRgb(t.text);
@@ -436,7 +546,7 @@ function initSite(c){
     (function cl(){if(my!==gen)return;requestAnimationFrame(cl);if(auto)try_+=.25;rx+=(trx-rx)*.08;ry+=(try_-ry)*.08;cube.style.transform=`rotateX(${rx}deg) rotateY(${ry}deg)`})();
   }
   // parallax + stack
-  const planes=$$("[data-plane]",root),sds=$$(".solids .shp",root),cards=$$(".card",root),orbs=$$("[data-orb]",root);
+  const planes=$$("[data-plane]",root),sds=$$(".solids .shp",root),cards=t.work==="timeline"?[]:$$(".card",root),orbs=$$("[data-orb]",root);
   const sdSpeed=[.25,.5,.35,.6,.45,.3];
   fx.scroll=()=>{const y=scrollY;
     if(motion){planes.forEach(p=>p.style.transform=`translate3d(0,${-y*parseFloat(p.dataset.plane)}px,0)`);

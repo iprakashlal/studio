@@ -19,7 +19,21 @@
     "show3D": true,
     "showSolids": true,
     "showTicker": true,
-    "motion": true
+    "motion": true,
+    "preset": "blueprint",
+    "layout": "split",
+    "nav": "pill",
+    "cards": "soft",
+    "buttons": "brutal",
+    "motionStyle": "rise",
+    "pattern": "grid",
+    "ornament": "solid",
+    "heading": "normal",
+    "shead": "dot",
+    "width": "normal",
+    "about": "bento",
+    "skills": "cube",
+    "work": "stack"
   },
   "brand": {
     "logoText": "Your Name",

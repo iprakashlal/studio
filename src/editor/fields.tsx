@@ -1,4 +1,5 @@
 import { createContext, useContext, useRef, useState } from "react";
+import { ThemeGallery } from "../themes/ThemeGallery";
 import type { Field as F, TemplateDef } from "../schema/types";
 import { getP, setP, clone, vpaOk, paypalOk, httpsOk, hostIs, emailOk, phoneOk } from "../lib/util";
 import { Field, Toggle, useConfirm, useToast } from "../ui/kit";
@@ -144,6 +145,10 @@ export function FieldView({ f, obj, base }: { f: F; obj: any; base: string }) {
       return <StringsField f={f} arr={Array.isArray(val) ? val : []} set={set} id={id} />;
     case "list":
       return <ListField f={f} obj={obj} base={base} />;
+    case "themes":
+      return (
+        <ThemeGallery current={root.theme?.preset} onPick={(th) => { Object.assign(root.theme, tpl.themeValues(th)); bump(); }} />
+      );
     case "presets":
       return (
         <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">

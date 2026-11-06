@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
+import { ThemeGallery } from "../themes/ThemeGallery";
+import { themeById } from "../themes/catalog";
 import { TEMPLATES, TEMPLATE_LIST } from "../schema";
 import { CATEGORY_COLORS, type CategoryRec, type ProjectMeta, type Studio, type StudioIndex } from "../lib/studio";
 import { explain } from "../lib/repo";
@@ -131,7 +133,7 @@ export function Dashboard({ studio, index, onIndex }: { studio: Studio; index: S
 
 function NewProject({ studio, index, onClose, onCreated }: { studio: Studio; index: StudioIndex; onClose: () => void; onCreated: (i: StudioIndex, id: string) => void }) {
   const toast = useToast();
-  const [f, setF] = useState({ name: "", client: "", template: "portfolio", starter: "default", category: index.categories[0]?.id || "" });
+  const [f, setF] = useState({ name: "", client: "", template: "portfolio", starter: "default", theme: "", category: index.categories[0]?.id || "" });
   const [man, setMan] = useState<Record<string, Manifest>>({});
   const [busy, setBusy] = useState(false);
   const pick = (template: string) => setF((x) => ({ ...x, template, starter: "default" }));
@@ -144,6 +146,8 @@ function NewProject({ studio, index, onClose, onCreated }: { studio: Studio; ind
     try {
       const content = await loadStarter(f.template, f.starter);
       const tpl = TEMPLATES[f.template];
+      const th = f.theme ? themeById(f.theme) : undefined;
+      if (th) content.theme = { ...(content.theme || {}), ...tpl.themeValues(th) };
       const { index: i, id } = await studio.createProject({ name: f.name.trim(), template: f.template, category: f.category, client: f.client.trim(), content, summary: tpl.summary(content) });
       onCreated(i, id);
     } catch (e) {
@@ -177,6 +181,15 @@ function NewProject({ studio, index, onClose, onCreated }: { studio: Studio; ind
           </select>
         </Field>
       )}
+      <div className="flex flex-col gap-2">
+        <span className="label flex flex-wrap items-center justify-between gap-2">Theme
+          <button type="button" className={`rounded-full border px-2.5 py-1 text-xs font-semibold normal-case tracking-normal ${!f.theme ? "border-brand-500 bg-brand-500/15 text-ink-100" : "border-ink-600 text-ink-400"}`} aria-pressed={!f.theme} onClick={() => setF({ ...f, theme: "" })}>Template's own look</button>
+        </span>
+        <div className="max-h-[340px] overflow-y-auto pr-1 scroll-thin">
+          <ThemeGallery compact current={f.theme} onPick={(t) => setF({ ...f, theme: t.id })} />
+        </div>
+        <p className="text-xs text-ink-500">You can change the theme any time in Design → Theme &amp; layout.</p>
+      </div>
       <Field label="Category" htmlFor="np-cat">
         <select id="np-cat" className="input" value={f.category} onChange={(e) => setF({ ...f, category: e.target.value })}>
           <option value="">No category</option>

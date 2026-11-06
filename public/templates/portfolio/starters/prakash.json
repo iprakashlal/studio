@@ -1,0 +1,458 @@
+{
+  "theme": {
+    "bg": "#0A1830",
+    "surface": "#0F2142",
+    "deep": "#06101F",
+    "text": "#E9EEF6",
+    "soft": "#93A6C4",
+    "line": "#2A4A7A",
+    "c1": "#3D63FF",
+    "c2": "#FF6A3D",
+    "c3": "#FFC83A",
+    "glow": "#FFB547",
+    "fontDisplay": "Unbounded",
+    "fontBody": "Manrope",
+    "radius": 24,
+    "showGrid": true,
+    "showGlow": true,
+    "showNetwork": true,
+    "show3D": true,
+    "showSolids": true,
+    "showTicker": true,
+    "motion": true
+  },
+  "brand": {
+    "logoText": "Prakash Lal",
+    "contactLabel": "Contact"
+  },
+  "hero": {
+    "eyebrow": "Senior Lead Software Engineer · Bandhan Life",
+    "firstName": "Prakash",
+    "lastName": "Lal",
+    "role": "I assemble *simple shapes* into dependable products, and lead the teams who build them.",
+    "ctaPrimary": "View the deck ↓",
+    "ctaPrimaryTarget": "work",
+    "ctaSecondary": "LinkedIn ↗",
+    "ctaSecondaryUrl": "https://www.linkedin.com/in/prakashlal",
+    "photo": null,
+    "photoShape": "circle",
+    "meta": [
+      {
+        "value": "14+",
+        "label": "Years"
+      },
+      {
+        "value": "7",
+        "label": "Organisations"
+      },
+      {
+        "value": "Mumbai",
+        "label": "Based in"
+      }
+    ],
+    "solids": [
+      {
+        "type": "sphere",
+        "color": "c1"
+      },
+      {
+        "type": "cube",
+        "color": "c2"
+      },
+      {
+        "type": "pyramid",
+        "color": "c3"
+      },
+      {
+        "type": "torus",
+        "color": "text"
+      },
+      {
+        "type": "icosahedron",
+        "color": "surface"
+      },
+      {
+        "type": "octahedron",
+        "color": "c1"
+      }
+    ]
+  },
+  "ticker": [
+    "Engineering Leadership",
+    "Front-end Engineering",
+    "TypeScript",
+    "UX Design",
+    "BI Calculators",
+    "Enterprise Delivery"
+  ],
+  "sections": [
+    {
+      "id": "about",
+      "visible": true,
+      "navLabel": "About"
+    },
+    {
+      "id": "skills",
+      "visible": true,
+      "navLabel": "Skills"
+    },
+    {
+      "id": "work",
+      "visible": true,
+      "navLabel": "Work"
+    },
+    {
+      "id": "projects",
+      "visible": false,
+      "navLabel": "Projects"
+    },
+    {
+      "id": "learning",
+      "visible": true,
+      "navLabel": "Learning"
+    },
+    {
+      "id": "contact",
+      "visible": true,
+      "navLabel": "Contact"
+    }
+  ],
+  "about": {
+    "eyebrow": "About",
+    "title": "Built from the basics up.",
+    "lede": "From a two-person design studio to leading engineering at an insurer. Every step added a new piece.",
+    "storyLabel": "The story",
+    "storyHeading": "I started by *designing pixels* for clients. Today I lead the teams that ship them at enterprise scale.",
+    "story": "My first venture, PicAffectz, was a web and graphic design studio I ran while studying IT. Since then I've built at Deloitte, Optum (UnitedHealth Group) and now Bandhan Life, formerly Aegon Life.\n\nI care about clean architecture, typed code and interfaces that make complex numbers easy to read.",
+    "stats": [
+      {
+        "value": 14,
+        "suffix": "+",
+        "label": "Years building",
+        "color": "c1",
+        "shape": "circle"
+      },
+      {
+        "value": 7,
+        "suffix": "",
+        "label": "Organisations",
+        "color": "c2",
+        "shape": "square"
+      }
+    ],
+    "quote": "“You have it *on paper*, trust me, I'll make it *real*.”",
+    "quoteLabel": "Working motto",
+    "factsLabel": "Quick facts",
+    "facts": [
+      {
+        "k": "Now",
+        "v": "Senior Lead Software Engineer, Bandhan Life"
+      },
+      {
+        "k": "Before",
+        "v": "Optum · Deloitte · MindCraft"
+      },
+      {
+        "k": "Focus",
+        "v": "Leadership, front-end, BI calculators"
+      },
+      {
+        "k": "Speaks",
+        "v": "English, Hindi, Marathi"
+      }
+    ]
+  },
+  "skills": {
+    "eyebrow": "Skills",
+    "title": "Six sides of the build.",
+    "lede": "Drag the cube, or pick a skill to turn it to that face.",
+    "items": [
+      {
+        "tag": "01 / Lead",
+        "title": "Engineering Leadership",
+        "body": "Direction, reviews and delivery for engineering teams.",
+        "detail": "Leading teams through architecture, code reviews and on-time delivery.",
+        "color": "c1",
+        "shape": "circle"
+      },
+      {
+        "tag": "02 / Build",
+        "title": "Front-end Engineering",
+        "body": "Fast, accessible interfaces with maintainable code.",
+        "detail": "Interfaces that load fast and stay easy to change.",
+        "color": "surface",
+        "shape": "square"
+      },
+      {
+        "tag": "03 / Type",
+        "title": "TypeScript",
+        "body": "Typed, scalable JavaScript for large codebases.",
+        "detail": "Certified in Mastering TypeScript.",
+        "color": "c2",
+        "shape": "diamond"
+      },
+      {
+        "tag": "04 / Design",
+        "title": "UX Design",
+        "body": "Research, wireframes and usability in every release.",
+        "detail": "Certified in the Foundations of UX Design, rooted in graphic design.",
+        "color": "c3",
+        "shape": "triangle"
+      },
+      {
+        "tag": "05 / Compute",
+        "title": "BI Calculators",
+        "body": "Business rules turned into clear, trustworthy numbers.",
+        "detail": "Business intelligence calculators customers can trust.",
+        "color": "text",
+        "shape": "hexagon"
+      },
+      {
+        "tag": "06 / Scale",
+        "title": "Enterprise Delivery",
+        "body": "Consulting, healthcare and insurance platforms.",
+        "detail": "Security, compliance and scale for large organisations.",
+        "color": "surface",
+        "shape": "ring"
+      }
+    ]
+  },
+  "work": {
+    "eyebrow": "Work · 2012 → now",
+    "title": "The deck.",
+    "lede": "Each role stacks on the last. Scroll to deal the cards.",
+    "items": [
+      {
+        "period": "Jul 2022 – Present",
+        "title": "Senior Lead Software Engineer",
+        "org": "Bandhan Life",
+        "orgNote": "formerly Aegon Life · India",
+        "current": true,
+        "color": "surface",
+        "image": null,
+        "bullets": [
+          "Promoted to Senior Lead in November 2026 after four years as Lead Software Engineer and Lead Frontend Specialist.",
+          "Lead engineering on customer-facing insurance products and BI calculators.",
+          "Carried the platform through the Aegon to Bandhan transition."
+        ],
+        "art": [
+          {
+            "type": "circle",
+            "color": "c1"
+          },
+          {
+            "type": "square",
+            "color": "c2"
+          },
+          {
+            "type": "triangle",
+            "color": "c3"
+          }
+        ]
+      },
+      {
+        "period": "Mar 2021 – Jul 2022",
+        "title": "Frontend Software Engineer II",
+        "org": "Optum",
+        "orgNote": "UnitedHealth Group · Gurugram",
+        "current": false,
+        "color": "c1",
+        "image": null,
+        "bullets": [
+          "Built front-end features for large-scale healthcare platforms.",
+          "Worked to enterprise standards for quality, accessibility and security."
+        ],
+        "art": [
+          {
+            "type": "ring",
+            "color": "text"
+          },
+          {
+            "type": "diamond",
+            "color": "c3"
+          }
+        ]
+      },
+      {
+        "period": "May 2017 – Feb 2021",
+        "title": "Web Developer · Analyst L3",
+        "org": "Deloitte",
+        "orgNote": "Hyderabad",
+        "current": false,
+        "color": "c3",
+        "image": null,
+        "bullets": [
+          "Delivered web solutions for consulting engagements across nearly four years.",
+          "Grew to Analyst L3, owning features end to end."
+        ],
+        "art": [
+          {
+            "type": "half",
+            "color": "deep"
+          },
+          {
+            "type": "square",
+            "color": "c2"
+          }
+        ]
+      },
+      {
+        "period": "Feb 2016 – May 2017",
+        "title": "Software & Web Developer · Consultant",
+        "org": "MindCraft Software Pvt. Ltd.",
+        "orgNote": "Mumbai",
+        "current": false,
+        "color": "text",
+        "image": null,
+        "bullets": [
+          "Built and consulted on software and web projects for clients."
+        ],
+        "art": [
+          {
+            "type": "triangle",
+            "color": "c3"
+          },
+          {
+            "type": "circle",
+            "color": "c1"
+          }
+        ]
+      },
+      {
+        "period": "Nov 2014 – Feb 2016",
+        "title": "Digital Technology Associate",
+        "org": "V. K. Lalco Pvt. Ltd.",
+        "orgNote": "Nariman Point, Mumbai",
+        "current": false,
+        "color": "c2",
+        "image": null,
+        "bullets": [
+          "Ran the company's digital and web technology work."
+        ],
+        "art": [
+          {
+            "type": "diamond",
+            "color": "c1"
+          },
+          {
+            "type": "circle",
+            "color": "surface"
+          }
+        ]
+      },
+      {
+        "period": "Oct 2012 – Nov 2014",
+        "title": "Founder · Entrepreneur",
+        "org": "PicAffectz",
+        "orgNote": "Mumbai",
+        "current": false,
+        "color": "surface",
+        "image": null,
+        "bullets": [
+          "Started a web development and graphic design venture while studying, delivering sites and visual identities for clients."
+        ],
+        "art": [
+          {
+            "type": "circle",
+            "color": "c1"
+          },
+          {
+            "type": "square",
+            "color": "c2"
+          },
+          {
+            "type": "triangle",
+            "color": "c3"
+          }
+        ]
+      }
+    ]
+  },
+  "projects": {
+    "eyebrow": "Projects",
+    "title": "Selected work.",
+    "lede": "A closer look at things I've built.",
+    "items": []
+  },
+  "learning": {
+    "eyebrow": "Learning",
+    "title": "Education & certifications.",
+    "languagesLabel": "Speaks",
+    "items": [
+      {
+        "period": "2011 – 2014",
+        "title": "B.Sc. Information Technology, Web Engineering",
+        "sub": "Usha Pravin Gandhi College of Arts, Commerce and Science",
+        "shape": "circle",
+        "color": "c1"
+      },
+      {
+        "period": "Certification",
+        "title": "Mastering TypeScript",
+        "sub": "Typed, scalable JavaScript",
+        "shape": "square",
+        "color": "c2"
+      },
+      {
+        "period": "Certification",
+        "title": "Foundations of User Experience (UX) Design",
+        "sub": "Research, wireframing, usability",
+        "shape": "triangle",
+        "color": "c3"
+      },
+      {
+        "period": "2009 – 2011",
+        "title": "HSC",
+        "sub": "R. D. National College, Mumbai University",
+        "shape": "ring",
+        "color": "text"
+      },
+      {
+        "period": "Until 2009",
+        "title": "SSC",
+        "sub": "St. Andrews High School",
+        "shape": "hexagon",
+        "color": "c1"
+      },
+      {
+        "period": "Degree",
+        "title": "Bachelor of Science in Information Technology",
+        "sub": "Degree certification",
+        "shape": "diamond",
+        "color": "text"
+      }
+    ],
+    "languages": [
+      "English",
+      "हिन्दी",
+      "मराठी"
+    ]
+  },
+  "contact": {
+    "eyebrow": "Contact",
+    "title": "Have a plan? Let's *build it.*",
+    "body": "Open to conversations on engineering leadership, front-end architecture and ambitious product work.",
+    "email": "prakashlal@live.com",
+    "copyLabel": "Copy email",
+    "links": [
+      {
+        "label": "LinkedIn",
+        "url": "https://www.linkedin.com/in/prakashlal"
+      },
+      {
+        "label": "Portfolio",
+        "url": "https://iprakashlal.github.io/me/"
+      },
+      {
+        "label": "Email",
+        "url": "mailto:prakashlal@live.com"
+      }
+    ],
+    "footerLeft": "© 2026 Prakash Lal",
+    "footerRight": "Circle · Square · Triangle · Mumbai"
+  },
+  "seo": {
+    "title": "Prakash Lal",
+    "description": "Prakash Lal, Senior Lead Software Engineer in Mumbai. Engineering leadership, front-end engineering and UX."
+  }
+}

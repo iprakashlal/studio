@@ -1,0 +1,362 @@
+{
+  "theme": {
+    "bg": "#0A1830",
+    "surface": "#0F2142",
+    "deep": "#06101F",
+    "text": "#E9EEF6",
+    "soft": "#93A6C4",
+    "line": "#2A4A7A",
+    "c1": "#3D63FF",
+    "c2": "#FF6A3D",
+    "c3": "#FFC83A",
+    "glow": "#FFB547",
+    "fontDisplay": "Unbounded",
+    "fontBody": "Manrope",
+    "radius": 24,
+    "showGrid": true,
+    "showGlow": true,
+    "showNetwork": true,
+    "show3D": true,
+    "showSolids": true,
+    "showTicker": true,
+    "motion": true
+  },
+  "brand": {
+    "logoText": "Your Name",
+    "contactLabel": "Contact"
+  },
+  "hero": {
+    "eyebrow": "Product Designer · Your City",
+    "firstName": "Your",
+    "lastName": "Name",
+    "role": "I design and build *useful things* for people who care about the details.",
+    "ctaPrimary": "View the deck ↓",
+    "ctaPrimaryTarget": "work",
+    "ctaSecondary": "LinkedIn ↗",
+    "ctaSecondaryUrl": "https://www.linkedin.com/",
+    "photo": null,
+    "photoShape": "circle",
+    "meta": [
+      {
+        "value": "8+",
+        "label": "Years"
+      },
+      {
+        "value": "40",
+        "label": "Projects"
+      },
+      {
+        "value": "Your City",
+        "label": "Based in"
+      }
+    ],
+    "solids": [
+      {
+        "type": "sphere",
+        "color": "c1"
+      },
+      {
+        "type": "cube",
+        "color": "c2"
+      },
+      {
+        "type": "pyramid",
+        "color": "c3"
+      },
+      {
+        "type": "torus",
+        "color": "text"
+      },
+      {
+        "type": "icosahedron",
+        "color": "surface"
+      },
+      {
+        "type": "octahedron",
+        "color": "c1"
+      }
+    ]
+  },
+  "ticker": [
+    "Strategy",
+    "Design",
+    "Front-end",
+    "Research",
+    "Prototyping",
+    "Delivery"
+  ],
+  "sections": [
+    {
+      "id": "about",
+      "visible": true,
+      "navLabel": "About"
+    },
+    {
+      "id": "skills",
+      "visible": true,
+      "navLabel": "Skills"
+    },
+    {
+      "id": "work",
+      "visible": true,
+      "navLabel": "Work"
+    },
+    {
+      "id": "projects",
+      "visible": false,
+      "navLabel": "Projects"
+    },
+    {
+      "id": "learning",
+      "visible": true,
+      "navLabel": "Learning"
+    },
+    {
+      "id": "contact",
+      "visible": true,
+      "navLabel": "Contact"
+    }
+  ],
+  "about": {
+    "eyebrow": "About",
+    "title": "Built from the basics up.",
+    "lede": "A short line about the path that got you here.",
+    "storyLabel": "The story",
+    "storyHeading": "I started with *one small project*. Now I help teams ship work they're proud of.",
+    "story": "Write two or three short paragraphs about where you started and what you learned along the way.\n\nThen say what you care about in your work and the kind of problems you like to solve.",
+    "stats": [
+      {
+        "value": 8,
+        "suffix": "+",
+        "label": "Years of experience",
+        "color": "c1",
+        "shape": "circle"
+      },
+      {
+        "value": 40,
+        "suffix": "",
+        "label": "Projects shipped",
+        "color": "c2",
+        "shape": "square"
+      }
+    ],
+    "quote": "“Make it simple, then make it *real*.”",
+    "quoteLabel": "Working motto",
+    "factsLabel": "Quick facts",
+    "facts": [
+      {
+        "k": "Now",
+        "v": "Your current role"
+      },
+      {
+        "k": "Before",
+        "v": "Previous companies"
+      },
+      {
+        "k": "Focus",
+        "v": "What you're known for"
+      },
+      {
+        "k": "Speaks",
+        "v": "Your languages"
+      }
+    ]
+  },
+  "skills": {
+    "eyebrow": "Skills",
+    "title": "Six sides of the build.",
+    "lede": "Drag the cube, or pick a skill to turn it to that face.",
+    "items": [
+      {
+        "tag": "01 / Plan",
+        "title": "Strategy",
+        "body": "Turning goals into a clear plan.",
+        "detail": "Workshops, roadmaps and priorities.",
+        "color": "c1",
+        "shape": "circle"
+      },
+      {
+        "tag": "02 / Shape",
+        "title": "Design",
+        "body": "Interfaces that feel obvious.",
+        "detail": "Flows, wireframes and visual design.",
+        "color": "surface",
+        "shape": "square"
+      },
+      {
+        "tag": "03 / Build",
+        "title": "Front-end",
+        "body": "Fast, accessible, maintainable.",
+        "detail": "HTML, CSS, TypeScript and React.",
+        "color": "c2",
+        "shape": "diamond"
+      },
+      {
+        "tag": "04 / Learn",
+        "title": "Research",
+        "body": "Decisions backed by real users.",
+        "detail": "Interviews, tests and analytics.",
+        "color": "c3",
+        "shape": "triangle"
+      },
+      {
+        "tag": "05 / Try",
+        "title": "Prototyping",
+        "body": "Ideas you can click before you build.",
+        "detail": "Quick prototypes to test ideas early.",
+        "color": "text",
+        "shape": "hexagon"
+      },
+      {
+        "tag": "06 / Ship",
+        "title": "Delivery",
+        "body": "From plan to production, on time.",
+        "detail": "Releases, reviews and measurement.",
+        "color": "surface",
+        "shape": "ring"
+      }
+    ]
+  },
+  "work": {
+    "eyebrow": "Work · 2012 → now",
+    "title": "The deck.",
+    "lede": "Each role stacks on the last. Scroll to deal the cards.",
+    "items": [
+      {
+        "period": "2022 – Present",
+        "title": "Senior Designer",
+        "org": "Company One",
+        "orgNote": "City",
+        "current": true,
+        "color": "surface",
+        "image": null,
+        "bullets": [
+          "What you lead and the results it brought.",
+          "A second highlight with a number if you have one."
+        ],
+        "art": [
+          {
+            "type": "circle",
+            "color": "c1"
+          },
+          {
+            "type": "square",
+            "color": "c2"
+          },
+          {
+            "type": "triangle",
+            "color": "c3"
+          }
+        ]
+      },
+      {
+        "period": "2019 – 2022",
+        "title": "Designer",
+        "org": "Company Two",
+        "orgNote": "City",
+        "current": false,
+        "color": "c1",
+        "image": null,
+        "bullets": [
+          "What you built and who used it."
+        ],
+        "art": [
+          {
+            "type": "ring",
+            "color": "text"
+          },
+          {
+            "type": "diamond",
+            "color": "c3"
+          }
+        ]
+      },
+      {
+        "period": "2016 – 2019",
+        "title": "Junior Designer",
+        "org": "Company Three",
+        "orgNote": "City",
+        "current": false,
+        "color": "c3",
+        "image": null,
+        "bullets": [
+          "Where you started and what you learned."
+        ],
+        "art": [
+          {
+            "type": "half",
+            "color": "deep"
+          },
+          {
+            "type": "square",
+            "color": "c2"
+          }
+        ]
+      }
+    ]
+  },
+  "projects": {
+    "eyebrow": "Projects",
+    "title": "Selected work.",
+    "lede": "A closer look at things I've built.",
+    "items": []
+  },
+  "learning": {
+    "eyebrow": "Learning",
+    "title": "Education & certifications.",
+    "languagesLabel": "Speaks",
+    "items": [
+      {
+        "period": "2012 – 2016",
+        "title": "Your degree",
+        "sub": "Your university",
+        "shape": "circle",
+        "color": "c1"
+      },
+      {
+        "period": "Certification",
+        "title": "A certification",
+        "sub": "Issuer",
+        "shape": "square",
+        "color": "c2"
+      },
+      {
+        "period": "Course",
+        "title": "A course you took",
+        "sub": "Provider",
+        "shape": "triangle",
+        "color": "c3"
+      }
+    ],
+    "languages": [
+      "English"
+    ]
+  },
+  "contact": {
+    "eyebrow": "Contact",
+    "title": "Have a plan? Let's *build it.*",
+    "body": "Open to conversations on engineering leadership, front-end architecture and ambitious product work.",
+    "email": "hello@example.com",
+    "copyLabel": "Copy email",
+    "links": [
+      {
+        "label": "LinkedIn",
+        "url": "https://www.linkedin.com/"
+      },
+      {
+        "label": "GitHub",
+        "url": "https://github.com/"
+      },
+      {
+        "label": "Email",
+        "url": "mailto:hello@example.com"
+      }
+    ],
+    "footerLeft": "© 2026 Your Name",
+    "footerRight": "Circle · Square · Triangle"
+  },
+  "seo": {
+    "title": "Your Name · Portfolio",
+    "description": "Portfolio of Your Name: strategy, design and front-end."
+  }
+}

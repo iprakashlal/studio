@@ -1,0 +1,35 @@
+{
+  "files": [
+    "index.html",
+    "shop.html",
+    "product.html",
+    "cart.html",
+    "checkout.html",
+    "portfolio.html",
+    "policies.html",
+    "404.html",
+    "admin.html",
+    "assets/store.css",
+    "assets/store.js",
+    "README.md",
+    "supabase/schema.sql",
+    "supabase/functions/shop/index.ts",
+    "supabase/SETUP.md",
+    "cloudflare/worker.js",
+    "cloudflare/SETUP.md"
+  ],
+  "starters": [
+    {
+      "id": "default",
+      "name": "Sample shop",
+      "description": "Six sample products in three categories, cash on delivery switched on.",
+      "file": "content.json"
+    }
+  ],
+  "when": {
+    "account.html": [
+      "backend.enabled",
+      "backend.accounts"
+    ]
+  }
+}

@@ -1,0 +1,374 @@
+{
+  "theme": {
+    "bg": "#FAF7F2",
+    "surface": "#FFFFFF",
+    "text": "#1B1A17",
+    "soft": "#6B665D",
+    "line": "#E7E1D6",
+    "accent": "#1F4D3A",
+    "accent2": "#E9B949",
+    "sale": "#B4441B",
+    "fontDisplay": "Fraunces",
+    "fontBody": "Manrope",
+    "radius": 14
+  },
+  "brand": {
+    "name": "Fieldnote Goods",
+    "tagline": "Small-batch goods for slow mornings",
+    "logo": null,
+    "announcement": "Free shipping on orders over ₹1,999",
+    "showAnnouncement": true
+  },
+  "seo": {
+    "title": "Fieldnote Goods",
+    "description": "Small-batch ceramics, linen and paper goods."
+  },
+  "nav": {
+    "home": "Home",
+    "shop": "Shop",
+    "portfolio": "Our story",
+    "cart": "Cart",
+    "account": "Account",
+    "showPortfolio": true
+  },
+  "home": {
+    "hero": {
+      "eyebrow": "New collection",
+      "title": "Objects for slow mornings",
+      "text": "Hand-made ceramics, linen and paper goods, made in small batches and shipped with care.",
+      "cta": "Shop the collection",
+      "image": null
+    },
+    "featuredTitle": "Featured",
+    "featuredText": "Our most-loved pieces this season.",
+    "showCategories": true,
+    "categoriesTitle": "Shop by category",
+    "banner": {
+      "show": true,
+      "title": "Made in small batches",
+      "text": "Every piece is made by a small team. Read how we work and see what we've made for other brands.",
+      "cta": "Read our story",
+      "image": null
+    },
+    "testimonialsTitle": "What customers say",
+    "testimonials": []
+  },
+  "shop": {
+    "title": "Shop",
+    "intro": "Everything we make, in one place.",
+    "sortDefault": "featured",
+    "showSearch": true,
+    "emptyText": "No products match. Try another category or search."
+  },
+  "categories": [
+    {
+      "id": "ceramics",
+      "name": "Ceramics",
+      "description": "Cups, bowls and plates",
+      "image": null
+    },
+    {
+      "id": "linen",
+      "name": "Linen",
+      "description": "Napkins, aprons and runners",
+      "image": null
+    },
+    {
+      "id": "paper",
+      "name": "Paper",
+      "description": "Notebooks and cards",
+      "image": null
+    }
+  ],
+  "products": [
+    {
+      "id": "p1",
+      "slug": "stoneware-mug",
+      "name": "Stoneware mug",
+      "category": "ceramics",
+      "price": 850,
+      "compareAt": 1100,
+      "images": [],
+      "short": "Hand-thrown, 350 ml",
+      "description": "A sturdy everyday mug with a soft matte glaze.\n\nEach one is thrown by hand, so sizes and glaze vary slightly.",
+      "features": [
+        "Dishwasher safe",
+        "350 ml",
+        "Lead-free glaze"
+      ],
+      "optionName": "Glaze",
+      "options": [
+        "Sand",
+        "Moss",
+        "Ink"
+      ],
+      "stock": "in",
+      "featured": true,
+      "badge": "Bestseller",
+      "sample": true
+    },
+    {
+      "id": "p2",
+      "slug": "serving-bowl",
+      "name": "Serving bowl",
+      "category": "ceramics",
+      "price": 1650,
+      "compareAt": 0,
+      "images": [],
+      "short": "Wide bowl for salads and pasta",
+      "description": "A wide, shallow bowl for sharing.",
+      "features": [
+        "24 cm across",
+        "Oven safe to 200 °C"
+      ],
+      "optionName": "",
+      "options": [],
+      "stock": "low",
+      "featured": true,
+      "badge": "",
+      "sample": true
+    },
+    {
+      "id": "p3",
+      "slug": "linen-napkins",
+      "name": "Linen napkins, set of 4",
+      "category": "linen",
+      "price": 1200,
+      "compareAt": 0,
+      "images": [],
+      "short": "Stonewashed European linen",
+      "description": "Soft from the first use and softer with every wash.",
+      "features": [
+        "45 × 45 cm",
+        "Machine washable"
+      ],
+      "optionName": "Colour",
+      "options": [
+        "Oat",
+        "Rust",
+        "Charcoal"
+      ],
+      "stock": "in",
+      "featured": true,
+      "badge": "New",
+      "sample": true
+    },
+    {
+      "id": "p4",
+      "slug": "work-apron",
+      "name": "Work apron",
+      "category": "linen",
+      "price": 1900,
+      "compareAt": 2400,
+      "images": [],
+      "short": "Heavy linen with two pockets",
+      "description": "Cross-back straps that don't pull on your neck.",
+      "features": [
+        "One size",
+        "Two front pockets"
+      ],
+      "optionName": "",
+      "options": [],
+      "stock": "in",
+      "featured": false,
+      "badge": "",
+      "sample": true
+    },
+    {
+      "id": "p5",
+      "slug": "dot-grid-notebook",
+      "name": "Dot-grid notebook",
+      "category": "paper",
+      "price": 450,
+      "compareAt": 0,
+      "images": [],
+      "short": "A5, 120 pages, lay-flat",
+      "description": "Thick paper that takes fountain pen ink without bleeding.",
+      "features": [
+        "A5",
+        "120 gsm paper",
+        "Lay-flat binding"
+      ],
+      "optionName": "Cover",
+      "options": [
+        "Kraft",
+        "Forest"
+      ],
+      "stock": "in",
+      "featured": true,
+      "badge": "",
+      "sample": true
+    },
+    {
+      "id": "p6",
+      "slug": "letterpress-cards",
+      "name": "Letterpress cards",
+      "category": "paper",
+      "price": 600,
+      "compareAt": 0,
+      "images": [],
+      "short": "Set of 6 with envelopes",
+      "description": "Printed by hand on cotton paper.",
+      "features": [
+        "A6",
+        "Recycled envelopes"
+      ],
+      "optionName": "",
+      "options": [],
+      "stock": "out",
+      "featured": false,
+      "badge": "",
+      "sample": true
+    }
+  ],
+  "settings": {
+    "currency": "INR",
+    "shippingFee": 99,
+    "freeShippingOver": 1999,
+    "taxPercent": 0,
+    "taxLabel": "GST",
+    "taxIncluded": true,
+    "orderPrefix": "FG",
+    "minOrder": 0,
+    "maxQty": 10
+  },
+  "checkout": {
+    "title": "Checkout",
+    "intro": "Enter your details and choose how to pay. You'll send us the order on the next screen.",
+    "button": "Place order",
+    "askPhone": true,
+    "askAddress": true,
+    "askNotes": true,
+    "successTitle": "Thank you for your order",
+    "successText": "Pay using the option below, then send us the order so we can confirm it and ship."
+  },
+  "payments": {
+    "upi": {
+      "enabled": false,
+      "vpa": "",
+      "payeeName": "",
+      "label": "UPI"
+    },
+    "razorpay": {
+      "enabled": false,
+      "link": "",
+      "label": "Card, UPI or netbanking (Razorpay)"
+    },
+    "stripe": {
+      "enabled": false,
+      "link": "",
+      "label": "International card (Stripe)"
+    },
+    "paypal": {
+      "enabled": false,
+      "username": "",
+      "label": "PayPal"
+    },
+    "cod": {
+      "enabled": true,
+      "label": "Cash on delivery",
+      "note": "Pay when your order arrives."
+    }
+  },
+  "orders": {
+    "whatsapp": "",
+    "email": "",
+    "sendVia": "whatsapp",
+    "messageIntro": "New order"
+  },
+  "contact": {
+    "email": "hello@example.com",
+    "phone": "",
+    "whatsapp": "",
+    "instagram": "",
+    "address": ""
+  },
+  "portfolio": {
+    "eyebrow": "Our story",
+    "title": "A small studio making useful things",
+    "intro": "We started with one kiln and a table at a weekend market. Today we make pieces for homes, cafés and other brands.",
+    "image": null,
+    "storyTitle": "How we work",
+    "story": "Every piece starts as a sketch and a test batch. We only make what we'd use ourselves.\n\nWe work with local makers and pay fairly, and we ship in recycled packaging.",
+    "stats": [
+      {
+        "value": "6",
+        "label": "Years making"
+      },
+      {
+        "value": "40+",
+        "label": "Café partners"
+      },
+      {
+        "value": "12k",
+        "label": "Pieces shipped"
+      }
+    ],
+    "workTitle": "Selected work",
+    "work": [
+      {
+        "title": "Café tableware",
+        "text": "A full set of cups and plates for a neighbourhood café.",
+        "tag": "Commission",
+        "image": null,
+        "link": ""
+      },
+      {
+        "title": "Brand gift boxes",
+        "text": "Corporate gift boxes with linen and a notebook.",
+        "tag": "B2B",
+        "image": null,
+        "link": ""
+      },
+      {
+        "title": "Market stall",
+        "text": "Where it all began: a weekend stall that still runs.",
+        "tag": "Retail",
+        "image": null,
+        "link": ""
+      }
+    ],
+    "ctaTitle": "Find something you'll use every day",
+    "ctaText": "Browse the full collection.",
+    "ctaButton": "Go to the shop"
+  },
+  "policies": [
+    {
+      "id": "shipping",
+      "title": "Shipping",
+      "text": "Orders ship within 3 working days. Delivery usually takes 3 to 7 days in India."
+    },
+    {
+      "id": "refunds",
+      "title": "Returns and refunds",
+      "text": "Contact us within 7 days of delivery if something is damaged or not right. We'll replace it or refund you."
+    },
+    {
+      "id": "privacy",
+      "title": "Privacy",
+      "text": "We only use your details to process and deliver your order. We don't sell or share them."
+    },
+    {
+      "id": "terms",
+      "title": "Terms",
+      "text": "Prices include applicable taxes unless stated. Orders are confirmed once payment is received or, for cash on delivery, once we confirm with you."
+    }
+  ],
+  "footer": {
+    "text": "Made in small batches."
+  },
+  "backend": {
+    "enabled": false,
+    "provider": "supabase",
+    "workerUrl": "",
+    "supabaseUrl": "",
+    "anonKey": "",
+    "accounts": true,
+    "wishlist": true,
+    "requireLogin": false
+  },
+  "accountPage": {
+    "title": "Your account",
+    "signInText": "Enter your email and we'll send you a 6-digit code. No password needed."
+  }
+}

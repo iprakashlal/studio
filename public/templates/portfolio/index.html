@@ -357,6 +357,7 @@ html[data-work=timeline] .card .art{min-height:160px}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="assets/fx.js"></script>
 <script src="assets/motifs.js"></script>
+<script src="assets/layouts.js"></script>
 <script>
 (()=>{
 "use strict";
@@ -404,11 +405,16 @@ const colVar=k=>`var(--${k||"c1"})`;
 function colHex(t,k){return t[k]||t.c1}
 function imgUrl(img){if(!img)return "";if(img.path)return ASSETS[img.path]||img.path;return img.url||""}
 /* Theme element pack (assets/motifs.js): each shape name picks an illustrated element instead. */
-let MOTIF="geometric",CT={};
+let MOTIF="geometric",CT={},KIT="classic";
+/* Page layout (assets/layouts.js): a theme's own layout, a chosen one, or the classic page. */
+function resolveKit(t){const L=window.SiteLayouts;if(!L)return "classic";if(t.kit==="classic")return "classic";if(t.kit&&L.has(t.kit))return t.kit;return L.has(t.preset)?t.preset:"classic"}
+const PACK=()=>MOTIF==="geometric"||!window.SiteMotifs?"tech":MOTIF;
+function pimg(k,alt,w,cls){return window.SiteMotifs?SiteMotifs.img(PACK(),k,alt,w,cls):""}
+function itemImg(item,k,alt,w,cls){return item&&item.image?`<img src="${esc(imgUrl(item.image))}" alt="${esc(alt||"")}" loading="lazy" class="${cls||""}">`:pimg(k,alt,w,cls)}
 const moOn=()=>MOTIF!=="geometric"&&!!window.SiteMotifs&&SiteMotifs.has(MOTIF);
 function moAccent(color){const s=String(color).toLowerCase();return s.includes("c3")||s===String(CT.c3||"").toLowerCase()?"var(--c2)":"var(--c3)"}
 function shp(type,color,size,extra=""){
-  if(moOn())return `<span class="shp mo" style="--sc:${color};color:${color};--mo2:${moAccent(color)};width:${size}px;height:${size}px;${extra}">${SiteMotifs.svg(MOTIF,type)}</span>`;
+  if(moOn())return `<span class="shp mo" style="--sc:${color};color:${color};--mo2:${moAccent(color)};width:${size}px;height:${size}px;${extra}">${SiteMotifs.svg(MOTIF,type,0,true)}</span>`;
   const w=type==="pill"?size*1.6:size,h=type==="half"?size/2:type==="pill"?size*.65:size;
   const bg=type==="ring"?`border:${Math.max(3,size*.12)}px solid ${color};`:`background:${color};`;
   return `<span class="shp ${type}" style="--sc:${color};width:${w}px;height:${h}px;${bg}${extra}"></span>`;
@@ -438,6 +444,7 @@ function applyTheme(t){
     let l=document.getElementById(id);if(!l){l=document.createElement("link");l.id=id;l.rel="stylesheet";document.head.appendChild(l)}
     const href=f?"https://fonts.googleapis.com/css2?family="+f+"&display=swap":"";if(href&&l.getAttribute("href")!==href)l.setAttribute("href",href)});
   CT=t;MOTIF=window.SiteMotifs?SiteMotifs.resolve(t,"tech"):"geometric";
+  KIT=resolveKit(t);document.documentElement.dataset.kit=KIT;
   const d=document.documentElement.dataset;d.motif=moOn()?MOTIF:"geometric";
   for(const k of ["layout","nav","cards","buttons","motionStyle","pattern","ornament","heading","shead","width","about","skills","work","cursor","loader","textfx","hoverfx","scrollfx","overlay"])d[k]=String(t[k]||"");
 }
@@ -507,7 +514,7 @@ const SEC={
     return `<section id="work" class="sec tight"><div class="wrap">${head(W,W.lede)}<div class="stack" id="stack">${cards}</div></div></section>`},
   projects(c){const P=c.projects,t=c.theme;if(!P.items.length)return "";
     return `<section id="projects" class="sec tight"><div class="wrap">${head(P,P.lede)}<div class="projects">${P.items.map(p=>{const bg=colHex(t,p.color);
-      return `<article class="proj rv"><div class="pv" style="background:${bg};color:${onColor(bg)}">${p.image?`<img src="${esc(imgUrl(p.image))}" alt="${esc(p.title)}">`:(moOn()?shp(p.shape||"circle","currentColor",0):`<span class="shp ${esc(p.shape||"circle")}" style="${p.shape==="ring"?"border:14px solid currentColor;background:transparent!important":""}"></span>`)}</div>
+      return `<article class="proj rv"><div class="pv" style="background:${bg};color:${onColor(bg)}">${p.image?`<img src="${esc(imgUrl(p.image))}" alt="${esc(p.title)}">`:(moOn()?pimg(p.title||p.shape,p.title,800)+shp(p.shape||"circle","currentColor",0,"position:absolute;right:14px;bottom:14px;width:64px!important;height:64px!important;aspect-ratio:auto"):`<span class="shp ${esc(p.shape||"circle")}" style="${p.shape==="ring"?"border:14px solid currentColor;background:transparent!important":""}"></span>`)}</div>
       <div class="pb"><h3>${esc(p.title)}</h3><p>${esc(p.body)}</p>${p.tags&&p.tags.length?`<div class="tags">${p.tags.map(x=>`<span>${esc(x)}</span>`).join("")}</div>`:""}${p.url?`<a class="go" href="${esc(safeUrl(p.url))}" target="_blank" rel="noopener">${esc(p.linkLabel||"View project")} ↗</a>`:""}</div></article>`}).join("")}</div></div></section>`},
   learning(c){const L=c.learning,t=c.theme;const lc=["c3","c1","c2"];
     return `<section id="learning" class="sec tight" style="padding-top:20px"><div class="wrap">${head(L,"")}<div class="edu">${L.items.map(it=>`<div class="t rv">${shp(it.shape,colVar(it.color==="surface"?"text":it.color),36)}<span class="yr">${esc(it.period)}</span><h4>${esc(it.title)}</h4><p>${esc(it.sub)}</p></div>`).join("")}</div>
@@ -526,13 +533,26 @@ const SEC={
    SITE EFFECTS (re-initialised on each render)
    ============================================================ */
 let gen=0, fx={};
-function teardown(){gen++;if(fx.three){try{fx.three.dispose();fx.three.domElement.remove()}catch(e){}}fx={}}
+function teardown(){gen++;if(fx.three){try{fx.three.dispose();fx.three.domElement.remove()}catch(e){}}if(fx.kitAbort)fx.kitAbort.abort();if(fx.kitStop)try{fx.kitStop()}catch(e){}fx={}}
 function renderSite(c){
   teardown();applyTheme(c.theme);
   if(c.seo&&c.seo.title)document.title=c.seo.title;
+  const K=KIT!=="classic"&&window.SiteLayouts&&SiteLayouts.kits[KIT];
+  if(K){renderKit(c,K)}else{
   siteRoot.innerHTML=`<div id="siteInner">${siteHTML(c)}</div>`;
-  initSite(c);
+  initSite(c);}
   if(window.SiteFX)try{window.SiteFX.init({root:$("#siteInner"),brand:c.brand.logoText})}catch(e){}
+}
+function renderKit(c,K){
+  let st=document.getElementById("kitcss");if(!st){st=document.createElement("style");st.id="kitcss";document.head.appendChild(st)}
+  if(st.dataset.kit!==KIT){st.textContent=K.css;st.dataset.kit=KIT}
+  const motion=c.theme.motion!==false&&!RM;fx.kitAbort=new AbortController();
+  const h={esc,rich,safeUrl,imgUrl,motion,signal:fx.kitAbort.signal,
+    mo:(k,color,size,extra)=>moOn()?shp(k,color,size,extra):`<span class="shp mo" style="color:${color};width:${size}px;height:${size}px">${window.SiteMotifs?SiteMotifs.svg("tech",k,0,true):""}</span>`,
+    photo:(k,w)=>window.SiteMotifs?SiteMotifs.photo(PACK(),k,w):"",pimg,itemImg,
+    copy:tx=>{try{navigator.clipboard.writeText(tx).then(()=>toast("Copied: "+tx),()=>toast(tx))}catch(e){toast(tx)}}};
+  siteRoot.innerHTML=`<div id="siteInner" class="kit k-${KIT}">${K.render(c,h)}</div>`;
+  try{fx.kitStop=K.init&&K.init($("#siteInner"),c,h)}catch(e){console.error(e)}
 }
 function initSite(c){
   const my=gen,t=c.theme,motion=t.motion&&!RM,root=$("#siteInner");

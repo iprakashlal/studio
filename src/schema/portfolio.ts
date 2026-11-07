@@ -1,5 +1,5 @@
 import type { Category, Field, TemplateDef } from "./types";
-import { BODY_FONTS, DISPLAY_FONTS, PORTFOLIO_AXES, portfolioThemeValues } from "../themes/catalog";
+import { BODY_FONTS, DISPLAY_FONTS, KIT_AXIS, PORTFOLIO_AXES, portfolioThemeValues } from "../themes/catalog";
 import { themeCards } from "../themes/fields";
 
 const SECTION_NAMES: Record<string, string> = { about: "About", skills: "Skills cube", work: "Work deck", projects: "Projects", learning: "Learning", contact: "Contact" };
@@ -13,7 +13,7 @@ const g3 = (...fields: Field[]): Field => ({ t: "grid", cols: 3, fields });
 const schema: Category[] = [
   {
     id: "look", label: "Theme & layout", group: "Design", desc: "Choose from 55 themes, then fine-tune the layout, elements and animation.",
-    cards: themeCards([PORTFOLIO_AXES.about, PORTFOLIO_AXES.skills, PORTFOLIO_AXES.work], "Animation needs “Animations” switched on under Brand & theme. Visitors who ask their device for reduced motion always get a still page."),
+    cards: themeCards([KIT_AXIS, PORTFOLIO_AXES.about, PORTFOLIO_AXES.skills, PORTFOLIO_AXES.work], "Animation needs “Animations” switched on under Brand & theme. Visitors who ask their device for reduced motion always get a still page."),
   },
   {
     id: "theme", label: "Brand & theme", group: "Design", desc: "Colours, fonts, corner radius and background effects for the whole site.",

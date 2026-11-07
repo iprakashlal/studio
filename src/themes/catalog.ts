@@ -4,6 +4,10 @@
 // every value stays editable afterwards under Design → Theme & layout.
 
 import "../fx/motifs.js";
+import "../fx/layouts.js";
+
+/** The page layouts (src/fx/layouts.js) the portfolio template can use instead of the classic page. */
+export const Layouts: { list: [string, string][]; has: (id: string) => boolean } = (globalThis as any).SiteLayouts;
 
 /** The shared element packs (src/fx/motifs.js), also used by the templates. */
 export const Motifs: {
@@ -47,6 +51,12 @@ export type Fx = Record<(typeof FX_KEYS)[number], string>;
 export const MOTIF_AXIS: Axis = {
   key: "motif", label: "Element pack",
   options: [...Motifs.order.map((k) => [k, Motifs.packs[k].name] as [string, string]), ["geometric", "Plain geometric shapes"]],
+};
+
+/** Whole-page layout for the portfolio (each Motion theme brings its own). */
+export const KIT_AXIS: Axis = {
+  key: "kit", label: "Page layout",
+  options: [["classic", "Classic page"], ...Layouts.list],
 };
 
 /** Portfolio-only section layouts. */
@@ -98,6 +108,8 @@ export type Theme = {
   fx: Fx;
   /** Element pack (see MOTIF_AXIS). */
   motif: string;
+  /** Portfolio page layout (see KIT_AXIS). */
+  kit: string;
 };
 
 type Row = [string, string, string, string, string, string, number, string, string, string, string?];
@@ -205,6 +217,7 @@ export const THEMES: Theme[] = ROWS.map((r) => {
     portfolio: { about, skills, work, glow: fx.includes("g"), network: fx.includes("n"), three: fx.includes("3"), ticker: fx.includes("t") },
     store: { grid, product },
     motif: Motifs.themes[id] || "tech",
+    kit: Layouts.has(id) ? id : "classic",
     fx: { cursor: f[0], loader: f[1], textfx: f[2], hoverfx: f[3], scrollfx: f[4], overlay: f[5] },
   };
 });
@@ -224,7 +237,7 @@ export function portfolioThemeValues(t: Theme): Record<string, unknown> {
     fontDisplay: t.display, fontBody: t.body, radius: t.radius,
     showGrid: t.style.pattern !== "none", showGlow: t.portfolio.glow, showNetwork: t.portfolio.network, show3D: t.portfolio.three,
     showSolids: t.style.ornament !== "none", showTicker: t.portfolio.ticker, motion: t.style.motionStyle !== "none",
-    ...styleValues(t), about: t.portfolio.about, skills: t.portfolio.skills, work: t.portfolio.work,
+    ...styleValues(t), kit: t.kit, about: t.portfolio.about, skills: t.portfolio.skills, work: t.portfolio.work,
   };
 }
 

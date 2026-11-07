@@ -415,7 +415,10 @@ html[data-shead=slash] .sec-h h2::before{content:"//"}
 .mo-ph span{position:absolute;display:block}
 .mo-ph span svg{width:100%;height:100%;display:block;overflow:visible}
 .mo-ph .mo-a{width:56%;aspect-ratio:1;left:22%;top:18%;filter:drop-shadow(0 14px 18px rgba(0,0,0,.18));transition:transform .6s cubic-bezier(.2,.8,.2,1)}
-.mo-ph .mo-b{width:24%;aspect-ratio:1;right:7%;bottom:7%;transform:rotate(12deg)}
+.mo-ph .mo-photo{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transition:transform .7s cubic-bezier(.2,.8,.2,1)}
+.mo-ph .mo-b{width:22%;aspect-ratio:1;right:6%;bottom:6%;transform:rotate(12deg);z-index:1}
+.pcard:hover .mo-ph .mo-photo,.cat:hover .mo-ph .mo-photo{transform:scale(1.06)}
+.mo-ph .mo-fallback{position:absolute;inset:0}
 .pcard:hover .mo-ph .mo-a,.cat:hover .mo-ph .mo-a{transform:rotate(-6deg) scale(1.06)}
 .orn.mo span{position:absolute;display:block}
 .orn.mo span svg{width:100%;height:100%;display:block}

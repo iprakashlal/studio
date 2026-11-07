@@ -225,7 +225,7 @@ function ph(seed, cls = "") {
   const cols = [C.theme.accent, C.theme.accent2, C.theme.sale];
   if (moOn()) {
     const a = cols[h % 3], b = cols[(h + 1) % 3];
-    return `<div class="ph mo-ph ${cls}" style="--c:${a}" aria-hidden="true"><span class="mo-a" style="color:${a};--mo2:${b}">${SiteMotifs.svg(MOTIF, h % 8)}</span><span class="mo-b" style="color:${b};--mo2:${a}">${SiteMotifs.svg(MOTIF, (h >> 3) % 8 === h % 8 ? (h + 3) % 8 : (h >> 3) % 8)}</span><b>${esc(String(seed).trim()[0] || "")}</b></div>`;
+    return `<div class="ph mo-ph ${cls}" style="--c:${a}" aria-hidden="true">${SiteMotifs.img(MOTIF, seed, "", 900, "mo-photo")}<span class="mo-b" style="color:${b};--mo2:${a}">${SiteMotifs.svg(MOTIF, h % 8, 0, true)}</span></div>`;
   }
   return `<div class="ph ${cls}" style="--c:${cols[h % 3]}" aria-hidden="true"><i class="a" style="left:${8 + (h % 20)}%;top:${10 + (h % 14)}%"></i><i class="b"></i><i class="c"></i><b>${esc(String(seed).trim()[0] || "")}</b></div>`;
 }
@@ -314,7 +314,7 @@ const PAGES = {
   home() {
     const H = C.home, feat = C.products.filter((p) => p.featured).slice(0, 8), list = feat.length ? feat : C.products.slice(0, 4);
     const col = C.products.slice(0, 3);
-    return `<section class="hero">${C.theme.ornament && C.theme.ornament !== "none" ? (moOn() ? `<div class="orn mo" aria-hidden="true">${[["accent2", 0], ["accent", 1], ["sale", 2]].map(([k, i]) => `<span style="color:var(--${k});--mo2:var(--${k === "accent" ? "accent2" : "accent"})">${SiteMotifs.svg(MOTIF, i)}</span>`).join("")}</div>` : `<div class="orn" aria-hidden="true"><i></i><i></i><i></i></div>`) : ""}<div class="wrap"><div class="htx"><p class="eyebrow">${esc(H.hero.eyebrow)}</p><h1>${esc(H.hero.title)}</h1><p class="lead">${esc(H.hero.text)}</p>
+    return `<section class="hero">${C.theme.ornament && C.theme.ornament !== "none" ? (moOn() ? `<div class="orn mo" aria-hidden="true">${[["accent2", 0], ["accent", 1], ["sale", 2]].map(([k, i]) => `<span style="color:var(--${k});--mo2:var(--${k === "accent" ? "accent2" : "accent"})">${SiteMotifs.svg(MOTIF, i, 0, true)}</span>`).join("")}</div>` : `<div class="orn" aria-hidden="true"><i></i><i></i><i></i></div>`) : ""}<div class="wrap"><div class="htx"><p class="eyebrow">${esc(H.hero.eyebrow)}</p><h1>${esc(H.hero.title)}</h1><p class="lead">${esc(H.hero.text)}</p>
       <div class="cta"><a class="btn pri" href="shop.html">${esc(H.hero.cta)} →</a>${C.nav.showPortfolio ? `<a class="btn" href="portfolio.html">${esc(C.nav.portfolio)}</a>` : ""}</div></div>
       <div class="art">${H.hero.image ? `<img src="${esc(imgUrl(H.hero.image))}" alt="">` : `<div class="collage">${(col.length ? col : [{ name: "A" }, { name: "B" }, { name: "C" }]).map((p) => `<div style="border-radius:calc(var(--r)*1.1);overflow:hidden">${p.images && p.images[0] ? pimg(p) : ph(p.name)}</div>`).join("")}</div>`}</div></div></section>
     ${list.length ? `<section class="sec" style="padding-top:12px"><div class="wrap"><div class="sec-h"><div><h2>${esc(H.featuredTitle)}</h2>${H.featuredText ? `<p class="soft" style="margin-top:8px">${esc(H.featuredText)}</p>` : ""}</div><a class="link" href="shop.html">View all</a></div><div class="grid">${list.map(pcard).join("")}</div></div></section>` : ""}

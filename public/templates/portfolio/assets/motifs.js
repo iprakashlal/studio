@@ -192,6 +192,42 @@
     return THEMES[theme && theme.preset] || fallback || "tech";
   }
 
+  /** Curated free Unsplash photos per pack (hero, project and product placeholders). If one fails to load,
+      the image is swapped for the pack's element (see the error listener below). */
+  var PH = {
+    tech: ["1607799279861-4dd421887fb3", "1614741118887-7a4ee193a5fa", "1605379399642-870262d3d051", "1628258334105-2a0b3d6efee1", "1534972195531-d756b9bfa9f2", "1758640920659-0bb864175983"],
+    celestial: ["1514897575457-c4db467cf78e", "1490814525860-594e82bfd34a", "1532798369041-b33eb576ef16", "1572925077991-61acf7d70608", "1764067037164-93d0986881fd", "1562881223-9ba9b969166d"],
+    nature: ["1497250681960-ef046c08a56e", "1531156992292-d36397ee9184", "1554709248-9ca715a0c86b", "1515893035045-41e667292702", "1599148401005-fe6d7497cb5e", "1627213373335-26c0417ac50d"],
+    ocean: ["1505142468610-359e7d316be0", "1518837695005-2083093ee35b", "1559825481-12a05cc00344", "1616141893496-fbc65370493e", "1530053969600-caed2596d242", "1498330177096-689e3fb901ca"],
+    luxury: ["1605100804763-247f67b3557e", "1611955167811-4711904bb9f8", "1605100804567-1ffe942b5cd6", "1624585179018-25699030cb8f", "1762505464446-c0760d740aee", "1763029513623-37d488cb97b1"],
+    retro: ["1550745165-9bc0b252726f", "1496293455970-f8581aae0e3b", "1619983081563-430f63602796", "1623910270913-3e0294a1c765", "1509281373149-e957c6296406", "1775464713147-2b3b1efc51b5"],
+    studio: ["1716471330463-f475b00f0506", "1502810190503-8303352d0dd1", "1599420186946-7b6fb4e297f0", "1487338875411-8880f74114a2", "1549399905-5d1bad747576", "1621111848501-8d3634f82336"],
+    playful: ["1563262924-641a8b3d397f", "1606797020447-cf605fc9e408", "1666274694243-9997eb427237", "1633158832466-be592c721217", "1515007917921-cad9bf0e2e87", "1622873904690-76c655368668"],
+    cafe: ["1509042239860-f550ce710b93", "1524730320214-794038a15912", "1541167760496-1628856ab772", "1511364101538-0e6b3880a3d8", "1553611323-8c7976b6a39b", "1621947529620-2b9fdbd5beae"],
+    cinema: ["1536440136628-849c177e76a1", "1489599849927-2ee91cede3ba", "1478720568477-152d9b164e26", "1517604931442-7e0c8ed2963c", "1595769816263-9b910be24d5f", "1762541693135-fb989de961e1"],
+    cyber: ["1601042879364-f3947d3f9c16", "1563863251222-11d3e3bd3b62", "1519608487953-e999c86e7455", "1575365717666-1a84be3fd104", "1515036551567-bf1198cccc35", "1764418658910-c00b609c089e"],
+    build: ["1426927308491-6380b6a9936f", "1502343019212-cc6a09783255", "1610850760052-edbc52ef7618", "1761544775537-c024e7707477", "1760310936486-4dd450aab2a8", "1644185711758-7f7237b215b0"],
+  };
+  /** Photo URL for a pack: key picks one of its 6 photos (number or any seed string). */
+  function photo(pack, key, w) {
+    var list = PH[pack] || PH.tech, i;
+    if (typeof key === "number") i = ((key % list.length) + list.length) % list.length;
+    else { var h = 0, s = String(key || ""); for (var j = 0; j < s.length; j++) h = (h * 31 + s.charCodeAt(j)) >>> 0; i = h % list.length; }
+    return "https://images.unsplash.com/photo-" + list[i] + "?auto=format&fit=crop&w=" + (w || 1200) + "&q=70";
+  }
+  /** An <img> of a pack photo that falls back to the pack's 3D-style element if the photo can't load. */
+  function img(pack, key, alt, w, cls) {
+    return '<img src="' + photo(pack, key, w) + '" alt="' + String(alt || "").replace(/"/g, "&quot;") + '" loading="lazy" decoding="async" class="' + (cls || "") + '" data-mo="' + pack + ":" + slotOf(key) + '">';
+  }
+  if (typeof document !== "undefined") document.addEventListener("error", function (e) {
+    var t = e.target;
+    if (!t || t.tagName !== "IMG" || !t.getAttribute("data-mo")) return;
+    var parts = t.getAttribute("data-mo").split(":"), span = document.createElement("span");
+    span.className = "mo-fallback"; span.innerHTML = svg(parts[0], +parts[1], 0, true);
+    span.style.cssText = "display:grid;place-items:center;width:100%;height:100%;padding:12%";
+    t.replaceWith(span);
+  }, true);
+
   var ORDER = ["tech", "celestial", "nature", "ocean", "luxury", "retro", "studio", "playful", "cafe", "cinema", "cyber", "build"];
   var SLOT = { circle: 0, square: 1, triangle: 2, diamond: 3, ring: 4, hexagon: 5, half: 6, pill: 7, sphere: 0, cube: 1, pyramid: 2, torus: 4, icosahedron: 5, octahedron: 3, cylinder: 7 };
 
@@ -202,14 +238,27 @@
     return h % 8;
   }
   /** SVG markup for a pack element. key: shape/solid name, index, or any seed string. */
-  function svg(pack, key, title) {
+  var uid = 0;
+  /** SVG markup for a pack element. key: shape/solid name, index, or any seed string.
+      gloss: add 3D-style lighting (a highlight and shade masked to the element's outline). */
+  function svg(pack, key, title, gloss) {
     var p = PACKS[pack]; if (!p) return "";
-    var it = p.items[slotOf(key)];
-    return '<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false"' + (title ? ' data-name="' + it[0] + '"' : "") + ">" + it[1] + "</svg>";
+    var it = p.items[slotOf(key)], body = it[1];
+    if (gloss) {
+      var id = "mg" + (++uid);
+      body = '<defs><linearGradient id="' + id + 'g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".55"/><stop offset=".42" stop-color="#fff" stop-opacity="0"/><stop offset=".6" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".32"/></linearGradient><mask id="' + id + 'm" style="mask-type:alpha"><g>' + body + '</g></mask></defs>' + body + '<rect x="-10" y="-10" width="120" height="120" fill="url(#' + id + 'g)" mask="url(#' + id + 'm)"/>';
+    }
+    return '<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false"' + (gloss ? ' class="mo3d"' : "") + (title ? ' data-name="' + it[0] + '"' : "") + ">" + body + "</svg>";
   }
   function has(pack) { return !!PACKS[pack]; }
   function names(pack) { return PACKS[pack] ? PACKS[pack].items.map(function (i) { return i[0]; }) : []; }
 
-  var api = { packs: PACKS, order: ORDER, themes: THEMES, resolve: resolve, svg: svg, has: has, names: names, slotOf: slotOf };
+  var api = { packs: PACKS, order: ORDER, themes: THEMES, resolve: resolve, photo: photo, img: img, photos: PH, svg: svg, has: has, names: names, slotOf: slotOf };
+  /* Clay-like 3D extrusion for glossed elements. */
+  if (typeof document !== "undefined" && !document.getElementById("mo3d-css")) {
+    var css = document.createElement("style"); css.id = "mo3d-css";
+    css.textContent = "svg.mo3d{overflow:visible;filter:drop-shadow(0 1.5px 0 color-mix(in srgb,currentColor 62%,#000)) drop-shadow(0 1.5px 0 color-mix(in srgb,currentColor 55%,#000)) drop-shadow(0 1.5px 0 color-mix(in srgb,currentColor 48%,#000)) drop-shadow(0 16px 16px rgba(0,0,0,.28))}";
+    (document.head || document.documentElement).appendChild(css);
+  }
   root.SiteMotifs = api;
 })(typeof window !== "undefined" ? window : globalThis);

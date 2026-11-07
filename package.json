@@ -4,8 +4,10 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
+    "sync:fx": "node scripts/sync-fx.mjs",
+    "predev": "node scripts/sync-fx.mjs",
     "dev": "vite",
-    "build": "tsc -b && node scripts/build-worker.mjs && vite build && vite build -c vite.admin.config.ts",
+    "build": "node scripts/sync-fx.mjs && tsc -b && node scripts/build-worker.mjs && vite build && vite build -c vite.admin.config.ts",
     "build:worker": "node scripts/build-worker.mjs",
     "typecheck": "tsc -b",
     "preview": "vite preview"

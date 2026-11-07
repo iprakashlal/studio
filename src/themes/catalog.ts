@@ -1,4 +1,4 @@
-// The theme catalogue: 54 complete looks shared by the portfolio and shop templates.
+// The theme catalogue: complete looks shared by the portfolio and shop templates.
 // A theme sets colours, fonts and corners, plus a set of style "axes" (layout, cards, buttons,
 // motion, background, ornaments, headings…). Choosing one writes those values into content.theme;
 // every value stays editable afterwards under Design → Theme & layout.
@@ -18,6 +18,18 @@ export const AXES: Record<string, Axis> = {
   shead: { key: "shead", label: "Section label", options: [["dot", "● Dot"], ["plain", "Plain"], ["number", "01 Numbered"], ["line", "— Line"], ["bracket", "[ Brackets ]"], ["slash", "// Slash"]] },
   width: { key: "width", label: "Page width", options: [["normal", "Normal"], ["wide", "Wide"], ["narrow", "Narrow, editorial"]] },
 };
+/** Interaction effects (assets/fx.js). The first option of each is "off". */
+export const FX_AXES: Record<string, Axis> = {
+  cursor: { key: "cursor", label: "Cursor", options: [["none", "Normal cursor"], ["dot", "Dot + trailing ring"], ["blend", "Inverting blob"], ["spotlight", "Spotlight glow"], ["trail", "Light trail"]] },
+  loader: { key: "loader", label: "Intro & page transition", options: [["none", "None"], ["curtain", "Curtain lift"], ["counter", "0–100 counter"], ["split", "Split reveal"]] },
+  textfx: { key: "textfx", label: "Heading reveal", options: [["none", "None"], ["lines", "Line-by-line mask"], ["letters", "Letter cascade"], ["scramble", "Decode / scramble"]] },
+  hoverfx: { key: "hoverfx", label: "Hover", options: [["none", "Theme default"], ["lift", "Lift + glow edge"], ["magnetic", "Magnetic buttons"], ["tilt", "3D tilt + glare"]] },
+  scrollfx: { key: "scrollfx", label: "Scrolling", options: [["none", "Normal"], ["progress", "Progress bar"], ["smooth", "Smooth inertia"], ["skew", "Inertia + velocity skew"]] },
+  overlay: { key: "overlay", label: "Screen texture", options: [["none", "None"], ["grain", "Film grain"], ["scanlines", "Scanlines"], ["vignette", "Vignette"]] },
+};
+export const FX_KEYS = ["cursor", "loader", "textfx", "hoverfx", "scrollfx", "overlay"] as const;
+export type Fx = Record<(typeof FX_KEYS)[number], string>;
+
 /** Portfolio-only section layouts. */
 export const PORTFOLIO_AXES: Record<string, Axis> = {
   about: { key: "about", label: "About layout", options: [["bento", "Bento grid"], ["stack", "Simple stack"]] },
@@ -63,12 +75,15 @@ export type Theme = {
   style: { layout: string; nav: string; cards: string; buttons: string; motionStyle: string; pattern: string; ornament: string; heading: string; shead: string; width: string };
   portfolio: { about: string; skills: string; work: string; glow: boolean; network: boolean; three: boolean; ticker: boolean };
   store: { grid: string; product: string };
+  /** Interaction effects: cursor, loader, textfx, hoverfx, scrollfx, overlay. */
+  fx: Fx;
 };
 
-type Row = [string, string, string, string, string, string, number, string, string, string];
+type Row = [string, string, string, string, string, string, number, string, string, string, string?];
 // id | name | tags | colors (bg surface deep text soft line c1 c2 c3) | display | body | radius |
 // style "layout nav cards buttons motion pattern ornament heading shead width" |
-// portfolio "about skills work fx" (fx letters: g glow, n network, 3 three-d, t ticker) | store "grid product"
+// portfolio "about skills work fx" (fx letters: g glow, n network, 3 three-d, t ticker) | store "grid product" |
+// optional interactions "cursor loader textfx hoverfx scrollfx overlay" (see FX_AXES; omitted = all off)
 const ROWS: Row[] = [
   // ---------------- dark
   ["blueprint", "Blueprint", "Dark Tech Bold", "#0A1830 #0F2142 #06101F #E9EEF6 #93A6C4 #2A4A7A #3D63FF #FF6A3D #FFC83A", "Unbounded", "Manrope", 24, "split pill soft brutal rise grid solid normal dot normal", "bento cube stack gn3t", "auto classic"],
@@ -127,6 +142,20 @@ const ROWS: Row[] = [
   ["porcelain", "Porcelain Blue", "Light Elegant Calm", "#F3F6FB #FFFFFF #14213D #14213D #5A6680 #D9E1EE #1D4ED8 #B91C1C #0EA5E9", "Libre Baskerville", "Source Serif 4", 6, "center bar outline outline fade lines none italic line narrow", "stack grid timeline t", "3 minimal"],
   ["candy", "Candy", "Light Playful Bold", "#FFF0F6 #FFFFFF #3A1030 #3A1030 #86607A #F6D3E4 #D81B60 #0097A7 #FFB300", "Righteous", "Quicksand", 30, "center pill elevated pill zoom dots solid normal dot normal", "bento cube stack 3t", "4 framed"],
   ["kraft", "Kraft Paper", "Light Warm Retro Nature", "#E9DCC7 #F4EBDD #2A2016 #2A2016 #6E5D48 #D2C0A2 #8A4B2A #3D5A40 #D9A441", "Alfa Slab One", "Karla", 4, "reverse bar outline sharp fade cross outline normal bracket normal", "bento cube timeline 3t", "3 framed"],
+  // ---------------- motion: award-style interaction themes (cursor, intro, reveals, hover, scroll, texture)
+  ["solare", "Solare", "Dark Elegant Warm Luxury Motion", "#0E0A06 #18110A #050302 #F4E9D8 #B8A68C #3A2C1E #FF9A2E #FFD27A #E2553B", "Instrument Serif", "Manrope", 4, "center float flat outline fade none soft italic number wide", "stack grid timeline g", "3 overlay", "blend split lines lift smooth grain"],
+  ["solare-day", "Solare Day", "Light Elegant Warm Motion", "#F4ECDF #FBF6EE #1A120B #1A120B #6E5E4B #E0D3BF #D9601A #9A6F0B #7A3B1E", "Instrument Serif", "Manrope", 2, "minimal float flat outline fade none soft italic number wide", "stack grid timeline -", "3 minimal", "dot curtain lines lift smooth grain"],
+  ["tech-lead", "Tech Lead", "Light Minimal Tech Motion", "#FAFAFA #FFFFFF #0A0A0A #0A0A0A #5F6368 #E6E6E6 #2563EB #16A34A #F59E0B", "Inter", "Inter", 14, "split float soft rounded rise none none tight plain normal", "bento grid timeline t", "4 classic", "spotlight none none lift progress none"],
+  ["tech-lead-dark", "Tech Lead Dark", "Dark Minimal Tech Motion", "#09090B #131316 #000000 #FAFAFA #A1A1AA #27272A #60A5FA #34D399 #FBBF24", "Inter", "Inter", 14, "split float soft rounded rise none none tight plain normal", "bento grid timeline t", "4 classic", "spotlight none scramble lift progress none"],
+  ["kinetic-noir", "Kinetic Noir", "Dark Bold Motion", "#0B0B0B #151515 #000000 #F5F5F0 #9A9A92 #2A2A2A #E8FF3A #FF4D2E #F5F5F0", "Anton", "Inter", 0, "minimal bar flat sharp slide none none upper number wide", "stack grid timeline t", "4 overlay", "blend counter letters magnetic skew grain"],
+  ["editorial-motion", "Editorial Motion", "Light Elegant Minimal Motion", "#F3F0EA #FFFFFF #141414 #141414 #5E5A52 #D9D3C7 #141414 #B3261E #7D6E57", "Playfair Display", "Source Serif 4", 0, "center bar outline outline fade lines none italic line narrow", "stack grid timeline -", "3 minimal", "dot curtain lines lift smooth none"],
+  ["decode", "Decode", "Dark Tech Retro Motion", "#050805 #0C120D #000000 #D6FFD9 #6FA176 #1C2E1F #39FF6A #FFB000 #4FD1FF", "Space Mono", "JetBrains Mono", 0, "minimal bar outline outline fade lines none normal slash narrow", "stack grid timeline nt", "3 minimal", "trail counter scramble tilt progress scanlines"],
+  ["liquid-chrome", "Liquid Chrome", "Dark Tech Bold Motion", "#0A0C12 #121621 #05060A #EEF1F8 #9AA3B8 #262C3D #A3B8FF #FF7AD9 #7CFFE0", "Syne", "Inter", 22, "center float glass glow blur dots soft tight dot wide", "bento cube stack gn3t", "3 overlay", "spotlight split letters tilt smooth vignette"],
+  ["gallery", "Gallery", "Light Minimal Luxury Motion", "#FFFFFF #F5F5F3 #111111 #111111 #707070 #E7E7E4 #111111 #9A8F80 #C9C2B6", "Cormorant Garamond", "Mulish", 0, "minimal float flat outline fade none none upper line wide", "stack grid timeline -", "3 minimal", "dot split lines lift smooth grain"],
+  ["brutal-motion", "Brutal Motion", "Light Bold Playful Motion", "#F7F052 #FFFFFF #111111 #111111 #3A3A3A #111111 #E0204F #2D5BFF #111111", "Archivo Black", "DM Sans", 6, "split bar brutal brutal flip none solid upper bracket normal", "bento cube stack 3t", "3 framed", "blend counter letters magnetic skew none"],
+  ["orbit-lab", "Orbit Lab", "Dark Tech Playful Motion", "#070B1A #0E1430 #03050E #EAF0FF #8E9BC4 #1F2A55 #6C8CFF #FF6B9A #3DF5C8", "Unbounded", "Manrope", 26, "split pill glass glow zoom grid solid normal dot normal", "bento cube stack gn3t", "4 overlay", "dot curtain letters magnetic progress none"],
+  ["velvet-cinema", "Velvet Cinema", "Dark Luxury Elegant Motion", "#120607 #1D0B0D #070203 #F6E7D8 #BFA190 #3B1B1E #D7A24B #C21E36 #F6E7D8", "DM Serif Display", "Lora", 4, "center bar outline outline fade none soft upper line narrow", "stack grid timeline g", "3 minimal", "blend curtain lines lift smooth vignette"],
+  ["studio-pop", "Studio Pop", "Light Playful Motion", "#FFF7EE #FFFFFF #23123A #23123A #6F5F86 #F0E2D2 #7B4DFF #E2552B #0E9E83", "Bricolage Grotesque", "Plus Jakarta Sans", 28, "center pill elevated pill zoom dots solid tight dot normal", "bento cube stack 3t", "3 framed", "trail split letters magnetic none none"],
 ];
 
 function axis(s: string, n: number): string[] {
@@ -136,11 +165,12 @@ function axis(s: string, n: number): string[] {
 }
 
 export const THEMES: Theme[] = ROWS.map((r) => {
-  const [id, name, tags, cols, display, body, radius, style, pf, st] = r;
+  const [id, name, tags, cols, display, body, radius, style, pf, st, fxs] = r;
   const c = axis(cols, 9);
   const s = axis(style, 10);
   const [about, skills, work, fx] = axis(pf, 4);
   const [grid, product] = axis(st, 2);
+  const f = axis(fxs || "none none none none none none", 6);
   const lum = (h: string) => {
     const n = parseInt(h.slice(1), 16);
     const v = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((x) => { x /= 255; return x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4); });
@@ -153,12 +183,16 @@ export const THEMES: Theme[] = ROWS.map((r) => {
     style: { layout: s[0], nav: s[1], cards: s[2], buttons: s[3], motionStyle: s[4], pattern: s[5], ornament: s[6], heading: s[7], shead: s[8], width: s[9] },
     portfolio: { about, skills, work, glow: fx.includes("g"), network: fx.includes("n"), three: fx.includes("3"), ticker: fx.includes("t") },
     store: { grid, product },
+    fx: { cursor: f[0], loader: f[1], textfx: f[2], hoverfx: f[3], scrollfx: f[4], overlay: f[5] },
   };
 });
 
-export const THEME_TAGS = ["Dark", "Light", "Bold", "Minimal", "Elegant", "Playful", "Tech", "Calm", "Warm", "Nature", "Retro", "Luxury"];
+/** True when a theme turns on any interaction effect. */
+export const hasFx = (t: Theme) => FX_KEYS.some((k) => t.fx[k] !== "none");
 
-const styleValues = (t: Theme) => ({ preset: t.id, ...t.style });
+export const THEME_TAGS = ["Dark", "Light", "Bold", "Minimal", "Elegant", "Playful", "Tech", "Calm", "Warm", "Nature", "Retro", "Luxury", "Motion"];
+
+const styleValues = (t: Theme) => ({ preset: t.id, ...t.style, ...t.fx });
 
 /** Portfolio content.theme values for a theme. Keeps keys the theme doesn't set. */
 export function portfolioThemeValues(t: Theme): Record<string, unknown> {

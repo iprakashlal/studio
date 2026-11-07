@@ -33,7 +33,13 @@
     "width": "normal",
     "about": "bento",
     "skills": "cube",
-    "work": "stack"
+    "work": "stack",
+    "cursor": "none",
+    "loader": "none",
+    "textfx": "none",
+    "hoverfx": "none",
+    "scrollfx": "none",
+    "overlay": "none"
   },
   "brand": {
     "logoText": "Your Name",

@@ -24,7 +24,7 @@ The data repository can be private because the Studio reads it through the GitHu
 
 ## Themes
 
-Every portfolio and shop can use any of **55 themes** (`src/themes/catalog.ts`). A theme sets colours, fonts and corners, plus:
+Every portfolio and shop can use any of **68 themes** (`src/themes/catalog.ts`). A theme sets colours, fonts and corners, plus:
 
 | Setting | Choices |
 |---|---|
@@ -38,6 +38,18 @@ Every portfolio and shop can use any of **55 themes** (`src/themes/catalog.ts`).
 | Headings / section labels / width | normal, uppercase, italic, tight · dot, plain, numbered, line, brackets, slash · normal, wide, narrow |
 | Portfolio only | About (bento / stack), Skills (3D cube / card grid), Work (card deck / timeline) |
 | Shop only | products per row (auto, 2, 3, 4), product card (classic, framed, name over image, minimal) |
+| Cursor | normal, dot + trailing ring, inverting blob, spotlight glow, light trail |
+| Intro & page transition | none, curtain lift, 0–100 counter, split reveal (also animates links between pages) |
+| Heading reveal | none, line-by-line mask, letter cascade, decode / scramble |
+| Hover | theme default, lift + glow edge, magnetic buttons, 3D tilt + glare |
+| Scrolling | normal, progress bar, smooth inertia, inertia + velocity skew |
+| Screen texture | none, film grain, scanlines, vignette |
+
+### Motion themes
+
+13 award-style themes (tag **Motion**, marked **fx** in the gallery) switch on the interaction effects: Solare and Solare Day (letter-spaced serif, split intro, line reveals, grain), Tech Lead and Tech Lead Dark (clean stat-card look with a cursor spotlight and scroll progress), Kinetic Noir, Editorial Motion, Decode, Liquid Chrome, Gallery, Brutal Motion, Orbit Lab, Velvet Cinema and Studio Pop. Every effect is also a separate setting under **Design → Interactions**.
+
+The effects live in one dependency-free file, `src/fx/fx.js`. `npm run sync:fx` copies it into each template as `assets/fx.js` (this runs automatically before `dev` and `build`), and exported sites include it. Cursor and hover effects only run with a mouse, and visitors who ask their device for reduced motion get a still page.
 
 Pick one in **New project**, or later under **Design → Theme & layout** (also in each site's own CMS). Choosing a theme only changes `content.theme`; your content stays. Every setting stays editable after picking. The templates read these values as `data-*` attributes on `<html>` and switch their CSS, so exported sites need no extra files. Add a theme by adding one row to `ROWS` in `catalog.ts`.
 

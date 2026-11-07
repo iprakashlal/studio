@@ -12,6 +12,7 @@
     "assets/store.css",
     "assets/store.js",
     "assets/fx.js",
+    "assets/motifs.js",
     "README.md",
     "supabase/schema.sql",
     "supabase/functions/shop/index.ts",

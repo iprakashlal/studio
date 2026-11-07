@@ -1,5 +1,6 @@
 import { createContext, useContext, useRef, useState } from "react";
 import { ThemeGallery } from "../themes/ThemeGallery";
+import { Motifs } from "../themes/catalog";
 import type { Field as F, TemplateDef } from "../schema/types";
 import { getP, setP, clone, vpaOk, paypalOk, httpsOk, hostIs, emailOk, phoneOk } from "../lib/util";
 import { Field, Toggle, useConfirm, useToast } from "../ui/kit";
@@ -123,20 +124,28 @@ export function FieldView({ f, obj, base }: { f: F; obj: any; base: string }) {
         </div>
       );
     }
-    case "shape":
+    case "shape": {
+      const pack = Motifs.resolve(getP(root, tpl.themePath) || {}, "tech");
+      const names = Motifs.names(pack);
       return (
         <div className="flex flex-col gap-1.5">
           <span className="label">{f.label}</span>
           <div role="radiogroup" aria-label={f.label} className="flex flex-wrap gap-2">
-            {SHAPES.map(([k, l]) => (
-              <button key={k} type="button" role="radio" aria-checked={val === k} title={l} aria-label={l} onClick={() => set(k)}
-                className={`grid h-10 w-10 place-items-center rounded-lg border ${val === k ? "border-brand-500 bg-brand-500/15 text-brand-300" : "border-ink-600 bg-ink-950 text-ink-400"}`}>
-                <span className={`shp ${k}`} style={{ width: 18, height: 18, background: "currentColor" }} />
-              </button>
-            ))}
+            {SHAPES.map(([k, l], i) => {
+              const name = names[i] || l;
+              return (
+                <button key={k} type="button" role="radio" aria-checked={val === k} title={name} aria-label={name} onClick={() => set(k)}
+                  className={`grid place-items-center rounded-lg border ${names.length ? "h-12 w-12" : "h-10 w-10"} ${val === k ? "border-brand-500 bg-brand-500/15 text-brand-300" : "border-ink-600 bg-ink-950 text-ink-400"}`}>
+                  {names.length
+                    ? <span className="block h-8 w-8" style={{ ["--mo2" as any]: "#FFC83A" }} dangerouslySetInnerHTML={{ __html: Motifs.svg(pack, k) }} />
+                    : <span className={`shp ${k}`} style={{ width: 18, height: 18, background: "currentColor" }} />}
+                </button>
+              );
+            })}
           </div>
         </div>
       );
+    }
     case "image":
       return <ImageField id={id} label={f.label} hint={f.hint} value={val} onChange={set} />;
     case "images":

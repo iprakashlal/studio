@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { THEMES, THEME_TAGS, hasFx, type Theme } from "./catalog";
+import { THEMES, THEME_TAGS, hasFx, Motifs, type Theme } from "./catalog";
 
 /** A small drawing of the theme: background, a card in its card style, a button in its button style, and the hero layout. */
 export function ThemeSwatch({ t }: { t: Theme }) {
@@ -11,7 +11,13 @@ export function ThemeSwatch({ t }: { t: Theme }) {
     boxShadow: t.style.cards === "brutal" ? `2px 2px 0 ${c.text}` : t.style.cards === "elevated" ? "0 6px 12px -6px rgba(0,0,0,.45)" : "none",
     borderRadius: r,
   };
-  const art = (
+  const art = Motifs.has(t.motif) ? (
+    <div className="flex flex-1 items-center justify-center" style={{ minWidth: 0 }}>
+      {[[0, c.c1, c.c3, 26], [1, c.c2, c.c1, 20], [2, c.c3, c.c2, 18]].map(([i, col, acc, sz]) => (
+        <span key={i} className="block" style={{ width: sz, height: sz, color: col as string, ["--mo2" as any]: acc, marginLeft: i ? -4 : 0 }} dangerouslySetInnerHTML={{ __html: Motifs.svg(t.motif, i as number) }} />
+      ))}
+    </div>
+  ) : (
     <div className="flex flex-1 items-center justify-center gap-1" style={{ minWidth: 0 }}>
       <i className="block h-5 w-5 rounded-full" style={{ background: c.c1, filter: t.style.ornament === "soft" ? "blur(2px)" : undefined, boxShadow: t.style.ornament === "outline" ? `inset 0 0 0 2px ${c.c1}` : undefined, backgroundColor: t.style.ornament === "outline" ? "transparent" : c.c1 }} />
       <i className="block h-4 w-4" style={{ background: c.c2, borderRadius: r / 2 }} />
@@ -64,7 +70,7 @@ export function ThemeGallery({ current, onPick, compact }: { current?: string; o
             <span className="flex items-center justify-between gap-2 bg-ink-950 px-2.5 py-2">
               <span className="min-w-0">
                 <b className="block truncate text-[13px]">{t.name}</b>
-                <span className="block truncate text-[11px] text-ink-400">{t.display} · {hasFx(t) ? fxSummary(t) : t.style.motionStyle === "none" ? "still" : t.style.motionStyle}</span>
+                <span className="block truncate text-[11px] text-ink-400">{Motifs.packs[t.motif]?.name || t.display}{hasFx(t) ? " · " + fxSummary(t) : ""}</span>
               </span>
               {current === t.id ? <span className="text-xs font-bold text-brand-400">✓</span> : hasFx(t) && <span className="shrink-0 rounded-full border border-brand-500/50 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-brand-400" title="Interactive theme: cursor, intro and scroll effects">fx</span>}
             </span>

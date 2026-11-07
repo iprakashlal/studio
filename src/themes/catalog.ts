@@ -3,6 +3,19 @@
 // motion, background, ornaments, headings…). Choosing one writes those values into content.theme;
 // every value stays editable afterwards under Design → Theme & layout.
 
+import "../fx/motifs.js";
+
+/** The shared element packs (src/fx/motifs.js), also used by the templates. */
+export const Motifs: {
+  packs: Record<string, { name: string; items: [string, string][] }>;
+  order: string[];
+  themes: Record<string, string>;
+  svg: (pack: string, key: string | number) => string;
+  has: (pack: string) => boolean;
+  names: (pack: string) => string[];
+  resolve: (theme: any, fallback?: string) => string;
+} = (globalThis as any).SiteMotifs;
+
 export type Axis = { key: string; label: string; hint?: string; options: [string, string][] };
 
 /** Style axes both templates understand. The first option of each is the classic look. */
@@ -29,6 +42,12 @@ export const FX_AXES: Record<string, Axis> = {
 };
 export const FX_KEYS = ["cursor", "loader", "textfx", "hoverfx", "scrollfx", "overlay"] as const;
 export type Fx = Record<(typeof FX_KEYS)[number], string>;
+
+/** Illustrated elements that replace plain circles, squares and 3D solids. */
+export const MOTIF_AXIS: Axis = {
+  key: "motif", label: "Element pack",
+  options: [...Motifs.order.map((k) => [k, Motifs.packs[k].name] as [string, string]), ["geometric", "Plain geometric shapes"]],
+};
 
 /** Portfolio-only section layouts. */
 export const PORTFOLIO_AXES: Record<string, Axis> = {
@@ -77,6 +96,8 @@ export type Theme = {
   store: { grid: string; product: string };
   /** Interaction effects: cursor, loader, textfx, hoverfx, scrollfx, overlay. */
   fx: Fx;
+  /** Element pack (see MOTIF_AXIS). */
+  motif: string;
 };
 
 type Row = [string, string, string, string, string, string, number, string, string, string, string?];
@@ -183,6 +204,7 @@ export const THEMES: Theme[] = ROWS.map((r) => {
     style: { layout: s[0], nav: s[1], cards: s[2], buttons: s[3], motionStyle: s[4], pattern: s[5], ornament: s[6], heading: s[7], shead: s[8], width: s[9] },
     portfolio: { about, skills, work, glow: fx.includes("g"), network: fx.includes("n"), three: fx.includes("3"), ticker: fx.includes("t") },
     store: { grid, product },
+    motif: Motifs.themes[id] || "tech",
     fx: { cursor: f[0], loader: f[1], textfx: f[2], hoverfx: f[3], scrollfx: f[4], overlay: f[5] },
   };
 });
@@ -192,7 +214,7 @@ export const hasFx = (t: Theme) => FX_KEYS.some((k) => t.fx[k] !== "none");
 
 export const THEME_TAGS = ["Dark", "Light", "Bold", "Minimal", "Elegant", "Playful", "Tech", "Calm", "Warm", "Nature", "Retro", "Luxury", "Motion"];
 
-const styleValues = (t: Theme) => ({ preset: t.id, ...t.style, ...t.fx });
+const styleValues = (t: Theme) => ({ preset: t.id, ...t.style, ...t.fx, motif: t.motif });
 
 /** Portfolio content.theme values for a theme. Keeps keys the theme doesn't set. */
 export function portfolioThemeValues(t: Theme): Record<string, unknown> {

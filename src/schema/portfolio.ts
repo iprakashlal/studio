@@ -3,7 +3,7 @@ import { BODY_FONTS, DISPLAY_FONTS, PORTFOLIO_AXES, portfolioThemeValues } from 
 import { themeCards } from "../themes/fields";
 
 const SECTION_NAMES: Record<string, string> = { about: "About", skills: "Skills cube", work: "Work deck", projects: "Projects", learning: "Learning", contact: "Contact" };
-const SOLIDS: [string, string][] = [["sphere", "Sphere"], ["cube", "Cube"], ["pyramid", "Pyramid"], ["torus", "Torus"], ["icosahedron", "Icosahedron"], ["octahedron", "Octahedron"], ["cylinder", "Cylinder"]];
+const SOLIDS: [string, string][] = [["sphere", "Sphere · element 1"], ["cube", "Cube · element 2"], ["pyramid", "Pyramid · element 3"], ["octahedron", "Octahedron · element 4"], ["torus", "Torus · element 5"], ["icosahedron", "Icosahedron · element 6"], ["cylinder", "Cylinder · element 8"]];
 const FONTS_D = DISPLAY_FONTS;
 const FONTS_B = BODY_FONTS;
 
@@ -47,9 +47,9 @@ const schema: Category[] = [
       { title: "Buttons", fields: [g2({ t: "text", path: "hero.ctaPrimary", label: "Main button label" }, { t: "select", path: "hero.ctaPrimaryTarget", label: "Main button scrolls to", options: Object.entries(SECTION_NAMES).map(([value, label]) => ({ value, label })) },
         { t: "text", path: "hero.ctaSecondary", label: "Second button label" }, { t: "text", path: "hero.ctaSecondaryUrl", label: "Second button link" })] },
       { title: "Photo", fields: [{ t: "image", path: "hero.photo", label: "Profile photo, shown on the 3D cube" }, { t: "select", path: "hero.photoShape", label: "Photo shape on the cube", options: ["circle", "square", "hexagon", "diamond"] },
-        { t: "note", text: "The photo goes on the first cube in the 3D shapes, framed in that cube's colour. With no cube, or with 3D shapes off, it shows as a framed picture instead." }] },
+        { t: "note", text: "With plain geometric shapes, the photo goes on the first cube in the 3D shapes, framed in that cube's colour. With an element pack (Design → Element pack), or with no cube, it shows as a framed picture next to the illustrated elements." }] },
       { title: "Highlights under the buttons", fields: [{ t: "list", path: "hero.meta", add: () => ({ value: "New", label: "Label" }), max: 5, title: (it) => `${it.value} · ${it.label}`, item: [g2({ t: "text", path: "value", label: "Value" }, { t: "text", path: "label", label: "Label" })] }] },
-      { title: "3D shapes", fields: [{ t: "list", path: "hero.solids", add: () => ({ type: "sphere", color: "c1" }), max: 6, title: (it) => SOLIDS.find((s) => s[0] === it.type)?.[1] || it.type,
+      { title: "Hero elements", fields: [{ t: "note", text: "Each entry is an illustrated element from the theme's element pack (or a 3D solid with plain geometric shapes). The type picks which element." }, { t: "list", path: "hero.solids", add: () => ({ type: "sphere", color: "c1" }), max: 6, title: (it) => SOLIDS.find((s) => s[0] === it.type)?.[1] || it.type,
         item: [{ t: "select", path: "type", label: "Solid", options: SOLIDS.map(([value, label]) => ({ value, label })) }, { t: "colorKey", path: "color", label: "Colour" }] }] },
       { title: "Scrolling skills band", fields: [{ t: "strings", path: "ticker", label: "Words in the band", addLabel: "Add word" }] },
     ],

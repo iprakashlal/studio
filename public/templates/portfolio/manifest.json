@@ -2,6 +2,7 @@
   "files": [
     "index.html",
     "assets/fx.js",
+    "assets/motifs.js",
     "admin.html",
     "404.html",
     "README.md"

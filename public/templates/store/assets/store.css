@@ -409,3 +409,18 @@ html[data-shead=slash] .sec-h h2::before{content:"//"}
 .btn.wish[aria-pressed=true]{border-color:var(--sale);color:var(--sale)}
 .btn.wish[aria-pressed=true]:hover{background:var(--sale);color:var(--on-sale)}
 .in[readonly]{background:var(--bg);color:var(--soft)}
+
+/* Element-pack illustrations (assets/motifs.js) */
+.mo-ph{background:radial-gradient(circle at 50% 45%,color-mix(in srgb,var(--c) 22%,var(--surface)),color-mix(in srgb,var(--c) 10%,var(--surface)) 70%)}
+.mo-ph span{position:absolute;display:block}
+.mo-ph span svg{width:100%;height:100%;display:block;overflow:visible}
+.mo-ph .mo-a{width:56%;aspect-ratio:1;left:22%;top:18%;filter:drop-shadow(0 14px 18px rgba(0,0,0,.18));transition:transform .6s cubic-bezier(.2,.8,.2,1)}
+.mo-ph .mo-b{width:24%;aspect-ratio:1;right:7%;bottom:7%;transform:rotate(12deg)}
+.pcard:hover .mo-ph .mo-a,.cat:hover .mo-ph .mo-a{transform:rotate(-6deg) scale(1.06)}
+.orn.mo span{position:absolute;display:block}
+.orn.mo span svg{width:100%;height:100%;display:block}
+.orn.mo span:nth-child(1){width:200px;height:200px;left:-50px;bottom:-40px;opacity:.4;transform:rotate(-12deg)}
+.orn.mo span:nth-child(2){width:120px;height:120px;right:5%;top:12px;opacity:.35;transform:rotate(14deg)}
+.orn.mo span:nth-child(3){width:110px;height:110px;right:42%;bottom:-24px;opacity:.28}
+html[data-ornament=soft] .orn.mo span{filter:blur(3px);border-radius:0}
+html[data-ornament=outline] .orn.mo span{opacity:.22}

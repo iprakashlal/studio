@@ -9,7 +9,8 @@
    ============================================================ */
 const DEFAULT = {
   theme: { bg: "#FAF7F2", surface: "#FFFFFF", text: "#1B1A17", soft: "#6B665D", line: "#E7E1D6", accent: "#1F4D3A", accent2: "#E9B949", sale: "#B4441B", fontDisplay: "Fraunces", fontBody: "Manrope", radius: 14,
-    preset: "ivory-classic", layout: "split", nav: "pill", cards: "soft", buttons: "rounded", motionStyle: "none", pattern: "none", ornament: "none", heading: "normal", shead: "plain", width: "normal", grid: "auto", product: "classic" },
+    preset: "ivory-classic", layout: "split", nav: "pill", cards: "soft", buttons: "rounded", motionStyle: "none", pattern: "none", ornament: "none", heading: "normal", shead: "plain", width: "normal", grid: "auto", product: "classic",
+    cursor: "none", loader: "none", textfx: "none", hoverfx: "none", scrollfx: "none", overlay: "none" },
   brand: { name: "Fieldnote Goods", tagline: "Small-batch goods for slow mornings", logo: null, announcement: "Free shipping on orders over ₹1,999", showAnnouncement: true },
   seo: { title: "Fieldnote Goods", description: "Small-batch ceramics, linen and paper goods." },
   nav: { home: "Home", shop: "Shop", portfolio: "Our story", cart: "Cart", account: "Account", showPortfolio: true },
@@ -263,7 +264,7 @@ function applyTheme(t) {
   r.setProperty("--on-accent", onColor(t.accent)); r.setProperty("--on-accent2", onColor(t.accent2)); r.setProperty("--on-sale", onColor(t.sale));
   const deep = t.deep || t.text; r.setProperty("--deep", deep); r.setProperty("--on-deep", onColor(deep));
   const d = document.documentElement.dataset;
-  for (const k of ["layout", "nav", "cards", "buttons", "motionStyle", "pattern", "ornament", "heading", "shead", "width", "grid", "product"]) d[k] = String(t[k] || "");
+  for (const k of ["layout", "nav", "cards", "buttons", "motionStyle", "pattern", "ornament", "heading", "shead", "width", "grid", "product", "cursor", "loader", "textfx", "hoverfx", "scrollfx", "overlay"]) d[k] = String(t[k] || "");
   r.setProperty("--r", (+t.radius || 0) + "px");
   r.setProperty("--fd", `"${t.fontDisplay}",Georgia,serif`); r.setProperty("--fb", `"${t.fontBody}","Helvetica Neue",Arial,sans-serif`);
   // One stylesheet per family, so a family Google can't serve never blocks the others.
@@ -507,6 +508,7 @@ function render() {
   $("#app").innerHTML = `<a class="skip" href="#main">Skip to content</a>${header()}<main id="main">${fn()}</main>${footer()}`;
   bind();
   reveal();
+  if (window.SiteFX) try { window.SiteFX.init({ root: $("#app"), brand: C.brand.name }); } catch (e) {}
 }
 /* Entrance animations from the theme. In the CMS preview they play on the first render only, not on every keystroke. */
 let revealed = 0;

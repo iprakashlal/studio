@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { THEMES, THEME_TAGS, type Theme } from "./catalog";
+import { THEMES, THEME_TAGS, hasFx, type Theme } from "./catalog";
 
 /** A small drawing of the theme: background, a card in its card style, a button in its button style, and the hero layout. */
 export function ThemeSwatch({ t }: { t: Theme }) {
@@ -40,6 +40,8 @@ export function ThemeSwatch({ t }: { t: Theme }) {
   );
 }
 
+const fxSummary = (t: Theme) => [t.fx.cursor !== "none" && t.fx.cursor + " cursor", t.fx.loader !== "none" && t.fx.loader, t.fx.textfx !== "none" && t.fx.textfx].filter(Boolean).join(" · ") || "interactive";
+
 /** Theme gallery with tag filters. `current` is the selected theme id. */
 export function ThemeGallery({ current, onPick, compact }: { current?: string; onPick: (t: Theme) => void; compact?: boolean }) {
   const [tag, setTag] = useState("");
@@ -62,9 +64,9 @@ export function ThemeGallery({ current, onPick, compact }: { current?: string; o
             <span className="flex items-center justify-between gap-2 bg-ink-950 px-2.5 py-2">
               <span className="min-w-0">
                 <b className="block truncate text-[13px]">{t.name}</b>
-                <span className="block truncate text-[11px] text-ink-400">{t.display} · {t.style.motionStyle === "none" ? "still" : t.style.motionStyle}</span>
+                <span className="block truncate text-[11px] text-ink-400">{t.display} · {hasFx(t) ? fxSummary(t) : t.style.motionStyle === "none" ? "still" : t.style.motionStyle}</span>
               </span>
-              {current === t.id && <span className="text-xs font-bold text-brand-400">✓</span>}
+              {current === t.id ? <span className="text-xs font-bold text-brand-400">✓</span> : hasFx(t) && <span className="shrink-0 rounded-full border border-brand-500/50 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-brand-400" title="Interactive theme: cursor, intro and scroll effects">fx</span>}
             </span>
           </button>
         ))}

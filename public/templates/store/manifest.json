@@ -11,6 +11,7 @@
     "admin.html",
     "assets/store.css",
     "assets/store.js",
+    "assets/fx.js",
     "README.md",
     "supabase/schema.sql",
     "supabase/functions/shop/index.ts",

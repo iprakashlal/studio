@@ -23,7 +23,13 @@
     "shead": "plain",
     "width": "normal",
     "grid": "auto",
-    "product": "classic"
+    "product": "classic",
+    "cursor": "none",
+    "loader": "none",
+    "textfx": "none",
+    "hoverfx": "none",
+    "scrollfx": "none",
+    "overlay": "none"
   },
   "brand": {
     "name": "Fieldnote Goods",

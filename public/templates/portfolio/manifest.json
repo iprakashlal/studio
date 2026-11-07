@@ -1,7 +1,23 @@
 {
-  "files": ["index.html", "admin.html", "404.html", "README.md"],
+  "files": [
+    "index.html",
+    "assets/fx.js",
+    "admin.html",
+    "404.html",
+    "README.md"
+  ],
   "starters": [
-    { "id": "default", "name": "Sample portfolio", "description": "Placeholder name, roles and skills to replace.", "file": "content.json" },
-    { "id": "prakash", "name": "Prakash Lal", "description": "Your current portfolio content.", "file": "starters/prakash.json" }
+    {
+      "id": "default",
+      "name": "Sample portfolio",
+      "description": "Placeholder name, roles and skills to replace.",
+      "file": "content.json"
+    },
+    {
+      "id": "prakash",
+      "name": "Prakash Lal",
+      "description": "Your current portfolio content.",
+      "file": "starters/prakash.json"
+    }
   ]
 }

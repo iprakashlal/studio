@@ -1,0 +1,48 @@
+{
+  "status": "Available for new projects",
+  "menuLabel": "Menu",
+  "preloader": true,
+  "cursor": true,
+  "marquee": true,
+  "scrollLabel": "Scroll to explore",
+  "portraitShape": "arch",
+  "signature": "",
+  "signatureFont": "Great Vibes",
+  "signatureImage": null,
+  "nextLabel": "Next up",
+  "nextTitle": "Speaking at a design meetup",
+  "nextDate": "December 2026",
+  "nextUrl": "",
+  "messageLabel": "A note from me",
+  "message": "",
+  "showStory": true,
+  "storyTitle": "Moments",
+  "storyLabel": "Along the way",
+  "stories": [
+    { "image": null, "caption": "First project shipped", "year": "2016" },
+    { "image": null, "caption": "Led my first team", "year": "2019" },
+    { "image": null, "caption": "Product launch", "year": "2022" },
+    { "image": null, "caption": "Speaking on stage", "year": "2024" },
+    { "image": null, "caption": "New chapter", "year": "2026" }
+  ],
+  "quotes": ["Start simple. *Keep shipping.*", "Good work is *a habit*, not an accident."],
+  "showSplit": true,
+  "split": [
+    { "kicker": "On", "title": "the job", "text": "Roles, results and the teams I've worked with.", "target": "work", "image": null },
+    { "kicker": "Off", "title": "the clock", "text": "Side projects, experiments and things I make for fun.", "target": "projects", "image": null }
+  ],
+  "showPartners": true,
+  "partnersKicker": "Worked",
+  "partnersTitle": "with",
+  "partnersText": "Teams, clients and brands I've built things with.",
+  "partners": [
+    { "name": "Company One", "logo": null, "url": "" },
+    { "name": "Company Two", "logo": null, "url": "" },
+    { "name": "Studio Three", "logo": null, "url": "" },
+    { "name": "Agency Four", "logo": null, "url": "" },
+    { "name": "Brand Five", "logo": null, "url": "" },
+    { "name": "Lab Six", "logo": null, "url": "" }
+  ],
+  "footerTagline": "Always building *the next thing.*",
+  "backToTop": "Back to top"
+}

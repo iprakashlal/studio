@@ -1,6 +1,6 @@
 import type { Category, Field, TemplateDef } from "./types";
 import { uid, vpaOk, paypalOk, httpsOk } from "../lib/util";
-import { BODY_FONTS, DISPLAY_FONTS, STORE_AXES, storeThemeValues } from "../themes/catalog";
+import { BODY_FONTS, DISPLAY_FONTS, STORE_AXES, THEMES, storeThemeValues } from "../themes/catalog";
 import { themeCards } from "../themes/fields";
 
 const CURRENCIES = ["INR", "USD", "EUR", "GBP", "AED", "SGD", "AUD", "CAD"];
@@ -11,7 +11,7 @@ const g3 = (...fields: Field[]): Field => ({ t: "grid", cols: 3, fields });
 
 const schema: Category[] = [
   {
-    id: "look", label: "Theme & layout", group: "Design", desc: "Choose from 55 themes, then fine-tune the layout, elements and animation.",
+    id: "look", label: "Theme & layout", group: "Design", desc: `Choose from ${THEMES.length} themes, then fine-tune the layout, elements and animation.`,
     cards: themeCards([STORE_AXES.grid, STORE_AXES.product], "“Stacked” puts the hero text over a full-width image. Visitors who ask their device for reduced motion always get a still page."),
   },
   {

@@ -24,7 +24,7 @@ The data repository can be private because the Studio reads it through the GitHu
 
 ## Themes
 
-Every portfolio and shop can use any of **68 themes** (`src/themes/catalog.ts`). A theme sets colours, fonts and corners, plus:
+Every portfolio and shop can use any of **69 themes** (`src/themes/catalog.ts`). A theme sets colours, fonts and corners, plus:
 
 | Setting | Choices |
 |---|---|
@@ -44,6 +44,19 @@ Every portfolio and shop can use any of **68 themes** (`src/themes/catalog.ts`).
 | Hover | theme default, lift + glow edge, magnetic buttons, 3D tilt + glare |
 | Scrolling | normal, progress bar, smooth inertia, inertia + velocity skew |
 | Screen texture | none, film grain, scanlines, vignette |
+
+### Signature theme: Velocity ★
+
+Velocity (first in the gallery) is a whole portfolio page, not just a restyle. It has:
+
+- a loading counter, a fixed header with a status dot and a full-screen lime menu, and a custom cursor
+- a full-screen hero: your name, your portrait (or a 3D wireframe shape), a signature that draws itself, and a "Next up" card
+- a lime word band that speeds up as you scroll, and a message that lights up word by word
+- a pinned sideways "Moments" strip with photos and quotes
+- On/Off cards, career rows that open, a project grid with hover images, and a toolkit list
+- learning rows, a partners marquee and a giant contact footer
+
+It reuses Hero, About, Work, Projects, Skills, Learning and Contact. Its own content sits under **Design → Velocity layout**: status, menu label, signature text or image, Next up, message, moments, on/off cards, partners and the footer tagline. That tab appears while **Hero layout** is *Velocity* and **Page layout** is *Classic page*. Defaults are in `src/schema/velocity-defaults.json`, and the code is the `vx` section of `public/templates/portfolio/index.html`. On a shop, Velocity applies its colours and fonts only.
 
 ### Motion themes
 

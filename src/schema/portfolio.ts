@@ -1,5 +1,6 @@
 import type { Category, Field, TemplateDef } from "./types";
-import { BODY_FONTS, DISPLAY_FONTS, KIT_AXIS, PORTFOLIO_AXES, portfolioThemeValues } from "../themes/catalog";
+import { AXES, BODY_FONTS, DISPLAY_FONTS, KIT_AXIS, PORTFOLIO_AXES, THEMES, portfolioThemeValues } from "../themes/catalog";
+import VELOCITY_DEFAULTS from "./velocity-defaults.json";
 import { themeCards } from "../themes/fields";
 
 const SECTION_NAMES: Record<string, string> = { about: "About", skills: "Skills cube", work: "Work deck", projects: "Projects", learning: "Learning", contact: "Contact" };
@@ -12,8 +13,49 @@ const g3 = (...fields: Field[]): Field => ({ t: "grid", cols: 3, fields });
 
 const schema: Category[] = [
   {
-    id: "look", label: "Theme & layout", group: "Design", desc: "Choose from 55 themes, then fine-tune the layout, elements and animation.",
-    cards: themeCards([KIT_AXIS, PORTFOLIO_AXES.about, PORTFOLIO_AXES.skills, PORTFOLIO_AXES.work], "Animation needs “Animations” switched on under Brand & theme. Visitors who ask their device for reduced motion always get a still page."),
+    id: "look", label: "Theme & layout", group: "Design", desc: `Choose from ${THEMES.length} themes, then fine-tune the layout, elements and animation.`,
+    cards: themeCards([KIT_AXIS, PORTFOLIO_AXES.about, PORTFOLIO_AXES.skills, PORTFOLIO_AXES.work], "Animation needs “Animations” switched on under Brand & theme. Visitors who ask their device for reduced motion always get a still page.",
+      { ...AXES.layout, options: [...AXES.layout.options, ["velocity", "★ Velocity: signature layout"]] }),
+  },
+  {
+    id: "velocity", label: "Velocity layout", group: "Design", showIf: (c) => c?.theme?.layout === "velocity" && (!c?.theme?.kit || c.theme.kit === "classic"),
+    desc: "Shown while Hero layout is Velocity and Page layout is Classic. Everything only the Velocity layout shows. Your name, photo, About, Work, Projects, Skills, Learning and Contact come from their usual sections.",
+    cards: [
+      { title: "Header & intro", fields: [
+        g2({ t: "text", path: "velocity.status", label: "Status next to the logo", hint: "Leave empty to hide" }, { t: "text", path: "velocity.menuLabel", label: "Menu button label" }),
+        { t: "text", path: "velocity.scrollLabel", label: "Scroll hint under the hero" },
+        g3({ t: "toggle", path: "velocity.preloader", label: "Loading counter" }, { t: "toggle", path: "velocity.cursor", label: "Custom cursor" }, { t: "toggle", path: "velocity.marquee", label: "Lime word band" }),
+        { t: "note", text: "The word band uses the words from Brand & theme → Scrolling skills band." }] },
+      { title: "Portrait & signature", fields: [
+        { t: "note", text: "The portrait is your photo from Hero. Without a photo, a 3D wireframe shape is shown instead." },
+        { t: "select", path: "velocity.portraitShape", label: "Portrait frame", options: [{ value: "arch", label: "Arch" }, { value: "circle", label: "Circle" }, { value: "square", label: "Rounded square" }, { value: "cutout", label: "No frame (for a cut-out PNG)" }] },
+        g2({ t: "text", path: "velocity.signature", label: "Signature text", hint: "Empty uses your first name" }, { t: "select", path: "velocity.signatureFont", label: "Signature style", options: ["Great Vibes", "Caveat", "Permanent Marker"] }),
+        { t: "image", path: "velocity.signatureImage", label: "Or upload your real signature", hint: "Transparent PNG or SVG works best. It replaces the signature text." }] },
+      { title: "Next up (hero corner)", fields: [
+        g2({ t: "text", path: "velocity.nextLabel", label: "Label" }, { t: "text", path: "velocity.nextDate", label: "Date" }),
+        { t: "text", path: "velocity.nextTitle", label: "What's next", hint: "Leave empty to hide the block" }, { t: "text", path: "velocity.nextUrl", label: "Link (optional)", ph: "https://" }] },
+      { title: "Message", fields: [
+        { t: "text", path: "velocity.messageLabel", label: "Label" },
+        { t: "textarea", path: "velocity.message", label: "Message", rows: 4, hint: "Wrap words in *stars* to highlight them. Leave empty to use the About story heading." }] },
+      { title: "Moments strip", fields: [
+        g2({ t: "toggle", path: "velocity.showStory", label: "Show the strip" }, { t: "text", path: "velocity.storyTitle", label: "Title" }),
+        { t: "text", path: "velocity.storyLabel", label: "Small label" },
+        { t: "list", path: "velocity.stories", label: "Photos", max: 12, title: (it) => `${it.caption || "Photo"} · ${it.year || ""}`, add: () => ({ image: null, caption: "New moment", year: "2026" }),
+          item: [{ t: "image", path: "image", label: "Photo" }, g2({ t: "text", path: "caption", label: "Caption" }, { t: "text", path: "year", label: "Year or place" })] },
+        { t: "strings", path: "velocity.quotes", label: "Quotes between the photos", addLabel: "Add quote", multiline: true }] },
+      { title: "On / off cards", fields: [
+        { t: "toggle", path: "velocity.showSplit", label: "Show the two cards (before Work)" },
+        { t: "list", path: "velocity.split", fixed: true, add: () => ({}), title: (it) => `${it.kicker} ${it.title}`,
+          item: [g2({ t: "text", path: "kicker", label: "Big word" }, { t: "text", path: "title", label: "Second line" }), { t: "text", path: "text", label: "Text" },
+            { t: "select", path: "target", label: "Opens section", options: [{ value: "about", label: "About" }, { value: "work", label: "Work" }, { value: "projects", label: "Projects" }, { value: "skills", label: "Skills" }, { value: "learning", label: "Learning" }, { value: "contact", label: "Contact" }] },
+            { t: "image", path: "image", label: "Background photo (optional)" }] }] },
+      { title: "Partners", fields: [
+        g2({ t: "toggle", path: "velocity.showPartners", label: "Show partners (before Contact)" }, { t: "text", path: "velocity.partnersKicker", label: "Heading, line 1" }),
+        g2({ t: "text", path: "velocity.partnersTitle", label: "Heading, line 2" }, { t: "text", path: "velocity.partnersText", label: "Text" }),
+        { t: "list", path: "velocity.partners", label: "Names & logos", max: 24, title: (it) => it.name, add: () => ({ name: "New partner", logo: null, url: "" }),
+          item: [g2({ t: "text", path: "name", label: "Name" }, { t: "text", path: "url", label: "Link (optional)" }), { t: "image", path: "logo", label: "Logo (optional, light on transparent works best)" }] }] },
+      { title: "Footer", fields: [g2({ t: "text", path: "velocity.footerTagline", label: "Big tagline", hint: "*Stars* highlight words" }, { t: "text", path: "velocity.backToTop", label: "Back-to-top label" })] },
+    ],
   },
   {
     id: "theme", label: "Brand & theme", group: "Design", desc: "Colours, fonts, corner radius and background effects for the whole site.",
@@ -91,7 +133,7 @@ const schema: Category[] = [
       { title: "Heading", fields: [g2({ t: "text", path: "projects.eyebrow", label: "Small label" }, { t: "text", path: "projects.title", label: "Title" }), { t: "text", path: "projects.lede", label: "Intro" }] },
       { title: "Projects", fields: [{ t: "list", path: "projects.items", title: (it) => it.title,
         add: () => ({ title: "New project", body: "What it is and what you did.", url: "", linkLabel: "View project", image: null, color: "c1", shape: "circle", tags: [] }),
-        item: [{ t: "text", path: "title", label: "Title" }, { t: "textarea", path: "body", label: "Description" }, { t: "image", path: "image", label: "Cover image" },
+        item: [{ t: "text", path: "title", label: "Title" }, { t: "textarea", path: "body", label: "Description" }, { t: "image", path: "image", label: "Cover image" }, { t: "image", path: "image2", label: "Hover image (Velocity layout)" },
           g2({ t: "text", path: "url", label: "Link" }, { t: "text", path: "linkLabel", label: "Link label" }), { t: "strings", path: "tags", label: "Tags", addLabel: "Add tag" },
           { t: "colorKey", path: "color", label: "Cover colour (without image)" }, { t: "shape", path: "shape", label: "Cover shape (without image)" }] }] },
     ],
@@ -126,6 +168,11 @@ export const portfolioTemplate: TemplateDef = {
   colorKeys: [{ key: "c1", label: "Primary" }, { key: "c2", label: "Secondary" }, { key: "c3", label: "Tertiary" }, { key: "text", label: "Text" }, { key: "surface", label: "Surface" }, { key: "deep", label: "Deep" }, { key: "glow", label: "Glow" }],
   themePath: "theme",
   themeValues: portfolioThemeValues,
+  prepare: (c) => {
+    if (!c || typeof c !== "object") return;
+    const v = (c.velocity && typeof c.velocity === "object") ? c.velocity : (c.velocity = {});
+    for (const [k, val] of Object.entries(VELOCITY_DEFAULTS)) if (v[k] === undefined) v[k] = JSON.parse(JSON.stringify(val));
+  },
   summary: (c) => [c?.hero?.firstName, c?.hero?.lastName].filter(Boolean).join(" ") || c?.brand?.logoText || "",
   checks: (c) => {
     const w: string[] = [];

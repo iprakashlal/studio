@@ -110,6 +110,9 @@ export type Theme = {
   motif: string;
   /** Portfolio page layout (see KIT_AXIS). */
   kit: string;
+  /** A signature theme brings its own page layout (portfolio) with extra content controls. */
+  signature?: boolean;
+  blurb?: string;
 };
 
 type Row = [string, string, string, string, string, string, number, string, string, string, string?];
@@ -197,7 +200,7 @@ function axis(s: string, n: number): string[] {
   return p;
 }
 
-export const THEMES: Theme[] = ROWS.map((r) => {
+const BASE_THEMES: Theme[] = ROWS.map((r) => {
   const [id, name, tags, cols, display, body, radius, style, pf, st, fxs] = r;
   const c = axis(cols, 9);
   const s = axis(style, 10);
@@ -225,7 +228,22 @@ export const THEMES: Theme[] = ROWS.map((r) => {
 /** True when a theme turns on any interaction effect. */
 export const hasFx = (t: Theme) => FX_KEYS.some((k) => t.fx[k] !== "none");
 
-export const THEME_TAGS = ["Dark", "Light", "Bold", "Minimal", "Elegant", "Playful", "Tech", "Calm", "Warm", "Nature", "Retro", "Luxury", "Motion"];
+export const THEME_TAGS = ["Signature", "Dark", "Light", "Bold", "Minimal", "Elegant", "Playful", "Tech", "Calm", "Warm", "Nature", "Retro", "Luxury", "Motion"];
+
+/** Signature themes: a whole new portfolio layout, not just a restyle. */
+const VELOCITY: Theme = {
+  id: "velocity", name: "Velocity", tags: ["Signature", "Dark", "Bold"], dark: true, signature: true,
+  blurb: "Full-screen name, portrait and signature, a moments strip, on/off cards, career rows, partners and a giant footer. Its own preloader, menu, cursor and scroll effects.",
+  colors: { bg: "#1D2117", surface: "#272C1F", deep: "#13160F", text: "#F2F2EA", soft: "#ABAF9D", line: "#3A402F", c1: "#D4F53C", c2: "#EDEDE3", c3: "#8FA33A" },
+  display: "Anton", body: "Inter", radius: 18,
+  style: { layout: "velocity", nav: "bar", cards: "soft", buttons: "pill", motionStyle: "rise", pattern: "none", ornament: "none", heading: "upper", shead: "number", width: "wide" },
+  portfolio: { about: "bento", skills: "grid", work: "timeline", glow: false, network: false, three: true, ticker: true },
+  store: { grid: "3", product: "overlay" },
+  motif: "geometric", kit: "classic",
+  fx: { cursor: "none", loader: "none", textfx: "none", hoverfx: "none", scrollfx: "none", overlay: "none" },
+};
+
+export const THEMES: Theme[] = [VELOCITY, ...BASE_THEMES];
 
 const styleValues = (t: Theme) => ({ preset: t.id, ...t.style, ...t.fx, motif: t.motif });
 
@@ -247,7 +265,7 @@ export function storeThemeValues(t: Theme): Record<string, unknown> {
   return {
     bg: c.bg, surface: c.surface, text: c.text, soft: c.soft, line: c.line, accent: c.c1, accent2: c.c3, sale: c.c2, deep: c.deep,
     fontDisplay: t.display, fontBody: t.body, radius: Math.min(t.radius, 28),
-    ...styleValues(t), grid: t.store.grid, product: t.store.product,
+    ...styleValues(t), layout: t.style.layout === "velocity" ? "stacked" : t.style.layout, grid: t.store.grid, product: t.store.product,
   };
 }
 

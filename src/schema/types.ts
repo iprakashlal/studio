@@ -29,7 +29,7 @@ export type Field =
   | { t: "themes" };
 
 export type Card = { title: string; fields: Field[] };
-export type Category = { id: string; label: string; group: string; desc: string; cards: Card[] };
+export type Category = { id: string; label: string; group: string; desc: string; cards: Card[]; /** Show the category only when this returns true for the current content. */ showIf?: (content: any) => boolean };
 
 export type TemplatePage = { file: string; label: string };
 
@@ -49,4 +49,6 @@ export type TemplateDef = {
   checks?: (content: any) => string[];
   /** content.theme values for a catalogue theme (see src/themes/catalog.ts). */
   themeValues: (theme: import("../themes/catalog").Theme) => Record<string, unknown>;
+  /** Fills in content keys added by newer template versions, so older projects open safely. */
+  prepare?: (content: any) => void;
 };

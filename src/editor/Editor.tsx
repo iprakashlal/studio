@@ -15,14 +15,16 @@ export function Editor({ tpl, draft, version, onChange, upload, img, extras = []
   extras?: ExtraPanel[];
   onCategory?: (id: string) => void;
 }) {
+  tpl.prepare?.(draft);
   const [cat, setCat] = useState(tpl.schema[0].id);
+  const shown = tpl.schema.filter((c) => !c.showIf || c.showIf(draft));
   const scroller = useRef<HTMLDivElement>(null);
   useEffect(() => {
     scroller.current?.scrollTo(0, 0);
     onCategory?.(cat);
   }, [cat]);
   const groups = useMemo(() => {
-    const items = [...tpl.schema.map((c) => ({ id: c.id, label: c.label, group: c.group })), ...extras.map((e) => ({ id: e.id, label: e.label, group: e.group }))];
+    const items = [...shown.map((c) => ({ id: c.id, label: c.label, group: c.group })), ...extras.map((e) => ({ id: e.id, label: e.label, group: e.group }))];
     const out: { group: string; items: typeof items }[] = [];
     for (const it of items) {
       let g = out.find((x) => x.group === it.group);
@@ -30,10 +32,10 @@ export function Editor({ tpl, draft, version, onChange, upload, img, extras = []
       g.items.push(it);
     }
     return out;
-  }, [tpl, extras]);
+  }, [tpl, extras, shown.map((c) => c.id).join()]);
   const ctx = useMemo<EditorCtx>(() => ({ tpl, root: draft, bump: onChange, upload, img }), [tpl, draft, onChange, upload, img, version]);
   const extra = extras.find((e) => e.id === cat);
-  const current = extra ? undefined : tpl.schema.find((c) => c.id === cat);
+  const current = extra ? undefined : shown.find((c) => c.id === cat) || shown[0];
 
   return (
     <Ctx.Provider value={ctx}>

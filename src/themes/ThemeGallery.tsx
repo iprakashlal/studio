@@ -4,6 +4,20 @@ import { THEMES, THEME_TAGS, hasFx, Motifs, type Theme } from "./catalog";
 /** A small drawing of the theme: background, a card in its card style, a button in its button style, and the hero layout. */
 export function ThemeSwatch({ t }: { t: Theme }) {
   const c = t.colors, r = Math.min(t.radius, 16) / 2;
+  if (t.signature)
+    return (
+      <div className="relative flex h-[84px] flex-col justify-between overflow-hidden p-2" style={{ background: c.bg }}>
+        <div className="flex items-center justify-between">
+          <span className="block h-1.5 w-6 rounded" style={{ background: c.text }} />
+          <span className="block h-2 w-7 rounded-full" style={{ background: c.c1 }} />
+        </div>
+        <span className="absolute bottom-1 left-1/2 h-12 w-9 -translate-x-1/2 rounded-t-full" style={{ background: c.surface, border: `1px solid ${c.line}` }} />
+        <div className="relative leading-[.82]" style={{ color: c.text, fontFamily: "Impact, 'Arial Narrow', sans-serif", fontSize: 22, letterSpacing: ".01em" }}>
+          <div>FIRST</div><div className="text-right">NAME</div>
+        </div>
+        <span className="absolute right-3 top-8 text-[18px] italic" style={{ color: c.c1, fontFamily: "'Brush Script MT', cursive", transform: "rotate(-10deg)" }}>Signature</span>
+      </div>
+    );
   const btnRadius = { pill: 99, sharp: 0, brutal: r, rounded: 6, outline: 6, glow: 7 }[t.style.buttons] ?? 6;
   const card: React.CSSProperties = {
     background: t.style.cards === "outline" ? "transparent" : t.style.cards === "glass" ? c.surface + "AA" : c.surface,
@@ -64,13 +78,13 @@ export function ThemeGallery({ current, onPick, compact }: { current?: string; o
       </div>
       <div className={`grid gap-2.5 ${compact ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-2 sm:grid-cols-3 xl:grid-cols-4"}`} role="radiogroup" aria-label="Themes">
         {list.map((t) => (
-          <button key={t.id} type="button" role="radio" aria-checked={current === t.id} onClick={() => onPick(t)} title={`${t.name}: ${t.style.layout} layout, ${t.style.cards} cards, ${t.style.buttons} buttons, ${t.style.motionStyle} animation`}
+          <button key={t.id} type="button" role="radio" aria-checked={current === t.id} onClick={() => onPick(t)} title={t.blurb ? `${t.name}: ${t.blurb}` : `${t.name}: ${t.style.layout} layout, ${t.style.cards} cards, ${t.style.buttons} buttons, ${t.style.motionStyle} animation`}
             className={`flex flex-col overflow-hidden rounded-xl border text-left transition ${current === t.id ? "border-brand-500 ring-2 ring-brand-500/50" : "border-ink-600 hover:border-ink-400"}`}>
             <ThemeSwatch t={t} />
             <span className="flex items-center justify-between gap-2 bg-ink-950 px-2.5 py-2">
               <span className="min-w-0">
-                <b className="block truncate text-[13px]">{t.name}</b>
-                <span className="block truncate text-[11px] text-ink-400">{t.kit !== "classic" ? "Own layout · " : ""}{Motifs.packs[t.motif]?.name || t.display}{hasFx(t) ? " · " + fxSummary(t) : ""}</span>
+                <b className="block truncate text-[13px]">{t.signature && <span className="mr-1 text-brand-400" title="Signature layout">★</span>}{t.name}</b>
+                <span className="block truncate text-[11px] text-ink-400">{t.signature ? "Signature layout · own sections" : <>{t.kit !== "classic" ? "Own layout · " : ""}{Motifs.packs[t.motif]?.name || t.display}{hasFx(t) ? " · " + fxSummary(t) : ""}</>}</span>
               </span>
               {current === t.id ? <span className="text-xs font-bold text-brand-400">✓</span> : hasFx(t) && <span className="shrink-0 rounded-full border border-brand-500/50 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-brand-400" title="Interactive theme: cursor, intro and scroll effects">fx</span>}
             </span>

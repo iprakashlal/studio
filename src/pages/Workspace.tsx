@@ -41,6 +41,7 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
         {repo.demo && <span className="chip border-amber-400/50 text-amber-200">Demo · nothing is saved</span>}
         <nav className="ml-auto flex items-center gap-1" aria-label="Studio">
           <a href="#/" className={`btn btn-ghost btn-sm ${!route || route === "/" ? "text-ink-100" : "text-ink-400"}`}>Projects</a>
+          <a href="#/themes" className="btn btn-ghost btn-sm text-ink-400">Themes</a>
           {!repo.demo && <a href="#/settings" className={`btn btn-ghost btn-sm ${route === "settings" ? "text-ink-100" : "text-ink-400"}`}>Settings</a>}
           <span className="hidden px-2 text-sm text-ink-400 sm:inline">{session.username}</span>
           <button type="button" className="btn btn-sm" onClick={onSignOut}>{repo.demo ? "Exit demo" : "Sign out"}</button>

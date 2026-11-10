@@ -4,6 +4,7 @@ import { GitHubRepo, MemoryRepo, type Repo } from "../lib/repo";
 import { Gate } from "../ui/gate";
 import { useToast } from "../ui/kit";
 import { Workspace } from "./Workspace";
+import { ThemesPage } from "./ThemesPage";
 
 export const NS = "site-studio";
 
@@ -11,6 +12,8 @@ export function App() {
   const toast = useToast();
   const [session, setSession] = useState<Session | null>(() => sess.load(NS));
   const [demo, setDemo] = useState(false);
+  const [hash, setHash] = useState(location.hash);
+  useEffect(() => { const on = () => setHash(location.hash); addEventListener("hashchange", on); return () => removeEventListener("hashchange", on); }, []);
 
   const repo = useMemo<Repo | null>(() => (demo ? new MemoryRepo() : session ? new GitHubRepo(session.cfg, session.token) : null), [demo, session]);
 
@@ -28,6 +31,9 @@ export function App() {
       toast("Signed out after 30 minutes without activity");
     });
   }, [session]);
+
+  // The theme gallery is public: anyone with the link can browse it without signing in.
+  if (/^#\/themes(\?|$)/.test(hash)) return <ThemesPage signedIn={!!repo} />;
 
   if (!repo) {
     return (

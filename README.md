@@ -45,6 +45,17 @@ Every portfolio and shop can use any of **69 themes** (`src/themes/catalog.ts`).
 | Scrolling | normal, progress bar, smooth inertia, inertia + velocity skew |
 | Screen texture | none, film grain, scanlines, vignette |
 
+### Public theme gallery (share with clients)
+
+`https://<your-username>.github.io/studio/#/themes` opens a gallery of every theme. It needs **no sign-in**, so you can send it to anyone. It's also linked as **Themes** in the Studio header.
+
+- **IDs:** every theme has a permanent ID, like `T-07 · Terminal`, which a client can quote to choose a design. IDs live in `src/themes/codes.ts`. New themes take the next free number at the end; never renumber or reuse an ID.
+- **Previews:** hover a card for a live preview, or click it for a bigger one. There, you can switch between Portfolio and Shop and between desktop, tablet and phone, step through themes with ← →, and use **Copy ID** or **Copy link**.
+- **Shortlist:** star themes, then use **Share shortlist** to copy their IDs and a link that opens just those themes.
+- **Links:** `#/themes?t=velocity` opens one theme, `#/themes?v=store` previews as a shop, and `#/themes?list=a,b,c` shows a shared shortlist.
+
+The editor's theme picker shows the same IDs, and you can search it by ID.
+
 ### Signature theme: Velocity ★
 
 Velocity (first in the gallery) is a whole portfolio page, not just a restyle. It has:

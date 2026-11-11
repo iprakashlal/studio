@@ -103,7 +103,7 @@
     ".fx-load--split.out .fx-pt{transform:translateY(-101%)}",
     ".fx-load--split.out .fx-pb{transform:translateY(101%)}",
     ".fx-brand{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-size:clamp(28px,6vw,76px);font-weight:800;letter-spacing:.32em;text-transform:uppercase;white-space:nowrap;padding-left:.32em;transition:opacity .4s,letter-spacing 1.2s var(--fxe)}",
-    ".fx-brand span{display:inline-block;opacity:0;transform:translateY(60%);animation:fxup .7s var(--fxe) forwards;animation-delay:calc(var(--i)*45ms)}",
+    ".fx-brand span{display:inline-block;opacity:0;transform:translateY(60%);animation:fxup .7s var(--fxe) forwards}",
     ".fx-load.go .fx-brand{letter-spacing:.12em}",
     ".fx-load.out .fx-brand,.fx-load.out .fx-num,.fx-load.out .fx-bar{opacity:0}",
     ".fx-num{position:absolute;right:4vw;bottom:3vh;font-size:clamp(72px,18vw,240px);font-weight:800;line-height:.8;letter-spacing:-.04em;font-variant-numeric:tabular-nums;transition:opacity .3s}",
@@ -115,7 +115,7 @@
     ".fx-exit.in .fx-p{transform:none}",
     /* page-to-page: the name sits in the middle while the panels close, stays while the next page loads, then the panels open */
     ".fx-exit .fx-brand,.fx-cover .fx-brand{letter-spacing:.12em}",
-    ".fx-exit .fx-brand span{animation-duration:.45s;animation-delay:calc(.22s + var(--i)*22ms)}",
+    ".fx-exit .fx-brand span{animation-duration:.45s;animation-delay:.22s}",
     ".fx-cover .fx-brand span{animation:none;opacity:1;transform:none}",
     ".fx-cover.out .fx-brand{transition:opacity .35s}",
     "@keyframes fxup{to{opacity:1;transform:none}}",

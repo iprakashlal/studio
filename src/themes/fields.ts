@@ -25,6 +25,8 @@ export function themeCards(extra: Axis[], note: string, layout: Axis = AXES.layo
       { t: "note", text: "The full-screen panel that shows your name while the site opens (Intro & page transition above, or a signature theme's own preloader). It also slides across when visitors move between pages. Picking a theme resets these colours to match it." },
       { t: "text", path: "theme.introTitle", label: "Text on the intro screen", hint: "Leave empty to show your site name." },
       g({ t: "color", path: "theme.introBg", label: "Intro background" }, { t: "color", path: "theme.introFg", label: "Intro text colour" }),
+      g({ t: "select", path: "theme.introFont", label: "Intro font", options: [{ value: "display", label: "Same as the headline (headings font)" }, { value: "body", label: "Body text font" }] },
+        { t: "select", path: "theme.introCase", label: "Intro letters", options: [{ value: "upper", label: "CAPITALS" }, { value: "asis", label: "As typed" }] }),
     ] },
   ];
 }

@@ -11,7 +11,7 @@ const DEFAULT = {
   theme: { bg: "#FAF7F2", surface: "#FFFFFF", text: "#1B1A17", soft: "#6B665D", line: "#E7E1D6", accent: "#1F4D3A", accent2: "#E9B949", sale: "#B4441B", fontDisplay: "Fraunces", fontBody: "Manrope", radius: 14,
     preset: "ivory-classic", layout: "split", nav: "pill", cards: "soft", buttons: "rounded", motionStyle: "none", pattern: "none", ornament: "none", heading: "normal", shead: "plain", width: "normal", grid: "auto", product: "classic",
     cursor: "none", loader: "none", textfx: "none", hoverfx: "none", scrollfx: "none", overlay: "none",
-    introBg: "", introFg: "", introTitle: "", logoRadius: 26, scrollEase: "light", lineBreaks: "typed" },
+    introBg: "", introFg: "", introTitle: "", introFont: "display", introCase: "upper", logoRadius: 26, scrollEase: "light", lineBreaks: "typed" },
   labels: { allProducts: "All products", viewAll: "View all", help: "Help", contact: "Contact" },
   cms: { adminPage: "admin" },
   brand: { name: "Picaffectz Studio", tagline: "Small-batch goods for slow mornings", logo: null, announcement: "Free shipping on orders over ₹1,999", showAnnouncement: true },
@@ -284,6 +284,7 @@ function applyTheme(t) {
   const d = document.documentElement.dataset; d.motif = moOn() ? MOTIF : "geometric";
   for (const k of ["layout", "nav", "cards", "buttons", "motionStyle", "pattern", "ornament", "heading", "shead", "width", "grid", "product", "cursor", "loader", "textfx", "hoverfx", "scrollfx", "overlay"]) d[k] = String(t[k] || "");
   d.scrollease = t.scrollEase || "light"; d.linebreaks = t.lineBreaks || "typed";
+  d.introfont = t.introFont || "display"; d.introcase = t.introCase || "upper";
   r.setProperty("--r", (+t.radius || 0) + "px");
   r.setProperty("--fd", `"${t.fontDisplay}",Georgia,serif`); r.setProperty("--fb", `"${t.fontBody}","Helvetica Neue",Arial,sans-serif`);
   // One stylesheet per family, so a family Google can't serve never blocks the others.
@@ -291,6 +292,8 @@ function applyTheme(t) {
     let l = document.getElementById(id); if (!l) { l = document.createElement("link"); l.id = id; l.rel = "stylesheet"; document.head.appendChild(l); }
     const href = f ? "https://fonts.googleapis.com/css2?family=" + f + "&display=swap" : ""; if (href && l.getAttribute("href") !== href) l.setAttribute("href", href);
   });
+  // The next page starts loading these fonts from its <head>, before any script runs (no font swap on arrival).
+  if (!PREVIEW) try { localStorage.setItem("site-fonts:" + location.pathname.replace(/[^/]*$/, ""), JSON.stringify(["fontlink", "fontlink2", "fontlink3"].map((id) => [id, (document.getElementById(id) || {}).href || ""]))); } catch (e) {}
 }
 /** Tab title: the home page uses the title as typed, other pages "{page} · {site}" (Title & metadata). */
 function setTitle(label) {

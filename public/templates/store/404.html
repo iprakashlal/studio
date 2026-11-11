@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">
 <title>Page not found</title>
-<script>try{var b=localStorage.getItem("site-bg:"+location.pathname.replace(/[^/]*$/,""));if(b)document.documentElement.style.background=b;var x=sessionStorage.getItem("fx-exit");if(x){var c=x.charAt(0)=="{"?JSON.parse(x).bg:x;if(/^(#[0-9a-f]{3,8}|rgba?\([0-9., %]+\))$/i.test(c)){var s=document.createElement("style");s.id="fx-pre";s.textContent="html{background:"+c+"!important}body>*{visibility:hidden}";document.head.appendChild(s);setTimeout(function(){s.remove()},3500)}}}catch(e){}</script>
+<script>try{var b=localStorage.getItem("site-bg:"+location.pathname.replace(/[^/]*$/,""));if(b)document.documentElement.style.background=b;var F=JSON.parse(localStorage.getItem("site-fonts:"+location.pathname.replace(/[^/]*$/,""))||"[]");for(var i=0;i<F.length;i++)if(/^https:\/\/fonts\.googleapis\.com\//.test(F[i][1]||"")){var l=document.createElement("link");l.rel="stylesheet";l.href=F[i][1];l.setAttribute("data-boot","");document.head.appendChild(l)}var x=sessionStorage.getItem("fx-exit");if(x){var c=x.charAt(0)=="{"?JSON.parse(x).bg:x;if(/^(#[0-9a-f]{3,8}|rgba?\([0-9., %]+\))$/i.test(c)){var s=document.createElement("style");s.id="fx-pre";s.textContent="html{background:"+c+"!important}body>*{visibility:hidden}";document.head.appendChild(s);setTimeout(function(){s.remove()},3500)}}}catch(e){}</script>
 <script>
 // Unknown addresses go back to the home page of this site.
 (function(){var seg=location.pathname.split("/").filter(Boolean);var base=/\.github\.io$/i.test(location.hostname)&&seg.length&&!/\.\w+$/.test(seg[0])?"/"+seg[0]+"/":"/";location.replace(base)})();

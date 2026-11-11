@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Session } from "../lib/auth";
-import { explain, type Repo } from "../lib/repo";
+import { GitHubRepo, explain, type Repo } from "../lib/repo";
 import { Studio, type StudioIndex } from "../lib/studio";
 import { AccountPanel } from "../ui/gate";
 import { Logo, Spinner } from "../ui/kit";
@@ -19,7 +19,11 @@ function useHash() {
 }
 
 export function Workspace({ repo, session, onSession, onSignOut, onForget }: { repo: Repo; session: Session; onSession: (s: Session) => void; onSignOut: () => void; onForget: () => void }) {
-  const studio = useMemo(() => new Studio(repo), [repo]);
+  const studio = useMemo(() => {
+    const st = new Studio(repo);
+    if (!repo.demo) st.siteRepo = (t) => new GitHubRepo(t, session.token);
+    return st;
+  }, [repo, session.token]);
   const [index, setIndex] = useState<StudioIndex | null>(null);
   const [err, setErr] = useState("");
   const hash = useHash();

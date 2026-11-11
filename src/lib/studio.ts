@@ -46,10 +46,13 @@ const now = () => new Date().toISOString();
 
 export class Studio {
   constructor(readonly repo: Repo) {}
+  /** Opens a project's live-site repository (set by the workspace, which holds the token). */
+  siteRepo: ((t: PublishTarget) => Repo) | null = null;
+  private lastIndex: StudioIndex | null = null;
 
   async loadIndex(): Promise<StudioIndex> {
     const f = await this.repo.getJSON<StudioIndex>(INDEX);
-    if (f) return normalise(f.data);
+    if (f) return (this.lastIndex = normalise(f.data));
     const fresh: StudioIndex = {
       version: 1,
       categories: [
@@ -60,7 +63,7 @@ export class Studio {
       projects: [],
     };
     await this.repo.pushFiles([{ path: INDEX, base64: jsonB64(fresh) }], "Set up Site Studio");
-    return fresh;
+    return (this.lastIndex = fresh);
   }
 
   /** Re-reads the index right before writing so edits from another device aren't lost. */
@@ -68,7 +71,7 @@ export class Studio {
     const idx = await this.loadIndex();
     fn(idx);
     await this.repo.pushFiles([{ path: INDEX, base64: jsonB64(idx) }, ...files], message, remove);
-    return idx;
+    return (this.lastIndex = idx);
   }
 
   async createProject(p: { name: string; template: string; category: string; client: string; content: any; summary?: string }): Promise<{ index: StudioIndex; id: string }> {
@@ -113,8 +116,12 @@ export class Studio {
     return { path };
   }
 
-  assetBlob(id: string, path: string) {
-    return this.repo.getRaw(`projects/${id}/${path}`);
+  /** An image of a project: the Studio's copy, or else the live site's (images uploaded in the site's own CMS stay there). */
+  async assetBlob(id: string, path: string): Promise<Blob | null> {
+    const b = await this.repo.getRaw(`projects/${id}/${path}`);
+    if (b) return b;
+    const t = this.lastIndex?.projects.find((x) => x.id === id)?.publish;
+    return t && this.siteRepo ? this.siteRepo(t).getRaw(path).catch(() => null) : null;
   }
 
   async duplicate(id: string, name: string): Promise<StudioIndex> {
@@ -170,18 +177,13 @@ export class Studio {
   async importFromSite(id: string, site: Repo): Promise<{ index: StudioIndex; content: any; missing: string[] }> {
     const f = await site.getJSON("content.json");
     if (!f) throw new Error("The site has no content.json yet.");
-    const files = [{ path: `projects/${id}/content.json`, base64: jsonB64(f.data) }];
-    const missing: string[] = [];
-    for (const p of collectAssetPaths(f.data)) {
-      const b = await site.getRaw(p);
-      if (b) files.push({ path: `projects/${id}/${p}`, base64: bytesB64(await blobToBytes(b)) });
-      else missing.push(p);
-    }
+    // Only the content is copied, so a pull is quick however many photos the site has.
+    // Images stay on the site and load from there (see assetBlob) until the Studio has its own copy.
     const index = await this.updateIndex((i) => {
       const m = i.projects.find((x) => x.id === id);
       if (m) { m.updatedAt = m.contentAt = m.syncedAt = now(); m.siteSha = f.sha; m.summary = TEMPLATES[m.template]?.summary(f.data) ?? m.summary; }
-    }, "Update from the live site (edited in its own CMS)", files);
-    return { index, content: f.data, missing };
+    }, "Update from the live site (edited in its own CMS)", [{ path: `projects/${id}/content.json`, base64: jsonB64(f.data) }]);
+    return { index, content: f.data, missing: [] };
   }
 
   /** Remember that the live site's current content is accounted for (e.g. "keep the Studio's version"). */

@@ -6,6 +6,7 @@
 <meta name="description" content="">
 <style>body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
 <title>Portfolio</title>
+<script>try{var b=localStorage.getItem("site-bg:"+location.pathname.replace(/[^/]*$/,""));if(b)document.documentElement.style.background=b}catch(e){}</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Unbounded:wght@400;600;800&display=swap">
 <link rel="stylesheet" id="fontlink" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;600;800&display=swap">
@@ -754,6 +755,8 @@ const siteRoot=$("#siteRoot");
    ============================================================ */
 function applyTheme(t){
   const r=document.documentElement.style;
+  r.background=t.bg;r.colorScheme=onColor(t.bg)==="#FFFFFF"?"dark":"light";
+  if(!PREVIEW)try{localStorage.setItem("site-bg:"+location.pathname.replace(/[^/]*$/,""),t.bg)}catch(e){}
   ["bg","surface","deep","text","soft","line","c1","c2","c3","glow"].forEach(k=>r.setProperty("--"+k,t[k]));
   ["c1","c2","c3","deep","text","surface"].forEach(k=>r.setProperty("--on-"+k,onColor(t[k])));
   const ib=t.introBg||t.deep;r.setProperty("--intro-bg",ib);r.setProperty("--intro-fg",t.introFg||onColor(ib));

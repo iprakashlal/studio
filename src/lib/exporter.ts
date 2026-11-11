@@ -46,8 +46,10 @@ async function fetchBytes(url: string): Promise<Uint8Array> {
 const escAttr = (s: string) => String(s || "").replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
 
 /** Bake the site title and description into each page so search engines and link previews see them. */
-function bakeSeo(html: string, title: string, description: string): string {
+function bakeSeo(html: string, title: string, description: string, bg = ""): string {
   let out = html.replace(/<title>[^<]*<\/title>/i, `<title>${escAttr(title)}</title>`);
+  // The site's own background from the first paint, so first-time visitors never see the template's colours.
+  if (/^#[0-9a-f]{3,8}$/i.test(bg)) out = out.replace(/<\/title>/i, `</title>\n<style id="site-boot">html{background:${bg}}</style>`);
   if (/<meta name="description"[^>]*>/i.test(out)) out = out.replace(/<meta name="description"[^>]*>/i, `<meta name="description" content="${escAttr(description)}">`);
   return out;
 }
@@ -61,6 +63,8 @@ export async function buildSite(opts: {
   getAsset: (path: string) => Promise<Blob | null>;
   /** Admin page file name to use instead of the one in `content` (when the site keeps its own content). */
   admin?: string;
+  /** Background colour baked into the pages (defaults to the content's own). */
+  bg?: string;
   /** Image paths the target already has. Upload names are unique, so these are left as they are instead of re-sent. */
   keep?: Set<string>;
 }): Promise<{ files: SiteFile[]; warnings: string[]; admin: string }> {
@@ -76,7 +80,7 @@ export async function buildSite(opts: {
   const optional = Object.entries(m.when || {}).filter(([, paths]) => paths.every((p) => !!getP(content, p))).map(([f]) => f);
   for (const f of [...m.files, ...optional]) {
     let data = await fetchBytes(`templates/${template.id}/${f}`);
-    if (f.endsWith(".html") && f !== "admin.html") data = textToBytes(bakeSeo(new TextDecoder().decode(data), title, desc));
+    if (f.endsWith(".html") && f !== "admin.html") data = textToBytes(bakeSeo(new TextDecoder().decode(data), title, desc, opts.bg || content?.theme?.bg || ""));
     if (f.endsWith(".md") && admin !== "admin.html") data = textToBytes(new TextDecoder().decode(data).replace(/\badmin\.html\b/g, admin));
     files.push({ path: f === "admin.html" ? admin : f, data });
   }

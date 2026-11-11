@@ -273,6 +273,8 @@ function methods() {
    ============================================================ */
 function applyTheme(t) {
   const r = document.documentElement.style;
+  r.background = t.bg; r.colorScheme = onColor(t.bg) === "#FFFFFF" ? "dark" : "light";
+  if (!PREVIEW) try { localStorage.setItem("site-bg:" + location.pathname.replace(/[^/]*$/, ""), t.bg); } catch (e) {}
   ["bg", "surface", "text", "soft", "line", "accent", "accent2", "sale"].forEach((k) => r.setProperty("--" + k, t[k]));
   r.setProperty("--on-accent", onColor(t.accent)); r.setProperty("--on-accent2", onColor(t.accent2)); r.setProperty("--on-sale", onColor(t.sale));
   const deep = t.deep || t.text; r.setProperty("--deep", deep); r.setProperty("--on-deep", onColor(deep));
@@ -821,7 +823,21 @@ if (PREVIEW) {
   });
   window.parent.postMessage({ type: "cms:ready", page: location.pathname.split("/").pop() || "index.html" }, location.origin);
 }
-render();
-if (!PREVIEW) fetch("content.json", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((j) => { if (j) { C = merge(DEFAULT, j); render(); } }).catch(() => {});
+// The live site never shows the template's sample design: it waits for content.json (a returning visitor
+// gets the copy saved on the previous page at once), and only falls back to the defaults if loading fails.
+const CKEY = "site-content:" + location.pathname.replace(/[^/]*$/, "");
+if (PREVIEW) render();
+else {
+  let shown = "";
+  try { const c = sessionStorage.getItem(CKEY); if (c) { C = merge(DEFAULT, JSON.parse(c)); render(); shown = c; } } catch (e) {}
+  const giveUp = setTimeout(() => { if (!shown) { render(); shown = "default"; } }, 6000);
+  fetch("content.json", { cache: "no-store" }).then((r) => (r.ok ? r.text() : null)).then((txt) => {
+    clearTimeout(giveUp);
+    if (!txt) { if (!shown) render(); return; }
+    try { sessionStorage.setItem(CKEY, txt); } catch (e) {}
+    if (txt === shown) return;
+    C = merge(DEFAULT, JSON.parse(txt)); render();
+  }).catch(() => { clearTimeout(giveUp); if (!shown) render(); });
+}
 addEventListener("hashchange", () => { if (PAGE === "account") render(); });
 })();

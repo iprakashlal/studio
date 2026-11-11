@@ -3,6 +3,9 @@ import { pwScore, pwStrongEnough, seal, unseal, type Sealed } from "../lib/crypt
 import { detectRepo, device, session as sess, type Session } from "../lib/auth";
 import { GitHubRepo, explain } from "../lib/repo";
 import { Field, Logo, useConfirm, useToast } from "./kit";
+import { LINK_MINUTES, joinBlob, makeDeviceLink, openDeviceLink } from "../lib/devicelink";
+import qrcode from "qrcode-generator";
+import { BrandMark } from "../lib/brand";
 
 function Meter({ value }: { value: string }) {
   const s = pwScore(value);
@@ -20,7 +23,7 @@ function Shell({ title, brand, children, footer }: { title: string; brand: strin
   return (
     <div className="grid min-h-screen place-items-center bg-[radial-gradient(900px_520px_at_85%_-10%,rgba(91,124,255,.18),transparent_60%)] px-4 py-10">
       <div className="card w-full max-w-[460px] p-7 shadow-2xl sm:p-8">
-        <div className="mb-5 flex items-center gap-2.5 font-extrabold"><Logo />{brand}</div>
+        <div className="mb-5 flex items-center gap-2.5 font-extrabold"><BrandMark fallback={<Logo />} />{brand}</div>
         <h1 className="font-display text-2xl font-extrabold">{title}</h1>
         <div className="mt-4 flex flex-col gap-4">{children}</div>
         {footer && <div className="mt-5 border-t border-ink-700 pt-4">{footer}</div>}
@@ -44,6 +47,8 @@ export function Gate({ ns, brand, repoNoun, defaultRepo = "", tokenHint, onAuthe
   footer?: ReactNode;
 }) {
   const [sealed, setSealed] = useState<Sealed | null>(() => device.load(ns));
+  const [blob, setBlob] = useState(joinBlob);
+  if (blob) return <Join ns={ns} brand={brand} blob={blob} hasLogin={!!sealed} onAuthed={onAuthed} onCancel={() => { history.replaceState(null, "", location.pathname + location.search); setBlob(""); }} footer={footer} />;
   return sealed
     ? <Login ns={ns} brand={brand} sealed={sealed} onAuthed={onAuthed} onReset={() => { device.clear(ns); setSealed(null); }} footer={footer} />
     : <Setup ns={ns} brand={brand} repoNoun={repoNoun} defaultRepo={defaultRepo} tokenHint={tokenHint} onAuthed={onAuthed} onDemo={onDemo} footer={footer} />;
@@ -93,6 +98,102 @@ function Setup({ ns, brand, repoNoun, defaultRepo, tokenHint, onAuthed, onDemo, 
       </form>
       {onDemo && <button type="button" className="btn btn-ghost" onClick={onDemo}>Try a demo first (nothing is saved)</button>}
     </Shell>
+  );
+}
+
+/** Opened from "Sign in on another device": enter the code shown there, then choose this device's password. */
+function Join({ ns, brand, blob, hasLogin, onAuthed, onCancel, footer }: { ns: string; brand: string; blob: string; hasLogin: boolean; onAuthed: (s: Session) => void; onCancel: () => void; footer?: ReactNode }) {
+  const [code, setCode] = useState("");
+  const [got, setGot] = useState<Session | null>(null);
+  const [f, setF] = useState({ user: "", pw: "", pw2: "" });
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+  const fails = useRef(0);
+  const check = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErr(""); setBusy(true);
+    const r = await openDeviceLink(blob, code);
+    setBusy(false);
+    if (typeof r === "string") { fails.current++; setErr(r); return; }
+    setGot(r); setF({ ...f, user: r.username });
+  };
+  const finish = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!got) return;
+    setErr("");
+    if (f.user.trim().length < 3) return setErr("Username needs at least 3 characters.");
+    if (!pwStrongEnough(f.pw)) return setErr("Choose a stronger password: at least 12 characters, mixing words, numbers or symbols.");
+    if (f.pw !== f.pw2) return setErr("The passwords don't match.");
+    setBusy(true);
+    try {
+      await new GitHubRepo(got.cfg, got.token).check();
+      if (!device.save(ns, await seal(got.cfg, f.user.trim(), f.pw, got.token))) throw new Error("This browser blocked local storage. Allow site data for this page and try again.");
+      const s: Session = { ...got, username: f.user.trim() };
+      sess.save(ns, s);
+      history.replaceState(null, "", location.pathname + location.search + "#/");
+      onAuthed(s);
+    } catch (x) { setErr(explain(x)); setBusy(false); }
+  };
+  if (!got) return (
+    <Shell brand={brand} title="Sign in with your other device" footer={footer}>
+      <p className="text-sm text-ink-300">Type the code shown on the device that made this link (Settings → Sign in on another device).</p>
+      {hasLogin && <p className="rounded-lg border border-amber-400/40 bg-amber-400/5 px-3 py-2.5 text-[13px] text-amber-100">This browser already has a login. Continuing replaces it.</p>}
+      <form onSubmit={check} className="flex flex-col gap-3.5" autoComplete="off">
+        <Field label="Code" htmlFor="j-code"><input id="j-code" className="input text-center font-mono text-lg uppercase tracking-[.25em]" autoFocus required placeholder="XXXX-XXXX-XXXX" autoCapitalize="characters" spellCheck={false} value={code} onChange={(e) => setCode(e.target.value)} /></Field>
+        <p role="alert" className="min-h-[1.25em] text-sm text-red-300">{err}</p>
+        <button className="btn btn-pri" disabled={busy || fails.current >= 8}>{busy ? "Checking…" : "Continue"}</button>
+      </form>
+      <button type="button" className="btn btn-ghost btn-sm self-start" onClick={onCancel}>Set up with a GitHub token instead</button>
+    </Shell>
+  );
+  return (
+    <Shell brand={brand} title="Choose this device's login" footer={footer}>
+      <p className="text-sm text-ink-300">Connected to <b className="text-ink-100">{got.cfg.owner}/{got.cfg.repo}</b>. Pick the username and password you'll type on this device. The GitHub token is encrypted with it and kept only in this browser.</p>
+      <form onSubmit={finish} className="flex flex-col gap-3.5" autoComplete="off">
+        <Field label="Your username" htmlFor="j-user"><input id="j-user" className="input" required minLength={3} autoComplete="username" value={f.user} onChange={(e) => setF({ ...f, user: e.target.value })} /></Field>
+        <Field label="Password" htmlFor="j-pw"><input id="j-pw" className="input" type="password" required autoComplete="new-password" value={f.pw} onChange={(e) => setF({ ...f, pw: e.target.value })} /><Meter value={f.pw} /></Field>
+        <Field label="Confirm password" htmlFor="j-pw2"><input id="j-pw2" className="input" type="password" required autoComplete="new-password" value={f.pw2} onChange={(e) => setF({ ...f, pw2: e.target.value })} /></Field>
+        <p role="alert" className="min-h-[1.25em] text-sm text-red-300">{err}</p>
+        <button className="btn btn-pri" disabled={busy}>{busy ? "Connecting…" : "Finish signing in"}</button>
+      </form>
+    </Shell>
+  );
+}
+
+/** Makes a link + code that signs another phone or computer in to this same login. */
+function DeviceLinkCard({ session }: { session: Session }) {
+  const toast = useToast();
+  const [l, setL] = useState<{ code: string; url: string; expires: number } | null>(null);
+  const [left, setLeft] = useState(0);
+  const qr = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!l) return;
+    const t = setInterval(() => { const s = Math.max(0, Math.round((l.expires - Date.now()) / 1000)); setLeft(s); if (!s) setL(null); }, 1000);
+    return () => clearInterval(t);
+  }, [l]);
+  useEffect(() => {
+    if (!l || !qr.current) return;
+    try { const q = qrcode(0, "M"); q.addData(l.url); q.make(); qr.current.innerHTML = q.createSvgTag({ cellSize: 4, margin: 0, scalable: true }); } catch { /* the link and code still work */ }
+  }, [l]);
+  const copy = (t: string, what: string) => { try { navigator.clipboard.writeText(t).then(() => toast(`${what} copied`)); } catch { toast(t); } };
+  return (
+    <section className="card flex flex-col gap-3 p-5">
+      <h3 className="text-[15px] font-extrabold">Sign in on another device</h3>
+      <p className="text-sm text-ink-300">Opens this same login on your phone or another computer, without copying the GitHub token. Scan the QR code or open the link there, then type the code. The link works for {LINK_MINUTES} minutes, and only together with the code.</p>
+      {!l ? <button type="button" className="btn btn-pri self-start" onClick={async () => setL(await makeDeviceLink(session))}>Make a sign-in link</button> : (
+        <div className="flex flex-wrap items-start gap-5">
+          <div ref={qr} className="h-[200px] w-[200px] flex-none rounded-xl bg-white p-2.5 [&>svg]:h-full [&>svg]:w-full" role="img" aria-label="QR code for the sign-in link" />
+          <div className="flex min-w-[220px] flex-1 flex-col gap-3">
+            <div><div className="label">Code</div><div className="mt-1 font-mono text-2xl font-bold tracking-[.18em] text-ink-100">{l.code}</div></div>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" className="btn btn-sm" onClick={() => copy(l.url, "Link")}>Copy link</button>
+              <button type="button" className="btn btn-sm" onClick={() => setL(null)}>Cancel</button>
+            </div>
+            <p className="hint">Expires in {Math.floor(left / 60)}:{String(left % 60).padStart(2, "0")}. Send the link and the code separately, or just type the code on the other device. Anyone with both could sign in, so don't post them together.</p>
+          </div>
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -187,6 +288,7 @@ export function AccountPanel({ ns, session, onUpdated, onSignOut, onForget }: { 
           <button className="btn btn-pri self-start" disabled={busy}>{busy ? "Updating…" : "Update login"}</button>
         </form>
       </section>
+      <DeviceLinkCard session={session} />
       <section className="card flex flex-col gap-3 p-5">
         <h3 className="text-[15px] font-extrabold">Session</h3>
         <p className="text-sm text-ink-300">Connected to <b className="text-ink-100">{session.cfg.owner}/{session.cfg.repo}</b> on <b className="text-ink-100">{session.cfg.branch}</b>. You're signed out after 30 minutes without activity.</p>

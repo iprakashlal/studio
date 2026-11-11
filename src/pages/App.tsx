@@ -5,11 +5,14 @@ import { Gate } from "../ui/gate";
 import { useToast } from "../ui/kit";
 import { Workspace } from "./Workspace";
 import { ThemesPage } from "./ThemesPage";
+import { useBrand } from "../lib/brand";
 
 export const NS = "site-studio";
 
 export function App() {
   const toast = useToast();
+  const brandName = useBrand().name;
+  useEffect(() => { document.title = brandName; }, [brandName]);
   const [session, setSession] = useState<Session | null>(() => sess.load(NS));
   const [demo, setDemo] = useState(false);
   const [hash, setHash] = useState(location.hash);
@@ -37,7 +40,7 @@ export function App() {
 
   if (!repo) {
     return (
-      <Gate ns={NS} brand="Site Studio" repoNoun="Studio's data repository" defaultRepo="studio-data"
+      <Gate ns={NS} brand={brandName} repoNoun="Studio's data repository" defaultRepo="studio-data"
         tokenHint="A fine-grained token with Contents: Read and write on the data repository, plus any site repositories you'll publish to."
         onAuthed={setSession} onDemo={() => setDemo(true)} />
     );

@@ -37,7 +37,9 @@ export type SiteState =
   | { kind: "none" | "same" }
   | { kind: "pull" | "conflict"; siteAt: string | null };
 export type CategoryRec = { id: string; name: string; color: string };
-export type StudioIndex = { version: 1; categories: CategoryRec[]; projects: ProjectMeta[] };
+/** The Studio's own name and logo (logo: a file in the data repository). */
+export type StudioBrand = { name: string; logo?: string; v?: number };
+export type StudioIndex = { version: 1; categories: CategoryRec[]; projects: ProjectMeta[]; brand?: StudioBrand };
 
 export const CATEGORY_COLORS = ["#5B7CFF", "#3FB97A", "#F2A541", "#F06A6A", "#B57BFF", "#34C3D9", "#E86FB0", "#9AA6BC"];
 
@@ -186,6 +188,15 @@ export class Studio {
     return { index, content: f.data, missing: [] };
   }
 
+  /** Saves the Studio's name and logo (a PNG data URL, "" to remove it) for every device. */
+  async saveBrand(name: string, logo: string | null): Promise<StudioIndex> {
+    const files: { path: string; base64: string }[] = [];
+    if (logo) files.push({ path: "studio-assets/logo.png", base64: logo.split(",")[1] });
+    return this.updateIndex((i) => {
+      i.brand = { name: name.trim(), v: Date.now(), ...(logo ? { logo: "studio-assets/logo.png" } : logo === "" ? {} : i.brand?.logo ? { logo: i.brand.logo } : {}) };
+    }, "Update the Studio's name and logo", files);
+  }
+
   /** Remember that the live site's current content is accounted for (e.g. "keep the Studio's version"). */
   async markSynced(id: string, sha: string): Promise<StudioIndex> {
     return this.updateIndex((i) => {
@@ -220,6 +231,7 @@ export class Studio {
 function normalise(i: any): StudioIndex {
   return {
     version: 1,
+    ...(i?.brand && typeof i.brand.name === "string" ? { brand: { name: i.brand.name, ...(typeof i.brand.logo === "string" ? { logo: i.brand.logo } : {}), ...(typeof i.brand.v === "number" ? { v: i.brand.v } : {}) } } : {}),
     categories: Array.isArray(i?.categories) ? i.categories : [],
     projects: (Array.isArray(i?.projects) ? i.projects : []).map((p: any) => ({ exports: [], version: 0, notes: "", client: "", status: "draft", ...p })),
   };

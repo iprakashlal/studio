@@ -34,7 +34,8 @@ export function Dashboard({ studio, index, onIndex, token }: { studio: Studio; i
         setLive((m) => ({ ...m, [p.id]: "checking" }));
         try {
           const site = new GitHubRepo(p.publish!, token);
-          const st = await studio.siteState(p, site);
+          // Don't leave "Checking…" up forever on a slow or blocked connection.
+          const st = await Promise.race([studio.siteState(p, site), new Promise<never>((_, no) => setTimeout(() => no(new Error("timeout")), 45_000))]);
           if (st.kind === "pull") {
             const r = await studio.importFromSite(p.id, site);
             if (on) onIndex(r.index);

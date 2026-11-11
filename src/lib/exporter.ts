@@ -61,6 +61,8 @@ export async function buildSite(opts: {
   getAsset: (path: string) => Promise<Blob | null>;
   /** Admin page file name to use instead of the one in `content` (when the site keeps its own content). */
   admin?: string;
+  /** Image paths the target already has. Upload names are unique, so these are left as they are instead of re-sent. */
+  keep?: Set<string>;
 }): Promise<{ files: SiteFile[]; warnings: string[]; admin: string }> {
   const { template, content } = opts;
   const m = await loadManifest(template.id);
@@ -92,6 +94,7 @@ export async function buildSite(opts: {
   if (opts.includeContent) {
     files.push({ path: "content.json", data: textToBytes(JSON.stringify(content, null, 2)) });
     for (const p of collectAssetPaths(content)) {
+      if (opts.keep?.has(p)) continue;
       const b = await opts.getAsset(p);
       if (b) files.push({ path: p, data: await blobToBytes(b) });
       else warnings.push(`Image not found: ${p}`);

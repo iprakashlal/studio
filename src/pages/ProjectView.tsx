@@ -247,7 +247,9 @@ function PublishDialog({ studio, project, tpl, draft, dirty, save, onIndex, getB
       const next = project.version + 1;
       // Keeping the site's own content keeps its own admin page name too.
       const live = withContent ? null : await repo.getJSON("content.json").catch(() => null);
-      const { files, warnings, admin } = await buildSite({ template: tpl, content: draft, name: project.name, version: next, includeContent: withContent, getAsset: getBlob, admin: live ? adminFile(live.data) : undefined });
+      // Photos already in the repository stay put: only new ones are uploaded, so publishing a shop full of photos is quick.
+      const keep = withContent ? new Set(await repo.list("assets/").catch(() => [] as string[])) : undefined;
+      const { files, warnings, admin } = await buildSite({ template: tpl, content: draft, name: project.name, version: next, includeContent: withContent, getAsset: getBlob, admin: live ? adminFile(live.data) : undefined, keep });
       await publishSite(repo, files, `Publish v${next} from Site Studio${note.trim() ? `: ${note.trim()}` : ""}`, admin);
       setAdmin(admin);
       // Remember what the site holds now, so later edits in the site's own CMS are recognised and pulled back in.

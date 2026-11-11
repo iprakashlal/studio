@@ -12,7 +12,7 @@
 //
 // Secrets (Dashboard → Edge Functions → Secrets):
 //   SITE_URL                 https://you.github.io/shop/   (where content.json lives)
-//   RESEND_API_KEY, MAIL_FROM  e.g. "Fieldnote Goods <orders@yourdomain.com>"
+//   RESEND_API_KEY, MAIL_FROM  e.g. "Picaffectz Studio <orders@yourdomain.com>"
 //   OWNER_EMAIL              where new-order emails go (comma-separate several)
 //   RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET, RAZORPAY_WEBHOOK_SECRET   (if using Razorpay)
 //   STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET                        (if using Stripe)

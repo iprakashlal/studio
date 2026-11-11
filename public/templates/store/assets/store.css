@@ -33,7 +33,7 @@ p{margin:0}
 .brand{display:flex;align-items:center;gap:10px;text-decoration:none;min-width:0;margin-right:auto}
 .brand .mark{width:38px;height:38px;border-radius:10px;background:var(--accent);color:var(--on-accent);display:grid;place-items:center;font-family:var(--fd);font-weight:800;overflow:hidden;flex:none}
 .brand .mark img{width:100%;height:100%;object-fit:cover}
-.brand b{font-family:var(--fd);font-size:20px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.brand b{font-family:var(--fd);font-size:clamp(14px,4.2vw,20px);font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .nav{display:flex;gap:4px}
 .nav a{text-decoration:none;font-weight:600;font-size:15px;padding:8px 12px;border-radius:999px}
 .nav a:hover,.nav a[aria-current=page]{background:color-mix(in srgb,var(--text) 8%,transparent)}

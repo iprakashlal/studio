@@ -11,8 +11,8 @@ const DEFAULT = {
   theme: { bg: "#FAF7F2", surface: "#FFFFFF", text: "#1B1A17", soft: "#6B665D", line: "#E7E1D6", accent: "#1F4D3A", accent2: "#E9B949", sale: "#B4441B", fontDisplay: "Fraunces", fontBody: "Manrope", radius: 14,
     preset: "ivory-classic", layout: "split", nav: "pill", cards: "soft", buttons: "rounded", motionStyle: "none", pattern: "none", ornament: "none", heading: "normal", shead: "plain", width: "normal", grid: "auto", product: "classic",
     cursor: "none", loader: "none", textfx: "none", hoverfx: "none", scrollfx: "none", overlay: "none" },
-  brand: { name: "Fieldnote Goods", tagline: "Small-batch goods for slow mornings", logo: null, announcement: "Free shipping on orders over ₹1,999", showAnnouncement: true },
-  seo: { title: "Fieldnote Goods", description: "Small-batch ceramics, linen and paper goods." },
+  brand: { name: "Picaffectz Studio", tagline: "Small-batch goods for slow mornings", logo: null, announcement: "Free shipping on orders over ₹1,999", showAnnouncement: true },
+  seo: { title: "Picaffectz Studio", description: "Small-batch ceramics, linen and paper goods." },
   nav: { home: "Home", shop: "Shop", portfolio: "Our story", cart: "Cart", account: "Account", showPortfolio: true },
   home: {
     hero: { eyebrow: "New collection", title: "Objects for slow mornings", text: "Hand-made ceramics, linen and paper goods, made in small batches and shipped with care.", cta: "Shop the collection", image: null },

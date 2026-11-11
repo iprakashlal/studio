@@ -50,7 +50,7 @@ Open the Worker → **Settings → Variables and Secrets → Add**. For each ent
 | `AUTH_SECRET` | Secret | a random string of at least 32 characters (see below) |
 | `SITE_URL` | Text | your shop's address, e.g. `https://your-name.github.io/shop/` |
 | `RESEND_API_KEY` | Secret | from step 3 |
-| `MAIL_FROM` | Text | e.g. `Fieldnote Goods <orders@yourdomain.com>` |
+| `MAIL_FROM` | Text | e.g. `Picaffectz Studio <orders@yourdomain.com>` |
 | `OWNER_EMAIL` | Text | where new-order emails go. This email can also sign in to Orders and Customers. |
 | `ADMIN_EMAILS` | Text | optional: other emails allowed into Orders and Customers, comma-separated. If you set this, include your own email too. |
 | `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET` | Secret | if you use Razorpay |

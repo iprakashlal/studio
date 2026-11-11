@@ -1,6 +1,6 @@
 import type { Category, Field, TemplateDef } from "./types";
 import { AXES, BODY_FONTS, DISPLAY_FONTS, KIT_AXIS, LINE_BREAKS_AXIS, PORTFOLIO_AXES, THEMES, onColor, portfolioThemeValues } from "../themes/catalog";
-import { adminCategory } from "./common";
+import { adminCategory, seoCategory } from "./common";
 import VELOCITY_DEFAULTS from "./velocity-defaults.json";
 import { themeCards } from "../themes/fields";
 
@@ -75,7 +75,6 @@ const schema: Category[] = [
         g2({ t: "toggle", path: "theme.showGrid", label: "Blueprint grid" }, { t: "toggle", path: "theme.showGlow", label: "Corner glow" }, { t: "toggle", path: "theme.showNetwork", label: "Line network in hero" },
           { t: "toggle", path: "theme.show3D", label: "3D shapes in hero" }, { t: "toggle", path: "theme.showSolids", label: "Floating background shapes" }, { t: "toggle", path: "theme.showTicker", label: "Scrolling skills band" },
           { t: "toggle", path: "theme.motion", label: "Animations" })] },
-      { title: "Search & sharing", fields: [{ t: "text", path: "seo.title", label: "Browser tab title" }, { t: "textarea", path: "seo.description", label: "Search description", hint: "One or two sentences shown by search engines and link previews." }] },
     ],
   },
   {
@@ -170,6 +169,7 @@ const schema: Category[] = [
       { title: "Footer", fields: [g2({ t: "text", path: "contact.footerLeft", label: "Left" }, { t: "text", path: "contact.footerRight", label: "Right" })] },
     ],
   },
+  seoCategory(false),
   adminCategory(),
 ];
 
@@ -203,6 +203,7 @@ export const portfolioTemplate: TemplateDef = {
     if (!t.lineBreaks) t.lineBreaks = "typed";
     c.labels = { ...PORTFOLIO_LABELS, ...(c.labels && typeof c.labels === "object" ? c.labels : {}) };
     c.cms = { adminPage: "admin", ...(c.cms && typeof c.cms === "object" ? c.cms : {}) };
+    c.seo = { titlePattern: "{page} · {site}", keywords: "", author: "", image: null, siteUrl: "", themeColor: "", noindex: false, googleVerification: "", meta: [], ...(c.seo && typeof c.seo === "object" ? c.seo : {}) };
   },
   summary: (c) => [c?.hero?.firstName, c?.hero?.lastName].filter(Boolean).join(" ") || c?.brand?.logoText || "",
   checks: (c) => {

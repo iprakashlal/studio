@@ -1,7 +1,7 @@
 import type { Category, Field, TemplateDef } from "./types";
 import { uid, vpaOk, paypalOk, httpsOk } from "../lib/util";
 import { BODY_FONTS, DISPLAY_FONTS, LINE_BREAKS_AXIS, STORE_AXES, THEMES, onColor, storeThemeValues } from "../themes/catalog";
-import { adminCategory } from "./common";
+import { adminCategory, seoCategory } from "./common";
 import { themeCards } from "../themes/fields";
 
 const CURRENCIES = ["INR", "USD", "EUR", "GBP", "AED", "SGD", "AUD", "CAD"];
@@ -30,7 +30,6 @@ const schema: Category[] = [
         { t: "range", path: "theme.radius", label: "Corner radius", min: 0, max: 28, step: 1, unit: "px" },
         { t: "select", path: "theme.lineBreaks", label: LINE_BREAKS_AXIS.label, options: LINE_BREAKS_AXIS.options.map(([value, label]) => ({ value, label })) },
         { t: "note", text: "Headings and titles break where you press Enter. With “As typed”, a heading you typed on one line stays on one line (it shrinks a little to fit, and only wraps on screens too narrow for it)." }] },
-      { title: "Search & sharing", fields: [{ t: "text", path: "seo.title", label: "Browser tab title" }, { t: "textarea", path: "seo.description", label: "Search description" }] },
     ],
   },
   {
@@ -184,6 +183,7 @@ const schema: Category[] = [
       { title: "Footer", fields: [{ t: "textarea", path: "footer.text", label: "Footer text" }] },
     ],
   },
+  seoCategory(true),
   adminCategory(),
 ];
 
@@ -200,6 +200,7 @@ export function prepareStore(c: any) {
   if (!t.lineBreaks) t.lineBreaks = "typed";
   c.labels = { ...STORE_LABELS, ...(c.labels && typeof c.labels === "object" ? c.labels : {}) };
   c.cms = { adminPage: "admin", ...(c.cms && typeof c.cms === "object" ? c.cms : {}) };
+  c.seo = { titlePattern: "{page} · {site}", keywords: "", author: "", image: null, siteUrl: "", themeColor: "", noindex: false, googleVerification: "", meta: [], ...(c.seo && typeof c.seo === "object" ? c.seo : {}) };
 }
 
 /** Reads the payload of a Supabase key (a JWT) to catch a pasted service_role key. */

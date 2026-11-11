@@ -4,6 +4,7 @@ import { device, session as sess, watchIdle, type Session } from "../lib/auth";
 import { GitHubRepo, explain, jsonB64, bytesB64 } from "../lib/repo";
 import { blobToBytes, clone, safeFileName, textToB64 } from "../lib/util";
 import { adminFile } from "../schema/common";
+import { bakeHead, headChanged, storePageLabel } from "../lib/head";
 import ACCOUNT_HTML from "../../public/templates/store/account.html?raw";
 import { Editor } from "../editor/Editor";
 import { Preview } from "../editor/Preview";
@@ -143,8 +144,10 @@ function Workspace({ info, onInfo, session, onSession, onSignOut, onForget }: { 
     const at = v;
     const oldAdmin = currentAdmin(info);
     const newAdmin = adminFile(draft);
+    // Titles, metadata and the background live in each page's <head> too (for search engines and link previews).
+    const bake = headChanged(saved, draft);
     try {
-      if (!draftSha && oldAdmin === newAdmin) {
+      if (!draftSha && oldAdmin === newAdmin && !bake) {
         const next = await repo.putFile("content.json", jsonB64(draft), "Update site content", sha);
         setSha(next);
       } else {
@@ -153,6 +156,14 @@ function Workspace({ info, onInfo, session, onSession, onSignOut, onForget }: { 
         if (cur && sha && cur.sha !== sha) throw Object.assign(new Error("changed"), { status: 409 });
         const files = [{ path: "content.json", base64: jsonB64(draft) }];
         const remove = draftSha ? [DRAFT] : [];
+        if (bake) {
+          const base = new URL("./", location.href).href;
+          const pages = (await repo.list("")).filter((f) => /^[a-z0-9-]+\.html$/.test(f) && f !== oldAdmin && f !== newAdmin && f !== "404.html");
+          for (const f of pages) {
+            const page = await repo.getText(f);
+            if (page) files.push({ path: f, base64: textToB64(bakeHead(page.text, draft, { file: f, label: tpl.id === "store" ? storePageLabel(f, draft) : "", base, bg: draft?.theme?.bg })) });
+          }
+        }
         if (oldAdmin !== newAdmin) {
           const page = await repo.getText(oldAdmin);
           if (!page) throw new Error(`Couldn't find ${oldAdmin} in the repository to move it. Change the admin page name back, or publish again from Site Studio.`);
@@ -160,7 +171,7 @@ function Workspace({ info, onInfo, session, onSession, onSignOut, onForget }: { 
           files.push({ path: "cms/site.json", base64: jsonB64({ ...info, admin: newAdmin }) });
           remove.push(oldAdmin);
         }
-        await repo.pushFiles(files, oldAdmin !== newAdmin ? `Update site content; move the CMS to ${newAdmin}` : "Update site content", remove);
+        await repo.pushFiles(files, oldAdmin !== newAdmin ? `Update site content; move the CMS to ${newAdmin}` : bake ? "Update site content, titles and metadata" : "Update site content", remove);
         const f = await repo.getJSON("content.json").catch(() => null);
         setSha(f ? f.sha : null);
         if (oldAdmin !== newAdmin) { onInfo({ ...info, admin: newAdmin }); setMoved(new URL(newAdmin, location.href).href); }

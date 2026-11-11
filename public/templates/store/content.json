@@ -46,7 +46,16 @@
   },
   "seo": {
     "title": "Picaffectz Studio",
-    "description": "Small-batch ceramics, linen and paper goods."
+    "description": "Small-batch ceramics, linen and paper goods.",
+    "titlePattern": "{page} · {site}",
+    "keywords": "",
+    "author": "",
+    "image": null,
+    "siteUrl": "",
+    "themeColor": "",
+    "noindex": false,
+    "googleVerification": "",
+    "meta": []
   },
   "nav": {
     "home": "Home",

@@ -92,7 +92,7 @@
     /* loader + page transitions */
     ".fx-load{position:fixed;inset:0;z-index:99999;pointer-events:none;color:var(--fxo);font-family:var(--fd,system-ui)}",
     ".fx-load .fx-p{position:absolute;left:0;right:0;background:var(--fxd)}",
-    ".fx-load--curtain .fx-p,.fx-load--counter .fx-p,.fx-cover .fx-p,.fx-exit .fx-p{top:0;bottom:0}",
+    ".fx-load--curtain .fx-p,.fx-load--counter .fx-p,.fx-cover:not(.fx-load--split) .fx-p,.fx-exit:not(.fx-load--split) .fx-p{top:0;bottom:0}",
     ".fx-load--curtain .fx-p{transition:transform 1s var(--fxe)}",
     ".fx-load--curtain.out .fx-p,.fx-cover.out .fx-p{transform:translateY(-101%)}",
     ".fx-cover .fx-p{transition:transform .9s var(--fxe)}",
@@ -110,7 +110,14 @@
     ".fx-num small{font-size:.3em;vertical-align:top;margin-left:.08em}",
     ".fx-bar{position:absolute;left:4vw;right:4vw;bottom:2vh;height:2px;background:currentColor;transform-origin:0 50%;transform:scaleX(0);opacity:.5;transition:opacity .3s}",
     ".fx-exit .fx-p{transform:translateY(101%);transition:transform .55s cubic-bezier(.7,0,.3,1)}",
+    ".fx-exit.fx-load--split .fx-pt{transform:translateY(-101%)}",
+    ".fx-exit.fx-load--split .fx-pt,.fx-exit.fx-load--split .fx-pb{transition:transform .55s cubic-bezier(.7,0,.3,1)}",
     ".fx-exit.in .fx-p{transform:none}",
+    /* page-to-page: the name sits in the middle while the panels close, stays while the next page loads, then the panels open */
+    ".fx-exit .fx-brand,.fx-cover .fx-brand{letter-spacing:.12em}",
+    ".fx-exit .fx-brand span{animation-duration:.45s;animation-delay:calc(.22s + var(--i)*22ms)}",
+    ".fx-cover .fx-brand span{animation:none;opacity:1;transform:none}",
+    ".fx-cover.out .fx-brand{transition:opacity .35s}",
     "@keyframes fxup{to{opacity:1;transform:none}}",
     /* text */
     ".fx-w{display:inline-block;white-space:nowrap}",
@@ -139,19 +146,32 @@
   /* ---------------------------------------------------------------- page-to-page cover */
   // A link click with a loader theme slides a panel in; the next page starts covered and slides it away.
   var cover = null;
+  /** The intro panels with the site name in the middle (kind: split, or a single panel). */
+  function panels(kind, brand) {
+    var letters = String(brand || "").slice(0, 24).split("").map(function (ch, i) { return '<span style="--i:' + i + '">' + (ch === " " ? "&nbsp;" : escHtml(ch)) + "</span>"; }).join("");
+    return (kind === "split" ? '<div class="fx-p fx-pt"></div><div class="fx-p fx-pb"></div>' : '<div class="fx-p"></div>') + (letters ? '<div class="fx-brand">' + letters + "</div>" : "");
+  }
   try {
     var pend = sessionStorage.getItem("fx-exit");
     if (pend) {
       sessionStorage.removeItem("fx-exit");
       ensureStyle();
-      cover = el("div", "fx-load fx-cover", '<div class="fx-p" style="background:' + escHtml(pend) + '"></div>');
-      (document.body || doc).appendChild(cover);
+      var x = pend.charAt(0) === "{" ? JSON.parse(pend) : { bg: pend };
+      var kind = x.kind === "split" ? "split" : "curtain";
+      cover = el("div", "fx-load fx-cover fx-load--" + kind, panels(kind, x.brand));
+      cover.style.setProperty("--fxd", x.bg || "#111"); cover.style.setProperty("--fxo", x.fg || "#fff");
+      (document.body || doc).appendChild(cover); coverAt = Date.now();
       setTimeout(function () { if (cover) revealCover(); }, 4000);
     }
   } catch (e) {}
+  // The page's <head> hid everything (in the panel colour) until this cover existed: no flash in between.
+  var pre = document.getElementById("fx-pre"); if (pre) pre.remove();
+  var coverAt = 0;
   function revealCover() {
     var c = cover; cover = null; if (!c) return;
-    requestAnimationFrame(function () { c.classList.add("out"); setTimeout(function () { c.remove(); }, 1000); });
+    // Hold the name on screen for a moment even when the next page is ready at once.
+    var wait = c.querySelector(".fx-brand") ? Math.max(0, 450 - (Date.now() - coverAt)) : 0;
+    setTimeout(function () { requestAnimationFrame(function () { c.classList.add("out"); setTimeout(function () { c.remove(); }, 1000); }); }, wait);
   }
 
   /* ---------------------------------------------------------------- layers */
@@ -408,12 +428,12 @@
     if (u.origin !== location.origin || !/^https?:$/.test(u.protocol) || /admin\.html$/.test(u.pathname)) return;
     if (u.pathname === location.pathname && u.search === location.search) return;
     e.preventDefault();
-    var col = colors(), box = el("div", "fx-load fx-exit", '<div class="fx-p"></div>');
-    box.querySelector(".fx-p").style.background = col.deep;
+    var col = colors(), kind = c.loader === "split" ? "split" : "curtain", box = el("div", "fx-load fx-exit fx-load--" + kind, panels(kind, st.brand));
+    box.style.setProperty("--fxd", col.deep); box.style.setProperty("--fxo", col.on);
     document.body.appendChild(box);
-    try { sessionStorage.setItem("fx-exit", col.deep); } catch (x) {}
+    try { sessionStorage.setItem("fx-exit", JSON.stringify({ bg: col.deep, fg: col.on, kind: kind, brand: st.brand })); } catch (x) {}
     requestAnimationFrame(function () { requestAnimationFrame(function () { box.classList.add("in"); }); });
-    setTimeout(function () { location.href = u.href; }, 560);
+    setTimeout(function () { location.href = u.href; }, st.brand ? 760 : 560);
   }
   addEventListener("pageshow", function (e) { if (e.persisted) $$(".fx-exit").forEach(function (n) { n.remove(); }); });
 
@@ -443,6 +463,7 @@
     var root = opts.root || document.body;
     ensureStyle(); wire();
     var c = cfg(), sig = JSON.stringify(c), changed = sig !== st.sig;
+    st.brand = opts.brand || st.brand || document.title;
     st.sig = sig;
     doc.classList.toggle("fx-dark", isDark());
     st.accent = colors().a;

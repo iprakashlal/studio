@@ -8,6 +8,7 @@ import type { Repo } from "./repo";
 import { bytesB64 } from "./repo";
 import { blobToBytes, collectAssetPaths, getP, textToBytes } from "./util";
 import { adminFile } from "../schema/common";
+import { bakeHead, storePageLabel } from "./head";
 
 export type SiteFile = { path: string; data: Uint8Array };
 /** `when` lists files exported only if every given content path is switched on. */
@@ -43,16 +44,6 @@ async function fetchBytes(url: string): Promise<Uint8Array> {
   return new Uint8Array(await r.arrayBuffer());
 }
 
-const escAttr = (s: string) => String(s || "").replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
-
-/** Bake the site title and description into each page so search engines and link previews see them. */
-function bakeSeo(html: string, title: string, description: string, bg = ""): string {
-  let out = html.replace(/<title>[^<]*<\/title>/i, `<title>${escAttr(title)}</title>`);
-  // The site's own background from the first paint, so first-time visitors never see the template's colours.
-  if (/^#[0-9a-f]{3,8}$/i.test(bg)) out = out.replace(/<\/title>/i, `</title>\n<style id="site-boot">html{background:${bg}}</style>`);
-  if (/<meta name="description"[^>]*>/i.test(out)) out = out.replace(/<meta name="description"[^>]*>/i, `<meta name="description" content="${escAttr(description)}">`);
-  return out;
-}
 
 export async function buildSite(opts: {
   template: TemplateDef;
@@ -63,8 +54,11 @@ export async function buildSite(opts: {
   getAsset: (path: string) => Promise<Blob | null>;
   /** Admin page file name to use instead of the one in `content` (when the site keeps its own content). */
   admin?: string;
-  /** Background colour baked into the pages (defaults to the content's own). */
-  bg?: string;
+  /** Content whose title, metadata and background go into the pages' <head> (defaults to `content`; the live
+   *  site's own content when it keeps it). */
+  headContent?: any;
+  /** The site's address, for canonical links and share images when the content doesn't set one. */
+  base?: string;
   /** Image paths the target already has. Upload names are unique, so these are left as they are instead of re-sent. */
   keep?: Set<string>;
 }): Promise<{ files: SiteFile[]; warnings: string[]; admin: string }> {
@@ -72,15 +66,16 @@ export async function buildSite(opts: {
   const m = await loadManifest(template.id);
   const files: SiteFile[] = [];
   const warnings: string[] = [];
-  const title = content?.seo?.title || opts.name;
-  const desc = content?.seo?.description || "";
+  const hc0 = opts.headContent || content;
+  const hc = hc0?.seo?.title || hc0?.brand?.name || hc0?.brand?.logoText ? hc0 : { ...hc0, seo: { ...(hc0?.seo || {}), title: opts.name } };
   // The site's CMS page goes out under the owner's chosen name (Admin page → address).
   const admin = opts.admin || adminFile(content);
 
   const optional = Object.entries(m.when || {}).filter(([, paths]) => paths.every((p) => !!getP(content, p))).map(([f]) => f);
   for (const f of [...m.files, ...optional]) {
     let data = await fetchBytes(`templates/${template.id}/${f}`);
-    if (f.endsWith(".html") && f !== "admin.html") data = textToBytes(bakeSeo(new TextDecoder().decode(data), title, desc, opts.bg || content?.theme?.bg || ""));
+    if (f.endsWith(".html") && f !== "admin.html" && f !== "404.html")
+      data = textToBytes(bakeHead(new TextDecoder().decode(data), hc, { file: f, label: template.id === "store" ? storePageLabel(f, hc) : "", base: opts.base, bg: hc?.theme?.bg }));
     if (f.endsWith(".md") && admin !== "admin.html") data = textToBytes(new TextDecoder().decode(data).replace(/\badmin\.html\b/g, admin));
     files.push({ path: f === "admin.html" ? admin : f, data });
   }

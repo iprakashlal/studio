@@ -15,7 +15,7 @@ const DEFAULT = {
   labels: { allProducts: "All products", viewAll: "View all", help: "Help", contact: "Contact" },
   cms: { adminPage: "admin" },
   brand: { name: "Picaffectz Studio", tagline: "Small-batch goods for slow mornings", logo: null, announcement: "Free shipping on orders over ₹1,999", showAnnouncement: true },
-  seo: { title: "Picaffectz Studio", description: "Small-batch ceramics, linen and paper goods." },
+  seo: { title: "Picaffectz Studio", description: "Small-batch ceramics, linen and paper goods.", titlePattern: "{page} · {site}", keywords: "", author: "", image: null, siteUrl: "", themeColor: "", noindex: false, googleVerification: "", meta: [] },
   nav: { home: "Home", shop: "Shop", portfolio: "Our story", cart: "Cart", account: "Account", showPortfolio: true },
   home: {
     hero: { eyebrow: "New collection", title: "Objects for\nslow mornings", text: "Hand-made ceramics, linen and paper goods, made in small batches and shipped with care.", cta: "Shop the collection", image: null },
@@ -292,6 +292,19 @@ function applyTheme(t) {
     const href = f ? "https://fonts.googleapis.com/css2?family=" + f + "&display=swap" : ""; if (href && l.getAttribute("href") !== href) l.setAttribute("href", href);
   });
 }
+/** Tab title: the home page uses the title as typed, other pages "{page} · {site}" (Title & metadata). */
+function setTitle(label) {
+  const one = (x) => String(x || "").replace(/\s*\n\s*/g, " ").trim();
+  document.title = !label ? one(C.seo.title || C.brand.name) : one((C.seo.titlePattern || "{page} · {site}").replace(/\{page\}/g, one(label)).replace(/\{site\}/g, one(C.brand.name)));
+}
+/** Keeps the description and preview tags in step for crawlers that run JavaScript (the CMS also bakes them into the HTML). */
+function applyMeta() {
+  if (PREVIEW) return;
+  const set = (attr, key, val) => { let m = document.head.querySelector(`meta[${attr}="${key}"]`); if (!val) { if (m) m.remove(); return; } if (!m) { m = document.createElement("meta"); m.setAttribute(attr, key); document.head.appendChild(m); } m.setAttribute("content", val); };
+  const d = String(C.seo.description || "").replace(/\s+/g, " ").trim();
+  set("name", "description", d); set("property", "og:title", document.title); set("property", "og:description", d);
+  set("name", "theme-color", /^#[0-9a-f]{3,8}$/i.test(C.seo.themeColor || "") ? C.seo.themeColor : "");
+}
 /** The browser-tab icon: the logo (or initials) in the logo shape. */
 let iconKey = "";
 function setIcon() {
@@ -384,7 +397,7 @@ const PAGES = {
     if (!p) return `<div class="wrap"><div class="empty" style="margin-block:64px"><h1 style="font-size:32px">Product not found</h1><p>It may have been removed.</p><a class="btn pri" href="shop.html">Back to the shop</a></div></div>`;
     const cat = catOf(p.category), imgs = p.images && p.images.length ? p.images : [null];
     const related = C.products.filter((x) => x.id !== p.id && x.category === p.category).slice(0, 4);
-    document.title = `${p.name} · ${C.brand.name}`;
+    setTitle(p.name);
     return `<div class="wrap"><nav class="crumbs" aria-label="Breadcrumb"><a href="shop.html">${esc(C.nav.shop)}</a>${cat ? `<span>/</span><a href="shop.html?c=${encodeURIComponent(cat.id)}">${esc(cat.name)}</a>` : ""}<span>/</span><span>${esc(p.name)}</span></nav>
     <div class="pd" data-pid="${esc(p.id)}"><div class="gal"><div class="main" id="mainimg">${imgs[0] ? `<img src="${esc(imgUrl(imgs[0]))}" alt="${esc(p.name)}">` : ph(p.name)}</div>
       ${imgs.length > 1 ? `<div class="thumbs">${imgs.map((im, i) => `<button type="button" data-i="${i}" aria-pressed="${i === 0}" aria-label="Photo ${i + 1}"><img src="${esc(imgUrl(im))}" alt=""></button>`).join("")}</div>` : ""}</div>
@@ -559,7 +572,8 @@ function orderDone(o) {
    ============================================================ */
 function render() {
   applyTheme(C.theme);
-  if (PAGE !== "product") document.title = (PAGE === "home" ? C.seo.title || C.brand.name : `${{ shop: C.shop.title, cart: C.nav.cart, checkout: C.checkout.title, portfolio: C.nav.portfolio, policies: "Policies", account: C.accountPage.title }[PAGE] || ""} · ${C.brand.name}`).replace(/\s*\n\s*/g, " ");
+  if (PAGE !== "product") setTitle(PAGE === "home" ? "" : { shop: C.shop.title, cart: C.nav.cart, checkout: C.checkout.title, portfolio: C.nav.portfolio, policies: "Policies", account: C.accountPage.title }[PAGE] || "");
+  applyMeta();
   const fn = PAGES[PAGE] || PAGES.home;
   $("#app").innerHTML = `<a class="skip" href="#main">Skip to content</a>${header()}<main id="main">${fn()}</main>${footer()}`;
   bind();

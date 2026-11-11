@@ -377,7 +377,16 @@
   },
   "seo": {
     "title": "Your Name · Portfolio",
-    "description": "Portfolio of Your Name: strategy, design and front-end."
+    "description": "Portfolio of Your Name: strategy, design and front-end.",
+    "titlePattern": "{page} · {site}",
+    "keywords": "",
+    "author": "",
+    "image": null,
+    "siteUrl": "",
+    "themeColor": "",
+    "noindex": false,
+    "googleVerification": "",
+    "meta": []
   },
   "velocity": {
     "status": "Available for new projects",

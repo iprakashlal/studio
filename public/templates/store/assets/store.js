@@ -10,12 +10,15 @@
 const DEFAULT = {
   theme: { bg: "#FAF7F2", surface: "#FFFFFF", text: "#1B1A17", soft: "#6B665D", line: "#E7E1D6", accent: "#1F4D3A", accent2: "#E9B949", sale: "#B4441B", fontDisplay: "Fraunces", fontBody: "Manrope", radius: 14,
     preset: "ivory-classic", layout: "split", nav: "pill", cards: "soft", buttons: "rounded", motionStyle: "none", pattern: "none", ornament: "none", heading: "normal", shead: "plain", width: "normal", grid: "auto", product: "classic",
-    cursor: "none", loader: "none", textfx: "none", hoverfx: "none", scrollfx: "none", overlay: "none" },
+    cursor: "none", loader: "none", textfx: "none", hoverfx: "none", scrollfx: "none", overlay: "none",
+    introBg: "", introFg: "", introTitle: "", logoRadius: 26, scrollEase: "light", lineBreaks: "typed" },
+  labels: { allProducts: "All products", viewAll: "View all", help: "Help", contact: "Contact" },
+  cms: { adminPage: "admin" },
   brand: { name: "Picaffectz Studio", tagline: "Small-batch goods for slow mornings", logo: null, announcement: "Free shipping on orders over ₹1,999", showAnnouncement: true },
   seo: { title: "Picaffectz Studio", description: "Small-batch ceramics, linen and paper goods." },
   nav: { home: "Home", shop: "Shop", portfolio: "Our story", cart: "Cart", account: "Account", showPortfolio: true },
   home: {
-    hero: { eyebrow: "New collection", title: "Objects for slow mornings", text: "Hand-made ceramics, linen and paper goods, made in small batches and shipped with care.", cta: "Shop the collection", image: null },
+    hero: { eyebrow: "New collection", title: "Objects for\nslow mornings", text: "Hand-made ceramics, linen and paper goods, made in small batches and shipped with care.", cta: "Shop the collection", image: null },
     featuredTitle: "Featured", featuredText: "Our most-loved pieces this season.",
     showCategories: true, categoriesTitle: "Shop by category",
     banner: { show: true, title: "Made in small batches", text: "Every piece is made by a small team. Read how we work and see what we've made for other brands.", cta: "Read our story", image: null },
@@ -87,6 +90,9 @@ const FONTS = {
    ============================================================ */
 const $ = (s, c = document) => c.querySelector(s), $$ = (s, c = document) => [...c.querySelectorAll(s)];
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+/** Escaped text that keeps the line breaks typed in the CMS. */
+const ml = (s) => esc(String(s ?? "").replace(/\r\n?/g, "\n").trim()).replace(/\n/g, "<br>");
+const lab = (k, d) => (C.labels && C.labels[k]) || d;
 const paras = (s) => String(s || "").split(/\n\s*\n/).filter((x) => x.trim()).map((p) => `<p>${esc(p)}</p>`).join("");
 const safeUrl = (u) => { u = String(u || "").trim(); return /^(https?:|mailto:|tel:)/i.test(u) ? u : ""; };
 const slugify = (s) => String(s || "").toLowerCase().normalize("NFKD").replace(/[^\w\s-]/g, "").trim().replace(/[\s_]+/g, "-").replace(/-+/g, "-").slice(0, 48) || "item";
@@ -270,9 +276,12 @@ function applyTheme(t) {
   ["bg", "surface", "text", "soft", "line", "accent", "accent2", "sale"].forEach((k) => r.setProperty("--" + k, t[k]));
   r.setProperty("--on-accent", onColor(t.accent)); r.setProperty("--on-accent2", onColor(t.accent2)); r.setProperty("--on-sale", onColor(t.sale));
   const deep = t.deep || t.text; r.setProperty("--deep", deep); r.setProperty("--on-deep", onColor(deep));
+  const ib = t.introBg || deep; r.setProperty("--intro-bg", ib); r.setProperty("--intro-fg", t.introFg || onColor(ib));
+  r.setProperty("--logo-r", Math.max(0, Math.min(50, t.logoRadius ?? 26)) + "%");
   MOTIF = window.SiteMotifs ? SiteMotifs.resolve(t, "cafe") : "geometric";
   const d = document.documentElement.dataset; d.motif = moOn() ? MOTIF : "geometric";
   for (const k of ["layout", "nav", "cards", "buttons", "motionStyle", "pattern", "ornament", "heading", "shead", "width", "grid", "product", "cursor", "loader", "textfx", "hoverfx", "scrollfx", "overlay"]) d[k] = String(t[k] || "");
+  d.scrollease = t.scrollEase || "light"; d.linebreaks = t.lineBreaks || "typed";
   r.setProperty("--r", (+t.radius || 0) + "px");
   r.setProperty("--fd", `"${t.fontDisplay}",Georgia,serif`); r.setProperty("--fb", `"${t.fontBody}","Helvetica Neue",Arial,sans-serif`);
   // One stylesheet per family, so a family Google can't serve never blocks the others.
@@ -281,11 +290,48 @@ function applyTheme(t) {
     const href = f ? "https://fonts.googleapis.com/css2?family=" + f + "&display=swap" : ""; if (href && l.getAttribute("href") !== href) l.setAttribute("href", href);
   });
 }
+/** The browser-tab icon: the logo (or initials) in the logo shape. */
+let iconKey = "";
+function setIcon() {
+  const B = C.brand, t = C.theme, rad = Math.max(0, Math.min(50, t.logoRadius ?? 26)), key = [B.logo && B.logo.path, B.name, rad, t.accent].join("|");
+  if (key === iconKey) return; iconKey = key;
+  let l = document.querySelector("link[rel=icon]"); if (!l) { l = document.createElement("link"); l.rel = "icon"; document.head.appendChild(l); }
+  const ini = B.name.split(/\s+/).map((w) => w[0] || "").join("").slice(0, 2).toUpperCase();
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="${(rad * 0.64).toFixed(1)}" fill="${esc(t.accent)}"/><text x="32" y="34" dominant-baseline="middle" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-weight="800" font-size="${ini.length > 1 ? 26 : 34}" fill="${onColor(t.accent)}">${esc(ini)}</text></svg>`;
+  l.type = "image/svg+xml"; l.href = "data:image/svg+xml," + encodeURIComponent(svg);
+  if (!B.logo) return;
+  const im = new Image(); im.crossOrigin = "anonymous";
+  im.onload = () => { try {
+    const cv = document.createElement("canvas"); cv.width = cv.height = 64; const x = cv.getContext("2d"), r = rad * 0.64;
+    x.beginPath(); x.moveTo(r, 0); x.arcTo(64, 0, 64, 64, r); x.arcTo(64, 64, 0, 64, r); x.arcTo(0, 64, 0, 0, r); x.arcTo(0, 0, 64, 0, r); x.closePath(); x.clip();
+    const s = Math.max(64 / im.width, 64 / im.height); x.drawImage(im, (64 - im.width * s) / 2, (64 - im.height * s) / 2, im.width * s, im.height * s);
+    if (iconKey === key) { l.type = "image/png"; l.href = cv.toDataURL("image/png"); }
+  } catch (e) {} };
+  im.src = imgUrl(B.logo);
+}
+/** "As typed" headings: keep each typed line on one line, shrinking up to ~45% to fit; wrap only if it still can't. */
+function fitLines() {
+  const on = document.documentElement.dataset.linebreaks !== "auto";
+  document.querySelectorAll("h1.fit,h2.fit").forEach((el) => {
+    el.style.fontSize = ""; el.style.width = ""; el.classList.remove("fit-one");
+    const room = el.clientWidth; // measured while wrapping is allowed: the real space, before a long line can widen a grid or flex column
+    if (!on || !room) return;
+    el.classList.add("fit-one"); el.style.width = room + "px";
+    const need = el.scrollWidth; el.style.width = "";
+    if (need <= room + 1) return;
+    const k = room / need;
+    if (k < 0.55) { el.classList.remove("fit-one"); return; }
+    el.style.fontSize = (parseFloat(getComputedStyle(el).fontSize) * k * 0.98).toFixed(2) + "px";
+  });
+}
+let fitT = 0;
+addEventListener("resize", () => { clearTimeout(fitT); fitT = setTimeout(fitLines, 120); });
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => fitLines());
 function header() {
   const B = C.brand, N = C.nav;
   const initials = B.name.split(/\s+/).map((w) => w[0] || "").join("").slice(0, 2).toUpperCase();
   const cur = (p) => (PAGE === p ? ' aria-current="page"' : "");
-  return `${B.showAnnouncement && B.announcement ? `<div class="announce">${esc(B.announcement)}</div>` : ""}
+  return `${B.showAnnouncement && B.announcement ? `<div class="announce">${ml(B.announcement)}</div>` : ""}
   <header class="hdr"><div class="wrap" style="position:relative">
     <a class="brand" href="index.html"><span class="mark">${B.logo ? `<img src="${esc(imgUrl(B.logo))}" alt="">` : esc(initials)}</span><b>${esc(B.name)}</b></a>
     <nav class="nav" id="nav" aria-label="Main"><a href="index.html"${cur("home")}>${esc(N.home)}</a><a href="shop.html"${cur("shop")}>${esc(N.shop)}</a>${N.showPortfolio ? `<a href="portfolio.html"${cur("portfolio")}>${esc(N.portfolio)}</a>` : ""}${ACCOUNTS() ? `<a href="account.html"${cur("account")}>${esc(N.account)}</a>` : ""}</nav>
@@ -296,10 +342,10 @@ function header() {
 function footer() {
   const K = C.contact, ms = methods();
   return `<footer class="ftr"><div class="wrap"><div class="cols">
-    <div class="about"><b style="font-family:var(--fd);font-size:22px">${esc(C.brand.name)}</b><p>${esc(C.footer.text || C.brand.tagline)}</p>${ms.length ? `<div class="pm">${ms.map((m) => `<span>${esc(m.label)}</span>`).join("")}</div>` : ""}</div>
-    <div><h4>${esc(C.nav.shop)}</h4><ul><li><a href="shop.html">All products</a></li>${C.categories.map((c) => `<li><a href="shop.html?c=${encodeURIComponent(c.id)}">${esc(c.name)}</a></li>`).join("")}</ul></div>
-    <div><h4>Help</h4><ul>${C.policies.map((p) => `<li><a href="policies.html#${esc(p.id || slugify(p.title))}">${esc(p.title)}</a></li>`).join("")}${C.nav.showPortfolio ? `<li><a href="portfolio.html">${esc(C.nav.portfolio)}</a></li>` : ""}</ul></div>
-    <div><h4>Contact</h4><ul>${K.email ? `<li><a href="mailto:${esc(K.email)}">${esc(K.email)}</a></li>` : ""}${K.phone ? `<li><a href="tel:${esc(digits(K.phone))}">${esc(K.phone)}</a></li>` : ""}${K.whatsapp ? `<li><a href="https://wa.me/${digits(K.whatsapp)}" target="_blank" rel="noopener">WhatsApp</a></li>` : ""}${safeUrl(K.instagram) ? `<li><a href="${esc(safeUrl(K.instagram))}" target="_blank" rel="noopener">Instagram</a></li>` : ""}${K.address ? `<li class="soft" style="white-space:pre-line">${esc(K.address)}</li>` : ""}</ul></div>
+    <div class="about"><b style="font-family:var(--fd);font-size:22px">${esc(C.brand.name)}</b><p>${ml(C.footer.text || C.brand.tagline)}</p>${ms.length ? `<div class="pm">${ms.map((m) => `<span>${esc(m.label)}</span>`).join("")}</div>` : ""}</div>
+    <div><h4>${esc(C.nav.shop)}</h4><ul><li><a href="shop.html">${esc(lab("allProducts", "All products"))}</a></li>${C.categories.map((c) => `<li><a href="shop.html?c=${encodeURIComponent(c.id)}">${esc(c.name)}</a></li>`).join("")}</ul></div>
+    <div><h4>${esc(lab("help", "Help"))}</h4><ul>${C.policies.map((p) => `<li><a href="policies.html#${esc(p.id || slugify(p.title))}">${esc(p.title)}</a></li>`).join("")}${C.nav.showPortfolio ? `<li><a href="portfolio.html">${esc(C.nav.portfolio)}</a></li>` : ""}</ul></div>
+    <div><h4>${esc(lab("contact", "Contact"))}</h4><ul>${K.email ? `<li><a href="mailto:${esc(K.email)}">${esc(K.email)}</a></li>` : ""}${K.phone ? `<li><a href="tel:${esc(digits(K.phone))}">${esc(K.phone)}</a></li>` : ""}${K.whatsapp ? `<li><a href="https://wa.me/${digits(K.whatsapp)}" target="_blank" rel="noopener">WhatsApp</a></li>` : ""}${safeUrl(K.instagram) ? `<li><a href="${esc(safeUrl(K.instagram))}" target="_blank" rel="noopener">Instagram</a></li>` : ""}${K.address ? `<li class="soft" style="white-space:pre-line">${esc(K.address)}</li>` : ""}</ul></div>
   </div><div class="base"><span>© ${new Date().getFullYear()} ${esc(C.brand.name)}</span><span>Prices in ${esc(C.settings.currency)}</span></div></div></footer>`;
 }
 function pcard(p) {
@@ -314,17 +360,17 @@ const PAGES = {
   home() {
     const H = C.home, feat = C.products.filter((p) => p.featured).slice(0, 8), list = feat.length ? feat : C.products.slice(0, 4);
     const col = C.products.slice(0, 3);
-    return `<section class="hero">${C.theme.ornament && C.theme.ornament !== "none" ? (moOn() ? `<div class="orn mo" aria-hidden="true">${[["accent2", 0], ["accent", 1], ["sale", 2]].map(([k, i]) => `<span style="color:var(--${k});--mo2:var(--${k === "accent" ? "accent2" : "accent"})">${SiteMotifs.svg(MOTIF, i, 0, true)}</span>`).join("")}</div>` : `<div class="orn" aria-hidden="true"><i></i><i></i><i></i></div>`) : ""}<div class="wrap"><div class="htx"><p class="eyebrow">${esc(H.hero.eyebrow)}</p><h1>${esc(H.hero.title)}</h1><p class="lead">${esc(H.hero.text)}</p>
+    return `<section class="hero">${C.theme.ornament && C.theme.ornament !== "none" ? (moOn() ? `<div class="orn mo" aria-hidden="true">${[["accent2", 0], ["accent", 1], ["sale", 2]].map(([k, i]) => `<span style="color:var(--${k});--mo2:var(--${k === "accent" ? "accent2" : "accent"})">${SiteMotifs.svg(MOTIF, i, 0, true)}</span>`).join("")}</div>` : `<div class="orn" aria-hidden="true"><i></i><i></i><i></i></div>`) : ""}<div class="wrap"><div class="htx"><p class="eyebrow">${ml(H.hero.eyebrow)}</p><h1 class="fit">${ml(H.hero.title)}</h1><p class="lead">${ml(H.hero.text)}</p>
       <div class="cta"><a class="btn pri" href="shop.html">${esc(H.hero.cta)} →</a>${C.nav.showPortfolio ? `<a class="btn" href="portfolio.html">${esc(C.nav.portfolio)}</a>` : ""}</div></div>
       <div class="art">${H.hero.image ? `<img src="${esc(imgUrl(H.hero.image))}" alt="">` : `<div class="collage">${(col.length ? col : [{ name: "A" }, { name: "B" }, { name: "C" }]).map((p) => `<div style="border-radius:calc(var(--r)*1.1);overflow:hidden">${p.images && p.images[0] ? pimg(p) : ph(p.name)}</div>`).join("")}</div>`}</div></div></section>
-    ${list.length ? `<section class="sec" style="padding-top:12px"><div class="wrap"><div class="sec-h"><div><h2>${esc(H.featuredTitle)}</h2>${H.featuredText ? `<p class="soft" style="margin-top:8px">${esc(H.featuredText)}</p>` : ""}</div><a class="link" href="shop.html">View all</a></div><div class="grid">${list.map(pcard).join("")}</div></div></section>` : ""}
-    ${H.showCategories && C.categories.length ? `<section class="sec" style="padding-top:0"><div class="wrap"><div class="sec-h"><h2>${esc(H.categoriesTitle)}</h2></div><div class="cats">${C.categories.map((c) => `<a class="cat" href="shop.html?c=${encodeURIComponent(c.id)}">${c.image ? `<img src="${esc(imgUrl(c.image))}" alt="">` : ph(c.name)}<span>${esc(c.name)}<small>${C.products.filter((p) => p.category === c.id).length} products</small></span></a>`).join("")}</div></div></section>` : ""}
-    ${H.banner.show ? `<section class="sec" style="padding-top:0"><div class="wrap"><div class="banner"><div class="tx"><h2>${esc(H.banner.title)}</h2><p>${esc(H.banner.text)}</p>${C.nav.showPortfolio && H.banner.cta ? `<a class="btn" href="portfolio.html">${esc(H.banner.cta)} →</a>` : ""}</div><div class="im">${H.banner.image ? `<img src="${esc(imgUrl(H.banner.image))}" alt="">` : ph(H.banner.title)}</div></div></div></section>` : ""}
-    ${H.testimonials.length ? `<section class="sec" style="padding-top:0"><div class="wrap"><div class="sec-h"><h2>${esc(H.testimonialsTitle)}</h2></div><div class="quotes">${H.testimonials.map((t) => `<figure class="quote" style="margin:0"><p>“${esc(t.quote)}”</p><span><b>${esc(t.name)}</b>${t.role ? ` · ${esc(t.role)}` : ""}</span></figure>`).join("")}</div></div></section>` : ""}`;
+    ${list.length ? `<section class="sec" style="padding-top:12px"><div class="wrap"><div class="sec-h"><div><h2 class="fit">${ml(H.featuredTitle)}</h2>${H.featuredText ? `<p class="soft" style="margin-top:8px">${ml(H.featuredText)}</p>` : ""}</div><a class="link" href="shop.html">${esc(lab("viewAll", "View all"))}</a></div><div class="grid">${list.map(pcard).join("")}</div></div></section>` : ""}
+    ${H.showCategories && C.categories.length ? `<section class="sec" style="padding-top:0"><div class="wrap"><div class="sec-h"><h2 class="fit">${ml(H.categoriesTitle)}</h2></div><div class="cats">${C.categories.map((c) => `<a class="cat" href="shop.html?c=${encodeURIComponent(c.id)}">${c.image ? `<img src="${esc(imgUrl(c.image))}" alt="">` : ph(c.name)}<span>${esc(c.name)}<small>${C.products.filter((p) => p.category === c.id).length} products</small></span></a>`).join("")}</div></div></section>` : ""}
+    ${H.banner.show ? `<section class="sec" style="padding-top:0"><div class="wrap"><div class="banner"><div class="tx"><h2 class="fit">${ml(H.banner.title)}</h2><p>${ml(H.banner.text)}</p>${C.nav.showPortfolio && H.banner.cta ? `<a class="btn" href="portfolio.html">${esc(H.banner.cta)} →</a>` : ""}</div><div class="im">${H.banner.image ? `<img src="${esc(imgUrl(H.banner.image))}" alt="">` : ph(H.banner.title)}</div></div></div></section>` : ""}
+    ${H.testimonials.length ? `<section class="sec" style="padding-top:0"><div class="wrap"><div class="sec-h"><h2 class="fit">${ml(H.testimonialsTitle)}</h2></div><div class="quotes">${H.testimonials.map((t) => `<figure class="quote" style="margin:0"><p>“${esc(t.quote)}”</p><span><b>${esc(t.name)}</b>${t.role ? ` · ${esc(t.role)}` : ""}</span></figure>`).join("")}</div></div></section>` : ""}`;
   },
   shop() {
     const S = C.shop, q = new URLSearchParams(location.search);
-    return `<section class="page-h"><div class="wrap"><p class="eyebrow">${esc(C.brand.name)}</p><h1>${esc(S.title)}</h1>${S.intro ? `<p>${esc(S.intro)}</p>` : ""}</div></section>
+    return `<section class="page-h"><div class="wrap"><p class="eyebrow">${esc(C.brand.name)}</p><h1 class="fit">${ml(S.title)}</h1>${S.intro ? `<p>${ml(S.intro)}</p>` : ""}</div></section>
     <div class="wrap"><div class="toolbar"><div class="chips" role="group" aria-label="Category"><button class="chip" type="button" data-c="" aria-pressed="${!q.get("c")}">All</button>${C.categories.map((c) => `<button class="chip" type="button" data-c="${esc(c.id)}" aria-pressed="${q.get("c") === c.id}">${esc(c.name)}</button>`).join("")}</div>
       <div class="tools">${S.showSearch ? `<input class="in" type="search" id="q" placeholder="Search products" aria-label="Search products" value="${esc(q.get("q") || "")}">` : ""}<select class="in" id="sort" aria-label="Sort">${[["featured", "Featured first"], ["new", "Newest first"], ["low", "Price: low to high"], ["high", "Price: high to low"]].map(([v, l]) => `<option value="${v}"${(q.get("s") || S.sortDefault) === v ? " selected" : ""}>${l}</option>`).join("")}</select></div></div>
       <p class="count" id="count" aria-live="polite"></p><div class="grid" id="results"></div><div style="height:72px"></div></div>`;
@@ -377,10 +423,10 @@ const PAGES = {
     }
     if (!lines.length) return `<section class="page-h"><div class="wrap"><h1>${esc(C.checkout.title)}</h1></div></section><div class="wrap" style="padding-bottom:80px"><div class="empty"><p>Your cart is empty.</p><a class="btn pri" href="shop.html">Start shopping</a></div></div>`;
     const K = C.checkout, ms = methods(), t = totals(lines);
-    if (ACCOUNTS() && C.backend.requireLogin && !USER && !PREVIEW) return `<section class="page-h"><div class="wrap"><h1>${esc(K.title)}</h1></div></section><div class="wrap" style="padding-bottom:80px"><div class="box" style="max-width:520px"><h2>Sign in to check out</h2><p class="soft">We'll send a 6-digit code to your email. Your orders then appear in your account.</p><a class="btn pri" href="account.html?next=checkout.html">Sign in</a></div></div>`;
+    if (ACCOUNTS() && C.backend.requireLogin && !USER && !PREVIEW) return `<section class="page-h"><div class="wrap"><h1 class="fit">${ml(K.title)}</h1></div></section><div class="wrap" style="padding-bottom:80px"><div class="box" style="max-width:520px"><h2>Sign in to check out</h2><p class="soft">We'll send a 6-digit code to your email. Your orders then appear in your account.</p><a class="btn pri" href="account.html?next=checkout.html">Sign in</a></div></div>`;
     const me = { ...store.get("me", {}), ...(PROFILE ? { name: PROFILE.name || "", phone: PROFILE.phone || "", ...(PROFILE.address || {}) } : {}), ...(USER ? { email: USER.email } : {}) };
     const fld = (id, label, type = "text", req = true, full = false, ac = "") => `<div class="f${full ? " full" : ""}"><label for="${id}">${esc(label)}${req ? "" : ' <span class="soft">(optional)</span>'}</label><input class="in" id="${id}" name="${id}" type="${type}"${req ? " required" : ""}${ac ? ` autocomplete="${ac}"` : ""}${id === "email" && USER ? " readonly" : ""} value="${esc(me[id] || "")}"><span class="err" id="${id}-e"></span></div>`;
-    return `<section class="page-h"><div class="wrap"><h1>${esc(K.title)}</h1>${K.intro ? `<p>${esc(K.intro)}</p>` : ""}</div></section>
+    return `<section class="page-h"><div class="wrap"><h1 class="fit">${ml(K.title)}</h1>${K.intro ? `<p>${ml(K.intro)}</p>` : ""}</div></section>
     <form class="wrap two" id="co" novalidate><div class="form">
       <div class="box"><h2>Your details</h2><div class="fgrid">${fld("name", "Full name", "text", true, false, "name")}${fld("email", "Email", "email", true, false, "email")}${K.askPhone ? fld("phone", "Phone", "tel", true, false, "tel") : ""}</div></div>
       ${K.askAddress ? `<div class="box"><h2>Delivery address</h2><div class="fgrid">${fld("address", "Address", "text", true, true, "street-address")}${fld("city", "City", "text", true, false, "address-level2")}${fld("pin", "PIN / postcode", "text", true, false, "postal-code")}${fld("state", "State", "text", true, false, "address-level1")}</div></div>` : ""}
@@ -392,11 +438,11 @@ const PAGES = {
   },
   portfolio() {
     const P = C.portfolio;
-    return `<section class="hero pf-hero"><div class="wrap"><div><p class="eyebrow">${esc(P.eyebrow)}</p><h1 style="font-size:clamp(38px,5.6vw,66px);margin-top:14px">${esc(P.title)}</h1><p class="lead">${esc(P.intro)}</p></div><div class="im">${P.image ? `<img src="${esc(imgUrl(P.image))}" alt="">` : ph(P.title)}</div></div></section>
-    <section class="sec" style="padding-top:12px"><div class="wrap"><div class="story"><h2 style="font-size:clamp(28px,4vw,40px)">${esc(P.storyTitle)}</h2><div class="body">${paras(P.story)}</div></div>
+    return `<section class="hero pf-hero"><div class="wrap"><div><p class="eyebrow">${ml(P.eyebrow)}</p><h1 class="fit" style="font-size:clamp(38px,5.6vw,66px);margin-top:14px">${ml(P.title)}</h1><p class="lead">${ml(P.intro)}</p></div><div class="im">${P.image ? `<img src="${esc(imgUrl(P.image))}" alt="">` : ph(P.title)}</div></div></section>
+    <section class="sec" style="padding-top:12px"><div class="wrap"><div class="story"><h2 class="fit" style="font-size:clamp(28px,4vw,40px)">${ml(P.storyTitle)}</h2><div class="body">${paras(P.story)}</div></div>
       ${P.stats.length ? `<div class="stats">${P.stats.map((s) => `<div><b>${esc(s.value)}</b><span>${esc(s.label)}</span></div>`).join("")}</div>` : ""}</div></section>
-    ${P.work.length ? `<section class="sec" style="padding-top:0"><div class="wrap"><div class="sec-h"><h2>${esc(P.workTitle)}</h2></div><div class="work">${P.work.map((w) => `<article class="wcard"><div class="im">${w.image ? `<img src="${esc(imgUrl(w.image))}" alt="" loading="lazy">` : ph(w.title)}</div><div class="bd">${w.tag ? `<span class="tag">${esc(w.tag)}</span>` : ""}<h3>${esc(w.title)}</h3><p>${esc(w.text)}</p>${safeUrl(w.link) ? `<a class="link" href="${esc(safeUrl(w.link))}" target="_blank" rel="noopener">View ↗</a>` : ""}</div></article>`).join("")}</div></div></section>` : ""}
-    <section class="sec" style="padding-top:0"><div class="wrap"><div class="ctaband"><h2>${esc(P.ctaTitle)}</h2><p class="soft">${esc(P.ctaText)}</p><a class="btn pri" href="shop.html">${esc(P.ctaButton)} →</a></div></div></section>`;
+    ${P.work.length ? `<section class="sec" style="padding-top:0"><div class="wrap"><div class="sec-h"><h2 class="fit">${ml(P.workTitle)}</h2></div><div class="work">${P.work.map((w) => `<article class="wcard"><div class="im">${w.image ? `<img src="${esc(imgUrl(w.image))}" alt="" loading="lazy">` : ph(w.title)}</div><div class="bd">${w.tag ? `<span class="tag">${esc(w.tag)}</span>` : ""}<h3>${esc(w.title)}</h3><p>${esc(w.text)}</p>${safeUrl(w.link) ? `<a class="link" href="${esc(safeUrl(w.link))}" target="_blank" rel="noopener">View ↗</a>` : ""}</div></article>`).join("")}</div></div></section>` : ""}
+    <section class="sec" style="padding-top:0"><div class="wrap"><div class="ctaband"><h2 class="fit">${ml(P.ctaTitle)}</h2><p class="soft">${ml(P.ctaText)}</p><a class="btn pri" href="shop.html">${esc(P.ctaButton)} →</a></div></div></section>`;
   },
   account() {
     return `<section class="page-h"><div class="wrap"><h1>${esc(C.accountPage.title)}</h1></div></section><div class="wrap" style="padding-bottom:80px"><div id="acct" aria-live="polite"><p class="soft">Loading…</p></div></div>`;
@@ -496,7 +542,7 @@ function orderDone(o) {
   else if (o.method === "paypal") pay = `<p>PayPal opens with the amount filled in. Add the order number <b>${esc(o.id)}</b> as the note.</p><a class="btn pri" href="https://www.paypal.me/${encodeURIComponent(P.paypal.username)}/${Number(o.t.total)}${esc(C.settings.currency)}" target="_blank" rel="noopener">Pay ${esc(money(o.t.total))} with PayPal ↗</a>`;
   else if (o.method === "cod") pay = `<p>${esc(P.cod.note || "Pay when your order arrives.")} Keep <b>${esc(money(o.t.total))}</b> ready.</p>`;
   else pay = `<p>We'll contact you about payment.</p>`;
-  return `<div class="wrap"><div class="done"><p class="eyebrow">Order ${esc(o.id)}</p><h1>${esc(K.successTitle)}</h1><p class="soft" style="font-size:17px">${esc(K.successText)}</p>
+  return `<div class="wrap"><div class="done"><p class="eyebrow">Order ${esc(o.id)}</p><h1 class="fit">${ml(K.successTitle)}</h1><p class="soft" style="font-size:17px">${ml(K.successText)}</p>
     <div><span class="lbl">Your order number</span><br><span class="oid">${esc(o.id)}</span></div>
     <div class="box"><div class="step"><i>1</i><div><h2 style="font-size:22px">Pay ${esc(money(o.t.total))}</h2>${pay}</div></div></div>
     <div class="box"><div class="step"><i>2</i><div><h2 style="font-size:22px">Send us the order</h2><p>This opens ${viaWa && viaMail ? "WhatsApp or your email app" : viaWa ? "WhatsApp" : "your email app"} with the full order written out. Just press send.</p>
@@ -511,12 +557,13 @@ function orderDone(o) {
    ============================================================ */
 function render() {
   applyTheme(C.theme);
-  if (PAGE !== "product") document.title = PAGE === "home" ? C.seo.title || C.brand.name : `${{ shop: C.shop.title, cart: C.nav.cart, checkout: C.checkout.title, portfolio: C.nav.portfolio, policies: "Policies", account: C.accountPage.title }[PAGE] || ""} · ${C.brand.name}`;
+  if (PAGE !== "product") document.title = (PAGE === "home" ? C.seo.title || C.brand.name : `${{ shop: C.shop.title, cart: C.nav.cart, checkout: C.checkout.title, portfolio: C.nav.portfolio, policies: "Policies", account: C.accountPage.title }[PAGE] || ""} · ${C.brand.name}`).replace(/\s*\n\s*/g, " ");
   const fn = PAGES[PAGE] || PAGES.home;
   $("#app").innerHTML = `<a class="skip" href="#main">Skip to content</a>${header()}<main id="main">${fn()}</main>${footer()}`;
   bind();
   reveal();
-  if (window.SiteFX) try { window.SiteFX.init({ root: $("#app"), brand: C.brand.name }); } catch (e) {}
+  if (window.SiteFX) try { window.SiteFX.init({ root: $("#app"), brand: C.theme.introTitle || C.brand.name }); } catch (e) {}
+  setIcon(); fitLines();
 }
 /* Entrance animations from the theme. In the CMS preview they play on the first render only, not on every keystroke. */
 let revealed = 0;

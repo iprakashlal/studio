@@ -4,6 +4,7 @@ import type { Session } from "../lib/auth";
 import { GitHubRepo, explain } from "../lib/repo";
 import type { ProjectMeta, PublishTarget, Studio, StudioIndex, ExportRec } from "../lib/studio";
 import { buildSite, downloadBlob, loadDefaults, publishSite, zipName, zipSite } from "../lib/exporter";
+import { adminFile } from "../schema/common";
 import { clone, fmtDate, merge, slugify, timeAgo } from "../lib/util";
 import { Editor } from "../editor/Editor";
 import { Preview } from "../editor/Preview";
@@ -165,7 +166,7 @@ function ExportDialog({ studio, project, tpl, draft, dirty, save, onIndex, getBl
   };
   return (
     <Modal title="Export as ZIP" onClose={onClose} footer={<><button className="btn" onClick={onClose}>Cancel</button><button className="btn btn-pri" disabled={busy} onClick={go}>{busy ? "Building…" : `Download v${project.version + 1}`}</button></>}>
-      <p className="text-sm text-ink-300">The ZIP is a complete website: every page, your content and images, and the site's own CMS at <code className="font-mono text-xs">admin.html</code>. Upload it to any GitHub repository to put it online.</p>
+      <p className="text-sm text-ink-300">The ZIP is a complete website: every page, your content and images, and the site's own CMS at <code className="font-mono text-xs">{adminFile(draft)}</code>. Upload it to any GitHub repository to put it online.</p>
       <Checks list={checks} />
       <Field label="Version note (optional)" htmlFor="ex-note"><input id="ex-note" className="input" placeholder="e.g. Sent to client for review" value={note} onChange={(e) => setNote(e.target.value)} /></Field>
       {dirty && <p className="hint">Your unsaved changes are saved first.</p>}
@@ -180,6 +181,7 @@ function PublishDialog({ studio, project, tpl, draft, dirty, save, onIndex, getB
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<PublishTarget | null>(null);
+  const [admin, setAdmin] = useState("admin.html");
   const demo = studio.repo.demo;
   const checks = tpl.checks?.(draft) || [];
   const go = async () => {
@@ -191,8 +193,11 @@ function PublishDialog({ studio, project, tpl, draft, dirty, save, onIndex, getB
       const repo = new GitHubRepo(target, session.token);
       await repo.check();
       const next = project.version + 1;
-      const { files, warnings } = await buildSite({ template: tpl, content: draft, name: project.name, version: next, includeContent: withContent, getAsset: getBlob });
-      await publishSite(repo, files, `Publish v${next} from Site Studio${note.trim() ? `: ${note.trim()}` : ""}`);
+      // Keeping the site's own content keeps its own admin page name too.
+      const live = withContent ? null : await repo.getJSON("content.json").catch(() => null);
+      const { files, warnings, admin } = await buildSite({ template: tpl, content: draft, name: project.name, version: next, includeContent: withContent, getAsset: getBlob, admin: live ? adminFile(live.data) : undefined });
+      await publishSite(repo, files, `Publish v${next} from Site Studio${note.trim() ? `: ${note.trim()}` : ""}`, admin);
+      setAdmin(admin);
       const { index } = await studio.recordExport(project.id, { kind: "github", note: note.trim(), target: `${target.owner}/${target.repo}` }, draft, "published", target);
       onIndex(index);
       if (warnings.length) toast(`Published with ${warnings.length} missing image(s).`, "bad");
@@ -210,7 +215,7 @@ function PublishDialog({ studio, project, tpl, draft, dirty, save, onIndex, getB
         <ol className="list-decimal space-y-2 pl-5 text-sm text-ink-200">
           <li>First time only: in that repository open <b>Settings → Pages</b>, choose <b>Deploy from a branch → {done.branch} / (root)</b> and save.</li>
           <li>The site goes live about a minute after each publish at <a className="font-semibold text-brand-300 underline" href={url} target="_blank" rel="noopener">{url}</a>.</li>
-          <li>The site's own CMS is at <a className="font-semibold text-brand-300 underline" href={url + "admin.html"} target="_blank" rel="noopener">{url}admin.html</a>. Give the owner a token for that repository only.</li>
+          <li>The site's own CMS is at <a className="font-semibold text-brand-300 underline" href={url + admin} target="_blank" rel="noopener">{url}{admin}</a>. Give the owner a token for that repository only.</li>
         </ol>
       </Modal>
     );

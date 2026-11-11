@@ -31,7 +31,7 @@ p{margin:0}
 .hdr{position:sticky;top:0;z-index:40;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
 .hdr .wrap{display:flex;align-items:center;gap:16px;min-height:68px}
 .brand{display:flex;align-items:center;gap:10px;text-decoration:none;min-width:0;margin-right:auto}
-.brand .mark{width:38px;height:38px;border-radius:10px;background:var(--accent);color:var(--on-accent);display:grid;place-items:center;font-family:var(--fd);font-weight:800;overflow:hidden;flex:none}
+.brand .mark{width:38px;height:38px;border-radius:var(--logo-r,26%);background:var(--accent);color:var(--on-accent);display:grid;place-items:center;font-family:var(--fd);font-weight:800;overflow:hidden;flex:none}
 .brand .mark img{width:100%;height:100%;object-fit:cover}
 .brand b{font-family:var(--fd);font-size:clamp(14px,4.2vw,20px);font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .nav{display:flex;gap:4px}
@@ -427,3 +427,7 @@ html[data-shead=slash] .sec-h h2::before{content:"//"}
 .orn.mo span:nth-child(3){width:110px;height:110px;right:42%;bottom:-24px;opacity:.28}
 html[data-ornament=soft] .orn.mo span{filter:blur(3px);border-radius:0}
 html[data-ornament=outline] .orn.mo span{opacity:.22}
+
+/* headings keep the lines typed in the CMS (see fitLines in store.js) */
+h1.fit-one,h2.fit-one{white-space:nowrap;max-width:none!important;text-wrap:nowrap}
+html[data-linebreaks=auto] .fit{text-wrap:balance}

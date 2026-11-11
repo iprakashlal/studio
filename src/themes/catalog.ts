@@ -41,9 +41,23 @@ export const FX_AXES: Record<string, Axis> = {
   loader: { key: "loader", label: "Intro & page transition", options: [["none", "None"], ["curtain", "Curtain lift"], ["counter", "0–100 counter"], ["split", "Split reveal"]] },
   textfx: { key: "textfx", label: "Heading reveal", options: [["none", "None"], ["lines", "Line-by-line mask"], ["letters", "Letter cascade"], ["scramble", "Decode / scramble"]] },
   hoverfx: { key: "hoverfx", label: "Hover", options: [["none", "Theme default"], ["lift", "Lift + glow edge"], ["magnetic", "Magnetic buttons"], ["tilt", "3D tilt + glare"]] },
-  scrollfx: { key: "scrollfx", label: "Scrolling", options: [["none", "Normal"], ["progress", "Progress bar"], ["smooth", "Smooth inertia"], ["skew", "Inertia + velocity skew"]] },
+  scrollfx: { key: "scrollfx", label: "Scrolling", options: [["none", "Normal (the browser's own)"], ["progress", "Normal + progress bar"], ["smooth", "Smooth (eased)"], ["skew", "Smooth + velocity skew"]] },
   overlay: { key: "overlay", label: "Screen texture", options: [["none", "None"], ["grain", "Film grain"], ["scanlines", "Scanlines"], ["vignette", "Vignette"]] },
 };
+/** How strongly "Smooth" scrolling eases. Trackpads and touch screens always scroll natively. */
+export const SCROLL_EASE_AXIS: Axis = { key: "scrollEase", label: "Smooth scrolling strength", options: [["light", "Light (snappy)"], ["medium", "Medium"], ["heavy", "Heavy (floaty)"]] };
+/** Whether headings keep the lines exactly as typed, or wrap to fit. */
+export const LINE_BREAKS_AXIS: Axis = { key: "lineBreaks", label: "Heading line breaks", options: [["typed", "As typed: one line stays one line"], ["auto", "Wrap to fit (typed breaks still apply)"]] };
+
+/** Readable text colour (dark or white) on a background colour. */
+export function onColor(hex: string): string {
+  const h = String(hex || "").replace("#", "");
+  const n = parseInt(h.length === 3 ? h.replace(/./g, "$&$&") : h.slice(0, 6), 16);
+  if (isNaN(n)) return "#FFFFFF";
+  const v = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((x) => { x /= 255; return x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4); });
+  return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2] > 0.42 ? "#111111" : "#FFFFFF";
+}
+
 export const FX_KEYS = ["cursor", "loader", "textfx", "hoverfx", "scrollfx", "overlay"] as const;
 export type Fx = Record<(typeof FX_KEYS)[number], string>;
 
@@ -245,7 +259,7 @@ const VELOCITY: Theme = {
 
 export const THEMES: Theme[] = [VELOCITY, ...BASE_THEMES];
 
-const styleValues = (t: Theme) => ({ preset: t.id, ...t.style, ...t.fx, motif: t.motif });
+const styleValues = (t: Theme) => ({ preset: t.id, ...t.style, ...t.fx, motif: t.motif, introBg: t.colors.deep, introFg: onColor(t.colors.deep) });
 
 /** Portfolio content.theme values for a theme. Keeps keys the theme doesn't set. */
 export function portfolioThemeValues(t: Theme): Record<string, unknown> {

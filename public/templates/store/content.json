@@ -29,7 +29,13 @@
     "textfx": "none",
     "hoverfx": "none",
     "scrollfx": "none",
-    "overlay": "none"
+    "overlay": "none",
+    "introBg": "#1B1A17",
+    "introFg": "#FFFFFF",
+    "introTitle": "",
+    "logoRadius": 26,
+    "scrollEase": "light",
+    "lineBreaks": "typed"
   },
   "brand": {
     "name": "Picaffectz Studio",
@@ -53,7 +59,7 @@
   "home": {
     "hero": {
       "eyebrow": "New collection",
-      "title": "Objects for slow mornings",
+      "title": "Objects for\nslow mornings",
       "text": "Hand-made ceramics, linen and paper goods, made in small batches and shipped with care.",
       "cta": "Shop the collection",
       "image": null
@@ -389,5 +395,14 @@
   "accountPage": {
     "title": "Your account",
     "signInText": "Enter your email and we'll send you a 6-digit code. No password needed."
+  },
+  "labels": {
+    "allProducts": "All products",
+    "viewAll": "View all",
+    "help": "Help",
+    "contact": "Contact"
+  },
+  "cms": {
+    "adminPage": "admin"
   }
 }

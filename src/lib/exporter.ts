@@ -7,6 +7,7 @@ import type { TemplateDef } from "../schema/types";
 import type { Repo } from "./repo";
 import { bytesB64 } from "./repo";
 import { blobToBytes, collectAssetPaths, getP, textToBytes } from "./util";
+import { adminFile } from "../schema/common";
 
 export type SiteFile = { path: string; data: Uint8Array };
 /** `when` lists files exported only if every given content path is switched on. */
@@ -58,19 +59,24 @@ export async function buildSite(opts: {
   version: number;
   includeContent: boolean;
   getAsset: (path: string) => Promise<Blob | null>;
-}): Promise<{ files: SiteFile[]; warnings: string[] }> {
+  /** Admin page file name to use instead of the one in `content` (when the site keeps its own content). */
+  admin?: string;
+}): Promise<{ files: SiteFile[]; warnings: string[]; admin: string }> {
   const { template, content } = opts;
   const m = await loadManifest(template.id);
   const files: SiteFile[] = [];
   const warnings: string[] = [];
   const title = content?.seo?.title || opts.name;
   const desc = content?.seo?.description || "";
+  // The site's CMS page goes out under the owner's chosen name (Admin page → address).
+  const admin = opts.admin || adminFile(content);
 
   const optional = Object.entries(m.when || {}).filter(([, paths]) => paths.every((p) => !!getP(content, p))).map(([f]) => f);
   for (const f of [...m.files, ...optional]) {
     let data = await fetchBytes(`templates/${template.id}/${f}`);
     if (f.endsWith(".html") && f !== "admin.html") data = textToBytes(bakeSeo(new TextDecoder().decode(data), title, desc));
-    files.push({ path: f, data });
+    if (f.endsWith(".md") && admin !== "admin.html") data = textToBytes(new TextDecoder().decode(data).replace(/\badmin\.html\b/g, admin));
+    files.push({ path: f === "admin.html" ? admin : f, data });
   }
   try {
     files.push({ path: "cms/admin.js", data: await fetchBytes("runtime/admin.js") });
@@ -81,7 +87,7 @@ export async function buildSite(opts: {
   files.push({ path: ".nojekyll", data: new Uint8Array() });
   files.push({
     path: "cms/site.json",
-    data: textToBytes(JSON.stringify({ template: template.id, name: opts.name, version: opts.version, exportedAt: new Date().toISOString(), generator: "Site Studio" }, null, 2)),
+    data: textToBytes(JSON.stringify({ template: template.id, name: opts.name, version: opts.version, admin, exportedAt: new Date().toISOString(), generator: "Site Studio" }, null, 2)),
   });
   if (opts.includeContent) {
     files.push({ path: "content.json", data: textToBytes(JSON.stringify(content, null, 2)) });
@@ -91,7 +97,7 @@ export async function buildSite(opts: {
       else warnings.push(`Image not found: ${p}`);
     }
   }
-  return { files, warnings };
+  return { files, warnings, admin };
 }
 
 export async function zipSite(files: SiteFile[]): Promise<Blob> {
@@ -111,8 +117,12 @@ export function downloadBlob(blob: Blob, filename: string) {
   setTimeout(() => URL.revokeObjectURL(url), 4000);
 }
 
-export async function publishSite(target: Repo, files: SiteFile[], message: string) {
-  await target.pushFiles(files.map((f) => ({ path: f.path, base64: bytesB64(f.data) })), message);
+/** Commits the site. If the admin page was renamed since the last publish, the old page is removed in the same commit. */
+export async function publishSite(target: Repo, files: SiteFile[], message: string, admin = "admin.html") {
+  const prev = await target.getJSON<{ admin?: string }>("cms/site.json").catch(() => null);
+  const old = prev ? prev.data?.admin || "admin.html" : "";
+  const remove = old && old !== admin && /^[a-z0-9-]+\.html$/.test(old) ? [old] : [];
+  await target.pushFiles(files.map((f) => ({ path: f.path, base64: bytesB64(f.data) })), message, remove);
 }
 
 export const zipName = (name: string, version: number) => `${name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "site"}-v${version}.zip`;

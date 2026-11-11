@@ -5,7 +5,8 @@ export type Opt = string | { value: string; label: string };
 export type Check = "vpa" | "paypal" | "https" | "razorpay" | "stripe" | "email" | "phone";
 
 export type Field =
-  | { t: "text"; path: string; label: string; hint?: string; ph?: string; check?: Check }
+  /** ml: a heading-style line that may hold several lines; Enter starts a new one and the site breaks the line there. */
+  | { t: "text"; path: string; label: string; hint?: string; ph?: string; check?: Check; ml?: boolean; /** Live line under the box, e.g. the resulting address. */ show?: (value: string) => string }
   | { t: "textarea"; path: string; label: string; hint?: string; rows?: number }
   | { t: "number"; path: string; label: string; hint?: string; min?: number; step?: number }
   | { t: "select"; path: string; label: string; options: Opt[] }

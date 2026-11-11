@@ -99,6 +99,16 @@ Use **Try a demo** on the login screen to explore first; nothing is saved in dem
 4. Hand over the site: the owner opens `admin.html` on the live site with a token for that repository only.
 5. Later: **Details → Import content from site** pulls the owner's edits back, so you can redesign without losing them. When publishing, switch off *Replace the site's content* to update only the design and CMS.
 
+## Site CMS: drafts, admin address and site-wide controls
+
+- **Save** keeps your edits as a draft (`cms/draft.json` in the site's repository) without changing the live site. Reopening the CMS loads the draft. **Save & publish** makes it live and removes the draft; **Delete draft** goes back to what's live. The draft sits in the same repository as the site, so anyone who can read that repository can read it.
+- **Admin page** (Settings) renames the CMS page, e.g. `yoursite/studio-desk` instead of `yoursite/admin`. Publishing moves the page in one commit and the old address stops working. Exports and Studio publishes use the same name, and order emails link to it.
+- **Intro screen** (Theme & layout) sets the intro text and its background and text colours for every theme, including signature preloaders and the panel between pages.
+- **Smooth scrolling strength** (Light / Medium / Heavy). Trackpads and touch screens always scroll natively.
+- **Logo shape** from square (0) to circle (50). It also shapes the browser-tab icon, which shows the logo or your initials.
+- **Menu, footer and layout titles** are all editable, including the words the Motion layouts show (“Drag to explore”, “List view”…).
+- **Heading line breaks**: press Enter in a title to break the line there. With “As typed”, a heading typed on one line stays on one line and shrinks a little to fit.
+
 ## Login and security
 
 - Your GitHub token is encrypted with your password (PBKDF2, 310,000 rounds, AES-256-GCM) and stored **only in that browser**. Nothing about the login is committed anywhere. Set up each device once.

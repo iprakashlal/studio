@@ -3,6 +3,7 @@ import { TEMPLATES } from "../schema";
 import { device, session as sess, watchIdle, type Session } from "../lib/auth";
 import { GitHubRepo, explain, jsonB64, bytesB64 } from "../lib/repo";
 import { blobToBytes, clone, safeFileName, textToB64 } from "../lib/util";
+import { adminFile } from "../schema/common";
 import ACCOUNT_HTML from "../../public/templates/store/account.html?raw";
 import { Editor } from "../editor/Editor";
 import { Preview } from "../editor/Preview";
@@ -12,7 +13,15 @@ import { Logo, Spinner, useConfirm, useToast } from "../ui/kit";
 import { CustomersPanel, OrdersPanel } from "./ShopPanels";
 
 const NS = "site-cms";
-type SiteInfo = { template: string; name: string; version?: number };
+type SiteInfo = { template: string; name: string; version?: number; admin?: string; exportedAt?: string; generator?: string };
+/** Saved-but-not-published edits live here. The live site never reads this file. */
+const DRAFT = "cms/draft.json";
+/** This CMS page's own file name: from cms/site.json, else the address it was opened at. */
+function currentAdmin(info: SiteInfo): string {
+  if (info.admin) return info.admin;
+  const here = decodeURIComponent(location.pathname.split("/").pop() || "");
+  return /^[a-z0-9-]+(\.html)?$/i.test(here) && here ? (here.endsWith(".html") ? here : here + ".html") : "admin.html";
+}
 
 export function SiteAdmin() {
   const toast = useToast();
@@ -40,17 +49,22 @@ export function SiteAdmin() {
       onAuthed={setSession}
       footer={<a href="./" className="text-sm text-ink-400 hover:text-ink-100">← Back to the website</a>} />;
   }
-  return <Workspace info={info} session={session} onSession={setSession} onSignOut={() => { sess.clear(NS); setSession(null); }} onForget={() => { device.clear(NS); sess.clear(NS); setSession(null); }} />;
+  return <Workspace info={info} onInfo={setInfo} session={session} onSession={setSession} onSignOut={() => { sess.clear(NS); setSession(null); }} onForget={() => { device.clear(NS); sess.clear(NS); setSession(null); }} />;
 }
 
-function Workspace({ info, session, onSession, onSignOut, onForget }: { info: SiteInfo; session: Session; onSession: (s: Session) => void; onSignOut: () => void; onForget: () => void }) {
+function Workspace({ info, onInfo, session, onSession, onSignOut, onForget }: { info: SiteInfo; onInfo: (i: SiteInfo) => void; session: Session; onSession: (s: Session) => void; onSignOut: () => void; onForget: () => void }) {
   const toast = useToast();
   const confirm = useConfirm();
   const tpl = TEMPLATES[info.template];
   const repo = useMemo(() => new GitHubRepo(session.cfg, session.token), [session]);
+  /** saved: what's live (content.json). base: the last saved state, a draft or the live content. */
   const [saved, setSaved] = useState<any>(null);
+  const [base, setBase] = useState<any>(null);
   const [draft, setDraft] = useState<any>(null);
   const [sha, setSha] = useState<string | null>(null);
+  const [draftSha, setDraftSha] = useState<string | null>(null);
+  const [draftAt, setDraftAt] = useState("");
+  const [moved, setMoved] = useState("");
   const [err, setErr] = useState("");
   const [v, setV] = useState(0);
   const [savedV, setSavedV] = useState(0);
@@ -65,9 +79,14 @@ function Workspace({ info, session, onSession, onSignOut, onForget }: { info: Si
     try {
       const f = await repo.getJSON("content.json");
       if (!f) throw new Error("content.json wasn't found in the repository.");
+      const d = await repo.getJSON<{ savedAt?: string; content?: any }>(DRAFT).catch(() => null);
+      const dc = d?.data?.content && typeof d.data.content === "object" ? d.data.content : null;
       setSaved(f.data);
-      setDraft(clone(f.data));
+      setBase(clone(dc || f.data));
+      setDraft(clone(dc || f.data));
       setSha(f.sha);
+      setDraftSha(dc ? d!.sha : null);
+      setDraftAt(dc ? d!.data.savedAt || "" : "");
       setV(0);
       setSavedV(0);
     } catch (e) {
@@ -92,25 +111,91 @@ function Workspace({ info, session, onSession, onSignOut, onForget }: { info: Si
   }, [repo]);
   const img = useCallback((val: any) => (val?.path ? assets[val.path] || val.path : ""), [assets]);
 
-  const save = async () => {
+  const conflict = async (e: any, path: string, setter: (x: string | null) => void) => {
+    if (e?.status === 409 || e?.status === 422) {
+      const f = await repo.getJSON(path).catch(() => null);
+      setter(f ? f.sha : null);
+      toast("This changed on GitHub since you opened it (maybe from another device). Press the button again to replace it with your version.", "bad");
+    } else toast("Couldn't save: " + explain(e), "bad");
+  };
+
+  /** Save: keeps the edits in the repository as a draft. The live site doesn't change. */
+  const saveDraft = async () => {
     setSaving(true);
     const at = v;
     try {
-      const next = await repo.putFile("content.json", jsonB64(draft), "Update site content", sha);
-      setSha(next);
+      const when = new Date().toISOString();
+      const next = await repo.putFile(DRAFT, jsonB64({ savedAt: when, note: "Draft from the site CMS. Not live until you press Save & publish.", content: draft }), "Save draft (not published)", draftSha);
+      setDraftSha(next);
+      setDraftAt(when);
+      setBase(clone(draft));
+      setSavedV(at);
+      toast("Draft saved. The live site hasn't changed. Press Save & publish when it's ready.");
+    } catch (e) {
+      await conflict(e, DRAFT, setDraftSha);
+    }
+    setSaving(false);
+  };
+
+  /** Save & publish: writes content.json (the live site), clears the draft, and moves the CMS page if its name changed. */
+  const save = async () => {
+    setSaving(true);
+    const at = v;
+    const oldAdmin = currentAdmin(info);
+    const newAdmin = adminFile(draft);
+    try {
+      if (!draftSha && oldAdmin === newAdmin) {
+        const next = await repo.putFile("content.json", jsonB64(draft), "Update site content", sha);
+        setSha(next);
+      } else {
+        // One commit for everything. Check first that nobody published from elsewhere since this page loaded.
+        const cur = await repo.getJSON("content.json");
+        if (cur && sha && cur.sha !== sha) throw Object.assign(new Error("changed"), { status: 409 });
+        const files = [{ path: "content.json", base64: jsonB64(draft) }];
+        const remove = draftSha ? [DRAFT] : [];
+        if (oldAdmin !== newAdmin) {
+          const page = await repo.getText(oldAdmin);
+          if (!page) throw new Error(`Couldn't find ${oldAdmin} in the repository to move it. Change the admin page name back, or publish again from Site Studio.`);
+          files.push({ path: newAdmin, base64: textToB64(page.text) });
+          files.push({ path: "cms/site.json", base64: jsonB64({ ...info, admin: newAdmin }) });
+          remove.push(oldAdmin);
+        }
+        await repo.pushFiles(files, oldAdmin !== newAdmin ? `Update site content; move the CMS to ${newAdmin}` : "Update site content", remove);
+        const f = await repo.getJSON("content.json").catch(() => null);
+        setSha(f ? f.sha : null);
+        if (oldAdmin !== newAdmin) { onInfo({ ...info, admin: newAdmin }); setMoved(new URL(newAdmin, location.href).href); }
+      }
       setSaved(clone(draft));
+      setBase(clone(draft));
+      setDraftSha(null);
+      setDraftAt("");
       setSavedV(at);
       // Turning customer accounts on later adds the Account page the export left out.
       if (tpl.id === "store" && draft.backend?.enabled && draft.backend?.accounts && !(await repo.getText("account.html"))) {
         await repo.putFile("account.html", textToB64(ACCOUNT_HTML), "Add customer account page");
       }
-      toast("Saved. The live site updates in about a minute.");
+      toast(oldAdmin !== newAdmin ? "Published. The editor's address has changed: see the note at the top." : "Published. The live site updates in about a minute.");
     } catch (e: any) {
-      if (e?.status === 409 || e?.status === 422) {
-        const f = await repo.getJSON("content.json").catch(() => null);
-        if (f) setSha(f.sha);
-        toast("The content changed on GitHub since you opened it. Press Save again to replace it with yours.", "bad");
-      } else toast("Couldn't save: " + explain(e), "bad");
+      await conflict(e, "content.json", setSha);
+    }
+    setSaving(false);
+  };
+
+  /** Throws the saved draft away and goes back to what's live. */
+  const dropDraft = async () => {
+    if (!(await confirm("Delete the saved draft?", "The editor goes back to what's live on the site. The draft's changes are lost.", "Delete draft", true))) return;
+    setSaving(true);
+    try {
+      await repo.pushFiles([], "Delete the CMS draft", [DRAFT]);
+      setDraftSha(null);
+      setDraftAt("");
+      setBase(clone(saved));
+      setDraft(clone(saved));
+      setV(0);
+      setSavedV(0);
+      toast("Draft deleted. You're editing what's live.");
+    } catch (e) {
+      toast("Couldn't delete the draft: " + explain(e), "bad");
     }
     setSaving(false);
   };
@@ -132,17 +217,33 @@ function Workspace({ info, session, onSession, onSignOut, onForget }: { info: Si
       <header className="flex flex-wrap items-center gap-2 border-b border-ink-700 bg-ink-900 px-3 py-2.5 pt-[max(10px,env(safe-area-inset-top))] sm:px-4">
         <span className="flex items-center gap-2.5 font-extrabold"><Logo />{info.name}</span>
         <span className="text-xs text-ink-400">{tpl.name} · CMS</span>
-        <span className={`ml-1 flex items-center gap-1.5 text-xs ${dirty ? "text-amber-300" : "text-ink-400"}`}><span className={`h-2 w-2 rounded-full ${dirty ? "bg-amber-400" : "bg-emerald-400"}`} />{saving ? "Saving…" : dirty ? "Unsaved changes" : "All changes saved"}</span>
+        <span className={`ml-1 flex items-center gap-1.5 text-xs ${dirty ? "text-amber-300" : draftSha ? "text-sky-300" : "text-ink-400"}`}><span className={`h-2 w-2 rounded-full ${dirty ? "bg-amber-400" : draftSha ? "bg-sky-400" : "bg-emerald-400"}`} />{saving ? "Saving…" : dirty ? "Unsaved changes" : draftSha ? "Draft saved, not published" : "Published, all saved"}</span>
         <div className="ml-auto flex flex-wrap gap-1.5">
           <div className={`flex rounded-lg border border-ink-600 lg:hidden ${wide ? "hidden" : ""}`} role="group" aria-label="Show">
             <button type="button" aria-pressed={pane === "edit"} className={`btn btn-sm border-0 ${pane === "edit" ? "bg-ink-700" : "bg-transparent"}`} onClick={() => setPane("edit")}>Edit</button>
             <button type="button" aria-pressed={pane === "preview"} className={`btn btn-sm border-0 ${pane === "preview" ? "bg-ink-700" : "bg-transparent"}`} onClick={() => setPane("preview")}>Preview</button>
           </div>
           <a className="btn btn-sm" href="./" target="_blank" rel="noopener">View site ↗</a>
-          <button type="button" className="btn btn-sm" disabled={!dirty} onClick={async () => { if (await confirm("Discard unsaved changes?", "Your edits since the last save will be lost.", "Discard", true)) { setDraft(clone(saved)); setV(0); setSavedV(0); } }}>Discard</button>
-          <button type="button" className="btn btn-pri btn-sm" disabled={!dirty || saving} onClick={save}>Save &amp; publish</button>
+          {dirty || !draftSha
+            ? <button type="button" className="btn btn-sm" disabled={!dirty} onClick={async () => { if (await confirm("Discard unsaved changes?", draftSha ? "The editor goes back to your last saved draft." : "Your edits since the last save will be lost.", "Discard", true)) { setDraft(clone(base)); setV(0); setSavedV(0); } }}>Discard</button>
+            : <button type="button" className="btn btn-sm" disabled={saving} onClick={dropDraft}>Delete draft</button>}
+          <button type="button" className="btn btn-sm" disabled={!dirty || saving} onClick={saveDraft} title="Saves a draft in the site's repository. The live site doesn't change.">Save</button>
+          <button type="button" className="btn btn-pri btn-sm" disabled={(!dirty && !draftSha) || saving} onClick={save} title="Makes your changes live.">Save &amp; publish</button>
         </div>
       </header>
+      {moved && (
+        <div className="flex flex-wrap items-center gap-2 border-b border-amber-400/40 bg-amber-400/10 px-4 py-2.5 text-[13px] text-amber-100" role="status">
+          <b>The editor has a new address:</b>
+          <a className="font-mono font-semibold underline" href={moved}>{moved}</a>
+          <span>It works in about a minute. Bookmark it: this address stops working.</span>
+          <button type="button" className="btn btn-sm ml-auto" onClick={() => { try { navigator.clipboard.writeText(moved); toast("Copied"); } catch { toast(moved); } }}>Copy</button>
+        </div>
+      )}
+      {!moved && draftSha && !dirty && (
+        <div className="border-b border-sky-400/30 bg-sky-400/5 px-4 py-2 text-[13px] text-sky-100" role="status">
+          You're editing a saved draft{draftAt ? ` from ${new Date(draftAt).toLocaleString()}` : ""}. Visitors still see the published version until you press <b>Save &amp; publish</b>.
+        </div>
+      )}
       <div className="flex min-h-0 flex-1">
         <div className={`min-h-0 min-w-0 flex-1 flex-col lg:flex ${pane === "edit" || wide ? "flex" : "hidden"}`}>
           <Editor tpl={tpl} draft={draft} version={v} onChange={bump} upload={upload} img={img} extras={extras} onCategory={setCat} />

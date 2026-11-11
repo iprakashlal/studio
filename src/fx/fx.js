@@ -9,6 +9,8 @@
      data-textfx    none | lines | letters | scramble
      data-hoverfx   none | lift | magnetic | tilt
      data-scrollfx  none | progress | smooth | skew
+     data-scrollease light | medium | heavy  (how strongly smooth scrolling eases; mouse wheels only)
+   Intro screen colours come from --intro-bg / --intro-fg (falling back to --deep / --on-deep).
      data-overlay   none | grain | scanlines | vignette
    Visitors who ask for reduced motion get a still page (only static overlays stay). */
 (function () {
@@ -37,8 +39,8 @@
   function cssVar(n) { return getComputedStyle(doc).getPropertyValue(n).trim(); }
   function colors() {
     var a = cssVar("--c1") || cssVar("--accent") || "#7c5cff";
-    var deep = cssVar("--deep") || cssVar("--text") || "#111";
-    var on = cssVar("--on-deep") || cssVar("--bg") || "#fff";
+    var deep = cssVar("--intro-bg") || cssVar("--deep") || cssVar("--text") || "#111";
+    var on = cssVar("--intro-fg") || cssVar("--on-deep") || cssVar("--bg") || "#fff";
     return { a: a, deep: deep, on: on };
   }
   function isDark() {
@@ -351,7 +353,8 @@
   }
 
   /* ---------------------------------------------------------------- scroll */
-  var sm = { target: 0, cur: 0, run: false };
+  var sm = { target: 0, cur: 0, run: false, set: -1 };
+  var EASE = { light: 0.2, medium: 0.12, heavy: 0.075 };
   function smoothOn() { var s = cfg().scroll; return FINE && !RM && (s === "smooth" || s === "skew"); }
   function scrollable(n) {
     for (; n && n !== document.body && n !== doc; n = n.parentElement) {
@@ -360,8 +363,11 @@
     }
     return false;
   }
+  // Trackpads send many small pixel steps (often fractional); easing those on top of their own momentum feels laggy.
+  function trackpad(e) { return e.deltaMode === 0 && (Math.abs(e.deltaY) < 40 || e.deltaY % 1 !== 0); }
   function onWheel(e) {
     if (!smoothOn() || e.ctrlKey || e.defaultPrevented || Math.abs(e.deltaX) > Math.abs(e.deltaY) || scrollable(e.target)) return;
+    if (trackpad(e)) { sm.run = false; return; }
     e.preventDefault();
     var max = doc.scrollHeight - innerHeight;
     if (!sm.run) sm.target = sm.cur = scrollY;
@@ -369,10 +375,14 @@
     if (!sm.run) { sm.run = true; requestAnimationFrame(smoothStep); }
   }
   function smoothStep() {
-    sm.cur += (sm.target - sm.cur) * 0.1;
+    if (!sm.run) return;
+    // The visitor dragged the scrollbar, used the keyboard or followed a link: hand control back.
+    if (sm.set >= 0 && Math.abs(scrollY - sm.set) > 2) { sm.run = false; sm.set = -1; return; }
+    sm.cur += (sm.target - sm.cur) * (EASE[doc.getAttribute("data-scrollease")] || EASE.light);
     if (Math.abs(sm.target - sm.cur) < 0.5) { sm.cur = sm.target; sm.run = false; }
-    scrollTo(0, sm.cur);
-    if (sm.run) requestAnimationFrame(smoothStep);
+    // "instant": a site-wide scroll-behavior:smooth would otherwise animate every step and fight the easing.
+    scrollTo({ top: sm.cur, behavior: "instant" }); sm.set = scrollY;
+    if (sm.run) requestAnimationFrame(smoothStep); else sm.set = -1;
   }
   var sk = { last: 0, v: 0, run: false };
   function skewStep() {

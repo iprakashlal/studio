@@ -99,6 +99,16 @@ Use **Try a demo** on the login screen to explore first; nothing is saved in dem
 4. Hand over the site: the owner opens `admin.html` on the live site with a token for that repository only.
 5. Later: **Details → Import content from site** pulls the owner's edits back, so you can redesign without losing them. When publishing, switch off *Replace the site's content* to update only the design and CMS.
 
+## Central control: Studio and live sites stay in step
+
+Each published project is linked to its site's repository. When you open the Studio, every linked project checks whether the content on the live site was changed in the site's own CMS. Opening a project runs the same check.
+
+- **Only the site changed:** the Studio copies the content and images in automatically. The card shows **Updated from live site**.
+- **Both changed since they were last in step:** the card shows **Live site edited · review**. In the project you choose **Use the site's version** or **Keep the Studio's version**. Keeping the Studio's version means the next publish with content replaces the site's.
+- **A site that was never published from the Studio** (for example one uploaded from a ZIP): use Project details → **Link and load its live content**.
+
+Drafts saved in a site's CMS aren't pulled in, only published content. The Studio's GitHub token needs read access to the site repositories.
+
 ## Site CMS: drafts, admin address and site-wide controls
 
 - **Save** keeps your edits as a draft (`cms/draft.json` in the site's repository) without changing the live site. Reopening the CMS loads the draft. **Save & publish** makes it live and removes the draft; **Delete draft** goes back to what's live. The draft sits in the same repository as the site, so anyone who can read that repository can read it.

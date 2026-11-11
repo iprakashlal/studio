@@ -3,7 +3,7 @@ import { ThemeGallery } from "../themes/ThemeGallery";
 import { themeById } from "../themes/catalog";
 import { TEMPLATES, TEMPLATE_LIST } from "../schema";
 import { CATEGORY_COLORS, type CategoryRec, type ProjectMeta, type Studio, type StudioIndex } from "../lib/studio";
-import { explain } from "../lib/repo";
+import { GitHubRepo, explain } from "../lib/repo";
 import { loadManifest, loadStarter, type Manifest } from "../lib/exporter";
 import { slugify, timeAgo } from "../lib/util";
 import { Empty, Field, Modal, useConfirm, useToast } from "../ui/kit";
@@ -14,8 +14,41 @@ const STATUS: Record<ProjectMeta["status"], { label: string; cls: string }> = {
   published: { label: "Published", cls: "border-emerald-400/60 text-emerald-200" },
 };
 
-export function Dashboard({ studio, index, onIndex }: { studio: Studio; index: StudioIndex; onIndex: (i: StudioIndex) => void }) {
+/** Last live-site check per project, so going back and forth doesn't re-check every time. */
+const checked = new Map<string, number>();
+
+export function Dashboard({ studio, index, onIndex, token }: { studio: Studio; index: StudioIndex; onIndex: (i: StudioIndex) => void; token: string }) {
   const toast = useToast();
+  const [live, setLive] = useState<Record<string, "checking" | "pulled" | "conflict">>({});
+
+  // Central control: published projects pick up edits made in their sites' own CMS.
+  useEffect(() => {
+    if (studio.repo.demo) return;
+    let on = true;
+    (async () => {
+      const due = index.projects.filter((p) => p.publish && Date.now() - (checked.get(p.id) || 0) > 60_000);
+      const pulled: string[] = [];
+      for (const p of due) {
+        if (!on) return;
+        checked.set(p.id, Date.now());
+        setLive((m) => ({ ...m, [p.id]: "checking" }));
+        try {
+          const site = new GitHubRepo(p.publish!, token);
+          const st = await studio.siteState(p, site);
+          if (st.kind === "pull") {
+            const r = await studio.importFromSite(p.id, site);
+            if (on) onIndex(r.index);
+            pulled.push(p.name);
+            setLive((m) => ({ ...m, [p.id]: "pulled" }));
+          } else setLive((m) => { const n = { ...m }; if (st.kind === "conflict") n[p.id] = "conflict"; else delete n[p.id]; return n; });
+        } catch {
+          setLive((m) => { const n = { ...m }; delete n[p.id]; return n; });
+        }
+      }
+      if (on && pulled.length) toast(`Updated from the live site${pulled.length > 1 ? "s" : ""}: ${pulled.join(", ")}`);
+    })();
+    return () => { on = false; };
+  }, [index.projects.map((p) => p.id + (p.publish ? p.publish.repo : "")).join()]);
   const confirm = useConfirm();
   const [q, setQ] = useState("");
   const [cat, setCat] = useState("");
@@ -100,6 +133,9 @@ export function Dashboard({ studio, index, onIndex }: { studio: Studio; index: S
                   <div className="flex items-center gap-2 text-xs">
                     <span className="chip">{t?.name || p.template} · {t?.kind}</span>
                     <span className={`chip ${st.cls}`}>{st.label}</span>
+                    {live[p.id] === "checking" && <span className="chip border-ink-600 text-ink-400">Checking live site…</span>}
+                    {live[p.id] === "pulled" && <span className="chip border-emerald-400/60 text-emerald-200" title="Edits made in the site's own CMS were copied into this project.">Updated from live site</span>}
+                    {live[p.id] === "conflict" && <span className="chip border-amber-400/60 text-amber-200" title="The site's own CMS and the Studio both changed the content. Open the project to choose which to keep.">Live site edited · review</span>}
                     {c && <span className="ml-auto truncate text-ink-400">{c.name}</span>}
                   </div>
                   <a href={`#/p/${p.id}`} className="after:absolute after:inset-0">

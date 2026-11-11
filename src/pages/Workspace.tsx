@@ -70,5 +70,5 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
     );
   }
 
-  return <>{header}<Dashboard studio={studio} index={index} onIndex={setIndex} /></>;
+  return <>{header}<Dashboard studio={studio} index={index} onIndex={setIndex} token={session.token} /></>;
 }

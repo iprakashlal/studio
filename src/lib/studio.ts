@@ -8,6 +8,7 @@
 import type { Repo } from "./repo";
 import { jsonB64, bytesB64 } from "./repo";
 import { blobToBytes, collectAssetPaths, safeFileName, uid } from "./util";
+import { TEMPLATES } from "../schema";
 
 export type ExportRec = { version: number; at: string; kind: "zip" | "github"; note: string; target?: string };
 export type PublishTarget = { owner: string; repo: string; branch: string };
@@ -25,7 +26,16 @@ export type ProjectMeta = {
   summary?: string;
   exports: ExportRec[];
   publish?: PublishTarget;
+  /** When the Studio's copy of the content last changed (saves and imports). */
+  contentAt?: string;
+  /** content.json's blob sha on the live site when the two were last in step, and when that was. */
+  siteSha?: string;
+  syncedAt?: string;
 };
+/** How a project's live site compares with the Studio's copy. */
+export type SiteState =
+  | { kind: "none" | "same" }
+  | { kind: "pull" | "conflict"; siteAt: string | null };
 export type CategoryRec = { id: string; name: string; color: string };
 export type StudioIndex = { version: 1; categories: CategoryRec[]; projects: ProjectMeta[] };
 
@@ -65,7 +75,7 @@ export class Studio {
     const id = uid();
     const meta: ProjectMeta = {
       id, name: p.name, template: p.template, category: p.category, client: p.client, notes: "",
-      status: "draft", createdAt: now(), updatedAt: now(), version: 0, summary: p.summary, exports: [],
+      status: "draft", createdAt: now(), updatedAt: now(), contentAt: now(), version: 0, summary: p.summary, exports: [],
     };
     const index = await this.updateIndex((i) => i.projects.unshift(meta), `Create project ${p.name}`, [{ path: `projects/${id}/content.json`, base64: jsonB64(p.content) }]);
     return { index, id };
@@ -81,7 +91,7 @@ export class Studio {
       (i) => {
         const m = i.projects.find((x) => x.id === id);
         if (m) {
-          m.updatedAt = now();
+          m.updatedAt = m.contentAt = now();
           m.summary = summary;
         }
       },
@@ -127,7 +137,7 @@ export class Studio {
     return this.updateIndex((i) => (i.projects = i.projects.filter((p) => p.id !== id)), "Delete project", [], paths);
   }
 
-  async recordExport(id: string, rec: Omit<ExportRec, "version" | "at">, content: any, status: ProjectMeta["status"], publish?: PublishTarget): Promise<{ index: StudioIndex; version: number }> {
+  async recordExport(id: string, rec: Omit<ExportRec, "version" | "at">, content: any, status: ProjectMeta["status"], publish?: PublishTarget, siteSha?: string): Promise<{ index: StudioIndex; version: number }> {
     let version = 0;
     const idx0 = await this.loadIndex();
     const m0 = idx0.projects.find((x) => x.id === id);
@@ -142,6 +152,8 @@ export class Studio {
         if (status === "published" || m.status !== "published") m.status = status;
         if (publish) m.publish = publish;
         m.updatedAt = now();
+        // Published with content: the site and the Studio now hold the same content.
+        if (siteSha) { m.siteSha = siteSha; m.syncedAt = m.updatedAt; }
       },
       `Export v${version}`,
       [{ path: `projects/${id}/exports/v${version}.json`, base64: jsonB64(content) }],
@@ -167,9 +179,39 @@ export class Studio {
     }
     const index = await this.updateIndex((i) => {
       const m = i.projects.find((x) => x.id === id);
-      if (m) m.updatedAt = now();
-    }, "Import content from published site", files);
+      if (m) { m.updatedAt = m.contentAt = m.syncedAt = now(); m.siteSha = f.sha; m.summary = TEMPLATES[m.template]?.summary(f.data) ?? m.summary; }
+    }, "Update from the live site (edited in its own CMS)", files);
     return { index, content: f.data, missing };
+  }
+
+  /** Remember that the live site's current content is accounted for (e.g. "keep the Studio's version"). */
+  async markSynced(id: string, sha: string): Promise<StudioIndex> {
+    return this.updateIndex((i) => {
+      const m = i.projects.find((x) => x.id === id);
+      if (m) { m.siteSha = sha; m.syncedAt = now(); }
+    }, "Mark the live site as reviewed");
+  }
+
+  /**
+   * Compares a project with its live site. "pull": the site's CMS changed the content and the Studio
+   * hasn't, so it's safe to copy over. "conflict": both changed since they were last in step.
+   */
+  async siteState(p: ProjectMeta, site: Repo): Promise<SiteState> {
+    const f = await site.getText("content.json");
+    if (!f) return { kind: "none" };
+    if (p.siteSha && p.siteSha === f.sha) return { kind: "same" };
+    const local = await this.loadContent(p.id);
+    let live: any = null;
+    try { live = JSON.parse(f.text); } catch { return { kind: "none" }; }
+    if (local && stable(local) === stable(live)) {
+      if (p.siteSha !== f.sha) await this.markSynced(p.id, f.sha).catch(() => {});
+      return { kind: "same" };
+    }
+    const siteAt = await site.lastChange("content.json");
+    const edited = p.contentAt || p.updatedAt;
+    // Without a record of the last sync (projects published before this existed), compare dates instead.
+    const studioChanged = p.syncedAt ? edited > p.syncedAt : !siteAt || edited > siteAt;
+    return { kind: studioChanged ? "conflict" : "pull", siteAt };
   }
 }
 
@@ -179,4 +221,11 @@ function normalise(i: any): StudioIndex {
     categories: Array.isArray(i?.categories) ? i.categories : [],
     projects: (Array.isArray(i?.projects) ? i.projects : []).map((p: any) => ({ exports: [], version: 0, notes: "", client: "", status: "draft", ...p })),
   };
+}
+
+/** JSON with sorted keys, so key order doesn't count as a change. */
+function stable(v: any): string {
+  if (Array.isArray(v)) return "[" + v.map(stable).join(",") + "]";
+  if (v && typeof v === "object") return "{" + Object.keys(v).sort().filter((k) => v[k] !== undefined).map((k) => JSON.stringify(k) + ":" + stable(v[k])).join(",") + "}";
+  return JSON.stringify(v ?? null);
 }

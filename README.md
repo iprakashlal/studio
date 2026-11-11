@@ -119,6 +119,11 @@ Drafts saved in a site's CMS aren't pulled in, only published content. The Studi
 - **Menu, footer and layout titles** are all editable, including the words the Motion layouts show (“Drag to explore”, “List view”…).
 - **Heading line breaks**: press Enter in a title to break the line there. With “As typed”, a heading typed on one line stays on one line and shrinks a little to fit.
 
+## Studio name, logo and other devices
+
+- **Settings → Studio name & logo:** rename the Studio (default *Picaffectz Studio*) and upload a square logo. They're saved in `studio.json` and `studio-assets/logo.png`, so every signed-in device shows them. The logo is also the browser-tab icon. Visitors to the public theme gallery see the default name.
+- **Settings → Sign in on another device:** shows a QR code, a link and a code like `5RXC-LZJK-SJS3`. Open the link (or scan the code) on the new phone or computer and type the code. It then asks for a username and password for that device. The link carries your login encrypted with the code (PBKDF2, 310k rounds, then AES-GCM), the code is never part of the link, and links expire after 15 minutes. Each site's own CMS has the same option under Account.
+
 ## Login and security
 
 - Your GitHub token is encrypted with your password (PBKDF2, 310,000 rounds, AES-256-GCM) and stored **only in that browser**. Nothing about the login is committed anywhere. Set up each device once.

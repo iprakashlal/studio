@@ -1,3 +1,4 @@
+import { BrandMark, useBrand } from "../lib/brand";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { THEMES, THEME_TAGS, portfolioThemeValues, storeThemeValues, type Theme } from "../themes/catalog";
 import { ThemeSwatch } from "../themes/ThemeGallery";
@@ -51,7 +52,8 @@ export function ThemesPage({ signedIn }: { signedIn: boolean }) {
   }, []);
   useEffect(() => { try { localStorage.setItem(LS, JSON.stringify(mine)); } catch { /* private mode */ } }, [mine]);
   useEffect(() => { history.replaceState(null, "", link({ v: kind, t: open, list: only === "shared" ? shared : undefined })); }, [kind, open, only]);
-  useEffect(() => { document.title = "Theme gallery · Site Studio"; }, []);
+  const studioBrand = useBrand();
+  useEffect(() => { document.title = "Theme gallery · " + studioBrand.name; }, [studioBrand.name]);
 
   const list = useMemo(() => {
     const s = q.trim().toLowerCase().replace(/^t-?0*/, "");
@@ -94,7 +96,7 @@ export function ThemesPage({ signedIn }: { signedIn: boolean }) {
     <div className="min-h-screen bg-ink-950 text-ink-100">
       <header className="sticky top-0 z-30 border-b border-ink-700 bg-ink-950/90 backdrop-blur">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-3 px-4 py-3">
-          <a href="#/" className="flex items-center gap-2.5 font-extrabold"><Logo />Site Studio</a>
+          <a href="#/" className="flex items-center gap-2.5 font-extrabold"><BrandMark fallback={<Logo />} />{studioBrand.name}</a>
           <span className="text-ink-500">/</span><span className="font-bold">Theme gallery</span>
           <div className="ml-auto flex flex-wrap items-center gap-2">
             <button type="button" className="btn btn-sm" onClick={() => copy(link({ v: kind }), "Gallery link copied")}>Copy gallery link</button>

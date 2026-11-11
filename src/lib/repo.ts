@@ -25,6 +25,8 @@ export interface Repo {
   /** One commit that writes `files` and removes `remove`. */
   pushFiles(files: FileIn[], message: string, remove?: string[]): Promise<void>;
   list(prefix: string): Promise<string[]>;
+  /** When the file last changed on the branch (ISO date), or null if unknown. */
+  lastChange(path: string): Promise<string | null>;
 }
 
 export function explain(e: unknown): string {
@@ -146,6 +148,15 @@ export class GitHubRepo implements Repo {
     await this.api(`/git/refs/heads/${encodeURIComponent(this.cfg.branch)}`, { method: "PATCH", body: JSON.stringify({ sha: next.sha }) });
   }
 
+  async lastChange(path: string) {
+    try {
+      const c = await this.api(`/commits?path=${encodeURIComponent(path)}&sha=${encodeURIComponent(this.cfg.branch)}&per_page=1`);
+      return (Array.isArray(c) && c[0]?.commit?.committer?.date) || null;
+    } catch {
+      return null;
+    }
+  }
+
   async list(prefix: string) {
     const head = await this.headSha();
     if (!head) return [];
@@ -161,6 +172,7 @@ export class MemoryRepo implements Repo {
   private files = new Map<string, { b64: string; sha: string }>();
   private n = 0;
   private sha = () => "s" + ++this.n;
+  async lastChange() { return null; }
   async check() {}
   async getText(path: string) {
     const f = this.files.get(path);

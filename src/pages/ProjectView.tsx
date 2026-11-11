@@ -24,6 +24,9 @@ export function ProjectView({ studio, index, project, session, onIndex }: { stud
   const [pane, setPane] = useState<"edit" | "preview">("edit");
   const [modal, setModal] = useState<"" | "export" | "publish" | "history" | "details">("");
   const defaults = useRef<any>(null);
+  const [conflict, setConflict] = useState<{ siteAt: string | null } | null>(null);
+  const [syncBusy, setSyncBusy] = useState(false);
+  const site = useMemo(() => (project.publish && !studio.repo.demo ? new GitHubRepo(project.publish, session.token) : null), [project.publish?.owner, project.publish?.repo, project.publish?.branch, session.token]);
 
   useEffect(() => {
     let live = true;
@@ -34,10 +37,50 @@ export function ProjectView({ studio, index, project, session, onIndex }: { stud
         if (live) setDraft(merge(defaults.current, c || {}));
       } catch (e) {
         if (live) setErr(explain(e));
+        return;
       }
+      // Central control: if the site's own CMS changed the content, bring it in (or ask when both sides changed).
+      if (!site) return;
+      try {
+        const st = await studio.siteState(project, site);
+        if (!live) return;
+        if (st.kind === "pull") {
+          const r = await studio.importFromSite(project.id, site);
+          if (!live) return;
+          onIndex(r.index);
+          setDraft(merge(defaults.current, clone(r.content)));
+          setV(0); setSavedV(0);
+          toast(`Updated from the live site: edits made in its own CMS${st.siteAt ? " " + timeAgo(st.siteAt) : ""}.${r.missing.length ? ` ${r.missing.length} image(s) weren't found.` : ""}`);
+        } else if (st.kind === "conflict") setConflict({ siteAt: st.siteAt });
+      } catch { /* offline or no access: keep working on the Studio copy */ }
     })();
     return () => { live = false; };
   }, [project.id]);
+
+  const useSiteVersion = async () => {
+    if (!site) return;
+    if (dirty && !(await confirm("Replace your unsaved edits?", "The editor switches to the live site's content.", "Use the site's version", true))) return;
+    setSyncBusy(true);
+    try {
+      const r = await studio.importFromSite(project.id, site);
+      onIndex(r.index);
+      setDraft(merge(defaults.current || {}, clone(r.content)));
+      setV(0); setSavedV(0); setConflict(null);
+      toast("Now editing the live site's content.");
+    } catch (e) { toast(explain(e), "bad"); }
+    setSyncBusy(false);
+  };
+  const keepStudioVersion = async () => {
+    if (!site) return;
+    setSyncBusy(true);
+    try {
+      const f = await site.getText("content.json");
+      if (f) onIndex(await studio.markSynced(project.id, f.sha));
+      setConflict(null);
+      toast("Keeping the Studio's version. Publish with content to replace the live site's.");
+    } catch (e) { toast(explain(e), "bad"); }
+    setSyncBusy(false);
+  };
 
   const dirty = v !== savedV;
   useEffect(() => {
@@ -113,6 +156,15 @@ export function ProjectView({ studio, index, project, session, onIndex }: { stud
           <button type="button" className="btn btn-pri btn-sm" disabled={!dirty || saving} onClick={() => save()}>Save</button>
         </div>
       </header>
+      {conflict && (
+        <div className="flex flex-wrap items-center gap-2 border-b border-amber-400/40 bg-amber-400/10 px-4 py-2.5 text-[13px] text-amber-100" role="status">
+          <span><b>The live site was edited in its own CMS{conflict.siteAt ? ` ${timeAgo(conflict.siteAt)}` : ""}</b>, and this project also changed since they were last in step.</span>
+          <span className="ml-auto flex gap-2">
+            <button type="button" className="btn btn-sm" disabled={syncBusy} onClick={useSiteVersion}>Use the site's version</button>
+            <button type="button" className="btn btn-sm" disabled={syncBusy} onClick={keepStudioVersion}>Keep the Studio's version</button>
+          </span>
+        </div>
+      )}
       <div className="flex min-h-0 flex-1">
         <div className={`min-h-0 min-w-0 flex-1 flex-col lg:flex ${pane === "edit" ? "flex" : "hidden"}`}>
           <Editor tpl={tpl} draft={draft} version={v} onChange={bump} upload={upload} img={img} extras={extras} />
@@ -198,7 +250,9 @@ function PublishDialog({ studio, project, tpl, draft, dirty, save, onIndex, getB
       const { files, warnings, admin } = await buildSite({ template: tpl, content: draft, name: project.name, version: next, includeContent: withContent, getAsset: getBlob, admin: live ? adminFile(live.data) : undefined });
       await publishSite(repo, files, `Publish v${next} from Site Studio${note.trim() ? `: ${note.trim()}` : ""}`, admin);
       setAdmin(admin);
-      const { index } = await studio.recordExport(project.id, { kind: "github", note: note.trim(), target: `${target.owner}/${target.repo}` }, draft, "published", target);
+      // Remember what the site holds now, so later edits in the site's own CMS are recognised and pulled back in.
+      const siteSha = withContent ? (await repo.getText("content.json").catch(() => null))?.sha : undefined;
+      const { index } = await studio.recordExport(project.id, { kind: "github", note: note.trim(), target: `${target.owner}/${target.repo}` }, draft, "published", target, siteSha);
       onIndex(index);
       if (warnings.length) toast(`Published with ${warnings.length} missing image(s).`, "bad");
       setDone(target);
@@ -286,9 +340,28 @@ function DetailsDialog({ studio, index, project, session, onIndex, onImported, o
     setBusy("save");
     try { onIndex(await studio.updateMeta(project.id, { ...f, name: f.name.trim() })); toast("Details saved"); onClose(); } catch (e) { toast(explain(e), "bad"); setBusy(""); }
   };
+  const [link, setLink] = useState<PublishTarget>({ owner: session.cfg.owner, repo: "", branch: "main" });
+  const linkSite = async () => {
+    const t = { owner: link.owner.trim(), repo: link.repo.trim().replace(/^.*github\.com\/[^/]+\//, "").replace(/\.git$|\/$/g, ""), branch: link.branch.trim() || "main" };
+    if (!t.owner || !t.repo) return toast("Fill in the owner and repository.", "bad");
+    setBusy("link");
+    try {
+      const site = new GitHubRepo(t, session.token);
+      const f = await site.getJSON("content.json");
+      if (!f) throw new Error(`${t.owner}/${t.repo} has no content.json. Is it a site exported from Site Studio?`);
+      const info = await site.getJSON<{ template?: string }>("cms/site.json").catch(() => null);
+      if (info?.data?.template && info.data.template !== project.template) throw new Error(`That site uses the ${info.data.template} template, and this project is a ${project.template}.`);
+      onIndex(await studio.updateMeta(project.id, { publish: t, status: "published" }, `Link ${t.owner}/${t.repo}`));
+      const r = await studio.importFromSite(project.id, site);
+      onIndex(r.index);
+      onImported(r.content);
+      toast(`Linked to ${t.owner}/${t.repo} and loaded its live content.`);
+      onClose();
+    } catch (e) { toast(explain(e), "bad"); setBusy(""); }
+  };
   const importSite = async () => {
     if (!project.publish) return;
-    if (!(await confirm("Import content from the live site?", "This replaces the Studio's copy of the content with what's in the site's repository now, including edits made in the site's own CMS.", "Import"))) return;
+    if (!(await confirm("Pull content from the live site?", "This replaces the Studio's copy of the content with what's live on the site now, including edits made in the site's own CMS.", "Pull"))) return;
     setBusy("import");
     try {
       const r = await studio.importFromSite(project.id, new GitHubRepo(project.publish, session.token));
@@ -312,10 +385,20 @@ function DetailsDialog({ studio, index, project, session, onIndex, onImported, o
         {project.publish ? (
           <>
             <p className="mt-1 text-ink-300">{project.publish.owner}/{project.publish.repo} on {project.publish.branch}</p>
-            <button type="button" className="btn btn-sm mt-3" disabled={!!busy || studio.repo.demo} onClick={importSite}>{busy === "import" ? "Importing…" : "Import content from site"}</button>
-            <p className="hint mt-2">Brings back edits the site owner made in the site's own CMS, so you can re-edit from the latest content.</p>
+            <p className="hint mt-2">Kept in step automatically: edits published from the site's own CMS come into this project when you open the Studio or this project{project.syncedAt ? ` (last in step ${timeAgo(project.syncedAt)})` : ""}. If both sides changed, you choose which to keep.</p>
+            <button type="button" className="btn btn-sm mt-3" disabled={!!busy || studio.repo.demo} onClick={importSite}>{busy === "import" ? "Importing…" : "Pull from the live site now"}</button>
           </>
-        ) : <p className="mt-1 text-ink-400">Not published yet. Use Publish to GitHub to link a repository.</p>}
+        ) : (
+          <>
+            <p className="mt-1 text-ink-400">Not linked yet. Publish to GitHub links it, or link a site that's already live (for example one you uploaded from a ZIP) to keep it in step from here on.</p>
+            <div className="mt-3 grid gap-2 sm:grid-cols-3">
+              <Field label="Owner" htmlFor="ln-o"><input id="ln-o" className="input" value={link.owner} onChange={(e) => setLink({ ...link, owner: e.target.value })} /></Field>
+              <Field label="Repository" htmlFor="ln-r"><input id="ln-r" className="input" placeholder="kasa-katha" value={link.repo} onChange={(e) => setLink({ ...link, repo: e.target.value })} /></Field>
+              <Field label="Branch" htmlFor="ln-b"><input id="ln-b" className="input" value={link.branch} onChange={(e) => setLink({ ...link, branch: e.target.value })} /></Field>
+            </div>
+            <button type="button" className="btn btn-sm mt-3" disabled={!!busy || studio.repo.demo} onClick={linkSite}>{busy === "link" ? "Linking…" : "Link and load its live content"}</button>
+          </>
+        )}
       </div>
       <p className="hint">Created {fmtDate(project.createdAt)} · last edited {timeAgo(project.updatedAt)}</p>
     </Modal>

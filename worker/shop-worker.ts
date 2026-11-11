@@ -307,7 +307,7 @@ async function health(env: Env, f: typeof fetch, repo: string): Promise<Response
         const c: any = await r.json().catch(() => null);
         const be = c?.backend || {};
         add("SITE_URL", true, `Shop found at ${base} ("${c?.brand?.name || "Shop"}").`);
-        add("Shop CMS backend", !!be.enabled && be.provider === "cloudflare", be.enabled && be.provider === "cloudflare" ? `Backend on, Cloudflare selected, customer sign-in ${be.accounts ? "on" : "off"}.` : "In the shop's admin.html → Accounts & backend: switch on the backend, choose Cloudflare Worker + GitHub files, paste this Worker's URL, then Save & publish.");
+        add("Shop CMS backend", !!be.enabled && be.provider === "cloudflare", be.enabled && be.provider === "cloudflare" ? `Backend on, Cloudflare selected, customer sign-in ${be.accounts ? "on" : "off"}.` : "In the shop's CMS (admin page) → Accounts & backend: switch on the backend, choose Cloudflare Worker + GitHub files, paste this Worker's URL, then Save & publish.");
       }
     } catch { add("SITE_URL", false, `Couldn't load ${base}content.json.`); }
   }

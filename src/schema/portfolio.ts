@@ -1,5 +1,6 @@
 import type { Category, Field, TemplateDef } from "./types";
-import { AXES, BODY_FONTS, DISPLAY_FONTS, KIT_AXIS, PORTFOLIO_AXES, THEMES, portfolioThemeValues } from "../themes/catalog";
+import { AXES, BODY_FONTS, DISPLAY_FONTS, KIT_AXIS, LINE_BREAKS_AXIS, PORTFOLIO_AXES, THEMES, onColor, portfolioThemeValues } from "../themes/catalog";
+import { adminCategory } from "./common";
 import VELOCITY_DEFAULTS from "./velocity-defaults.json";
 import { themeCards } from "../themes/fields";
 
@@ -38,7 +39,7 @@ const schema: Category[] = [
         { t: "text", path: "velocity.messageLabel", label: "Label" },
         { t: "textarea", path: "velocity.message", label: "Message", rows: 4, hint: "Wrap words in *stars* to highlight them. Leave empty to use the About story heading." }] },
       { title: "Moments strip", fields: [
-        g2({ t: "toggle", path: "velocity.showStory", label: "Show the strip" }, { t: "text", path: "velocity.storyTitle", label: "Title" }),
+        g2({ t: "toggle", path: "velocity.showStory", label: "Show the strip" }, { t: "text", path: "velocity.storyTitle", label: "Title", ml: true }),
         { t: "text", path: "velocity.storyLabel", label: "Small label" },
         { t: "list", path: "velocity.stories", label: "Photos", max: 12, title: (it) => `${it.caption || "Photo"} · ${it.year || ""}`, add: () => ({ image: null, caption: "New moment", year: "2026" }),
           item: [{ t: "image", path: "image", label: "Photo" }, g2({ t: "text", path: "caption", label: "Caption" }, { t: "text", path: "year", label: "Year or place" })] },
@@ -51,10 +52,10 @@ const schema: Category[] = [
             { t: "image", path: "image", label: "Background photo (optional)" }] }] },
       { title: "Partners", fields: [
         g2({ t: "toggle", path: "velocity.showPartners", label: "Show partners (before Contact)" }, { t: "text", path: "velocity.partnersKicker", label: "Heading, line 1" }),
-        g2({ t: "text", path: "velocity.partnersTitle", label: "Heading, line 2" }, { t: "text", path: "velocity.partnersText", label: "Text" }),
+        g2({ t: "text", path: "velocity.partnersTitle", label: "Heading, line 2" }, { t: "text", path: "velocity.partnersText", label: "Text", ml: true }),
         { t: "list", path: "velocity.partners", label: "Names & logos", max: 24, title: (it) => it.name, add: () => ({ name: "New partner", logo: null, url: "" }),
           item: [g2({ t: "text", path: "name", label: "Name" }, { t: "text", path: "url", label: "Link (optional)" }), { t: "image", path: "logo", label: "Logo (optional, light on transparent works best)" }] }] },
-      { title: "Footer", fields: [g2({ t: "text", path: "velocity.footerTagline", label: "Big tagline", hint: "*Stars* highlight words" }, { t: "text", path: "velocity.backToTop", label: "Back-to-top label" })] },
+      { title: "Footer", fields: [g2({ t: "text", path: "velocity.footerTagline", label: "Big tagline", hint: "*Stars* highlight words. Enter breaks the line.", ml: true }, { t: "text", path: "velocity.backToTop", label: "Back-to-top label" })] },
     ],
   },
   {
@@ -65,9 +66,12 @@ const schema: Category[] = [
         { t: "color", path: "theme.text", label: "Text" }, { t: "color", path: "theme.soft", label: "Secondary text" }, { t: "color", path: "theme.line", label: "Grid lines" },
         { t: "color", path: "theme.c1", label: "Primary shape" }, { t: "color", path: "theme.c2", label: "Secondary shape" }, { t: "color", path: "theme.c3", label: "Tertiary shape" },
         { t: "color", path: "theme.glow", label: "Glow & highlight" })] },
-      { title: "Typography", fields: [g2({ t: "select", path: "theme.fontDisplay", label: "Headings font", options: FONTS_D }, { t: "select", path: "theme.fontBody", label: "Body font", options: FONTS_B })] },
+      { title: "Typography", fields: [g2({ t: "select", path: "theme.fontDisplay", label: "Headings font", options: FONTS_D }, { t: "select", path: "theme.fontBody", label: "Body font", options: FONTS_B }),
+        { t: "select", path: "theme.lineBreaks", label: LINE_BREAKS_AXIS.label, options: LINE_BREAKS_AXIS.options.map(([value, label]) => ({ value, label })) },
+        { t: "note", text: "Headings and titles break where you press Enter. With “As typed”, a heading you typed on one line stays on one line (it shrinks a little to fit, and only wraps on screens too narrow for it)." }] },
       { title: "Shape & effects", fields: [
         { t: "range", path: "theme.radius", label: "Corner radius", min: 0, max: 40, step: 1, unit: "px" },
+        { t: "range", path: "theme.logoRadius", label: "Browser tab icon: 0 = square, 50 = circle", min: 0, max: 50, step: 1, unit: "%" },
         g2({ t: "toggle", path: "theme.showGrid", label: "Blueprint grid" }, { t: "toggle", path: "theme.showGlow", label: "Corner glow" }, { t: "toggle", path: "theme.showNetwork", label: "Line network in hero" },
           { t: "toggle", path: "theme.show3D", label: "3D shapes in hero" }, { t: "toggle", path: "theme.showSolids", label: "Floating background shapes" }, { t: "toggle", path: "theme.showTicker", label: "Scrolling skills band" },
           { t: "toggle", path: "theme.motion", label: "Animations" })] },
@@ -78,13 +82,23 @@ const schema: Category[] = [
     id: "layout", label: "Sections & order", group: "Design", desc: "Show, hide and reorder sections. The order here is the order on the page and in the menu.",
     cards: [
       { title: "Header", fields: [g2({ t: "text", path: "brand.logoText", label: "Logo text" }, { t: "text", path: "brand.contactLabel", label: "Header button label" })] },
-      { title: "Sections", fields: [{ t: "list", path: "sections", fixed: true, add: () => ({}), title: (it) => SECTION_NAMES[it.id] + (it.visible ? "" : "  (hidden)"), item: [g2({ t: "toggle", path: "visible", label: "Show on page" }, { t: "text", path: "navLabel", label: "Menu label" })] }] },
+      { title: "Sections & menu titles", fields: [{ t: "note", text: "Open a section to rename its menu title or hide it." }, { t: "list", path: "sections", fixed: true, add: () => ({}), title: (it) => `${SECTION_NAMES[it.id]} · menu: “${it.navLabel || ""}”` + (it.visible ? "" : "  (hidden)"), item: [g2({ t: "toggle", path: "visible", label: "Show on page" }, { t: "text", path: "navLabel", label: "Menu title" })] }] },
+      { title: "Page layout labels", fields: [
+        { t: "note", text: "Words the Motion page layouts show around your content: menu buttons, hints and small headings. They only appear in the layout that uses them." },
+        g2({ t: "text", path: "labels.scrollHint", label: "Scroll hint (Type specimen)" }, { t: "text", path: "labels.project", label: "“Project” tag" },
+          { t: "text", path: "labels.available", label: "Status badge (Profile dashboard)" }, { t: "text", path: "labels.dragHint", label: "Drag hint (Drag canvas)" },
+          { t: "text", path: "labels.listView", label: "“List view” button" }, { t: "text", path: "labels.canvasView", label: "“Canvas view” button" },
+          { t: "text", path: "labels.close", label: "“Close” button" }, { t: "text", path: "labels.scenes", label: "Scene count (Cinema)", hint: "{n} becomes the number of scenes." },
+          { t: "text", path: "labels.stickerHint", label: "Sticker hint (Sticker board)" }, { t: "text", path: "labels.edition", label: "Masthead line (Broadsheet)" },
+          { t: "text", path: "labels.inThisEdition", label: "“In this edition”" }, { t: "text", path: "labels.classifieds", label: "“Classifieds”" },
+          { t: "text", path: "labels.letters", label: "“Letters to the editor”" }),
+      ] },
     ],
   },
   {
     id: "hero", label: "Hero", group: "Content", desc: "The first screen: name, role, buttons, photo and the 3D shapes.",
     cards: [
-      { title: "Text", fields: [{ t: "text", path: "hero.eyebrow", label: "Badge above name" }, g2({ t: "text", path: "hero.firstName", label: "First line of name" }, { t: "text", path: "hero.lastName", label: "Second line of name" }),
+      { title: "Text", fields: [{ t: "text", path: "hero.eyebrow", label: "Badge above name", ml: true }, g2({ t: "text", path: "hero.firstName", label: "First line of name" }, { t: "text", path: "hero.lastName", label: "Second line of name" }),
         { t: "textarea", path: "hero.role", label: "Intro line", hint: "Wrap words in *asterisks* to highlight them." }] },
       { title: "Buttons", fields: [g2({ t: "text", path: "hero.ctaPrimary", label: "Main button label" }, { t: "select", path: "hero.ctaPrimaryTarget", label: "Main button scrolls to", options: Object.entries(SECTION_NAMES).map(([value, label]) => ({ value, label })) },
         { t: "text", path: "hero.ctaSecondary", label: "Second button label" }, { t: "text", path: "hero.ctaSecondaryUrl", label: "Second button link" })] },
@@ -99,7 +113,7 @@ const schema: Category[] = [
   {
     id: "about", label: "About", group: "Content", desc: "The bento grid: story, number tiles, motto and quick facts.",
     cards: [
-      { title: "Heading", fields: [g2({ t: "text", path: "about.eyebrow", label: "Small label" }, { t: "text", path: "about.title", label: "Title" }), { t: "textarea", path: "about.lede", label: "Intro" }] },
+      { title: "Heading", fields: [g2({ t: "text", path: "about.eyebrow", label: "Small label", ml: true }, { t: "text", path: "about.title", label: "Title", ml: true }), { t: "textarea", path: "about.lede", label: "Intro" }] },
       { title: "Story tile", fields: [{ t: "text", path: "about.storyLabel", label: "Tile label" }, { t: "textarea", path: "about.storyHeading", label: "Headline", hint: "Use *asterisks* to highlight." }, { t: "textarea", path: "about.story", label: "Story", hint: "Leave a blank line between paragraphs.", rows: 7 }] },
       { title: "Number tiles", fields: [{ t: "list", path: "about.stats", add: () => ({ value: 1, suffix: "", label: "New stat", color: "c3", shape: "triangle" }), max: 6, title: (it) => `${it.value}${it.suffix} · ${it.label}`,
         item: [g3({ t: "number", path: "value", label: "Number" }, { t: "text", path: "suffix", label: "After number" }, { t: "text", path: "label", label: "Label" }), { t: "colorKey", path: "color", label: "Tile colour" }, { t: "shape", path: "shape", label: "Corner shape" }] }] },
@@ -110,7 +124,7 @@ const schema: Category[] = [
   {
     id: "skills", label: "Skills cube", group: "Content", desc: "The rotating cube always has six faces. Edit each face and its matching list entry.",
     cards: [
-      { title: "Heading", fields: [g2({ t: "text", path: "skills.eyebrow", label: "Small label" }, { t: "text", path: "skills.title", label: "Title" }), { t: "text", path: "skills.lede", label: "Intro" }] },
+      { title: "Heading", fields: [g2({ t: "text", path: "skills.eyebrow", label: "Small label", ml: true }, { t: "text", path: "skills.title", label: "Title", ml: true }), { t: "text", path: "skills.lede", label: "Intro", ml: true }] },
       { title: "Cube faces", fields: [{ t: "list", path: "skills.items", fixed: true, add: () => ({}), title: (it, i) => `Face ${i + 1} · ${it.title}`,
         item: [g2({ t: "text", path: "tag", label: "Face label" }, { t: "text", path: "title", label: "Skill" }), { t: "text", path: "body", label: "Text on the cube" }, { t: "text", path: "detail", label: "Text in the list" }, { t: "colorKey", path: "color", label: "Face colour" }, { t: "shape", path: "shape", label: "Icon shape" }] }] },
     ],
@@ -118,7 +132,7 @@ const schema: Category[] = [
   {
     id: "work", label: "Work deck", group: "Content", desc: "Each role is a card in the stacked deck. The top of the list appears first.",
     cards: [
-      { title: "Heading", fields: [g2({ t: "text", path: "work.eyebrow", label: "Small label" }, { t: "text", path: "work.title", label: "Title" }), { t: "text", path: "work.lede", label: "Intro" }] },
+      { title: "Heading", fields: [g2({ t: "text", path: "work.eyebrow", label: "Small label", ml: true }, { t: "text", path: "work.title", label: "Title", ml: true }), { t: "text", path: "work.lede", label: "Intro", ml: true }] },
       { title: "Roles", fields: [{ t: "list", path: "work.items", title: (it) => `${it.title} · ${it.org}`,
         add: () => ({ period: "Year – Year", title: "New role", org: "Company", orgNote: "City", current: false, color: "surface", image: null, bullets: ["What you did"], art: [{ type: "circle", color: "c1" }, { type: "square", color: "c2" }] }),
         item: [g2({ t: "text", path: "title", label: "Role" }, { t: "text", path: "period", label: "Dates" }, { t: "text", path: "org", label: "Company" }, { t: "text", path: "orgNote", label: "Note after company" }),
@@ -130,7 +144,7 @@ const schema: Category[] = [
   {
     id: "projects", label: "Projects", group: "Content", desc: "Project cards with images and links. The section appears once it has a project and is switched on under Sections & order.",
     cards: [
-      { title: "Heading", fields: [g2({ t: "text", path: "projects.eyebrow", label: "Small label" }, { t: "text", path: "projects.title", label: "Title" }), { t: "text", path: "projects.lede", label: "Intro" }] },
+      { title: "Heading", fields: [g2({ t: "text", path: "projects.eyebrow", label: "Small label", ml: true }, { t: "text", path: "projects.title", label: "Title", ml: true }), { t: "text", path: "projects.lede", label: "Intro", ml: true }] },
       { title: "Projects", fields: [{ t: "list", path: "projects.items", title: (it) => it.title,
         add: () => ({ title: "New project", body: "What it is and what you did.", url: "", linkLabel: "View project", image: null, color: "c1", shape: "circle", tags: [] }),
         item: [{ t: "text", path: "title", label: "Title" }, { t: "textarea", path: "body", label: "Description" }, { t: "image", path: "image", label: "Cover image" }, { t: "image", path: "image2", label: "Hover image (Velocity layout)" },
@@ -141,7 +155,7 @@ const schema: Category[] = [
   {
     id: "learning", label: "Learning", group: "Content", desc: "Education, certifications and languages.",
     cards: [
-      { title: "Heading", fields: [g2({ t: "text", path: "learning.eyebrow", label: "Small label" }, { t: "text", path: "learning.title", label: "Title" })] },
+      { title: "Heading", fields: [g2({ t: "text", path: "learning.eyebrow", label: "Small label", ml: true }, { t: "text", path: "learning.title", label: "Title", ml: true })] },
       { title: "Entries", fields: [{ t: "list", path: "learning.items", title: (it) => it.title, add: () => ({ period: "Year", title: "New entry", sub: "Institution", shape: "circle", color: "c1" }),
         item: [g2({ t: "text", path: "title", label: "Title" }, { t: "text", path: "period", label: "Dates or type" }), { t: "text", path: "sub", label: "Institution or detail" }, { t: "shape", path: "shape", label: "Icon shape" }, { t: "colorKey", path: "color", label: "Icon colour" }] }] },
       { title: "Languages", fields: [{ t: "text", path: "learning.languagesLabel", label: "Label" }, { t: "strings", path: "learning.languages", label: "Languages", addLabel: "Add language" }] },
@@ -150,13 +164,21 @@ const schema: Category[] = [
   {
     id: "contact", label: "Contact & footer", group: "Content", desc: "The closing panel, links and the footer.",
     cards: [
-      { title: "Panel", fields: [{ t: "text", path: "contact.eyebrow", label: "Small label" }, { t: "text", path: "contact.title", label: "Title", hint: "Use *asterisks* to highlight." }, { t: "textarea", path: "contact.body", label: "Message" },
+      { title: "Panel", fields: [{ t: "text", path: "contact.eyebrow", label: "Small label", ml: true }, { t: "text", path: "contact.title", label: "Title", hint: "Use *asterisks* to highlight. Press Enter to break the line.", ml: true }, { t: "textarea", path: "contact.body", label: "Message" },
         g2({ t: "text", path: "contact.email", label: "Email shown", check: "email" }, { t: "text", path: "contact.copyLabel", label: "Copy button label" })] },
       { title: "Links", fields: [{ t: "list", path: "contact.links", add: () => ({ label: "New link", url: "https://" }), max: 8, title: (it) => it.label, item: [g2({ t: "text", path: "label", label: "Label" }, { t: "text", path: "url", label: "URL" })] }] },
       { title: "Footer", fields: [g2({ t: "text", path: "contact.footerLeft", label: "Left" }, { t: "text", path: "contact.footerRight", label: "Right" })] },
     ],
   },
+  adminCategory(),
 ];
+
+/** Words the Motion layouts show (src/fx/layouts.js reads content.labels with these as fallbacks). */
+export const PORTFOLIO_LABELS = {
+  scrollHint: "Scroll to discover", project: "Project", available: "Available", dragHint: "Drag to explore", listView: "List view", canvasView: "Canvas view",
+  close: "Close", scenes: "A portfolio in {n} scenes", stickerHint: "Grab a sticker and move it around.", edition: "Portfolio edition",
+  inThisEdition: "In this edition", classifieds: "Classifieds", letters: "Letters to the editor",
+};
 
 export const portfolioTemplate: TemplateDef = {
   id: "portfolio",
@@ -172,6 +194,15 @@ export const portfolioTemplate: TemplateDef = {
     if (!c || typeof c !== "object") return;
     const v = (c.velocity && typeof c.velocity === "object") ? c.velocity : (c.velocity = {});
     for (const [k, val] of Object.entries(VELOCITY_DEFAULTS)) if (v[k] === undefined) v[k] = JSON.parse(JSON.stringify(val));
+    const t = c.theme && typeof c.theme === "object" ? c.theme : (c.theme = {});
+    if (!t.introBg) t.introBg = t.deep || t.text || "#111111";
+    if (!t.introFg) t.introFg = onColor(t.introBg);
+    if (t.introTitle === undefined) t.introTitle = "";
+    if (t.logoRadius === undefined || t.logoRadius === null) t.logoRadius = 22;
+    if (!t.scrollEase) t.scrollEase = "light";
+    if (!t.lineBreaks) t.lineBreaks = "typed";
+    c.labels = { ...PORTFOLIO_LABELS, ...(c.labels && typeof c.labels === "object" ? c.labels : {}) };
+    c.cms = { adminPage: "admin", ...(c.cms && typeof c.cms === "object" ? c.cms : {}) };
   },
   summary: (c) => [c?.hero?.firstName, c?.hero?.lastName].filter(Boolean).join(" ") || c?.brand?.logoText || "",
   checks: (c) => {

@@ -1,5 +1,5 @@
 import type { Card, Field } from "../schema/types";
-import { AXES, FX_AXES, MOTIF_AXIS, THEMES, type Axis } from "./catalog";
+import { AXES, FX_AXES, MOTIF_AXIS, SCROLL_EASE_AXIS, THEMES, type Axis } from "./catalog";
 
 const sel = (a: Axis): Field => ({ t: "select", path: "theme." + a.key, label: a.label, options: a.options.map(([value, label]) => ({ value, label })) });
 
@@ -17,6 +17,14 @@ export function themeCards(extra: Axis[], note: string, layout: Axis = AXES.layo
     { title: "Interactions", fields: [
       { t: "note", text: "Award-style effects: a custom cursor, an intro that also animates links between pages, heading reveals, hover physics, smooth scrolling and a screen texture. Themes tagged Motion set these for you. Cursor and hover effects only run with a mouse; visitors who ask for reduced motion get a still page." },
       g(sel(FX_AXES.cursor), sel(FX_AXES.loader), sel(FX_AXES.textfx), sel(FX_AXES.hoverfx), sel(FX_AXES.scrollfx), sel(FX_AXES.overlay)),
+      { t: "when", path: "theme.scrollfx", is: "smooth", fields: [sel(SCROLL_EASE_AXIS)] },
+      { t: "when", path: "theme.scrollfx", is: "skew", fields: [sel(SCROLL_EASE_AXIS)] },
+      { t: "note", text: "Scrolling feels heavy? Pick Light, or set Scrolling to Normal. Smooth scrolling only changes mouse wheels: trackpads and phones always scroll the normal way." },
+    ] },
+    { title: "Intro screen", fields: [
+      { t: "note", text: "The full-screen panel that shows your name while the site opens (Intro & page transition above, or a signature theme's own preloader). It also slides across when visitors move between pages. Picking a theme resets these colours to match it." },
+      { t: "text", path: "theme.introTitle", label: "Text on the intro screen", hint: "Leave empty to show your site name." },
+      g({ t: "color", path: "theme.introBg", label: "Intro background" }, { t: "color", path: "theme.introFg", label: "Intro text colour" }),
     ] },
   ];
 }

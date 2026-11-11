@@ -1,4 +1,4 @@
-import { createContext, useContext, useRef, useState } from "react";
+import { createContext, useContext, useLayoutEffect, useRef, useState } from "react";
 import { ThemeGallery } from "../themes/ThemeGallery";
 import { Motifs } from "../themes/catalog";
 import type { Field as F, TemplateDef } from "../schema/types";
@@ -53,8 +53,15 @@ export function FieldView({ f, obj, base }: { f: F; obj: any; base: string }) {
     case "note":
       return <p className={`rounded-lg border px-3 py-2.5 text-[13px] ${f.tone === "warn" ? "border-amber-400/40 bg-amber-400/5 text-amber-100" : "border-ink-700 bg-ink-850 text-ink-300"}`}>{f.text}</p>;
     case "text":
+      if (f.ml) {
+        return (
+          <Field label={f.label} htmlFor={id} hint={f.hint || "Enter starts a new line."}>
+            <GrowText id={id} value={val ?? ""} ph={f.ph} onChange={set} />
+          </Field>
+        );
+      }
       return (
-        <Field label={f.label} htmlFor={id} hint={f.hint} warn={checkMsg(f.check, String(val ?? ""))}>
+        <Field label={f.label} htmlFor={id} hint={f.show ? f.show(String(val ?? "")) : f.hint} warn={checkMsg(f.check, String(val ?? ""))}>
           <input id={id} className="input" value={val ?? ""} placeholder={f.ph} spellCheck={!f.check} onChange={(e) => set(e.target.value)} />
         </Field>
       );
@@ -329,4 +336,16 @@ function ListField({ f, obj, base }: { f: Extract<F, { t: "list" }>; obj: any; b
       )}
     </div>
   );
+}
+
+/** A heading box that grows with its text: one row for one line, more as lines are added or wrap. */
+function GrowText({ id, value, ph, onChange }: { id: string; value: string; ph?: string; onChange: (v: string) => void }) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = el.scrollHeight + 2 + "px";
+  }, [value]);
+  return <textarea ref={ref} id={id} rows={1} className="input resize-none overflow-hidden leading-snug" value={value} placeholder={ph} onChange={(e) => onChange(e.target.value)} />;
 }

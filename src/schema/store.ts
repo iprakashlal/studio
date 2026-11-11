@@ -1,6 +1,7 @@
 import type { Category, Field, TemplateDef } from "./types";
 import { uid, vpaOk, paypalOk, httpsOk } from "../lib/util";
-import { BODY_FONTS, DISPLAY_FONTS, STORE_AXES, THEMES, storeThemeValues } from "../themes/catalog";
+import { BODY_FONTS, DISPLAY_FONTS, LINE_BREAKS_AXIS, STORE_AXES, THEMES, onColor, storeThemeValues } from "../themes/catalog";
+import { adminCategory } from "./common";
 import { themeCards } from "../themes/fields";
 
 const CURRENCIES = ["INR", "USD", "EUR", "GBP", "AED", "SGD", "AUD", "CAD"];
@@ -17,35 +18,41 @@ const schema: Category[] = [
   {
     id: "theme", label: "Brand & theme", group: "Design", desc: "Store name, logo, colours, fonts and the announcement bar.",
     cards: [
-      { title: "Brand", fields: [g2({ t: "text", path: "brand.name", label: "Store name" }, { t: "text", path: "brand.tagline", label: "Tagline" }), { t: "image", path: "brand.logo", label: "Logo (square works best)" }] },
-      { title: "Announcement bar", fields: [{ t: "toggle", path: "brand.showAnnouncement", label: "Show the bar above the menu" }, { t: "text", path: "brand.announcement", label: "Message" }] },
+      { title: "Brand", fields: [g2({ t: "text", path: "brand.name", label: "Store name" }, { t: "text", path: "brand.tagline", label: "Tagline", ml: true }), { t: "image", path: "brand.logo", label: "Logo (square works best)" },
+        { t: "range", path: "theme.logoRadius", label: "Logo shape: 0 = square, 50 = circle", min: 0, max: 50, step: 1, unit: "%" },
+        { t: "note", text: "The logo shape is used next to the store name and for the icon in the browser tab. Without a logo image, the icon shows your initials." }] },
+      { title: "Announcement bar", fields: [{ t: "toggle", path: "brand.showAnnouncement", label: "Show the bar above the menu" }, { t: "text", path: "brand.announcement", label: "Message", ml: true }] },
       { title: "Colours", fields: [g3(
         { t: "color", path: "theme.bg", label: "Background" }, { t: "color", path: "theme.surface", label: "Cards" }, { t: "color", path: "theme.text", label: "Text" },
         { t: "color", path: "theme.soft", label: "Secondary text" }, { t: "color", path: "theme.line", label: "Borders" }, { t: "color", path: "theme.accent", label: "Accent & buttons" },
         { t: "color", path: "theme.accent2", label: "Second accent" }, { t: "color", path: "theme.sale", label: "Sale & badges" })] },
       { title: "Typography & corners", fields: [g2({ t: "select", path: "theme.fontDisplay", label: "Headings font", options: FONTS_D }, { t: "select", path: "theme.fontBody", label: "Body font", options: FONTS_B }),
-        { t: "range", path: "theme.radius", label: "Corner radius", min: 0, max: 28, step: 1, unit: "px" }] },
+        { t: "range", path: "theme.radius", label: "Corner radius", min: 0, max: 28, step: 1, unit: "px" },
+        { t: "select", path: "theme.lineBreaks", label: LINE_BREAKS_AXIS.label, options: LINE_BREAKS_AXIS.options.map(([value, label]) => ({ value, label })) },
+        { t: "note", text: "Headings and titles break where you press Enter. With “As typed”, a heading you typed on one line stays on one line (it shrinks a little to fit, and only wraps on screens too narrow for it)." }] },
       { title: "Search & sharing", fields: [{ t: "text", path: "seo.title", label: "Browser tab title" }, { t: "textarea", path: "seo.description", label: "Search description" }] },
     ],
   },
   {
     id: "nav", label: "Menu & pages", group: "Design", desc: "Menu labels and which pages appear.",
     cards: [
-      { title: "Menu", fields: [g2({ t: "text", path: "nav.home", label: "Home label" }, { t: "text", path: "nav.shop", label: "Shop label" }, { t: "text", path: "nav.portfolio", label: "Portfolio page label" }, { t: "text", path: "nav.cart", label: "Cart label" }, { t: "text", path: "nav.account", label: "Account label" }),
-        { t: "toggle", path: "nav.showPortfolio", label: "Show the portfolio page in the menu" }] },
+      { title: "Menu titles", fields: [g2({ t: "text", path: "nav.home", label: "Home" }, { t: "text", path: "nav.shop", label: "Shop" }, { t: "text", path: "nav.portfolio", label: "Story / portfolio page" }, { t: "text", path: "nav.cart", label: "Cart" }, { t: "text", path: "nav.account", label: "Account (when sign-in is on)" }),
+        { t: "toggle", path: "nav.showPortfolio", label: "Show the story / portfolio page in the menu" }] },
+      { title: "Footer titles & links", fields: [g2({ t: "text", path: "labels.allProducts", label: "“All products” link" }, { t: "text", path: "labels.viewAll", label: "“View all” link on the home page" },
+        { t: "text", path: "labels.help", label: "Footer column: help & policies" }, { t: "text", path: "labels.contact", label: "Footer column: contact" })] },
     ],
   },
   {
     id: "home", label: "Home page", group: "Pages", desc: "The landing page: hero, featured products, categories, banner and reviews.",
     cards: [
-      { title: "Hero", fields: [{ t: "text", path: "home.hero.eyebrow", label: "Small label" }, { t: "text", path: "home.hero.title", label: "Headline" }, { t: "textarea", path: "home.hero.text", label: "Text" },
+      { title: "Hero", fields: [{ t: "text", path: "home.hero.eyebrow", label: "Small label", ml: true }, { t: "text", path: "home.hero.title", label: "Headline", ml: true }, { t: "textarea", path: "home.hero.text", label: "Text", hint: "Line breaks you type show on the site." },
         { t: "text", path: "home.hero.cta", label: "Button label" }, { t: "image", path: "home.hero.image", label: "Hero image", hint: "Wide images look best. Without one, a pattern in your colours is used." }] },
-      { title: "Featured products", fields: [g2({ t: "text", path: "home.featuredTitle", label: "Title" }, { t: "text", path: "home.featuredText", label: "Line under the title" }),
+      { title: "Featured products", fields: [g2({ t: "text", path: "home.featuredTitle", label: "Title", ml: true }, { t: "text", path: "home.featuredText", label: "Line under the title", ml: true }),
         { t: "note", text: "Mark products as featured under Products. Up to 8 are shown." }] },
-      { title: "Categories", fields: [{ t: "toggle", path: "home.showCategories", label: "Show categories on the home page" }, { t: "text", path: "home.categoriesTitle", label: "Title" }] },
-      { title: "Banner", fields: [{ t: "toggle", path: "home.banner.show", label: "Show the banner" }, { t: "text", path: "home.banner.title", label: "Title" }, { t: "textarea", path: "home.banner.text", label: "Text" },
+      { title: "Categories", fields: [{ t: "toggle", path: "home.showCategories", label: "Show categories on the home page" }, { t: "text", path: "home.categoriesTitle", label: "Title", ml: true }] },
+      { title: "Banner", fields: [{ t: "toggle", path: "home.banner.show", label: "Show the banner" }, { t: "text", path: "home.banner.title", label: "Title", ml: true }, { t: "textarea", path: "home.banner.text", label: "Text", hint: "Line breaks you type show on the site." },
         { t: "text", path: "home.banner.cta", label: "Button label (opens the portfolio page)" }, { t: "image", path: "home.banner.image", label: "Banner image" }] },
-      { title: "Customer reviews", fields: [{ t: "text", path: "home.testimonialsTitle", label: "Title" },
+      { title: "Customer reviews", fields: [{ t: "text", path: "home.testimonialsTitle", label: "Title", ml: true },
         { t: "list", path: "home.testimonials", add: () => ({ quote: "", name: "", role: "" }), max: 6, title: (it) => it.name || "Review",
           item: [{ t: "textarea", path: "quote", label: "Quote" }, g2({ t: "text", path: "name", label: "Name" }, { t: "text", path: "role", label: "Detail (city, product)" })] },
         { t: "note", text: "Only add reviews real customers gave you.", tone: "warn" }] },
@@ -81,20 +88,20 @@ const schema: Category[] = [
   {
     id: "shop", label: "Shop page", group: "Pages", desc: "The product listing page.",
     cards: [
-      { title: "Shop page", fields: [g2({ t: "text", path: "shop.title", label: "Title" }, { t: "select", path: "shop.sortDefault", label: "Default sort", options: [{ value: "featured", label: "Featured first" }, { value: "new", label: "Newest first" }, { value: "low", label: "Price: low to high" }, { value: "high", label: "Price: high to low" }] }),
+      { title: "Shop page", fields: [g2({ t: "text", path: "shop.title", label: "Title", ml: true }, { t: "select", path: "shop.sortDefault", label: "Default sort", options: [{ value: "featured", label: "Featured first" }, { value: "new", label: "Newest first" }, { value: "low", label: "Price: low to high" }, { value: "high", label: "Price: high to low" }] }),
         { t: "textarea", path: "shop.intro", label: "Intro" }, { t: "toggle", path: "shop.showSearch", label: "Show the search box" }, { t: "text", path: "shop.emptyText", label: "Text when nothing matches" }] },
     ],
   },
   {
     id: "portfolio", label: "Portfolio page", group: "Pages", desc: "Your story, numbers and past work, on its own page.",
     cards: [
-      { title: "Intro", fields: [g2({ t: "text", path: "portfolio.eyebrow", label: "Small label" }, { t: "text", path: "portfolio.title", label: "Title" }), { t: "textarea", path: "portfolio.intro", label: "Intro" }, { t: "image", path: "portfolio.image", label: "Image" }] },
-      { title: "Story", fields: [{ t: "text", path: "portfolio.storyTitle", label: "Title" }, { t: "textarea", path: "portfolio.story", label: "Story", rows: 6, hint: "Leave a blank line between paragraphs." }] },
+      { title: "Intro", fields: [g2({ t: "text", path: "portfolio.eyebrow", label: "Small label", ml: true }, { t: "text", path: "portfolio.title", label: "Title", ml: true }), { t: "textarea", path: "portfolio.intro", label: "Intro" }, { t: "image", path: "portfolio.image", label: "Image" }] },
+      { title: "Story", fields: [{ t: "text", path: "portfolio.storyTitle", label: "Title", ml: true }, { t: "textarea", path: "portfolio.story", label: "Story", rows: 6, hint: "Leave a blank line between paragraphs." }] },
       { title: "Numbers", fields: [{ t: "list", path: "portfolio.stats", add: () => ({ value: "10+", label: "Label" }), max: 4, title: (it) => `${it.value} ${it.label}`, item: [g2({ t: "text", path: "value", label: "Value" }, { t: "text", path: "label", label: "Label" })] }] },
-      { title: "Work", fields: [{ t: "text", path: "portfolio.workTitle", label: "Section title" },
+      { title: "Work", fields: [{ t: "text", path: "portfolio.workTitle", label: "Section title", ml: true },
         { t: "list", path: "portfolio.work", add: () => ({ title: "Project", text: "", tag: "", image: null, link: "" }), title: (it) => it.title || "Project",
           item: [g2({ t: "text", path: "title", label: "Title" }, { t: "text", path: "tag", label: "Tag" }), { t: "textarea", path: "text", label: "Description" }, { t: "image", path: "image", label: "Image" }, { t: "text", path: "link", label: "Link (optional)", check: "https" }] }] },
-      { title: "Call to action", fields: [{ t: "text", path: "portfolio.ctaTitle", label: "Title" }, { t: "textarea", path: "portfolio.ctaText", label: "Text" }, { t: "text", path: "portfolio.ctaButton", label: "Button label (opens the shop)" }] },
+      { title: "Call to action", fields: [{ t: "text", path: "portfolio.ctaTitle", label: "Title", ml: true }, { t: "textarea", path: "portfolio.ctaText", label: "Text" }, { t: "text", path: "portfolio.ctaButton", label: "Button label (opens the shop)" }] },
     ],
   },
   {
@@ -109,9 +116,9 @@ const schema: Category[] = [
   {
     id: "checkout", label: "Checkout", group: "Selling", desc: "What shoppers fill in and what they see after ordering.",
     cards: [
-      { title: "Form", fields: [g2({ t: "text", path: "checkout.title", label: "Page title" }, { t: "text", path: "checkout.button", label: "Order button label" }), { t: "textarea", path: "checkout.intro", label: "Intro" },
+      { title: "Form", fields: [g2({ t: "text", path: "checkout.title", label: "Page title", ml: true }, { t: "text", path: "checkout.button", label: "Order button label" }), { t: "textarea", path: "checkout.intro", label: "Intro" },
         g3({ t: "toggle", path: "checkout.askPhone", label: "Ask for phone" }, { t: "toggle", path: "checkout.askAddress", label: "Ask for address" }, { t: "toggle", path: "checkout.askNotes", label: "Ask for notes" })] },
-      { title: "After ordering", fields: [{ t: "text", path: "checkout.successTitle", label: "Title" }, { t: "textarea", path: "checkout.successText", label: "Text" }] },
+      { title: "After ordering", fields: [{ t: "text", path: "checkout.successTitle", label: "Title", ml: true }, { t: "textarea", path: "checkout.successText", label: "Text" }] },
     ],
   },
   {
@@ -177,7 +184,23 @@ const schema: Category[] = [
       { title: "Footer", fields: [{ t: "textarea", path: "footer.text", label: "Footer text" }] },
     ],
   },
+  adminCategory(),
 ];
+
+/** Defaults for settings added after a shop was made. */
+export const STORE_LABELS = { allProducts: "All products", viewAll: "View all", help: "Help", contact: "Contact" };
+export function prepareStore(c: any) {
+  if (!c || typeof c !== "object") return;
+  const t = c.theme && typeof c.theme === "object" ? c.theme : (c.theme = {});
+  if (!t.introBg) t.introBg = t.deep || t.text || "#111111";
+  if (!t.introFg) t.introFg = onColor(t.introBg);
+  if (t.introTitle === undefined) t.introTitle = "";
+  if (t.logoRadius === undefined || t.logoRadius === null) t.logoRadius = 26;
+  if (!t.scrollEase) t.scrollEase = "light";
+  if (!t.lineBreaks) t.lineBreaks = "typed";
+  c.labels = { ...STORE_LABELS, ...(c.labels && typeof c.labels === "object" ? c.labels : {}) };
+  c.cms = { adminPage: "admin", ...(c.cms && typeof c.cms === "object" ? c.cms : {}) };
+}
 
 /** Reads the payload of a Supabase key (a JWT) to catch a pasted service_role key. */
 function atobSafe(jwt: string): string {
@@ -207,6 +230,7 @@ export const storeTemplate: TemplateDef = {
   colorKeys: [{ key: "accent", label: "Accent" }, { key: "accent2", label: "Second accent" }, { key: "sale", label: "Sale" }, { key: "text", label: "Text" }, { key: "surface", label: "Cards" }],
   themePath: "theme",
   themeValues: storeThemeValues,
+  prepare: prepareStore,
   summary: (c) => `${(c?.products || []).length} products`,
   checks: (c) => {
     const w: string[] = [];

@@ -95,6 +95,13 @@ export class HttpError extends Error {
 
 // ---------------------------------------------------------------- site content (cached briefly)
 let contentCache: { at: number; data: any } | null = null;
+/** The shop CMS page's file name (content.cms.adminPage, same rules as Site Studio's adminSlug). */
+export function adminHtml(c: any): string {
+  const reserved = ["index", "404", "shop", "product", "cart", "checkout", "portfolio", "policies", "account", "content", "readme", "assets", "cms"];
+  const s = String(c?.cms?.adminPage ?? "").trim().toLowerCase().replace(/\.html?$/, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40);
+  return (s.length >= 2 && !reserved.includes(s) ? s : "admin") + ".html";
+}
+
 export async function siteContent(d: Deps): Promise<any> {
   if (contentCache && d.now().getTime() - contentCache.at < 60_000) return contentCache.data;
   const base = d.env("SITE_URL").replace(/\/?$/, "/");
@@ -160,7 +167,7 @@ async function notify(d: Deps, o: Order, kind: "paid" | "cod" | "awaiting" | "re
     const via = o.method === "paypal" ? "PayPal" : "UPI";
     await cust(`Payment reference received for order ${o.order_no}`, "We've got your payment reference", `Hi ${esc(o.name)}, thanks for paying <b>${esc(money(o.totals.total, o.currency))}</b> by ${via}. Your reference is <b>${esc(o.payment_ref)}</b>. We'll email you again as soon as we've confirmed it.`);
     if (own.length) {
-      const ok = await sendEmail(d, own, `Check ${via} payment for ${o.order_no}: ref ${o.payment_ref}`, wrap(shop, `Customer says they've paid by ${via}`, `<p style="font-size:15px"><b>${esc(o.name)}</b> reports paying <b>${esc(money(o.totals.total, o.currency))}</b> for order <b>${esc(o.order_no)}</b>.</p><p style="font-size:15px">Reference: <b style="font-family:monospace;font-size:17px">${esc(o.payment_ref)}</b></p><p style="font-size:14px">Find this reference in your ${via} app. If the amount matches, open <a href="${esc(site)}admin.html">the shop CMS → Orders</a> and tap <b>Mark paid</b>. You and the customer then get the confirmation email.</p>${orderTable(o)}`), o.email);
+      const ok = await sendEmail(d, own, `Check ${via} payment for ${o.order_no}: ref ${o.payment_ref}`, wrap(shop, `Customer says they've paid by ${via}`, `<p style="font-size:15px"><b>${esc(o.name)}</b> reports paying <b>${esc(money(o.totals.total, o.currency))}</b> for order <b>${esc(o.order_no)}</b>.</p><p style="font-size:15px">Reference: <b style="font-family:monospace;font-size:17px">${esc(o.payment_ref)}</b></p><p style="font-size:14px">Find this reference in your ${via} app. If the amount matches, open <a href="${esc(site + adminHtml(c))}">the shop CMS → Orders</a> and tap <b>Mark paid</b>. You and the customer then get the confirmation email.</p>${orderTable(o)}`), o.email);
       log.push({ at: d.now().toISOString(), what: "owner:reported", ok });
     }
   } else {

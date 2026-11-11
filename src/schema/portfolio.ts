@@ -198,6 +198,8 @@ export const portfolioTemplate: TemplateDef = {
     if (!t.introBg) t.introBg = t.deep || t.text || "#111111";
     if (!t.introFg) t.introFg = onColor(t.introBg);
     if (t.introTitle === undefined) t.introTitle = "";
+    if (!t.introFont) t.introFont = "display";
+    if (!t.introCase) t.introCase = "upper";
     if (t.logoRadius === undefined || t.logoRadius === null) t.logoRadius = 22;
     if (!t.scrollEase) t.scrollEase = "light";
     if (!t.lineBreaks) t.lineBreaks = "typed";

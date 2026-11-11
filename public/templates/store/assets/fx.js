@@ -103,7 +103,8 @@
     ".fx-load--split.out .fx-pt{transform:translateY(-101%)}",
     ".fx-load--split.out .fx-pb{transform:translateY(101%)}",
     ".fx-brand{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-size:clamp(28px,6vw,76px);font-weight:800;letter-spacing:.32em;text-transform:uppercase;white-space:nowrap;padding-left:.32em;transition:opacity .4s,letter-spacing 1.2s var(--fxe)}",
-    ".fx-brand span{display:inline-block;opacity:0;transform:translateY(60%);animation:fxup .7s var(--fxe) forwards}",
+    ".fx-brand span{display:inline-block;opacity:0;transform:translateY(60%)}",
+    ".fx-load.ready .fx-brand span{animation:fxup .7s var(--fxe) forwards}",
     ".fx-load.go .fx-brand{letter-spacing:.12em}",
     ".fx-load.out .fx-brand,.fx-load.out .fx-num,.fx-load.out .fx-bar{opacity:0}",
     ".fx-num{position:absolute;right:4vw;bottom:3vh;font-size:clamp(72px,18vw,240px);font-weight:800;line-height:.8;letter-spacing:-.04em;font-variant-numeric:tabular-nums;transition:opacity .3s}",
@@ -191,10 +192,26 @@
     if (kind === "counter") html += '<div class="fx-num">0<small>%</small></div><div class="fx-bar"></div>';
     var box = el("div", "fx-load fx-load--" + kind, html);
     box.style.setProperty("--fxd", c.deep); box.style.setProperty("--fxo", c.on);
+    // The name is set like the site's own headline (Intro screen → font): same family, weight and style.
+    var b = box.querySelector(".fx-brand");
+    if (b) {
+      var h = document.querySelector("main h1") || document.querySelector("h1");
+      if (doc.getAttribute("data-introfont") === "body") { b.style.fontFamily = "var(--fb, inherit)"; b.style.fontWeight = "700"; }
+      else if (h) { var cs = getComputedStyle(h); b.style.fontFamily = cs.fontFamily; b.style.fontWeight = cs.fontWeight; b.style.fontStyle = cs.fontStyle; }
+      if (doc.getAttribute("data-introcase") === "asis") b.style.textTransform = "none";
+    }
     document.body.appendChild(box);
-    var hold = kind === "counter" ? 1200 : 1050, done = false;
+    var hold = kind === "counter" ? 1200 : 1050, done = false, started = false;
     function out() { if (done) return; done = true; box.classList.add("out"); setTimeout(function () { box.remove(); }, 1100); }
-    requestAnimationFrame(function () { box.classList.add("go"); });
+    // Start once the font is ready (at most 800 ms), so the name never appears in a fallback font and then jumps.
+    function start() {
+      if (started) return; started = true;
+      box.classList.add("ready");
+      requestAnimationFrame(function () { box.classList.add("go"); });
+      if (kind !== "counter") setTimeout(out, hold);
+    }
+    if (b && document.fonts && document.fonts.load) { whenFont(b, String(brand || ""), start); setTimeout(start, 1000); }
+    else start();
     if (kind === "counter") {
       var n = box.querySelector(".fx-num"), bar = box.querySelector(".fx-bar"), s0 = performance.now();
       (function tick(now) {
@@ -202,8 +219,22 @@
         n.firstChild.nodeValue = String(Math.round(e * 100)); bar.style.transform = "scaleX(" + e + ")";
         if (p < 1) requestAnimationFrame(tick); else setTimeout(out, 120);
       })(s0);
-    } else setTimeout(out, hold);
-    setTimeout(out, 3500);
+    }
+    setTimeout(out, 4300);
+  }
+
+  /** Calls back once el's font has loaded. Waits for the font's stylesheet to arrive first: until it does,
+      document.fonts.load() resolves at once with nothing, and the text would show in a fallback font. */
+  function whenFont(el, text, cb) {
+    var cs = getComputedStyle(el), spec = cs.fontStyle + " " + cs.fontWeight + " 48px " + cs.fontFamily;
+    var fam = cs.fontFamily.split(",")[0].replace(/["']/g, "").trim(), t0 = Date.now();
+    (function poll() {
+      var has = false;
+      document.fonts.forEach(function (f) { if (f.family.replace(/["']/g, "") === fam) has = true; });
+      if (has) { document.fonts.load(spec, text).then(function () { cb(); }, cb); return; }
+      if (Date.now() - t0 > 900) return cb();
+      setTimeout(poll, 40);
+    })();
   }
 
   /* ---------------------------------------------------------------- text */

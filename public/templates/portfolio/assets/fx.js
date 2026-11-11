@@ -158,7 +158,7 @@
       ensureStyle();
       var x = pend.charAt(0) === "{" ? JSON.parse(pend) : { bg: pend };
       var kind = x.kind === "split" ? "split" : "curtain";
-      cover = el("div", "fx-load fx-cover fx-load--" + kind, panels(kind, x.brand));
+      cover = el("div", "fx-load fx-cover fx-load--" + kind, panels(kind, ""));
       cover.style.setProperty("--fxd", x.bg || "#111"); cover.style.setProperty("--fxo", x.fg || "#fff");
       (document.body || doc).appendChild(cover); coverAt = Date.now();
       setTimeout(function () { if (cover) revealCover(); }, 4000);
@@ -428,12 +428,12 @@
     if (u.origin !== location.origin || !/^https?:$/.test(u.protocol) || /admin\.html$/.test(u.pathname)) return;
     if (u.pathname === location.pathname && u.search === location.search) return;
     e.preventDefault();
-    var col = colors(), kind = c.loader === "split" ? "split" : "curtain", box = el("div", "fx-load fx-exit fx-load--" + kind, panels(kind, st.brand));
+    var col = colors(), kind = c.loader === "split" ? "split" : "curtain", box = el("div", "fx-load fx-exit fx-load--" + kind, panels(kind, ""));
     box.style.setProperty("--fxd", col.deep); box.style.setProperty("--fxo", col.on);
     document.body.appendChild(box);
     try { sessionStorage.setItem("fx-exit", JSON.stringify({ bg: col.deep, fg: col.on, kind: kind, brand: st.brand })); } catch (x) {}
     requestAnimationFrame(function () { requestAnimationFrame(function () { box.classList.add("in"); }); });
-    setTimeout(function () { location.href = u.href; }, st.brand ? 760 : 560);
+    setTimeout(function () { location.href = u.href; }, 560);
   }
   addEventListener("pageshow", function (e) { if (e.persisted) $$(".fx-exit").forEach(function (n) { n.remove(); }); });
 
@@ -485,7 +485,15 @@
 
     // entrance: page cover from the previous page, or the theme's loader
     var animate = !RM && (!PREVIEW || changed), delay = 0;
-    if (cover) { st.loaderPlayed = true; revealCover(); delay = 350; }
+    if (cover && c.loader !== "none" && !RM) {
+      // Arriving from another page of the site: the panels are already closed, so play the site's full intro
+      // (the name rises in letter by letter, then the panels open) exactly as on the first visit.
+      var cv = cover; cover = null; st.loaderPlayed = true;
+      playLoader(c.loader, opts.brand || document.title);
+      requestAnimationFrame(function () { requestAnimationFrame(function () { cv.remove(); }); });
+      delay = c.loader === "counter" ? 1250 : 950;
+    }
+    else if (cover) { st.loaderPlayed = true; revealCover(); delay = 350; }
     else if (c.loader !== "none" && !RM) {
       var play = PREVIEW ? c.loader !== st.loader : !st.loaderPlayed && Date.now() - T0 < 5000;
       if (play) { st.loaderPlayed = true; playLoader(c.loader, opts.brand || document.title); delay = c.loader === "counter" ? 1250 : 950; }

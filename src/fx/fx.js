@@ -131,7 +131,7 @@
     ".fx-now,.fx-now *{transition:none!important}",
     /* hover */
     ".fx-card{transition:transform .5s var(--fxe),box-shadow .5s var(--fxe),border-color .3s}",
-    "html:is([data-hoverfx=lift],[data-hoverfx=magnetic]) .fx-card:hover{transform:translateY(-6px);box-shadow:0 0 0 1px color-mix(in srgb,var(--fxa) 55%,transparent),0 26px 50px -26px rgba(0,0,0,.55)}",
+    "html:is([data-hoverfx=lift],[data-hoverfx=magnetic]) .fx-card:hover{transform:translateY(-6px)}",
     "html[data-hoverfx=tilt] .fx-tilt{transform-style:preserve-3d;transition:transform .6s var(--fxe)}",
     ".fx-glare{position:absolute;inset:0;border-radius:inherit;pointer-events:none;opacity:0;transition:opacity .4s;background:radial-gradient(420px circle at var(--gx,50%) var(--gy,50%),rgba(255,255,255,.28),transparent 45%);mix-blend-mode:overlay;z-index:3}",
     ".fx-tilt:hover>.fx-glare{opacity:1}",

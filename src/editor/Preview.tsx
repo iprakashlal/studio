@@ -105,6 +105,8 @@ function clickToEdit(doc: Document, live: Live) {
   const w = doc.defaultView as (Window & { __cte?: boolean }) | null;
   if (!w || w.__cte) return;
   w.__cte = true;
+  // Which upload each picture is (path → address), for checking click-to-edit in tests.
+  Object.defineProperty(w, "__cteAssets", { get: () => live.current.assets });
   let ui: HTMLElement | null = null, box: HTMLElement, chip: HTMLElement, cur: { el: Element; path?: string; cat?: string } | null = null, raf = 0;
   const build = () => {
     ui = doc.createElement("div"); ui.id = "cms-edit-ui";
@@ -122,16 +124,25 @@ function clickToEdit(doc: Document, live: Live) {
   /** The content section an element is in ("hero", "about"…), to prefer that section's values. */
   const sectionOf = (el: Element | null) => { const id = el?.closest("section[id], header[id], footer[id], [data-section]")?.getAttribute("data-section") || el?.closest("section[id], header[id], footer[id]")?.id || ""; return id === "top" ? "hero" : id; };
   const find = (el: Element | null): { el: Element; path?: string; cat?: string; label: string } | null => {
-    const L = live.current, prefer = sectionOf(el);
+    const L = live.current, prefer = sectionOf(el), region = el?.closest("[data-edit]");
     for (let n = el, d = 0; n && n !== doc.body && d < 7; n = n.parentElement, d++) {
       if (n.closest("#cms-edit-ui")) return null;
+      // A part that names its field (the hero graphic) wins over text further up around it.
+      if (n.hasAttribute("data-edit")) { const dp = n.getAttribute("data-edit") || "", dl = locateField(L.tpl.schema, dp, L.content); if (dl) return { el: n, path: dp, label: dl.trail.join(" → ") }; }
       let path: string | null = null;
       if (n.tagName === "IMG") path = matchImage(L.idx, (n as HTMLImageElement).getAttribute("src") || "", L.assets);
-      if (!path) { const t = n.textContent || ""; if (t.trim() && t.length < 700) path = matchText(L.idx, t, prefer); }
+      // Inside the hero graphic its words repeat your content: they belong to the graphic, not those fields.
+      if (!path && !(region && region !== n && region.contains(n))) { const t = n.textContent || ""; if (t.trim() && t.length < 700) path = matchText(L.idx, t, prefer); }
       if (path) {
         const loc = locateField(L.tpl.schema, path, L.content);
         if (loc) return { el: n, path, label: loc.trail.join(" → ") };
       }
+    }
+    // Parts of the page that name their field (the hero graphic, an empty portrait): data-edit="hero.graphic".
+    const named = el?.closest("[data-edit]");
+    if (named) {
+      const path = named.getAttribute("data-edit") || "", loc = locateField(L.tpl.schema, path, L.content);
+      if (loc) return { el: named, path, label: loc.trail.join(" → ") };
     }
     // Nothing editable right here: offer the page section it's in.
     const sec = el?.closest("section[id], header[id], footer[id], [data-section]");
@@ -164,34 +175,38 @@ function clickToEdit(doc: Document, live: Live) {
   let coarse = false;
   /** What's editable at a point: the text or picture there, else its page section. */
   const resolve = (x: number, y: number, target: EventTarget | null) => {
-    const el = (target as Element) || doc.elementFromPoint(x, y);
-    if (!el || !(el as Element).closest || (el as Element).closest("#cms-edit-ui")) return null;
-    let hit = find(el as Element);
-    // Text that lets the pointer through (big animated names) sits under the section it's in: find it by position.
-    if (!hit || !hit.path) {
-      const scope = (hit?.el || (el as Element).closest("section, header, footer, main") || doc.body) as Element;
-      let best: Element | null = null, area = Infinity;
-      for (const c of Array.from(scope.querySelectorAll("*"))) {
-        if (c.closest("#cms-edit-ui") || ![...c.childNodes].some((t) => t.nodeType === 3 && (t.textContent || "").trim())) continue;
-        const r = c.getBoundingClientRect();
-        if (x < r.left || x > r.right || y < r.top || y > r.bottom) continue;
-        if (r.width * r.height < area) { area = r.width * r.height; best = c; }
-      }
-      const h2 = best && find(best);
-      if (h2 && h2.path) hit = h2;
+    const el = ((target as Element) || doc.elementFromPoint(x, y)) as Element;
+    if (!el || !el.closest || el.closest("#cms-edit-ui")) return null;
+    const ownText = (e: Element) => [...e.childNodes].some((t) => t.nodeType === 3 && (t.textContent || "").trim());
+    // Layout size, so hover zooms (a card photo scaling up) don't change which is smaller.
+    const area = (e: Element) => { const h = e as HTMLElement; if (h.offsetWidth !== undefined) return h.offsetWidth * h.offsetHeight; const r = e.getBoundingClientRect(); return r.width * r.height; };
+    const inside = (e: Element) => { const r = e.getBoundingClientRect(); return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom && r.width > 4 && r.height > 4; };
+    // Inside a part that names its field (the hero graphic, whose terminal or chart repeats your words), that field.
+    const named = el.closest("[data-edit]");
+    if (named && ownText(el)) { const dp = named.getAttribute("data-edit") || "", dl = locateField(live.current.tpl.schema, dp, live.current.content); if (dl) return { el: named, path: dp, label: dl.trail.join(" → ") }; }
+    // Text (or a picture) right under the pointer: that's it.
+    const direct = ownText(el) || el.tagName === "IMG" ? find(el) : null;
+    if (direct && direct.path) return direct;
+    // A blank or decorative spot: compare what's there — pictures (also under layers that ignore the pointer),
+    // text that lets the pointer through (big animated names), and parts that name their field — smallest wins.
+    const L = live.current, cands: NonNullable<ReturnType<typeof find>>[] = [];
+    const up = find(el);
+    if (up && up.path) cands.push(up);
+    for (const im of Array.from(doc.images)) {
+      if (!inside(im)) continue;
+      const path = matchImage(L.idx, im.getAttribute("src") || "", L.assets);
+      const loc = path && locateField(L.tpl.schema, path, L.content);
+      if (loc) cands.push({ el: im, path: path!, label: loc.trail.join(" → ") });
     }
-    // Pictures can sit under decorations that ignore the pointer (the hero disc): check images under the point too.
-    if (!hit || !hit.path) {
-      const L = live.current;
-      for (const im of Array.from(doc.images)) {
-        const r = im.getBoundingClientRect();
-        if (x < r.left || x > r.right || y < r.top || y > r.bottom || r.width < 8) continue;
-        const path = matchImage(L.idx, im.getAttribute("src") || "", L.assets);
-        const loc = path && locateField(L.tpl.schema, path, L.content);
-        if (loc) { hit = { el: im, path: path!, label: loc.trail.join(" → ") }; break; }
-      }
-    }
-    return hit;
+    const scope = (el.closest("section, header, footer, main") || doc.body) as Element;
+    let best: Element | null = null;
+    for (const c of Array.from(scope.querySelectorAll("*"))) if (!c.closest("#cms-edit-ui") && ownText(c) && inside(c) && (!best || area(c) < area(best))) best = c;
+    const byPos = best && find(best);
+    if (byPos && byPos.path) cands.push(byPos);
+    // Same size (a photo filling its card): the picture wins, as the card's text can be pointed at directly.
+    const score = (h: NonNullable<ReturnType<typeof find>>) => area(h.el) * (h.el.tagName === "IMG" ? 0.98 : 1);
+    if (cands.length) return cands.sort((a, b) => score(a) - score(b))[0];
+    return up; // only the page section
   };
   const at = (x: number, y: number, target: EventTarget | null) => {
     if (!live.current.editOn) return hide();

@@ -109,7 +109,10 @@ const ppOk = (v) => /^[A-Za-z0-9]{1,40}$/.test(String(v || "").trim());
 const httpsOk = (u) => /^https:\/\/[^\s]+$/i.test(String(u || "").trim());
 const digits = (v) => String(v || "").replace(/\D/g, "");
 let ASSETS = {};
-const imgUrl = (img) => (!img ? "" : img.path ? ASSETS[img.path] || img.path : img.url || "");
+// Hosted outside GitHub: the Studio adds a "site-host" JSON script tag saying where the live content and photos are.
+const HOST = (() => { try { const e = document.getElementById("site-host"); return e ? JSON.parse(e.textContent) : null; } catch (e) { return null; } })();
+const hostPhoto = (p) => (HOST && /^assets\/uploads\//.test(p) ? HOST.assets + p.split("/").map(encodeURIComponent).join("/") : p);
+const imgUrl = (img) => (!img ? "" : img.path ? ASSETS[img.path] || hostPhoto(img.path) : img.url || "");
 const basePath = location.pathname.replace(/[^/]*$/, "");
 let C = merge(DEFAULT, {});
 const PAGE = document.body.dataset.page || "home";
@@ -848,7 +851,10 @@ else {
   let shown = "";
   try { const c = sessionStorage.getItem(CKEY); if (c) { C = merge(DEFAULT, JSON.parse(c)); render(); shown = c; } } catch (e) {}
   const giveUp = setTimeout(() => { if (!shown) { render(); shown = "default"; } }, 6000);
-  fetch("content.json", { cache: "no-store" }).then((r) => (r.ok ? r.text() : null)).then((txt) => {
+  const fromFile = () => fetch("content.json", { cache: "no-store" }).then((r) => (r.ok ? r.text() : null));
+  const fromDb = () => fetch(HOST.db + "/rest/v1/site_content?select=content&site=eq." + encodeURIComponent(HOST.site), { cache: "no-store", headers: { apikey: HOST.key, Authorization: "Bearer " + HOST.key } })
+    .then((r) => (r.ok ? r.json() : null)).then((j) => (j && j[0] && j[0].content ? JSON.stringify(j[0].content) : null)).catch(() => null).then((t) => t || fromFile());
+  (HOST ? fromDb() : fromFile()).then((txt) => {
     clearTimeout(giveUp);
     if (!txt) { if (!shown) render(); return; }
     try { sessionStorage.setItem(CKEY, txt); } catch (e) {}

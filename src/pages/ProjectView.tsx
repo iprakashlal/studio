@@ -6,6 +6,8 @@ import type { ProjectMeta, PublishTarget, Studio, StudioIndex, ExportRec } from 
 import { buildSite, downloadBlob, loadDefaults, publishSite, zipName, zipSite } from "../lib/exporter";
 import { adminFile } from "../schema/common";
 import { clone, fmtDate, merge, slugify, timeAgo } from "../lib/util";
+import { siteAddress, siteRepoFor } from "../lib/hosting";
+import { HostDialog } from "./HostDialog";
 import { Editor } from "../editor/Editor";
 import { Preview } from "../editor/Preview";
 import { BackupPanel } from "../editor/BackupPanel";
@@ -22,11 +24,11 @@ export function ProjectView({ studio, index, project, session, onIndex }: { stud
   const [savedV, setSavedV] = useState(0);
   const [saving, setSaving] = useState(false);
   const [pane, setPane] = useState<"edit" | "preview">("edit");
-  const [modal, setModal] = useState<"" | "export" | "publish" | "history" | "details">("");
+  const [modal, setModal] = useState<"" | "export" | "publish" | "host" | "history" | "details">("");
   const defaults = useRef<any>(null);
   const [conflict, setConflict] = useState<{ siteAt: string | null } | null>(null);
   const [syncBusy, setSyncBusy] = useState(false);
-  const site = useMemo(() => (project.publish && !studio.repo.demo ? new GitHubRepo(project.publish, session.token) : null), [project.publish?.owner, project.publish?.repo, project.publish?.branch, session.token]);
+  const site = useMemo(() => (studio.repo.demo ? null : siteRepoFor(project, session.token)), [project.publish?.owner, project.publish?.repo, project.publish?.branch, project.host?.siteId, project.host?.sb.url, session.token]);
 
   useEffect(() => {
     let live = true;
@@ -152,7 +154,12 @@ export function ProjectView({ studio, index, project, session, onIndex }: { stud
           </div>
           <button type="button" className="btn btn-sm" onClick={() => setModal("history")}>History{project.exports.length ? ` (${project.exports.length})` : ""}</button>
           <button type="button" className="btn btn-sm" onClick={() => setModal("export")}>Export ZIP</button>
-          <button type="button" className="btn btn-sm" onClick={() => setModal("publish")}>Publish to GitHub</button>
+          {project.host
+            ? <button type="button" className="btn btn-sm" onClick={() => setModal("host")}>Publish to Netlify</button>
+            : <>
+              <button type="button" className="btn btn-sm" onClick={() => setModal("publish")}>Publish to GitHub</button>
+              <button type="button" className="btn btn-sm" onClick={() => setModal("host")} title="Move the site to Netlify hosting, with content and photos in Supabase, and your own domain">Host outside GitHub</button>
+            </>}
           <button type="button" className="btn btn-pri btn-sm" disabled={!dirty || saving} onClick={() => save()}>Save</button>
         </div>
       </header>
@@ -176,6 +183,7 @@ export function ProjectView({ studio, index, project, session, onIndex }: { stud
 
       {modal === "export" && <ExportDialog {...{ studio, project, tpl, draft, dirty, save, onIndex, getBlob }} onClose={() => setModal("")} />}
       {modal === "publish" && <PublishDialog {...{ studio, project, tpl, draft, dirty, save, onIndex, getBlob, session }} onClose={() => setModal("")} />}
+      {modal === "host" && <HostDialog {...{ studio, project, tpl, draft, dirty, save, onIndex, getBlob, session }} onClose={() => setModal("")} />}
       {modal === "history" && <HistoryDialog {...{ studio, project, tpl, getBlob }} onLoad={(c) => { replaceDraft(c); setModal(""); toast("Loaded into the editor. Save to keep it."); }} onClose={() => setModal("")} />}
       {modal === "details" && <DetailsDialog {...{ studio, index, project, session, onIndex }} onImported={(c) => { replaceDraft(c); setSavedV(v + 1); }} onClose={() => setModal("")} />}
     </div>
@@ -319,7 +327,7 @@ function HistoryDialog({ studio, project, tpl, getBlob, onLoad, onClose }: Omit<
             <li key={e.version + e.at} className="flex flex-wrap items-center gap-3 rounded-xl border border-ink-700 bg-ink-950 px-4 py-3">
               <span className="font-display text-lg font-extrabold tabular-nums">v{e.version}</span>
               <div className="min-w-0 flex-1">
-                <div className="text-sm font-semibold">{e.kind === "github" ? `Published to ${e.target}` : "ZIP download"}{e.note ? ` · ${e.note}` : ""}</div>
+                <div className="text-sm font-semibold">{e.kind === "github" ? `Published to ${e.target}` : e.kind === "netlify" ? `Published to Netlify (${e.target})` : "ZIP download"}{e.note ? ` · ${e.note}` : ""}</div>
                 <div className="text-xs text-ink-400" title={fmtDate(e.at)}>{fmtDate(e.at)} · {timeAgo(e.at)}</div>
               </div>
               <button className="btn btn-sm" disabled={!!busy} onClick={() => act(e, "zip")}>{busy === e.version ? "Working…" : "Download"}</button>
@@ -362,11 +370,11 @@ function DetailsDialog({ studio, index, project, session, onIndex, onImported, o
     } catch (e) { toast(explain(e), "bad"); setBusy(""); }
   };
   const importSite = async () => {
-    if (!project.publish) return;
+    if (!project.publish && !project.host) return;
     if (!(await confirm("Pull content from the live site?", "This replaces the Studio's copy of the content with what's live on the site now, including edits made in the site's own CMS.", "Pull"))) return;
     setBusy("import");
     try {
-      const r = await studio.importFromSite(project.id, new GitHubRepo(project.publish, session.token));
+      const r = await studio.importFromSite(project.id, siteRepoFor(project, session.token)!);
       onIndex(r.index);
       onImported(r.content);
       toast(r.missing.length ? `Imported. ${r.missing.length} image(s) weren't found on the site.` : "Imported from the site");
@@ -384,9 +392,9 @@ function DetailsDialog({ studio, index, project, session, onIndex, onImported, o
       <Field label="Notes" htmlFor="d-notes"><textarea id="d-notes" className="input min-h-[80px]" value={f.notes} onChange={(e) => setF({ ...f, notes: e.target.value })} /></Field>
       <div className="rounded-xl border border-ink-700 bg-ink-950 p-4 text-sm">
         <div className="font-bold">Published site</div>
-        {project.publish ? (
+        {project.publish || project.host ? (
           <>
-            <p className="mt-1 text-ink-300">{project.publish.owner}/{project.publish.repo} on {project.publish.branch}</p>
+            <p className="mt-1 text-ink-300">{project.host ? <>Netlify: <a className="underline" href={siteAddress(project.host)} target="_blank" rel="noopener">{siteAddress(project.host)}</a> · content in Supabase</> : <>{project.publish!.owner}/{project.publish!.repo} on {project.publish!.branch}</>}</p>
             <p className="hint mt-2">Kept in step automatically: edits published from the site's own CMS come into this project when you open the Studio or this project{project.syncedAt ? ` (last in step ${timeAgo(project.syncedAt)})` : ""}. If both sides changed, you choose which to keep.</p>
             <button type="button" className="btn btn-sm mt-3" disabled={!!busy || studio.repo.demo} onClick={importSite}>{busy === "import" ? "Importing…" : "Pull from the live site now"}</button>
           </>

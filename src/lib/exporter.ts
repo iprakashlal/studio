@@ -9,6 +9,7 @@ import { bytesB64 } from "./repo";
 import { blobToBytes, collectAssetPaths, getP, textToBytes } from "./util";
 import { adminFile } from "../schema/common";
 import { bakeHead, storePageLabel } from "./head";
+import { assetBase, cleanUrl, type SbCfg } from "./supa";
 
 export type SiteFile = { path: string; data: Uint8Array };
 /** `when` lists files exported only if every given content path is switched on. */
@@ -61,6 +62,8 @@ export async function buildSite(opts: {
   base?: string;
   /** Image paths the target already has. Upload names are unique, so these are left as they are instead of re-sent. */
   keep?: Set<string>;
+  /** Hosted outside GitHub: pages load the content and photos from this Supabase project. */
+  host?: SbCfg;
 }): Promise<{ files: SiteFile[]; warnings: string[]; admin: string }> {
   const { template, content } = opts;
   const m = await loadManifest(template.id);
@@ -75,7 +78,8 @@ export async function buildSite(opts: {
   for (const f of [...m.files, ...optional]) {
     let data = await fetchBytes(`templates/${template.id}/${f}`);
     if (f.endsWith(".html") && f !== "admin.html" && f !== "404.html")
-      data = textToBytes(bakeHead(new TextDecoder().decode(data), hc, { file: f, label: template.id === "store" ? storePageLabel(f, hc) : "", base: opts.base, bg: hc?.theme?.bg }));
+      data = textToBytes(bakeHead(new TextDecoder().decode(data), hc, { file: f, label: template.id === "store" ? storePageLabel(f, hc) : "", base: opts.base, bg: hc?.theme?.bg, assets: opts.host ? assetBase(opts.host) : undefined }));
+    if (opts.host && f.endsWith(".html")) data = textToBytes(hostTag(new TextDecoder().decode(data), opts.host));
     if (f.endsWith(".md") && admin !== "admin.html") data = textToBytes(new TextDecoder().decode(data).replace(/\badmin\.html\b/g, admin));
     files.push({ path: f === "admin.html" ? admin : f, data });
   }
@@ -92,10 +96,10 @@ export async function buildSite(opts: {
       catch { warnings.push("The PDF reader for Import from LinkedIn is missing from this Studio build; the data export ZIP still works."); break; }
     }
   }
-  files.push({ path: ".nojekyll", data: new Uint8Array() });
+  if (!opts.host) files.push({ path: ".nojekyll", data: new Uint8Array() });
   files.push({
     path: "cms/site.json",
-    data: textToBytes(JSON.stringify({ template: template.id, name: opts.name, version: opts.version, admin, exportedAt: new Date().toISOString(), generator: "Site Studio" }, null, 2)),
+    data: textToBytes(JSON.stringify({ template: template.id, name: opts.name, version: opts.version, admin, exportedAt: new Date().toISOString(), generator: "Site Studio", ...(opts.host ? { host: { kind: "supabase", url: cleanUrl(opts.host.url), key: opts.host.key, site: opts.host.site } } : {}) }, null, 2)),
   });
   if (opts.includeContent) {
     files.push({ path: "content.json", data: textToBytes(JSON.stringify(content, null, 2)) });
@@ -107,6 +111,14 @@ export async function buildSite(opts: {
     }
   }
   return { files, warnings, admin };
+}
+
+/** Tells the pages where the live content and photos are (the key is the public anon key). */
+export function hostTag(html: string, sb: SbCfg): string {
+  const cfg = JSON.stringify({ db: cleanUrl(sb.url), key: sb.key, site: sb.site, assets: assetBase(sb) }).replace(/</g, "\\u003c");
+  const tag = `<script id="site-host" type="application/json">${cfg}</script>`;
+  html = html.replace(/<script id="site-host" type="application\/json">[^<]*<\/script>\n?/, "");
+  return /<head[^>]*>/i.test(html) ? html.replace(/<head[^>]*>/i, (m) => `${m}\n${tag}`) : tag + html;
 }
 
 export async function zipSite(files: SiteFile[]): Promise<Blob> {

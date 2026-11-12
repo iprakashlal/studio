@@ -9,8 +9,9 @@ import type { Repo } from "./repo";
 import { jsonB64, bytesB64 } from "./repo";
 import { blobToBytes, collectAssetPaths, safeFileName, uid } from "./util";
 import { TEMPLATES } from "../schema";
+import type { HostCfg } from "./supa";
 
-export type ExportRec = { version: number; at: string; kind: "zip" | "github"; note: string; target?: string };
+export type ExportRec = { version: number; at: string; kind: "zip" | "github" | "netlify"; note: string; target?: string };
 export type PublishTarget = { owner: string; repo: string; branch: string };
 export type ProjectMeta = {
   id: string;
@@ -26,6 +27,8 @@ export type ProjectMeta = {
   summary?: string;
   exports: ExportRec[];
   publish?: PublishTarget;
+  /** Hosted outside GitHub (Netlify + Supabase). When set, this is the live site the Studio keeps in step with. */
+  host?: HostCfg;
   /** When the Studio's copy of the content last changed (saves and imports). */
   contentAt?: string;
   /** content.json's blob sha on the live site when the two were last in step, and when that was. */
@@ -48,8 +51,8 @@ const now = () => new Date().toISOString();
 
 export class Studio {
   constructor(readonly repo: Repo) {}
-  /** Opens a project's live-site repository (set by the workspace, which holds the token). */
-  siteRepo: ((t: PublishTarget) => Repo) | null = null;
+  /** Opens a project's live site (set by the workspace, which holds the token): GitHub, or Supabase when hosted outside it. */
+  siteRepo: ((p: ProjectMeta) => Repo | null) | null = null;
   private lastIndex: StudioIndex | null = null;
 
   async loadIndex(): Promise<StudioIndex> {
@@ -122,8 +125,9 @@ export class Studio {
   async assetBlob(id: string, path: string): Promise<Blob | null> {
     const b = await this.repo.getRaw(`projects/${id}/${path}`);
     if (b) return b;
-    const t = this.lastIndex?.projects.find((x) => x.id === id)?.publish;
-    return t && this.siteRepo ? this.siteRepo(t).getRaw(path).catch(() => null) : null;
+    const p = this.lastIndex?.projects.find((x) => x.id === id);
+    const site = p && this.siteRepo ? this.siteRepo(p) : null;
+    return site ? site.getRaw(path).catch(() => null) : null;
   }
 
   async duplicate(id: string, name: string): Promise<StudioIndex> {
@@ -137,7 +141,7 @@ export class Studio {
       const b = await this.assetBlob(id, p);
       if (b) files.push({ path: `projects/${nid}/${p}`, base64: bytesB64(await blobToBytes(b)) });
     }
-    const copy: ProjectMeta = { ...src, id: nid, name, status: "draft", version: 0, exports: [], publish: undefined, createdAt: now(), updatedAt: now() };
+    const copy: ProjectMeta = { ...src, id: nid, name, status: "draft", version: 0, exports: [], publish: undefined, host: undefined, createdAt: now(), updatedAt: now() };
     return this.updateIndex((i) => i.projects.unshift(copy), `Duplicate ${src.name}`, files);
   }
 
@@ -146,7 +150,7 @@ export class Studio {
     return this.updateIndex((i) => (i.projects = i.projects.filter((p) => p.id !== id)), "Delete project", [], paths);
   }
 
-  async recordExport(id: string, rec: Omit<ExportRec, "version" | "at">, content: any, status: ProjectMeta["status"], publish?: PublishTarget, siteSha?: string): Promise<{ index: StudioIndex; version: number }> {
+  async recordExport(id: string, rec: Omit<ExportRec, "version" | "at">, content: any, status: ProjectMeta["status"], publish?: PublishTarget, siteSha?: string, host?: HostCfg): Promise<{ index: StudioIndex; version: number }> {
     let version = 0;
     const idx0 = await this.loadIndex();
     const m0 = idx0.projects.find((x) => x.id === id);
@@ -160,6 +164,7 @@ export class Studio {
         m.exports = m.exports.slice(0, 50);
         if (status === "published" || m.status !== "published") m.status = status;
         if (publish) m.publish = publish;
+        if (host) m.host = host;
         m.updatedAt = now();
         // Published with content: the site and the Studio now hold the same content.
         if (siteSha) { m.siteSha = siteSha; m.syncedAt = m.updatedAt; }

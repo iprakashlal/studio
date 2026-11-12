@@ -1,5 +1,9 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { TemplateDef } from "../schema/types";
+import { STUDIO_BUILD } from "../build-info";
+
+/** The template page for this Studio build, so a Studio update never previews a cached older template. */
+const pageUrl = (base: string, file: string, r = 0) => `${base}${file}?v=${STUDIO_BUILD.id}${r ? `&r=${r}` : ""}`;
 
 // The template pages run in an iframe named "cms-preview". They announce themselves with
 // { type: "cms:ready", page } and render whatever { type: "cms:content" } we send back.
@@ -15,7 +19,7 @@ export function Preview({ tpl, base, content, version, assets }: { tpl: Template
   const box = useRef<HTMLDivElement>(null);
   const [device, setDevice] = useState<(typeof DEVICES)[number]["id"]>("desktop");
   const [page, setPage] = useState(tpl.pages[0].file);
-  const [src, setSrc] = useState(base + tpl.pages[0].file);
+  const [src, setSrc] = useState(pageUrl(base, tpl.pages[0].file));
   const [size, setSize] = useState({ w: 600, h: 600 });
   const latest = useRef({ content, assets });
   latest.current = { content, assets };
@@ -54,7 +58,7 @@ export function Preview({ tpl, base, content, version, assets }: { tpl: Template
   const scale = Math.min(1, (size.w - 24) / dw);
   const go = (file: string) => {
     setPage(file);
-    setSrc(base + file + (src.endsWith(file) ? `?r=${Date.now()}` : ""));
+    setSrc(pageUrl(base, file, file === page ? Date.now() : 0));
   };
 
   return (

@@ -1,4 +1,5 @@
 import { BrandMark, useBrand } from "../lib/brand";
+import { STUDIO_BUILD } from "../build-info";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { THEMES, THEME_TAGS, portfolioThemeValues, storeThemeValues, type Theme } from "../themes/catalog";
 import { ThemeSwatch } from "../themes/ThemeGallery";
@@ -199,7 +200,7 @@ function HoverPreview({ kind, sample, theme, rect, onEnter, onLeave }: { kind: K
         <b className="truncate">{theme.name}</b><span className="ml-auto text-ink-400">Click the card to open</span>
       </div>
       <div className="relative overflow-hidden bg-white" style={{ height: H - 36 }}>
-        <iframe ref={ref} key={kind} name="cms-preview" title={`${theme.name} preview`} src={`templates/${kind}/index.html`} tabIndex={-1}
+        <iframe ref={ref} key={kind} name="cms-preview" title={`${theme.name} preview`} src={`templates/${kind}/index.html?v=${STUDIO_BUILD.id}`} tabIndex={-1}
           className="pointer-events-none absolute left-0 top-0 origin-top-left border-0" style={{ width: 1280, height: (H - 36) / scale, transform: `scale(${scale})` }} />
       </div>
     </div>

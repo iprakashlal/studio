@@ -10,7 +10,7 @@ export const HERO_GRAPHICS: [string, string][] = [
   ["elements", "Floating elements (theme pack / 3D)"], ["orb", "Glossy orb with ring"], ["rings", "Orbit rings with initials"],
   ["dots", "Interactive dot wave"], ["blob", "Morphing gradient blob"], ["monogram", "Giant monogram with text badge"],
   ["cards", "Fanned work cards"], ["terminal", "Terminal typing about you"], ["chart", "Highlights as a live chart"],
-  ["photo", "Arch photo with spinning badge"], ["lines", "Flowing line waves"],
+  ["photo", "Arch picture with spinning badge"], ["lines", "Flowing line waves"],
 ];
 const SOLIDS: [string, string][] = [["sphere", "Sphere · element 1"], ["cube", "Cube · element 2"], ["pyramid", "Pyramid · element 3"], ["octahedron", "Octahedron · element 4"], ["torus", "Torus · element 5"], ["icosahedron", "Icosahedron · element 6"], ["cylinder", "Cylinder · element 8"]];
 const FONTS_D = DISPLAY_FONTS;
@@ -27,7 +27,7 @@ const schema: Category[] = [
   },
   {
     id: "velocity", label: "Velocity layout", group: "Design", showIf: (c) => c?.theme?.layout === "velocity" && (!c?.theme?.kit || c.theme.kit === "classic"),
-    desc: "Shown while Hero layout is Velocity and Page layout is Classic. Everything only the Velocity layout shows. Your name, photo, About, Work, Projects, Skills, Learning and Contact come from their usual sections.",
+    desc: "Shown while Hero layout is Velocity and Page layout is Classic. Everything only the Velocity layout shows. Your name, picture, About, Work, Projects, Skills, Learning and Contact come from their usual sections.",
     cards: [
       { title: "Header & intro", fields: [
         g2({ t: "text", path: "velocity.status", label: "Status next to the logo", hint: "Leave empty to hide" }, { t: "text", path: "velocity.menuLabel", label: "Menu button label" }),
@@ -35,7 +35,7 @@ const schema: Category[] = [
         g3({ t: "toggle", path: "velocity.preloader", label: "Loading counter" }, { t: "toggle", path: "velocity.cursor", label: "Custom cursor" }, { t: "toggle", path: "velocity.marquee", label: "Lime word band" }),
         { t: "note", text: "The word band uses the words from Brand & theme → Scrolling skills band." }] },
       { title: "Portrait & signature", fields: [
-        { t: "note", text: "The portrait is your photo from Hero. Without a photo, a 3D wireframe shape is shown instead." },
+        { t: "note", text: "The portrait is your hero picture: Brand & theme → Logo icon (or its different image for the disc), when it's shown on the hero. Without one, a 3D wireframe shape is shown instead." },
         { t: "select", path: "velocity.portraitShape", label: "Portrait frame", options: [{ value: "arch", label: "Arch" }, { value: "circle", label: "Circle" }, { value: "square", label: "Rounded square" }, { value: "cutout", label: "No frame (for a cut-out PNG)" }] },
         g2({ t: "text", path: "velocity.signature", label: "Signature text", hint: "Empty uses your first name" }, { t: "select", path: "velocity.signatureFont", label: "Signature style", options: ["Great Vibes", "Caveat", "Permanent Marker"] }),
         { t: "image", path: "velocity.signatureImage", label: "Or upload your real signature", hint: "Transparent PNG or SVG works best. It replaces the signature text." }] },
@@ -85,9 +85,9 @@ const schema: Category[] = [
       { title: "Logo icon", fields: [
         { t: "image", path: "brand.icon", label: "Logo icon", hint: "A square image works best (PNG, SVG or JPG). Its corners follow the logo shape under Shape & effects. It also becomes the browser tab icon." },
         { t: "toggle", path: "brand.iconInMenu", label: "Show the icon in the menu, before your name" },
-        { t: "toggle", path: "brand.iconOnHero", label: "Show the icon on a disc on the right side of the hero" },
+        { t: "toggle", path: "brand.iconOnHero", label: "Show it on the hero as your picture (a disc on the right; also the Velocity portrait and Arch picture graphic)" },
         { t: "when", path: "brand.iconOnHero", is: "true", fields: [
-          { t: "image", path: "hero.discImage", label: "Different image for the disc (optional)", hint: "Leave empty to use the logo icon." },
+          { t: "image", path: "hero.discImage", label: "Different image for the hero, e.g. your photo (optional)", hint: "Leave empty to use the logo icon." },
           g2({ t: "select", path: "hero.discRim", label: "Disc rim colour", options: [{ value: "theme", label: "Theme colours (mixed)" }, { value: "c1", label: "Primary" }, { value: "c2", label: "Secondary" }, { value: "c3", label: "Tertiary" }, { value: "text", label: "Text colour" }, { value: "surface", label: "Surface" }, { value: "deep", label: "Deep" }] },
             { t: "select", path: "hero.discSize", label: "Disc size", options: [{ value: "s", label: "Small" }, { value: "m", label: "Medium" }, { value: "l", label: "Large" }] }),
           { t: "toggle", path: "hero.discMotion", label: "Float, tilt and spin the rim" },
@@ -119,14 +119,12 @@ const schema: Category[] = [
     cards: [{ title: "LinkedIn profile", fields: [{ t: "linkedin" }] }],
   },
   {
-    id: "hero", label: "Hero", group: "Content", desc: "The first screen: name, role, buttons, photo and the 3D shapes.",
+    id: "hero", label: "Hero", group: "Content", desc: "The first screen: name, role, buttons, highlights and the hero graphic. Your picture is set in Brand & theme → Logo icon.",
     cards: [
       { title: "Text", fields: [{ t: "text", path: "hero.eyebrow", label: "Badge above name", ml: true }, g2({ t: "text", path: "hero.firstName", label: "First line of name" }, { t: "text", path: "hero.lastName", label: "Second line of name" }),
         { t: "textarea", path: "hero.role", label: "Intro line", hint: "Wrap words in *asterisks* to highlight them." }] },
       { title: "Buttons", fields: [g2({ t: "text", path: "hero.ctaPrimary", label: "Main button label" }, { t: "select", path: "hero.ctaPrimaryTarget", label: "Main button scrolls to", options: Object.entries(SECTION_NAMES).map(([value, label]) => ({ value, label })) },
         { t: "text", path: "hero.ctaSecondary", label: "Second button label" }, { t: "text", path: "hero.ctaSecondaryUrl", label: "Second button link" })] },
-      { title: "Photo", fields: [{ t: "image", path: "hero.photo", label: "Profile photo, shown on the 3D cube" }, { t: "select", path: "hero.photoShape", label: "Photo shape on the cube", options: ["circle", "square", "hexagon", "diamond"] },
-        { t: "note", text: "With plain geometric shapes, the photo goes on the first cube in the 3D shapes, framed in that cube's colour. With an element pack (Design → Element pack), or with no cube, it shows as a framed picture next to the illustrated elements." }] },
       { title: "Highlights under the buttons", fields: [{ t: "list", path: "hero.meta", add: () => ({ value: "New", label: "Label" }), max: 5, title: (it) => `${it.value} · ${it.label}`, item: [g2({ t: "text", path: "value", label: "Value" }, { t: "text", path: "label", label: "Label" })] }] },
       { title: "Hero graphic", fields: [{ t: "select", path: "hero.graphic", label: "Graphic beside the name", options: HERO_GRAPHICS.map(([value, label]) => ({ value, label })) },
         { t: "note", text: "Every graphic is drawn in the theme's colours, so it suits any theme. Floating elements uses the list below; the others are built from your name, work, skills and highlights." }] },
@@ -226,6 +224,12 @@ export const portfolioTemplate: TemplateDef = {
   prepare: (c) => {
     if (!c || typeof c !== "object") return;
     if (c.hero && typeof c.hero === "object" && !c.hero.graphic) c.hero.graphic = "elements";
+    // Hero → Photo was replaced by the logo icon / disc image (Brand & theme): an existing photo moves to the disc.
+    if (c.hero && c.hero.photo) {
+      if (!c.hero.discImage) c.hero.discImage = c.hero.photo;
+      c.brand ||= {}; c.brand.iconOnHero = true;
+      c.hero.photo = null;
+    }
     const v = (c.velocity && typeof c.velocity === "object") ? c.velocity : (c.velocity = {});
     for (const [k, val] of Object.entries(VELOCITY_DEFAULTS)) if (v[k] === undefined) v[k] = JSON.parse(JSON.stringify(val));
     const t = c.theme && typeof c.theme === "object" ? c.theme : (c.theme = {});

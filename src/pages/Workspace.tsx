@@ -5,6 +5,8 @@ import { Studio, type StudioIndex } from "../lib/studio";
 import { siteRepoFor } from "../lib/hosting";
 import { AccountPanel } from "../ui/gate";
 import { NetlifyAccount } from "./HostDialog";
+import { GitHubPublishAccount } from "./GitHubAccount";
+import { ghPublish } from "../lib/ghpublish";
 import { Field, Logo, Spinner, useToast } from "../ui/kit";
 import { BrandMark, DEFAULT_NAME, brand as currentBrand, setBrand, shrinkImage, useBrand } from "../lib/brand";
 import { Dashboard } from "./Dashboard";
@@ -35,7 +37,8 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
     setErr("");
     studio.loadIndex().then(setIndex).catch((e) => setErr(explain(e)));
   };
-  useEffect(load, [studio]);
+  // The publishing token (if any) is unlocked first, so live-site checks can read the sites' repositories.
+  useEffect(() => { let on = true; (repo.demo ? Promise.resolve(null) : ghPublish.load(session.token)).finally(() => { if (on) load(); }); return () => { on = false; }; }, [studio]);
   const b = useBrand();
   useEffect(() => { document.title = b.name; }, [b.name]);
   // Name and logo come from studio.json, so every signed-in device shows the same.
@@ -88,7 +91,10 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
           <BrandCard studio={studio} onIndex={setIndex} />
           <section className="card flex flex-col gap-3 p-5" aria-label="Hosting accounts">
             <h2 className="text-lg font-extrabold">Hosting accounts</h2>
-            <p className="text-sm text-ink-300">For sites hosted outside GitHub (project → Host outside GitHub). Each site's Supabase details are kept with its project.</p>
+            <p className="text-sm text-ink-300">GitHub publishing creates each site's repository and turns on GitHub Pages; Netlify is for sites hosted outside GitHub. Tokens stay on this device. Each site's Supabase details are kept with its project.</p>
+            <h3 className="mt-2 text-sm font-bold">GitHub (publishing)</h3>
+            <GitHubPublishAccount session={session} />
+            <h3 className="mt-2 text-sm font-bold">Netlify</h3>
             <NetlifyAccount session={session} />
           </section>
           <AccountPanel ns={NS} session={session} onUpdated={onSession} onSignOut={onSignOut} onForget={onForget} />

@@ -10,11 +10,12 @@ import { Netlify } from "./netlify";
 import { SupabaseRepo, type HostCfg } from "./supa";
 import { blobToBytes, collectAssetPaths } from "./util";
 import { adminFile } from "../schema/common";
+import { ghPublish } from "./ghpublish";
 
 /** The live site of a project: its Supabase data when hosted outside GitHub, else its GitHub repository. */
 export function siteRepoFor(p: ProjectMeta, token: string): Repo | null {
   if (p.host?.kind === "netlify") return new SupabaseRepo(p.host.sb);
-  if (p.publish) return new GitHubRepo(p.publish, token);
+  if (p.publish) return new GitHubRepo(p.publish, ghPublish.token(token));
   return null;
 }
 

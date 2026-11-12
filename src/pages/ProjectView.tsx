@@ -8,6 +8,8 @@ import { adminFile } from "../schema/common";
 import { clone, fmtDate, merge, slugify, timeAgo } from "../lib/util";
 import { siteAddress, siteRepoFor } from "../lib/hosting";
 import { HostDialog } from "./HostDialog";
+import { GitHubPublishAccount } from "./GitHubAccount";
+import { ensurePages, ensureRepo, ghPublish } from "../lib/ghpublish";
 import { LiveSitesDialog } from "./LiveSites";
 import { Editor } from "../editor/Editor";
 import { Preview } from "../editor/Preview";
@@ -243,16 +245,25 @@ function PublishDialog({ studio, project, tpl, draft, dirty, save, onIndex, getB
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<PublishTarget | null>(null);
   const [admin, setAdmin] = useState("admin.html");
+  const [login, setLogin] = useState<string | null>(ghPublish.login() || null);
+  const [step, setStep] = useState("");
+  const [result, setResult] = useState<{ created: boolean; pages: { url: string | null; turnedOn: boolean; error?: string } } | null>(null);
   const demo = studio.repo.demo;
+  // A new project publishes under the publishing account once it's connected.
+  useEffect(() => { if (login && !project.publish && t.owner === session.cfg.owner) setT((x) => ({ ...x, owner: login })); }, [login]);
   const checks = tpl.checks?.(draft) || [];
   const go = async () => {
     if (!t.owner.trim() || !t.repo.trim()) return toast("Fill in the GitHub owner and repository.", "bad");
     setBusy(true);
     try {
       if (dirty && !(await save(true))) { setBusy(false); return; }
-      const target = { owner: t.owner.trim(), repo: t.repo.trim(), branch: t.branch.trim() || "main" };
-      const repo = new GitHubRepo(target, session.token);
+      const target = { owner: t.owner.trim(), repo: t.repo.trim().replace(/\s+/g, "-"), branch: t.branch.trim() || "main" };
+      const token = ghPublish.token(session.token);
+      setStep("Checking the repository…");
+      const created = await ensureRepo(token, target.owner, target.repo, `${project.name}: website made with Picaffectz Studio`);
+      const repo = new GitHubRepo(target, token);
       await repo.check();
+      setStep("Uploading the site…");
       const next = project.version + 1;
       // Keeping the site's own content keeps its own admin page name too.
       const live = withContent ? null : await repo.getJSON("content.json").catch(() => null);
@@ -261,6 +272,9 @@ function PublishDialog({ studio, project, tpl, draft, dirty, save, onIndex, getB
       const { files, warnings, admin } = await buildSite({ template: tpl, content: draft, name: project.name, version: next, includeContent: withContent, getAsset: getBlob, admin: live ? adminFile(live.data) : undefined, headContent: live?.data, base: `https://${target.owner}.github.io/${target.repo === `${target.owner}.github.io` ? "" : target.repo + "/"}`, keep });
       await publishSite(repo, files, `Publish v${next} from Site Studio${note.trim() ? `: ${note.trim()}` : ""}`, admin);
       setAdmin(admin);
+      setStep("Turning on GitHub Pages…");
+      const pages = await ensurePages(token, target.owner, target.repo, target.branch);
+      setResult({ created, pages });
       // Remember what the site holds now, so later edits in the site's own CMS are recognised and pulled back in.
       // A Netlify-hosted project stays in step with Supabase, so a GitHub copy doesn't touch its sync record.
       const siteSha = withContent && !project.host ? (await repo.getText("content.json").catch(() => null))?.sha : undefined;
@@ -271,15 +285,18 @@ function PublishDialog({ studio, project, tpl, draft, dirty, save, onIndex, getB
     } catch (e) {
       toast(explain(e), "bad");
     }
+    setStep("");
     setBusy(false);
   };
   if (done) {
     const url = `https://${done.owner}.github.io/${done.repo === `${done.owner}.github.io` ? "" : done.repo + "/"}`;
     return (
       <Modal title="Published" onClose={onClose} footer={<button className="btn btn-pri" onClick={onClose}>Done</button>}>
-        <p className="text-sm text-ink-300">v{project.version} is committed to <b className="text-ink-100">{done.owner}/{done.repo}</b>.</p>
+        <p className="text-sm text-ink-300">v{project.version} is committed to <b className="text-ink-100">{done.owner}/{done.repo}</b>{result?.created ? " (a new repository the Studio just created)" : ""}.</p>
         <ol className="list-decimal space-y-2 pl-5 text-sm text-ink-200">
-          <li>First time only: in that repository open <b>Settings → Pages</b>, choose <b>Deploy from a branch → {done.branch} / (root)</b> and save.</li>
+          {result?.pages.error || (!result?.pages.url && !result?.pages.turnedOn)
+            ? <li>Turn on GitHub Pages once{result?.pages.error ? ` (the Studio couldn't: ${result.pages.error})` : ""}: in <a className="text-brand-300 underline" href={`https://github.com/${done.owner}/${done.repo}/settings/pages`} target="_blank" rel="noopener">{done.owner}/{done.repo} → Settings → Pages ↗</a>, choose <b>Deploy from a branch → {done.branch} / (root)</b> and save.</li>
+            : <li>GitHub Pages is {result?.pages.turnedOn ? "now switched on" : "on"} for this repository. Nothing to set up.</li>}
           <li>The site goes live about a minute after each publish at <a className="font-semibold text-brand-300 underline" href={url} target="_blank" rel="noopener">{url}</a>.</li>
           <li>The site's own CMS is at <a className="font-semibold text-brand-300 underline" href={url + admin} target="_blank" rel="noopener">{url}{admin}</a>. Give the owner a token for that repository only.</li>
         </ol>
@@ -289,7 +306,9 @@ function PublishDialog({ studio, project, tpl, draft, dirty, save, onIndex, getB
   return (
     <Modal title="Publish to GitHub" onClose={onClose} footer={<><button className="btn" onClick={onClose}>Cancel</button><button className="btn btn-pri" disabled={busy || demo} onClick={go}>{busy ? "Publishing…" : `Publish v${project.version + 1}`}</button></>}>
       {demo ? <p className="rounded-lg border border-amber-400/40 bg-amber-400/5 px-3 py-2.5 text-[13px] text-amber-100">Publishing needs a real GitHub login. Exit the demo and connect your repository to use it.</p>
-        : <p className="text-sm text-ink-300">Commits the whole site to a repository in one go. Create the repository on GitHub first (it can be empty) and make sure your token can write to it.</p>}
+        : <p className="text-sm text-ink-300">Publishes the whole site to a GitHub repository in one go. If the repository doesn't exist yet, the Studio creates it, and it switches on GitHub Pages for you.</p>}
+      {!demo && <section className="flex flex-col gap-3 rounded-xl border border-ink-700 bg-ink-950 p-4" aria-label="GitHub account"><GitHubPublishAccount session={session} onLogin={setLogin} />
+        {!login && <p className="text-[13px] text-ink-400">Without a publishing token the Studio uses its own login, which can only publish to repositories that already exist and that its token includes.</p>}</section>}
       {project.host && !demo && <p className="rounded-lg border border-sky-400/30 bg-sky-400/5 px-3 py-2.5 text-[13px] text-sky-100">This site is live on Netlify. Publishing here makes or updates a separate GitHub copy (for example a backup, or a GitHub Pages version). The Netlify site, its content in Supabase and the Studio's live-site sync aren't changed.</p>}
       <Checks list={checks} />
       <div className="grid gap-3 sm:grid-cols-3">
@@ -300,6 +319,7 @@ function PublishDialog({ studio, project, tpl, draft, dirty, save, onIndex, getB
       <Toggle id="pb-content" label="Replace the site's content with this version" checked={withContent} onChange={setWithContent} />
       <p className="hint">{withContent ? "Overwrites content.json and images on the site, including any edits made in the site's own CMS." : "Updates pages, design code and the CMS only. Content edited in the site's own CMS is kept. Use Details → Import from site to bring those edits here."}</p>
       <Field label="Version note (optional)" htmlFor="pb-note"><input id="pb-note" className="input" value={note} onChange={(e) => setNote(e.target.value)} /></Field>
+      {step && <p className="text-[13px] text-brand-300" aria-live="polite">{step}</p>}
     </Modal>
   );
 }
@@ -359,7 +379,7 @@ function DetailsDialog({ studio, index, project, session, onIndex, onImported, o
     if (!t.owner || !t.repo) return toast("Fill in the owner and repository.", "bad");
     setBusy("link");
     try {
-      const site = new GitHubRepo(t, session.token);
+      const site = new GitHubRepo(t, ghPublish.token(session.token));
       const f = await site.getJSON("content.json");
       if (!f) throw new Error(`${t.owner}/${t.repo} has no content.json. Is it a site exported from Site Studio?`);
       const info = await site.getJSON<{ template?: string }>("cms/site.json").catch(() => null);

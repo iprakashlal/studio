@@ -38,13 +38,15 @@ export function siteBase(c: any, fallback = ""): string {
 const MARK = /<!-- site-meta -->[\s\S]*?<!-- \/site-meta -->\n?/g;
 
 /** Rewrites a page's <title> and its managed meta block. Safe to run again on an already baked page. */
-export function bakeHead(html: string, c: any, opts: { file: string; label?: string; base?: string; bg?: string }): string {
+export function bakeHead(html: string, c: any, opts: { file: string; label?: string; base?: string; bg?: string; assets?: string }): string {
   const s: Seo = c?.seo || {};
   const title = pageTitle(c, opts.file, opts.label);
   const desc = oneLine(s.description);
   const base = siteBase(c, opts.base);
   const url = base ? base + (opts.file === "index.html" ? "" : opts.file) : "";
-  const img = s.image && (s.image as any).path ? (base ? base + String((s.image as any).path).replace(/^\.?\//, "") : "") : "";
+  const ip = s.image && (s.image as any).path ? String((s.image as any).path).replace(/^\.?\//, "") : "";
+  // Photos of a site hosted outside GitHub live in its Supabase storage (opts.assets).
+  const img = !ip ? "" : opts.assets && ip.startsWith("assets/uploads/") ? opts.assets + ip : base ? base + ip : "";
   const tags: string[] = [];
   const meta = (k: "name" | "property", n: string, v: unknown) => { const t = oneLine(v); if (t) tags.push(`<meta ${k}="${esc(n)}" content="${esc(t)}">`); };
   meta("name", "description", desc);

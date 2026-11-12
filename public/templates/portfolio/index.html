@@ -758,7 +758,9 @@ function lum(h){const[r,g,b]=hexRgb(h).map(v=>{v/=255;return v<=.03928?v/12.92:M
 function onColor(h){return lum(h)>.42?"#0A1830":"#FFFFFF"}
 const colVar=k=>`var(--${k||"c1"})`;
 function colHex(t,k){return t[k]||t.c1}
-function imgUrl(img){if(!img)return "";if(img.path)return ASSETS[img.path]||img.path;return img.url||""}
+// Hosted outside GitHub: the Studio adds a "site-host" JSON script tag saying where the live content and photos are.
+const HOST=(()=>{try{const e=document.getElementById("site-host");return e?JSON.parse(e.textContent):null}catch(e){return null}})();
+function imgUrl(img){if(!img)return "";if(img.path)return ASSETS[img.path]||(HOST&&/^assets\/uploads\//.test(img.path)?HOST.assets+img.path.split("/").map(encodeURIComponent).join("/"):img.path);return img.url||""}
 /* Theme element pack (assets/motifs.js): each shape name picks an illustrated element instead. */
 let MOTIF="geometric",CT={},KIT="classic";
 /* Page layout (assets/layouts.js): a theme's own layout, a chosen one, or the classic page. */
@@ -1304,7 +1306,8 @@ if(PREVIEW){
   window.parent.postMessage({type:"cms:ready",page:"index.html"},location.origin);
 }
 if(PREVIEW)renderSite(saved);
-else(async()=>{let got=null;try{const ac=new AbortController(),tm=setTimeout(()=>ac.abort(),5000);const r=await fetch("content.json",{cache:"no-store",signal:ac.signal});clearTimeout(tm);if(r.ok)got=await r.json()}catch(e){}
+else(async()=>{let got=null;try{const ac=new AbortController(),tm=setTimeout(()=>ac.abort(),5000);if(HOST){const r=await fetch(HOST.db+"/rest/v1/site_content?select=content&site=eq."+encodeURIComponent(HOST.site),{cache:"no-store",signal:ac.signal,headers:{apikey:HOST.key,Authorization:"Bearer "+HOST.key}});if(r.ok){const j=await r.json();if(j&&j[0]&&j[0].content)got=j[0].content}}}catch(e){}
+  try{if(!got){const ac=new AbortController(),tm=setTimeout(()=>ac.abort(),5000);const r=await fetch("content.json",{cache:"no-store",signal:ac.signal});clearTimeout(tm);if(r.ok)got=await r.json()}}catch(e){}
   if(got)saved=merge(DEFAULT,got);renderSite(saved)})();
 })();
 </script>

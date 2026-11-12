@@ -109,6 +109,17 @@ Each published project is linked to its site's repository. When you open the Stu
 
 Drafts saved in a site's CMS aren't pulled in, only published content. The Studio's GitHub token needs read access to the site repositories.
 
+## Host outside GitHub (Netlify + Supabase + your domain)
+
+A project can live off GitHub: **Netlify** serves the pages, and the owner's **Supabase** project holds the content, photos and who may edit. Open the project → **Host outside GitHub**:
+
+1. **Netlify:** paste a personal access token (Netlify → User settings → Applications). It's encrypted on this device with your Studio login and never written to the data repository. Also in Settings → Hosting accounts. Pick the site name (`name.netlify.app`).
+2. **Supabase:** a free project's URL and **anon public** key (Project Settings → API), a site ID, and your email. Copy the **setup SQL** into Supabase → SQL Editor (tables `site_content`, `site_drafts`, `site_admins`, public bucket `site-assets`, row-level security: anyone reads live content, only listed emails write). Once per project, put `{{ .Token }}` in Authentication → Emails → Magic Link so sign-in emails carry a 6-digit code. Then sign in with the code.
+3. **Move the site and publish:** new photos go to storage, content to `site_content`, and the pages to Netlify (only files Netlify doesn't have are uploaded). Each page carries a small `site-host` tag, so it reads the live content and photos from Supabase; a `content.json` copy is deployed as a fallback.
+4. **Domain:** enter `yourname.com`. The Studio adds `www.yourname.com` on Netlify, shows the two DNS records (`A @ 75.2.60.5` and `CNAME www → name.netlify.app`), checks them with public DNS, and asks Netlify for HTTPS once they're right. Publish once more so canonical links use the domain.
+
+The site's CMS (`/admin.html` or its chosen address) signs in with an email code, edits go live at once, and drafts are kept in `site_drafts`. Edits come back into the Studio as with GitHub sites. Page titles/metadata in `<head>` and a changed admin address update on the next publish from the Studio. To add an editor, add a row to `site_admins` (or run the setup SQL with their email).
+
 ## Site CMS: drafts, admin address and site-wide controls
 
 - **Save** keeps your edits as a draft (`cms/draft.json` in the site's repository) without changing the live site. Reopening the CMS loads the draft. **Save & publish** makes it live and removes the draft; **Delete draft** goes back to what's live. The draft sits in the same repository as the site, so anyone who can read that repository can read it.
@@ -160,7 +171,8 @@ src/
   site-admin/   The CMS bundled into every exported site (cms/admin.js)
   editor/       Shared schema-driven editor, live preview, backup panel
   schema/       Field definitions for each template
-  lib/          GitHub client, encryption, studio storage, exporter
+  lib/          GitHub client, encryption, studio storage, exporter,
+                supa.ts (Supabase repo + setup SQL), netlify.ts (deploy, domain, DNS), hosting.ts
   ui/           Buttons, dialogs, toasts, login screens
 worker/         shop-worker.ts: the Cloudflare backend (GitHub files); bundled with the shared
                 shop function by scripts/build-worker.mjs into templates/store/cloudflare/worker.js

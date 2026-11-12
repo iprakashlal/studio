@@ -3,7 +3,8 @@ import { ThemeGallery } from "../themes/ThemeGallery";
 import { themeById } from "../themes/catalog";
 import { TEMPLATES, TEMPLATE_LIST } from "../schema";
 import { CATEGORY_COLORS, type CategoryRec, type ProjectMeta, type Studio, type StudioIndex } from "../lib/studio";
-import { GitHubRepo, explain } from "../lib/repo";
+import { explain } from "../lib/repo";
+import { siteAddress, siteRepoFor } from "../lib/hosting";
 import { loadManifest, loadStarter, type Manifest } from "../lib/exporter";
 import { slugify, timeAgo } from "../lib/util";
 import { Empty, Field, Modal, useConfirm, useToast } from "../ui/kit";
@@ -26,14 +27,14 @@ export function Dashboard({ studio, index, onIndex, token }: { studio: Studio; i
     if (studio.repo.demo) return;
     let on = true;
     (async () => {
-      const due = index.projects.filter((p) => p.publish && Date.now() - (checked.get(p.id) || 0) > 60_000);
+      const due = index.projects.filter((p) => (p.publish || p.host) && Date.now() - (checked.get(p.id) || 0) > 60_000);
       const pulled: string[] = [];
       for (const p of due) {
         if (!on) return;
         checked.set(p.id, Date.now());
         setLive((m) => ({ ...m, [p.id]: "checking" }));
         try {
-          const site = new GitHubRepo(p.publish!, token);
+          const site = siteRepoFor(p, token)!;
           // Don't leave "Checking…" up forever on a slow or blocked connection.
           const st = await Promise.race([studio.siteState(p, site), new Promise<never>((_, no) => setTimeout(() => no(new Error("timeout")), 45_000))]);
           if (st.kind === "pull") {
@@ -49,7 +50,7 @@ export function Dashboard({ studio, index, onIndex, token }: { studio: Studio; i
       if (on && pulled.length) toast(`Updated from the live site${pulled.length > 1 ? "s" : ""}: ${pulled.join(", ")}`);
     })();
     return () => { on = false; };
-  }, [index.projects.map((p) => p.id + (p.publish ? p.publish.repo : "")).join()]);
+  }, [index.projects.map((p) => p.id + (p.publish ? p.publish.repo : "") + (p.host ? p.host.siteId : "")).join()]);
   const confirm = useConfirm();
   const [q, setQ] = useState("");
   const [cat, setCat] = useState("");
@@ -72,7 +73,7 @@ export function Dashboard({ studio, index, onIndex, token }: { studio: Studio; i
   const stats = [
     { n: index.projects.length, l: "Projects" },
     { n: index.projects.filter((p) => p.status !== "draft").length, l: "Exported or published" },
-    { n: index.projects.filter((p) => p.status === "published").length, l: "Published to GitHub" },
+    { n: index.projects.filter((p) => p.status === "published").length, l: "Published" },
     { n: index.projects.reduce((s, p) => s + p.exports.length, 0), l: "Exports in total" },
   ];
 
@@ -150,7 +151,7 @@ export function Dashboard({ studio, index, onIndex, token }: { studio: Studio; i
                   <div className="relative z-10 flex flex-wrap gap-2">
                     <a href={`#/p/${p.id}`} className="btn btn-pri btn-sm">Open</a>
                     <button className="btn btn-sm" disabled={!!busy} onClick={() => run("dup" + p.id, () => studio.duplicate(p.id, `${p.name} (copy)`), "Project duplicated")}>{busy === "dup" + p.id ? "Copying…" : "Duplicate"}</button>
-                    {p.publish && <a className="btn btn-sm" href={`https://${p.publish.owner}.github.io/${p.publish.repo === `${p.publish.owner}.github.io` ? "" : p.publish.repo + "/"}`} target="_blank" rel="noopener">Live site ↗</a>}
+                    {p.host ? <a className="btn btn-sm" href={siteAddress(p.host)} target="_blank" rel="noopener">Live site ↗</a> : p.publish && <a className="btn btn-sm" href={`https://${p.publish.owner}.github.io/${p.publish.repo === `${p.publish.owner}.github.io` ? "" : p.publish.repo + "/"}`} target="_blank" rel="noopener">Live site ↗</a>}
                     <button className="btn btn-sm btn-danger ml-auto" disabled={!!busy} onClick={async () => {
                       if (await confirm(`Delete “${p.name}”?`, "This removes the project, its images and export snapshots from the Studio. Sites you already exported or published are not affected.", "Delete", true)) run("del" + p.id, () => studio.remove(p.id), "Project deleted");
                     }}>Delete</button>

@@ -2,7 +2,7 @@ import type { Category, Field, TemplateDef } from "./types";
 import { uid, vpaOk, paypalOk, httpsOk } from "../lib/util";
 import { BODY_FONTS, DISPLAY_FONTS, LINE_BREAKS_AXIS, STORE_AXES, THEMES, onColor, storeThemeValues } from "../themes/catalog";
 import { adminCategory, seoCategory } from "./common";
-import { themeCards } from "../themes/fields";
+import { NAV_MODE_FIELD, themeCards } from "../themes/fields";
 
 const CURRENCIES = ["INR", "USD", "EUR", "GBP", "AED", "SGD", "AUD", "CAD"];
 const FONTS_D = DISPLAY_FONTS;
@@ -37,6 +37,7 @@ const schema: Category[] = [
     cards: [
       { title: "Menu titles", fields: [g2({ t: "text", path: "nav.home", label: "Home" }, { t: "text", path: "nav.shop", label: "Shop" }, { t: "text", path: "nav.portfolio", label: "Story / portfolio page" }, { t: "text", path: "nav.cart", label: "Cart" }, { t: "text", path: "nav.account", label: "Account (when sign-in is on)" }),
         { t: "toggle", path: "nav.showPortfolio", label: "Show the story / portfolio page in the menu" }] },
+      { title: "Menu when scrolling", fields: [NAV_MODE_FIELD, { t: "note", text: "Theme default keeps the menu at the top of the screen while shoppers scroll. The same setting is under Theme & layout." }] },
       { title: "Footer titles & links", fields: [g2({ t: "text", path: "labels.allProducts", label: "“All products” link" }, { t: "text", path: "labels.viewAll", label: "“View all” link on the home page" },
         { t: "text", path: "labels.help", label: "Footer column: help & policies" }, { t: "text", path: "labels.contact", label: "Footer column: contact" })] },
     ],

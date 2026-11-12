@@ -2,7 +2,7 @@ import type { Category, Field, TemplateDef } from "./types";
 import { AXES, BODY_FONTS, DISPLAY_FONTS, KIT_AXIS, LINE_BREAKS_AXIS, PORTFOLIO_AXES, THEMES, onColor, portfolioThemeValues } from "../themes/catalog";
 import { adminCategory, seoCategory } from "./common";
 import VELOCITY_DEFAULTS from "./velocity-defaults.json";
-import { themeCards } from "../themes/fields";
+import { NAV_MODE_FIELD, NAV_MODE_NOTE, themeCards } from "../themes/fields";
 
 const SECTION_NAMES: Record<string, string> = { about: "About", skills: "Skills cube", work: "Work deck", projects: "Projects", learning: "Learning", contact: "Contact" };
 const SOLIDS: [string, string][] = [["sphere", "Sphere · element 1"], ["cube", "Cube · element 2"], ["pyramid", "Pyramid · element 3"], ["octahedron", "Octahedron · element 4"], ["torus", "Torus · element 5"], ["icosahedron", "Icosahedron · element 6"], ["cylinder", "Cylinder · element 8"]];
@@ -92,6 +92,7 @@ const schema: Category[] = [
   {
     id: "layout", label: "Sections & order", group: "Design", desc: "Show, hide and reorder sections. The order here is the order on the page and in the menu.",
     cards: [
+      { title: "Menu when scrolling", fields: [NAV_MODE_FIELD, { t: "note", text: NAV_MODE_NOTE + " The same setting is under Theme & layout → Layout & elements." }] },
       { title: "Header", fields: [g2({ t: "text", path: "brand.logoText", label: "Logo text" }, { t: "text", path: "brand.contactLabel", label: "Header button label" })] },
       { title: "Sections & menu titles", fields: [{ t: "note", text: "Open a section to rename its menu title or hide it." }, { t: "list", path: "sections", fixed: true, add: () => ({}), title: (it) => `${SECTION_NAMES[it.id]} · menu: “${it.navLabel || ""}”` + (it.visible ? "" : "  (hidden)"), item: [g2({ t: "toggle", path: "visible", label: "Show on page" }, { t: "text", path: "navLabel", label: "Menu title" })] }] },
       { title: "Page layout labels", fields: [

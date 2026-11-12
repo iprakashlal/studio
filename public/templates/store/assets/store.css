@@ -28,6 +28,9 @@ p{margin:0}
 
 /* announcement + header */
 .announce{background:var(--accent);color:var(--on-accent);text-align:center;font-size:13px;font-weight:600;padding:8px var(--gr) 8px var(--gl)}
+html[data-menu=scroll] .hdr{position:relative}
+html[data-menu=hide] .hdr{transition:transform .45s cubic-bezier(.2,.8,.2,1)}
+html[data-menu=hide].menu-away .hdr{transform:translateY(-110%)}
 .hdr{position:sticky;top:0;z-index:40;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
 .hdr .wrap{display:flex;align-items:center;gap:16px;min-height:68px}
 .brand{display:flex;align-items:center;gap:10px;text-decoration:none;min-width:0;margin-right:auto}

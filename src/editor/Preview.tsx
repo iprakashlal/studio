@@ -119,13 +119,15 @@ function clickToEdit(doc: Document, live: Live) {
     doc.body.appendChild(ui);
   };
   const hide = () => { if (ui) ui.style.display = "none"; cur = null; };
+  /** The content section an element is in ("hero", "about"…), to prefer that section's values. */
+  const sectionOf = (el: Element | null) => { const id = el?.closest("section[id], header[id], footer[id], [data-section]")?.getAttribute("data-section") || el?.closest("section[id], header[id], footer[id]")?.id || ""; return id === "top" ? "hero" : id; };
   const find = (el: Element | null): { el: Element; path?: string; cat?: string; label: string } | null => {
-    const L = live.current;
+    const L = live.current, prefer = sectionOf(el);
     for (let n = el, d = 0; n && n !== doc.body && d < 7; n = n.parentElement, d++) {
       if (n.closest("#cms-edit-ui")) return null;
       let path: string | null = null;
       if (n.tagName === "IMG") path = matchImage(L.idx, (n as HTMLImageElement).getAttribute("src") || "", L.assets);
-      if (!path) { const t = n.textContent || ""; if (t.trim() && t.length < 700) path = matchText(L.idx, t); }
+      if (!path) { const t = n.textContent || ""; if (t.trim() && t.length < 700) path = matchText(L.idx, t, prefer); }
       if (path) {
         const loc = locateField(L.tpl.schema, path, L.content);
         if (loc) return { el: n, path, label: loc.trail.join(" → ") };
@@ -157,6 +159,19 @@ function clickToEdit(doc: Document, live: Live) {
     const el = (target as Element) || doc.elementFromPoint(x, y);
     if (!el || (el as Element).closest?.("#cms-edit-ui")) return;
     let hit = find(el as Element);
+    // Text that lets the pointer through (big animated names) sits under the section it's in: find it by position.
+    if (!hit || !hit.path) {
+      const scope = (hit?.el || (el as Element).closest("section, header, footer, main") || doc.body) as Element;
+      let best: Element | null = null, area = Infinity;
+      for (const c of Array.from(scope.querySelectorAll("*"))) {
+        if (c.closest("#cms-edit-ui") || ![...c.childNodes].some((t) => t.nodeType === 3 && (t.textContent || "").trim())) continue;
+        const r = c.getBoundingClientRect();
+        if (x < r.left || x > r.right || y < r.top || y > r.bottom) continue;
+        if (r.width * r.height < area) { area = r.width * r.height; best = c; }
+      }
+      const h2 = best && find(best);
+      if (h2 && h2.path) hit = h2;
+    }
     // Pictures can sit under decorations that ignore the pointer (the hero disc): check images under the point too.
     if (!hit || !hit.path) {
       const L = live.current;

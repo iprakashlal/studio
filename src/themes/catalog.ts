@@ -24,25 +24,26 @@ export type Axis = { key: string; label: string; hint?: string; options: [string
 
 /** Style axes both templates understand. The first option of each is the classic look. */
 export const AXES: Record<string, Axis> = {
-  layout: { key: "layout", label: "Hero layout", options: [["split", "Split: text left, art right"], ["reverse", "Reverse: art left, text right"], ["center", "Centred"], ["stacked", "Stacked: text, then a wide art band"], ["minimal", "Minimal: big type only"]] },
-  nav: { key: "nav", label: "Menu style", options: [["pill", "Floating pill"], ["bar", "Full-width bar"], ["float", "Transparent, no frame"], ["center", "Centred"]] },
-  cards: { key: "cards", label: "Card style", options: [["soft", "Soft"], ["outline", "Outline"], ["elevated", "Elevated shadow"], ["brutal", "Bold border + hard shadow"], ["glass", "Frosted glass"], ["flat", "Flat"]] },
-  buttons: { key: "buttons", label: "Button style", options: [["brutal", "Offset shadow"], ["rounded", "Rounded"], ["pill", "Pill"], ["sharp", "Square"], ["outline", "Outline"], ["glow", "Glow"]] },
-  motionStyle: { key: "motionStyle", label: "Animation", options: [["rise", "Rise in"], ["fade", "Fade in"], ["zoom", "Zoom in"], ["slide", "Slide in from the side"], ["blur", "Blur to sharp"], ["flip", "Flip up"], ["none", "No animation"]] },
-  pattern: { key: "pattern", label: "Background pattern", options: [["grid", "Blueprint grid"], ["dots", "Dots"], ["lines", "Horizontal lines"], ["diagonal", "Diagonal stripes"], ["waves", "Waves"], ["cross", "Crosses"], ["none", "Plain"]] },
+  layout: { key: "layout", label: "Hero layout", options: [["split", "Split: text left, art right"], ["reverse", "Reverse: art left, text right"], ["center", "Centred"], ["stacked", "Stacked: text, then a wide art band"], ["minimal", "Minimal: big type only"], ["panel", "Panel: art in a coloured panel"], ["editorial", "Editorial: ruled, big type"], ["framed", "Framed: hero in a card"], ["offset", "Offset: asymmetric"], ["poster", "Poster: huge title, set low"], ["marquee", "Marquee: name runs across the screen"], ["bento", "Bento: hero as a grid of tiles"], ["orbit", "Orbit: art in a circle, turning text ring"], ["index", "Index: big list of the site's sections"], ["frame", "Frame: architectural frame, corner notes"], ["stackname", "Stacked name: filled + outlined"]] },
+  heroArt: { key: "heroArt", label: "Hero art shape", options: [["default", "Theme default"], ["circle", "Circle"], ["arch", "Arch"], ["blob", "Soft blob (moves)"], ["tilt", "Tilted card"], ["frame", "Framed print"], ["none", "No art (text only)"]] },
+  nav: { key: "nav", label: "Menu style", options: [["pill", "Floating pill"], ["bar", "Full-width bar"], ["float", "Transparent, no frame"], ["center", "Centred"], ["line", "Hairline, underlined links"], ["dock", "Floating dock at the bottom"], ["side", "Side rail (wide screens)"]] },
+  cards: { key: "cards", label: "Card style", options: [["soft", "Soft"], ["outline", "Outline"], ["elevated", "Elevated shadow"], ["brutal", "Bold border + hard shadow"], ["glass", "Frosted glass"], ["flat", "Flat"], ["gradient", "Gradient edge"], ["inset", "Inset, pressed"], ["lined", "Top rule, no box"]] },
+  buttons: { key: "buttons", label: "Button style", options: [["brutal", "Offset shadow"], ["rounded", "Rounded"], ["pill", "Pill"], ["sharp", "Square"], ["outline", "Outline"], ["glow", "Glow"], ["underline", "Underlined text + arrow"], ["gradient", "Gradient pill"], ["soft", "Soft tint"]] },
+  motionStyle: { key: "motionStyle", label: "Animation", options: [["rise", "Rise in"], ["fade", "Fade in"], ["zoom", "Zoom in"], ["slide", "Slide in from the side"], ["blur", "Blur to sharp"], ["flip", "Flip up"], ["mask", "Mask wipe"], ["skew", "Skew up"], ["drift", "Slow drift from the side"], ["none", "No animation"]] },
+  pattern: { key: "pattern", label: "Background pattern", options: [["grid", "Blueprint grid"], ["dots", "Dots"], ["lines", "Horizontal lines"], ["diagonal", "Diagonal stripes"], ["waves", "Waves"], ["cross", "Crosses"], ["mesh", "Colour mesh glow"], ["rings", "Rings"], ["topo", "Contour lines"], ["checker", "Checker"], ["noise", "Fine noise"], ["none", "Plain"]] },
   ornament: { key: "ornament", label: "Decorative shapes", options: [["solid", "Solid shapes"], ["outline", "Outlined shapes"], ["soft", "Soft blurred blobs"], ["none", "None"]] },
-  heading: { key: "heading", label: "Heading style", options: [["normal", "Normal"], ["upper", "UPPERCASE"], ["italic", "Italic accent"], ["tight", "Tight & heavy"]] },
-  shead: { key: "shead", label: "Section label", options: [["dot", "● Dot"], ["plain", "Plain"], ["number", "01 Numbered"], ["line", "— Line"], ["bracket", "[ Brackets ]"], ["slash", "// Slash"]] },
-  width: { key: "width", label: "Page width", options: [["normal", "Normal"], ["wide", "Wide"], ["narrow", "Narrow, editorial"]] },
+  heading: { key: "heading", label: "Heading style", options: [["normal", "Normal"], ["upper", "UPPERCASE"], ["italic", "Italic accent"], ["tight", "Tight & heavy"], ["outline", "Outlined name"], ["gradient", "Gradient text"], ["wide", "Wide caps, light"]] },
+  shead: { key: "shead", label: "Section label", options: [["dot", "● Dot"], ["plain", "Plain"], ["number", "01 Numbered"], ["line", "— Line"], ["bracket", "[ Brackets ]"], ["slash", "// Slash"], ["pill", "Tinted pill"], ["roman", "I. Roman numerals"]] },
+  width: { key: "width", label: "Page width", options: [["normal", "Normal"], ["wide", "Wide"], ["narrow", "Narrow, editorial"], ["full", "Full, edge to edge"]] },
 };
 /** Interaction effects (assets/fx.js). The first option of each is "off". */
 export const FX_AXES: Record<string, Axis> = {
-  cursor: { key: "cursor", label: "Cursor", options: [["none", "Normal cursor"], ["dot", "Dot + trailing ring"], ["blend", "Inverting blob"], ["spotlight", "Spotlight glow"], ["trail", "Light trail"]] },
-  loader: { key: "loader", label: "Intro & page transition", options: [["none", "None"], ["curtain", "Curtain lift"], ["counter", "0–100 counter"], ["split", "Split reveal"]] },
-  textfx: { key: "textfx", label: "Heading reveal", options: [["none", "None"], ["lines", "Line-by-line mask"], ["letters", "Letter cascade"], ["scramble", "Decode / scramble"]] },
-  hoverfx: { key: "hoverfx", label: "Hover", options: [["none", "Theme default"], ["lift", "Lift + glow edge"], ["magnetic", "Magnetic buttons"], ["tilt", "3D tilt + glare"]] },
+  cursor: { key: "cursor", label: "Cursor", options: [["none", "Normal cursor"], ["dot", "Dot + trailing ring"], ["blend", "Inverting blob"], ["spotlight", "Spotlight glow"], ["trail", "Light trail"], ["ring", "Large ring + dot"]] },
+  loader: { key: "loader", label: "Intro & page transition", options: [["none", "None"], ["curtain", "Curtain lift"], ["counter", "0–100 counter"], ["split", "Split reveal"], ["wipe", "Diagonal wipe"], ["iris", "Iris close"]] },
+  textfx: { key: "textfx", label: "Heading reveal", options: [["none", "None"], ["lines", "Line-by-line mask"], ["letters", "Letter cascade"], ["scramble", "Decode / scramble"], ["words", "Words blur in"]] },
+  hoverfx: { key: "hoverfx", label: "Hover", options: [["none", "Theme default"], ["lift", "Lift + glow edge"], ["magnetic", "Magnetic buttons"], ["tilt", "3D tilt + glare"], ["shine", "Light sweep"]] },
   scrollfx: { key: "scrollfx", label: "Scrolling", options: [["none", "Normal (the browser's own)"], ["progress", "Normal + progress bar"], ["smooth", "Smooth (eased)"], ["skew", "Smooth + velocity skew"]] },
-  overlay: { key: "overlay", label: "Screen texture", options: [["none", "None"], ["grain", "Film grain"], ["scanlines", "Scanlines"], ["vignette", "Vignette"]] },
+  overlay: { key: "overlay", label: "Screen texture", options: [["none", "None"], ["grain", "Film grain"], ["scanlines", "Scanlines"], ["vignette", "Vignette"], ["paper", "Paper texture"], ["halftone", "Halftone corner"]] },
 };
 /** How strongly "Smooth" scrolling eases. Trackpads and touch screens always scroll natively. */
 export const SCROLL_EASE_AXIS: Axis = { key: "scrollEase", label: "Smooth scrolling strength", options: [["light", "Light (snappy)"], ["medium", "Medium"], ["heavy", "Heavy (floaty)"]] };
@@ -75,14 +76,14 @@ export const KIT_AXIS: Axis = {
 
 /** Portfolio-only section layouts. */
 export const PORTFOLIO_AXES: Record<string, Axis> = {
-  about: { key: "about", label: "About layout", options: [["bento", "Bento grid"], ["stack", "Simple stack"]] },
-  skills: { key: "skills", label: "Skills layout", options: [["cube", "3D cube + list"], ["grid", "Card grid"]] },
-  work: { key: "work", label: "Work layout", options: [["stack", "Stacking card deck"], ["timeline", "Timeline"]] },
+  about: { key: "about", label: "About layout", options: [["bento", "Bento grid"], ["stack", "Simple stack"], ["columns", "Wide story in columns"]] },
+  skills: { key: "skills", label: "Skills layout", options: [["cube", "3D cube + list"], ["grid", "Card grid"], ["rows", "Numbered rows"]] },
+  work: { key: "work", label: "Work layout", options: [["stack", "Stacking card deck"], ["timeline", "Timeline"], ["grid", "Two-column grid"]] },
 };
 /** Shop-only layouts. */
 export const STORE_AXES: Record<string, Axis> = {
   grid: { key: "grid", label: "Products per row", options: [["auto", "Automatic"], ["2", "2 large"], ["3", "3"], ["4", "4 compact"]] },
-  product: { key: "product", label: "Product card", options: [["classic", "Classic"], ["framed", "Framed card"], ["overlay", "Name over image"], ["minimal", "Minimal"]] },
+  product: { key: "product", label: "Product card", options: [["classic", "Classic"], ["framed", "Framed card"], ["overlay", "Name over image"], ["minimal", "Minimal"], ["polaroid", "Polaroid"], ["tall", "Tall, fashion"], ["float", "Floating, soft shadow"]] },
 };
 
 /** Fonts available to every template, with exact Google Fonts specs (a wrong weight breaks the whole link). */
@@ -115,7 +116,7 @@ export type Theme = {
   display: string;
   body: string;
   radius: number;
-  style: { layout: string; nav: string; cards: string; buttons: string; motionStyle: string; pattern: string; ornament: string; heading: string; shead: string; width: string };
+  style: { layout: string; heroArt?: string; nav: string; cards: string; buttons: string; motionStyle: string; pattern: string; ornament: string; heading: string; shead: string; width: string };
   portfolio: { about: string; skills: string; work: string; glow: boolean; network: boolean; three: boolean; ticker: boolean };
   store: { grid: string; product: string };
   /** Interaction effects: cursor, loader, textfx, hoverfx, scrollfx, overlay. */
@@ -129,7 +130,7 @@ export type Theme = {
   blurb?: string;
 };
 
-type Row = [string, string, string, string, string, string, number, string, string, string, string?];
+type Row = [string, string, string, string, string, string, number, string, string, string, string?, string?];
 // id | name | tags | colors (bg surface deep text soft line c1 c2 c3) | display | body | radius |
 // style "layout nav cards buttons motion pattern ornament heading shead width" |
 // portfolio "about skills work fx" (fx letters: g glow, n network, 3 three-d, t ticker) | store "grid product" |
@@ -206,6 +207,58 @@ const ROWS: Row[] = [
   ["orbit-lab", "Orbit Lab", "Dark Tech Playful Motion", "#070B1A #0E1430 #03050E #EAF0FF #8E9BC4 #1F2A55 #6C8CFF #FF6B9A #3DF5C8", "Unbounded", "Manrope", 26, "split pill glass glow zoom grid solid normal dot normal", "bento cube stack gn3t", "4 overlay", "dot curtain letters magnetic progress none"],
   ["velvet-cinema", "Velvet Cinema", "Dark Luxury Elegant Motion", "#120607 #1D0B0D #070203 #F6E7D8 #BFA190 #3B1B1E #D7A24B #C21E36 #F6E7D8", "DM Serif Display", "Lora", 4, "center bar outline outline fade none soft upper line narrow", "stack grid timeline g", "3 minimal", "blend curtain lines lift smooth vignette"],
   ["studio-pop", "Studio Pop", "Light Playful Motion", "#FFF7EE #FFFFFF #23123A #23123A #6F5F86 #F0E2D2 #7B4DFF #E2552B #0E9E83", "Bricolage Grotesque", "Plus Jakarta Sans", 28, "center pill elevated pill zoom dots solid tight dot normal", "bento cube stack 3t", "3 framed", "trail split letters magnetic none none"],
+  // ---------------- modern & classy (T-70…T-119): built on layout kit 2 (panel/editorial/framed/offset/poster heroes,
+  // line/dock/side menus, gradient/inset/lined cards, new buttons, reveals, backgrounds, cursors, loaders and hovers)
+  ["noir-atelier", "Noir Atelier", "Dark Elegant Luxury Classy", "#0D0D0F #17171B #050506 #F1EDE6 #A39D93 #2C2B30 #C8A97E #E8E2D6 #7D6A55", "Cormorant Garamond", "Manrope", 2, "editorial line lined underline mask none outline wide roman full none", "columns rows timeline -", "3 tall", "ring iris words shine smooth grain", "geometric"],
+  ["onyx-glass", "Onyx Glass", "Dark Modern Tech", "#0A0B10 #12141C #04050A #EEF0F7 #9097AA #252836 #8B9CFF #5EEAD4 #F0ABFC", "Sora", "Inter", 20, "bento dock glass gradient blur mesh soft gradient pill wide default", "bento grid grid gn3", "3 float", "ring wipe scramble tilt smooth none", "celestial"],
+  ["midnight-serif", "Midnight Serif", "Dark Elegant Classy", "#10131C #181C28 #0A0C12 #EDE9E1 #A3A6B4 #2B3040 #D9B26F #8FA8D8 #EDE9E1", "DM Serif Display", "Source Serif 4", 4, "frame line inset underline fade rings outline italic roman normal arch", "columns cube timeline g", "3 framed", "dot curtain lines lift smooth vignette", "geometric"],
+  ["carbon-lab", "Carbon Lab", "Dark Modern Tech Minimal", "#0B0C0D #151718 #000000 #E8EAEC #8C9196 #2A2D30 #FF6B35 #E8EAEC #4CC9F0", "Space Grotesk", "IBM Plex Sans", 8, "index side outline soft skew checker none tight number wide tilt", "stack rows grid nt", "4 minimal", "dot counter letters magnetic progress none", "geometric"],
+  ["velvet-night", "Velvet Night", "Dark Luxury Classy", "#160B14 #22121F #0B050A #F5E9EF #BFA2B3 #3D2436 #E7B4C8 #C9A86A #8E5C7E", "Playfair Display", "Lora", 10, "orbit float gradient gradient blur mesh outline italic pill narrow default", "columns cube stack g", "3 float", "spotlight split words shine smooth grain", "geometric"],
+  ["moss-brass", "Moss & Brass", "Dark Nature Classy", "#0F1712 #17221B #08100B #ECEFE6 #9FAF9F #2A3A2F #C9A55C #7FB08A #E8DDC3", "Fraunces", "Karla", 12, "stackname bar lined underline drift topo outline italic line normal arch", "stack rows timeline gt", "3 polaroid", "none curtain lines lift smooth paper", "geometric"],
+  ["aurora-glass", "Aurora Glass", "Dark Modern Playful", "#090B1A #12152B #04050F #EEF0FF #A0A6D0 #262B52 #7C9CFF #57F2C1 #FF8FD8", "Plus Jakarta Sans", "Plus Jakarta Sans", 24, "orbit dock glass gradient zoom mesh soft gradient dot wide blob", "bento grid grid gn3t", "4 overlay", "spotlight iris none tilt smooth none", "celestial"],
+  ["ink-ember", "Ink & Ember", "Dark Warm Classy", "#120F0D #1C1814 #090706 #F3ECE4 #B3A698 #362E27 #E2643B #F3ECE4 #C9A27A", "Instrument Serif", "Instrument Sans", 0, "marquee line lined underline mask noise outline italic roman full none", "columns rows grid t", "3 tall", "blend wipe lines shine smooth grain", "geometric"],
+  ["cobalt-studio", "Cobalt Studio", "Dark Modern Bold", "#071233 #0C1B47 #040A1F #EEF2FF #9DAAD6 #22356E #3D7BFF #FFC857 #79E2FF", "Unbounded", "Manrope", 16, "bento pill gradient gradient skew rings solid upper pill normal tilt", "bento cube grid gn3t", "3 framed", "ring counter letters magnetic skew none", "tech"],
+  ["graphite-pro", "Graphite Pro", "Dark Minimal Modern", "#111214 #191A1D #0A0A0B #F2F2F3 #96989E #2A2B2F #E6E6E6 #FF4F3A #8E8E93", "Inter", "Inter", 10, "index line inset soft fade none none wide plain wide none", "columns rows grid t", "4 minimal", "dot none words lift progress none", "geometric"],
+  ["bordeaux", "Bordeaux", "Dark Classy Luxury Warm", "#1A0A0E #261218 #0E0507 #F6E8E8 #C29FA3 #47232B #D4A373 #E8C1C5 #9D2B3C", "Cormorant Garamond", "Mulish", 6, "framed center outline outline drift none outline wide roman narrow arch", "stack cube timeline g", "3 framed", "ring iris lines shine smooth vignette", "geometric"],
+  ["teal-dusk", "Teal Dusk", "Dark Calm Modern", "#0B1D21 #11292F #061215 #E6F2F1 #93B3B1 #22444A #3CCFB4 #F4A261 #E9C46A", "Outfit", "DM Sans", 22, "panel pill soft soft rise topo soft normal pill normal blob", "columns grid stack g3t", "3 float", "none curtain words lift smooth none", "ocean"],
+  ["neon-mono", "Neon Mono", "Dark Tech Bold Modern", "#060606 #101010 #000000 #EDEDED #8A8A8A #222222 #D7FF3A #EDEDED #00E0FF", "Space Grotesk", "JetBrains Mono", 4, "marquee side outline sharp skew checker none upper slash full tilt", "stack rows grid nt", "4 minimal", "blend counter scramble magnetic skew scanlines", "cyber"],
+  ["rose-noir", "Rose Noir", "Dark Elegant Playful", "#140C10 #1F1319 #0A0508 #F8ECF1 #C4A6B4 #3E2632 #FF7AA2 #FFC2D4 #B48CFF", "Syne", "Plus Jakarta Sans", 26, "split float gradient gradient blur mesh soft gradient dot normal blob", "bento cube stack gn3", "3 overlay", "spotlight split none tilt smooth grain", "celestial"],
+  ["slate-editorial", "Slate Editorial", "Dark Classy Minimal", "#15181D #1D2128 #0D0F12 #E9EBEE #9CA2AD #2F343D #E8E1D3 #C66B3D #8EA8C3", "Libre Baskerville", "Source Serif 4", 2, "frame line lined underline fade lines outline normal roman narrow none", "columns rows timeline -", "3 minimal", "dot curtain lines lift smooth paper", "geometric"],
+  ["solar-flare", "Solar Flare", "Dark Warm Bold Modern", "#140A04 #20110A #090401 #FFF0E3 #CFA98C #43261A #FF7A1A #FFD166 #FF3D6E", "Bricolage Grotesque", "Manrope", 18, "offset dock soft gradient zoom mesh soft tight number wide circle", "bento cube grid gn3t", "4 overlay", "trail iris letters magnetic smooth grain", "celestial"],
+  ["black-tie", "Black Tie", "Dark Luxury Classy Minimal", "#0A0A0A #141414 #000000 #F4F1EA #A8A39A #262626 #F4F1EA #B89B5E #6B6B6B", "Playfair Display", "Mulish", 0, "center line lined underline mask none outline wide roman narrow arch", "columns rows timeline -", "3 tall", "ring iris lines shine smooth none", "geometric"],
+  ["arctic-night", "Arctic Night", "Dark Tech Calm", "#0A1420 #10202F #050B12 #E8F3FF #93AECB #203A55 #66C7FF #A5F3C4 #FFD580", "Sora", "IBM Plex Sans", 14, "bento pill inset rounded rise rings outline normal pill normal circle", "bento grid timeline n3t", "4 float", "dot curtain words lift progress none", "ocean"],
+  ["plum-gold", "Plum & Gold", "Dark Luxury Elegant", "#1A1024 #241632 #0F0918 #F3ECF8 #B6A5C7 #3E2C52 #D9B45A #B794F6 #F3ECF8", "DM Serif Display", "Lora", 14, "panel float gradient pill blur waves soft italic dot normal arch", "columns cube stack g3t", "3 polaroid", "spotlight wipe words shine smooth vignette", "luxury"],
+  ["signal", "Signal", "Dark Tech Retro", "#050A07 #0A140E #000000 #D9FBE4 #7EA88D #183022 #2BFF88 #E9FF70 #5AD1FF", "Chakra Petch", "JetBrains Mono", 2, "index bar outline sharp skew noise none upper bracket wide frame", "stack rows grid nt", "4 minimal", "ring counter scramble tilt progress scanlines", "cyber"],
+  ["roastery", "Roastery", "Dark Warm Calm Classy", "#1B130F #261B16 #110B08 #F4E8DC #BCA591 #45352B #D6965A #9CB380 #F2D3A8", "Young Serif", "Karla", 16, "framed bar soft soft drift topo outline normal line normal circle", "columns cube timeline gt", "3 polaroid", "none curtain words lift smooth paper", "geometric"],
+  ["storm", "Storm", "Dark Modern Minimal Bold", "#0E1116 #161A21 #07090C #F0F3F7 #8F98A6 #262C36 #A3B1C6 #FF5D73 #F0F3F7", "Anton", "Inter", 0, "stackname float flat sharp mask none none upper number full none", "stack grid grid t", "4 overlay", "blend wipe letters magnetic skew grain", "cinema"],
+  ["lagoon", "Lagoon", "Dark Nature Playful", "#071A1C #0C2629 #031012 #E3F7F5 #8DB9B5 #1B4446 #2FE0C8 #FF8A5B #F9E07F", "Lexend", "Nunito Sans", 28, "center dock soft pill zoom waves solid normal pill normal blob", "bento cube stack gn3t", "3 float", "trail iris words magnetic smooth none", "ocean"],
+  ["indigo-hour", "Indigo Hour", "Dark Calm Elegant", "#0E0E24 #16163A #080816 #ECECFF #A4A4D2 #2C2C5E #9D8CFF #F7C8A0 #6FD6FF", "Fraunces", "Figtree", 18, "split line gradient underline blur rings soft italic roman normal arch", "columns grid stack g3", "3 tall", "ring curtain lines shine smooth vignette", "celestial"],
+  ["copper", "Copper", "Dark Minimal Warm Modern", "#121110 #1B1A18 #0A0909 #EFEAE4 #9E978E #2D2A27 #C97B4A #EFEAE4 #7A8C8A", "Plus Jakarta Sans", "Manrope", 12, "offset side lined soft fade noise none tight pill wide frame", "columns rows grid t", "3 minimal", "dot split words lift progress grain", "build"],
+  ["atelier-white", "Atelier White", "Light Classy Minimal Luxury", "#FBFAF7 #FFFFFF #1C1B19 #1C1B19 #6E6A63 #E8E4DC #1C1B19 #A08155 #C9BBA4", "Cormorant Garamond", "Mulish", 0, "marquee line lined underline mask none outline wide roman full arch", "columns rows timeline -", "3 tall", "ring iris lines shine smooth paper", "geometric"],
+  ["linen", "Linen", "Light Calm Classy", "#F5F0E8 #FBF8F2 #2B2620 #2B2620 #6F665B #E3DACC #8A6A45 #5E7B6E #D9B48A", "Fraunces", "Work Sans", 14, "framed pill inset soft drift topo outline italic line normal frame", "columns cube timeline t", "3 polaroid", "dot curtain words lift smooth paper", "geometric"],
+  ["swiss-modern", "Swiss Modern", "Light Minimal Bold Modern", "#FFFFFF #F4F4F4 #0A0A0A #0A0A0A #555555 #DDDDDD #0047FF #0A0A0A #FF3B30", "Inter", "Inter", 0, "stackname line flat sharp mask none none tight number full tilt", "stack rows grid t", "4 minimal", "none wipe letters magnetic progress none", "geometric"],
+  ["blush-studio", "Blush Studio", "Light Playful Elegant", "#FFF5F3 #FFFFFF #3A2027 #3A2027 #8A6A71 #F3DCD8 #E0607E #6C7BD9 #F4B183", "Bricolage Grotesque", "Plus Jakarta Sans", 28, "bento dock gradient gradient zoom mesh soft gradient pill normal blob", "bento cube grid 3t", "3 float", "ring iris none tilt smooth none", "playful"],
+  ["exhibit", "Exhibit", "Light Minimal Luxury Classy", "#F7F7F5 #FFFFFF #121212 #121212 #6B6B6B #E2E2DE #121212 #8C7B6B #BDB5A9", "Instrument Serif", "Instrument Sans", 0, "frame side lined underline fade none outline italic roman wide frame", "columns rows grid -", "4 tall", "dot wipe lines shine smooth grain", "geometric"],
+  ["sage-stone", "Sage & Stone", "Light Nature Calm Modern", "#EFF2EC #F9FBF7 #1F2A23 #1F2A23 #5E6B62 #D6DED3 #4C7A5E #C27A4E #E3C77A", "Outfit", "Figtree", 22, "offset pill soft soft rise topo soft normal pill normal arch", "columns grid stack 3t", "3 float", "none curtain words lift smooth none", "nature"],
+  ["cobalt-paper", "Cobalt Paper", "Light Bold Modern Retro", "#F2F0E9 #FBFAF5 #0B1F66 #0B1F66 #4A5680 #D7D3C5 #1638D6 #F05A28 #F6C343", "Archivo Black", "DM Sans", 4, "editorial bar outline sharp skew checker solid upper number wide default", "bento cube grid n3t", "3 framed", "blend counter letters magnetic skew halftone", "retro"],
+  ["mist", "Mist", "Light Calm Modern", "#EEF2F7 #FFFFFF #1B2433 #1B2433 #5F6B7D #D7DFEA #5B7CFA #36C3B0 #F7A8B8", "Sora", "Inter", 24, "orbit dock glass gradient blur mesh soft gradient pill normal frame", "bento grid grid g3t", "4 float", "spotlight iris none tilt smooth none", "celestial"],
+  ["champagne", "Champagne", "Light Luxury Classy Warm", "#F8F3EA #FFFDF8 #2A221A #2A221A #77695A #EADFCD #B08D57 #6B4E3D #D9C3A0", "Playfair Display", "Lora", 6, "center center outline outline drift none outline italic roman narrow frame", "columns cube timeline g", "3 framed", "ring curtain lines shine smooth paper", "geometric"],
+  ["clay", "Clay", "Light Warm Modern", "#F3E7DD #FBF3EC #2B1D17 #2B1D17 #7A6357 #E2CDBE #C25B3F #2F6F73 #E8B04B", "Syne", "Manrope", 20, "panel line soft pill rise rings solid tight pill normal circle", "bento cube grid 3t", "3 polaroid", "trail wipe words magnetic progress none", "cafe"],
+  ["monochrome", "Monochrome", "Light Minimal Classy", "#FAFAFA #FFFFFF #111111 #111111 #6A6A6A #E5E5E5 #111111 #6A6A6A #BDBDBD", "Libre Baskerville", "IBM Plex Sans", 2, "index line lined underline fade lines outline normal roman narrow arch", "columns rows timeline -", "3 minimal", "dot none lines lift progress none", "geometric"],
+  ["citrus-grove", "Citrus Grove", "Light Playful Bold Modern", "#FFFBEE #FFFFFF #1F2A10 #1F2A10 #5C6650 #EFE8C8 #F06D06 #2F9E44 #FCC419", "Unbounded", "Plus Jakarta Sans", 26, "marquee dock gradient gradient zoom dots solid upper pill normal blob", "bento cube grid 3t", "4 float", "ring counter letters magnetic skew none", "playful"],
+  ["harbour", "Harbour", "Light Calm Nature Classy", "#EEF5F7 #FFFFFF #0E2A36 #0E2A36 #4E6B76 #D2E3E9 #136F8A #C9573B #E9C46A", "DM Serif Display", "Karla", 10, "split bar inset underline drift waves outline italic line normal frame", "columns cube timeline t", "3 tall", "none curtain words shine smooth none", "geometric"],
+  ["lilac", "Lilac", "Light Playful Calm", "#F6F2FF #FFFFFF #2A2142 #2A2142 #6F6688 #E3DBF5 #7B5CF0 #F07AA8 #5CC8C2", "Plus Jakarta Sans", "Quicksand", 26, "center pill gradient gradient blur mesh soft gradient dot normal circle", "bento grid stack g3t", "3 overlay", "spotlight split none tilt smooth none", "celestial"],
+  ["kraft-studio", "Kraft Studio", "Light Warm Retro Classy", "#E9DFCF #F3ECE0 #2A2218 #2A2218 #6D5F4C #D4C5AC #9C4A2B #3F5B45 #D7A443", "Young Serif", "Karla", 4, "stackname bar lined underline skew noise outline normal roman wide frame", "stack rows timeline t", "3 polaroid", "dot wipe lines lift smooth paper", "geometric"],
+  ["product", "Product", "Light Modern Tech Minimal", "#FFFFFF #F6F7F9 #0B0D12 #0B0D12 #5B6270 #E6E8EC #3B5BFF #12B886 #F59F00", "Plus Jakarta Sans", "Inter", 16, "bento dock soft soft rise grid none tight pill wide frame", "bento grid grid nt", "4 float", "dot none words lift progress none", "tech"],
+  ["peony", "Peony", "Light Elegant Warm Classy", "#FCF1F0 #FFFFFF #3A1F24 #3A1F24 #85646A #F1D8D6 #B4475C #6E8B74 #E7B07C", "Cormorant Garamond", "DM Sans", 18, "orbit float inset outline mask waves outline italic roman normal arch", "columns cube stack t", "3 tall", "ring iris lines shine smooth paper", "geometric"],
+  ["primary", "Primary", "Light Bold Retro Modern", "#F5F1E8 #FFFFFF #161616 #161616 #555555 #DCD4C4 #E63322 #1D4ED8 #F6B800", "Josefin Sans", "Work Sans", 0, "poster bar lined sharp skew checker solid upper number wide tilt", "stack rows grid 3t", "3 framed", "blend counter letters magnetic progress halftone", "retro"],
+  ["dune", "Dune", "Light Warm Minimal Calm", "#F1E9DD #FAF5ED #2C241B #2C241B #6E6253 #E0D4C2 #A0673C #4F6D5E #D9B77E", "Outfit", "Mulish", 12, "frame pill inset soft drift topo none wide pill normal circle", "columns rows stack 3t", "3 minimal", "none curtain words lift smooth paper", "nature"],
+  ["daybreak", "Daybreak", "Light Playful Modern", "#F3F7FF #FFFFFF #13213D #13213D #56627C #DDE6F7 #4F7CFF #FF7A59 #FFC94D", "Bricolage Grotesque", "Figtree", 24, "poster dock gradient gradient zoom mesh solid tight dot normal blob", "bento cube grid g3t", "3 float", "trail iris letters magnetic smooth none", "celestial"],
+  ["folio", "Folio", "Light Classy Elegant Minimal", "#F6F1E7 #FFFDF8 #1A1712 #1A1712 #6B645A #E2DACB #1A1712 #9E2B25 #B89A62", "Playfair Display", "Source Serif 4", 0, "editorial line lined underline mask lines outline italic roman narrow circle", "columns rows timeline -", "3 tall", "dot wipe lines shine smooth paper", "geometric"],
+  ["fresh-mint", "Fresh Mint", "Light Calm Modern", "#EEFAF5 #FFFFFF #0F2B23 #0F2B23 #4D6C62 #CFEDE2 #0FA37F #5B6CFF #FFB547", "Lexend", "Figtree", 20, "panel pill soft soft rise rings soft normal pill normal frame", "bento grid grid 3t", "4 float", "dot curtain words lift progress none", "nature"],
+  ["consultant", "Consultant", "Light Minimal Modern Classy", "#F4F5F7 #FFFFFF #172033 #172033 #5A6476 #DDE1E8 #1E3A8A #B45309 #94A3B8", "DM Serif Display", "Inter", 8, "index line inset underline fade none outline normal number wide circle", "columns rows timeline t", "3 minimal", "ring none words lift progress none", "geometric"],
+  ["coral-club", "Coral Club", "Light Warm Playful", "#FFF4EF #FFFFFF #2E1A14 #2E1A14 #7E6158 #F3DBD1 #F25C3B #1F8A8A #FFB703", "Sora", "Poppins", 24, "marquee dock soft gradient zoom waves solid tight pill normal circle", "bento cube grid g3t", "3 polaroid", "trail iris letters magnetic skew none", "playful"],
+  ["pearl", "Pearl", "Light Luxury Elegant Classy", "#F7F6F3 #FFFFFF #23211E #23211E #6E6A64 #E5E2DC #23211E #A88B5A #D8CDBB", "Cormorant Garamond", "Manrope", 24, "framed float gradient pill blur mesh outline wide pill wide none", "columns cube stack g", "3 float", "spotlight split none shine smooth grain", "geometric"],
 ];
 
 function axis(s: string, n: number): string[] {
@@ -215,7 +268,7 @@ function axis(s: string, n: number): string[] {
 }
 
 const BASE_THEMES: Theme[] = ROWS.map((r) => {
-  const [id, name, tags, cols, display, body, radius, style, pf, st, fxs] = r;
+  const [id, name, tags, cols, display, body, radius, style, pf, st, fxs, motif] = r;
   const c = axis(cols, 9);
   const s = axis(style, 10);
   const [about, skills, work, fx] = axis(pf, 4);
@@ -230,10 +283,10 @@ const BASE_THEMES: Theme[] = ROWS.map((r) => {
     id, name, tags: tags.split(" "), dark: lum(c[0]) < 0.2,
     colors: { bg: c[0], surface: c[1], deep: c[2], text: c[3], soft: c[4], line: c[5], c1: c[6], c2: c[7], c3: c[8] },
     display, body, radius: +radius,
-    style: { layout: s[0], nav: s[1], cards: s[2], buttons: s[3], motionStyle: s[4], pattern: s[5], ornament: s[6], heading: s[7], shead: s[8], width: s[9] },
+    style: { layout: s[0], heroArt: s[10] || "default", nav: s[1], cards: s[2], buttons: s[3], motionStyle: s[4], pattern: s[5], ornament: s[6], heading: s[7], shead: s[8], width: s[9] },
     portfolio: { about, skills, work, glow: fx.includes("g"), network: fx.includes("n"), three: fx.includes("3"), ticker: fx.includes("t") },
     store: { grid, product },
-    motif: Motifs.themes[id] || "tech",
+    motif: motif || Motifs.themes[id] || "tech",
     kit: Layouts.has(id) ? id : "classic",
     fx: { cursor: f[0], loader: f[1], textfx: f[2], hoverfx: f[3], scrollfx: f[4], overlay: f[5] },
   };
@@ -242,7 +295,7 @@ const BASE_THEMES: Theme[] = ROWS.map((r) => {
 /** True when a theme turns on any interaction effect. */
 export const hasFx = (t: Theme) => FX_KEYS.some((k) => t.fx[k] !== "none");
 
-export const THEME_TAGS = ["Signature", "Dark", "Light", "Bold", "Minimal", "Elegant", "Playful", "Tech", "Calm", "Warm", "Nature", "Retro", "Luxury", "Motion"];
+export const THEME_TAGS = ["Signature", "Modern", "Classy", "Dark", "Light", "Bold", "Minimal", "Elegant", "Playful", "Tech", "Calm", "Warm", "Nature", "Retro", "Luxury", "Motion"];
 
 /** Signature themes: a whole new portfolio layout, not just a restyle. */
 const VELOCITY: Theme = {

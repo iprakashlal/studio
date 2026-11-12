@@ -4,14 +4,14 @@
 
    Each template sets these attributes on <html> from content.theme and calls SiteFX.init()
    after every render:
-     data-cursor    none | dot | blend | spotlight | trail
-     data-loader    none | curtain | counter | split      (also animates page-to-page links)
-     data-textfx    none | lines | letters | scramble
-     data-hoverfx   none | lift | magnetic | tilt
+     data-cursor    none | dot | blend | spotlight | trail | ring
+     data-loader    none | curtain | counter | split | wipe | iris   (also animates page-to-page links)
+     data-textfx    none | lines | letters | scramble | words
+     data-hoverfx   none | lift | magnetic | tilt | shine
      data-scrollfx  none | progress | smooth | skew
      data-scrollease light | medium | heavy  (how strongly smooth scrolling eases; mouse wheels only)
    Intro screen colours come from --intro-bg / --intro-fg (falling back to --deep / --on-deep).
-     data-overlay   none | grain | scanlines | vignette
+     data-overlay   none | grain | scanlines | vignette | paper | halftone
    Visitors who ask for reduced motion get a still page (only static overlays stay). */
 (function () {
   "use strict";
@@ -63,6 +63,10 @@
     "html.fx-dark[data-overlay=grain] .fx-ov{opacity:.11;mix-blend-mode:screen}",
     "html[data-overlay=scanlines] .fx-ov{background:repeating-linear-gradient(0deg,rgba(0,0,0,.22) 0 1px,transparent 1px 3px);mix-blend-mode:multiply}",
     "html[data-overlay=vignette] .fx-ov{background:radial-gradient(ellipse at 50% 45%,transparent 50%,rgba(0,0,0,.5))}",
+    "html[data-overlay=paper] .fx-ov{inset:0;background-image:url(\"" + GRAIN + "\"),linear-gradient(115deg,rgba(255,240,215,.10),rgba(0,0,0,.04));opacity:.5;mix-blend-mode:multiply}",
+    "html.fx-dark[data-overlay=paper] .fx-ov{mix-blend-mode:soft-light;opacity:.45}",
+    "html[data-overlay=halftone] .fx-ov{inset:0;background-image:radial-gradient(rgba(0,0,0,.16) 1px,transparent 1.4px);background-size:5px 5px;-webkit-mask-image:linear-gradient(160deg,#000,transparent 55%);mask-image:linear-gradient(160deg,#000,transparent 55%)}",
+    "html.fx-dark[data-overlay=halftone] .fx-ov{background-image:radial-gradient(rgba(255,255,255,.12) 1px,transparent 1.4px)}",
     "@keyframes fxgrain{0%{transform:translate(0,0)}20%{transform:translate(-6%,4%)}40%{transform:translate(5%,-3%)}60%{transform:translate(-3%,-6%)}80%{transform:translate(6%,5%)}100%{transform:translate(0,0)}}",
     /* cursor */
     "html.fx-nocur,html.fx-nocur *{cursor:none!important}",
@@ -85,6 +89,11 @@
     "html[data-cursor=blend] .fx-ring.is-link i{transform:translate(-50%,-50%) scale(3);background:#fff}",
     "html[data-cursor=blend] .fx-ring.is-card i{transform:translate(-50%,-50%) scale(5.2);background:#fff}",
     "html[data-cursor=blend] .fx-ring b{display:none}",
+    "html[data-cursor=ring] .fx-dot i{width:5px;height:5px}",
+    "html[data-cursor=ring] .fx-ring i{width:58px;height:58px;border:1px solid color-mix(in srgb,var(--fxi) 55%,transparent);transition:transform .7s var(--fxe),background .3s,border-color .3s}",
+    "html[data-cursor=ring] .fx-ring.is-link i{transform:translate(-50%,-50%) scale(.55);background:color-mix(in srgb,var(--fxa) 25%,transparent);border-color:transparent}",
+    "html[data-cursor=ring] .fx-ring.is-card i{transform:translate(-50%,-50%) scale(1.7);background:color-mix(in srgb,var(--fxa) 14%,transparent);border-color:var(--fxa)}",
+    "html[data-cursor=ring] .fx-ring b{color:var(--fxi)}",
     ".fx-spot{position:fixed;inset:0;pointer-events:none;z-index:99960;opacity:0;transition:opacity .5s;background:radial-gradient(560px circle at var(--mx,50%) var(--my,50%),color-mix(in srgb,var(--fxa) 22%,transparent),transparent 62%);mix-blend-mode:multiply}",
     "html.fx-dark .fx-spot{mix-blend-mode:screen}",
     "html.fx-seen .fx-spot{opacity:1}",
@@ -94,6 +103,11 @@
     ".fx-load .fx-p{position:absolute;left:0;right:0;background:var(--fxd)}",
     ".fx-load--curtain .fx-p,.fx-load--counter .fx-p,.fx-cover:not(.fx-load--split) .fx-p,.fx-exit:not(.fx-load--split) .fx-p{top:0;bottom:0}",
     ".fx-load--curtain .fx-p{transition:transform 1s var(--fxe)}",
+    ".fx-load--wipe .fx-p,.fx-load--iris .fx-p{top:0;bottom:0;transition:clip-path 1.1s var(--fxe)}",
+    ".fx-load--wipe .fx-p{clip-path:polygon(0 0,100% 0,100% 100%,0 100%)}",
+    ".fx-load--wipe.out .fx-p{clip-path:polygon(100% 0,100% 0,100% 100%,100% 100%)}",
+    ".fx-load--iris .fx-p{clip-path:circle(150% at 50% 50%)}",
+    ".fx-load--iris.out .fx-p{clip-path:circle(0% at 50% 50%)}",
     ".fx-load--curtain.out .fx-p,.fx-cover.out .fx-p{transform:translateY(-101%)}",
     ".fx-cover .fx-p{transition:transform .9s var(--fxe)}",
     ".fx-load--counter .fx-p{transition:clip-path 1s var(--fxe);clip-path:inset(0 0 0 0)}",
@@ -127,12 +141,19 @@
     "html[data-textfx=lines] .fx-in .fx-wi{transform:none}",
     "html[data-textfx=letters] [data-fx-split] .fx-c{display:inline-block;opacity:0;transform:translateY(.55em) rotate(10deg) scale(.9);transform-origin:0 100%;transition:transform .9s var(--fxe),opacity .6s;transition-delay:calc(var(--i,0)*24ms)}",
     "html[data-textfx=letters] .fx-in .fx-c{opacity:1;transform:none}",
+    "html[data-textfx=words] [data-fx-split] .fx-wi{display:inline-block;opacity:0;filter:blur(10px);transform:translateY(35%);transition:opacity .9s var(--fxe),filter .9s var(--fxe),transform .9s var(--fxe);transition-delay:calc(var(--k,0)*55ms)}",
+    "html[data-textfx=words] .fx-in .fx-wi{opacity:1;filter:none;transform:none}",
+    "html[data-textfx=words] .h-name .ln>span{animation:none!important}",
     "html[data-textfx=letters] .h-name .ln>span{animation:none!important}",
     ".fx-now,.fx-now *{transition:none!important}",
     /* hover */
     ".fx-card{transition:transform .5s var(--fxe),box-shadow .5s var(--fxe),border-color .3s}",
     "html:is([data-hoverfx=lift],[data-hoverfx=magnetic]) .fx-card:hover{transform:translateY(-6px)}",
     "html[data-hoverfx=tilt] .fx-tilt{transform-style:preserve-3d;transition:transform .6s var(--fxe)}",
+    "html[data-hoverfx=shine] .fx-card:not(.cat):not(.contact-box){position:relative;overflow:hidden}",
+    "html[data-hoverfx=shine] .fx-card:not(.cat):not(.contact-box)::after{content:'';position:absolute;inset:0;pointer-events:none;z-index:4;border-radius:inherit;background:linear-gradient(110deg,transparent 35%,rgba(255,255,255,.26) 50%,transparent 65%);transform:translateX(-130%)}",
+    "html[data-hoverfx=shine] .fx-card:hover{transform:translateY(-4px)}",
+    "html[data-hoverfx=shine] .fx-card:hover::after{transform:translateX(130%);transition:transform 1.05s var(--fxe)}",
     ".fx-glare{position:absolute;inset:0;border-radius:inherit;pointer-events:none;opacity:0;transition:opacity .4s;background:radial-gradient(420px circle at var(--gx,50%) var(--gy,50%),rgba(255,255,255,.28),transparent 45%);mix-blend-mode:overlay;z-index:3}",
     ".fx-tilt:hover>.fx-glare{opacity:1}",
     /* scroll */
@@ -315,7 +336,7 @@
   /* ---------------------------------------------------------------- cursor */
   var trail = { pts: [], ctx: null, run: false };
   function setupCursor(c) {
-    var custom = FINE && !RM && (c.cursor === "dot" || c.cursor === "blend");
+    var custom = FINE && !RM && (c.cursor === "dot" || c.cursor === "blend" || c.cursor === "ring");
     doc.classList.toggle("fx-nocur", custom);
     layer("dot", custom, function () { return el("div", "fx-dot", "<i></i>"); });
     layer("ring", custom, function () { return el("div", "fx-ring", "<i></i><b>View</b>"); });

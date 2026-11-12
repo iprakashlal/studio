@@ -18,7 +18,7 @@ export function themeCards(extra: Axis[], note: string, layout: Axis = AXES.layo
       { t: "note", text: "Every circle, square, triangle and 3D shape on the site is drawn as an illustrated element from this pack: sun and planets, leaves, coffee and croissants, film reels, tools… Each theme picks a pack that suits it. In shape pickers, each shape chooses a different element from the pack." },
       sel(MOTIF_AXIS),
     ] },
-    { title: "Layout & elements", fields: [g(sel(layout), sel(AXES.nav), NAV_MODE_FIELD, sel(AXES.width), sel(AXES.heading), sel(AXES.shead), ...extra.map(sel)), { t: "note", text: NAV_MODE_NOTE }] },
+    { title: "Layout & elements", fields: [g(sel(layout), sel(AXES.heroArt), sel(AXES.nav), NAV_MODE_FIELD, sel(AXES.width), sel(AXES.heading), sel(AXES.shead), ...extra.map(sel)), { t: "note", text: NAV_MODE_NOTE }] },
     { title: "Cards, buttons & motion", fields: [g(sel(AXES.cards), sel(AXES.buttons), sel(AXES.motionStyle), sel(AXES.pattern), sel(AXES.ornament)), { t: "note", text: note }] },
     { title: "Interactions", fields: [
       { t: "note", text: "Award-style effects: a custom cursor, an intro that also animates links between pages, heading reveals, hover physics, smooth scrolling and a screen texture. Themes tagged Motion set these for you. Cursor and hover effects only run with a mouse; visitors who ask for reduced motion get a still page." },

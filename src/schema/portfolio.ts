@@ -71,10 +71,22 @@ const schema: Category[] = [
         { t: "note", text: "Headings and titles break where you press Enter. With “As typed”, a heading you typed on one line stays on one line (it shrinks a little to fit, and only wraps on screens too narrow for it)." }] },
       { title: "Shape & effects", fields: [
         { t: "range", path: "theme.radius", label: "Corner radius", min: 0, max: 40, step: 1, unit: "px" },
-        { t: "range", path: "theme.logoRadius", label: "Browser tab icon: 0 = square, 50 = circle", min: 0, max: 50, step: 1, unit: "%" },
+        { t: "range", path: "theme.logoRadius", label: "Logo icon and browser tab icon: 0 = square, 50 = circle", min: 0, max: 50, step: 1, unit: "%" },
         g2({ t: "toggle", path: "theme.showGrid", label: "Blueprint grid" }, { t: "toggle", path: "theme.showGlow", label: "Corner glow" }, { t: "toggle", path: "theme.showNetwork", label: "Line network in hero" },
           { t: "toggle", path: "theme.show3D", label: "3D shapes in hero" }, { t: "toggle", path: "theme.showSolids", label: "Floating background shapes" }, { t: "toggle", path: "theme.showTicker", label: "Scrolling skills band" },
           { t: "toggle", path: "theme.motion", label: "Animations" })] },
+      { title: "Logo icon", fields: [
+        { t: "image", path: "brand.icon", label: "Logo icon", hint: "A square image works best (PNG, SVG or JPG). Its corners follow the logo shape under Shape & effects. It also becomes the browser tab icon." },
+        { t: "toggle", path: "brand.iconInMenu", label: "Show the icon in the menu, before your name" },
+        { t: "toggle", path: "brand.iconOnHero", label: "Show the icon on a disc on the right side of the hero" },
+        { t: "when", path: "brand.iconOnHero", is: "true", fields: [
+          { t: "image", path: "hero.discImage", label: "Different image for the disc (optional)", hint: "Leave empty to use the logo icon." },
+          g2({ t: "select", path: "hero.discRim", label: "Disc rim colour", options: [{ value: "theme", label: "Theme colours (mixed)" }, { value: "c1", label: "Primary" }, { value: "c2", label: "Secondary" }, { value: "c3", label: "Tertiary" }, { value: "text", label: "Text colour" }, { value: "surface", label: "Surface" }, { value: "deep", label: "Deep" }] },
+            { t: "select", path: "hero.discSize", label: "Disc size", options: [{ value: "s", label: "Small" }, { value: "m", label: "Medium" }, { value: "l", label: "Large" }] }),
+          { t: "toggle", path: "hero.discMotion", label: "Float, tilt and spin the rim" },
+        ] },
+        { t: "note", text: "The menu icon shows in every layout. The disc floats over the hero's right side in the standard layouts (most themes); the Velocity and Motion layouts keep their own hero art." },
+      ] },
     ],
   },
   {
@@ -110,7 +122,14 @@ const schema: Category[] = [
       { title: "Highlights under the buttons", fields: [{ t: "list", path: "hero.meta", add: () => ({ value: "New", label: "Label" }), max: 5, title: (it) => `${it.value} · ${it.label}`, item: [g2({ t: "text", path: "value", label: "Value" }, { t: "text", path: "label", label: "Label" })] }] },
       { title: "Hero elements", fields: [{ t: "note", text: "Each entry is an illustrated element from the theme's element pack (or a 3D solid with plain geometric shapes). The type picks which element." }, { t: "list", path: "hero.solids", add: () => ({ type: "sphere", color: "c1" }), max: 6, title: (it) => SOLIDS.find((s) => s[0] === it.type)?.[1] || it.type,
         item: [{ t: "select", path: "type", label: "Solid", options: SOLIDS.map(([value, label]) => ({ value, label })) }, { t: "colorKey", path: "color", label: "Colour" }] }] },
-      { title: "Scrolling skills band", fields: [{ t: "strings", path: "ticker", label: "Words in the band", addLabel: "Add word" }] },
+      { title: "Scrolling skills band", fields: [{ t: "strings", path: "ticker", label: "Words in the band", addLabel: "Add word" },
+        { t: "toggle", path: "theme.beltCustom", label: "Use my own band colours" },
+        { t: "when", path: "theme.beltCustom", is: "true", fields: [
+          g2({ t: "color", path: "theme.beltBg", label: "Band colour" }, { t: "color", path: "theme.beltFg", label: "Text colour" }),
+          { t: "toggle", path: "theme.beltDotOne", label: "Shapes between words in one colour" },
+          { t: "when", path: "theme.beltDotOne", is: "true", fields: [{ t: "color", path: "theme.beltDot", label: "Shape colour" }] },
+        ] },
+        { t: "note", text: "Off: the band follows the theme. The band shows when Brand & theme → Scrolling skills band is on (Velocity calls it the marquee)." }] },
     ],
   },
   {
@@ -205,6 +224,20 @@ export const portfolioTemplate: TemplateDef = {
     if (!t.introFont) t.introFont = "display";
     if (!t.introCase) t.introCase = "upper";
     if (t.logoRadius === undefined || t.logoRadius === null) t.logoRadius = 22;
+    if (t.beltCustom === undefined) t.beltCustom = false;
+    if (!t.beltBg) t.beltBg = (t.layout === "velocity" ? t.c1 : t.text) || "#111111";
+    if (!t.beltFg) t.beltFg = onColor(t.beltBg);
+    if (t.beltDotOne === undefined) t.beltDotOne = false;
+    if (!t.beltDot) t.beltDot = t.c1 || "#3D63FF";
+    const b = c.brand && typeof c.brand === "object" ? c.brand : (c.brand = {});
+    if (b.icon === undefined) b.icon = null;
+    if (b.iconInMenu === undefined) b.iconInMenu = true;
+    if (b.iconOnHero === undefined) b.iconOnHero = true;
+    const h = c.hero && typeof c.hero === "object" ? c.hero : (c.hero = {});
+    if (h.discImage === undefined) h.discImage = null;
+    if (!h.discRim) h.discRim = "theme";
+    if (!h.discSize) h.discSize = "m";
+    if (h.discMotion === undefined) h.discMotion = true;
     if (!t.scrollEase) t.scrollEase = "light";
     if (!t.lineBreaks) t.lineBreaks = "typed";
     c.labels = { ...PORTFOLIO_LABELS, ...(c.labels && typeof c.labels === "object" ? c.labels : {}) };

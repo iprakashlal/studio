@@ -154,12 +154,10 @@ export function ProjectView({ studio, index, project, session, onIndex }: { stud
           </div>
           <button type="button" className="btn btn-sm" onClick={() => setModal("history")}>History{project.exports.length ? ` (${project.exports.length})` : ""}</button>
           <button type="button" className="btn btn-sm" onClick={() => setModal("export")}>Export ZIP</button>
+          <button type="button" className="btn btn-sm" onClick={() => setModal("publish")}>Publish to GitHub</button>
           {project.host
             ? <button type="button" className="btn btn-sm" onClick={() => setModal("host")}>Publish to Netlify</button>
-            : <>
-              <button type="button" className="btn btn-sm" onClick={() => setModal("publish")}>Publish to GitHub</button>
-              <button type="button" className="btn btn-sm" onClick={() => setModal("host")} title="Move the site to Netlify hosting, with content and photos in Supabase, and your own domain">Host outside GitHub</button>
-            </>}
+            : <button type="button" className="btn btn-sm" onClick={() => setModal("host")} title="Move the site to Netlify hosting, with content and photos in Supabase, and your own domain">Host outside GitHub</button>}
           <button type="button" className="btn btn-pri btn-sm" disabled={!dirty || saving} onClick={() => save()}>Save</button>
         </div>
       </header>
@@ -261,7 +259,8 @@ function PublishDialog({ studio, project, tpl, draft, dirty, save, onIndex, getB
       await publishSite(repo, files, `Publish v${next} from Site Studio${note.trim() ? `: ${note.trim()}` : ""}`, admin);
       setAdmin(admin);
       // Remember what the site holds now, so later edits in the site's own CMS are recognised and pulled back in.
-      const siteSha = withContent ? (await repo.getText("content.json").catch(() => null))?.sha : undefined;
+      // A Netlify-hosted project stays in step with Supabase, so a GitHub copy doesn't touch its sync record.
+      const siteSha = withContent && !project.host ? (await repo.getText("content.json").catch(() => null))?.sha : undefined;
       const { index } = await studio.recordExport(project.id, { kind: "github", note: note.trim(), target: `${target.owner}/${target.repo}` }, draft, "published", target, siteSha);
       onIndex(index);
       if (warnings.length) toast(`Published with ${warnings.length} missing image(s).`, "bad");
@@ -288,6 +287,7 @@ function PublishDialog({ studio, project, tpl, draft, dirty, save, onIndex, getB
     <Modal title="Publish to GitHub" onClose={onClose} footer={<><button className="btn" onClick={onClose}>Cancel</button><button className="btn btn-pri" disabled={busy || demo} onClick={go}>{busy ? "Publishing…" : `Publish v${project.version + 1}`}</button></>}>
       {demo ? <p className="rounded-lg border border-amber-400/40 bg-amber-400/5 px-3 py-2.5 text-[13px] text-amber-100">Publishing needs a real GitHub login. Exit the demo and connect your repository to use it.</p>
         : <p className="text-sm text-ink-300">Commits the whole site to a repository in one go. Create the repository on GitHub first (it can be empty) and make sure your token can write to it.</p>}
+      {project.host && !demo && <p className="rounded-lg border border-sky-400/30 bg-sky-400/5 px-3 py-2.5 text-[13px] text-sky-100">This site is live on Netlify. Publishing here makes or updates a separate GitHub copy (for example a backup, or a GitHub Pages version). The Netlify site, its content in Supabase and the Studio's live-site sync aren't changed.</p>}
       <Checks list={checks} />
       <div className="grid gap-3 sm:grid-cols-3">
         <Field label="Owner" htmlFor="pb-o"><input id="pb-o" className="input" value={t.owner} onChange={(e) => setT({ ...t, owner: e.target.value })} /></Field>

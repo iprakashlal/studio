@@ -73,7 +73,7 @@ export function ConfirmHost({ children }: { children: ReactNode }) {
 // ---------- small pieces ----------
 export function Field({ label, htmlFor, hint, children, warn }: { label: string; htmlFor?: string; hint?: string; children: ReactNode; warn?: string }) {
   return (
-    <div className="flex min-w-0 flex-col gap-1.5">
+    <div data-field className="flex min-w-0 flex-col gap-1.5 rounded-lg">
       <label className="label" htmlFor={htmlFor}>{label}</label>
       {children}
       {warn ? <span className="text-xs text-amber-300">{warn}</span> : hint ? <span className="hint">{hint}</span> : null}

@@ -1,6 +1,11 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { TemplateDef } from "../schema/types";
 import { STUDIO_BUILD } from "../build-info";
+import { contentIndex, locateField, matchImage, matchText } from "./locate";
+import { GOTO_EVENT } from "./Editor";
+
+const EDIT_KEY = "site-studio:click-to-edit";
+const editPref = () => { try { return localStorage.getItem(EDIT_KEY) !== "off"; } catch { return true; } };
 
 /** The template page for this Studio build, so a Studio update never previews a cached older template. */
 const pageUrl = (base: string, file: string, r = 0) => `${base}${file}?v=${STUDIO_BUILD.id}${r ? `&r=${r}` : ""}`;
@@ -23,6 +28,12 @@ export function Preview({ tpl, base, content, version, assets }: { tpl: Template
   const [size, setSize] = useState({ w: 600, h: 600 });
   const latest = useRef({ content, assets });
   latest.current = { content, assets };
+  const [editOn, setEditOn] = useState(editPref);
+  const live = useRef({ editOn, idx: contentIndex(content), tpl, content, assets });
+  live.current = { editOn, idx: live.current.content === content && live.current.idx ? live.current.idx : contentIndex(content), tpl, content, assets };
+  useEffect(() => { live.current.idx = contentIndex(content); }, [version]);
+  useEffect(() => { try { localStorage.setItem(EDIT_KEY, editOn ? "on" : "off"); } catch { /* private mode */ } if (!editOn) frame.current?.contentDocument?.getElementById("cms-edit-ui")?.remove(); }, [editOn]);
+  const wire = () => { try { const d = frame.current?.contentDocument; if (d) clickToEdit(d, live); } catch { /* another origin */ } };
 
   const send = () => {
     const w = frame.current?.contentWindow;
@@ -75,13 +86,95 @@ export function Preview({ tpl, base, content, version, assets }: { tpl: Template
             <button key={d.id} type="button" aria-pressed={device === d.id} onClick={() => setDevice(d.id)} className={`btn btn-sm ${device === d.id ? "border-brand-500 text-brand-300" : ""}`}>{d.label}</button>
           ))}
           <button type="button" className="btn btn-sm" title="Reload preview" aria-label="Reload preview" onClick={() => go(page)}>↻</button>
+          <button type="button" aria-pressed={editOn} onClick={() => setEditOn(!editOn)} title="Point at text or a picture in the preview, then click Edit to open its field" className={`btn btn-sm ${editOn ? "border-brand-500 text-brand-300" : ""}`}>✎ Click to edit</button>
         </div>
       </div>
       <div ref={box} className="relative min-h-0 flex-1 overflow-hidden">
         <div className="absolute left-1/2 top-3 origin-top overflow-hidden rounded-lg border border-ink-700 bg-white shadow-2xl" style={{ width: dw, height: (size.h - 24) / scale, transform: `translateX(-50%) scale(${scale})` }}>
-          <iframe ref={frame} name="cms-preview" title="Site preview" src={src} className="h-full w-full border-0" />
+          <iframe ref={frame} name="cms-preview" title="Site preview" src={src} onLoad={wire} className="h-full w-full border-0" />
         </div>
       </div>
     </div>
   );
+}
+
+type Live = { current: { editOn: boolean; idx: ReturnType<typeof contentIndex>; tpl: TemplateDef; content: any; assets: Record<string, string> } };
+
+/** In the preview page: outline what's under the pointer (or a tap) and offer "✎ Section → Field" to jump to its field. */
+function clickToEdit(doc: Document, live: Live) {
+  const w = doc.defaultView as (Window & { __cte?: boolean }) | null;
+  if (!w || w.__cte) return;
+  w.__cte = true;
+  let ui: HTMLElement | null = null, box: HTMLElement, chip: HTMLButtonElement, cur: { el: Element; path?: string; cat?: string } | null = null, raf = 0;
+  const build = () => {
+    ui = doc.createElement("div"); ui.id = "cms-edit-ui";
+    ui.innerHTML = `<style>#cms-edit-ui{position:fixed;inset:0;pointer-events:none;z-index:2147483647}#cms-edit-ui .b{position:fixed;border:2px solid #5B7CFF;border-radius:6px;background:rgba(91,124,255,.07);box-shadow:0 0 0 4px rgba(91,124,255,.16);transition:all .08s}#cms-edit-ui button{position:fixed;pointer-events:auto;font:600 12px/1 system-ui,-apple-system,Segoe UI,sans-serif;color:#fff;background:#4A67F0;border:0;border-radius:7px;padding:7px 10px;box-shadow:0 6px 18px rgba(0,0,0,.28);cursor:pointer;white-space:nowrap;max-width:min(420px,90vw);overflow:hidden;text-overflow:ellipsis;letter-spacing:0;text-transform:none}#cms-edit-ui button:hover{background:#3550D6}</style><div class="b"></div><button type="button"></button>`;
+    box = ui.querySelector(".b") as HTMLElement; chip = ui.querySelector("button") as HTMLButtonElement;
+    chip.addEventListener("click", (e) => {
+      e.preventDefault(); e.stopPropagation();
+      if (!cur) return;
+      parent.dispatchEvent(new CustomEvent(GOTO_EVENT, { detail: cur.path ? { path: cur.path } : { cat: cur.cat } }));
+      hide();
+    });
+    doc.body.appendChild(ui);
+  };
+  const hide = () => { if (ui) ui.style.display = "none"; cur = null; };
+  const find = (el: Element | null): { el: Element; path?: string; cat?: string; label: string } | null => {
+    const L = live.current;
+    for (let n = el, d = 0; n && n !== doc.body && d < 7; n = n.parentElement, d++) {
+      if (n.closest("#cms-edit-ui")) return null;
+      let path: string | null = null;
+      if (n.tagName === "IMG") path = matchImage(L.idx, (n as HTMLImageElement).getAttribute("src") || "", L.assets);
+      if (!path) { const t = n.textContent || ""; if (t.trim() && t.length < 700) path = matchText(L.idx, t); }
+      if (path) {
+        const loc = locateField(L.tpl.schema, path, L.content);
+        if (loc) return { el: n, path, label: loc.trail.join(" → ") };
+      }
+    }
+    // Nothing editable right here: offer the page section it's in.
+    const sec = el?.closest("section[id], header[id], footer[id], [data-section]");
+    const id = sec?.getAttribute("data-section") || sec?.id || "";
+    const cat = L.tpl.schema.find((c) => c.id === id || (id === "top" && c.id === "hero"));
+    return cat && sec ? { el: sec, cat: cat.id, label: cat.label } : null;
+  };
+  const show = (hit: NonNullable<ReturnType<typeof find>>) => {
+    if (!ui || !ui.isConnected) build();
+    const r = hit.el.getBoundingClientRect();
+    if (r.width < 4 || r.height < 4) return hide();
+    ui!.style.display = "";
+    // The preview is zoomed out to fit (a desktop page on a phone): keep the outline and button a readable size.
+    const fw = (w!.frameElement as HTMLElement | null)?.getBoundingClientRect().width || w!.innerWidth, k = Math.max(1, Math.min(4, w!.innerWidth / fw));
+    Object.assign(chip.style, { fontSize: 12 * k + "px", padding: `${7 * k}px ${10 * k}px`, borderRadius: 7 * k + "px", maxWidth: Math.min(460 * k, w!.innerWidth - 12) + "px" });
+    box.style.borderWidth = 2 * k + "px";
+    Object.assign(box.style, { left: r.left - 4 + "px", top: r.top - 4 + "px", width: r.width + 8 + "px", height: r.height + 8 + "px" });
+    chip.textContent = "✎ " + hit.label;
+    const ch = chip.offsetHeight || 26 * k, top = r.top > ch + 8 ? r.top - ch - 6 : Math.min(r.bottom + 6, w!.innerHeight - ch - 4);
+    chip.style.left = Math.max(6, Math.min(r.left - 4, w!.innerWidth - chip.offsetWidth - 6)) + "px"; chip.style.top = top + "px";
+    cur = hit;
+  };
+  const at = (x: number, y: number, target: EventTarget | null) => {
+    if (!live.current.editOn) return hide();
+    const el = (target as Element) || doc.elementFromPoint(x, y);
+    if (!el || (el as Element).closest?.("#cms-edit-ui")) return;
+    let hit = find(el as Element);
+    // Pictures can sit under decorations that ignore the pointer (the hero disc): check images under the point too.
+    if (!hit || !hit.path) {
+      const L = live.current;
+      for (const im of Array.from(doc.images)) {
+        const r = im.getBoundingClientRect();
+        if (x < r.left || x > r.right || y < r.top || y > r.bottom || r.width < 8) continue;
+        const path = matchImage(L.idx, im.getAttribute("src") || "", L.assets);
+        const loc = path && locateField(L.tpl.schema, path, L.content);
+        if (loc) { hit = { el: im, path: path!, label: loc.trail.join(" → ") }; break; }
+      }
+    }
+    if (!hit) return hide();
+    if (cur && cur.el === hit.el) return;
+    show(hit);
+  };
+  doc.addEventListener("pointermove", (e) => { if (e.pointerType === "touch") return; cancelAnimationFrame(raf); raf = requestAnimationFrame(() => at(e.clientX, e.clientY, e.target)); }, { passive: true });
+  // Touch: a tap shows the outline and the Edit button; tap the button to go to the field.
+  doc.addEventListener("pointerdown", (e) => { if (e.pointerType === "touch") at(e.clientX, e.clientY, e.target); }, { passive: true });
+  doc.documentElement.addEventListener("mouseleave", () => hide());
+  doc.addEventListener("scroll", () => { if (cur) { const c = cur, label = chip.textContent?.slice(2) || ""; cur = null; show({ ...c, label }); } }, { passive: true, capture: true });
 }

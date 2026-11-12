@@ -38,3 +38,10 @@
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* Click-to-edit: the field the preview jumped to glows for a moment. */
+.jump-flash { animation: jumpflash 1.8s ease-out; }
+@keyframes jumpflash {
+  0%, 35% { box-shadow: 0 0 0 3px rgba(91, 124, 255, 0.85), 0 0 0 8px rgba(91, 124, 255, 0.18); background: rgba(91, 124, 255, 0.08); }
+  100% { box-shadow: 0 0 0 0 rgba(91, 124, 255, 0); background: transparent; }
+}

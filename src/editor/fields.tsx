@@ -230,7 +230,7 @@ function ImageField({ id, label, hint, value, onChange }: { id: string; label: s
   const { img } = useCtx();
   const { busy, run } = useUpload();
   return (
-    <div className="flex flex-col gap-1.5">
+    <div data-field className="flex flex-col gap-1.5 rounded-lg">
       <span className="label">{label}</span>
       <div className="flex flex-wrap items-center gap-3.5">
         <div className="grid h-20 w-20 flex-none place-items-center overflow-hidden rounded-xl border border-dashed border-ink-600 bg-ink-950 text-[11px] text-ink-500">
@@ -252,7 +252,7 @@ function ImagesField({ id, label, hint, value, onChange }: { id: string; label: 
   const { busy, run } = useUpload();
   const move = (i: number, d: number) => { const a = [...value]; [a[i], a[i + d]] = [a[i + d], a[i]]; onChange(a); };
   return (
-    <div className="flex flex-col gap-1.5">
+    <div data-field className="flex flex-col gap-1.5 rounded-lg">
       <span className="label">{label}</span>
       <div className="flex flex-wrap gap-2.5">
         {value.map((v, i) => (

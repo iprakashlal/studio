@@ -1114,14 +1114,14 @@ function heroHTML(c){
   const photo="";
   const G=H.graphic&&H.graphic!=="elements"&&GFX[H.graphic]?H.graphic:"";
   const stageIn=G?GFX[G](c):(moOn()?moStage:fall),stageAttr=G?` data-gfx="${G}"`:"",ph=G==="photo"?"":photo;
-  if(HX[t.layout])return HX[t.layout](c,{H,t,art:`<div class="stage-wrap"><div id="stage"${stageAttr} aria-label="${G?"Hero graphic":moOn()?"Illustrated composition":"3D composition of geometric solids"}">${stageIn}</div>${ph}${discHTML(c)}</div>`});
+  if(HX[t.layout])return HX[t.layout](c,{H,t,art:`<div class="stage-wrap"><div id="stage" data-edit="hero.graphic"${stageAttr} aria-label="${G?"Hero graphic":moOn()?"Illustrated composition":"3D composition of geometric solids"}">${stageIn}</div>${ph}${discHTML(c)}</div>`});
   return `<div class="hero" id="hero">${t.showNetwork?'<canvas id="net" aria-hidden="true"></canvas>':""}<div class="wrap"><div class="hero-grid"><div class="h-text">
     ${H.eyebrow?`<span class="eyebrow"><b></b>${ml(H.eyebrow)}</span>`:""}
     <h1 class="h-name"><span class="ln"><span>${esc(H.firstName)}</span></span><span class="ln"><span>${esc(H.lastName)}<span class="dot">.</span></span></span></h1>
     <p class="h-role">${rich(H.role)}</p>
     <div class="h-cta">${H.ctaPrimary?`<a href="#${esc(H.ctaPrimaryTarget)}" class="b pri">${esc(H.ctaPrimary)}</a>`:""}${H.ctaSecondary?`<a href="${esc(safeUrl(H.ctaSecondaryUrl))}" target="_blank" rel="noopener" class="b">${esc(H.ctaSecondary)}</a>`:""}</div>
     ${H.meta.length?`<div class="h-meta">${H.meta.map(m=>`<div><b>${esc(m.value)}</b><span class="m">${esc(m.label)}</span></div>`).join("")}</div>`:""}
-  </div><div class="stage-wrap"><div id="stage"${stageAttr} aria-label="${G?"Hero graphic":moOn()?"Illustrated composition":"3D composition of geometric solids"}">${stageIn}</div>${ph}${discHTML(c)}</div></div></div></div>`;
+  </div><div class="stage-wrap"><div id="stage" data-edit="hero.graphic"${stageAttr} aria-label="${G?"Hero graphic":moOn()?"Illustrated composition":"3D composition of geometric solids"}">${stageIn}</div>${ph}${discHTML(c)}</div></div></div></div>`;
 }
 /* Hero structures (kit 3): each builds its own markup from the same hero content. */
 function hxParts(c,H){
@@ -1285,7 +1285,7 @@ function vxHTML(c){
 function vxHero(c){const H=c.hero,V=c.velocity;
   const shape=["arch","circle","square","cutout"].includes(V.portraitShape)?V.portraitShape:"arch";
   const port=heroPic(c)?`<div class="vx-portrait vx-${shape}"><img src="${esc(imgUrl(heroPic(c)))}" alt="${esc(H.firstName+" "+H.lastName)}"></div>`
-    :`<div class="vx-portrait vx-noimg" aria-hidden="true"><div class="vx-stage" id="vxStage"><span class="vx-orb2"></span><span class="vx-orb"></span></div></div>`;
+    :`<div class="vx-portrait vx-noimg" aria-hidden="true" data-edit="brand.icon"><div class="vx-stage" id="vxStage"><span class="vx-orb2"></span><span class="vx-orb"></span></div></div>`;
   const nextTag=V.nextUrl?"a":"div";
   return `<section class="vx-hero" id="hero">
     <div class="vx-hero-top">${H.eyebrow?`<p class="vx-eyebrow"><i></i>${ml(H.eyebrow)}</p>`:"<span></span>"}

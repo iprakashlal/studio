@@ -1,5 +1,6 @@
 import { createContext, useContext, useLayoutEffect, useRef, useState } from "react";
 import { ThemeGallery } from "../themes/ThemeGallery";
+import { LinkedInImport } from "./LinkedInImport";
 import { Motifs } from "../themes/catalog";
 import type { Field as F, TemplateDef } from "../schema/types";
 import { getP, setP, clone, vpaOk, paypalOk, httpsOk, hostIs, emailOk, phoneOk } from "../lib/util";
@@ -165,6 +166,8 @@ export function FieldView({ f, obj, base }: { f: F; obj: any; base: string }) {
       return (
         <ThemeGallery current={root.theme?.preset} onPick={(th) => { Object.assign(root.theme, tpl.themeValues(th)); bump(); }} />
       );
+    case "linkedin":
+      return <LinkedInImport root={root} bump={bump} />;
     case "presets":
       return (
         <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">

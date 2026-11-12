@@ -350,12 +350,99 @@ function parseDate(s?: string): { y: number; m: number } | null {
 const fmt = (s?: string) => { const d = parseDate(s); if (!d) return s || ""; return /^[A-Za-z]/.test(String(s).trim()) ? `${MONTHS[d.m][0].toUpperCase()}${MONTHS[d.m].slice(1)} ${d.y}` : String(d.y); };
 export const period = (start?: string, end?: string, current?: boolean) => [fmt(start), current ? "Present" : fmt(end)].filter(Boolean).join(" – ");
 
-/** Whole years since the earliest role started. */
+/** Whole years actually worked: every role's months added up, with overlapping roles counted once (gaps don't count). */
 export function yearsOfExperience(d: LinkedInData, now = new Date()): number {
-  const starts = d.roles.map((r) => parseDate(r.start)).filter(Boolean) as { y: number; m: number }[];
-  if (!starts.length) return 0;
-  const e = starts.reduce((a, b) => (a.y * 12 + a.m <= b.y * 12 + b.m ? a : b));
-  return Math.max(0, Math.floor((now.getFullYear() * 12 + now.getMonth() - (e.y * 12 + e.m)) / 12));
+  const nowM = now.getFullYear() * 12 + now.getMonth();
+  const spans = d.roles.map((r) => {
+    const a = parseDate(r.start); if (!a) return null;
+    const b = r.current || !r.end || /present/i.test(r.end) ? null : parseDate(r.end);
+    const s0 = a.y * 12 + a.m, e0 = b ? b.y * 12 + b.m + 1 : nowM + 1;
+    return e0 > s0 ? [s0, Math.min(e0, nowM + 1)] as [number, number] : null;
+  }).filter(Boolean).sort((x, y) => x![0] - y![0]) as [number, number][];
+  let months = 0, cur: [number, number] | null = null;
+  for (const sp of spans) {
+    if (cur && sp[0] <= cur[1]) cur[1] = Math.max(cur[1], sp[1]);
+    else { if (cur) months += cur[1] - cur[0]; cur = [...sp] as [number, number]; }
+  }
+  if (cur) months += cur[1] - cur[0];
+  return Math.max(0, Math.floor(months / 12));
+}
+
+/** The latest role: the current one (most recently started), else the one that ended last. */
+export function latestRole(d: LinkedInData): LiRole | undefined {
+  const key = (r: LiRole) => { const e = r.current || /present/i.test(r.end || "") ? 1e9 : (parseDate(r.end) ? parseDate(r.end)!.y * 12 + parseDate(r.end)!.m : -1); const st = parseDate(r.start); return e * 1e4 + (st ? st.y * 12 + st.m : 0); };
+  return [...d.roles].sort((a, b) => key(b) - key(a))[0];
+}
+
+/** "Mumbai, Maharashtra, India" → "Mumbai"; work modes ("Remote", "Hybrid") don't count as a place. */
+function cityOf(loc?: string): string {
+  const parts = String(loc || "").split(/[,·]/).map((x) => x.replace(/\b(area|metropolitan region|metropolitan area)\b/gi, "").trim()).filter((x) => x && !/^(remote|hybrid|on-site|onsite|in office)$/i.test(x));
+  return parts[0] || "";
+}
+
+/** Where they're based: the latest role's location when it has one, else the profile's location. */
+export function basedIn(d: LinkedInData): string {
+  const r = latestRole(d);
+  return cityOf(r?.location) || cityOf(d.location);
+}
+
+// ── Picking lines from the About summary for quotes, intro and headings (no AI: plain sentence rules) ──
+
+/** The summary as clean sentences (bullets and line breaks count as sentence ends). */
+export function summarySentences(summary?: string): string[] {
+  if (!summary) return [];
+  const chunks = summary.split(/\n+|\s*[•▪●]\s+/).map((x) => x.trim()).filter(Boolean);
+  const out: string[] = [];
+  for (const ch of chunks) for (const m of ch.match(/[^.!?]+[.!?]+["”’)]*(?=\s|$)|[^.!?]+$/g) || []) {
+    const t = m.replace(/^[-–*]\s+/, "").replace(/\s+/g, " ").trim();
+    if (t.length >= 12 && /[a-z]/i.test(t) && !/^(skills|core competencies|specialties|technologies)\s*:/i.test(t) && (t.match(/,/g) || []).length < 6) out.push(t);
+  }
+  return out;
+}
+const STRONG = /\b(believe|love|passion|passionate|mission|driven|obsessed|care|craft|purpose|always|never|simple|impact|great|better|best)\b/i;
+const OPEN = /\b(open to|reach out|connect|conversations?|let'?s|get in touch|collaborat|looking for|happy to|talk)\b/i;
+const FIRST = /^(i|i'm|i’m|my|as a|with|over|i've|i’ve)\b/i;
+/** Highlights the last two or three words with *…* (the templates show those in the accent style). */
+function accent(t: string): string {
+  const w = t.replace(/\*/g, "").split(" ");
+  if (w.length < 5) return t.replace(/\*/g, "");
+  const n = w.length > 10 ? 3 : 2, end = w.slice(-n).join(" "), m = end.match(/^(.*?)([.!?,;:"”’)]*)$/)!;
+  return `${w.slice(0, -n).join(" ")} *${m[1]}*${m[2]}`;
+}
+
+export type SummaryLines = { intro?: string; lede?: string; heading?: string; quote?: string; quotes: string[]; contact?: string; tagline?: string };
+/** Picks a different summary sentence for each place a short line goes, best fit first. */
+export function pickSummaryLines(summary?: string): SummaryLines {
+  const S = summarySentences(summary), used = new Set<string>(), out: SummaryLines = { quotes: [] };
+  const take = (score: (t: string, i: number) => number) => {
+    let best = "", bs = -Infinity;
+    S.forEach((t, i) => { if (used.has(t)) return; const v = score(t, i); if (v > bs) { bs = v; best = t; } });
+    if (best && bs > -50) { used.add(best); return best; }
+    return undefined;
+  };
+  const len = (t: string, lo: number, hi: number) => (t.length < lo ? -60 : t.length > hi ? -60 : 0);
+  // Contact: an "open to / let's talk" line when the summary has one (taken first, so nothing else uses it).
+  const contact = S.find((t) => OPEN.test(t) && t.length <= 220);
+  if (contact) { used.add(contact); out.contact = contact; }
+  // Intro under the name: the opening, first-person line about what they do.
+  const intro = take((t, i) => len(t, 30, 150) - i * 3 + (FIRST.test(t) ? 8 : 0) + (OPEN.test(t) ? -20 : 0));
+  if (intro) out.intro = accent(intro);
+  // Short line under the About heading: the next sentence in order.
+  const lede = take((t, i) => len(t, 25, 140) - i * 2 + (OPEN.test(t) ? -20 : 0));
+  if (lede) out.lede = lede;
+  // Quote: the punchiest belief-style sentence. A plain line about themselves ("Outside work I run…") isn't a
+  // quote, so without a quotable line the template's quote stays.
+  const quotable = (t: string) => STRONG.test(t) || !/\b(i|i'm|i’m|i've|i’ve|my|me)\b/i.test(t);
+  const quote = take((t) => (quotable(t) ? 0 : -100) + len(t, 25, 120) + (STRONG.test(t) ? 12 : 0) - t.length / 12);
+  if (quote) { out.quote = `“${accent(quote.replace(/^["“]|["”]$/g, ""))}”`; out.quotes.push(accent(quote)); }
+  const q2 = take((t) => (quotable(t) ? 0 : -100) + len(t, 25, 110) + (STRONG.test(t) ? 10 : 0) - t.length / 12);
+  if (q2) out.quotes.push(accent(q2));
+  // Big About heading: a longer line about their path.
+  const heading = take((t, i) => len(t, 35, 130) + (/\b(years?|journey|started|began|career|today|now)\b/i.test(t) ? 10 : 0) - i);
+  if (heading) out.heading = accent(heading);
+  const tag = take((t) => len(t, 15, 70) + (STRONG.test(t) ? 6 : 0));
+  if (tag) out.tagline = accent(tag);
+  return out;
 }
 
 /** Description text → up to `max` short highlights. */
@@ -368,8 +455,8 @@ export function bullets(text?: string, max = 4): string[] {
 
 export type ApplyParts = { profile: boolean; about: boolean; work: boolean; learning: boolean; skills: boolean; projects: boolean; contact: boolean };
 export const PART_LABELS: Record<keyof ApplyParts, string> = {
-  profile: "Name, headline and location (Hero)",
-  about: "About text (About → Story)",
+  profile: "Name, headline, years of experience and where you're based (Hero)",
+  about: "Summary → About story, intro line, quote and headings",
   work: "Experience (Work deck)",
   learning: "Education, certifications and languages (Learning)",
   skills: "Skills (scrolling band under the hero)",
@@ -381,8 +468,9 @@ export const PART_LABELS: Record<keyof ApplyParts, string> = {
 export function available(d: LinkedInData): Partial<Record<keyof ApplyParts, string>> {
   const a: Partial<Record<keyof ApplyParts, string>> = {};
   const nm = [d.firstName, d.lastName].filter(Boolean).join(" ");
-  if (nm || d.headline) a.profile = [nm, d.headline, d.location].filter(Boolean).join(" · ");
-  if (d.summary) a.about = d.summary.length > 120 ? d.summary.slice(0, 117) + "…" : d.summary;
+  const yrs = yearsOfExperience(d), city = basedIn(d);
+  if (nm || d.headline) a.profile = [nm, d.headline, yrs ? `${yrs}+ years` : "", city ? `based in ${city}` : ""].filter(Boolean).join(" · ");
+  if (d.summary) { const L = pickSummaryLines(d.summary); const n = [L.intro, L.lede, L.quote, L.heading, L.contact].filter(Boolean).length; a.about = (d.summary.length > 100 ? d.summary.slice(0, 97) + "…" : d.summary) + (n ? ` (+ ${n} line${n > 1 ? "s" : ""} for the intro, quote and headings)` : ""); }
   if (d.roles.length) a.work = `${d.roles.length} role${d.roles.length > 1 ? "s" : ""}: ${d.roles.slice(0, 3).map((r) => `${r.title} at ${r.company}`).join("; ")}${d.roles.length > 3 ? "…" : ""}`;
   const ln = d.education.length + d.certifications.length;
   if (ln || d.languages.length) a.learning = [d.education.length && `${d.education.length} school${d.education.length > 1 ? "s" : ""}`, d.certifications.length && `${d.certifications.length} certification${d.certifications.length > 1 ? "s" : ""}`, d.languages.length && d.languages.join(", ")].filter(Boolean).join(" · ");
@@ -400,13 +488,13 @@ export function applyLinkedIn(c: any, d: LinkedInData, parts: ApplyParts, profil
     c.hero ||= {};
     if (d.firstName) c.hero.firstName = d.firstName;
     if (d.lastName !== undefined && d.firstName) c.hero.lastName = d.lastName || "";
-    const city = d.location?.split(",")[0]?.trim();
+    const city = basedIn(d);
     if (d.headline) c.hero.eyebrow = [d.headline.split(/\s+[|·]\s+/)[0], city].filter(Boolean).join(" · ");
     const yrs = yearsOfExperience(d);
-    for (const m of c.hero.meta || []) {
-      if (/year/i.test(m.label) && yrs) m.value = `${yrs}+`;
-      if (/based|city|location/i.test(m.label) && city) m.value = city;
-    }
+    const meta: any[] = (c.hero.meta ||= []);
+    const yr = meta.find((m) => /year|experience/i.test(m.label)), loc = meta.find((m) => /based|city|location/i.test(m.label));
+    if (yrs) { if (yr) yr.value = `${yrs}+`; else if (meta.length < 5) meta.unshift({ value: `${yrs}+`, label: "Years" }); }
+    if (city) { if (loc) loc.value = city; else if (meta.length < 5) meta.push({ value: city, label: "Based in" }); }
     const name = [d.firstName, d.lastName].filter(Boolean).join(" ");
     if (name) {
       c.brand ||= {}; c.brand.logoText = name;
@@ -419,12 +507,32 @@ export function applyLinkedIn(c: any, d: LinkedInData, parts: ApplyParts, profil
       if (c.contact) c.contact.footerLeft = `© ${new Date().getFullYear()} ${name}`;
     }
     for (const s of c.about?.stats || []) if (/year/i.test(s.label) && yrs) s.value = yrs;
+    // Quick facts (k/v): current role, earlier companies, focus, languages, where they're based.
+    const latest = latestRole(d), facts: any[] = c.about?.facts || [];
+    const before = [...new Set(d.roles.filter((r) => r !== latest && r.company && r.company !== latest?.company).map((r) => r.company))].slice(0, 3);
+    const focus = d.headline?.split(/\s+[|·]\s+/).slice(1, 3).join(" · ") || d.skills.slice(0, 3).join(", ");
+    for (const f of facts) {
+      const k = String(f.k || "");
+      if (/^now|current/i.test(k) && latest) f.v = [latest.title, latest.company].filter(Boolean).join(", ");
+      else if (/^before|previous|past/i.test(k) && before.length) f.v = before.join(", ");
+      else if (/focus|known|speciali/i.test(k) && focus) f.v = focus;
+      else if (/speak|language/i.test(k) && d.languages.length) f.v = d.languages.slice(0, 4).join(", ");
+      else if (/based|city|location|lives/i.test(k) && city) f.v = city;
+    }
   }
   if (parts.about && d.summary) {
     c.about ||= {};
     c.about.story = d.summary.trim().replace(/\n(?!\n)/g, "\n\n").replace(/\n{3,}/g, "\n\n");
-    const firstSentence = d.summary.split(/(?<=[.!?])\s+/)[0];
-    if (firstSentence && firstSentence.length <= 140) c.about.lede = firstSentence;
+    const L = pickSummaryLines(d.summary);
+    if (L.lede) c.about.lede = L.lede;
+    if (L.heading && "storyHeading" in c.about) c.about.storyHeading = L.heading;
+    if (L.quote && "quote" in c.about) c.about.quote = L.quote;
+    if (L.intro && c.hero) c.hero.role = L.intro;
+    if (L.contact && c.contact && "body" in c.contact) c.contact.body = L.contact;
+    if (c.velocity) {
+      if (L.quotes.length && Array.isArray(c.velocity.quotes)) c.velocity.quotes = c.velocity.quotes.map((q: string, i: number) => L.quotes[i] || q);
+      if (L.tagline && "footerTagline" in c.velocity) c.velocity.footerTagline = L.tagline;
+    }
   }
   if (parts.work && d.roles.length) {
     c.work ||= {};

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useConfirm, useToast } from "../ui/kit";
 
 /** Copy the content as JSON, restore a copy, or reset to the template's starting content. */
-export function BackupPanel({ draft, onReplace, loadDefaults }: { draft: any; onReplace: (c: any) => void; loadDefaults: () => Promise<any> }) {
+export function BackupPanel({ draft, onReplace, loadDefaults, hosted }: { draft: any; onReplace: (c: any) => void; loadDefaults: () => Promise<any>; hosted?: boolean }) {
   const toast = useToast();
   const confirm = useConfirm();
   const [txt, setTxt] = useState("");
@@ -11,7 +11,7 @@ export function BackupPanel({ draft, onReplace, loadDefaults }: { draft: any; on
     <>
       <section className="card flex flex-col gap-3 p-5">
         <h3 className="text-[15px] font-extrabold">Back up</h3>
-        <p className="text-sm text-ink-300">Copies everything in the editor, including unsaved changes. Every save is also a commit on GitHub, so the repository history is a backup too.</p>
+        <p className="text-sm text-ink-300">Copies everything in the editor, including unsaved changes. {hosted ? "Keep a copy somewhere safe: Supabase keeps only the latest version." : "Every save is also a commit on GitHub, so the repository history is a backup too."}</p>
         <button type="button" className="btn self-start" onClick={() => {
           const t = JSON.stringify(draft, null, 2);
           navigator.clipboard.writeText(t).then(() => toast("Content copied"), () => { setTxt(t); toast("Copy it from the box below"); });

@@ -86,7 +86,7 @@ export function Preview({ tpl, base, content, version, assets }: { tpl: Template
             <button key={d.id} type="button" aria-pressed={device === d.id} onClick={() => setDevice(d.id)} className={`btn btn-sm ${device === d.id ? "border-brand-500 text-brand-300" : ""}`}>{d.label}</button>
           ))}
           <button type="button" className="btn btn-sm" title="Reload preview" aria-label="Reload preview" onClick={() => go(page)}>↻</button>
-          <button type="button" aria-pressed={editOn} onClick={() => setEditOn(!editOn)} title="Point at text or a picture in the preview, then click Edit to open its field" className={`btn btn-sm ${editOn ? "border-brand-500 text-brand-300" : ""}`}>✎ Click to edit</button>
+          <button type="button" aria-pressed={editOn} onClick={() => setEditOn(!editOn)} title="Point at text or a picture in the preview to see its field; Ctrl+click (⌘+click on a Mac), or press and hold on touch, to open it" className={`btn btn-sm ${editOn ? "border-brand-500 text-brand-300" : ""}`}>✎ Click to edit</button>
         </div>
       </div>
       <div ref={box} className="relative min-h-0 flex-1 overflow-hidden">
@@ -105,18 +105,18 @@ function clickToEdit(doc: Document, live: Live) {
   const w = doc.defaultView as (Window & { __cte?: boolean }) | null;
   if (!w || w.__cte) return;
   w.__cte = true;
-  let ui: HTMLElement | null = null, box: HTMLElement, chip: HTMLButtonElement, cur: { el: Element; path?: string; cat?: string } | null = null, raf = 0;
+  let ui: HTMLElement | null = null, box: HTMLElement, chip: HTMLElement, cur: { el: Element; path?: string; cat?: string } | null = null, raf = 0;
   const build = () => {
     ui = doc.createElement("div"); ui.id = "cms-edit-ui";
-    ui.innerHTML = `<style>#cms-edit-ui{position:fixed;inset:0;pointer-events:none;z-index:2147483647}#cms-edit-ui .b{position:fixed;border:2px solid #5B7CFF;border-radius:6px;background:rgba(91,124,255,.07);box-shadow:0 0 0 4px rgba(91,124,255,.16);transition:all .08s}#cms-edit-ui button{position:fixed;pointer-events:auto;font:600 12px/1 system-ui,-apple-system,Segoe UI,sans-serif;color:#fff;background:#4A67F0;border:0;border-radius:7px;padding:7px 10px;box-shadow:0 6px 18px rgba(0,0,0,.28);cursor:pointer;white-space:nowrap;max-width:min(420px,90vw);overflow:hidden;text-overflow:ellipsis;letter-spacing:0;text-transform:none}#cms-edit-ui button:hover{background:#3550D6}</style><div class="b"></div><button type="button"></button>`;
-    box = ui.querySelector(".b") as HTMLElement; chip = ui.querySelector("button") as HTMLButtonElement;
-    chip.addEventListener("click", (e) => {
-      e.preventDefault(); e.stopPropagation();
-      if (!cur) return;
-      parent.dispatchEvent(new CustomEvent(GOTO_EVENT, { detail: cur.path ? { path: cur.path } : { cat: cur.cat } }));
-      hide();
-    });
+    ui.innerHTML = `<style>#cms-edit-ui{position:fixed;inset:0;pointer-events:none;z-index:2147483647}#cms-edit-ui .b{position:fixed;border:2px solid #5B7CFF;border-radius:6px;background:rgba(91,124,255,.07);box-shadow:0 0 0 4px rgba(91,124,255,.16);transition:all .08s}#cms-edit-ui .c{position:fixed;font:600 12px/1 system-ui,-apple-system,Segoe UI,sans-serif;color:#fff;background:#4A67F0;border-radius:7px;padding:7px 10px;box-shadow:0 6px 18px rgba(0,0,0,.28);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:0;text-transform:none}#cms-edit-ui .c i{font-style:normal;opacity:.75;font-weight:500}</style><div class="b"></div><div class="c" role="status"></div>`;
+    box = ui.querySelector(".b") as HTMLElement; chip = ui.querySelector(".c") as HTMLElement;
     doc.body.appendChild(ui);
+  };
+  // The label only names the field; Ctrl+click (⌘+click on a Mac) on the outlined item opens it. Touch: press and hold.
+  const mac = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent), hint = mac ? "⌘+click to edit" : "Ctrl+click to edit";
+  const go = (hit: { path?: string; cat?: string } | null) => {
+    if (!hit) return;
+    parent.dispatchEvent(new CustomEvent(GOTO_EVENT, { detail: hit.path ? { path: hit.path } : { cat: hit.cat } }));
   };
   const hide = () => { if (ui) ui.style.display = "none"; cur = null; };
   /** The content section an element is in ("hero", "about"…), to prefer that section's values. */
@@ -149,15 +149,23 @@ function clickToEdit(doc: Document, live: Live) {
     Object.assign(chip.style, { fontSize: 12 * k + "px", padding: `${7 * k}px ${10 * k}px`, borderRadius: 7 * k + "px", maxWidth: Math.min(460 * k, w!.innerWidth - 12) + "px" });
     box.style.borderWidth = 2 * k + "px";
     Object.assign(box.style, { left: r.left - 4 + "px", top: r.top - 4 + "px", width: r.width + 8 + "px", height: r.height + 8 + "px" });
-    chip.textContent = "✎ " + hit.label;
+    chip.innerHTML = "";
+    chip.append("✎ " + hit.label + "  ");
+    const h = doc.createElement("i"); h.textContent = "· " + (coarse ? "press and hold to edit" : hint); chip.append(h);
     const ch = chip.offsetHeight || 26 * k, top = r.top > ch + 8 ? r.top - ch - 6 : Math.min(r.bottom + 6, w!.innerHeight - ch - 4);
     chip.style.left = Math.max(6, Math.min(r.left - 4, w!.innerWidth - chip.offsetWidth - 6)) + "px"; chip.style.top = top + "px";
     cur = hit;
   };
-  const at = (x: number, y: number, target: EventTarget | null) => {
-    if (!live.current.editOn) return hide();
+  // Holding Ctrl / ⌘ shows a pointer cursor over the outlined item.
+  const cursor = (on: boolean) => { doc.documentElement.style.cursor = on && live.current.editOn ? "pointer" : ""; };
+  w.addEventListener("keydown", (e) => { if (e.key === "Control" || e.key === "Meta") cursor(true); });
+  w.addEventListener("keyup", (e) => { if (e.key === "Control" || e.key === "Meta") cursor(false); });
+  w.addEventListener("blur", () => cursor(false));
+  let coarse = false;
+  /** What's editable at a point: the text or picture there, else its page section. */
+  const resolve = (x: number, y: number, target: EventTarget | null) => {
     const el = (target as Element) || doc.elementFromPoint(x, y);
-    if (!el || (el as Element).closest?.("#cms-edit-ui")) return;
+    if (!el || !(el as Element).closest || (el as Element).closest("#cms-edit-ui")) return null;
     let hit = find(el as Element);
     // Text that lets the pointer through (big animated names) sits under the section it's in: find it by position.
     if (!hit || !hit.path) {
@@ -183,13 +191,43 @@ function clickToEdit(doc: Document, live: Live) {
         if (loc) { hit = { el: im, path: path!, label: loc.trail.join(" → ") }; break; }
       }
     }
+    return hit;
+  };
+  const at = (x: number, y: number, target: EventTarget | null) => {
+    if (!live.current.editOn) return hide();
+    const hit = resolve(x, y, target);
     if (!hit) return hide();
     if (cur && cur.el === hit.el) return;
     show(hit);
   };
-  doc.addEventListener("pointermove", (e) => { if (e.pointerType === "touch") return; cancelAnimationFrame(raf); raf = requestAnimationFrame(() => at(e.clientX, e.clientY, e.target)); }, { passive: true });
-  // Touch: a tap shows the outline and the Edit button; tap the button to go to the field.
-  doc.addEventListener("pointerdown", (e) => { if (e.pointerType === "touch") at(e.clientX, e.clientY, e.target); }, { passive: true });
+  doc.addEventListener("pointermove", (e) => { if (e.pointerType === "touch") return; coarse = false; cursor(e.ctrlKey || e.metaKey); cancelAnimationFrame(raf); raf = requestAnimationFrame(() => at(e.clientX, e.clientY, e.target)); }, { passive: true });
+  // Ctrl+click / ⌘+click: open the field instead of following a link or button.
+  const editClick = (e: MouseEvent) => {
+    if (!live.current.editOn || !(e.ctrlKey || e.metaKey) || e.button !== 0 && e.type === "click") return false;
+    const hit = resolve(e.clientX, e.clientY, e.target);
+    if (!hit) return false;
+    e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation();
+    go(hit); hide();
+    return true;
+  };
+  doc.addEventListener("click", editClick, true);
+  // On a Mac, Ctrl+click is a right-click: treat it the same way.
+  doc.addEventListener("contextmenu", (e) => { if (e.ctrlKey) editClick(e); }, true);
+  doc.addEventListener("auxclick", (e) => { if (e.ctrlKey || e.metaKey) { e.preventDefault(); } }, true);
+  // Touch: a tap outlines; press and hold (half a second, without moving) opens the field.
+  let hold = 0, sx = 0, sy = 0, held = false;
+  doc.addEventListener("pointerdown", (e) => {
+    if (e.pointerType !== "touch" || !live.current.editOn) return;
+    coarse = true; held = false; sx = e.clientX; sy = e.clientY; at(e.clientX, e.clientY, e.target);
+    clearTimeout(hold);
+    hold = w.setTimeout(() => { const hit = resolve(sx, sy, e.target); if (hit) { held = true; go(hit); hide(); } }, 550);
+  }, { passive: true });
+  doc.addEventListener("pointermove", (e) => { if (e.pointerType === "touch" && Math.hypot(e.clientX - sx, e.clientY - sy) > 10) clearTimeout(hold); }, { passive: true });
+  doc.addEventListener("pointerup", () => clearTimeout(hold), { passive: true });
+  doc.addEventListener("pointercancel", () => clearTimeout(hold), { passive: true });
+  // After a hold, don't also follow the link under the finger or open the long-press menu.
+  doc.addEventListener("click", (e) => { if (held) { e.preventDefault(); e.stopPropagation(); held = false; } }, true);
+  doc.addEventListener("contextmenu", (e) => { if (coarse && live.current.editOn) e.preventDefault(); }, true);
   doc.documentElement.addEventListener("mouseleave", () => hide());
-  doc.addEventListener("scroll", () => { if (cur) { const c = cur, label = chip.textContent?.slice(2) || ""; cur = null; show({ ...c, label }); } }, { passive: true, capture: true });
+  doc.addEventListener("scroll", () => { if (cur) { const c = cur as any; cur = null; show(c); } }, { passive: true, capture: true });
 }

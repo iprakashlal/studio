@@ -2,6 +2,7 @@ import { BrandMark, useBrand } from "../lib/brand";
 import { STUDIO_BUILD } from "../build-info";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { THEMES, THEME_TAGS, portfolioThemeValues, storeThemeValues, type Theme } from "../themes/catalog";
+import { BIZ_TAGS, BIZ_THEMES, businessThemeValues } from "../themes/business";
 import { ThemeSwatch } from "../themes/ThemeGallery";
 import { themeCode } from "../themes/codes";
 import { TEMPLATES } from "../schema";
@@ -12,25 +13,29 @@ import { Logo, useToast } from "../ui/kit";
 // Hover a card for a live preview, click it for a bigger one, and quote the theme ID (T-07) to choose.
 // URL: #/themes?v=store&t=velocity&list=velocity,blueprint
 
-type Kind = "portfolio" | "store";
-const KINDS: { id: Kind; label: string }[] = [{ id: "portfolio", label: "Portfolio" }, { id: "store", label: "Shop" }];
+type Kind = "portfolio" | "store" | "business";
+const KINDS: { id: Kind; label: string }[] = [{ id: "portfolio", label: "Personal portfolio" }, { id: "store", label: "Shop" }, { id: "business", label: "Business portfolio" }];
+/** Business sites have their own themes; personal portfolios and shops share the rest. */
+const poolOf = (k: Kind): Theme[] => (k === "business" ? BIZ_THEMES : THEMES);
+const ALL: Theme[] = [...THEMES, ...BIZ_THEMES];
 const LS = "site-studio:theme-shortlist";
 
 function parse(): { v: Kind; t: string; list: string[] } {
   const q = new URLSearchParams(location.hash.split("?")[1] || "");
-  return { v: q.get("v") === "store" ? "store" : "portfolio", t: q.get("t") || "", list: (q.get("list") || "").split(",").filter((id) => THEMES.some((t) => t.id === id)) };
+  const v: Kind = q.get("v") === "store" ? "store" : q.get("v") === "business" ? "business" : "portfolio";
+  return { v, t: q.get("t") || "", list: (q.get("list") || "").split(",").filter((id) => ALL.some((t) => t.id === id)) };
 }
 function link(p: { v: Kind; t?: string; list?: string[] }) {
   const q = new URLSearchParams();
-  if (p.v === "store") q.set("v", "store");
+  if (p.v !== "portfolio") q.set("v", p.v);
   if (p.t) q.set("t", p.t);
   if (p.list && p.list.length) q.set("list", p.list.join(","));
   const s = q.toString();
   return location.origin + location.pathname + "#/themes" + (s ? "?" + s : "");
 }
-const values = (k: Kind, t: Theme) => (k === "store" ? storeThemeValues(t) : portfolioThemeValues(t));
+const values = (k: Kind, t: Theme) => (k === "store" ? storeThemeValues(t) : k === "business" ? businessThemeValues(t) : portfolioThemeValues(t));
 const withTheme = (sample: any, k: Kind, t: Theme) => sample && { ...sample, theme: { ...(sample.theme || {}), ...values(k, t) } };
-const readList = (): string[] => { try { return JSON.parse(localStorage.getItem(LS) || "[]").filter((id: string) => THEMES.some((t) => t.id === id)); } catch { return []; } };
+const readList = (): string[] => { try { return JSON.parse(localStorage.getItem(LS) || "[]").filter((id: string) => ALL.some((t) => t.id === id)); } catch { return []; } };
 
 export function ThemesPage({ signedIn }: { signedIn: boolean }) {
   const toast = useToast();
@@ -42,10 +47,13 @@ export function ThemesPage({ signedIn }: { signedIn: boolean }) {
   const [mine, setMine] = useState<string[]>(readList);
   const [shared] = useState<string[]>(init.list);
   const [only, setOnly] = useState<"" | "shared" | "mine">(init.list.length ? "shared" : "");
-  const [samples, setSamples] = useState<Record<Kind, any>>({ portfolio: null, store: null });
+  const [samples, setSamples] = useState<Record<Kind, any>>({ portfolio: null, store: null, business: null });
+  const pool = poolOf(kind), tags = kind === "business" ? BIZ_TAGS : THEME_TAGS;
+  // Switching between business and the other types changes the theme list: clear what doesn't belong.
+  const switchKind = (k: Kind) => { if ((k === "business") !== (kind === "business")) { setTag(""); setOpen(""); setHover(null); } setKind(k); };
 
   useEffect(() => {
-    for (const k of ["portfolio", "store"] as Kind[])
+    for (const k of ["portfolio", "store", "business"] as Kind[])
       fetch(`templates/${k}/content.json`, { cache: "no-store" }).then((r) => r.json()).then((c) => {
         TEMPLATES[k].prepare?.(c);
         setSamples((s) => ({ ...s, [k]: c }));
@@ -57,27 +65,27 @@ export function ThemesPage({ signedIn }: { signedIn: boolean }) {
   useEffect(() => { document.title = "Theme gallery · " + studioBrand.name; }, [studioBrand.name]);
 
   const list = useMemo(() => {
-    const s = q.trim().toLowerCase().replace(/^t-?0*/, "");
-    return THEMES.filter((t) => {
+    const s = q.trim().toLowerCase().replace(/^[tb]-?0*/, "");
+    return pool.filter((t) => {
       if (only === "shared" && !shared.includes(t.id)) return false;
       if (only === "mine" && !mine.includes(t.id)) return false;
       if (tag && !t.tags.includes(tag)) return false;
       if (!s) return true;
-      const code = themeCode(t).toLowerCase().replace(/^t-?0*/, "");
+      const code = themeCode(t).toLowerCase().replace(/^[tb]-?0*/, "");
       return code === s || t.name.toLowerCase().includes(q.trim().toLowerCase()) || t.tags.some((g) => g.toLowerCase() === q.trim().toLowerCase());
     });
-  }, [q, tag, only, mine, shared]);
+  }, [q, tag, only, mine, shared, pool]);
 
   const toggle = (id: string) => setMine((m) => (m.includes(id) ? m.filter((x) => x !== id) : [...m, id]));
   const copy = async (text: string, msg: string) => {
     try { await navigator.clipboard.writeText(text); toast(msg); } catch { prompt("Copy this:", text); }
   };
   const shareMine = () => {
-    const ts = mine.map((id) => THEMES.find((t) => t.id === id)!).filter(Boolean);
+    const ts = mine.map((id) => pool.find((t) => t.id === id)!).filter(Boolean);
     copy(ts.map((t) => `${themeCode(t)} · ${t.name}`).join("\n") + "\n\n" + link({ v: kind, list: mine }), "Shortlist and link copied");
   };
 
-  const openTheme = THEMES.find((t) => t.id === open);
+  const openTheme = pool.find((t) => t.id === open);
   const idx = openTheme ? list.findIndex((t) => t.id === open) : -1;
   const step = (d: number) => { if (!list.length) return; const i = idx < 0 ? 0 : (idx + d + list.length) % list.length; setOpen(list[i].id); };
 
@@ -110,12 +118,12 @@ export function ThemesPage({ signedIn }: { signedIn: boolean }) {
         <div className="flex flex-wrap items-end justify-between gap-6">
           <div className="max-w-2xl">
             <h1 className="text-3xl font-extrabold tracking-tight sm:text-4xl">Pick a look for your site</h1>
-            <p className="mt-2 text-ink-300">{THEMES.length} themes. Hover a theme to preview it, or click it to open a bigger preview. When you've chosen, send the <b className="text-ink-100">theme ID</b> (like <code className="rounded bg-ink-800 px-1.5 py-0.5 text-brand-300">T-07</code>), or star a few and share your shortlist.</p>
+            <p className="mt-2 text-ink-300">{kind === "business" ? `${BIZ_THEMES.length} business themes for companies, firms, agencies and practices.` : `${THEMES.length} themes for personal portfolios and shops.`} Hover a theme to preview it, or click it to open a bigger preview. When you've chosen, send the <b className="text-ink-100">theme ID</b> (like <code className="rounded bg-ink-800 px-1.5 py-0.5 text-brand-300">{kind === "business" ? "B-07" : "T-07"}</code>), or star a few and share your shortlist.</p>
           </div>
           <div className="flex rounded-xl border border-ink-600 p-1" role="group" aria-label="Preview as">
             {KINDS.map((k) => (
-              <button key={k.id} type="button" aria-pressed={kind === k.id} onClick={() => setKind(k.id)}
-                className={`rounded-lg px-4 py-2 text-sm font-bold ${kind === k.id ? "bg-brand-500 text-white" : "text-ink-300 hover:text-ink-100"}`}>Preview as {k.label}</button>
+              <button key={k.id} type="button" aria-pressed={kind === k.id} onClick={() => switchKind(k.id)}
+                className={`rounded-lg px-4 py-2 text-sm font-bold ${kind === k.id ? "bg-brand-500 text-white" : "text-ink-300 hover:text-ink-100"}`}>{k.label}</button>
             ))}
           </div>
         </div>
@@ -128,8 +136,8 @@ export function ThemesPage({ signedIn }: { signedIn: boolean }) {
         )}
 
         <div className="sticky top-[57px] z-20 -mx-4 mt-6 flex flex-wrap items-center gap-2 border-b border-ink-800 bg-ink-950/95 px-4 py-3 backdrop-blur">
-          <input className="input w-56 py-2 text-sm" placeholder="Search name or ID, e.g. T-07" aria-label="Search themes" value={q} onChange={(e) => setQ(e.target.value)} />
-          {["", ...THEME_TAGS].map((x) => (
+          <input className="input w-56 py-2 text-sm" placeholder={`Search name or ID, e.g. ${kind === "business" ? "B-07" : "T-07"}`} aria-label="Search themes" value={q} onChange={(e) => setQ(e.target.value)} />
+          {["", ...tags].map((x) => (
             <button key={x || "all"} type="button" aria-pressed={tag === x} onClick={() => setTag(x)}
               className={`rounded-full border px-3 py-1.5 text-xs font-semibold ${tag === x ? "border-brand-500 bg-brand-500/15 text-ink-100" : "border-ink-600 text-ink-400 hover:text-ink-100"}`}>{x || "All"}</button>
           ))}
@@ -140,7 +148,7 @@ export function ThemesPage({ signedIn }: { signedIn: boolean }) {
           </div>
         </div>
 
-        <p className="mt-4 text-sm text-ink-400">{list.length} of {THEMES.length} themes</p>
+        <p className="mt-4 text-sm text-ink-400">{list.length} of {pool.length} themes</p>
         <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {list.map((t) => {
             const starred = mine.includes(t.id);
@@ -166,7 +174,7 @@ export function ThemesPage({ signedIn }: { signedIn: boolean }) {
         {!list.length && <p className="mt-10 text-center text-ink-400">No themes match. Try another filter, or clear the search.</p>}
       </main>
 
-      {hover && !openTheme && <HoverPreview kind={kind} sample={samples[kind]} theme={THEMES.find((t) => t.id === hover.id)!} rect={hover.rect} onEnter={() => clearTimeout(timer.current)} onLeave={onLeave} />}
+      {hover && !openTheme && pool.some((t) => t.id === hover.id) && <HoverPreview kind={kind} sample={samples[kind]} theme={pool.find((t) => t.id === hover.id)!} rect={hover.rect} onEnter={() => clearTimeout(timer.current)} onLeave={onLeave} />}
 
       {openTheme && (
         <ThemeModal key={kind} theme={openTheme} kind={kind} setKind={setKind} sample={samples[kind]} starred={mine.includes(openTheme.id)}
@@ -233,7 +241,7 @@ function ThemeModal(p: { theme: Theme; kind: Kind; setKind: (k: Kind) => void; s
           <div className="flex items-center gap-1" aria-label="Colours">{[c.bg, c.surface, c.text, c.c1, c.c2, c.c3].map((x, i) => <span key={i} className="h-5 w-5 rounded-full border border-white/20" style={{ background: x }} title={x} />)}</div>
           <div className="ml-auto flex flex-wrap items-center gap-2">
             <div className="flex rounded-lg border border-ink-600 p-0.5" role="group" aria-label="Preview as">
-              {KINDS.map((k) => <button key={k.id} type="button" aria-pressed={p.kind === k.id} onClick={() => p.setKind(k.id)} className={`rounded-md px-3 py-1.5 text-xs font-bold ${p.kind === k.id ? "bg-ink-700 text-ink-100" : "text-ink-400"}`}>{k.label}</button>)}
+              {KINDS.filter((k) => (k.id === "business") === t.id.startsWith("biz-")).map((k) => <button key={k.id} type="button" aria-pressed={p.kind === k.id} onClick={() => p.setKind(k.id)} className={`rounded-md px-3 py-1.5 text-xs font-bold ${p.kind === k.id ? "bg-ink-700 text-ink-100" : "text-ink-400"}`}>{k.label}</button>)}
             </div>
             <button type="button" className="btn btn-sm" onClick={p.onCopyId}>Copy ID</button>
             <button type="button" className="btn btn-sm" onClick={p.onCopyLink}>Copy link</button>

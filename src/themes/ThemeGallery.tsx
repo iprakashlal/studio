@@ -5,6 +5,7 @@ import { themeCode } from "./codes";
 /** A small drawing of the theme: background, a card in its card style, a button in its button style, and the hero layout. */
 export function ThemeSwatch({ t }: { t: Theme }) {
   const c = t.colors, r = Math.min(t.radius, 16) / 2;
+  if (t.id.startsWith("biz-")) return <BizSwatch t={t} />;
   if (t.signature)
     return (
       <div className="relative flex h-[84px] flex-col justify-between overflow-hidden p-2" style={{ background: c.bg }}>
@@ -64,17 +65,18 @@ export function ThemeSwatch({ t }: { t: Theme }) {
 const fxSummary = (t: Theme) => [t.fx.cursor !== "none" && t.fx.cursor + " cursor", t.fx.loader !== "none" && t.fx.loader, t.fx.textfx !== "none" && t.fx.textfx].filter(Boolean).join(" · ") || "interactive";
 
 /** Theme gallery with tag filters. `current` is the selected theme id. */
-export function ThemeGallery({ current, onPick, compact }: { current?: string; onPick: (t: Theme) => void; compact?: boolean }) {
+export function ThemeGallery({ current, onPick, compact, themes = THEMES, tags = THEME_TAGS }: { current?: string; onPick: (t: Theme) => void; compact?: boolean; themes?: Theme[]; tags?: string[] }) {
   const [tag, setTag] = useState("");
   const [q, setQ] = useState("");
-  const list = useMemo(() => THEMES.filter((t) => (!tag || t.tags.includes(tag)) && (!q || t.name.toLowerCase().includes(q.toLowerCase()) || themeCode(t).replace(/^T-0*/, "") === q.trim().toUpperCase().replace(/^T-?0*/, ""))), [tag, q]);
+  const num = (x: string) => x.trim().toUpperCase().replace(/^[TB]-?0*/, "");
+  const list = useMemo(() => themes.filter((t) => (!tag || t.tags.includes(tag)) && (!q || t.name.toLowerCase().includes(q.toLowerCase()) || num(themeCode(t)) === num(q))), [themes, tag, q]);
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-1.5">
         <input className="input w-40 py-1.5 text-sm" placeholder="Search name or ID" aria-label="Search themes" value={q} onChange={(e) => setQ(e.target.value)} />
-        {["", ...THEME_TAGS].map((x) => (
+        {["", ...tags.filter((x) => themes.some((t) => t.tags.includes(x)))].map((x) => (
           <button key={x || "all"} type="button" aria-pressed={tag === x} onClick={() => setTag(x)}
-            className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${tag === x ? "border-brand-500 bg-brand-500/15 text-ink-100" : "border-ink-600 text-ink-400 hover:text-ink-100"}`}>{x || `All ${THEMES.length}`}</button>
+            className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${tag === x ? "border-brand-500 bg-brand-500/15 text-ink-100" : "border-ink-600 text-ink-400 hover:text-ink-100"}`}>{x || `All ${themes.length}`}</button>
         ))}
       </div>
       <div className={`grid gap-2.5 ${compact ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-2 sm:grid-cols-3 xl:grid-cols-4"}`} role="radiogroup" aria-label="Themes">
@@ -92,6 +94,35 @@ export function ThemeGallery({ current, onPick, compact }: { current?: string; o
           </button>
         ))}
         {!list.length && <p className="col-span-full text-sm text-ink-400">No themes match.</p>}
+      </div>
+    </div>
+  );
+}
+
+/** A business theme in miniature: menu bar, headline, button and a figures panel, in its colours and styles. */
+function BizSwatch({ t }: { t: Theme }) {
+  const c = t.colors, s = t.style, r = Math.min(t.radius, 14) / 2, dark = s.nav === "dark";
+  const btn: React.CSSProperties = { background: s.buttons === "outline" || s.buttons === "underline" ? "transparent" : c.c1, border: s.buttons === "underline" ? "none" : `1.5px solid ${c.c1}`, borderBottom: `2px solid ${c.c1}`, borderRadius: s.buttons === "pill" ? 99 : s.buttons === "sharp" || s.buttons === "underline" ? 0 : 3 };
+  const panel = s.layout === "panel";
+  const serif = s.heading === "serif";
+  return (
+    <div className="relative flex h-[84px] flex-col overflow-hidden" style={{ background: c.bg, fontFamily: serif ? "Georgia,serif" : undefined }}>
+      <div className="flex h-[14px] flex-none items-center justify-between px-2" style={{ background: dark ? c.deep : "transparent", borderBottom: s.nav === "line" ? `1px solid ${c.line}` : undefined }}>
+        <span className="flex items-center gap-1"><i className="block h-1.5 w-1.5" style={{ background: c.c1, borderRadius: 2 }} /><i className="block h-1 w-6 rounded" style={{ background: dark ? "#ffffffcc" : c.text }} /></span>
+        <span className="flex gap-1">{[0, 1, 2].map((i) => <i key={i} className="block h-[3px] w-3 rounded" style={{ background: dark ? "#ffffff88" : c.soft, opacity: 0.7 }} />)}<i className="ml-1 block h-[6px] w-5" style={{ ...btn, borderWidth: 1 }} /></span>
+      </div>
+      <div className={`m-1.5 flex flex-1 gap-2 p-1.5 ${s.layout === "center" ? "flex-col items-center" : ""}`} style={{ background: panel ? c.deep : "transparent", borderRadius: r }}>
+        <div className={`flex flex-1 flex-col justify-center gap-1 ${s.layout === "center" ? "items-center" : ""}`} style={{ minWidth: 0 }}>
+          <span className="block truncate text-[12.5px] leading-[1.05]" style={{ color: panel ? "#fff" : c.text, fontWeight: s.heading === "light" || serif ? 500 : 800, textTransform: s.heading === "upper" ? "uppercase" : undefined, fontStyle: serif ? "italic" : undefined }}>{t.name}</span>
+          <span className="block h-[3px] w-12 rounded" style={{ background: panel ? "#ffffff66" : c.soft, opacity: 0.6 }} />
+          <span className="mt-0.5 block h-[9px] w-11" style={btn} />
+        </div>
+        {s.layout !== "center" && (
+          <div className="flex w-[42%] flex-none flex-col justify-end gap-[3px] p-1.5" style={{ background: c.surface, border: s.cards === "lined" ? "none" : `1px solid ${c.line}`, borderTop: s.cards === "lined" || s.cards === "accent" ? `2px solid ${s.cards === "accent" ? c.c1 : c.text}` : undefined, borderRadius: s.cards === "lined" ? 0 : r, boxShadow: s.cards === "elevated" ? "0 4px 10px -4px rgba(0,0,0,.35)" : undefined }}>
+            <span className="flex h-6 items-end gap-[2px]">{[40, 55, 48, 70, 62, 85, 100].map((h, i) => <i key={i} className="block flex-1 rounded-sm" style={{ height: h + "%", background: i > 3 ? c.c1 : c.c2, opacity: i > 3 ? 1 : 0.45 }} />)}</span>
+            <i className="block h-[3px] w-2/3 rounded" style={{ background: c.c3 }} />
+          </div>
+        )}
       </div>
     </div>
   );

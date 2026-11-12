@@ -1,0 +1,25 @@
+{
+  "files": [
+    "index.html",
+    "services.html",
+    "work.html",
+    "about.html",
+    "contact.html",
+    "404.html",
+    "admin.html",
+    "assets/biz.css",
+    "assets/biz.js",
+    "assets/fx.js",
+    "assets/motifs.js",
+    "README.md",
+    "supabase/enquiries.sql"
+  ],
+  "starters": [
+    {
+      "id": "default",
+      "name": "Consulting firm",
+      "description": "A sample consultancy with services, case studies, team, pricing and an enquiry form.",
+      "file": "content.json"
+    }
+  ]
+}

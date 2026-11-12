@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { EnquiriesPanel, enquiriesCfg } from "./EnquiriesPanel";
 import { GOTO_EVENT } from "../editor/Editor";
 import { TEMPLATES } from "../schema";
 import { device, session as sess, watchIdle, type Session } from "../lib/auth";
@@ -7,7 +8,7 @@ import { SupabaseRepo, assetBase, type SbCfg } from "../lib/supa";
 import { SbGate, SbAccount, sbSignOut } from "./SbGate";
 import { blobToBytes, clone, safeFileName, textToB64 } from "../lib/util";
 import { adminFile } from "../schema/common";
-import { bakeHead, headChanged, storePageLabel } from "../lib/head";
+import { bakeHead, headChanged, pageLabel } from "../lib/head";
 import ACCOUNT_HTML from "../../public/templates/store/account.html?raw";
 import { Editor } from "../editor/Editor";
 import { Preview } from "../editor/Preview";
@@ -205,7 +206,7 @@ function Workspace({ info, onInfo, repo, account, onSignOut, hosted }: { info: S
           const pages = (await repo.list("")).filter((f) => /^[a-z0-9-]+\.html$/.test(f) && f !== oldAdmin && f !== newAdmin && f !== "404.html");
           for (const f of pages) {
             const page = await repo.getText(f);
-            if (page) files.push({ path: f, base64: textToB64(bakeHead(page.text, draft, { file: f, label: tpl.id === "store" ? storePageLabel(f, draft) : "", base, bg: draft?.theme?.bg })) });
+            if (page) files.push({ path: f, base64: textToB64(bakeHead(page.text, draft, { file: f, label: pageLabel(tpl.id, f, draft), base, bg: draft?.theme?.bg })) });
           }
         }
         if (oldAdmin !== newAdmin) {
@@ -259,6 +260,9 @@ function Workspace({ info, onInfo, repo, account, onSignOut, hosted }: { info: S
     ...(tpl.id === "store" ? [
       { id: "shop-orders", label: "Orders", group: "Shop", desc: "Every order from checkout. Update status, confirm UPI payments and message customers.", render: () => <OrdersPanel content={saved} /> },
       { id: "shop-customers", label: "Customers", group: "Shop", desc: "Signed-up customers by account number and email, with their orders.", render: () => <CustomersPanel content={saved} /> },
+    ] : []),
+    ...(tpl.id === "business" ? [
+      { id: "enquiries", label: "Enquiries", group: "Content", desc: "Messages sent through your website's enquiry form.", render: () => <EnquiriesPanel cfg={enquiriesCfg(saved, hosted)} hosted={!!hosted} email={saved?.contact?.email} /> },
     ] : []),
     { id: "backup", label: "Backup & reset", group: "Settings", desc: "Copy, restore or reset the site's content.", render: () => <BackupPanel draft={draft} onReplace={(c) => { setDraft(clone(c)); bump(); }} loadDefaults={async () => clone(saved)} hosted={!!hosted} /> },
     { id: "account", label: "Account", group: "Settings", desc: "Your login on this device.", render: () => account },

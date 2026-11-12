@@ -166,7 +166,7 @@ export function FieldView({ f, obj, base }: { f: F; obj: any; base: string }) {
       return <ListField f={f} obj={obj} base={base} />;
     case "themes":
       return (
-        <ThemeGallery current={root.theme?.preset} onPick={(th) => { Object.assign(root.theme, tpl.themeValues(th)); bump(); }} />
+        <ThemeGallery current={root.theme?.preset} themes={tpl.themes} tags={tpl.themeTags} onPick={(th) => { Object.assign(root.theme, tpl.themeValues(th)); bump(); }} />
       );
     case "linkedin":
       return <LinkedInImport root={root} bump={bump} />;

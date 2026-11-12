@@ -2,6 +2,7 @@
 // They never change once given out: add new themes at the END with the next free number,
 // and never renumber or reuse an ID, even if a theme is removed.
 import { THEMES, type Theme } from "./catalog";
+import { BIZ_CODES, BIZ_THEMES } from "./business";
 
 export const THEME_CODES: Record<string, string> = {
   "velocity": "T-01",
@@ -126,12 +127,17 @@ export const THEME_CODES: Record<string, string> = {
 };
 
 /** The ID shown for a theme, e.g. "T-07". Themes without an ID yet fall back to their slug. */
-export const themeCode = (t: Pick<Theme, "id">) => THEME_CODES[t.id] ?? t.id.toUpperCase();
+export const themeCode = (t: Pick<Theme, "id">) => THEME_CODES[t.id] ?? BIZ_CODES[t.id] ?? t.id.toUpperCase();
 
 /** Find a theme by ID ("T-07", "t7", "7") or by slug. */
 export function findTheme(q: string): Theme | undefined {
   const s = q.trim().toLowerCase();
+  const b = s.match(/^b-?0*(\d+)$/);
+  if (b) return BIZ_THEMES.find((t) => BIZ_CODES[t.id] === "B-" + b[1].padStart(2, "0"));
   const n = s.match(/^(?:t-?)?0*(\d+)$/);
   if (n) return THEMES.find((t) => THEME_CODES[t.id] === "T-" + n[1].padStart(2, "0"));
-  return THEMES.find((t) => t.id === s);
+  return THEMES.find((t) => t.id === s) || BIZ_THEMES.find((t) => t.id === s);
 }
+
+/** Any theme by its slug, personal/shop or business. */
+export const anyThemeById = (id: string): Theme | undefined => THEMES.find((t) => t.id === id) || BIZ_THEMES.find((t) => t.id === id);

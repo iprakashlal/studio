@@ -52,6 +52,9 @@ export type TemplateDef = {
   checks?: (content: any) => string[];
   /** content.theme values for a catalogue theme (see src/themes/catalog.ts). */
   themeValues: (theme: import("../themes/catalog").Theme) => Record<string, unknown>;
+  /** The template's own theme list and filter tags (default: the shared personal/shop themes). */
+  themes?: import("../themes/catalog").Theme[];
+  themeTags?: string[];
   /** Fills in content keys added by newer template versions, so older projects open safely. */
   prepare?: (content: any) => void;
 };

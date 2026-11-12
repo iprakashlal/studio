@@ -101,6 +101,34 @@ html[data-ornament=soft] .solids .shp.mo{filter:blur(3px);opacity:.35;scale:1.15
 .stage-fallback .shp{position:absolute}
 .photo{position:absolute;left:0;bottom:4%;width:38%;aspect-ratio:1/1;overflow:hidden;border:4px solid var(--text);background:var(--surface);z-index:3}
 .photo.on-cube{display:none}
+/* Logo icon (menu) */
+.logo-ic{width:30px;height:30px;object-fit:cover;flex:none;display:inline-block;vertical-align:middle;margin-right:10px;background:var(--surface)}
+.logo .logo-ic{margin-right:0}
+.kd-bar .logo-ic{width:16px;height:16px;margin-right:6px}.kg-top h1 .logo-ic{width:.8em;height:.8em;margin-right:.25em}
+.vx-logo{display:inline-flex;align-items:center;gap:10px}.vx-logo .logo-ic{width:34px;height:34px;margin:0}
+/* Hero disc: the icon on a floating frisbee */
+.disc{position:absolute;right:0;top:2%;width:46%;aspect-ratio:1/1;z-index:4;perspective:1000px;pointer-events:none}
+.disc.s{width:34%}.disc.l{width:60%}
+.disc-in{position:absolute;inset:0;transform-style:preserve-3d;transform:rotateX(20deg) rotateY(-12deg) rotateZ(-4deg)}
+.disc-edge,.disc-rim,.disc-top{position:absolute;inset:0;border-radius:50%}
+.disc-edge{transform:translateZ(-14px);background:var(--disc-rim);filter:brightness(.55);box-shadow:0 40px 50px -24px rgba(0,0,0,.6)}
+.disc-rim{background:var(--disc-rim);box-shadow:inset 0 -10px 22px rgba(0,0,0,.35),inset 0 10px 18px rgba(255,255,255,.28)}
+.disc-rim::after{content:"";position:absolute;inset:4.5%;border-radius:50%;background:repeating-radial-gradient(circle,transparent 0 6px,rgba(255,255,255,.07) 6px 7px)}
+.disc-top{inset:11%;overflow:hidden;background:var(--surface);box-shadow:0 0 0 4px rgba(255,255,255,.55),0 0 0 7px rgba(0,0,0,.18),inset 0 0 0 1px rgba(0,0,0,.2);transform:translateZ(2px)}
+.disc-top img{width:100%;height:100%;object-fit:cover;display:block}
+.disc-top::after{content:"";position:absolute;inset:0;border-radius:50%;background:radial-gradient(120% 80% at 30% 15%,rgba(255,255,255,.45),transparent 45%);mix-blend-mode:soft-light}
+.disc-sh{position:absolute;left:16%;right:16%;bottom:-12%;height:9%;border-radius:50%;background:rgba(0,0,0,.4);filter:blur(12px)}
+@media (prefers-reduced-motion:no-preference){
+  html:not(.no-motion) .disc.mv .disc-in{animation:discFloat 7s ease-in-out infinite}
+  html:not(.no-motion) .disc.mv .disc-rim{animation:discSpin 16s linear infinite}
+  html:not(.no-motion) .disc.mv .disc-sh{animation:discSh 7s ease-in-out infinite}
+}
+@keyframes discFloat{0%,100%{transform:translateY(0) rotateX(22deg) rotateY(-14deg) rotateZ(-4deg)}50%{transform:translateY(-16px) rotateX(12deg) rotateY(10deg) rotateZ(3deg)}}
+@keyframes discSpin{to{transform:rotate(360deg)}}
+@keyframes discSh{0%,100%{transform:scale(1);opacity:.9}50%{transform:scale(.82);opacity:.6}}
+html[data-layout=minimal] .disc{position:relative;right:auto;top:auto;width:180px;margin:0 0 18px auto}
+html[data-layout=center] .disc,html[data-layout=stacked] .disc{width:38%}
+@media (max-width:880px){.disc{width:40%}.disc.l{width:50%}}
 .photo img{width:100%;height:100%;object-fit:cover;display:block}
 .photo.circle{border-radius:50%}
 .photo.square{border-radius:var(--r)}
@@ -127,7 +155,7 @@ html[data-ornament=soft] .solids .shp.mo{filter:blur(3px);opacity:.35;scale:1.15
 .h-meta b{font-family:var(--fd);font-size:22px}
 @media (max-width:880px){.hero-grid{grid-template-columns:1fr}.stage-wrap{max-width:440px;margin:0 auto;order:-1;width:100%}.hero{padding-top:100px}}
 
-.belt{background:var(--text);color:var(--on-text);padding-block:18px;overflow:hidden;transform:rotate(1.2deg) scale(1.03);position:relative;z-index:3}
+.belt{background:var(--belt-bg,var(--text));color:var(--belt-fg,var(--on-text));padding-block:18px;overflow:hidden;transform:rotate(1.2deg) scale(1.03);position:relative;z-index:3}
 .belt-t{display:flex;gap:40px;width:max-content;animation:belt 34s linear infinite;align-items:center}
 .belt-t span{font-family:var(--fd);font-size:clamp(20px,3vw,32px);font-weight:600;white-space:nowrap}
 .belt-t .shp{width:18px;height:18px;flex:none}
@@ -468,7 +496,7 @@ a.vx-next:hover i{transform:rotate(45deg)}
 .vx-anim.vx-in :is(.vx-hero-top,.vx-hero-foot,.vx-scroll){opacity:1;transition:opacity .9s .7s}
 .vx-anim.vx-in .vx-hdr{opacity:1;transition:opacity .9s .7s,transform .5s cubic-bezier(.2,.8,.2,1),background .3s,color .3s}
 /* word band */
-.vx-band{position:relative;z-index:5;background:var(--c1);color:var(--on-c1);transform:rotate(-2deg);margin:30px -2vw;overflow:hidden;padding:14px 0;box-shadow:0 20px 40px -20px rgba(0,0,0,.5)}
+.vx-band{position:relative;z-index:5;background:var(--belt-bg,var(--c1));color:var(--belt-fg,var(--on-c1));transform:rotate(-2deg);margin:30px -2vw;overflow:hidden;padding:14px 0;box-shadow:0 20px 40px -20px rgba(0,0,0,.5)}
 .vx-band-t{display:flex;width:max-content;will-change:transform}
 .vx-band-t .g{display:flex;align-items:center;flex:none}
 .vx-band span{font-family:var(--fd);text-transform:uppercase;font-size:clamp(28px,4vw,56px);line-height:1;padding:0 22px;white-space:nowrap}
@@ -734,6 +762,11 @@ function pimg(k,alt,w,cls){return window.SiteMotifs?SiteMotifs.img(PACK(),k,alt,
 function itemImg(item,k,alt,w,cls){return item&&item.image?`<img src="${esc(imgUrl(item.image))}" alt="${esc(alt||"")}" loading="lazy" class="${cls||""}">`:pimg(k,alt,w,cls)}
 const moOn=()=>MOTIF!=="geometric"&&!!window.SiteMotifs&&SiteMotifs.has(MOTIF);
 function moAccent(color){const s=String(color).toLowerCase();return s.includes("c3")||s===String(CT.c3||"").toLowerCase()?"var(--c2)":"var(--c3)"}
+function logoIc(c,cls){const B=c.brand||{};if(!B.icon||B.iconInMenu===false)return "";const rad=Math.max(0,Math.min(50,c.theme.logoRadius??22));
+  return `<img class="logo-ic${cls?" "+cls:""}" src="${esc(imgUrl(B.icon))}" alt="" style="border-radius:${rad}%">`}
+function discHTML(c){const B=c.brand||{},H=c.hero||{},src=H.discImage||B.icon;if(!src||B.iconOnHero===false)return "";
+  const rim=H.discRim&&H.discRim!=="theme"?`var(--${esc(H.discRim)})`:"conic-gradient(from 20deg,var(--c1),var(--c2),var(--c3),var(--c1))";
+  return `<div class="disc ${esc(H.discSize||"m")}${H.discMotion!==false&&c.theme.motion!==false?" mv":""}" style="--disc-rim:${rim}" aria-hidden="true"><div class="disc-sh"></div><div class="disc-in"><div class="disc-edge"></div><div class="disc-rim"></div><div class="disc-top"><img src="${esc(imgUrl(src))}" alt=""></div></div></div>`}
 function shp(type,color,size,extra=""){
   if(moOn())return `<span class="shp mo" style="--sc:${color};color:${color};--mo2:${moAccent(color)};width:${size}px;height:${size}px;${extra}">${SiteMotifs.svg(MOTIF,type,0,true)}</span>`;
   const w=type==="pill"?size*1.6:size,h=type==="half"?size/2:type==="pill"?size*.65:size;
@@ -760,6 +793,7 @@ function applyTheme(t){
   ["bg","surface","deep","text","soft","line","c1","c2","c3","glow"].forEach(k=>r.setProperty("--"+k,t[k]));
   ["c1","c2","c3","deep","text","surface"].forEach(k=>r.setProperty("--on-"+k,onColor(t[k])));
   const ib=t.introBg||t.deep;r.setProperty("--intro-bg",ib);r.setProperty("--intro-fg",t.introFg||onColor(ib));
+  if(t.beltCustom&&t.beltBg){r.setProperty("--belt-bg",t.beltBg);r.setProperty("--belt-fg",t.beltFg||onColor(t.beltBg))}else{r.removeProperty("--belt-bg");r.removeProperty("--belt-fg")}
   r.setProperty("--r",(+t.radius||0)+"px");
   r.setProperty("--fd",`"${t.fontDisplay}","Arial Black",sans-serif`);
   r.setProperty("--fb",`"${t.fontBody}","Helvetica Neue",Arial,sans-serif`);
@@ -790,11 +824,11 @@ function siteHTML(c){
     ${shp("circle","var(--c3)",90,"top:24%;left:4%")}${shp("ring","var(--c1)",70,"top:62%;left:90%")}
     ${shp("triangle","var(--c2)",80,"top:120%;left:8%")}${shp("square","var(--c1)",44,"top:150%;left:86%")}
     ${shp("circle","var(--c2)",30,"top:210%;left:50%")}${shp("ring","var(--c3)",120,"top:260%;left:-3%")}</div>`;
-  h+=`<header class="nav"><div class="nav-in"><a href="#top" class="logo"><i>${moOn()?shp("circle","var(--c1)",26):shp("circle","var(--c1)",10)+shp("square","var(--c2)",10)+shp("triangle","var(--c3)",10)}</i>${esc(c.brand.logoText)}</a>
+  h+=`<header class="nav"><div class="nav-in"><a href="#top" class="logo">${logoIc(c)||`<i>${moOn()?shp("circle","var(--c1)",26):shp("circle","var(--c1)",10)+shp("square","var(--c2)",10)+shp("triangle","var(--c3)",10)}</i>`}${esc(c.brand.logoText)}</a>
     <ul>${nav}</ul>${hasContact?`<a href="#contact" class="pill-btn">${esc(c.brand.contactLabel)}</a>`:""}</div></header><main id="top">`;
   h+=heroHTML(c);
-  if(t.showTicker&&c.ticker.length){const sh=["circle","square","triangle"],cl=["c1","c2","c3"];
-    h+=`<div class="belt" aria-hidden="true"><div class="belt-t">${c.ticker.map((w,i)=>`<span>${esc(w)}</span>${shp(sh[i%3],colVar(cl[i%3]),18)}`).join("")}</div></div>`}
+  if(t.showTicker&&c.ticker.length){const sh=["circle","square","triangle"],cl=["c1","c2","c3"],dot=t.beltCustom&&t.beltDotOne&&t.beltDot;
+    h+=`<div class="belt" aria-hidden="true"><div class="belt-t">${c.ticker.map((w,i)=>`<span>${esc(w)}</span>${shp(sh[i%3],dot||colVar(cl[i%3]),18)}`).join("")}</div></div>`}
   for(const s of vis){const fn=SEC[s.id];if(fn)h+=fn(c)}
   h+=`</main><footer class="foot"><div class="wrap m"><span>${esc(c.contact.footerLeft)}</span><span>${esc(c.contact.footerRight)}</span></div></footer>`;
   return h;
@@ -814,7 +848,7 @@ function heroHTML(c){
     <p class="h-role">${rich(H.role)}</p>
     <div class="h-cta">${H.ctaPrimary?`<a href="#${esc(H.ctaPrimaryTarget)}" class="b pri">${esc(H.ctaPrimary)}</a>`:""}${H.ctaSecondary?`<a href="${esc(safeUrl(H.ctaSecondaryUrl))}" target="_blank" rel="noopener" class="b">${esc(H.ctaSecondary)}</a>`:""}</div>
     ${H.meta.length?`<div class="h-meta">${H.meta.map(m=>`<div><b>${esc(m.value)}</b><span class="m">${esc(m.label)}</span></div>`).join("")}</div>`:""}
-  </div><div class="stage-wrap"><div id="stage" aria-label="${moOn()?"Illustrated composition":"3D composition of geometric solids"}">${moOn()?moStage:fall}</div>${photo}</div></div></div></div>`;
+  </div><div class="stage-wrap"><div id="stage" aria-label="${moOn()?"Illustrated composition":"3D composition of geometric solids"}">${moOn()?moStage:fall}</div>${photo}${discHTML(c)}</div></div></div></div>`;
 }
 const head=(s,lede)=>`<div class="head rv"><div><p class="m">${ml(s.eyebrow)}</p><h2 class="s-h2 fit">${rich(s.title)}</h2></div>${lede?`<p class="lede">${ml(lede)}</p>`:""}</div>`;
 const SEC={
@@ -882,12 +916,12 @@ function vxHTML(c){
   let h="";
   if(!PREVIEW&&V.preloader&&motion&&!(vxBoot&&vxBoot.done))h+=`<div class="vx-load" id="vxLoad" aria-hidden="true"><div class="vx-load-top"><span>${esc(c.brand.logoText)}</span><span>${esc(V.status||"")}</span></div><div class="vx-load-n"><span id="vxLoadN">0</span><small>%</small></div><div class="vx-load-bar"><i id="vxLoadBar"></i></div></div>`;
   if(V.cursor&&fine&&motion)h+=`<div class="vx-cur" id="vxCur" aria-hidden="true"><span></span></div>`;
-  h+=`<header class="vx-hdr" id="vxHdr"><a href="#top" class="vx-logo">${esc(c.brand.logoText)}</a>${V.status?`<span class="vx-status"><i></i>${esc(V.status)}</span>`:"<span></span>"}
+  h+=`<header class="vx-hdr" id="vxHdr"><a href="#top" class="vx-logo">${logoIc(c)}${esc(c.brand.logoText)}</a>${V.status?`<span class="vx-status"><i></i>${esc(V.status)}</span>`:"<span></span>"}
     <div class="vx-hr">${hasContact?`<a href="#contact" class="vx-pill">${esc(c.brand.contactLabel)}</a>`:""}<button type="button" class="vx-mbtn" id="vxMbtn" aria-expanded="false" aria-controls="vxMenu"><span>${esc(V.menuLabel||"Menu")}</span><b><i></i><i></i></b></button></div></header>
   <div class="vx-menu" id="vxMenu" hidden><div class="vx-menu-in"><nav aria-label="Sections">${vis.map((s,i)=>`<a href="#${s.id}" style="--d:${i}"><small>${pad2(i+1)}</small><span>${esc(s.navLabel)}</span></a>`).join("")}</nav>
     <div class="vx-menu-side">${C.email?`<a href="mailto:${esc(C.email)}" class="vx-menu-mail">${esc(C.email)}</a>`:""}<div>${C.links.map(l=>`<a href="${esc(safeUrl(l.url))}" target="_blank" rel="noopener">${esc(l.label)} ↗</a>`).join("")}</div></div></div></div>
   <main id="top">${vxHero(c)}`;
-  if(V.marquee&&c.ticker.length)h+=vxBand(c.ticker);
+  if(V.marquee&&c.ticker.length)h+=vxBand(c.ticker,c.theme.beltCustom&&c.theme.beltDotOne&&c.theme.beltDot);
   for(const s of vis){
     if(s.id==="work"&&V.showSplit)h+=vxSplit(c,ids);
     if(s.id==="contact"&&partners)h+=vxPartners(c);
@@ -911,7 +945,7 @@ function vxHero(c){const H=c.hero,V=c.velocity;
       ${V.nextTitle?`<${nextTag} class="vx-next"${V.nextUrl?` href="${esc(safeUrl(V.nextUrl))}" target="_blank" rel="noopener" data-cur="Open"`:""}><small>${esc(V.nextLabel)}</small><b>${esc(V.nextTitle)}</b><span>${esc(V.nextDate)}</span>${V.nextUrl?"<i>↗</i>":""}</${nextTag}>`:""}</div>
     ${V.scrollLabel?`<div class="vx-scroll" aria-hidden="true"><span>${esc(V.scrollLabel)}</span><i></i></div>`:""}
   </section>`}
-function vxBand(words){const g=words.map(w=>`<span>${esc(w)}</span><b>✦</b>`).join("").repeat(Math.max(2,Math.ceil(8/words.length)));
+function vxBand(words,dot){const g=words.map(w=>`<span>${esc(w)}</span><b${dot?` style="color:${esc(dot)}"`:""}>✦</b>`).join("").repeat(Math.max(2,Math.ceil(8/words.length)));
   return `<div class="vx-band" aria-hidden="true"><div class="vx-band-t"><div class="g">${g}</div><div class="g">${g}</div></div></div>`}
 const vxQuote=q=>`<blockquote class="vx-q"><p>${rich(q)}</p></blockquote>`;
 function vxStory(c){const V=c.velocity,items=[];let q=0;
@@ -1079,9 +1113,10 @@ function renderSite(c){
 /* the browser-tab icon: initials in the primary colour, in the chosen shape (0 = square, 50 = circle) */
 let iconKey="";
 function setIcon(c){
-  const t=c.theme,rad=Math.max(0,Math.min(50,t.logoRadius??22)),ini=String(c.brand.logoText||"").split(/\s+/).map(w=>w[0]||"").join("").slice(0,2).toUpperCase()||"•",key=[ini,rad,t.c1].join("|");
+  const t=c.theme,rad=Math.max(0,Math.min(50,t.logoRadius??22)),ini=String(c.brand.logoText||"").split(/\s+/).map(w=>w[0]||"").join("").slice(0,2).toUpperCase()||"•",key=[ini,rad,t.c1,c.brand.icon||""].join("|");
   if(key===iconKey)return;iconKey=key;
   let l=document.querySelector("link[rel=icon]");if(!l){l=document.createElement("link");l.rel="icon";document.head.appendChild(l)}
+  if(c.brand.icon){l.removeAttribute("type");l.href=imgUrl(c.brand.icon);return}
   const svg=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="${(rad*.64).toFixed(1)}" fill="${esc(t.c1)}"/><text x="32" y="34" dominant-baseline="middle" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-weight="800" font-size="${ini.length>1?26:34}" fill="${onColor(t.c1)}">${esc(ini)}</text></svg>`;
   l.type="image/svg+xml";l.href="data:image/svg+xml,"+encodeURIComponent(svg);
 }
@@ -1103,7 +1138,7 @@ function renderKit(c,K){
   let st=document.getElementById("kitcss");if(!st){st=document.createElement("style");st.id="kitcss";document.head.appendChild(st)}
   if(st.dataset.kit!==KIT){st.textContent=K.css;st.dataset.kit=KIT}
   const motion=c.theme.motion!==false&&!RM;fx.kitAbort=new AbortController();
-  const h={esc,rich,ml,safeUrl,imgUrl,motion,signal:fx.kitAbort.signal,lab:(k,d)=>(c.labels&&c.labels[k])||d,
+  const h={esc,rich,ml,safeUrl,imgUrl,motion,logoIc:()=>logoIc(c),signal:fx.kitAbort.signal,lab:(k,d)=>(c.labels&&c.labels[k])||d,
     mo:(k,color,size,extra)=>moOn()?shp(k,color,size,extra):`<span class="shp mo" style="color:${color};width:${size}px;height:${size}px">${window.SiteMotifs?SiteMotifs.svg("tech",k,0,true):""}</span>`,
     photo:(k,w)=>window.SiteMotifs?SiteMotifs.photo(PACK(),k,w):"",pimg,itemImg,
     copy:tx=>{try{navigator.clipboard.writeText(tx).then(()=>toast("Copied: "+tx),()=>toast(tx))}catch(e){toast(tx)}}};

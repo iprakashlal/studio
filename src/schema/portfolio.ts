@@ -5,6 +5,13 @@ import VELOCITY_DEFAULTS from "./velocity-defaults.json";
 import { NAV_MODE_FIELD, NAV_MODE_NOTE, themeCards } from "../themes/fields";
 
 const SECTION_NAMES: Record<string, string> = { about: "About", skills: "Skills cube", work: "Work deck", projects: "Projects", learning: "Learning", contact: "Contact" };
+/** Hero graphics: alternatives to the floating elements, drawn in the theme's colours. */
+export const HERO_GRAPHICS: [string, string][] = [
+  ["elements", "Floating elements (theme pack / 3D)"], ["orb", "Glossy orb with ring"], ["rings", "Orbit rings with initials"],
+  ["dots", "Interactive dot wave"], ["blob", "Morphing gradient blob"], ["monogram", "Giant monogram with text badge"],
+  ["cards", "Fanned work cards"], ["terminal", "Terminal typing about you"], ["chart", "Highlights as a live chart"],
+  ["photo", "Arch photo with spinning badge"], ["lines", "Flowing line waves"],
+];
 const SOLIDS: [string, string][] = [["sphere", "Sphere · element 1"], ["cube", "Cube · element 2"], ["pyramid", "Pyramid · element 3"], ["octahedron", "Octahedron · element 4"], ["torus", "Torus · element 5"], ["icosahedron", "Icosahedron · element 6"], ["cylinder", "Cylinder · element 8"]];
 const FONTS_D = DISPLAY_FONTS;
 const FONTS_B = BODY_FONTS;
@@ -121,8 +128,10 @@ const schema: Category[] = [
       { title: "Photo", fields: [{ t: "image", path: "hero.photo", label: "Profile photo, shown on the 3D cube" }, { t: "select", path: "hero.photoShape", label: "Photo shape on the cube", options: ["circle", "square", "hexagon", "diamond"] },
         { t: "note", text: "With plain geometric shapes, the photo goes on the first cube in the 3D shapes, framed in that cube's colour. With an element pack (Design → Element pack), or with no cube, it shows as a framed picture next to the illustrated elements." }] },
       { title: "Highlights under the buttons", fields: [{ t: "list", path: "hero.meta", add: () => ({ value: "New", label: "Label" }), max: 5, title: (it) => `${it.value} · ${it.label}`, item: [g2({ t: "text", path: "value", label: "Value" }, { t: "text", path: "label", label: "Label" })] }] },
-      { title: "Hero elements", fields: [{ t: "note", text: "Each entry is an illustrated element from the theme's element pack (or a 3D solid with plain geometric shapes). The type picks which element." }, { t: "list", path: "hero.solids", add: () => ({ type: "sphere", color: "c1" }), max: 6, title: (it) => SOLIDS.find((s) => s[0] === it.type)?.[1] || it.type,
-        item: [{ t: "select", path: "type", label: "Solid", options: SOLIDS.map(([value, label]) => ({ value, label })) }, { t: "colorKey", path: "color", label: "Colour" }] }] },
+      { title: "Hero graphic", fields: [{ t: "select", path: "hero.graphic", label: "Graphic beside the name", options: HERO_GRAPHICS.map(([value, label]) => ({ value, label })) },
+        { t: "note", text: "Every graphic is drawn in the theme's colours, so it suits any theme. Floating elements uses the list below; the others are built from your name, work, skills and highlights." }] },
+      { title: "Hero elements", fields: [{ t: "when", path: "hero.graphic", is: "elements", fields: [{ t: "note", text: "Each entry is an illustrated element from the theme's element pack (or a 3D solid with plain geometric shapes). The type picks which element." }, { t: "list", path: "hero.solids", add: () => ({ type: "sphere", color: "c1" }), max: 6, title: (it) => SOLIDS.find((s) => s[0] === it.type)?.[1] || it.type,
+        item: [{ t: "select", path: "type", label: "Solid", options: SOLIDS.map(([value, label]) => ({ value, label })) }, { t: "colorKey", path: "color", label: "Colour" }] }] }, { t: "when", path: "hero.graphic", not: "elements", fields: [{ t: "note", text: "Hidden while Hero graphic isn't Floating elements." }] }] },
       { title: "Scrolling skills band", fields: [{ t: "strings", path: "ticker", label: "Words in the band", addLabel: "Add word" },
         { t: "toggle", path: "theme.beltCustom", label: "Use my own band colours" },
         { t: "when", path: "theme.beltCustom", is: "true", fields: [
@@ -216,6 +225,7 @@ export const portfolioTemplate: TemplateDef = {
   themeValues: portfolioThemeValues,
   prepare: (c) => {
     if (!c || typeof c !== "object") return;
+    if (c.hero && typeof c.hero === "object" && !c.hero.graphic) c.hero.graphic = "elements";
     const v = (c.velocity && typeof c.velocity === "object") ? c.velocity : (c.velocity = {});
     for (const [k, val] of Object.entries(VELOCITY_DEFAULTS)) if (v[k] === undefined) v[k] = JSON.parse(JSON.stringify(val));
     const t = c.theme && typeof c.theme === "object" ? c.theme : (c.theme = {});

@@ -8,6 +8,7 @@ import { siteAddress } from "../lib/hosting";
 import { changedSections, sameContent, type ProjectMeta, type Studio, type StudioIndex } from "../lib/studio";
 import { fmtDate, merge, timeAgo } from "../lib/util";
 import { Modal, Spinner, useConfirm, useToast } from "../ui/kit";
+import { TEMPLATES } from "../schema";
 
 type Site = { key: string; kind: "netlify" | "github"; name: string; url: string; where: string; repo: Repo; primary: boolean };
 type Info = { state: "loading" } | { state: "error"; msg: string } | { state: "empty" }
@@ -44,7 +45,10 @@ export function LiveSitesDialog({ studio, project, session, dirty, current, defa
         try {
           const f = await s.repo.getJSON("content.json");
           const at = f ? await s.repo.lastChange("content.json").catch(() => null) : null;
-          const v: Info = !f ? { state: "empty" } : { state: "ok", at, same: sameContent(mine, merge(defaults || {}, f.data)), sections: changedSections(mine, merge(defaults || {}, f.data)), content: f.data };
+          // The live copy gets the same defaults and upgrades the editor applies (e.g. an older Hero photo moving to the disc).
+          const norm = f ? merge(defaults || {}, JSON.parse(JSON.stringify(f.data))) : null;
+          if (norm) TEMPLATES[project.template]?.prepare?.(norm);
+          const v: Info = !f ? { state: "empty" } : { state: "ok", at, same: sameContent(mine, norm), sections: changedSections(mine, norm), content: f.data };
           if (live) setInfo((m) => ({ ...m, [s.key]: v }));
         } catch (e) { if (live) setInfo((m) => ({ ...m, [s.key]: { state: "error", msg: explain(e) } })); }
       }));

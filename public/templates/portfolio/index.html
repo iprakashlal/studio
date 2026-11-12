@@ -1030,7 +1030,10 @@ const moOn=()=>MOTIF!=="geometric"&&!!window.SiteMotifs&&SiteMotifs.has(MOTIF);
 function moAccent(color){const s=String(color).toLowerCase();return s.includes("c3")||s===String(CT.c3||"").toLowerCase()?"var(--c2)":"var(--c3)"}
 function logoIc(c,cls){const B=c.brand||{};if(!B.icon||B.iconInMenu===false)return "";const rad=Math.max(0,Math.min(50,c.theme.logoRadius??22));
   return `<img class="logo-ic${cls?" "+cls:""}" src="${esc(imgUrl(B.icon))}" alt="" style="border-radius:${rad}%">`}
-function discHTML(c){const B=c.brand||{},H=c.hero||{},src=H.discImage||B.icon;if(!src||B.iconOnHero===false)return "";
+/* The hero's picture (Brand & theme → Logo icon → on the hero): the disc image, else the logo icon. Older
+   projects' Hero photo still counts until the project is saved again (it then moves to the disc image). */
+function heroPic(c){const B=c.brand||{},H=c.hero||{};if(H.photo)return H.photo;if(B.iconOnHero===false)return null;return H.discImage||B.icon||null}
+function discHTML(c){const B=c.brand||{},H=c.hero||{},src=heroPic(c);if(!src||H.graphic==="photo")return "";
   const rim=H.discRim&&H.discRim!=="theme"?`var(--${esc(H.discRim)})`:"conic-gradient(from 20deg,var(--c1),var(--c2),var(--c3),var(--c1))";
   return `<div class="disc ${esc(H.discSize||"m")}${H.discMotion!==false&&c.theme.motion!==false?" mv":""}" style="--disc-rim:${rim}" aria-hidden="true"><div class="disc-sh"></div><div class="disc-in"><div class="disc-edge"></div><div class="disc-rim"></div><div class="disc-top"><img src="${esc(imgUrl(src))}" alt=""></div></div></div>`}
 function shp(type,color,size,extra=""){
@@ -1108,7 +1111,7 @@ function heroHTML(c){
   const MOPOS=[[2,6,52,.7],[48,30,46,1],[4,54,36,.9],[60,0,30,.45],[38,70,24,1.3],[80,62,19,.6]];
   const sol=H.solids.length?H.solids:[{type:"sphere",color:"c1"},{type:"cube",color:"c2"},{type:"pyramid",color:"c3"}];
   const moStage=`<div class="mo-stage" aria-hidden="true"><div class="mo-halo"></div>${sol.slice(0,6).map((s,i)=>{const p=MOPOS[i];return `<span class="mo-it" data-depth="${p[3]}" style="left:${p[0]}%;top:${p[1]}%;width:${p[2]}%;--i:${i}">${shp(s.type,colVar(s.color),0)}</span>`}).join("")}</div>`;
-  const photo=H.photo?`<div class="photo ${esc(H.photoShape)}"><img src="${esc(imgUrl(H.photo))}" alt="${esc(H.firstName+" "+H.lastName)}"></div>`:"";
+  const photo="";
   const G=H.graphic&&H.graphic!=="elements"&&GFX[H.graphic]?H.graphic:"";
   const stageIn=G?GFX[G](c):(moOn()?moStage:fall),stageAttr=G?` data-gfx="${G}"`:"",ph=G==="photo"?"":photo;
   if(HX[t.layout])return HX[t.layout](c,{H,t,art:`<div class="stage-wrap"><div id="stage"${stageAttr} aria-label="${G?"Hero graphic":moOn()?"Illustrated composition":"3D composition of geometric solids"}">${stageIn}</div>${ph}${discHTML(c)}</div>`});
@@ -1178,7 +1181,7 @@ const GFX={
       <svg class="gx-ch-line" viewBox="0 0 280 100" preserveAspectRatio="none"><polyline points="${pts}" fill="none" stroke="var(--c1)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
       <div class="gx-ch-bars">${m.map((x,i)=>`<div class="gx-bar"><i style="--h:${nums[i]?Math.max(.18,nums[i]/mx):.35};--d:${i};background:var(--c${(i%3)+1})"></i><b>${esc(x.value)}</b><span>${esc(x.label)}</span></div>`).join("")}</div></div>`},
   photo(c){const H=c.hero,ring=(plain(H.eyebrow)||"Portfolio")+" · ";
-    return `<div class="gx gx-photo" aria-hidden="true"><div class="gx-ph-arch">${H.photo?`<img src="${esc(imgUrl(H.photo))}" alt="">`:`<span>${esc(initials(H))}</span>`}</div><svg class="gx-ph-ring" viewBox="0 0 200 200"><defs><path id="gxp" d="M100,100 m-80,0 a80,80 0 1,1 160,0 a80,80 0 1,1 -160,0"/></defs><text><textPath href="#gxp">${esc(ring.repeat(Math.max(1,Math.ceil(60/ring.length))))}</textPath></text></svg><span class="gx-ph-star">✦</span></div>`},
+    return `<div class="gx gx-photo" aria-hidden="true"><div class="gx-ph-arch">${heroPic(c)?`<img src="${esc(imgUrl(heroPic(c)))}" alt="">`:`<span>${esc(initials(H))}</span>`}</div><svg class="gx-ph-ring" viewBox="0 0 200 200"><defs><path id="gxp" d="M100,100 m-80,0 a80,80 0 1,1 160,0 a80,80 0 1,1 -160,0"/></defs><text><textPath href="#gxp">${esc(ring.repeat(Math.max(1,Math.ceil(60/ring.length))))}</textPath></text></svg><span class="gx-ph-star">✦</span></div>`},
   lines(c){return `<svg class="gx gx-lines" viewBox="0 0 400 400" aria-hidden="true"><defs><linearGradient id="gxln" x1="0" x2="1"><stop offset="0" stop-color="var(--c1)"/><stop offset="1" stop-color="var(--c3)"/></linearGradient></defs>${Array.from({length:9},(_,i)=>{const y=70+i*30,a=40+i*9;return `<path d="M-20 ${y} C 100 ${y-a}, 180 ${y+a}, 260 ${y} S 380 ${y-a/2}, 430 ${y}" fill="none" stroke="url(#gxln)" stroke-width="${1.2+i%3*.6}" style="--i:${i}"/>`}).join("")}<circle cx="260" cy="190" r="10" fill="var(--c2)"/></svg>`},
 };
 function initGfx(c,stage,my,motion){
@@ -1281,7 +1284,7 @@ function vxHTML(c){
 }
 function vxHero(c){const H=c.hero,V=c.velocity;
   const shape=["arch","circle","square","cutout"].includes(V.portraitShape)?V.portraitShape:"arch";
-  const port=H.photo?`<div class="vx-portrait vx-${shape}"><img src="${esc(imgUrl(H.photo))}" alt="${esc(H.firstName+" "+H.lastName)}"></div>`
+  const port=heroPic(c)?`<div class="vx-portrait vx-${shape}"><img src="${esc(imgUrl(heroPic(c)))}" alt="${esc(H.firstName+" "+H.lastName)}"></div>`
     :`<div class="vx-portrait vx-noimg" aria-hidden="true"><div class="vx-stage" id="vxStage"><span class="vx-orb2"></span><span class="vx-orb"></span></div></div>`;
   const nextTag=V.nextUrl?"a":"div";
   return `<section class="vx-hero" id="hero">
@@ -1486,7 +1489,7 @@ function renderKit(c,K){
   let st=document.getElementById("kitcss");if(!st){st=document.createElement("style");st.id="kitcss";document.head.appendChild(st)}
   if(st.dataset.kit!==KIT){st.textContent=K.css;st.dataset.kit=KIT}
   const motion=c.theme.motion!==false&&!RM;fx.kitAbort=new AbortController();
-  const h={esc,rich,ml,safeUrl,imgUrl,motion,logoIc:()=>logoIc(c),signal:fx.kitAbort.signal,lab:(k,d)=>(c.labels&&c.labels[k])||d,
+  const pic=heroPic(c);const h={esc,rich,ml,safeUrl,imgUrl,motion,heroPic:pic?imgUrl(pic):"",logoIc:()=>logoIc(c),signal:fx.kitAbort.signal,lab:(k,d)=>(c.labels&&c.labels[k])||d,
     mo:(k,color,size,extra)=>moOn()?shp(k,color,size,extra):`<span class="shp mo" style="color:${color};width:${size}px;height:${size}px">${window.SiteMotifs?SiteMotifs.svg("tech",k,0,true):""}</span>`,
     photo:(k,w)=>window.SiteMotifs?SiteMotifs.photo(PACK(),k,w):"",pimg,itemImg,
     copy:tx=>{try{navigator.clipboard.writeText(tx).then(()=>toast("Copied: "+tx),()=>toast(tx))}catch(e){toast(tx)}}};
@@ -1596,7 +1599,7 @@ function initThree(c,stage,my,motion){
   const geos={sphere:()=>new T.SphereGeometry(1.25,32,32),cube:()=>new T.BoxGeometry(1.7,1.7,1.7),pyramid:()=>new T.ConeGeometry(1.05,1.8,3),torus:()=>new T.TorusGeometry(.72,.24,16,48),icosahedron:()=>new T.IcosahedronGeometry(.9,0),octahedron:()=>new T.OctahedronGeometry(.8,0),cylinder:()=>new T.CylinderGeometry(.7,.7,1.5,6)};
   const scl=[1,1,1,1,.6,.5],pos=[[-1.3,.7,0],[1.35,-.6,-.4],[-.9,-1.6,.9],[1.6,1.65,.2],[.15,.05,1.8],[-2.4,-.5,-.8]];
   const items=[];
-  const photoSrc=c.hero.photo?imgUrl(c.hero.photo):"";let photoUsed=false;
+  const photoSrc="";let photoUsed=false;
   c.hero.solids.slice(0,6).forEach((s,i)=>{const g=(geos[s.type]||geos.sphere)();
     const mat=new T.MeshStandardMaterial({color:new T.Color(colHex(t,s.color)),roughness:.45,metalness:.05,flatShading:true});
     const m=new T.Mesh(g,mat);

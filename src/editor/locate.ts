@@ -9,7 +9,8 @@ const SKIP_KEY = /(^|\.)(theme|velocityTheme|labelsHidden)(\.|$)|(color|colour|s
  *  spans (no spaces between them in the page text) and show periods with their own dashes. */
 const norm = (s: string) => String(s).replace(/[*“”"‘’']/g, "").replace(/[–—‒−-]/g, "-").replace(/\s+/g, "").toLowerCase();
 
-type Leaf = { path: string; text: string };
+/** exact: a number or code-like value ("2022", "8+"), matched only when the page shows exactly that. */
+type Leaf = { path: string; text: string; exact?: boolean };
 type Img = { path: string; key: string };
 
 /** Every readable text value and every image in the content, with its path ("work.items.2.title"). */
@@ -17,9 +18,12 @@ export function contentIndex(content: any): { texts: Leaf[]; imgs: Img[] } {
   const texts: Leaf[] = [], imgs: Img[] = [];
   const walk = (v: any, p: string) => {
     if (v == null) return;
-    if (typeof v === "string") {
+    if (typeof v === "string" || typeof v === "number") {
       const last = p.split(".").filter((x) => !/^\d+$/.test(x)).pop() || "";
-      if (!SKIP_KEY.test(p) && !SKIP_KEY.test(last) && /[a-z]{2}/i.test(v) && !/^(https?:|mailto:|tel:|#|assets\/)/i.test(v)) texts.push({ path: p, text: norm(v) });
+      if (SKIP_KEY.test(p) || SKIP_KEY.test(last)) return;
+      const str = String(v);
+      if (typeof v === "string" && /[a-z]{2}/i.test(str) && !/^(https?:|mailto:|tel:|#|assets\/)/i.test(str)) texts.push({ path: p, text: norm(str) });
+      else if (/^[\d.,:+%$₹€£ \/–-]{1,16}$/.test(str.trim()) && /\d/.test(str)) texts.push({ path: p, text: norm(str), exact: true });
       return;
     }
     if (Array.isArray(v)) { v.forEach((x, i) => walk(x, p ? `${p}.${i}` : String(i))); return; }
@@ -34,18 +38,20 @@ export function contentIndex(content: any): { texts: Leaf[]; imgs: Img[] } {
 }
 
 /** The content path a piece of preview text shows: an exact match first, then the longest value it contains. */
-export function matchText(idx: ReturnType<typeof contentIndex>, raw: string): string | null {
+export function matchText(idx: ReturnType<typeof contentIndex>, raw: string, prefer = ""): string | null {
   const t = norm(raw);
+  if (!t) return null;
+  // The same words can be in two places ("8+" in the hero and in About): prefer the section being pointed at.
+  const exact = idx.texts.filter((l) => l.text === t);
+  if (exact.length) return (prefer && exact.find((l) => l.path === prefer || l.path.startsWith(prefer + "."))?.path) || exact[0].path;
   if (t.length < 2) return null;
-  const exact = idx.texts.find((l) => l.text === t);
-  if (exact) return exact.path;
   // The element adds a little around the value ("Your Name." or "01 · Senior Designer").
   let best: Leaf | null = null;
   // A small card can hold two values (a skill's line and its details): the larger one wins.
-  for (const l of idx.texts) if (l.text.length >= 3 && t.includes(l.text) && t.length <= l.text.length * (t.length < 160 ? 2.6 : 1.6) + 8 && (!best || l.text.length > best.text.length)) best = l;
+  for (const l of idx.texts) if (!l.exact && l.text.length >= 3 && t.includes(l.text) && t.length <= l.text.length * (t.length < 160 ? 2.6 : 1.6) + 8 && (!best || l.text.length > best.text.length)) best = l;
   if (best) return best.path;
   // The element shows part of a longer value (one paragraph of a story).
-  if (t.length >= 20) { const part = idx.texts.find((l) => l.text.includes(t)); if (part) return part.path; }
+  if (t.length >= 20) { const part = idx.texts.find((l) => !l.exact && l.text.includes(t)); if (part) return part.path; }
   return null;
 }
 

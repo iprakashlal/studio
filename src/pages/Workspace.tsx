@@ -131,7 +131,7 @@ function BrandCard({ studio, onIndex }: { studio: Studio; onIndex: (i: StudioInd
       <Field label="Studio name" htmlFor="b-name" hint="Shown in the header, the browser tab, the sign-in screen and the shareable theme gallery."><input id="b-name" className="input" value={name} maxLength={40} onChange={(e) => setName(e.target.value)} /></Field>
       <div className="flex flex-wrap items-center gap-3">
         <div className="grid h-16 w-16 place-items-center overflow-hidden rounded-xl border border-ink-600 bg-ink-950">{shown ? <img src={shown} alt="Studio logo" className="h-full w-full object-cover" /> : <Logo size={10} />}</div>
-        <label className="btn btn-sm cursor-pointer">Upload logo / icon<input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" className="sr-only" onChange={async (e) => { const f = e.target.files?.[0]; e.target.value = ""; if (!f) return; try { setLogo(await shrinkImage(f)); } catch (x) { toast(explain(x), "bad"); } }} /></label>
+        <label className="btn btn-sm relative cursor-pointer">Upload logo / icon<input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" className="sr-only" onChange={async (e) => { const f = e.target.files?.[0]; e.target.value = ""; if (!f) return; try { setLogo(await shrinkImage(f)); } catch (x) { toast(explain(x), "bad"); } }} /></label>
         {shown && <button type="button" className="btn btn-sm" onClick={() => setLogo("")}>Remove</button>}
         <span className="hint">A square image works best. It's also the browser-tab icon.</span>
       </div>

@@ -68,11 +68,14 @@ export function HostDialog({ studio, project, tpl, draft, dirty, save, onIndex, 
   const nf = useMemo(() => (token ? new Netlify(token) : null), [token]);
   const [sb, setSb] = useState<SbCfg>(host?.sb || { url: "", key: "", site: slugify(project.name) || "my-site" });
   const [siteName, setSiteName] = useState(host?.siteName || slugify(project.name) || "");
-  const [email, setEmail] = useState("");
+  const EMAIL_KEY = "site-studio:host-email";
+  const [email, setEmailState] = useState(() => { try { return localStorage.getItem(EMAIL_KEY) || ""; } catch { return ""; } });
+  const setEmail = (v: string) => { setEmailState(v); try { localStorage.setItem(EMAIL_KEY, v); } catch { /* private mode */ } };
   const [code, setCode] = useState("");
   const [codeSent, setCodeSent] = useState(false);
   const [signed, setSigned] = useState<string | null>(null);
-  const [access, setAccess] = useState<"" | "ok" | "no">("");
+  const [access, setAccess] = useState<"" | "ok" | "no" | "error">("");
+  const [accessErr, setAccessErr] = useState("");
   const [showSql, setShowSql] = useState(false);
   const [busy, setBusy] = useState("");
   const [withContent, setWithContent] = useState(true);
@@ -89,7 +92,8 @@ export function HostDialog({ studio, project, tpl, draft, dirty, save, onIndex, 
   useEffect(() => {
     if (!signed) { setAccess(""); return; }
     if (!email) setEmail(signed);
-    isAdmin(cfg()).then((ok) => setAccess(ok ? "ok" : "no")).catch(() => setAccess(""));
+    setAccessErr("");
+    isAdmin(cfg()).then((ok) => setAccess(ok ? "ok" : "no")).catch((e) => { setAccess("error"); setAccessErr(e?.message || "Couldn't check your access."); });
   }, [signed, sb.site]);
 
   const run = async (k: string, fn: () => Promise<void>) => { setBusy(k); try { await fn(); } catch (e: any) { toast(e?.message || explain(e), "bad"); } setBusy(""); };
@@ -203,7 +207,16 @@ export function HostDialog({ studio, project, tpl, draft, dirty, save, onIndex, 
           {STEPS.map((s, i) => <li key={s} className={i < step.i ? "text-emerald-300" : i === step.i ? "text-ink-100" : "text-ink-500"}>{i < step.i ? "✓" : i === step.i ? "…" : "·"} {s}{i === step.i && step.detail ? ` (${step.detail})` : ""}</li>)}
         </ol>
       )}
-      {!nf || !sbReady || access !== "ok" ? <p className="hint">To publish: connect Netlify, fill in Supabase, run the setup SQL, and sign in.</p> : null}
+      {!nf || !sbReady || access !== "ok" ? (
+        <div className="rounded-lg border border-amber-400/40 bg-amber-400/5 px-3 py-2.5 text-[13px] text-amber-100" role="status">
+          <b>Publish is waiting for:</b>
+          <ul className="mt-1 space-y-0.5">
+            <li>{nf ? "✓" : "✗"} Netlify connected on this device{nf ? "" : " (section 1: paste your Netlify token)"}</li>
+            <li>{sbReady ? "✓" : "✗"} Supabase details{sbReady ? "" : " (section 2: Project URL with nothing after .supabase.co, the anon key, and the Site ID)"}</li>
+            <li>{access === "ok" ? "✓" : "✗"} {signed ? (access === "no" ? `Signed in as ${signed}, but that email isn't an editor of this site: run the setup SQL with it` : access === "error" ? `Couldn't check your access: ${accessErr}` : `Signed in as ${signed}, checking access…`) : "Signed in to Supabase on this device (section 2: email me a sign-in code). Each browser signs in once."}</li>
+          </ul>
+        </div>
+      ) : null}
 
       {host && nf && <DomainCard host={host} nf={nf} onHost={async (h) => onIndex(await studio.updateMeta(project.id, { host: h }, "Update the site's domain"))} />}
     </Modal>

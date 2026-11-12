@@ -27,7 +27,9 @@ export type Field =
   | { t: "when"; path: string; is?: string; not?: string; fields: Field[] }
   | { t: "presets"; target: string; presets: { name: string; values: Record<string, string> }[] }
   /** The theme gallery: picking one writes the template's themeValues into content.theme. */
-  | { t: "themes" };
+  | { t: "themes" }
+  /** Import name, experience, education and skills from a LinkedIn profile PDF or data export. */
+  | { t: "linkedin" };
 
 export type Card = { title: string; fields: Field[] };
 export type Category = { id: string; label: string; group: string; desc: string; cards: Card[]; /** Show the category only when this returns true for the current content. */ showIf?: (content: any) => boolean };

@@ -95,6 +95,10 @@ const schema: Category[] = [
     ],
   },
   {
+    id: "linkedin", label: "Import from LinkedIn", group: "Content", desc: "Fill your portfolio from your LinkedIn profile: name, headline, about, experience, education, skills and links.",
+    cards: [{ title: "LinkedIn profile", fields: [{ t: "linkedin" }] }],
+  },
+  {
     id: "hero", label: "Hero", group: "Content", desc: "The first screen: name, role, buttons, photo and the 3D shapes.",
     cards: [
       { title: "Text", fields: [{ t: "text", path: "hero.eyebrow", label: "Badge above name", ml: true }, g2({ t: "text", path: "hero.firstName", label: "First line of name" }, { t: "text", path: "hero.lastName", label: "Second line of name" }),

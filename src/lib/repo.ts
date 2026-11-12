@@ -6,6 +6,17 @@ import { b64ToText, bytesToB64, textToB64 } from "./util";
 
 export type FileIn = { path: string; base64: string };
 
+/** The id git gives a file's contents: sha1("blob <size>\0" + bytes). */
+export async function gitBlobSha(base64: string): Promise<string> {
+  const bin = atob(base64);
+  const head = `blob ${bin.length}\0`;
+  const buf = new Uint8Array(head.length + bin.length);
+  for (let i = 0; i < head.length; i++) buf[i] = head.charCodeAt(i);
+  for (let i = 0; i < bin.length; i++) buf[head.length + i] = bin.charCodeAt(i);
+  const h = new Uint8Array(await crypto.subtle.digest("SHA-1", buf));
+  return [...h].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
 export class RepoError extends Error {
   status: number;
   constructor(message: string, status: number) {
@@ -132,7 +143,18 @@ export class GitHubRepo implements Repo {
     }
     const commit = await this.api(`/git/commits/${head}`);
     const entries: any[] = [];
-    const queue = [...files];
+    // Files already on the branch with the same contents (same git blob id) aren't uploaded again.
+    const have = new Map<string, string>();
+    try {
+      const t = await this.api(`/git/trees/${commit.tree.sha}?recursive=1`);
+      if (!t.truncated) for (const e of t.tree as any[]) if (e.type === "blob") have.set(e.path, e.sha);
+    } catch { /* fall back to uploading everything */ }
+    const queue: FileIn[] = [];
+    for (const f of files) {
+      const old = have.get(f.path);
+      if (old && old === (await gitBlobSha(f.base64))) continue;
+      queue.push(f);
+    }
     const worker = async () => {
       while (queue.length) {
         const f = queue.shift()!;

@@ -85,6 +85,13 @@ export async function buildSite(opts: {
   } catch {
     throw new Error("The site CMS files are missing from this Studio build. Run the GitHub Actions build again.");
   }
+  // The portfolio CMS reads LinkedIn profile PDFs with pdf.js, loaded only when someone imports one.
+  if (template.id === "portfolio") {
+    for (const f of ["pdf.min.js", "pdf.worker.min.js"]) {
+      try { files.push({ path: `cms/${f}`, data: await fetchBytes(`runtime/${f}`) }); }
+      catch { warnings.push("The PDF reader for Import from LinkedIn is missing from this Studio build; the data export ZIP still works."); break; }
+    }
+  }
   files.push({ path: ".nojekyll", data: new Uint8Array() });
   files.push({
     path: "cms/site.json",

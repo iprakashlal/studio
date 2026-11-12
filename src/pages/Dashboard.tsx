@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { ThemeGallery } from "../themes/ThemeGallery";
-import { themeById } from "../themes/catalog";
+import { anyThemeById as themeById } from "../themes/codes";
 import { TEMPLATES, TEMPLATE_LIST } from "../schema";
 import { CATEGORY_COLORS, type CategoryRec, type ProjectMeta, type Studio, type StudioIndex } from "../lib/studio";
 import { explain } from "../lib/repo";
@@ -180,7 +180,7 @@ function NewProject({ studio, index, onClose, onCreated }: { studio: Studio; ind
   const [f, setF] = useState({ name: "", client: "", template: "portfolio", starter: "default", theme: "", category: index.categories[0]?.id || "" });
   const [man, setMan] = useState<Record<string, Manifest>>({});
   const [busy, setBusy] = useState(false);
-  const pick = (template: string) => setF((x) => ({ ...x, template, starter: "default" }));
+  const pick = (template: string) => setF((x) => ({ ...x, template, starter: "default", theme: (TEMPLATES[template].themes || []).some((t) => t.id === x.theme) || (!TEMPLATES[template].themes && !x.theme.startsWith("biz-")) ? x.theme : "" }));
   useEffect(() => {
     if (!man[f.template]) loadManifest(f.template).then((m) => setMan((o) => ({ ...o, [f.template]: m }))).catch(() => {});
   }, [f.template]);
@@ -207,7 +207,7 @@ function NewProject({ studio, index, onClose, onCreated }: { studio: Studio; ind
       </div>
       <div className="flex flex-col gap-2">
         <span className="label">Template</span>
-        <div className="grid gap-3 sm:grid-cols-2" role="radiogroup" aria-label="Template">
+        <div className="grid gap-3 sm:grid-cols-3" role="radiogroup" aria-label="Template">
           {TEMPLATE_LIST.map((t) => (
             <button key={t.id} type="button" role="radio" aria-checked={f.template === t.id} onClick={() => pick(t.id)}
               className={`flex flex-col gap-1.5 rounded-xl border p-4 text-left ${f.template === t.id ? "border-brand-500 bg-brand-500/10" : "border-ink-600 bg-ink-950 hover:border-ink-400"}`}>
@@ -230,7 +230,7 @@ function NewProject({ studio, index, onClose, onCreated }: { studio: Studio; ind
           <button type="button" className={`rounded-full border px-2.5 py-1 text-xs font-semibold normal-case tracking-normal ${!f.theme ? "border-brand-500 bg-brand-500/15 text-ink-100" : "border-ink-600 text-ink-400"}`} aria-pressed={!f.theme} onClick={() => setF({ ...f, theme: "" })}>Template's own look</button>
         </span>
         <div className="max-h-[340px] overflow-y-auto pr-1 scroll-thin">
-          <ThemeGallery compact current={f.theme} onPick={(t) => setF({ ...f, theme: t.id })} />
+          <ThemeGallery compact current={f.theme} themes={TEMPLATES[f.template].themes} tags={TEMPLATES[f.template].themeTags} onPick={(t) => setF({ ...f, theme: t.id })} />
         </div>
         <p className="text-xs text-ink-500">You can change the theme any time in Design → Theme &amp; layout.</p>
       </div>

@@ -21,6 +21,15 @@ export function storePageLabel(file: string, c: any): string {
   return oneLine(m[file] || "");
 }
 
+/** Business pages in several-page mode: their names from Sections & pages. */
+export function bizPageLabel(file: string, c: any): string {
+  if (!c?.site?.multiPage) return "";
+  const k = file.replace(/\.html$/, "");
+  return k === "index" ? "" : oneLine(c?.site?.pageLabels?.[k] || "");
+}
+/** The page label a template gives a file, for its tab title. */
+export const pageLabel = (template: string, file: string, c: any) => (template === "store" ? storePageLabel(file, c) : template === "business" ? bizPageLabel(file, c) : "");
+
 /** The tab title for a page: the home page uses the title as typed, other pages follow the pattern. */
 export function pageTitle(c: any, file = "index.html", label = ""): string {
   const site = oneLine(c?.seo?.title || c?.brand?.name || c?.brand?.logoText || "");

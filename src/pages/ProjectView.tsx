@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { EnquiriesPanel, enquiriesCfg } from "../site-admin/EnquiriesPanel";
 import { GOTO_EVENT } from "../editor/Editor";
 import { TEMPLATES } from "../schema";
 import type { Session } from "../lib/auth";
@@ -126,10 +127,15 @@ export function ProjectView({ studio, index, project, session, onIndex }: { stud
 
   const replaceDraft = (c: any) => { setDraft(merge(defaults.current || {}, clone(c))); setV((n) => n + 1); };
 
-  const extras = useMemo(() => [{
-    id: "backup", label: "Backup & reset", group: "Project", desc: "Copy, restore or reset this project's content.",
-    render: () => <BackupPanel draft={draft} onReplace={replaceDraft} loadDefaults={() => loadDefaults(project.template)} />,
-  }], [draft, project.template]);
+  const extras = useMemo(() => [
+    ...(project.template === "business" ? [{
+      id: "enquiries", label: "Enquiries", group: "Content", desc: "Messages sent through the website's enquiry form.",
+      render: () => <EnquiriesPanel cfg={enquiriesCfg(draft, project.host?.sb)} hosted={!!project.host} email={draft?.contact?.email} />,
+    }] : []),
+    {
+      id: "backup", label: "Backup & reset", group: "Project", desc: "Copy, restore or reset this project's content.",
+      render: () => <BackupPanel draft={draft} onReplace={replaceDraft} loadDefaults={() => loadDefaults(project.template)} />,
+    }], [draft, project.template, project.host]);
 
   // The confirm is async, so stop the link first and navigate ourselves.
   const onBack = async (e: React.MouseEvent) => {

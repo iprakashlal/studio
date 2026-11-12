@@ -1,0 +1,542 @@
+{
+  "theme": {
+    "bg": "#F7F8FA",
+    "surface": "#FFFFFF",
+    "deep": "#0E1B2C",
+    "text": "#0E1B2C",
+    "soft": "#5A6678",
+    "line": "#DDE2EA",
+    "c1": "#1D4ED8",
+    "c2": "#0E7490",
+    "c3": "#F59E0B",
+    "fontDisplay": "Plus Jakarta Sans",
+    "fontBody": "Inter",
+    "radius": 12,
+    "preset": "meridian",
+    "layout": "split",
+    "nav": "bar",
+    "cards": "outline",
+    "buttons": "rounded",
+    "heading": "normal",
+    "shead": "label",
+    "pattern": "none",
+    "width": "normal",
+    "motionStyle": "rise",
+    "bands": "soft",
+    "heroArt": "panel",
+    "cursor": "none",
+    "loader": "none",
+    "textfx": "none",
+    "hoverfx": "none",
+    "scrollfx": "none",
+    "overlay": "none",
+    "introBg": "",
+    "introFg": "",
+    "introTitle": "",
+    "introFont": "display",
+    "introCase": "upper",
+    "logoRadius": 22,
+    "scrollEase": "light",
+    "lineBreaks": "typed"
+  },
+  "cms": {
+    "adminPage": "admin"
+  },
+  "brand": {
+    "name": "Northbeam Partners",
+    "tagline": "Strategy, design and engineering for growing companies",
+    "logo": null,
+    "showName": true
+  },
+  "site": {
+    "multiPage": false,
+    "pageLabels": {
+      "home": "Home",
+      "services": "Services",
+      "work": "Work",
+      "about": "About",
+      "contact": "Contact"
+    }
+  },
+  "nav": {
+    "cta": "Book a call",
+    "ctaTarget": "contact"
+  },
+  "sections": [
+    {
+      "id": "hero",
+      "label": "Home",
+      "show": true,
+      "inNav": false
+    },
+    {
+      "id": "clients",
+      "label": "Clients",
+      "show": true,
+      "inNav": false
+    },
+    {
+      "id": "services",
+      "label": "Services",
+      "show": true,
+      "inNav": true
+    },
+    {
+      "id": "stats",
+      "label": "Numbers",
+      "show": true,
+      "inNav": false
+    },
+    {
+      "id": "work",
+      "label": "Work",
+      "show": true,
+      "inNav": true
+    },
+    {
+      "id": "about",
+      "label": "About",
+      "show": true,
+      "inNav": true
+    },
+    {
+      "id": "process",
+      "label": "Process",
+      "show": true,
+      "inNav": false
+    },
+    {
+      "id": "team",
+      "label": "Team",
+      "show": true,
+      "inNav": true
+    },
+    {
+      "id": "testimonials",
+      "label": "Testimonials",
+      "show": true,
+      "inNav": false
+    },
+    {
+      "id": "pricing",
+      "label": "Pricing",
+      "show": true,
+      "inNav": false
+    },
+    {
+      "id": "faq",
+      "label": "FAQ",
+      "show": true,
+      "inNav": false
+    },
+    {
+      "id": "cta",
+      "label": "Call to action",
+      "show": true,
+      "inNav": false
+    },
+    {
+      "id": "contact",
+      "label": "Contact",
+      "show": true,
+      "inNav": true
+    }
+  ],
+  "hero": {
+    "eyebrow": "Consulting · Design · Engineering",
+    "title": "We help growing companies\nbuild what's next.",
+    "lede": "Northbeam is an independent team of strategists, designers and engineers. We plan, design and ship digital products for banks, insurers and healthcare companies.",
+    "ctaPrimary": "Book a consultation",
+    "ctaPrimaryTarget": "contact",
+    "ctaSecondary": "See our work",
+    "ctaSecondaryTarget": "work",
+    "image": null,
+    "badges": [
+      "ISO 27001 certified",
+      "120+ projects delivered",
+      "Offices in Mumbai & London"
+    ]
+  },
+  "clients": {
+    "title": "Trusted by teams at",
+    "logos": [
+      {
+        "name": "Arcadia Bank",
+        "logo": null
+      },
+      {
+        "name": "Helix Health",
+        "logo": null
+      },
+      {
+        "name": "Orbit Insurance",
+        "logo": null
+      },
+      {
+        "name": "Lumen Retail",
+        "logo": null
+      },
+      {
+        "name": "Stratus Cloud",
+        "logo": null
+      },
+      {
+        "name": "Vertex Labs",
+        "logo": null
+      }
+    ]
+  },
+  "services": {
+    "eyebrow": "What we do",
+    "title": "Services built around outcomes",
+    "lede": "Pick one engagement or bring us in end to end. Every project has a single lead who owns delivery.",
+    "items": [
+      {
+        "icon": "compass",
+        "title": "Strategy & discovery",
+        "body": "Research, roadmaps and business cases that get a project funded and pointed the right way.",
+        "points": [
+          "Customer research",
+          "Product roadmaps",
+          "Business cases"
+        ]
+      },
+      {
+        "icon": "layers",
+        "title": "Product design",
+        "body": "Interfaces people understand at first glance, tested with real users before a line of code.",
+        "points": [
+          "UX & UI design",
+          "Design systems",
+          "Usability testing"
+        ]
+      },
+      {
+        "icon": "code",
+        "title": "Engineering",
+        "body": "Web and mobile platforms built to last: secure, accessible and easy for your team to run.",
+        "points": [
+          "Web & mobile apps",
+          "Cloud platforms",
+          "Integrations & APIs"
+        ]
+      },
+      {
+        "icon": "chart",
+        "title": "Data & analytics",
+        "body": "Dashboards and data pipelines that turn day-to-day numbers into decisions.",
+        "points": [
+          "Dashboards",
+          "Data pipelines",
+          "Reporting automation"
+        ]
+      },
+      {
+        "icon": "shield",
+        "title": "Security & compliance",
+        "body": "Reviews, hardening and documentation for regulated industries.",
+        "points": [
+          "Security reviews",
+          "Compliance readiness",
+          "Access controls"
+        ]
+      },
+      {
+        "icon": "people",
+        "title": "Team augmentation",
+        "body": "Senior specialists who join your team for a quarter or a year.",
+        "points": [
+          "Tech leads",
+          "Designers",
+          "QA engineers"
+        ]
+      }
+    ]
+  },
+  "about": {
+    "eyebrow": "About us",
+    "title": "Independent, senior and accountable",
+    "body": "We started Northbeam in 2014 with a simple idea: small senior teams deliver better work than large junior ones.\n\nToday we're 45 people across Mumbai and London. We work with a handful of clients at a time, so every engagement gets our full attention.",
+    "image": null,
+    "mission": "Help organisations make better products with less risk.",
+    "vision": "Be the partner companies call first when the work really matters.",
+    "values": [
+      {
+        "title": "Clarity",
+        "body": "Plain language, honest estimates, no surprises."
+      },
+      {
+        "title": "Craft",
+        "body": "We sweat the details our clients' customers notice."
+      },
+      {
+        "title": "Ownership",
+        "body": "One lead, accountable from kickoff to launch."
+      },
+      {
+        "title": "Care",
+        "body": "For the people we work with and the people they serve."
+      }
+    ]
+  },
+  "stats": {
+    "items": [
+      {
+        "value": "12+",
+        "label": "Years in business"
+      },
+      {
+        "value": "120+",
+        "label": "Projects delivered"
+      },
+      {
+        "value": "45",
+        "label": "Specialists"
+      },
+      {
+        "value": "98%",
+        "label": "Clients who return"
+      }
+    ]
+  },
+  "work": {
+    "eyebrow": "Case studies",
+    "title": "Selected work",
+    "lede": "A few recent engagements. More on request, under NDA.",
+    "items": [
+      {
+        "title": "Digital onboarding for a retail bank",
+        "client": "Arcadia Bank",
+        "sector": "Banking",
+        "summary": "Rebuilt account opening from a 40-minute branch visit into a 7-minute mobile journey.",
+        "result": "3.2× more accounts opened online",
+        "image": null,
+        "url": ""
+      },
+      {
+        "title": "Claims portal for 40,000 agents",
+        "client": "Orbit Insurance",
+        "sector": "Insurance",
+        "summary": "Replaced four legacy tools with one portal for agents, adjusters and partners.",
+        "result": "Claim processing time down 46%",
+        "image": null,
+        "url": ""
+      },
+      {
+        "title": "Patient app and care dashboard",
+        "client": "Helix Health",
+        "sector": "Healthcare",
+        "summary": "A patient app linked to a clinician dashboard for remote monitoring.",
+        "result": "28% fewer missed appointments",
+        "image": null,
+        "url": ""
+      }
+    ]
+  },
+  "process": {
+    "eyebrow": "How we work",
+    "title": "A clear path from first call to launch",
+    "steps": [
+      {
+        "title": "Discover",
+        "body": "Two weeks of interviews, data and workshops to agree on the problem and the goal."
+      },
+      {
+        "title": "Plan",
+        "body": "A roadmap, budget and team you can take to your board."
+      },
+      {
+        "title": "Build",
+        "body": "Fortnightly releases you can see and test, with one lead accountable."
+      },
+      {
+        "title": "Launch & grow",
+        "body": "Go-live support, training and a plan for what comes next."
+      }
+    ]
+  },
+  "team": {
+    "eyebrow": "Leadership",
+    "title": "The people you'll work with",
+    "lede": "Senior leads on every project, from first call to launch.",
+    "members": [
+      {
+        "name": "Ananya Rao",
+        "role": "Managing Partner",
+        "photo": null,
+        "linkedin": ""
+      },
+      {
+        "name": "David Mercer",
+        "role": "Head of Design",
+        "photo": null,
+        "linkedin": ""
+      },
+      {
+        "name": "Karan Mehta",
+        "role": "Head of Engineering",
+        "photo": null,
+        "linkedin": ""
+      },
+      {
+        "name": "Sara Lindqvist",
+        "role": "Head of Strategy",
+        "photo": null,
+        "linkedin": ""
+      }
+    ]
+  },
+  "testimonials": {
+    "eyebrow": "Client stories",
+    "title": "What clients say",
+    "items": [
+      {
+        "quote": "Northbeam took a project three vendors had failed at and shipped it in six months. They're the first team I call now.",
+        "name": "Priya Nair",
+        "role": "Chief Digital Officer",
+        "company": "Arcadia Bank"
+      },
+      {
+        "quote": "Senior people, honest estimates and no surprises. Exactly what a regulated business needs from a partner.",
+        "name": "James Whitfield",
+        "role": "COO",
+        "company": "Orbit Insurance"
+      }
+    ]
+  },
+  "pricing": {
+    "eyebrow": "Engagements",
+    "title": "Ways to work with us",
+    "lede": "Fixed scopes for a clear start; retainers when you want a team on call.",
+    "plans": [
+      {
+        "name": "Discovery sprint",
+        "price": "₹4.5L",
+        "period": "fixed, 2 weeks",
+        "blurb": "Research, workshops and a costed roadmap.",
+        "features": [
+          "Stakeholder interviews",
+          "User research",
+          "Roadmap & estimate"
+        ],
+        "cta": "Start a sprint",
+        "featured": false
+      },
+      {
+        "name": "Product build",
+        "price": "From ₹25L",
+        "period": "per project",
+        "blurb": "Design and engineering to launch.",
+        "features": [
+          "Dedicated lead",
+          "Fortnightly releases",
+          "Launch support"
+        ],
+        "cta": "Plan a project",
+        "featured": true
+      },
+      {
+        "name": "Retainer",
+        "price": "₹6L",
+        "period": "per month",
+        "blurb": "A senior team on call for improvements.",
+        "features": [
+          "Design + engineering hours",
+          "Monthly roadmap review",
+          "Priority support"
+        ],
+        "cta": "Talk to us",
+        "featured": false
+      }
+    ],
+    "note": "Prices exclude GST. Every engagement starts with a free 30-minute call."
+  },
+  "faq": {
+    "eyebrow": "FAQ",
+    "title": "Questions we're often asked",
+    "items": [
+      {
+        "q": "How quickly can you start?",
+        "a": "Usually within two to three weeks of signing. Discovery sprints can often start the following week."
+      },
+      {
+        "q": "Do you work with companies outside India?",
+        "a": "Yes. About a third of our clients are in the UK, Europe and the Middle East. We overlap with their working hours."
+      },
+      {
+        "q": "Who owns the work?",
+        "a": "You do. All designs, code and documents are yours once invoices are paid."
+      },
+      {
+        "q": "Can you work with our in-house team?",
+        "a": "Most of our projects are joint teams. We can lead, support or hand over, whichever suits you."
+      }
+    ]
+  },
+  "cta": {
+    "title": "Have a project in mind?",
+    "body": "Tell us where you are and where you want to be. We'll reply within one working day.",
+    "button": "Start a conversation",
+    "target": "contact"
+  },
+  "contact": {
+    "eyebrow": "Contact",
+    "title": "Let's talk about your project",
+    "lede": "Send a few details and we'll set up a 30-minute call. No obligation.",
+    "email": "hello@northbeam.example",
+    "phone": "+91 22 4000 1234",
+    "whatsapp": "",
+    "address": "Level 9, One BKC\nBandra Kurla Complex, Mumbai 400051",
+    "hours": "Mon–Fri, 9:30 am – 6:30 pm IST",
+    "mapUrl": "",
+    "linkedin": "https://www.linkedin.com/",
+    "form": {
+      "enabled": true,
+      "title": "Tell us about your project",
+      "askPhone": true,
+      "askCompany": true,
+      "askService": true,
+      "askBudget": true,
+      "budgets": [
+        "Under ₹5L",
+        "₹5L – ₹25L",
+        "₹25L – ₹1Cr",
+        "Above ₹1Cr"
+      ],
+      "submit": "Send enquiry",
+      "success": "Thank you. We've received your enquiry and will reply within one working day.",
+      "consent": "I agree to be contacted about this enquiry.",
+      "saveTo": "auto",
+      "sbUrl": "",
+      "sbKey": "",
+      "site": ""
+    }
+  },
+  "footer": {
+    "text": "Strategy, design and engineering for growing companies.",
+    "legal": "© {year} Northbeam Partners LLP. All rights reserved.",
+    "links": [
+      {
+        "label": "Privacy",
+        "url": ""
+      },
+      {
+        "label": "Terms",
+        "url": ""
+      }
+    ]
+  },
+  "seo": {
+    "title": "Northbeam Partners · Strategy, design and engineering",
+    "description": "Independent consultancy helping banks, insurers and healthcare companies plan, design and ship digital products.",
+    "titlePattern": "{page} · {site}",
+    "keywords": "",
+    "author": "",
+    "image": null,
+    "siteUrl": "",
+    "themeColor": "",
+    "noindex": false,
+    "googleVerification": "",
+    "meta": []
+  }
+}

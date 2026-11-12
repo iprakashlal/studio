@@ -2,7 +2,7 @@
 import type { Category, Field } from "./types";
 
 /** Page names a site already uses, so the admin page can't take them. */
-const RESERVED = ["index", "404", "shop", "product", "cart", "checkout", "portfolio", "policies", "account", "content", "readme", "assets", "cms"];
+const RESERVED = ["index", "404", "shop", "product", "cart", "checkout", "portfolio", "policies", "account", "content", "readme", "assets", "cms", "services", "work", "about", "contact"];
 
 /** "My Admin!" → "my-admin". Empty or unusable names fall back to "admin". */
 export function adminSlug(raw: unknown): string {

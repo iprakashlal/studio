@@ -213,7 +213,7 @@ export const PORTFOLIO_LABELS = {
 
 export const portfolioTemplate: TemplateDef = {
   id: "portfolio",
-  name: "Portfolio",
+  name: "Personal portfolio",
   kind: "Single page",
   description: "Geometric 3D portfolio: hero with 3D shapes, bento about, skills cube, stacked work deck, projects, learning and contact.",
   pages: [{ file: "index.html", label: "Home" }],

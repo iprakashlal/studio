@@ -9,7 +9,7 @@ import type { Repo } from "./repo";
 import { bytesB64 } from "./repo";
 import { blobToBytes, collectAssetPaths, getP, textToBytes } from "./util";
 import { adminFile } from "../schema/common";
-import { bakeHead, storePageLabel } from "./head";
+import { bakeHead, pageLabel } from "./head";
 import { assetBase, cleanUrl, type SbCfg } from "./supa";
 
 export type SiteFile = { path: string; data: Uint8Array };
@@ -79,7 +79,7 @@ export async function buildSite(opts: {
   for (const f of [...m.files, ...optional]) {
     let data = await fetchBytes(`templates/${template.id}/${f}`);
     if (f.endsWith(".html") && f !== "admin.html" && f !== "404.html")
-      data = textToBytes(bakeHead(new TextDecoder().decode(data), hc, { file: f, label: template.id === "store" ? storePageLabel(f, hc) : "", base: opts.base, bg: hc?.theme?.bg, assets: opts.host ? assetBase(opts.host) : undefined }));
+      data = textToBytes(bakeHead(new TextDecoder().decode(data), hc, { file: f, label: pageLabel(template.id, f, hc), base: opts.base, bg: hc?.theme?.bg, assets: opts.host ? assetBase(opts.host) : undefined }));
     if (opts.host && f.endsWith(".html")) data = textToBytes(hostTag(new TextDecoder().decode(data), opts.host));
     if (f.endsWith(".md") && admin !== "admin.html") data = textToBytes(new TextDecoder().decode(data).replace(/\badmin\.html\b/g, admin));
     files.push({ path: f === "admin.html" ? admin : f, data });

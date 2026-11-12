@@ -181,16 +181,33 @@ export class Studio {
   }
 
   /** Copy content edited in a published site's own CMS back into the Studio project. */
-  async importFromSite(id: string, site: Repo): Promise<{ index: StudioIndex; content: any; missing: string[] }> {
+  /** `track`: remember this site as the one the project is in step with (false for a secondary copy, e.g. GitHub beside Netlify). */
+  async importFromSite(id: string, site: Repo, track = true): Promise<{ index: StudioIndex; content: any; missing: string[] }> {
     const f = await site.getJSON("content.json");
     if (!f) throw new Error("The site has no content.json yet.");
     // Only the content is copied, so a pull is quick however many photos the site has.
     // Images stay on the site and load from there (see assetBlob) until the Studio has its own copy.
     const index = await this.updateIndex((i) => {
       const m = i.projects.find((x) => x.id === id);
-      if (m) { m.updatedAt = m.contentAt = m.syncedAt = now(); m.siteSha = f.sha; m.summary = TEMPLATES[m.template]?.summary(f.data) ?? m.summary; }
+      if (m && !track) { m.updatedAt = m.contentAt = now(); m.summary = TEMPLATES[m.template]?.summary(f.data) ?? m.summary; }
+      else if (m) { m.updatedAt = m.contentAt = m.syncedAt = now(); m.siteSha = f.sha; m.summary = TEMPLATES[m.template]?.summary(f.data) ?? m.summary; }
     }, "Update from the live site (edited in its own CMS)", [{ path: `projects/${id}/content.json`, base64: jsonB64(f.data) }]);
     return { index, content: f.data, missing: [] };
+  }
+
+  /** Copies photos the Studio doesn't have from a site (used when pulling from a secondary copy). Returns how many were missing everywhere. */
+  async copyMissingAssets(id: string, content: any, from: Repo): Promise<number> {
+    const have = new Set(await this.repo.list(`projects/${id}/assets/`).catch(() => [] as string[]));
+    const files: { path: string; base64: string }[] = [];
+    let missing = 0;
+    for (const p of collectAssetPaths(content)) {
+      if (have.has(`projects/${id}/${p}`)) continue;
+      const b = await from.getRaw(p).catch(() => null);
+      if (b) files.push({ path: `projects/${id}/${p}`, base64: bytesB64(await blobToBytes(b)) });
+      else missing++;
+    }
+    if (files.length) await this.repo.pushFiles(files, `Copy ${files.length} photo(s) from the live site`);
+    return missing;
   }
 
   /** Saves the Studio's name and logo (a PNG data URL, "" to remove it) for every device. */
@@ -243,6 +260,14 @@ function normalise(i: any): StudioIndex {
 }
 
 /** JSON with sorted keys, so key order doesn't count as a change. */
+export const sameContent = (a: any, b: any) => stable(a) === stable(b);
+
+/** Top-level sections whose content differs (hero, about, theme…). */
+export function changedSections(a: any, b: any): string[] {
+  const keys = new Set([...Object.keys(a || {}), ...Object.keys(b || {})]);
+  return [...keys].filter((k) => stable(a?.[k]) !== stable(b?.[k])).sort();
+}
+
 function stable(v: any): string {
   if (Array.isArray(v)) return "[" + v.map(stable).join(",") + "]";
   if (v && typeof v === "object") return "{" + Object.keys(v).sort().filter((k) => v[k] !== undefined).map((k) => JSON.stringify(k) + ":" + stable(v[k])).join(",") + "}";

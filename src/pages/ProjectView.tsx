@@ -8,6 +8,7 @@ import { adminFile } from "../schema/common";
 import { clone, fmtDate, merge, slugify, timeAgo } from "../lib/util";
 import { siteAddress, siteRepoFor } from "../lib/hosting";
 import { HostDialog } from "./HostDialog";
+import { LiveSitesDialog } from "./LiveSites";
 import { Editor } from "../editor/Editor";
 import { Preview } from "../editor/Preview";
 import { BackupPanel } from "../editor/BackupPanel";
@@ -24,7 +25,7 @@ export function ProjectView({ studio, index, project, session, onIndex }: { stud
   const [savedV, setSavedV] = useState(0);
   const [saving, setSaving] = useState(false);
   const [pane, setPane] = useState<"edit" | "preview">("edit");
-  const [modal, setModal] = useState<"" | "export" | "publish" | "host" | "history" | "details">("");
+  const [modal, setModal] = useState<"" | "export" | "publish" | "host" | "live" | "history" | "details">("");
   const defaults = useRef<any>(null);
   const [conflict, setConflict] = useState<{ siteAt: string | null } | null>(null);
   const [syncBusy, setSyncBusy] = useState(false);
@@ -152,6 +153,7 @@ export function ProjectView({ studio, index, project, session, onIndex }: { stud
             <button type="button" aria-pressed={pane === "edit"} className={`btn btn-sm border-0 ${pane === "edit" ? "bg-ink-700" : "bg-transparent"}`} onClick={() => setPane("edit")}>Edit</button>
             <button type="button" aria-pressed={pane === "preview"} className={`btn btn-sm border-0 ${pane === "preview" ? "bg-ink-700" : "bg-transparent"}`} onClick={() => setPane("preview")}>Preview</button>
           </div>
+          {(project.publish || project.host) && !studio.repo.demo && <button type="button" className="btn btn-sm" onClick={() => setModal("live")} title="When each live site last changed, and pull its content">Live sites</button>}
           <button type="button" className="btn btn-sm" onClick={() => setModal("history")}>History{project.exports.length ? ` (${project.exports.length})` : ""}</button>
           <button type="button" className="btn btn-sm" onClick={() => setModal("export")}>Export ZIP</button>
           <button type="button" className="btn btn-sm" onClick={() => setModal("publish")}>Publish to GitHub</button>
@@ -182,6 +184,7 @@ export function ProjectView({ studio, index, project, session, onIndex }: { stud
       {modal === "export" && <ExportDialog {...{ studio, project, tpl, draft, dirty, save, onIndex, getBlob }} onClose={() => setModal("")} />}
       {modal === "publish" && <PublishDialog {...{ studio, project, tpl, draft, dirty, save, onIndex, getBlob, session }} onClose={() => setModal("")} />}
       {modal === "host" && <HostDialog {...{ studio, project, tpl, draft, dirty, save, onIndex, getBlob, session }} onClose={() => setModal("")} />}
+      {modal === "live" && <LiveSitesDialog {...{ studio, project, session, dirty, onIndex }} current={draft} defaults={defaults.current} onImported={(c) => { replaceDraft(c); setSavedV(v + 1); setConflict(null); }} onClose={() => setModal("")} />}
       {modal === "history" && <HistoryDialog {...{ studio, project, tpl, getBlob }} onLoad={(c) => { replaceDraft(c); setModal(""); toast("Loaded into the editor. Save to keep it."); }} onClose={() => setModal("")} />}
       {modal === "details" && <DetailsDialog {...{ studio, index, project, session, onIndex }} onImported={(c) => { replaceDraft(c); setSavedV(v + 1); }} onClose={() => setModal("")} />}
     </div>

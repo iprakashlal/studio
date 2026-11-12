@@ -101,7 +101,7 @@ export function LinkedInImport({ root, bump }: { root: any; bump: () => void }) 
 
       <label htmlFor="li-file" onDragOver={(e) => { e.preventDefault(); setDrag(true); }} onDragLeave={() => setDrag(false)}
         onDrop={(e) => { e.preventDefault(); setDrag(false); read([...e.dataTransfer.files]); }}
-        className={`flex cursor-pointer flex-col items-center gap-1 rounded-xl border-2 border-dashed px-4 py-6 text-center text-sm transition ${drag ? "border-brand-400 bg-brand-500/10" : "border-ink-600 hover:border-brand-500"}`}>
+        className={`relative flex cursor-pointer flex-col items-center gap-1 rounded-xl border-2 border-dashed px-4 py-6 text-center text-sm transition ${drag ? "border-brand-400 bg-brand-500/10" : "border-ink-600 hover:border-brand-500"}`}>
         <b>Upload your LinkedIn PDF or data export</b>
         <span className="text-[13px] text-ink-400">Drop a .pdf, a .zip, or the .csv files here, or click to choose</span>
         <input id="li-file" ref={input} type="file" multiple accept=".pdf,.zip,.csv,application/pdf,application/zip,text/csv" className="sr-only" onChange={(e) => read([...(e.target.files || [])])} />

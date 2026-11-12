@@ -83,9 +83,9 @@ export function Field({ label, htmlFor, hint, children, warn }: { label: string;
 
 export function Toggle({ id, label, checked, onChange }: { id: string; label: string; checked: boolean; onChange: (v: boolean) => void }) {
   return (
-    <label htmlFor={id} className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-ink-600 bg-ink-950 px-3 py-2.5">
+    <label htmlFor={id} className="relative flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-ink-600 bg-ink-950 px-3 py-2.5">
       <span className="text-sm font-semibold">{label}</span>
-      <input id={id} type="checkbox" className="peer sr-only" checked={checked} onChange={(e) => onChange(e.target.checked)} />
+      <input id={id} type="checkbox" className="peer sr-only left-0 top-0" checked={checked} onChange={(e) => onChange(e.target.checked)} />
       <span aria-hidden className="relative h-[22px] w-10 flex-none rounded-full bg-ink-600 transition peer-checked:bg-brand-500 peer-focus-visible:ring-2 peer-focus-visible:ring-brand-400 after:absolute after:left-[3px] after:top-[3px] after:h-4 after:w-4 after:rounded-full after:bg-white after:transition peer-checked:after:translate-x-[18px]" />
     </label>
   );

@@ -86,10 +86,11 @@ export class Netlify {
     return { id: d.id, url: dep.ssl_url || dep.deploy_ssl_url || "" };
   }
 
-  /** Uses www.<domain> as the main address (Netlify's advice for external DNS); the bare domain redirects to it. */
+  /** Uses www.<domain> as the main address (Netlify's advice for external DNS); the bare domain redirects to it.
+   *  HTTPS is requested later (provisionSsl), once DNS points here; Netlify then redirects http to https itself. */
   async setDomain(siteId: string, domain: string) {
     const apex = domain.replace(/^www\./, "");
-    return this.req<NetlifySite>(`/sites/${encodeURIComponent(siteId)}`, { method: "PATCH", body: JSON.stringify({ custom_domain: `www.${apex}`, force_ssl: true }) });
+    return this.req<NetlifySite>(`/sites/${encodeURIComponent(siteId)}`, { method: "PATCH", body: JSON.stringify({ custom_domain: `www.${apex}` }) });
   }
   async removeDomain(siteId: string) {
     return this.req<NetlifySite>(`/sites/${encodeURIComponent(siteId)}`, { method: "PATCH", body: JSON.stringify({ custom_domain: null, domain_aliases: [] }) });

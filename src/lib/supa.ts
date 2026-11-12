@@ -75,6 +75,9 @@ drop policy if exists "owners see their sites" on public.site_admins;
 create policy "owners see their sites" on public.site_admins for select to authenticated using (lower(email) = lower(coalesce(auth.jwt() ->> 'email', '')));
 
 insert into storage.buckets (id, name, public) values ('${BUCKET}', '${BUCKET}', true) on conflict (id) do update set public = true;
+-- Uploads replace files in place (upsert), which needs editors to be able to see the bucket's files too.
+drop policy if exists "owners see site photos" on storage.objects;
+create policy "owners see site photos" on storage.objects for select to authenticated using (bucket_id = '${BUCKET}' and public.is_site_admin(split_part(name, '/', 1)));
 drop policy if exists "owners upload site photos" on storage.objects;
 create policy "owners upload site photos" on storage.objects for insert to authenticated with check (bucket_id = '${BUCKET}' and public.is_site_admin(split_part(name, '/', 1)));
 drop policy if exists "owners replace site photos" on storage.objects;

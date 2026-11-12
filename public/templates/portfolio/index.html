@@ -709,8 +709,10 @@ html[data-layout=editorial] .h-text{border-top:2px solid var(--text);border-bott
 html[data-layout=editorial] .h-name{font-size:clamp(48px,14cqw,196px);letter-spacing:-.045em}
 html[data-layout=editorial] .h-role{max-width:58ch}
 html[data-layout=editorial] .stage-wrap{max-width:300px;width:100%;margin:22px 0 0 auto}
-html[data-layout=editorial] #stage{display:none}
-html[data-layout=editorial] .stage-wrap:not(:has(.photo,.disc)){display:none}
+html[data-layout=editorial] #stage:not([data-gfx]){display:none}
+html[data-layout=editorial] .stage-wrap:not(:has(.photo,.disc,#stage[data-gfx])){display:none}
+html[data-layout=editorial] #stage[data-gfx]{display:block;aspect-ratio:1;width:100%}
+@media (min-width:901px){html[data-layout=editorial] .hero-grid:has(#stage[data-gfx]){grid-template-columns:minmax(0,1fr) minmax(240px,30%);gap:clamp(20px,3vw,48px);align-items:end}html[data-layout=editorial] .hero-grid:has(#stage[data-gfx]) .stage-wrap{max-width:none;margin:0}}
 /* hero: framed (the whole hero sits in a card) */
 html[data-layout=framed] .hero{padding-block:104px 34px}
 html[data-layout=framed] .hero-grid{background:var(--surface);border:1px solid color-mix(in srgb,var(--line) 80%,transparent);border-radius:calc(var(--r)*1.6 + 6px);padding:clamp(24px,4vw,60px);box-shadow:0 34px 80px -50px rgba(0,0,0,.5)}
@@ -723,7 +725,7 @@ html[data-layout=poster] .hero{min-height:min(980px,100svh);align-items:flex-end
 html[data-layout=poster] .hero-grid{grid-template-columns:1fr;position:relative}
 html[data-layout=poster] .h-text{position:relative;z-index:2}
 html[data-layout=poster] .h-name{font-size:clamp(56px,16.5cqw,236px);line-height:.84}
-html[data-layout=poster] .stage-wrap{position:absolute;right:0;bottom:62%;width:min(38%,440px)}
+html[data-layout=poster] .stage-wrap{position:absolute;right:0;top:0;width:min(34%,400px);z-index:1}
 @media (max-width:900px){html[data-layout=panel] .hero-grid,html[data-layout=offset] .hero-grid{grid-template-columns:1fr}html[data-layout=offset] .stage-wrap{transform:none}html[data-layout=poster] .stage-wrap{position:relative;bottom:auto;width:64%;margin:0 0 18px auto}}
 /* menu: line (no frame, hairline, underlined links) */
 html[data-nav=line] .nav{background:color-mix(in srgb,var(--bg) 82%,transparent);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
@@ -880,13 +882,80 @@ html[data-work=grid] .card .art{min-height:150px;order:-1}
 @media (max-width:900px){.hx-row,.hx-cols,.hx-under{grid-template-columns:1fr}.hx-marquee .stage-wrap{justify-self:start}.hx-bento .hx-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.hx-t.hx-name,.hx-t.hx-go,.hx-t.hx-role{grid-column:span 2}.hx-t.hx-art{grid-row:span 2}.hx-frame .stage-wrap{position:relative;right:auto;bottom:auto;width:55%;margin-top:24px}.hx-stackname .stage-wrap{position:relative;top:auto;right:auto;width:50%;margin:0 0 12px auto}.hx-box::before,.hx-box::after{display:none}}
 @media (prefers-reduced-motion:reduce){.hx-mq-t,.hx-ring{animation:none}}
 /* hero art shapes */
-html[data-hero-art=circle] .stage-wrap #stage{border-radius:50%;overflow:hidden;background:var(--surface)}
-html[data-hero-art=arch] .stage-wrap #stage{border-radius:999px 999px 14px 14px;overflow:hidden;background:var(--surface);aspect-ratio:4/5}
-html[data-hero-art=blob] .stage-wrap #stage{border-radius:58% 42% 50% 50%/46% 54% 46% 54%;overflow:hidden;background:color-mix(in srgb,var(--c1) 16%,var(--surface));animation:hxblob 14s ease-in-out infinite alternate}
+html[data-hero-art=circle] .stage-wrap #stage:not([data-gfx]){border-radius:50%;overflow:hidden;background:var(--surface)}
+html[data-hero-art=arch] .stage-wrap #stage:not([data-gfx]){border-radius:999px 999px 14px 14px;overflow:hidden;background:var(--surface);aspect-ratio:4/5}
+html[data-hero-art=blob] .stage-wrap #stage:not([data-gfx]){border-radius:58% 42% 50% 50%/46% 54% 46% 54%;overflow:hidden;background:color-mix(in srgb,var(--c1) 16%,var(--surface));animation:hxblob 14s ease-in-out infinite alternate}
 @keyframes hxblob{to{border-radius:42% 58% 46% 54%/54% 44% 56% 46%}}
-html[data-hero-art=tilt] .stage-wrap #stage{transform:rotate(-3deg);border-radius:var(--r);background:var(--surface);box-shadow:14px 14px 0 var(--c1)}
-html[data-hero-art=frame] .stage-wrap #stage{background:var(--surface);padding:12px;outline:1px solid var(--line);outline-offset:10px;border-radius:2px}
-html[data-hero-art=none] .stage-wrap #stage{display:none}
+html[data-hero-art=tilt] .stage-wrap #stage:not([data-gfx]){transform:rotate(-3deg);border-radius:var(--r);background:var(--surface);box-shadow:14px 14px 0 var(--c1)}
+html[data-hero-art=frame] .stage-wrap #stage:not([data-gfx]){background:var(--surface);padding:12px;outline:1px solid var(--line);outline-offset:10px;border-radius:2px}
+html[data-hero-art=none] .stage-wrap #stage:not([data-gfx]){display:none}
+
+/* ===== Hero graphics ===== */
+#stage[data-gfx]{position:relative}
+.gx{position:absolute;inset:0;width:100%;height:100%}
+.gx-still *,.gx-still{animation:none!important}
+/* orb */
+.gx-orb{perspective:900px;display:grid;place-items:center}
+.gx-orb-glow{position:absolute;inset:12%;border-radius:50%;background:radial-gradient(circle,color-mix(in srgb,var(--c1) 55%,transparent),transparent 65%);filter:blur(30px);opacity:.8}
+.gx-orb-b{position:relative;width:64%;aspect-ratio:1;border-radius:50%;background:radial-gradient(circle at var(--lx,32%) var(--ly,28%),rgba(255,255,255,.85),transparent 22%),conic-gradient(from 210deg,var(--c1),var(--c3),var(--c2),var(--c1));box-shadow:inset -24px -30px 60px rgba(0,0,0,.35),inset 16px 18px 40px rgba(255,255,255,.18),0 40px 80px -30px color-mix(in srgb,var(--c1) 70%,transparent);transition:transform .6s cubic-bezier(.2,.8,.2,1);overflow:hidden}
+.gx-orb-b i{position:absolute;inset:-30%;background:conic-gradient(from 0deg,transparent,rgba(255,255,255,.22),transparent 40%);animation:gxspin 9s linear infinite;mix-blend-mode:overlay}
+.gx-orb-ring{position:absolute;width:92%;aspect-ratio:1;border-radius:50%;border:1.5px solid color-mix(in srgb,var(--text) 30%,transparent);transform:rotateX(72deg) rotateZ(-14deg);animation:gxring 12s linear infinite}
+.gx-orb-sh{position:absolute;bottom:6%;width:46%;height:6%;border-radius:50%;background:rgba(0,0,0,.35);filter:blur(12px)}
+@keyframes gxspin{to{transform:rotate(360deg)}}
+@keyframes gxring{to{transform:rotateX(72deg) rotateZ(346deg)}}
+/* rings */
+.gx-rings .gx-r{transform-origin:200px 200px;animation:gxspin linear infinite}
+.gx-r0{animation-duration:14s!important}.gx-r1{animation-duration:26s!important;animation-direction:reverse!important}.gx-r2{animation-duration:40s!important}
+.gx-ini{font:800 34px var(--fd);fill:var(--text);letter-spacing:-.02em}
+/* blob */
+.gx-blob{filter:drop-shadow(0 30px 40px color-mix(in srgb,var(--c1) 35%,transparent))}
+/* monogram */
+.gx-mono{display:grid;place-items:center}
+.gx-mono-ring{position:absolute;inset:0;width:100%;height:100%;animation:gxspin 36s linear infinite;fill:var(--soft);font:600 10px var(--fm);letter-spacing:3px;text-transform:uppercase}
+.gx-mono span{grid-area:1/1;font-family:var(--fd);font-weight:800;font-size:clamp(90px,15vw,210px);line-height:1;letter-spacing:-.06em}
+.gx-mono-o{color:transparent;-webkit-text-stroke:2px var(--c1);transform:translate(5%,4%)}
+.gx-mono-f{color:var(--text)}
+/* cards */
+.gx-cards{display:grid;place-items:center}
+.gx-card{grid-area:1/1;width:62%;aspect-ratio:4/3;border-radius:calc(var(--r)*1 + 6px);padding:22px;display:flex;flex-direction:column;justify-content:flex-end;gap:4px;box-shadow:0 30px 60px -30px rgba(0,0,0,.6);transform:rotate(calc((var(--i) - 1) * 9deg)) translateY(calc(var(--i) * -6px));transition:transform .7s cubic-bezier(.2,.8,.2,1);border:1.5px solid color-mix(in srgb,currentColor 25%,transparent)}
+.gx-card b{font-family:var(--fd);font-size:clamp(18px,2vw,26px);line-height:1.1}
+.gx-card .m{font-family:var(--fm);font-size:11px;letter-spacing:.1em;opacity:.8;margin-bottom:auto}
+.gx-open .gx-card{transform:rotate(calc((var(--i) - 1) * 14deg)) translateX(calc((var(--i) - 1) * 26%)) translateY(calc(var(--i) * -10px))}
+/* terminal */
+.gx-term{inset:8% 2%;height:auto;width:auto;background:color-mix(in srgb,var(--deep) 92%,#000);color:#E6E8EE;border-radius:14px;box-shadow:0 40px 80px -40px rgba(0,0,0,.7);border:1px solid color-mix(in srgb,var(--text) 14%,transparent);overflow:hidden;font:500 clamp(12px,1.25vw,15px)/1.7 var(--fm);display:flex;flex-direction:column}
+.gx-term-bar{display:flex;align-items:center;gap:7px;padding:11px 14px;background:rgba(255,255,255,.05)}
+.gx-term-bar i{width:11px;height:11px;border-radius:50%;background:#FF5F57}.gx-term-bar i:nth-child(2){background:#FEBC2E}.gx-term-bar i:nth-child(3){background:#28C840}
+.gx-term-bar span{margin-left:10px;opacity:.6;font-size:12px}
+.gx-term-body{padding:16px 18px}
+.gx-ln{opacity:0;animation:gxin .01s forwards;animation-delay:calc(var(--i) * .55s + .3s);white-space:pre-wrap;word-break:break-word}
+.gx-ln em{font-style:normal;color:var(--c1)}
+.gx-ln:not(.cmd){color:#B9C0D4}
+.gx-cur u{display:inline-block;width:.6em;height:1.1em;background:var(--c1);vertical-align:-.2em;animation:gxblink 1s steps(1) infinite}
+@keyframes gxin{to{opacity:1}}@keyframes gxblink{50%{opacity:0}}
+/* chart */
+.gx-chart{inset:10% 4%;width:auto;height:auto;background:var(--surface);border:1px solid var(--line);border-radius:calc(var(--r) + 6px);padding:22px;display:flex;flex-direction:column;gap:14px;box-shadow:0 40px 80px -45px rgba(0,0,0,.6)}
+.gx-ch-h{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+.gx-ch-h b{font-family:var(--fd);font-size:18px}
+.gx-ch-line{width:100%;height:28%}
+.gx-ch-line polyline{stroke-dasharray:600;stroke-dashoffset:600;animation:gxdraw 1.8s .3s cubic-bezier(.2,.8,.2,1) forwards}
+@keyframes gxdraw{to{stroke-dashoffset:0}}
+.gx-ch-bars{flex:1;display:flex;gap:12px;align-items:flex-end}
+.gx-bar{flex:1;height:100%;display:flex;flex-direction:column;justify-content:flex-end;gap:4px;min-width:0}
+.gx-bar i{display:block;height:calc(var(--h) * 70%);border-radius:8px 8px 3px 3px;transform-origin:bottom;transform:scaleY(0);animation:gxgrow .9s cubic-bezier(.2,.8,.2,1) forwards;animation-delay:calc(var(--d) * .12s + .4s)}
+.gx-bar b{font-family:var(--fd);font-size:20px}
+.gx-bar span{font-size:11px;color:var(--soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+@keyframes gxgrow{to{transform:none}}
+/* photo */
+.gx-photo{display:grid;place-items:center}
+.gx-ph-arch{width:58%;aspect-ratio:4/5;border-radius:999px 999px 18px 18px;overflow:hidden;background:linear-gradient(160deg,var(--c1),var(--c3));display:grid;place-items:center;box-shadow:0 40px 70px -40px rgba(0,0,0,.6)}
+.gx-ph-arch img{width:100%;height:100%;object-fit:cover}
+.gx-ph-arch span{font-family:var(--fd);font-weight:800;font-size:clamp(60px,9vw,120px);color:var(--on-c1)}
+.gx-ph-ring{position:absolute;right:2%;top:4%;width:34%;animation:gxspin 22s linear infinite;fill:var(--text);font:700 13px var(--fm);letter-spacing:3px;text-transform:uppercase}
+.gx-ph-star{position:absolute;right:calc(2% + 17% - .5em);top:calc(4% + 17% - .6em);font-size:clamp(18px,2vw,26px);color:var(--c2)}
+/* lines */
+.gx-lines path{stroke-dasharray:14 10;animation:gxflow 3s linear infinite;animation-delay:calc(var(--i) * -.3s);opacity:.85}
+@keyframes gxflow{to{stroke-dashoffset:-48}}
+@media (prefers-reduced-motion:reduce){.gx *{animation:none!important}.gx-ln{opacity:1}.gx-bar i{transform:none}.gx-ch-line polyline{stroke-dashoffset:0}}
 </style>
 </head>
 <body>
@@ -1040,14 +1109,16 @@ function heroHTML(c){
   const sol=H.solids.length?H.solids:[{type:"sphere",color:"c1"},{type:"cube",color:"c2"},{type:"pyramid",color:"c3"}];
   const moStage=`<div class="mo-stage" aria-hidden="true"><div class="mo-halo"></div>${sol.slice(0,6).map((s,i)=>{const p=MOPOS[i];return `<span class="mo-it" data-depth="${p[3]}" style="left:${p[0]}%;top:${p[1]}%;width:${p[2]}%;--i:${i}">${shp(s.type,colVar(s.color),0)}</span>`}).join("")}</div>`;
   const photo=H.photo?`<div class="photo ${esc(H.photoShape)}"><img src="${esc(imgUrl(H.photo))}" alt="${esc(H.firstName+" "+H.lastName)}"></div>`:"";
-  if(HX[t.layout])return HX[t.layout](c,{H,t,art:`<div class="stage-wrap"><div id="stage" aria-label="${moOn()?"Illustrated composition":"3D composition of geometric solids"}">${moOn()?moStage:fall}</div>${photo}${discHTML(c)}</div>`});
+  const G=H.graphic&&H.graphic!=="elements"&&GFX[H.graphic]?H.graphic:"";
+  const stageIn=G?GFX[G](c):(moOn()?moStage:fall),stageAttr=G?` data-gfx="${G}"`:"",ph=G==="photo"?"":photo;
+  if(HX[t.layout])return HX[t.layout](c,{H,t,art:`<div class="stage-wrap"><div id="stage"${stageAttr} aria-label="${G?"Hero graphic":moOn()?"Illustrated composition":"3D composition of geometric solids"}">${stageIn}</div>${ph}${discHTML(c)}</div>`});
   return `<div class="hero" id="hero">${t.showNetwork?'<canvas id="net" aria-hidden="true"></canvas>':""}<div class="wrap"><div class="hero-grid"><div class="h-text">
     ${H.eyebrow?`<span class="eyebrow"><b></b>${ml(H.eyebrow)}</span>`:""}
     <h1 class="h-name"><span class="ln"><span>${esc(H.firstName)}</span></span><span class="ln"><span>${esc(H.lastName)}<span class="dot">.</span></span></span></h1>
     <p class="h-role">${rich(H.role)}</p>
     <div class="h-cta">${H.ctaPrimary?`<a href="#${esc(H.ctaPrimaryTarget)}" class="b pri">${esc(H.ctaPrimary)}</a>`:""}${H.ctaSecondary?`<a href="${esc(safeUrl(H.ctaSecondaryUrl))}" target="_blank" rel="noopener" class="b">${esc(H.ctaSecondary)}</a>`:""}</div>
     ${H.meta.length?`<div class="h-meta">${H.meta.map(m=>`<div><b>${esc(m.value)}</b><span class="m">${esc(m.label)}</span></div>`).join("")}</div>`:""}
-  </div><div class="stage-wrap"><div id="stage" aria-label="${moOn()?"Illustrated composition":"3D composition of geometric solids"}">${moOn()?moStage:fall}</div>${photo}${discHTML(c)}</div></div></div></div>`;
+  </div><div class="stage-wrap"><div id="stage"${stageAttr} aria-label="${G?"Hero graphic":moOn()?"Illustrated composition":"3D composition of geometric solids"}">${stageIn}</div>${ph}${discHTML(c)}</div></div></div></div>`;
 }
 /* Hero structures (kit 3): each builds its own markup from the same hero content. */
 function hxParts(c,H){
@@ -1084,6 +1155,49 @@ const HX={
   stackname(c,{H,t,art}){const P=hxParts(c,H);
     return `<div class="hero hx hx-stackname" id="hero">${hxNet(t)}<div class="wrap"><div class="h-text">${P.eb}${P.name}<div class="hx-under">${P.role}${P.cta}</div></div>${art}</div></div>`},
 };
+/* Hero graphics: alternatives to the floating elements, drawn in the theme's own colours. */
+const initials=H=>((String(H.firstName||"").trim()[0]||"")+(String(H.lastName||"").trim()[0]||"")).toUpperCase()||"✦";
+const plain=s=>String(s||"").replace(/\*/g,"").replace(/\s*\n\s*/g," ");
+const GFX={
+  orb(c){return `<div class="gx gx-orb" aria-hidden="true"><div class="gx-orb-glow"></div><div class="gx-orb-ring"></div><div class="gx-orb-b"><i></i></div><div class="gx-orb-sh"></div></div>`},
+  rings(c){const H=c.hero;return `<svg class="gx gx-rings" viewBox="0 0 400 400" aria-hidden="true">
+    ${[70,118,166].map((r,i)=>`<g class="gx-r gx-r${i}"><circle cx="200" cy="200" r="${r}" fill="none" stroke="var(--line)" stroke-width="1.2" stroke-dasharray="${i===1?"3 7":"none"}"/><circle cx="${200+r}" cy="200" r="${[9,12,7][i]}" fill="var(--c${i+1})"/></g>`).join("")}
+    <circle cx="200" cy="200" r="44" fill="var(--surface)" stroke="var(--line)"/><text x="200" y="212" text-anchor="middle" class="gx-ini">${esc(initials(H))}</text></svg>`},
+  dots(c){return `<canvas class="gx gx-dots" aria-hidden="true"></canvas>`},
+  blob(c){return `<svg class="gx gx-blob" viewBox="0 0 400 400" aria-hidden="true"><defs><linearGradient id="gxbl" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="var(--c1)"/><stop offset=".55" stop-color="var(--c3)"/><stop offset="1" stop-color="var(--c2)"/></linearGradient><filter id="gxgr"><feTurbulence baseFrequency=".9" numOctaves="2" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .18 0"/><feComposite in2="SourceGraphic" operator="in"/></filter></defs><path class="gx-blob-p" fill="url(#gxbl)"/><path class="gx-blob-p" filter="url(#gxgr)"/></svg>`},
+  monogram(c){const H=c.hero,ring=(plain(H.eyebrow)||plain(H.firstName+" "+H.lastName))+" · ";
+    return `<div class="gx gx-mono" aria-hidden="true"><svg class="gx-mono-ring" viewBox="0 0 200 200"><defs><path id="gxm" d="M100,100 m-86,0 a86,86 0 1,1 172,0 a86,86 0 1,1 -172,0"/></defs><text><textPath href="#gxm">${esc(ring.repeat(Math.max(1,Math.ceil(70/ring.length))))}</textPath></text></svg><span class="gx-mono-o">${esc(initials(H))}</span><span class="gx-mono-f">${esc(initials(H))}</span></div>`},
+  cards(c){const it=(c.work.items.length?c.work.items:[{title:"Your role",org:"Company",period:"Now",color:"c1"}]).slice(0,3),t=c.theme;
+    return `<div class="gx gx-cards" aria-hidden="true">${it.map((w,i)=>{const bg=colHex(t,w.color||"c1");return `<div class="gx-card" style="--i:${i};background:${bg};color:${onColor(bg)}"><span class="m">${esc(w.period||"")}</span><b>${esc(w.title||"")}</b><span>${esc(w.org||"")}</span></div>`}).reverse().join("")}</div>`},
+  terminal(c){const H=c.hero,sk=c.skills.items.slice(0,4).map(s=>s.title),loc=(H.meta.find(m=>/based|city|location/i.test(m.label))||H.meta[H.meta.length-1]||{}).value;
+    const L=[["$","whoami"],["",plain(H.firstName+" "+H.lastName)],["$","cat role.txt"],["",plain(H.role).slice(0,90)],["$","ls skills/"],["",sk.join("  ")],...(loc?[["$","echo $CITY"],["",loc]]:[])];
+    return `<div class="gx gx-term" aria-hidden="true"><div class="gx-term-bar"><i></i><i></i><i></i><span>about.sh</span></div><div class="gx-term-body">${L.map(([p,x],i)=>`<div class="gx-ln${p?" cmd":""}" style="--i:${i}">${p?`<em>${p}</em> `:""}${esc(x)}</div>`).join("")}<div class="gx-ln gx-cur" style="--i:${L.length}"><em>$</em> <u></u></div></div></div>`},
+  chart(c){const H=c.hero,m=(H.meta.length?H.meta:[{value:"8",label:"Years"},{value:"40",label:"Projects"}]).slice(0,4),nums=m.map(x=>parseFloat(String(x.value).replace(/[^\d.]/g,""))||0),mx=Math.max(1,...nums);
+    const pts=[12,30,22,46,38,62,54,80].map((v,i)=>`${i*40},${100-v}`).join(" ");
+    return `<div class="gx gx-chart" aria-hidden="true"><div class="gx-ch-h"><b>${esc(plain(H.firstName+" "+H.lastName))}</b><span class="m">${esc(plain(H.eyebrow).slice(0,40))}</span></div>
+      <svg class="gx-ch-line" viewBox="0 0 280 100" preserveAspectRatio="none"><polyline points="${pts}" fill="none" stroke="var(--c1)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <div class="gx-ch-bars">${m.map((x,i)=>`<div class="gx-bar"><i style="--h:${nums[i]?Math.max(.18,nums[i]/mx):.35};--d:${i};background:var(--c${(i%3)+1})"></i><b>${esc(x.value)}</b><span>${esc(x.label)}</span></div>`).join("")}</div></div>`},
+  photo(c){const H=c.hero,ring=(plain(H.eyebrow)||"Portfolio")+" · ";
+    return `<div class="gx gx-photo" aria-hidden="true"><div class="gx-ph-arch">${H.photo?`<img src="${esc(imgUrl(H.photo))}" alt="">`:`<span>${esc(initials(H))}</span>`}</div><svg class="gx-ph-ring" viewBox="0 0 200 200"><defs><path id="gxp" d="M100,100 m-80,0 a80,80 0 1,1 160,0 a80,80 0 1,1 -160,0"/></defs><text><textPath href="#gxp">${esc(ring.repeat(Math.max(1,Math.ceil(60/ring.length))))}</textPath></text></svg><span class="gx-ph-star">✦</span></div>`},
+  lines(c){return `<svg class="gx gx-lines" viewBox="0 0 400 400" aria-hidden="true"><defs><linearGradient id="gxln" x1="0" x2="1"><stop offset="0" stop-color="var(--c1)"/><stop offset="1" stop-color="var(--c3)"/></linearGradient></defs>${Array.from({length:9},(_,i)=>{const y=70+i*30,a=40+i*9;return `<path d="M-20 ${y} C 100 ${y-a}, 180 ${y+a}, 260 ${y} S 380 ${y-a/2}, 430 ${y}" fill="none" stroke="url(#gxln)" stroke-width="${1.2+i%3*.6}" style="--i:${i}"/>`}).join("")}<circle cx="260" cy="190" r="10" fill="var(--c2)"/></svg>`},
+};
+function initGfx(c,stage,my,motion){
+  const g=stage.dataset.gfx,t=c.theme;
+  if(g==="dots"){const cv=$(".gx-dots",stage);if(!cv)return;const x=cv.getContext("2d");let W,H,mx=-999,my2=-999,t0=performance.now();
+    const [tr,tg,tb]=hexRgb(t.text),[ar,ag,ab]=hexRgb(t.c1);
+    const size=()=>{const d=Math.min(devicePixelRatio||1,2);W=cv.clientWidth;H=cv.clientHeight;cv.width=W*d;cv.height=H*d;x.setTransform(d,0,0,d,0,0)};size();
+    stage.addEventListener("pointermove",e=>{const r=cv.getBoundingClientRect();mx=e.clientX-r.left;my2=e.clientY-r.top});stage.addEventListener("pointerleave",()=>{mx=my2=-999});
+    const draw=now=>{if(my!==gen)return;if(cv.clientWidth!==W)size();x.clearRect(0,0,W,H);const step=Math.max(14,W/22),tt=(now-t0)/1000;
+      for(let yy=step/2;yy<H;yy+=step)for(let xx=step/2;xx<W;xx+=step){const dx=xx-W/2,dy=yy-H/2,dist=Math.hypot(dx,dy),wave=Math.sin(dist/26-tt*2.2)*.5+.5,near=Math.max(0,1-Math.hypot(xx-mx,yy-my2)/120);
+        if(dist>W*.52)continue;const r=1.2+wave*2.6+near*4;x.fillStyle=near>.05?`rgba(${ar},${ag},${ab},${.5+near*.5})`:`rgba(${tr},${tg},${tb},${.18+wave*.5})`;x.beginPath();x.arc(xx,yy+(motion?Math.sin(dist/30-tt*2.2)*3:0),r,0,7);x.fill()}
+      if(motion)requestAnimationFrame(draw)};requestAnimationFrame(draw)}
+  if(g==="blob"){const ps=$$(".gx-blob-p",stage);const n=8,R=130;const shape=tt=>{const p=Array.from({length:n},(_,i)=>{const a=i/n*Math.PI*2,r=R+Math.sin(tt*.9+i*1.7)*22+Math.cos(tt*.6+i*2.3)*16;return[200+Math.cos(a)*r,200+Math.sin(a)*r]});
+      let d=`M${p[0][0].toFixed(1)},${p[0][1].toFixed(1)}`;for(let i=0;i<n;i++){const p0=p[(i-1+n)%n],p1=p[i],p2=p[(i+1)%n],p3=p[(i+2)%n];d+=`C${(p1[0]+(p2[0]-p0[0])/6).toFixed(1)},${(p1[1]+(p2[1]-p0[1])/6).toFixed(1)} ${(p2[0]-(p3[0]-p1[0])/6).toFixed(1)},${(p2[1]-(p3[1]-p1[1])/6).toFixed(1)} ${p2[0].toFixed(1)},${p2[1].toFixed(1)}`}return d+"Z"};
+    const t0=performance.now();const loop=now=>{if(my!==gen)return;const d=shape((now-t0)/1000);ps.forEach(p=>p.setAttribute("d",d));if(motion)requestAnimationFrame(loop)};loop(t0)}
+  if(g==="orb"&&motion){const b=$(".gx-orb-b",stage);stage.addEventListener("pointermove",e=>{const r=stage.getBoundingClientRect(),px=(e.clientX-r.left)/r.width-.5,py=(e.clientY-r.top)/r.height-.5;b.style.setProperty("--lx",(30+px*40)+"%");b.style.setProperty("--ly",(26+py*40)+"%");b.style.transform=`rotateX(${-py*10}deg) rotateY(${px*10}deg)`})}
+  if(g==="cards"&&motion){const cs=$$(".gx-card",stage);stage.addEventListener("pointerenter",()=>stage.classList.add("gx-open"));stage.addEventListener("pointerleave",()=>stage.classList.remove("gx-open"))}
+  if(!motion)stage.classList.add("gx-still");
+}
 const head=(s,lede)=>`<div class="head rv"><div><p class="m">${ml(s.eyebrow)}</p><h2 class="s-h2 fit">${rich(s.title)}</h2></div>${lede?`<p class="lede">${ml(lede)}</p>`:""}</div>`;
 const SEC={
   about(c){const A=c.about,t=c.theme;
@@ -1397,7 +1511,8 @@ function initSite(c){
     $$("[data-count]",root).forEach(el=>{if(el.getBoundingClientRect().top>innerHeight)cio.observe(el)})}
   // three.js hero
   const stage=$("#stage",root);
-  if(t.show3D&&window.THREE&&stage&&t.layout!=="minimal"&&!moOn()){try{initThree(c,stage,my,motion)}catch(e){}}
+  if(stage&&stage.dataset.gfx){try{initGfx(c,stage,my,motion)}catch(e){}}
+  else if(t.show3D&&window.THREE&&stage&&t.layout!=="minimal"&&!moOn()){try{initThree(c,stage,my,motion)}catch(e){}}
   const its=$$(".mo-it",root);
   if(its.length){if(!motion)its.forEach(m=>m.classList.add("still"));
     else{const hero=$("#hero",root);hero&&hero.addEventListener("pointermove",e=>{const x=e.clientX/innerWidth-.5,y=e.clientY/innerHeight-.5;

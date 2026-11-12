@@ -809,6 +809,84 @@ html[data-work=grid] .stack{display:grid;grid-template-columns:repeat(2,minmax(0
 html[data-work=grid] .card{position:relative;top:auto;min-height:0;grid-template-columns:1fr;gap:18px}
 html[data-work=grid] .card .art{min-height:150px;order:-1}
 @media (max-width:760px){html[data-work=grid] .stack{grid-template-columns:1fr}}
+/* ===== Hero structures (kit 3) ===== */
+.sr{position:absolute!important;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.hx .h-name{white-space:normal}
+/* marquee: the name runs across the screen */
+.hx-marquee{flex-direction:column;align-items:stretch;justify-content:center;gap:clamp(28px,5vw,64px);padding-block:120px 60px}
+.hx-mq{overflow:hidden;width:100%;position:relative;z-index:2;border-block:1px solid var(--line);padding-block:clamp(10px,1.5vw,18px)}
+.hx-mq-t{display:flex;width:max-content;gap:.32em;align-items:center;animation:hxmq 36s linear infinite;font-family:var(--fd);font-weight:800;font-size:clamp(72px,13vw,210px);line-height:.95;letter-spacing:-.04em;white-space:nowrap}
+.hx-mq-t i{font-style:normal;font-size:.4em;color:var(--c1)}
+.hx-mq-t span:nth-of-type(even){color:transparent;-webkit-text-stroke:1.5px var(--text)}
+@keyframes hxmq{to{transform:translateX(-50%)}}
+.hx-row{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,.7fr);gap:clamp(24px,4vw,64px);align-items:end}
+.hx-marquee .h-role{font-size:clamp(20px,2.4vw,30px);max-width:30ch;margin-top:18px}
+.hx-marquee .stage-wrap{max-width:340px;width:100%;justify-self:end}
+/* bento: the hero as a grid of tiles */
+.hx-bento .hx-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));grid-auto-rows:minmax(130px,auto);gap:14px}
+.hx-t{background:var(--surface);border:1px solid color-mix(in srgb,var(--line) 80%,transparent);border-radius:var(--r);padding:clamp(18px,2.2vw,30px);position:relative;overflow:hidden;min-width:0}
+.hx-t.hx-name{grid-column:span 3;grid-row:span 2;display:flex;flex-direction:column;justify-content:space-between;container-type:inline-size}
+.hx-t.hx-name .h-name{font-size:clamp(46px,15cqw,170px);margin-top:20px}
+.hx-t.hx-art{grid-row:span 3;padding:0;background:var(--deep);display:grid;place-items:center}
+.hx-t.hx-art .stage-wrap{width:100%;padding:8%}
+.hx-t.hx-role{grid-column:span 2;display:flex;align-items:center}
+.hx-t.hx-role .h-role{margin:0;font-size:clamp(18px,1.8vw,24px)}
+.hx-t.hx-stat{display:flex;flex-direction:column;justify-content:flex-end}
+.hx-t.hx-stat b{font-family:var(--fd);font-size:clamp(34px,4vw,56px);line-height:1}
+.hx-t.hx-go{grid-column:span 3;display:flex;align-items:center;background:color-mix(in srgb,var(--c1) 14%,var(--surface))}
+.hx-t.hx-go .h-cta{margin:0}
+/* orbit: art in a circle with a turning ring of text, name across the middle */
+.hx-orbit .wrap{display:flex;flex-direction:column;align-items:center;text-align:center}
+.hx-orb{position:relative;width:min(520px,78vw);aspect-ratio:1/1}
+.hx-orb .stage-wrap{position:absolute;inset:13%;border-radius:50%;overflow:hidden;background:var(--surface);display:grid;place-items:center}
+.hx-orb #stage{width:84%}
+.hx-ring{position:absolute;inset:0;width:100%;height:100%;animation:hxspin 48s linear infinite;fill:var(--text);font:600 8.6px var(--fm);letter-spacing:2px;text-transform:uppercase}
+@keyframes hxspin{to{transform:rotate(360deg)}}
+.hx-mid{margin-top:-9%;position:relative;z-index:3;display:flex;flex-direction:column;align-items:center;container-type:inline-size;width:100%}
+.hx-mid .h-name{font-size:clamp(48px,11cqw,150px);margin-top:0}
+.hx-mid .h-role{margin-inline:auto}
+.hx-mid .h-cta{justify-content:center}
+/* index: name on the left, the site's sections as a big list */
+.hx-cols{display:grid;grid-template-columns:minmax(0,.95fr) minmax(0,1.05fr);gap:clamp(30px,5vw,80px);align-items:end}
+.hx-index .h-name{font-size:clamp(44px,13cqw,120px)}
+.hx-index .stage-wrap{max-width:220px;margin-top:28px}
+.hx-list{list-style:none;margin:0;padding:0;counter-reset:x}
+.hx-list li{border-top:1px solid var(--line)}
+.hx-list li:last-child{border-bottom:1px solid var(--line)}
+.hx-list a{display:flex;align-items:baseline;gap:18px;text-decoration:none;font-family:var(--fd);font-weight:700;font-size:clamp(34px,5vw,76px);letter-spacing:-.03em;line-height:1.15;padding-block:8px;transition:padding .4s cubic-bezier(.2,.8,.2,1),color .3s}
+.hx-list a .m{font-size:13px;color:var(--c1);font-family:var(--fm);letter-spacing:.1em;min-width:28px}
+.hx-list a i{margin-left:auto;font-style:normal;font-size:.5em;opacity:0;transform:translateX(-12px);transition:.35s}
+.hx-list a:hover{padding-left:16px;color:var(--c1)}
+.hx-list a:hover i{opacity:1;transform:none}
+/* frame: an architectural frame with corner notes */
+.hx-box{position:relative;border:1.5px solid var(--text);padding:clamp(48px,7vw,104px) clamp(22px,5vw,72px);min-height:min(640px,78svh);display:flex;flex-direction:column;justify-content:center}
+.hx-box::before,.hx-box::after{content:"";position:absolute;background:var(--line);pointer-events:none}
+.hx-box::before{left:50%;top:0;bottom:0;width:1px}
+.hx-box::after{top:50%;left:0;right:0;height:1px}
+.hx-c{position:absolute;font-family:var(--fm);font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--soft);z-index:2}
+.hx-c.tl{left:18px;top:14px}.hx-c.tr{right:18px;top:14px}.hx-c.bl{left:18px;bottom:14px}.hx-c.br{right:18px;bottom:14px}
+.hx-frame .h-name{font-size:clamp(52px,14cqw,190px);position:relative;z-index:2;margin-top:0}
+.hx-frame .h-role,.hx-frame .h-cta{position:relative;z-index:2}
+.hx-frame .stage-wrap{position:absolute;right:6%;bottom:10%;width:min(28%,320px);z-index:1}
+/* stackname: first name filled, last name outlined, huge */
+.hx-stackname .wrap{position:relative}
+.hx-stackname .h-name{font-size:clamp(70px,19cqw,280px);line-height:.82;letter-spacing:-.055em}
+.hx-stackname .h-name .ln:nth-child(2) span{color:transparent;-webkit-text-stroke:2px var(--text)}
+.hx-stackname .h-name .dot{-webkit-text-stroke:0;color:var(--c1)}
+.hx-under{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:24px;align-items:end;margin-top:28px;border-top:1px solid var(--line);padding-top:24px}
+.hx-under .h-role{margin:0;font-size:clamp(18px,2vw,26px)}
+.hx-under .h-cta{margin:0}
+.hx-stackname .stage-wrap{position:absolute;right:var(--gr);top:-40px;width:min(30%,360px);z-index:0}
+@media (max-width:900px){.hx-row,.hx-cols,.hx-under{grid-template-columns:1fr}.hx-marquee .stage-wrap{justify-self:start}.hx-bento .hx-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.hx-t.hx-name,.hx-t.hx-go,.hx-t.hx-role{grid-column:span 2}.hx-t.hx-art{grid-row:span 2}.hx-frame .stage-wrap{position:relative;right:auto;bottom:auto;width:55%;margin-top:24px}.hx-stackname .stage-wrap{position:relative;top:auto;right:auto;width:50%;margin:0 0 12px auto}.hx-box::before,.hx-box::after{display:none}}
+@media (prefers-reduced-motion:reduce){.hx-mq-t,.hx-ring{animation:none}}
+/* hero art shapes */
+html[data-hero-art=circle] .stage-wrap #stage{border-radius:50%;overflow:hidden;background:var(--surface)}
+html[data-hero-art=arch] .stage-wrap #stage{border-radius:999px 999px 14px 14px;overflow:hidden;background:var(--surface);aspect-ratio:4/5}
+html[data-hero-art=blob] .stage-wrap #stage{border-radius:58% 42% 50% 50%/46% 54% 46% 54%;overflow:hidden;background:color-mix(in srgb,var(--c1) 16%,var(--surface));animation:hxblob 14s ease-in-out infinite alternate}
+@keyframes hxblob{to{border-radius:42% 58% 46% 54%/54% 44% 56% 46%}}
+html[data-hero-art=tilt] .stage-wrap #stage{transform:rotate(-3deg);border-radius:var(--r);background:var(--surface);box-shadow:14px 14px 0 var(--c1)}
+html[data-hero-art=frame] .stage-wrap #stage{background:var(--surface);padding:12px;outline:1px solid var(--line);outline-offset:10px;border-radius:2px}
+html[data-hero-art=none] .stage-wrap #stage{display:none}
 </style>
 </head>
 <body>
@@ -924,7 +1002,7 @@ function applyTheme(t){
   CT=t;MOTIF=window.SiteMotifs?SiteMotifs.resolve(t,"tech"):"geometric";
   KIT=resolveKit(t);document.documentElement.dataset.kit=KIT;
   const d=document.documentElement.dataset;d.motif=moOn()?MOTIF:"geometric";
-  for(const k of ["layout","nav","cards","buttons","motionStyle","pattern","ornament","heading","shead","width","about","skills","work","cursor","loader","textfx","hoverfx","scrollfx","overlay"])d[k]=String(t[k]||"");
+  for(const k of ["layout","heroArt","nav","cards","buttons","motionStyle","pattern","ornament","heading","shead","width","about","skills","work","cursor","loader","textfx","hoverfx","scrollfx","overlay"])d[k]=String(t[k]||"");
   d.menu=String(t.navMode||"");
   d.scrollease=t.scrollEase||"light";d.linebreaks=t.lineBreaks||"typed";d.introfont=t.introFont||"display";d.introcase=t.introCase||"upper";
 }
@@ -962,6 +1040,7 @@ function heroHTML(c){
   const sol=H.solids.length?H.solids:[{type:"sphere",color:"c1"},{type:"cube",color:"c2"},{type:"pyramid",color:"c3"}];
   const moStage=`<div class="mo-stage" aria-hidden="true"><div class="mo-halo"></div>${sol.slice(0,6).map((s,i)=>{const p=MOPOS[i];return `<span class="mo-it" data-depth="${p[3]}" style="left:${p[0]}%;top:${p[1]}%;width:${p[2]}%;--i:${i}">${shp(s.type,colVar(s.color),0)}</span>`}).join("")}</div>`;
   const photo=H.photo?`<div class="photo ${esc(H.photoShape)}"><img src="${esc(imgUrl(H.photo))}" alt="${esc(H.firstName+" "+H.lastName)}"></div>`:"";
+  if(HX[t.layout])return HX[t.layout](c,{H,t,art:`<div class="stage-wrap"><div id="stage" aria-label="${moOn()?"Illustrated composition":"3D composition of geometric solids"}">${moOn()?moStage:fall}</div>${photo}${discHTML(c)}</div>`});
   return `<div class="hero" id="hero">${t.showNetwork?'<canvas id="net" aria-hidden="true"></canvas>':""}<div class="wrap"><div class="hero-grid"><div class="h-text">
     ${H.eyebrow?`<span class="eyebrow"><b></b>${ml(H.eyebrow)}</span>`:""}
     <h1 class="h-name"><span class="ln"><span>${esc(H.firstName)}</span></span><span class="ln"><span>${esc(H.lastName)}<span class="dot">.</span></span></span></h1>
@@ -970,6 +1049,41 @@ function heroHTML(c){
     ${H.meta.length?`<div class="h-meta">${H.meta.map(m=>`<div><b>${esc(m.value)}</b><span class="m">${esc(m.label)}</span></div>`).join("")}</div>`:""}
   </div><div class="stage-wrap"><div id="stage" aria-label="${moOn()?"Illustrated composition":"3D composition of geometric solids"}">${moOn()?moStage:fall}</div>${photo}${discHTML(c)}</div></div></div></div>`;
 }
+/* Hero structures (kit 3): each builds its own markup from the same hero content. */
+function hxParts(c,H){
+  const eb=H.eyebrow?`<span class="eyebrow"><b></b>${ml(H.eyebrow)}</span>`:"";
+  const name=`<h1 class="h-name"><span class="ln"><span>${esc(H.firstName)}</span></span><span class="ln"><span>${esc(H.lastName)}<span class="dot">.</span></span></span></h1>`;
+  const role=`<p class="h-role">${rich(H.role)}</p>`;
+  const cta=`<div class="h-cta">${H.ctaPrimary?`<a href="#${esc(H.ctaPrimaryTarget)}" class="b pri">${esc(H.ctaPrimary)}</a>`:""}${H.ctaSecondary?`<a href="${esc(safeUrl(H.ctaSecondaryUrl))}" target="_blank" rel="noopener" class="b">${esc(H.ctaSecondary)}</a>`:""}</div>`;
+  const meta=H.meta.length?`<div class="h-meta">${H.meta.map(m=>`<div><b>${esc(m.value)}</b><span class="m">${esc(m.label)}</span></div>`).join("")}</div>`:"";
+  return {eb,name,role,cta,meta,full:esc((H.firstName+" "+H.lastName).trim())};
+}
+const hxNet=t=>t.showNetwork?'<canvas id="net" aria-hidden="true"></canvas>':"";
+const HX={
+  marquee(c,{H,t,art}){const P=hxParts(c,H),run=Array.from({length:6},()=>`<span>${P.full}</span><i>✦</i>`).join("");
+    return `<div class="hero hx hx-marquee" id="hero">${hxNet(t)}<div class="hx-mq fx-skip" aria-hidden="true"><div class="hx-mq-t">${run}</div></div>
+      <div class="wrap"><div class="hx-row"><div class="h-text">${P.eb}<div class="sr">${P.name}</div>${P.role}${P.cta}${P.meta}</div>${art}</div></div></div>`},
+  bento(c,{H,t,art}){const P=hxParts(c,H),m=H.meta.slice(0,2);
+    return `<div class="hero hx hx-bento" id="hero">${hxNet(t)}<div class="wrap"><div class="hx-grid">
+      <div class="hx-t hx-name h-text">${P.eb}${P.name}</div>
+      <div class="hx-t hx-art">${art}</div>
+      <div class="hx-t hx-role">${P.role}</div>
+      ${m.map(x=>`<div class="hx-t hx-stat"><b>${esc(x.value)}</b><span class="m">${esc(x.label)}</span></div>`).join("")}
+      <div class="hx-t hx-go">${P.cta}</div></div></div></div>`},
+  orbit(c,{H,t,art}){const P=hxParts(c,H),ring=(esc(H.firstName+" "+H.lastName)+" · "+esc(String(H.eyebrow||"").replace(/\n/g," "))+" · ").repeat(3);
+    return `<div class="hero hx hx-orbit" id="hero">${hxNet(t)}<div class="wrap"><div class="hx-orb"><svg class="hx-ring" viewBox="0 0 200 200" aria-hidden="true"><defs><path id="hxc" d="M100,100 m-88,0 a88,88 0 1,1 176,0 a88,88 0 1,1 -176,0"/></defs><text><textPath href="#hxc">${ring}</textPath></text></svg>${art}</div>
+      <div class="h-text hx-mid">${P.name}${P.role}${P.cta}</div></div></div>`},
+  index(c,{H,t,art}){const P=hxParts(c,H),vis=c.sections.filter(s=>s.visible&&s.id!=="contact"&&(s.id!=="projects"||c.projects.items.length));
+    return `<div class="hero hx hx-index" id="hero">${hxNet(t)}<div class="wrap"><div class="hx-cols"><div class="h-text">${P.eb}${P.name}${P.role}${P.cta}${art}</div>
+      <ol class="hx-list">${vis.map((s,i)=>`<li><a href="#${esc(s.id)}"><span class="m">${String(i+1).padStart(2,"0")}</span>${esc(s.navLabel)}<i>→</i></a></li>`).join("")}</ol></div></div></div>`},
+  frame(c,{H,t,art}){const P=hxParts(c,H),m=H.meta;
+    return `<div class="hero hx hx-frame" id="hero">${hxNet(t)}<div class="wrap"><div class="hx-box h-text">
+      <span class="hx-c tl">${ml(H.eyebrow||"")}</span><span class="hx-c tr">${m[0]?esc(m[0].value+" "+m[0].label):""}</span>
+      <span class="hx-c bl">${m[1]?esc(m[1].value+" "+m[1].label):""}</span><span class="hx-c br">${m[2]?esc(m[2].value+" "+m[2].label):"↓"}</span>
+      ${P.name}${P.role}${P.cta}${art}</div></div></div>`},
+  stackname(c,{H,t,art}){const P=hxParts(c,H);
+    return `<div class="hero hx hx-stackname" id="hero">${hxNet(t)}<div class="wrap"><div class="h-text">${P.eb}${P.name}<div class="hx-under">${P.role}${P.cta}</div></div>${art}</div></div>`},
+};
 const head=(s,lede)=>`<div class="head rv"><div><p class="m">${ml(s.eyebrow)}</p><h2 class="s-h2 fit">${rich(s.title)}</h2></div>${lede?`<p class="lede">${ml(lede)}</p>`:""}</div>`;
 const SEC={
   about(c){const A=c.about,t=c.theme;

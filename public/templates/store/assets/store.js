@@ -285,7 +285,7 @@ function applyTheme(t) {
   r.setProperty("--logo-r", Math.max(0, Math.min(50, t.logoRadius ?? 26)) + "%");
   MOTIF = window.SiteMotifs ? SiteMotifs.resolve(t, "cafe") : "geometric";
   const d = document.documentElement.dataset; d.motif = moOn() ? MOTIF : "geometric";
-  for (const k of ["layout", "nav", "cards", "buttons", "motionStyle", "pattern", "ornament", "heading", "shead", "width", "grid", "product", "cursor", "loader", "textfx", "hoverfx", "scrollfx", "overlay"]) d[k] = String(t[k] || "");
+  for (const k of ["layout", "heroArt", "nav", "cards", "buttons", "motionStyle", "pattern", "ornament", "heading", "shead", "width", "grid", "product", "cursor", "loader", "textfx", "hoverfx", "scrollfx", "overlay"]) d[k] = String(t[k] || "");
   d.scrollease = t.scrollEase || "light"; d.linebreaks = t.lineBreaks || "typed"; d.menu = String(t.navMode || "");
   d.introfont = t.introFont || "display"; d.introcase = t.introCase || "upper";
   r.setProperty("--r", (+t.radius || 0) + "px");
@@ -377,13 +377,45 @@ function pcard(p) {
 /* ============================================================
    PAGES
    ============================================================ */
+/* Hero structures (kit 3) for the home page: each builds its own markup from the same hero content. */
+function hxArt(H, col) {
+  return `<div class="art">${H.hero.image ? `<img src="${esc(imgUrl(H.hero.image))}" alt="">` : `<div class="collage">${(col.length ? col : [{ name: "A" }, { name: "B" }, { name: "C" }]).map((p) => `<div style="border-radius:calc(var(--r)*1.1);overflow:hidden">${p.images && p.images[0] ? pimg(p) : ph(p.name)}</div>`).join("")}</div>`}</div>`;
+}
+function hxBits(H) {
+  return {
+    eb: `<p class="eyebrow">${ml(H.hero.eyebrow)}</p>`,
+    h1: `<h1 class="fit">${ml(H.hero.title)}</h1>`,
+    lead: `<p class="lead">${ml(H.hero.text)}</p>`,
+    cta: `<div class="cta"><a class="btn pri" href="shop.html">${esc(H.hero.cta)} →</a>${C.nav.showPortfolio ? `<a class="btn" href="portfolio.html">${esc(C.nav.portfolio)}</a>` : ""}</div>`,
+    flat: esc(String(H.hero.title || "").replace(/\s*\n\s*/g, " ")),
+  };
+}
+const HXS = {
+  marquee(H, col) { const B = hxBits(H), run = Array.from({ length: 6 }, () => `<span>${B.flat}</span><i>✦</i>`).join("");
+    return `<section class="hero hx hx-marquee"><div class="hx-mq fx-skip" aria-hidden="true"><div class="hx-mq-t">${run}</div></div><div class="wrap hxw"><div class="hx-row"><div class="htx">${B.eb}<div class="sr">${B.h1}</div>${B.lead}${B.cta}</div>${hxArt(H, col)}</div></div></section>`; },
+  bento(H, col) { const B = hxBits(H), n = C.products.length, cats = C.categories.length;
+    return `<section class="hero hx hx-bento"><div class="wrap hxw"><div class="hx-grid">
+      <div class="hx-t hx-name">${B.eb}${B.h1}</div><div class="hx-t hx-art">${hxArt(H, col)}</div>
+      <div class="hx-t hx-role">${B.lead}</div><div class="hx-t hx-stat"><b>${n}</b><span>${esc(lab("products", "Products"))}</span></div>
+      <div class="hx-t hx-stat"><b>${cats || 1}</b><span>${esc(lab("collections", "Collections"))}</span></div><div class="hx-t hx-go">${B.cta}</div></div></div></section>`; },
+  orbit(H, col) { const B = hxBits(H), ring = (esc(C.brand.name) + " · " + esc(String(H.hero.eyebrow || "").replace(/\n/g, " ")) + " · ").repeat(3);
+    return `<section class="hero hx hx-orbit"><div class="wrap hxw"><div class="hx-orb"><svg class="hx-ring" viewBox="0 0 200 200" aria-hidden="true"><defs><path id="hxc" d="M100,100 m-88,0 a88,88 0 1,1 176,0 a88,88 0 1,1 -176,0"/></defs><text><textPath href="#hxc">${ring}</textPath></text></svg>${hxArt(H, col)}</div><div class="htx hx-mid">${B.h1}${B.lead}${B.cta}</div></div></section>`; },
+  index(H, col) { const B = hxBits(H), items = C.categories.length ? C.categories.map((c) => [`shop.html?c=${encodeURIComponent(c.id)}`, c.name]) : [["shop.html", C.nav.shop], ...(C.nav.showPortfolio ? [["portfolio.html", C.nav.portfolio]] : [])];
+    return `<section class="hero hx hx-index"><div class="wrap hxw"><div class="hx-cols"><div class="htx">${B.eb}${B.h1}${B.lead}${B.cta}</div><ol class="hx-list">${items.map(([u, t], i) => `<li><a href="${esc(u)}"><span class="m">${String(i + 1).padStart(2, "0")}</span>${esc(t)}<i>→</i></a></li>`).join("")}</ol></div></div></section>`; },
+  frame(H, col) { const B = hxBits(H);
+    return `<section class="hero hx hx-frame"><div class="wrap hxw"><div class="hx-box htx"><span class="hx-c tl">${ml(H.hero.eyebrow)}</span><span class="hx-c tr">${esc(C.brand.name)}</span><span class="hx-c bl">${C.products.length} ${esc(lab("products", "Products"))}</span><span class="hx-c br">↓</span>${B.h1}${B.lead}${B.cta}${hxArt(H, col)}</div></div></section>`; },
+  stackname(H, col) { const B = hxBits(H), lines = String(H.hero.title || "").split(/\n/);
+    const h1 = `<h1>${lines.map((l, i) => `<span class="${i % 2 ? "o" : ""}">${esc(l)}</span>`).join("<br>")}</h1>`;
+    return `<section class="hero hx hx-stackname"><div class="wrap hxw">${hxArt(H, col)}<div class="htx">${B.eb}${h1}<div class="hx-under">${B.lead}${B.cta}</div></div></div></section>`; },
+};
 const PAGES = {
   home() {
     const H = C.home, feat = C.products.filter((p) => p.featured).slice(0, 8), list = feat.length ? feat : C.products.slice(0, 4);
     const col = C.products.slice(0, 3);
-    return `<section class="hero">${C.theme.ornament && C.theme.ornament !== "none" ? (moOn() ? `<div class="orn mo" aria-hidden="true">${[["accent2", 0], ["accent", 1], ["sale", 2]].map(([k, i]) => `<span style="color:var(--${k});--mo2:var(--${k === "accent" ? "accent2" : "accent"})">${SiteMotifs.svg(MOTIF, i, 0, true)}</span>`).join("")}</div>` : `<div class="orn" aria-hidden="true"><i></i><i></i><i></i></div>`) : ""}<div class="wrap"><div class="htx"><p class="eyebrow">${ml(H.hero.eyebrow)}</p><h1 class="fit">${ml(H.hero.title)}</h1><p class="lead">${ml(H.hero.text)}</p>
+    const hx = HXS[C.theme.layout] ? HXS[C.theme.layout](H, col) : "";
+    return `${hx || `<section class="hero">${C.theme.ornament && C.theme.ornament !== "none" ? (moOn() ? `<div class="orn mo" aria-hidden="true">${[["accent2", 0], ["accent", 1], ["sale", 2]].map(([k, i]) => `<span style="color:var(--${k});--mo2:var(--${k === "accent" ? "accent2" : "accent"})">${SiteMotifs.svg(MOTIF, i, 0, true)}</span>`).join("")}</div>` : `<div class="orn" aria-hidden="true"><i></i><i></i><i></i></div>`) : ""}<div class="wrap"><div class="htx"><p class="eyebrow">${ml(H.hero.eyebrow)}</p><h1 class="fit">${ml(H.hero.title)}</h1><p class="lead">${ml(H.hero.text)}</p>
       <div class="cta"><a class="btn pri" href="shop.html">${esc(H.hero.cta)} →</a>${C.nav.showPortfolio ? `<a class="btn" href="portfolio.html">${esc(C.nav.portfolio)}</a>` : ""}</div></div>
-      <div class="art">${H.hero.image ? `<img src="${esc(imgUrl(H.hero.image))}" alt="">` : `<div class="collage">${(col.length ? col : [{ name: "A" }, { name: "B" }, { name: "C" }]).map((p) => `<div style="border-radius:calc(var(--r)*1.1);overflow:hidden">${p.images && p.images[0] ? pimg(p) : ph(p.name)}</div>`).join("")}</div>`}</div></div></section>
+      <div class="art">${H.hero.image ? `<img src="${esc(imgUrl(H.hero.image))}" alt="">` : `<div class="collage">${(col.length ? col : [{ name: "A" }, { name: "B" }, { name: "C" }]).map((p) => `<div style="border-radius:calc(var(--r)*1.1);overflow:hidden">${p.images && p.images[0] ? pimg(p) : ph(p.name)}</div>`).join("")}</div>`}</div></div></section>`}
     ${list.length ? `<section class="sec" style="padding-top:12px"><div class="wrap"><div class="sec-h"><div><h2 class="fit">${ml(H.featuredTitle)}</h2>${H.featuredText ? `<p class="soft" style="margin-top:8px">${ml(H.featuredText)}</p>` : ""}</div><a class="link" href="shop.html">${esc(lab("viewAll", "View all"))}</a></div><div class="grid">${list.map(pcard).join("")}</div></div></section>` : ""}
     ${H.showCategories && C.categories.length ? `<section class="sec" style="padding-top:0"><div class="wrap"><div class="sec-h"><h2 class="fit">${ml(H.categoriesTitle)}</h2></div><div class="cats">${C.categories.map((c) => `<a class="cat" href="shop.html?c=${encodeURIComponent(c.id)}">${c.image ? `<img src="${esc(imgUrl(c.image))}" alt="">` : ph(c.name)}<span>${esc(c.name)}<small>${C.products.filter((p) => p.category === c.id).length} products</small></span></a>`).join("")}</div></div></section>` : ""}
     ${H.banner.show ? `<section class="sec" style="padding-top:0"><div class="wrap"><div class="banner"><div class="tx"><h2 class="fit">${ml(H.banner.title)}</h2><p>${ml(H.banner.text)}</p>${C.nav.showPortfolio && H.banner.cta ? `<a class="btn" href="portfolio.html">${esc(H.banner.cta)} →</a>` : ""}</div><div class="im">${H.banner.image ? `<img src="${esc(imgUrl(H.banner.image))}" alt="">` : ph(H.banner.title)}</div></div></div></section>` : ""}

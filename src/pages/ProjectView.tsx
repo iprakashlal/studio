@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { GOTO_EVENT } from "../editor/Editor";
 import { TEMPLATES } from "../schema";
 import type { Session } from "../lib/auth";
 import { GitHubRepo, explain } from "../lib/repo";
@@ -27,6 +28,8 @@ export function ProjectView({ studio, index, project, session, onIndex }: { stud
   const [savedV, setSavedV] = useState(0);
   const [saving, setSaving] = useState(false);
   const [pane, setPane] = useState<"edit" | "preview">("edit");
+  // Click-to-edit from the preview: on small screens, switch to the editor to show the field.
+  useEffect(() => { const on = () => setPane("edit"); addEventListener(GOTO_EVENT, on); return () => removeEventListener(GOTO_EVENT, on); }, []);
   const [modal, setModal] = useState<"" | "export" | "publish" | "host" | "live" | "history" | "details">("");
   const defaults = useRef<any>(null);
   const [conflict, setConflict] = useState<{ siteAt: string | null } | null>(null);

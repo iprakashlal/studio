@@ -18,6 +18,8 @@ const useCtx = () => useContext(Ctx);
 
 export const SHAPES: [string, string][] = [["circle", "Circle"], ["square", "Square"], ["triangle", "Triangle"], ["diamond", "Diamond"], ["ring", "Ring"], ["hexagon", "Hexagon"], ["half", "Half circle"], ["pill", "Pill"]];
 const openItems = new Set<string>();
+/** Opens a list item (by its key, "hero.work.items#2") so its fields render; used by click-to-edit. */
+export const openListItem = (key: string) => openItems.add(key);
 
 function checkMsg(kind: string | undefined, v: string): string | undefined {
   if (!kind || !v) return;

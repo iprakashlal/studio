@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { GOTO_EVENT } from "../editor/Editor";
 import { TEMPLATES } from "../schema";
 import { device, session as sess, watchIdle, type Session } from "../lib/auth";
 import { GitHubRepo, explain, jsonB64, bytesB64, type Repo } from "../lib/repo";
@@ -98,6 +99,8 @@ function Workspace({ info, onInfo, repo, account, onSignOut, hosted }: { info: S
   const [savedV, setSavedV] = useState(0);
   const [saving, setSaving] = useState(false);
   const [pane, setPane] = useState<"edit" | "preview">("edit");
+  // Click-to-edit from the preview: on small screens, switch to the editor to show the field.
+  useEffect(() => { const on = () => setPane("edit"); addEventListener(GOTO_EVENT, on); return () => removeEventListener(GOTO_EVENT, on); }, []);
   const [assets, setAssets] = useState<Record<string, string>>({});
   const [cat, setCat] = useState("");
   const wide = cat === "shop-orders" || cat === "shop-customers";

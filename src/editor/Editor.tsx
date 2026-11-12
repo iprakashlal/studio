@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { TemplateDef } from "../schema/types";
-import { Ctx, FieldView, type EditorCtx } from "./fields";
+import { Ctx, FieldView, openListItem, type EditorCtx } from "./fields";
+import { locateField } from "./locate";
+
+/** Click-to-edit: the preview asks the editor to show a field ({ path }) or a whole section ({ cat }). */
+export const GOTO_EVENT = "studio:goto";
 
 export type ExtraPanel = { id: string; label: string; group: string; desc: string; render: () => ReactNode };
 
@@ -19,10 +23,43 @@ export function Editor({ tpl, draft, version, onChange, upload, img, extras = []
   const [cat, setCat] = useState(tpl.schema[0].id);
   const shown = tpl.schema.filter((c) => !c.showIf || c.showIf(draft));
   const scroller = useRef<HTMLDivElement>(null);
+  const [focus, setFocus] = useState<{ id: string; n: number } | null>(null);
   useEffect(() => {
+    if (focus) return; // a jump scrolls to its field instead
     scroller.current?.scrollTo(0, 0);
     onCategory?.(cat);
   }, [cat]);
+  useEffect(() => {
+    const on = (e: Event) => {
+      const d = (e as CustomEvent).detail || {};
+      if (d.path) {
+        const loc = locateField(tpl.schema, d.path, draft);
+        if (!loc) return;
+        loc.open.forEach(openListItem);
+        setFocus({ id: loc.domId || "", n: Date.now() });
+        if (loc.cat !== cat) { setCat(loc.cat); onCategory?.(loc.cat); } else onChange();
+      } else if (d.cat && shown.some((c) => c.id === d.cat)) { setCat(d.cat); scroller.current?.scrollTo({ top: 0, behavior: "smooth" }); }
+    };
+    addEventListener(GOTO_EVENT, on);
+    return () => removeEventListener(GOTO_EVENT, on);
+  }, [tpl, draft, cat, shown.map((c) => c.id).join()]);
+  useEffect(() => {
+    if (!focus) return;
+    const t = setTimeout(() => {
+      let el = focus.id ? document.getElementById(focus.id) : null;
+      // File inputs are hidden: use their label (the Upload button) and the field around it.
+      if (el && !el.offsetParent) el = document.querySelector<HTMLElement>(`label[for="${focus.id}"]`) || el.parentElement;
+      const box = (el?.closest(".field, [data-field]") as HTMLElement | null) || el?.parentElement || el;
+      if (box) {
+        box.scrollIntoView({ block: "center", behavior: "smooth" });
+        box.classList.remove("jump-flash"); void box.offsetWidth; box.classList.add("jump-flash");
+        setTimeout(() => box.classList.remove("jump-flash"), 1800);
+      }
+      if (el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) && el.offsetParent) (el as HTMLInputElement).focus({ preventScroll: true });
+      setFocus(null);
+    }, 80);
+    return () => clearTimeout(t);
+  }, [focus]);
   const groups = useMemo(() => {
     const items = [...shown.map((c) => ({ id: c.id, label: c.label, group: c.group })), ...extras.map((e) => ({ id: e.id, label: e.label, group: e.group }))];
     const out: { group: string; items: typeof items }[] = [];

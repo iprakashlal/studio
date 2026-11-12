@@ -8,6 +8,7 @@ import { siteAddress, siteRepoFor } from "../lib/hosting";
 import { loadManifest, loadStarter, type Manifest } from "../lib/exporter";
 import { slugify, timeAgo } from "../lib/util";
 import { Empty, Field, Modal, useConfirm, useToast } from "../ui/kit";
+import { PushUpdatesDialog } from "./PushUpdates";
 
 const STATUS: Record<ProjectMeta["status"], { label: string; cls: string }> = {
   draft: { label: "Draft", cls: "border-ink-500 text-ink-300" },
@@ -21,6 +22,7 @@ const checked = new Map<string, number>();
 export function Dashboard({ studio, index, onIndex, token }: { studio: Studio; index: StudioIndex; onIndex: (i: StudioIndex) => void; token: string }) {
   const toast = useToast();
   const [live, setLive] = useState<Record<string, "checking" | "pulled" | "conflict">>({});
+  const [pushing, setPushing] = useState(false);
 
   // Central control: published projects pick up edits made in their sites' own CMS.
   useEffect(() => {
@@ -90,8 +92,12 @@ export function Dashboard({ studio, index, onIndex, token }: { studio: Studio; i
           <h1 className="font-display text-3xl font-extrabold sm:text-4xl">Projects</h1>
           <p className="mt-1 text-sm text-ink-400">Create, preview, export and re-edit websites. Every site ships with its own CMS.</p>
         </div>
-        <button className="btn btn-pri" onClick={() => setCreating(true)}>+ New project</button>
+        <div className="flex flex-wrap gap-2">
+          {index.projects.some((p) => p.publish || p.host) && <button className="btn" onClick={() => setPushing(true)} title="Put the latest templates, themes and admin page on every published site">↻ Push updates to live sites</button>}
+          <button className="btn btn-pri" onClick={() => setCreating(true)}>+ New project</button>
+        </div>
       </div>
+      {pushing && <PushUpdatesDialog studio={studio} index={index} token={token} onClose={() => setPushing(false)} />}
 
       <div className="grid grid-cols-2 overflow-hidden rounded-2xl border border-ink-700 md:grid-cols-4">
         {stats.map((s, i) => (

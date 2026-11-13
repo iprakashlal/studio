@@ -375,11 +375,14 @@ function ThemesField() {
     // With a shortlist, the theme being left stays on it: the current theme only counts while it's current.
     const cfg = root.cms?.themes, prev = root.theme?.preset;
     if (cfg?.mode === "some" && prev && prev !== th.id) { const list: string[] = Array.isArray(cfg.list) ? cfg.list : []; if (!list.includes(prev)) cfg.list = [...list, prev]; }
-    Object.assign(root.theme, tpl.themeValues(th)); bump();
+    applyTheme(root, tpl, th); bump();
   };
-  if (!site) return <ThemeGallery current={root.theme?.preset} themes={tpl.themes} tags={tpl.themeTags} onPick={pick} />;
+  const cur = all.find((t) => t.id === root.theme?.preset);
+  const tweaked = !!cur && themeTweaked(root, tpl, cur);
+  const reset = tweaked && cur ? <p className="flex flex-wrap items-center gap-2 text-[13px] text-ink-400">Your changes to {cur.name} are kept when you switch themes and come back.<button type="button" className="text-brand-300 underline" onClick={() => { Object.assign(root.theme, tpl.themeValues(cur)); if (root.themeMemory) delete root.themeMemory[cur.id]; bump(); }}>Reset {cur.name} to its defaults</button></p> : null;
+  if (!site) return <>{reset}<ThemeGallery current={root.theme?.preset} themes={tpl.themes} tags={tpl.themeTags} onPick={pick} /></>;
   const { mode, themes } = adminThemeChoice(root, all);
-  if (mode === "all") return <><p className="text-[13px] text-ink-300">{all.length} themes. Picking one restyles the whole site; your content stays as it is.</p><ThemeGallery current={root.theme?.preset} themes={all} tags={tpl.themeTags} onPick={pick} /></>;
+  if (mode === "all") return <>{reset}<p className="text-[13px] text-ink-300">{all.length} themes. Picking one restyles the whole site; your content stays as it is.</p><ThemeGallery current={root.theme?.preset} themes={all} tags={tpl.themeTags} onPick={pick} /></>;
   if (themes.length <= 1) {
     const t = themes[0];
     return (
@@ -389,7 +392,7 @@ function ThemesField() {
       </div>
     );
   }
-  return <><p className="text-[13px] text-ink-300">{themes.length} themes chosen for this site. Picking one restyles the whole site; your content stays as it is.</p><ThemeGallery current={root.theme?.preset} themes={themes} tags={[]} onPick={pick} /></>;
+  return <>{reset}<p className="text-[13px] text-ink-300">{themes.length} themes chosen for this site. Picking one restyles the whole site; your content stays as it is.</p><ThemeGallery current={root.theme?.preset} themes={themes} tags={[]} onPick={pick} /></>;
 }
 
 function AdminThemesField() {
@@ -426,4 +429,26 @@ function AdminThemesField() {
       )}
     </div>
   );
+}
+
+/** Switches theme, remembering the one being left: its settings as you changed them come back when you return to it. */
+export function applyTheme(root: any, tpl: TemplateDef, th: Theme) {
+  root.theme = root.theme || {};
+  const prevId = root.theme.preset, all = tpl.themes || THEMES, prev = all.find((t) => t.id === prevId);
+  root.themeMemory = root.themeMemory && typeof root.themeMemory === "object" ? root.themeMemory : {};
+  if (prev && prev.id !== th.id) {
+    // Only the settings a theme controls, and only when they differ from that theme's own defaults.
+    const def = tpl.themeValues(prev), snap: Record<string, unknown> = {};
+    for (const k of Object.keys(def)) if (root.theme[k] !== undefined) snap[k] = clone(root.theme[k]);
+    if (themeTweaked(root, tpl, prev)) root.themeMemory[prev.id] = snap; else delete root.themeMemory[prev.id];
+  }
+  Object.assign(root.theme, tpl.themeValues(th), root.themeMemory[th.id] || {});
+  root.theme.preset = th.id;
+  delete root.themeMemory[th.id]; // the current theme's settings live in content.theme
+  if (!Object.keys(root.themeMemory).length) delete root.themeMemory;
+}
+/** True when the content's settings differ from this theme's defaults. */
+export function themeTweaked(root: any, tpl: TemplateDef, th: Theme): boolean {
+  const def = tpl.themeValues(th);
+  return Object.entries(def).some(([k, v]) => JSON.stringify(root.theme?.[k] ?? null) !== JSON.stringify(v ?? null));
 }

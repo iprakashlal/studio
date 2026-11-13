@@ -11,6 +11,7 @@ import { ghPublish } from "../lib/ghpublish";
 import { Field, Logo, StepLoader, useToast } from "../ui/kit";
 import { setCurrentMenus } from "../lib/menus";
 import { MenusCard } from "./MenusCard";
+import { MigrationTab } from "./MigrationTab";
 import { BADGE_DEFAULT, cleanBadge, setCurrentBadge, type BadgeCfg } from "../lib/badge";
 import { BrandMark, DEFAULT_NAME, brand as currentBrand, setBrand, shrinkImage, useBrand } from "../lib/brand";
 import { Dashboard } from "./Dashboard";
@@ -74,7 +75,7 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
         <nav className="ml-auto flex items-center gap-1" aria-label="Studio">
           <a href="#/" className={`btn btn-ghost btn-sm ${!route || route === "/" ? "text-ink-100" : "text-ink-400"}`}>Projects</a>
           <a href="#/themes" className="btn btn-ghost btn-sm text-ink-400">Themes</a>
-          {!repo.demo && <a href="#/settings" className={`btn btn-ghost btn-sm ${route === "settings" ? "text-ink-100" : "text-ink-400"}`}>Settings</a>}
+          {!repo.demo && <a href="#/settings" className={`btn btn-ghost btn-sm ${route.startsWith("settings") ? "text-ink-100" : "text-ink-400"}`}>Settings</a>}
           <span className="hidden px-2 text-sm text-ink-400 sm:inline">{session.username}</span>
           <button type="button" className="btn btn-sm" onClick={onSignOut}>{repo.demo ? "Exit demo" : "Sign out"}</button>
         </nav>
@@ -90,12 +91,18 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
     return <ProjectView key={project.id} studio={studio} index={index} project={project} session={session} onIndex={setIndex} />;
   }
 
-  if (route === "settings" && !repo.demo) {
+  if (route.startsWith("settings") && !repo.demo) {
+    const tab = route.split("/")[1] || "general";
+    const tabs = <div className="flex flex-wrap gap-1 border-b border-ink-700" role="tablist" aria-label="Settings">
+      {[["general", "General"], ["migration", "Migration"]].map(([k, l]) => <a key={k} href={`#/settings${k === "general" ? "" : "/" + k}`} role="tab" aria-selected={tab === k} className={`-mb-px border-b-2 px-3 py-2 text-sm font-semibold ${tab === k ? "border-brand-400 text-ink-100" : "border-transparent text-ink-400 hover:text-ink-100"}`}>{l}</a>)}
+    </div>;
+    if (tab === "migration") return <>{header}<main className="mx-auto flex max-w-3xl flex-col gap-4 px-4 py-8 sm:px-6"><h1 className="font-display text-3xl font-extrabold">Settings</h1>{tabs}<MigrationTab studio={studio} index={index} session={session} onIndex={setIndex} /></main></>;
     return (
       <>{header}
         <main className="mx-auto flex max-w-3xl flex-col gap-4 px-4 py-8 sm:px-6">
           <h1 className="font-display text-3xl font-extrabold">Settings</h1>
-          <p className="text-sm text-ink-300">Your Studio keeps everything as files in <b className="text-ink-100">{session.cfg.owner}/{session.cfg.repo}</b>: <code className="font-mono text-xs">studio.json</code> for the project list and <code className="font-mono text-xs">projects/</code> for each site's content, images and export snapshots.</p>
+          {tabs}
+          <p className="text-sm text-ink-300">Your Studio keeps everything as files in <b className="text-ink-100">{session.cfg.owner === "supabase" ? `Supabase (Studio “${session.cfg.repo}”)` : `${session.cfg.owner}/${session.cfg.repo}`}</b>: <code className="font-mono text-xs">studio.json</code> for the project list and <code className="font-mono text-xs">projects/</code> for each site's content, images and export snapshots.</p>
           <BrandCard studio={studio} onIndex={setIndex} />
           <BadgeCard studio={studio} saved={index.badge} onIndex={setIndex} />
           <MenusCard studio={studio} menus={index.menus || {}} onIndex={setIndex} />
@@ -108,7 +115,9 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
             <NetlifyAccount session={session} />
             <SetupAccounts session={session} />
           </section>
-          <AccountPanel ns={NS} session={session} onUpdated={onSession} onSignOut={onSignOut} onForget={onForget} />
+          {session.cfg.owner === "supabase"
+            ? <section className="card flex flex-col gap-3 p-5" aria-label="Account"><h3 className="text-[15px] font-extrabold">Account</h3><p className="text-sm text-ink-300">Signed in as <b className="text-ink-100">{session.username}</b> with an email code.</p><button type="button" className="btn self-start" onClick={onSignOut}>Sign out</button></section>
+            : <AccountPanel ns={NS} session={session} onUpdated={onSession} onSignOut={onSignOut} onForget={onForget} />}
         </main>
       </>
     );

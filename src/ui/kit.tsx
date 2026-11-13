@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { MARK_URI } from "./logo";
 
 // ---------- toasts ----------
 type ToastCtx = (msg: string, tone?: "ok" | "bad") => void;
@@ -132,11 +133,10 @@ export function StepLoader({ title, steps, at, detail }: { title: string; steps:
 }
 
 export function Logo({ size = 12 }: { size?: number }) {
+  const h = Math.round(size * 2);
   return (
-    <span className="flex items-center gap-[3px]" aria-hidden>
-      <span className="shp circle" style={{ width: size, height: size, background: "#5B7CFF" }} />
-      <span className="shp" style={{ width: size, height: size, background: "#FF6A3D" }} />
-      <span className="shp triangle" style={{ width: size, height: size, background: "#FFC83A" }} />
+    <span className="inline-grid flex-none place-items-center rounded-md bg-white shadow-sm" style={{ width: h, height: h }} aria-hidden>
+      <img src={MARK_URI} alt="" className="block" style={{ height: Math.round(h * 0.78), width: "auto" }} />
     </span>
   );
 }

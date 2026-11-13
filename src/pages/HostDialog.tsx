@@ -12,6 +12,7 @@ import { slugify } from "../lib/util";
 import { Netlify, checkDns, cleanDomain, dnsRecords, domainOk, type DnsRecord } from "../lib/netlify";
 import { cleanUrl, isAdmin, sbUrlOk, sendCode, setupSql, signedInEmail, siteIdOk, verifyCode, type CfSiteCfg, type HostCfg, type SbCfg } from "../lib/supa";
 import { netlifyToken, publishHosted, siteAddress } from "../lib/hosting";
+import { verifyMailDomain } from "../lib/maildomain";
 import { moveSbToCf, sbEditors, type MoveResult } from "../lib/movedb";
 import { getHelper } from "../lib/relay";
 import { Field, Modal, Spinner, Toggle, useConfirm, useToast } from "../ui/kit";
@@ -166,6 +167,26 @@ export function HostDialog({ studio, project, tpl, draft, dirty, save, onIndex, 
     setStep(null); setEmail(own); setEditors((cur) => (cur.split(/\s+/).includes(own) ? cur : (cur.trim() + "\n" + own).trim()));
     await cfSendCode(cfSite!.api, own); setTestOnly(null); setCodeSent(true); toast(`Code sent to ${own}.`);
   });
+  // Codes from your own domain: Resend + DNS records in Cloudflare + verify, then the database sends from it.
+  const [mailDom, setMailDom] = useState(host?.domain || host?.domainSetup?.name || ""), [mailMsg, setMailMsg] = useState("");
+  const verifyDomain = () => run("maildomain", async () => {
+    setMailMsg("");
+    if (!/^re_/.test(cfp.mail.key)) throw new Error("Paste your Resend API key above first (one with Full access, so the Studio can add your domain).");
+    const dom = cleanDomain(mailDom), { cf, relay } = await cfAcc.client((x) => setStep({ i: -1, detail: x }));
+    const r = await verifyMailDomain(relay, cf, cfp.mail.key, dom, (x) => setStep({ i: -1, detail: x }));
+    if (!r.verified) {
+      setStep(null);
+      const probs = [...new Set(r.problems)];
+      setMailMsg(probs.length
+        ? `Not verified yet: ${probs.join("; ")}. Delete that record in Cloudflare → ${dom} → DNS → Records (if you no longer use that service), then press the button again.`
+        : `Added ${r.added} record${r.added === 1 ? "" : "s"} to Cloudflare; Resend is checking them (“${r.domain.status}”). It usually takes a few minutes: press the button again then.`);
+      return;
+    }
+    const display = (/^(.*?)\s*</.exec(cfp.mail.from)?.[1] || "Picaffectz Studio").trim();
+    await cfp.ensure((x) => setStep({ i: -1, detail: x }), { mailFrom: `${display} <codes@${dom}>` });
+    setStep(null); setTestOnly(null);
+    setMailMsg(`✓ ${dom} is verified. Sign-in codes now come from codes@${dom} and reach any editor's email.`);
+  });
   const saveMail = () => run("cfsetup", async () => {
     await cfp.ensure((x) => setStep({ i: -1, detail: x })); setStep(null); setMailCfg(false); setTestOnly(null);
     toast("Email settings saved. Send the code again.");
@@ -294,8 +315,15 @@ export function HostDialog({ studio, project, tpl, draft, dirty, save, onIndex, 
                 {testOnly && <>
                   <p>Resend is in test mode: it only emails <b>{testOnly}</b>, the address of your Resend account. Either:</p>
                   <button type="button" className="btn btn-pri btn-sm self-start" disabled={!!busy} onClick={useOwn}>Sign in as {testOnly}</button>
-                  <p className="text-ink-300">(adds it as an editor of this site), or <b>verify your domain</b> at <a className="underline" href="https://resend.com/domains" target="_blank" rel="noopener noreferrer">resend.com/domains ↗</a>, then put an address on it below (like <code className="font-mono">Prakash &lt;codes@yourdomain&gt;</code>) so codes reach any editor.</p>
+                  <p className="text-ink-300">(adds it as an editor of this site), or send codes from your own domain (below) so they reach any editor.</p>
                 </>}
+                <div className="flex flex-col gap-2 rounded-lg border border-ink-700 bg-ink-950 p-3 text-ink-200" aria-label="Codes from your domain">
+                  <b className="text-ink-100">Send codes from your domain</b>
+                  <p className="text-ink-400">The Studio adds the domain to Resend, puts Resend's records into its Cloudflare DNS and verifies it. Needs the domain on your Cloudflare (section 3) and a Resend key with <b>Full access</b> below.</p>
+                  <div className="flex gap-2"><input aria-label="Email domain" className="input min-w-0 flex-1" placeholder="yourdomain.com" value={mailDom} onChange={(e) => setMailDom(e.target.value)} />
+                    <button type="button" className="btn btn-pri btn-sm" disabled={!!busy || !domainOk(mailDom)} onClick={verifyDomain}>{busy === "maildomain" ? (step?.detail || "Working") + "…" : "Verify and use it"}</button></div>
+                  {mailMsg && <p role="status" className={mailMsg.startsWith("✓") ? "text-emerald-300" : "text-ink-300"}>{mailMsg}</p>}
+                </div>
                 {mailCfg || testOnly ? <>{cfp.ui}<button type="button" className="btn btn-sm self-start" disabled={!!busy || !cfp.ready} onClick={saveMail}>{busy === "cfsetup" ? (step?.detail || "Saving") + "…" : "Save email settings"}</button></> : null}
               </div>
             )}

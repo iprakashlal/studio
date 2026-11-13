@@ -1,7 +1,7 @@
 // Sign-in for sites hosted on the Studio's Cloudflare database: a 6-digit code by email. Only the site's editors
 // (members of "site:<id>") get in; anyone else is told so and signed out again.
 import { useEffect, useState } from "react";
-import { cfRole, cfSendCode, cfSession, cfSignedIn, cfVerifyCode } from "../lib/cfdb";
+import { cfRole, resendTestOnly, cfSendCode, cfSession, cfSignedIn, cfVerifyCode } from "../lib/cfdb";
 import type { CfSiteCfg } from "../lib/supa";
 import { Field, Logo, Spinner, useToast } from "../ui/kit";
 
@@ -14,7 +14,17 @@ export function CfGate({ cf, brand, onIn }: { cf: CfSiteCfg; brand: string; onIn
     setErr(`${who || "This email"} can't edit this site. Ask the site's owner to add it as an editor.`);
   };
   useEffect(() => { cfSignedIn(cf.api).then((e) => (e ? admit() : undefined)).catch(() => {}).finally(() => setBusy(false)); }, []);
-  const send = async (e?: React.FormEvent) => { e?.preventDefault(); setErr(""); setBusy(true); try { await cfSendCode(cf.api, email.trim()); setSent(true); } catch (x: any) { setErr(x?.message || "Couldn't send the code."); } setBusy(false); };
+  const [own, setOwn] = useState<string | null>(null);
+  const send = async (e?: React.FormEvent, to = email.trim()) => {
+    e?.preventDefault(); setErr(""); setOwn(null); setBusy(true);
+    try { await cfSendCode(cf.api, to); setEmail(to); setSent(true); }
+    catch (x: any) {
+      const o = resendTestOnly(x?.message || "");
+      if (o && o !== to.toLowerCase()) { setOwn(o); setErr(`This site's sign-in email is still in test mode, so codes can only go to ${o}. Sign in with that address, or ask the site's owner to send codes from the site's domain (Studio → hosting window → Email settings).`); }
+      else setErr(x?.message || "Couldn't send the code.");
+    }
+    setBusy(false);
+  };
   const verify = async (e: React.FormEvent) => { e.preventDefault(); setErr(""); setBusy(true); try { await cfVerifyCode(cf.api, email.trim(), code); await admit(); } catch (x: any) { setErr(x?.message || "Couldn't sign in."); } setBusy(false); };
   return (
     <div className="grid min-h-screen place-items-center px-4 py-10">
@@ -35,6 +45,7 @@ export function CfGate({ cf, brand, onIn }: { cf: CfSiteCfg; brand: string; onIn
           </form>
         )}
         {err && <p role="alert" className="rounded-lg border border-amber-400/40 bg-amber-400/5 px-3 py-2 text-[13px] text-amber-100">{err}</p>}
+        {own && !sent && <button type="button" className="btn btn-sm self-start" disabled={busy} onClick={() => send(undefined, own)}>Send the code to {own}</button>}
         <a href="./" className="text-sm text-ink-400 hover:text-ink-100">← Back to the website</a>
       </div>
     </div>

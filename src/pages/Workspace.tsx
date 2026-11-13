@@ -9,6 +9,8 @@ import { GitHubPublishAccount } from "./GitHubAccount";
 import { SetupAccounts } from "./SetupAccounts";
 import { ghPublish } from "../lib/ghpublish";
 import { Field, Logo, StepLoader, useToast } from "../ui/kit";
+import { setCurrentMenus } from "../lib/menus";
+import { MenusCard } from "./MenusCard";
 import { BADGE_DEFAULT, cleanBadge, setCurrentBadge, type BadgeCfg } from "../lib/badge";
 import { BrandMark, DEFAULT_NAME, brand as currentBrand, setBrand, shrinkImage, useBrand } from "../lib/brand";
 import { Dashboard } from "./Dashboard";
@@ -46,6 +48,7 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
   useEffect(() => { document.title = b.name; }, [b.name]);
   // The "Powered by" badge's look, used when building sites and in previews.
   useEffect(() => { setCurrentBadge(index?.badge); }, [index?.badge]);
+  useEffect(() => { setCurrentMenus(index?.menus); }, [index?.menus]);
   // Name and logo come from studio.json, so every signed-in device shows the same.
   useEffect(() => {
     const sb = index?.brand;
@@ -95,6 +98,7 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
           <p className="text-sm text-ink-300">Your Studio keeps everything as files in <b className="text-ink-100">{session.cfg.owner}/{session.cfg.repo}</b>: <code className="font-mono text-xs">studio.json</code> for the project list and <code className="font-mono text-xs">projects/</code> for each site's content, images and export snapshots.</p>
           <BrandCard studio={studio} onIndex={setIndex} />
           <BadgeCard studio={studio} saved={index.badge} onIndex={setIndex} />
+          <MenusCard studio={studio} menus={index.menus || {}} onIndex={setIndex} />
           <section className="card flex flex-col gap-3 p-5" aria-label="Hosting accounts">
             <h2 className="text-lg font-extrabold">Hosting accounts</h2>
             <p className="text-sm text-ink-300">GitHub publishing creates each site's repository and turns on GitHub Pages; Netlify is for sites hosted outside GitHub. Tokens stay on this device. Each site's Supabase details are kept with its project.</p>

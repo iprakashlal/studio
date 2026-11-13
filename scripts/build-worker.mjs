@@ -21,3 +21,12 @@ await build({
   }],
 });
 console.log("Built public/templates/store/cloudflare/worker.js");
+
+// The Site Studio database (Settings → Migration / Studio Partners / Host outside GitHub on Cloudflare).
+await build({
+  entryPoints: ["worker/db-worker.ts"],
+  outfile: "public/templates/cfdb/worker.js",
+  bundle: true, format: "esm", target: "es2022", platform: "neutral", legalComments: "none",
+  banner: { js: "// Site Studio database for Cloudflare Workers (D1). Set up and updated from the Studio. Generated from worker/db-worker.ts.\n" },
+});
+console.log("worker built: public/templates/cfdb/worker.js");

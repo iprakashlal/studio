@@ -4,7 +4,8 @@ import { b64, relayCall, type Relay } from "./relay";
 import { vault } from "./vault";
 
 export const cfVault = vault<{ token: string; account?: string }>("cloudflare");
-export const CF_TOKEN_PAGE = "https://dash.cloudflare.com/profile/api-tokens";
+/** Cloudflare's token page with the shop server's permissions already ticked (Workers Scripts, Account Settings). */
+export const CF_TOKEN_PAGE = `https://dash.cloudflare.com/profile/api-tokens?${new URLSearchParams({ permissionGroupKeys: JSON.stringify([{ key: "workers_scripts", type: "edit" }, { key: "account_settings", type: "read" }]), accountId: "*", zoneId: "all", name: "Picaffectz Studio shop" })}`;
 /** Where to add "Zone → DNS → Edit" to the token, so the Studio can add email records too. */
 export const CF_DNS_HINT = "Edit the token (My Profile → API Tokens → Edit) and add the permission Zone → DNS → Edit for your domain.";
 export class CfError extends Error { constructor(msg: string, public status = 0, public code = 0) { super(msg); } }
@@ -30,8 +31,14 @@ export class Cloudflare {
     throw new CfError("Couldn't create a workers.dev address for this account.");
   }
   /** Uploads (or replaces) a Worker module. With `keep`, settings and secrets already on the Worker stay. */
-  async upload(account: string, name: string, code: string, opts: { vars?: Record<string, string>; secrets?: Record<string, string>; keep?: boolean }) {
+  // ---- D1 (the Studio's database on Cloudflare)
+  d1List(account: string) { return this.api<{ uuid: string; name: string }[]>("GET", `/accounts/${account}/d1/database?per_page=100`); }
+  d1Create(account: string, name: string) { return this.api<{ uuid: string; name: string }>("POST", `/accounts/${account}/d1/database`, { json: { name } }); }
+  d1Query(account: string, id: string, sql: string, params: unknown[] = []) { return this.api<any[]>("POST", `/accounts/${account}/d1/database/${id}/query`, { json: { sql, ...(params.length ? { params } : {}) } }); }
+
+  async upload(account: string, name: string, code: string, opts: { vars?: Record<string, string>; secrets?: Record<string, string>; keep?: boolean; d1?: { name: string; id: string }[] }) {
     const bindings = [
+      ...(opts.d1 || []).map((d) => ({ type: "d1", name: d.name, id: d.id })),
       ...Object.entries(opts.vars || {}).filter(([, v]) => v !== "").map(([n, text]) => ({ type: "plain_text", name: n, text })),
       ...Object.entries(opts.secrets || {}).filter(([, v]) => v !== "").map(([n, text]) => ({ type: "secret_text", name: n, text })),
     ];

@@ -3,7 +3,7 @@ import { Netlify } from "./netlify";
 import { bytesB64, type Repo } from "./repo";
 import { blobToBytes } from "./util";
 import { SupaMgmt } from "./supamgmt";
-import { StudioSbRepo, studioSql, type StudioHostCfg } from "./studiohost";
+import { studioSql, type StudioHostCfg } from "./studiohost";
 
 const sha1 = async (b: Uint8Array) => [...new Uint8Array(await crypto.subtle.digest("SHA-1", b as BufferSource))].map((x) => x.toString(16).padStart(2, "0")).join("");
 /** This app's address (the folder index.html is in), e.g. https://you.github.io/studio/. */
@@ -26,7 +26,7 @@ export async function prepareSupabase(m: SupaMgmt, ref: string, studio: string, 
 }
 
 /** Copies every file of `from` (studio.json, projects, photos) into the hosted Studio. */
-export async function transferFiles(from: Repo, to: StudioSbRepo, step: (done: number, total: number, path: string) => void, skip: (p: string) => boolean = () => false) {
+export async function transferFiles(from: Repo, to: Repo, step: (done: number, total: number, path: string) => void, skip: (p: string) => boolean = () => false) {
   const paths = (await from.list("")).filter((p) => !p.startsWith(".") && !skip(p));
   let n = 0;
   for (const p of paths) {

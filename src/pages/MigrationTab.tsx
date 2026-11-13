@@ -1,5 +1,8 @@
 // Settings → Migration: move the whole Studio to Netlify + Supabase in a few clicks, from the Studio itself.
 // On a moved Studio, the same tab shows where it runs and updates it to the latest Studio build.
+import { backendOf, isHosted } from "../lib/backend";
+import { cfAddMembers } from "../lib/cfdb";
+import { useCloudflarePicker } from "./CfPicker";
 import { SbTokenHelp } from "./SbTokenHelp";
 import { useEffect, useState } from "react";
 import type { Session } from "../lib/auth";
@@ -7,8 +10,7 @@ import { netlifyToken } from "../lib/hosting";
 import { Netlify } from "../lib/netlify";
 import { RELAY_VERSION, relayVault, setupRelay, type Relay } from "../lib/relay";
 import { SB_TOKENS_PAGE, SupaMgmt, refOf, sbMgmtVault, type SbOrg, type SbProject } from "../lib/supamgmt";
-import { sendCode, verifyCode, sbClient } from "../lib/supa";
-import { StudioSbRepo, loadHostConfig, type HostedStudio, type StudioHostCfg } from "../lib/studiohost";
+import { loadHostConfig, type HostedStudio, type StudioHostCfg } from "../lib/studiohost";
 import { appBase, appFiles, deployStudioApp, prepareSupabase, transferFiles } from "../lib/migrate";
 import type { Studio, StudioIndex } from "../lib/studio";
 import { jsonB64 } from "../lib/repo";
@@ -84,7 +86,7 @@ export function useSupabasePicker(studioToken: string, nf: Netlify | null, persi
 }
 
 export function MigrationTab({ studio, index, session, onIndex }: { studio: Studio; index: StudioIndex; session: Session; onIndex: (i: StudioIndex) => void }) {
-  const hostedHere = session.cfg.owner === "supabase";
+  const hostedHere = isHosted(session);
   const [nf, setNf] = useState<Netlify | null | undefined>(undefined);
   useEffect(() => { netlifyToken.load(session.token).then((t) => setNf(t ? new Netlify(t.token) : null)); }, [session.token]);
   if (nf === undefined) return <Spinner label="Checking Netlify…" />;
@@ -96,6 +98,8 @@ function MoveStudio({ studio, index, session, nf, setNf, onIndex }: { studio: St
   const brand = useBrand();
   const sb = useSupabasePicker(session.token, nf);
   const prev = index.hosted;
+  const [kind, setKind] = useState<"supabase" | "cloudflare">(prev?.backend || "cloudflare");
+  const cf = useCloudflarePicker(session.token, nf, true, brand.name);
   const [id, setId] = useState(prev?.studio || slug(brand.name) || "studio");
   const [siteName, setSiteName] = useState(prev?.siteName || (/studio$/.test(slug(brand.name)) ? slug(brand.name) : `${slug(brand.name) || "my"}-studio`));
   const [email, setEmail] = useState(() => prev?.owner || (() => { try { return localStorage.getItem("site-studio:host-email") || ""; } catch { return ""; } })());
@@ -103,19 +107,27 @@ function MoveStudio({ studio, index, session, nf, setNf, onIndex }: { studio: St
   const [count, setCount] = useState<number | null>(null);
   useEffect(() => { studio.repo.list("").then((l) => setCount(l.filter((p) => !p.startsWith(".")).length)).catch(() => setCount(null)); }, []);
   const [phase, setPhase] = useState<Phase>("setup"), [step, setStep] = useState(""), [err, setErr] = useState("");
-  const [target, setTarget] = useState<{ url: string; key: string } | null>(null), [code, setCode] = useState("");
+  const [target, setTarget] = useState<StudioHostCfg | null>(null), [code, setCode] = useState("");
   const [result, setResult] = useState<HostedStudio | null>(null);
   useEffect(() => { sb.setName(`${id}-studio`); }, [id]);
-  const ok = !!nf && sb.ready && /^[a-z0-9][a-z0-9-]{1,29}$/.test(id) && /^[a-z0-9][a-z0-9-]{1,40}$/.test(siteName) && /@/.test(email);
+  const ok = !!nf && (kind === "cloudflare" ? cf.ready : sb.ready) && /^[a-z0-9][a-z0-9-]{1,29}$/.test(id) && /^[a-z0-9][a-z0-9-]{1,40}$/.test(siteName) && /@/.test(email);
 
   // 1: Supabase ready and a sign-in code on its way.
   const start = async () => {
     setErr(""); setPhase("setup");
     try {
-      const { m, ref } = await sb.ensure(setStep);
-      const t = await prepareSupabase(m, ref, id, email.trim().toLowerCase(), setStep);
+      let t: StudioHostCfg;
+      if (kind === "cloudflare") {
+        const { setup, relay, token } = await cf.ensure(setStep);
+        setStep("Making you the Studio's owner"); await cfAddMembers(relay, token, setup, "studio:" + id, [{ email: email.trim().toLowerCase(), role: "owner" }]);
+        t = { kind: "cloudflare", api: setup.api, studio: id, name: brand.name };
+      } else {
+        const { m, ref } = await sb.ensure(setStep);
+        const s = await prepareSupabase(m, ref, id, email.trim().toLowerCase(), setStep);
+        t = { kind: "supabase", url: s.url, key: s.key, studio: id, name: brand.name };
+      }
       setTarget(t);
-      setStep("Sending you a sign-in code"); await sendCode(t, email.trim());
+      setStep("Sending you a sign-in code"); await backendOf(t).sendCode(email.trim());
       setPhase("code");
     } catch (e: any) { setErr(e?.message || "Something went wrong."); }
     setStep("");
@@ -125,16 +137,16 @@ function MoveStudio({ studio, index, session, nf, setNf, onIndex }: { studio: St
     if (!target || !nf) return;
     setErr(""); setPhase("moving");
     try {
-      setStep("Checking the code"); await verifyCode(target, email.trim(), code);
-      const dest = new StudioSbRepo(target, id, sbClient(target));
+      const be = backendOf(target);
+      setStep("Checking the code"); await be.verifyCode(email.trim(), code);
+      const dest = be.repo(id);
       if (withData) await transferFiles(studio.repo, dest, (d, t, p) => setStep(`Moving your Studio's files (${d} of ${t})${p ? " · " + p : ""}`));
-      const cfg: StudioHostCfg = { kind: "supabase", url: target.url, key: target.key, studio: id, name: brand.name };
-      const app = await deployStudioApp(nf, { siteId: prev?.siteId, siteName, source: appBase(), config: cfg }, setStep);
-      const rec: HostedStudio = { url: app.url, siteId: app.siteId, siteName, sbUrl: target.url, studio: id, owner: email.trim().toLowerCase(), build: app.build, at: new Date().toISOString() };
+      const app = await deployStudioApp(nf, { siteId: prev?.siteId, siteName, source: appBase(), config: target }, setStep);
+      const rec: HostedStudio = { url: app.url, siteId: app.siteId, siteName, backend: target.kind, ...(target.kind === "cloudflare" ? { api: target.api } : { sbUrl: target.url }), studio: id, owner: email.trim().toLowerCase(), build: app.build, at: new Date().toISOString() };
       setStep("Recording where the Studio moved");
       const cur = await dest.getJSON<any>("studio.json").catch(() => null);
       await dest.putFile("studio.json", jsonB64({ ...(cur?.data || { version: 1, categories: [], projects: [] }), hosted: rec }), "Moved", cur?.sha);
-      onIndex(await studio.updateIndex((i) => { i.hosted = rec; }, "Moved the Studio to Netlify + Supabase"));
+      onIndex(await studio.updateIndex((i) => { i.hosted = rec; }, `Moved the Studio to Netlify + ${be.label}`));
       setResult(rec); setPhase("done"); toast("Your Studio is on Netlify");
     } catch (e: any) { setErr(e?.message || "Something went wrong."); setPhase("code"); }
     setStep("");
@@ -144,7 +156,7 @@ function MoveStudio({ studio, index, session, nf, setNf, onIndex }: { studio: St
     <div className="flex flex-col gap-4">
       <section className="card flex flex-col gap-2 p-5">
         <h2 className="text-lg font-extrabold">Move the Studio outside GitHub</h2>
-        <p className="text-sm text-ink-300">Puts this whole Studio on <b className="text-ink-100">your Netlify</b>, with its projects, content and photos in <b className="text-ink-100">your Supabase</b>. You sign in there with a 6-digit code sent to your email, no GitHub token needed. This Studio keeps working until you stop using it.</p>
+        <p className="text-sm text-ink-300">Puts this whole Studio on <b className="text-ink-100">your Netlify</b>, with its projects, content and photos in <b className="text-ink-100">your Cloudflare</b> (a free D1 database) or <b className="text-ink-100">your Supabase</b>. You sign in there with a 6-digit code sent to your email, no GitHub token needed. This Studio keeps working until you stop using it.</p>
         <p className="text-[13px] text-ink-400">Setting up Studios for clients (B2B)? Each client gets their own Studio, on your accounts or theirs, with the sites you share kept in step: <a className="text-brand-300 underline" href="#/settings/partners">Studio Partners →</a></p>
         {prev && phase !== "done" && <p className="rounded-lg border border-emerald-400/30 bg-emerald-400/5 px-3 py-2.5 text-[13px] text-emerald-100">Moved before to <a className="underline" href={prev.url} target="_blank" rel="noopener noreferrer">{prev.url}</a>. Running it again updates that Studio to this build{withData ? " and copies your files again" : ""}.</p>}
       </section>
@@ -152,9 +164,13 @@ function MoveStudio({ studio, index, session, nf, setNf, onIndex }: { studio: St
         <h3 className="text-[15px] font-extrabold">1 · Netlify (where the Studio runs)</h3>
         {nf ? <p className="text-sm text-emerald-300">Connected.</p> : <NetlifyAccount session={session} onToken={(t) => setNf(t ? new Netlify(t) : null)} />}
       </section>
-      <section className="card flex flex-col gap-3 p-5" aria-label="Supabase">
-        <h3 className="text-[15px] font-extrabold">2 · Supabase (where its files live)</h3>
-        {sb.ui}
+      <section className="card flex flex-col gap-3 p-5" aria-label="Database">
+        <h3 className="text-[15px] font-extrabold">2 · Where its files live</h3>
+        <div className="flex flex-wrap rounded-lg border border-ink-600 self-start" role="radiogroup" aria-label="Database">
+          {([["cloudflare", "Cloudflare (free, then ₹470/month)"], ["supabase", "Supabase (free, then ₹2,360/month)"]] as const).map(([k, l]) => <button key={k} type="button" role="radio" aria-checked={kind === k} disabled={!!prev && phase !== "setup"} onClick={() => setKind(k)} className={`btn btn-sm border-0 ${kind === k ? "bg-ink-700" : "bg-transparent"}`}>{l}</button>)}
+        </div>
+        <p className="hint">{kind === "cloudflare" ? "A D1 database and a Worker on your Cloudflare. Never pauses; sign-in codes are emailed through Resend." : "A Supabase project. Free projects pause after a week without use."}</p>
+        <section aria-label={kind === "cloudflare" ? "Cloudflare" : "Supabase"}>{kind === "cloudflare" ? cf.ui : sb.ui}</section>
       </section>
       <section className="card flex flex-col gap-3 p-5" aria-label="Your Studio">
         <h3 className="text-[15px] font-extrabold">3 · Your Studio</h3>
@@ -167,14 +183,14 @@ function MoveStudio({ studio, index, session, nf, setNf, onIndex }: { studio: St
           <span><b>Transfer my Studio data</b> <span className="text-ink-400">— projects, content, photos, export history and settings{count != null ? ` (${count} files)` : ""}. Untick to start the new Studio empty.</span></span></label>
       </section>
 
-      {phase === "setup" && <button type="button" className="btn btn-pri self-start" disabled={!ok || !!step || !!sb.busy} onClick={start}>{step ? step + "…" : prev ? "Update the moved Studio" : "Move my Studio"}</button>}
+      {phase === "setup" && <button type="button" className="btn btn-pri self-start" disabled={!ok || !!step || !!sb.busy || !!cf.busy} onClick={start}>{step ? step + "…" : prev ? "Update the moved Studio" : "Move my Studio"}</button>}
       {(phase === "code" || phase === "moving") && (
         <section className="card flex flex-col gap-3 p-5" aria-label="Confirm your email">
-          <p className="text-sm text-ink-300">Supabase is ready. Enter the 6-digit code sent to <b className="text-ink-100">{email}</b> (check spam too), then the Studio moves.</p>
+          <p className="text-sm text-ink-300">{kind === "cloudflare" ? "Cloudflare" : "Supabase"} is ready. Enter the 6-digit code sent to <b className="text-ink-100">{email}</b> (check spam too), then the Studio moves.</p>
           <div className="flex flex-wrap gap-2">
             <input aria-label="Code from the email" className="input w-36 font-mono text-lg tracking-widest" inputMode="numeric" maxLength={10} value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))} />
             <button type="button" className="btn btn-pri" disabled={code.length < 6 || phase === "moving"} onClick={finish}>{phase === "moving" ? step + "…" : "Finish moving"}</button>
-            <button type="button" className="btn btn-ghost btn-sm" disabled={phase === "moving"} onClick={() => target && sendCode(target, email.trim()).then(() => toast("New code sent"))}>Send a new code</button>
+            <button type="button" className="btn btn-ghost btn-sm" disabled={phase === "moving"} onClick={() => target && backendOf(target).sendCode(email.trim()).then(() => toast("New code sent")).catch((e: any) => toast(e?.message || "Couldn't send", "bad"))}>Send a new code</button>
           </div>
         </section>
       )}
@@ -182,7 +198,7 @@ function MoveStudio({ studio, index, session, nf, setNf, onIndex }: { studio: St
       {err && <p role="alert" className="text-sm text-red-300">{err}</p>}
       {phase === "done" && result && (
         <section className="card flex flex-col gap-2 border-emerald-400/40 p-5" aria-label="Moved">
-          <h3 className="text-[15px] font-extrabold text-emerald-200">✓ Your Studio is on Netlify + Supabase</h3>
+          <h3 className="text-[15px] font-extrabold text-emerald-200">✓ Your Studio is on Netlify + {result.backend === "cloudflare" ? "Cloudflare" : "Supabase"}</h3>
           <p className="text-sm text-ink-300">Open it, sign in with <b className="text-ink-100">{result.owner}</b> and the code you'll get by email. Add your own domain in Netlify → Domain management whenever you like.</p>
           <a className="btn btn-pri self-start" href={result.url} target="_blank" rel="noopener noreferrer">Open your new Studio ↗</a>
           <p className="hint">Your hosting tokens (GitHub publishing, Netlify, Cloudflare…) stay on each device, so add them once in the new Studio's Settings → Hosting accounts.</p>
@@ -211,8 +227,8 @@ function HostedHere({ session, nf, setNf, index }: { session: Session; nf: Netli
   return (
     <div className="flex flex-col gap-4">
       <section className="card flex flex-col gap-2 p-5">
-        <h2 className="text-lg font-extrabold">This Studio runs on Netlify + Supabase</h2>
-        <p className="text-sm text-ink-300">Studio <b className="text-ink-100">{cfg?.studio}</b> · files in <code className="font-mono text-xs">{cfg?.url}</code> · signed in as <b className="text-ink-100">{session.username}</b>.</p>
+        <h2 className="text-lg font-extrabold">This Studio runs on Netlify + {cfg?.kind === "cloudflare" ? "Cloudflare" : "Supabase"}</h2>
+        <p className="text-sm text-ink-300">Studio <b className="text-ink-100">{cfg?.studio}</b> · files in <code className="font-mono text-xs">{cfg ? (cfg.kind === "cloudflare" ? cfg.api : cfg.url) : ""}</code> · signed in as <b className="text-ink-100">{session.username}</b>.</p>
       </section>
       <section className="card flex flex-col gap-3 p-5" aria-label="Update">
         <h3 className="text-[15px] font-extrabold">Studio updates</h3>

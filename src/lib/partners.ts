@@ -4,25 +4,30 @@
 import { Netlify } from "./netlify";
 import { gitBlobSha, jsonB64, type Repo } from "./repo";
 import { SupaMgmt } from "./supamgmt";
-import { StudioSbRepo, studioSql, type StudioHostCfg } from "./studiohost";
+import { studioSql, type StudioHostCfg } from "./studiohost";
+import { backendOf } from "./backend";
 import { deployStudioApp } from "./migrate";
 import type { ProjectMeta, Studio, StudioIndex } from "./studio";
 import { TEMPLATES } from "../schema";
-import { sbClient, signedInEmail } from "./supa";
 
 export type SharedSite = { project: string; base: string; at: string };
 export type PartnerRec = {
-  id: string; name: string; url: string; studio: string; sbUrl: string; sbKey: string; siteId?: string;
+  id: string; name: string; url: string; studio: string; siteId?: string;
+  /** Where the client Studio keeps its files: Supabase (sbUrl, sbKey) or the Studio database on Cloudflare (api). */
+  backend?: "supabase" | "cloudflare"; api?: string; sbUrl?: string; sbKey?: string;
   accounts: "mine" | "client"; clientEmails: string[]; partnerEmail: string; at: string; shared: SharedSite[];
 };
 export type SiteSync = "same" | "mine" | "theirs" | "both" | "gone";
 
 const now = () => new Date().toISOString();
-export const partnerCfg = (p: PartnerRec, partner: { name: string; url?: string }): StudioHostCfg => ({ kind: "supabase", url: p.sbUrl, key: p.sbKey, studio: p.studio, name: p.name, partner });
+/** The client Studio's place (its studio.config.json, without branding). */
+export const hostOf = (p: Pick<PartnerRec, "backend" | "api" | "sbUrl" | "sbKey" | "studio" | "name">, partner?: { name: string; url?: string }): StudioHostCfg =>
+  p.backend === "cloudflare" ? { kind: "cloudflare", api: p.api!, studio: p.studio, name: p.name, ...(partner ? { partner } : {}) } : { kind: "supabase", url: p.sbUrl!, key: p.sbKey!, studio: p.studio, name: p.name, ...(partner ? { partner } : {}) };
+export const partnerCfg = (p: PartnerRec, partner: { name: string; url?: string }): StudioHostCfg => hostOf(p, partner);
 /** The client Studio's files, read and written as this Studio's partner sign-in. */
-export const remoteRepo = (p: PartnerRec) => new StudioSbRepo({ url: p.sbUrl, key: p.sbKey }, p.studio, sbClient({ url: p.sbUrl, key: p.sbKey }));
-export async function partnerSignedIn(p: Pick<PartnerRec, "sbUrl" | "sbKey" | "partnerEmail">) {
-  const e = await signedInEmail({ url: p.sbUrl, key: p.sbKey }).catch(() => null);
+export const remoteRepo = (p: PartnerRec) => backendOf(hostOf(p)).repo(p.studio);
+export async function partnerSignedIn(p: Pick<PartnerRec, "backend" | "api" | "sbUrl" | "sbKey" | "studio" | "name" | "partnerEmail">) {
+  const e = await backendOf(hostOf(p)).signedIn().catch(() => null);
   return !!e && e.toLowerCase() === p.partnerEmail.toLowerCase();
 }
 
@@ -38,15 +43,15 @@ export async function prepareClientSupabase(m: SupaMgmt, ref: string, o: { studi
 }
 
 /** First files of a client Studio: its name, your “Powered by” look and an empty project list. */
-export async function seedClientStudio(remote: StudioSbRepo, o: { name: string; badge?: unknown; menus?: unknown }) {
+export async function seedClientStudio(remote: Repo, o: { name: string; badge?: unknown; menus?: unknown }) {
   const cur = await remote.getJSON<any>("studio.json").catch(() => null);
   const idx = { version: 1, categories: [], projects: [], ...(cur?.data || {}), brand: { name: o.name, v: Date.now() }, ...(o.badge ? { badge: o.badge } : {}), ...(o.menus ? { menus: o.menus } : {}) };
   await remote.putFile("studio.json", jsonB64(idx), "Set up the client Studio", cur?.sha);
 }
 
 /** Puts (or updates) the Studio app for the client on Netlify with its studio.config.json. */
-export async function deployClientApp(nf: Netlify, p: Pick<PartnerRec, "siteId" | "studio" | "sbUrl" | "sbKey" | "name">, siteName: string, source: string, partner: { name: string; url?: string }, step: (s: string) => void) {
-  return deployStudioApp(nf, { siteId: p.siteId, siteName, source, config: { kind: "supabase", url: p.sbUrl, key: p.sbKey, studio: p.studio, name: p.name, partner } }, step);
+export async function deployClientApp(nf: Netlify, p: Pick<PartnerRec, "siteId" | "studio" | "backend" | "api" | "sbUrl" | "sbKey" | "name">, siteName: string, source: string, partner: { name: string; url?: string }, step: (s: string) => void) {
+  return deployStudioApp(nf, { siteId: p.siteId, siteName, source, config: hostOf(p, partner) }, step);
 }
 
 const projectFiles = async (r: Repo, id: string) => (await r.list(`projects/${id}/`)).filter((p) => !p.includes("/exports/"));

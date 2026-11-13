@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { isHosted } from "../lib/backend";
 import type { Session } from "../lib/auth";
 import { explain, type Repo } from "../lib/repo";
 import { Studio, type StudioIndex } from "../lib/studio";
@@ -104,7 +105,7 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
         <main className="mx-auto flex max-w-3xl flex-col gap-4 px-4 py-8 sm:px-6">
           <h1 className="font-display text-3xl font-extrabold">Settings</h1>
           {tabs}
-          <p className="text-sm text-ink-300">Your Studio keeps everything as files in <b className="text-ink-100">{session.cfg.owner === "supabase" ? `Supabase (Studio “${session.cfg.repo}”)` : `${session.cfg.owner}/${session.cfg.repo}`}</b>: <code className="font-mono text-xs">studio.json</code> for the project list and <code className="font-mono text-xs">projects/</code> for each site's content, images and export snapshots.</p>
+          <p className="text-sm text-ink-300">Your Studio keeps everything as files in <b className="text-ink-100">{isHosted(session) ? `${session.cfg.owner === "cloudflare" ? "Cloudflare" : "Supabase"} (Studio “${session.cfg.repo}”)` : `${session.cfg.owner}/${session.cfg.repo}`}</b>: <code className="font-mono text-xs">studio.json</code> for the project list and <code className="font-mono text-xs">projects/</code> for each site's content, images and export snapshots.</p>
           <BrandCard studio={studio} onIndex={setIndex} />
           <BadgeCard studio={studio} saved={index.badge} onIndex={setIndex} />
           <MenusCard studio={studio} menus={index.menus || {}} onIndex={setIndex} />
@@ -117,7 +118,7 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
             <NetlifyAccount session={session} />
             <SetupAccounts session={session} />
           </section>
-          {session.cfg.owner === "supabase"
+          {isHosted(session)
             ? <section className="card flex flex-col gap-3 p-5" aria-label="Account"><h3 className="text-[15px] font-extrabold">Account</h3><p className="text-sm text-ink-300">Signed in as <b className="text-ink-100">{session.username}</b> with an email code.</p><button type="button" className="btn self-start" onClick={onSignOut}>Sign out</button></section>
             : <AccountPanel ns={NS} session={session} onUpdated={onSession} onSignOut={onSignOut} onForget={onForget} />}
         </main>

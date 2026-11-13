@@ -1,12 +1,13 @@
 // Hosting outside GitHub, from the Studio's side: the Netlify token kept on this device, which repository a
-// project's live site is, and publishing a project to Netlify with its content and photos in Supabase.
+// project's live site is, and publishing a project to Netlify or Cloudflare with its content and photos in the
+// Studio's Cloudflare database or Supabase.
 
 import { GitHubRepo, type Repo } from "./repo";
 import { bytesB64, jsonB64 } from "./repo";
 import type { ProjectMeta } from "./studio";
 import type { TemplateDef } from "../schema/types";
 import { buildSite } from "./exporter";
-import { Netlify } from "./netlify";
+import type { Pages } from "./pages";
 import { SupabaseRepo, type CfSiteCfg, type HostCfg, type SbCfg } from "./supa";
 import { CfRepo } from "./cfdb";
 import { blobToBytes, collectAssetPaths } from "./util";
@@ -15,7 +16,7 @@ import { ghPublish } from "./ghpublish";
 
 /** The live site of a project: its Supabase data when hosted outside GitHub, else its GitHub repository. */
 export function siteRepoFor(p: ProjectMeta, token: string): Repo | null {
-  if (p.host?.kind === "netlify") return hostRepo(p.host);
+  if (p.host) return hostRepo(p.host);
   if (p.publish) return new GitHubRepo(p.publish, ghPublish.token(token));
   return null;
 }
@@ -57,15 +58,15 @@ export const netlifyToken = {
 export type HostStep = { label: string; done?: boolean; detail?: string };
 
 /**
- * Publishes a project to Netlify. With `withContent`, the content and any photos Supabase doesn't have yet are
+ * Publishes a project to its host (Netlify or Cloudflare). With `withContent`, the content and any photos Supabase doesn't have yet are
  * uploaded first (so the pages never point at missing photos); otherwise the content edited in the site's own
  * CMS stays. Returns the content's new sha for the Studio's sync records.
  */
-export async function publishToNetlify(o: {
-  nf: Netlify; host: HostCfg; tpl: TemplateDef; draft: any; name: string; version: number; withContent: boolean;
+export async function publishHosted(o: {
+  pages: Pages; host: HostCfg; tpl: TemplateDef; draft: any; name: string; version: number; withContent: boolean;
   getBlob: (p: string) => Promise<Blob | null>; note: string; step: (i: number, detail?: string) => void;
 }): Promise<{ warnings: string[]; siteSha?: string; admin: string; url: string }> {
-  const { nf, host, tpl, draft } = o;
+  const { pages, host, tpl, draft } = o;
   const db = hostRepo(host);
   await db.check();
   const warnings: string[] = [];
@@ -100,7 +101,7 @@ export async function publishToNetlify(o: {
   files.push({ path: "content.json", data: enc.encode(JSON.stringify(content, null, 2)) });
   const info = files.find((f) => f.path === "cms/site.json");
   if (info) await db.putFile("cms/site.json", bytesB64(info.data), "Site info").catch(() => {});
-  const dep = await nf.deploy(host.siteId, files, `v${o.version} from Site Studio${o.note ? ": " + o.note : ""}`, (d, t) => o.step(2, t ? `${d} of ${t} files` : ""));
+  const dep = await pages.deploy(host.siteId, files, `v${o.version} from Site Studio${o.note ? ": " + o.note : ""}`, (d, t) => o.step(2, t ? `${d} of ${t} files` : ""));
   o.step(3);
   return { warnings, siteSha, admin, url: dep.url || base };
 }

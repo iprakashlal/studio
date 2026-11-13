@@ -13,7 +13,7 @@ import { blobToBytes, collectAssetPaths, safeFileName, uid } from "./util";
 import { TEMPLATES } from "../schema";
 import type { HostCfg } from "./supa";
 
-export type ExportRec = { version: number; at: string; kind: "zip" | "github" | "netlify"; note: string; target?: string };
+export type ExportRec = { version: number; at: string; kind: "zip" | "github" | "netlify" | "cloudflare"; note: string; target?: string };
 export type PublishTarget = { owner: string; repo: string; branch: string };
 export type WorkerCfg = { account: string; name: string; url: string; dataRepo: string; mailFrom: string; build?: string; deployedAt?: string };
 export type ProjectMeta = {

@@ -3,9 +3,10 @@
 // photos, including edits made in its own admin page; only the pages and code change.
 
 import { GitHubRepo, explain, type Repo } from "./repo";
-import { Netlify, NetlifyError } from "./netlify";
+import { NetlifyError } from "./netlify";
+import { PAGES_LABEL, type Pages } from "./pages";
 import { buildSite, loadDefaults, publishSite } from "./exporter";
-import { hostRepo, publishToNetlify, siteAddress } from "./hosting";
+import { hostRepo, publishHosted, siteAddress } from "./hosting";
 import { ghPublish } from "./ghpublish";
 import { adminFile } from "../schema/common";
 import { TEMPLATES } from "../schema";
@@ -17,19 +18,19 @@ import { currentMenus, menuVersion } from "./menus";
 import { relayVault } from "./relay";
 import { Cloudflare, cfVault } from "./cloudflare";
 
-export type LiveTarget = { key: string; project: ProjectMeta; kind: "netlify" | "github" | "worker"; label: string; url: string; repo: Repo | null };
+export type LiveTarget = { key: string; project: ProjectMeta; kind: "hosted" | "github" | "worker"; label: string; url: string; repo: Repo | null };
 export type TargetState =
   | { s: "checking" } | { s: "current"; at: string } | { s: "old"; at: string | null; build: string | null }
   | { s: "unreachable"; msg: string } | { s: "pushing"; detail?: string } | { s: "done" } | { s: "failed"; msg: string } | { s: "skipped"; msg: string };
 
 const ghUrl = (t: { owner: string; repo: string }) => `https://${t.owner}.github.io/${t.repo === `${t.owner}.github.io` ? "" : t.repo + "/"}`;
 
-/** Every place a project is live: its Netlify site and/or its GitHub repository. */
+/** Every place a project is live: its Netlify or Cloudflare site and/or its GitHub repository. */
 export function liveTargets(projects: ProjectMeta[], token: string): LiveTarget[] {
   const out: LiveTarget[] = [];
   for (const p of projects) {
     if (!TEMPLATES[p.template]) continue;
-    if (p.host?.kind === "netlify") out.push({ key: p.id + ":netlify", project: p, kind: "netlify", label: "Netlify", url: siteAddress(p.host), repo: hostRepo(p.host) });
+    if (p.host) out.push({ key: p.id + ":hosted", project: p, kind: "hosted", label: PAGES_LABEL[p.host.kind] || "Netlify", url: siteAddress(p.host), repo: hostRepo(p.host) });
     if (p.publish) out.push({ key: p.id + ":github", project: p, kind: "github", label: "GitHub Pages", url: ghUrl(p.publish), repo: new GitHubRepo(p.publish, ghPublish.token(token)) });
     // The shop's server code, when the Studio set up its Cloudflare Worker.
     if (p.worker) out.push({ key: p.id + ":worker", project: p, kind: "worker", label: "Shop server (Cloudflare Worker)", url: p.worker.url, repo: null });
@@ -51,7 +52,7 @@ export async function checkTarget(t: LiveTarget): Promise<TargetState> {
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /** Rebuilds one live site with this Studio build, keeping the site's own content. */
-export async function pushTarget(t: LiveTarget, o: { studio: Studio; nf: Netlify | null; step: (d: string) => void; token?: string }) {
+export async function pushTarget(t: LiveTarget, o: { studio: Studio; pages: (h: NonNullable<ProjectMeta["host"]>) => Promise<Pages | null>; step: (d: string) => void; token?: string }) {
   const p = t.project, tpl = TEMPLATES[p.template];
   if (t.kind === "worker") {
     // New code only: the Worker's settings and secrets stay as they are.
@@ -71,12 +72,13 @@ export async function pushTarget(t: LiveTarget, o: { studio: Studio; nf: Netlify
   const getBlob = (path: string) => o.studio.assetBlob(p.id, path);
   const note = `Studio update ${STUDIO_BUILD.id}`;
 
-  if (t.kind === "netlify") {
-    if (!o.nf) throw new Error("Connect Netlify in Settings → Hosting accounts first.");
+  if (t.kind === "hosted") {
+    const pages = await o.pages(p.host!);
+    if (!pages) throw new Error(`Connect ${t.label} in Settings → Hosting accounts first.`);
     const steps = ["Checking photos", "Checking content", "Uploading pages", "Done"];
     for (let attempt = 0; ; attempt++) {
       try {
-        await publishToNetlify({ nf: o.nf, host: p.host!, tpl, draft, name: p.name, version: p.version, withContent: false, getBlob, note, step: (i, d) => o.step(`${steps[i] || ""}${d ? " · " + d : ""}`) });
+        await publishHosted({ pages, host: p.host!, tpl, draft, name: p.name, version: p.version, withContent: false, getBlob, note, step: (i, d) => o.step(`${steps[i] || ""}${d ? " · " + d : ""}`) });
         return;
       } catch (e) {
         // Netlify allows 3 deploys a minute: wait and try again.

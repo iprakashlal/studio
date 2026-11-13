@@ -96,7 +96,7 @@ function CfWorkspace({ info, onInfo, cf, onSignOut }: { info: SiteInfo; onInfo: 
     account={<CfAccount cf={cf} onSignOut={onSignOut} />} />;
 }
 
-/** hosted: the site is on Netlify with content and photos in Supabase or the Cloudflare database (pages change only when the Studio publishes). */
+/** hosted: the site is on Cloudflare or Netlify with content and photos in Supabase or the Cloudflare database (pages change only when the Studio publishes). */
 function Workspace({ info, onInfo, repo, account, onSignOut, hosted, ghToken }: { info: SiteInfo; onInfo: (i: SiteInfo) => void; repo: Repo; account: React.ReactNode; onSignOut: () => void; hosted?: SbCfg | CfSiteCfg; ghToken?: string }) {
   const toast = useToast();
   const confirm = useConfirm();
@@ -194,7 +194,7 @@ function Workspace({ info, onInfo, repo, account, onSignOut, hosted, ghToken }: 
     const bake = headChanged(saved, draft);
     try {
       if (hosted) {
-        // The pages are on Netlify: content goes live from Supabase at once. Titles in the pages' <head> and the
+        // The pages are on Cloudflare or Netlify: content goes live from the database at once. Titles in the pages' <head> and the
         // CMS address change the next time the site is published from the Studio.
         const next = await repo.putFile("content.json", jsonB64(draft), "Update site content", sha);
         setSha(next);

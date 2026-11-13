@@ -1,0 +1,11 @@
+// The Picaffectz Studio helper as a Cloudflare Worker. Deployed with the "Deploy to Cloudflare" button in the
+// Studio; the KV namespace below is created for you on the first deploy.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "picaffectz-helper",
+  "main": "src/index.js",
+  "compatibility_date": "2025-01-01",
+  "compatibility_flags": ["global_fetch_strictly_public"],
+  "workers_dev": true,
+  "kv_namespaces": [{ "binding": "HELPER" }]
+}

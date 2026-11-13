@@ -1,7 +1,7 @@
 // Studio Partners: client Studios this Studio set up (on its own accounts or the client's), and the sites shared
 // with them, kept in step both ways. Each client Studio is a hosted Studio (Netlify + Supabase) where the
 // client's emails are owners and this Studio's email is a partner member.
-import { Netlify } from "./netlify";
+import type { Pages } from "./pages";
 import { gitBlobSha, jsonB64, type Repo } from "./repo";
 import { SupaMgmt } from "./supamgmt";
 import { studioSql, type StudioHostCfg } from "./studiohost";
@@ -13,6 +13,8 @@ import { TEMPLATES } from "../schema";
 export type SharedSite = { project: string; base: string; at: string };
 export type PartnerRec = {
   id: string; name: string; url: string; studio: string; siteId?: string;
+  /** Where the client Studio's app runs (Netlify when not set; on Cloudflare siteId is the Worker in pagesAccount). */
+  pages?: "netlify" | "cloudflare"; pagesAccount?: string;
   /** Where the client Studio keeps its files: Supabase (sbUrl, sbKey) or the Studio database on Cloudflare (api). */
   backend?: "supabase" | "cloudflare"; api?: string; sbUrl?: string; sbKey?: string;
   accounts: "mine" | "client"; clientEmails: string[]; partnerEmail: string; at: string; shared: SharedSite[];
@@ -49,9 +51,9 @@ export async function seedClientStudio(remote: Repo, o: { name: string; badge?: 
   await remote.putFile("studio.json", jsonB64(idx), "Set up the client Studio", cur?.sha);
 }
 
-/** Puts (or updates) the Studio app for the client on Netlify with its studio.config.json. */
-export async function deployClientApp(nf: Netlify, p: Pick<PartnerRec, "siteId" | "studio" | "backend" | "api" | "sbUrl" | "sbKey" | "name">, siteName: string, source: string, partner: { name: string; url?: string }, step: (s: string) => void) {
-  return deployStudioApp(nf, { siteId: p.siteId, siteName, source, config: hostOf(p, partner) }, step);
+/** Puts (or updates) the Studio app for the client on Netlify or Cloudflare with its studio.config.json. */
+export async function deployClientApp(pages: Pages, p: Pick<PartnerRec, "siteId" | "studio" | "backend" | "api" | "sbUrl" | "sbKey" | "name">, siteName: string, source: string, partner: { name: string; url?: string }, step: (s: string) => void) {
+  return deployStudioApp(pages, { siteId: p.siteId, siteName, source, config: hostOf(p, partner) }, step);
 }
 
 const projectFiles = async (r: Repo, id: string) => (await r.list(`projects/${id}/`)).filter((p) => !p.includes("/exports/"));

@@ -10,7 +10,8 @@ import { zip } from "./zip";
 
 export const RELAY_VERSION = 4;
 const FN = "studio-relay";
-export type Relay = { siteId: string; url: string; key: string; v: number };
+/** The helper: a Netlify function (siteId is the Netlify site) or a Worker on the user's Cloudflare (kind "cloudflare"). */
+export type Relay = { kind?: "netlify" | "cloudflare"; siteId: string; url: string; key: string; v: number };
 export const relayVault = vault<Relay>("relay");
 
 /** The function's code (Netlify Functions, Node 18+: fetch is built in). */
@@ -81,7 +82,7 @@ export async function setupRelay(nf: Netlify, studioToken: string, existing?: Re
     { name: `netlify/functions/${FN}.js`, data: enc.encode(relaySource(key, [location.origin])) },
   ]);
   await nf.build(siteId, src, `Site Studio helper v${RELAY_VERSION}`, step);
-  const relay: Relay = { siteId, url: url.replace(/^http:/, "https:").replace(/\/?$/, "/"), key, v: RELAY_VERSION };
+  const relay: Relay = { kind: "netlify", siteId, url: url.replace(/^http:/, "https:").replace(/\/?$/, "/"), key, v: RELAY_VERSION };
   step?.("Checking the helper answers");
   let lastErr: any;
   for (let i = 0; i < 8; i++) {
@@ -97,11 +98,53 @@ export class RelayError extends Error { constructor(msg: string, public status =
 /** One request through the helper. Returns the upstream status and body text. */
 export async function relayCall(relay: Relay, q: { target: "ping" | "cloudflare" | "resend" | "stripe" | "supabase" | "worker"; method?: string; path?: string; url?: string; auth?: string; body?: string; body64?: string; contentType?: string }): Promise<{ status: number; body: string }> {
   let r: Response;
-  try { r = await fetch(relay.url + ".netlify/functions/" + FN, { method: "POST", headers: { "Content-Type": "application/json", "x-relay-key": relay.key }, body: JSON.stringify(q) }); }
-  catch { throw new RelayError("Couldn't reach the Studio's helper on Netlify. Check your connection, or set the helper up again."); }
+  try { r = await fetch(relayEndpoint(relay), { method: "POST", headers: { "Content-Type": "application/json", "x-relay-key": relay.key }, body: JSON.stringify(q) }); }
+  catch { throw new RelayError(`Couldn't reach the Studio's helper on ${relay.kind === "cloudflare" ? "Cloudflare" : "Netlify"}. Check your connection, or set the helper up again.`); }
   const j = await r.json().catch(() => null);
   if (!r.ok) throw new RelayError(j?.error || `The helper answered ${r.status}.`, r.status);
   return q.target === "ping" ? { status: 200, body: "" } : j;
+}
+
+export const relayEndpoint = (r: Relay) => (r.kind === "cloudflare" ? r.url : r.url + ".netlify/functions/" + FN);
+/** A helper this Studio build can use as it is (a Netlify helper is rebuilt when the Studio's code changes). */
+export const helperOk = (r: Relay | null | undefined): boolean => !!r && (r.kind === "cloudflare" || r.v === RELAY_VERSION);
+
+// ---------------------------------------------------------------- the helper on Cloudflare
+/** "Deploy to Cloudflare": copies the helper (deploy/cloudflare-helper in the Studio's repository) to the user's account. */
+export const CF_HELPER_DEPLOY = "https://deploy.workers.cloudflare.com/?url=https://github.com/iprakashlal/studio/tree/main/deploy/cloudflare-helper";
+export const cleanHelperUrl = (u: string) => {
+  const m = /^(?:https?:\/\/)?([a-z0-9-]+\.[a-z0-9-]+\.workers\.dev)\/?$/i.exec(String(u || "").trim());
+  return m ? `https://${m[1].toLowerCase()}/` : null;
+};
+export class HelperClaimed extends Error { constructor() { super("This helper is already connected to a Studio. Paste your Cloudflare API token too, and press Connect again: it proves the helper is on your account."); } }
+
+/** Connects this Studio (on this device) to the helper Worker the user deployed. With `cfToken`, joins a helper
+ *  another Studio or device connected first. */
+export async function connectCfHelper(address: string, studioToken: string, cfToken?: string): Promise<Relay> {
+  const url = cleanHelperUrl(address);
+  if (!url) throw new RelayError("Paste the Worker's address, like https://picaffectz-helper.yourname.workers.dev");
+  let info: any = null;
+  try { info = await (await fetch(url, { cache: "no-store", headers: { Accept: "application/json" } })).json(); } catch { /* below */ }
+  if (info?.service !== "site-studio-helper") throw new RelayError("That address doesn't answer as the Studio's helper. Check it, or wait a minute if Cloudflare is still deploying it.");
+  const prev = await relayVault.load(studioToken);
+  const key = prev?.kind === "cloudflare" && prev.url === url ? prev.key : rand(24);
+  const r = await fetch(url + "claim", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key, ...(cfToken ? { cf: cfToken } : {}) }) });
+  const j = await r.json().catch(() => null);
+  if (r.status === 409) throw new HelperClaimed();
+  if (!r.ok) throw new RelayError(j?.error || `The helper answered ${r.status}.`, r.status);
+  const relay: Relay = { kind: "cloudflare", siteId: url.replace(/^https:\/\/|\/$/g, ""), url, key, v: j?.v || 1 };
+  await relayCall(relay, { target: "ping" });
+  await relayVault.save(relay, studioToken);
+  return relay;
+}
+
+export class HelperMissing extends Error { constructor(what = "Cloudflare") { super(`Set up the Studio's helper first (it talks to ${what} for you): Deploy it to Cloudflare, or connect Netlify.`); } }
+/** The helper to use: the one on this device, else (re)built on Netlify when Netlify is connected. */
+export async function getHelper(studioToken: string, nf: Netlify | null | undefined, step?: (s: string) => void, what?: string): Promise<Relay> {
+  const r = await relayVault.load(studioToken);
+  if (helperOk(r)) return r!;
+  if (nf && (!r || r.kind !== "cloudflare")) return setupRelay(nf, studioToken, r, step);
+  throw new HelperMissing(what);
 }
 
 /** Bytes → base64 for request bodies sent through the helper. */

@@ -7,6 +7,10 @@ import type { Relay } from "./relay";
 import { Cloudflare, type CfAccount } from "./cloudflare";
 import { CFDB_SCHEMA, CFDB_VERSION } from "./cfdbSchema";
 import { STUDIO_BUILD } from "../build-info";
+import { vault } from "./vault";
+
+/** The Cloudflare account on this device (one token for hosting, the database and Workers) and the database's setup. */
+export const cfAccountVault = vault<{ token: string; account?: string; resendKey?: string; mailFrom?: string; setup?: CfDbSetup }>("cfdb");
 
 export const CFDB_WORKER = "picaffectz-db";
 export const CFDB_DATABASE = "picaffectz-db";

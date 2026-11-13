@@ -1,26 +1,40 @@
-// Settings → Hosting accounts: the Studio's helper on Netlify and the Cloudflare token, as kept on this device.
+// Settings → Hosting accounts: the Studio's helper (on Cloudflare or Netlify), the Cloudflare account used for
+// hosting pages, the database and Workers, and the shop's Cloudflare token, as kept on this device.
 import { useEffect, useState } from "react";
 import type { Session } from "../lib/auth";
-import { relayVault, type Relay } from "../lib/relay";
 import { cfVault } from "../lib/cloudflare";
+import { cfAccountVault } from "../lib/cfdb";
+import { netlifyToken } from "../lib/hosting";
+import { Netlify } from "../lib/netlify";
+import { HelperStatus } from "./HelperBox";
+import { useCfAccount } from "./CfPicker";
 
 export function SetupAccounts({ session }: { session: Session }) {
-  const [relay, setRelay] = useState<Relay | null | undefined>(undefined);
-  const [cf, setCf] = useState<boolean | undefined>(undefined);
-  useEffect(() => { relayVault.load(session.token).then(setRelay); cfVault.load(session.token).then((v) => setCf(!!v?.token)); }, [session.token]);
-  if (relay === undefined || cf === undefined) return null;
+  const [nf, setNf] = useState<Netlify | null | undefined>(undefined);
+  const [shop, setShop] = useState<boolean | undefined>(undefined);
+  useEffect(() => { netlifyToken.load(session.token).then((t) => setNf(t ? new Netlify(t.token) : null)); cfVault.load(session.token).then((v) => setShop(!!v?.token)); }, [session.token]);
+  if (nf === undefined || shop === undefined) return null;
   return (
-    <div className="flex flex-col gap-2 text-sm">
-      <div className="flex flex-wrap items-center gap-2">
-        <span className={`h-2 w-2 rounded-full ${relay ? "bg-emerald-400" : "bg-ink-500"}`} />
-        <span>Studio helper (for Cloudflare and Resend): {relay ? <a className="text-brand-300 underline" href={relay.url} target="_blank" rel="noopener noreferrer">{relay.url.replace(/^https:\/\//, "")}</a> : <span className="text-ink-400">not set up. A shop's <b>Shop backend</b> sets it up when needed.</span>}</span>
-        {relay && <button type="button" className="btn btn-sm ml-auto" onClick={() => { relayVault.clear(); setRelay(null); }} title="Forget it on this device. Delete the site in Netlify to remove it completely.">Forget</button>}
-      </div>
-      <div className="flex flex-wrap items-center gap-2">
-        <span className={`h-2 w-2 rounded-full ${cf ? "bg-emerald-400" : "bg-ink-500"}`} />
-        <span>Cloudflare: {cf ? "token saved on this device" : <span className="text-ink-400">not connected</span>}</span>
-        {cf && <button type="button" className="btn btn-sm ml-auto" onClick={() => { cfVault.clear(); setCf(false); }}>Disconnect</button>}
-      </div>
+    <div className="flex flex-col gap-3 text-sm">
+      <h3 className="mt-2 text-sm font-bold">Studio helper</h3>
+      <HelperStatus studioToken={session.token} nf={nf} />
+      <h3 className="mt-2 text-sm font-bold">Cloudflare (hosting, database and Workers)</h3>
+      <CloudflareAccount session={session} nf={nf} />
+      {shop && <div className="flex flex-wrap items-center gap-2">
+        <span className="h-2 w-2 rounded-full bg-emerald-400" /><span>Shop backend's Cloudflare token saved on this device</span>
+        <button type="button" className="btn btn-sm ml-auto" onClick={() => { cfVault.clear(); setShop(false); }}>Disconnect</button>
+      </div>}
     </div>
   );
+}
+
+function CloudflareAccount({ session, nf }: { session: Session; nf: Netlify | null }) {
+  const acc = useCfAccount(session.token, nf, true);
+  if (acc.account) return (
+    <div className="flex flex-wrap items-center gap-2">
+      <span className="h-2 w-2 rounded-full bg-emerald-400" /><span>Cloudflare: <b>{acc.account.name}</b></span>
+      <button type="button" className="btn btn-sm ml-auto" onClick={() => { cfAccountVault.clear(); location.reload(); }} title="Forget the token on this device (the database's setup is forgotten too; running a setup again finds it).">Disconnect</button>
+    </div>
+  );
+  return acc.ui;
 }

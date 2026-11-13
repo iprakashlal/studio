@@ -180,8 +180,8 @@ export function ProjectView({ studio, index, project, session, onIndex }: { stud
           {project.template === "business" && !studio.repo.demo && <button type="button" className="btn btn-sm" onClick={() => setModal("inbox")} title="Save the enquiry form's enquiries as JSON files in a private GitHub repository (no email)">{project.inbox ? "Enquiry inbox ✓" : "Enquiry inbox"}</button>}
           <button type="button" className="btn btn-sm" onClick={() => setModal("publish")}>Publish to GitHub</button>
           {project.host
-            ? <button type="button" className="btn btn-sm" onClick={() => setModal("host")}>Publish to Netlify</button>
-            : <button type="button" className="btn btn-sm" onClick={() => setModal("host")} title="Move the site to Netlify hosting, with content and photos in Supabase, and your own domain">Host outside GitHub</button>}
+            ? <button type="button" className="btn btn-sm" onClick={() => setModal("host")}>Publish to {project.host.kind === "cloudflare" ? "Cloudflare" : "Netlify"}</button>
+            : <button type="button" className="btn btn-sm" onClick={() => setModal("host")} title="Move the site to Cloudflare or Netlify hosting, with content and photos in your own database, and your own domain">Host outside GitHub</button>}
           <button type="button" className="btn btn-pri btn-sm" disabled={!dirty || saving} onClick={() => save()}>Save</button>
         </div>
       </header>
@@ -338,7 +338,7 @@ function PublishDialog({ studio, project, tpl, draft, dirty, save, onIndex, getB
         : <p className="text-sm text-ink-300">Publishes the whole site to a GitHub repository in one go. If the repository doesn't exist yet, the Studio creates it, and it switches on GitHub Pages for you.</p>}
       {!demo && <section className="flex flex-col gap-3 rounded-xl border border-ink-700 bg-ink-950 p-4" aria-label="GitHub account"><GitHubPublishAccount session={session} onLogin={setLogin} />
         {!login && <p className="text-[13px] text-ink-400">Without a publishing token the Studio uses its own login, which can only publish to repositories that already exist and that its token includes.</p>}</section>}
-      {project.host && !demo && <p className="rounded-lg border border-sky-400/30 bg-sky-400/5 px-3 py-2.5 text-[13px] text-sky-100">This site is live on Netlify. Publishing here makes or updates a separate GitHub copy (for example a backup, or a GitHub Pages version). The Netlify site, its content in Supabase and the Studio's live-site sync aren't changed.</p>}
+      {project.host && !demo && <p className="rounded-lg border border-sky-400/30 bg-sky-400/5 px-3 py-2.5 text-[13px] text-sky-100">This site is live on {project.host.kind === "cloudflare" ? "Cloudflare" : "Netlify"}. Publishing here makes or updates a separate GitHub copy (for example a backup, or a GitHub Pages version). The hosted site, its content in the database and the Studio's live-site sync aren't changed.</p>}
       <Checks list={checks} />
       <div className="grid gap-3 sm:grid-cols-3">
         <Field label="Owner" htmlFor="pb-o"><input id="pb-o" className="input" value={t.owner} onChange={(e) => setT({ ...t, owner: e.target.value })} /></Field>
@@ -379,7 +379,7 @@ function HistoryDialog({ studio, project, tpl, getBlob, onLoad, onClose }: Omit<
             <li key={e.version + e.at} className="flex flex-wrap items-center gap-3 rounded-xl border border-ink-700 bg-ink-950 px-4 py-3">
               <span className="font-display text-lg font-extrabold tabular-nums">v{e.version}</span>
               <div className="min-w-0 flex-1">
-                <div className="text-sm font-semibold">{e.kind === "github" ? `Published to ${e.target}` : e.kind === "netlify" ? `Published to Netlify (${e.target})` : "ZIP download"}{e.note ? ` · ${e.note}` : ""}</div>
+                <div className="text-sm font-semibold">{e.kind === "github" ? `Published to ${e.target}` : e.kind === "netlify" || e.kind === "cloudflare" ? `Published to ${e.kind === "cloudflare" ? "Cloudflare" : "Netlify"} (${e.target})` : "ZIP download"}{e.note ? ` · ${e.note}` : ""}</div>
                 <div className="text-xs text-ink-400" title={fmtDate(e.at)}>{fmtDate(e.at)} · {timeAgo(e.at)}</div>
               </div>
               <button className="btn btn-sm" disabled={!!busy} onClick={() => act(e, "zip")}>{busy === e.version ? "Working…" : "Download"}</button>
@@ -446,7 +446,7 @@ function DetailsDialog({ studio, index, project, session, onIndex, onImported, o
         <div className="font-bold">Published site</div>
         {project.publish || project.host ? (
           <>
-            <p className="mt-1 text-ink-300">{project.host ? <>Netlify: <a className="underline" href={siteAddress(project.host)} target="_blank" rel="noopener">{siteAddress(project.host)}</a> · content in Supabase</> : <>{project.publish!.owner}/{project.publish!.repo} on {project.publish!.branch}</>}</p>
+            <p className="mt-1 text-ink-300">{project.host ? <>{project.host.kind === "cloudflare" ? "Cloudflare" : "Netlify"}: <a className="underline" href={siteAddress(project.host)} target="_blank" rel="noopener">{siteAddress(project.host)}</a> · content in {project.host.cf ? "Cloudflare" : "Supabase"}</> : <>{project.publish!.owner}/{project.publish!.repo} on {project.publish!.branch}</>}</p>
             <p className="hint mt-2">Kept in step automatically: edits published from the site's own CMS come into this project when you open the Studio or this project{project.syncedAt ? ` (last in step ${timeAgo(project.syncedAt)})` : ""}. If both sides changed, you choose which to keep.</p>
             <button type="button" className="btn btn-sm mt-3" disabled={!!busy || studio.repo.demo} onClick={importSite}>{busy === "import" ? "Importing…" : "Pull from the live site now"}</button>
           </>

@@ -1,14 +1,16 @@
-// Settings → Migration: move the whole Studio to Netlify + Supabase in a few clicks, from the Studio itself.
+// Settings → Migration: move the whole Studio to Cloudflare or Netlify, with its files in Cloudflare or Supabase,
+// in a few clicks, from the Studio itself.
 // On a moved Studio, the same tab shows where it runs and updates it to the latest Studio build.
 import { backendOf, isHosted } from "../lib/backend";
 import { cfAddMembers } from "../lib/cfdb";
-import { useCloudflarePicker } from "./CfPicker";
+import { useCfAccount, useCloudflarePicker, type CfAccountHook } from "./CfPicker";
+import { cloudflarePages, netlifyPages, PAGES_LABEL, type Pages, type PagesKind } from "../lib/pages";
 import { SbTokenHelp } from "./SbTokenHelp";
 import { useEffect, useState } from "react";
 import type { Session } from "../lib/auth";
 import { netlifyToken } from "../lib/hosting";
 import { Netlify } from "../lib/netlify";
-import { RELAY_VERSION, relayVault, setupRelay, type Relay } from "../lib/relay";
+import { useHelper } from "./HelperBox";
 import { SB_TOKENS_PAGE, SupaMgmt, refOf, sbMgmtVault, type SbOrg, type SbProject } from "../lib/supamgmt";
 import { loadHostConfig, type HostedStudio, type StudioHostCfg } from "../lib/studiohost";
 import { appBase, appFiles, deployStudioApp, prepareSupabase, transferFiles } from "../lib/migrate";
@@ -29,13 +31,8 @@ export function useSupabasePicker(studioToken: string, nf: Netlify | null, persi
   const [pick, setPick] = useState(""), [org, setOrg] = useState(""), [region, setRegion] = useState<"apac" | "emea" | "americas">("apac"), [name, setName] = useState("studio");
   const [busy, setBusy] = useState(""), [err, setErr] = useState("");
   useEffect(() => { if (!persist) { setTok(""); setSaved(false); setProjects(null); return; } sbMgmtVault.load(studioToken).then((v) => { if (v?.token) { setTok(v.token); setSaved(true); } }); }, [studioToken, persist]);
-  const helper = async (): Promise<Relay> => {
-    const r = await relayVault.load(studioToken);
-    if (r && r.v === RELAY_VERSION) return r;
-    if (!nf) throw new Error("Connect Netlify first: the Studio's helper on your Netlify talks to Supabase for you.");
-    return setupRelay(nf, studioToken, r, setBusy);
-  };
-  const mgmt = async () => new SupaMgmt(await helper(), tok.trim());
+  const h = useHelper(studioToken, nf, "Supabase");
+  const mgmt = async () => new SupaMgmt(await h.get(setBusy), tok.trim());
   const connect = async () => {
     setErr(""); setBusy("Connecting");
     try {
@@ -47,7 +44,7 @@ export function useSupabasePicker(studioToken: string, nf: Netlify | null, persi
     } catch (e: any) { setErr(e?.message || "Couldn't reach Supabase."); }
     setBusy("");
   };
-  useEffect(() => { if (saved && tok && nf && !projects && !busy) connect(); }, [saved, nf]);
+  useEffect(() => { if (saved && tok && h.ready && !projects && !busy) connect(); }, [saved, h.ready]);
   /** The chosen project's ref, creating the project first when "new" is chosen. */
   const ensure = async (step: (s: string) => void): Promise<{ m: SupaMgmt; ref: string }> => {
     const m = await mgmt();
@@ -60,9 +57,10 @@ export function useSupabasePicker(studioToken: string, nf: Netlify | null, persi
     <div className="flex flex-col gap-2.5 text-[13px]">
       <p><a className="btn btn-sm btn-pri" href={SB_TOKENS_PAGE} target="_blank" rel="noopener noreferrer">Open Supabase → Access tokens ↗</a> <span className="text-ink-400">Press <b>Generate new token</b>, copy it and paste it here. {persist ? "It's kept encrypted on this device only." : "Used now only, not kept."}</span></p>
           <SbTokenHelp />
+      {h.ui}
       <div className="flex gap-2">
         <input aria-label="Supabase access token" className="input min-w-0 flex-1 font-mono text-xs" type="password" autoComplete="off" placeholder="sbp_…" value={tok} onChange={(e) => { setTok(e.target.value); setSaved(false); setProjects(null); }} />
-        <button type="button" className="btn btn-sm" disabled={!tok.trim() || !!busy || !nf} onClick={connect}>{busy && !projects ? busy + "…" : "Connect"}</button>
+        <button type="button" className="btn btn-sm" disabled={!tok.trim() || !!busy || !h.ready} onClick={connect}>{busy && !projects ? busy + "…" : "Connect"}</button>
       </div>
       {projects && (
         <div className="grid gap-2 sm:grid-cols-2">
@@ -99,7 +97,11 @@ function MoveStudio({ studio, index, session, nf, setNf, onIndex }: { studio: St
   const sb = useSupabasePicker(session.token, nf);
   const prev = index.hosted;
   const [kind, setKind] = useState<"supabase" | "cloudflare">(prev?.backend || "cloudflare");
-  const cf = useCloudflarePicker(session.token, nf, true, brand.name);
+  const [pagesKind, setPagesKind] = useState<PagesKind>(prev ? prev.pages || "netlify" : "cloudflare");
+  const cfAcc = useCfAccount(session.token, nf, true);
+  const cf = useCloudflarePicker(session.token, nf, true, brand.name, cfAcc);
+  const pagesOk = pagesKind === "netlify" ? !!nf : cfAcc.ready;
+  const getPages = () => pagesFrom(pagesKind, nf, cfAcc, prev?.pages === pagesKind ? prev?.account : undefined, setStep);
   const [id, setId] = useState(prev?.studio || slug(brand.name) || "studio");
   const [siteName, setSiteName] = useState(prev?.siteName || (/studio$/.test(slug(brand.name)) ? slug(brand.name) : `${slug(brand.name) || "my"}-studio`));
   const [email, setEmail] = useState(() => prev?.owner || (() => { try { return localStorage.getItem("site-studio:host-email") || ""; } catch { return ""; } })());
@@ -110,7 +112,7 @@ function MoveStudio({ studio, index, session, nf, setNf, onIndex }: { studio: St
   const [target, setTarget] = useState<StudioHostCfg | null>(null), [code, setCode] = useState("");
   const [result, setResult] = useState<HostedStudio | null>(null);
   useEffect(() => { sb.setName(`${id}-studio`); }, [id]);
-  const ok = !!nf && (kind === "cloudflare" ? cf.ready : sb.ready) && /^[a-z0-9][a-z0-9-]{1,29}$/.test(id) && /^[a-z0-9][a-z0-9-]{1,40}$/.test(siteName) && /@/.test(email);
+  const ok = pagesOk && (kind === "cloudflare" ? cf.ready : sb.ready) && /^[a-z0-9][a-z0-9-]{1,29}$/.test(id) && /^[a-z0-9][a-z0-9-]{1,40}$/.test(siteName) && /@/.test(email);
 
   // 1: Supabase ready and a sign-in code on its way.
   const start = async () => {
@@ -134,20 +136,20 @@ function MoveStudio({ studio, index, session, nf, setNf, onIndex }: { studio: St
   };
   // 2: signed in to the new Studio: move the files, put the app on Netlify.
   const finish = async () => {
-    if (!target || !nf) return;
+    if (!target || !pagesOk) return;
     setErr(""); setPhase("moving");
     try {
       const be = backendOf(target);
       setStep("Checking the code"); await be.verifyCode(email.trim(), code);
       const dest = be.repo(id);
       if (withData) await transferFiles(studio.repo, dest, (d, t, p) => setStep(`Moving your Studio's files (${d} of ${t})${p ? " · " + p : ""}`));
-      const app = await deployStudioApp(nf, { siteId: prev?.siteId, siteName, source: appBase(), config: target }, setStep);
-      const rec: HostedStudio = { url: app.url, siteId: app.siteId, siteName, backend: target.kind, ...(target.kind === "cloudflare" ? { api: target.api } : { sbUrl: target.url }), studio: id, owner: email.trim().toLowerCase(), build: app.build, at: new Date().toISOString() };
+      const app = await deployStudioApp(await getPages(), { siteId: prev && (prev.pages || "netlify") === pagesKind ? prev.siteId : undefined, siteName, source: appBase(), config: target }, setStep);
+      const rec: HostedStudio = { url: app.url, siteId: app.siteId, siteName, pages: app.kind, ...(app.account ? { account: app.account } : {}), backend: target.kind, ...(target.kind === "cloudflare" ? { api: target.api } : { sbUrl: target.url }), studio: id, owner: email.trim().toLowerCase(), build: app.build, at: new Date().toISOString() };
       setStep("Recording where the Studio moved");
       const cur = await dest.getJSON<any>("studio.json").catch(() => null);
       await dest.putFile("studio.json", jsonB64({ ...(cur?.data || { version: 1, categories: [], projects: [] }), hosted: rec }), "Moved", cur?.sha);
-      onIndex(await studio.updateIndex((i) => { i.hosted = rec; }, `Moved the Studio to Netlify + ${be.label}`));
-      setResult(rec); setPhase("done"); toast("Your Studio is on Netlify");
+      onIndex(await studio.updateIndex((i) => { i.hosted = rec; }, `Moved the Studio to ${PAGES_LABEL[app.kind]} + ${be.label}`));
+      setResult(rec); setPhase("done"); toast(`Your Studio is on ${PAGES_LABEL[app.kind]}`);
     } catch (e: any) { setErr(e?.message || "Something went wrong."); setPhase("code"); }
     setStep("");
   };
@@ -156,13 +158,17 @@ function MoveStudio({ studio, index, session, nf, setNf, onIndex }: { studio: St
     <div className="flex flex-col gap-4">
       <section className="card flex flex-col gap-2 p-5">
         <h2 className="text-lg font-extrabold">Move the Studio outside GitHub</h2>
-        <p className="text-sm text-ink-300">Puts this whole Studio on <b className="text-ink-100">your Netlify</b>, with its projects, content and photos in <b className="text-ink-100">your Cloudflare</b> (a free D1 database) or <b className="text-ink-100">your Supabase</b>. You sign in there with a 6-digit code sent to your email, no GitHub token needed. This Studio keeps working until you stop using it.</p>
+        <p className="text-sm text-ink-300">Puts this whole Studio on <b className="text-ink-100">your Cloudflare</b> (free, no traffic limit) or <b className="text-ink-100">your Netlify</b>, with its projects, content and photos in <b className="text-ink-100">your Cloudflare</b> (a free D1 database) or <b className="text-ink-100">your Supabase</b>. You sign in there with a 6-digit code sent to your email, no GitHub token needed. This Studio keeps working until you stop using it.</p>
         <p className="text-[13px] text-ink-400">Setting up Studios for clients (B2B)? Each client gets their own Studio, on your accounts or theirs, with the sites you share kept in step: <a className="text-brand-300 underline" href="#/settings/partners">Studio Partners →</a></p>
         {prev && phase !== "done" && <p className="rounded-lg border border-emerald-400/30 bg-emerald-400/5 px-3 py-2.5 text-[13px] text-emerald-100">Moved before to <a className="underline" href={prev.url} target="_blank" rel="noopener noreferrer">{prev.url}</a>. Running it again updates that Studio to this build{withData ? " and copies your files again" : ""}.</p>}
       </section>
-      <section className="card flex flex-col gap-3 p-5" aria-label="Netlify">
-        <h3 className="text-[15px] font-extrabold">1 · Netlify (where the Studio runs)</h3>
-        {nf ? <p className="text-sm text-emerald-300">Connected.</p> : <NetlifyAccount session={session} onToken={(t) => setNf(t ? new Netlify(t) : null)} />}
+      <section className="card flex flex-col gap-3 p-5" aria-label="Hosting">
+        <h3 className="text-[15px] font-extrabold">1 · Where the Studio runs</h3>
+        <div className="flex flex-wrap rounded-lg border border-ink-600 self-start" role="radiogroup" aria-label="Studio host">
+          {([["cloudflare", "Cloudflare (free, unlimited traffic)"], ["netlify", "Netlify"]] as const).map(([k, l]) => <button key={k} type="button" role="radio" aria-checked={pagesKind === k} disabled={phase !== "setup"} onClick={() => setPagesKind(k)} className={`btn btn-sm border-0 ${pagesKind === k ? "bg-ink-700" : "bg-transparent"}`}>{l}</button>)}
+        </div>
+        {pagesKind === "netlify" ? (nf ? <p className="text-sm text-emerald-300">Netlify connected.</p> : <NetlifyAccount session={session} onToken={(t) => setNf(t ? new Netlify(t) : null)} />)
+          : cfAcc.ui}
       </section>
       <section className="card flex flex-col gap-3 p-5" aria-label="Database">
         <h3 className="text-[15px] font-extrabold">2 · Where its files live</h3>
@@ -170,13 +176,13 @@ function MoveStudio({ studio, index, session, nf, setNf, onIndex }: { studio: St
           {([["cloudflare", "Cloudflare (free, then ₹470/month)"], ["supabase", "Supabase (free, then ₹2,360/month)"]] as const).map(([k, l]) => <button key={k} type="button" role="radio" aria-checked={kind === k} disabled={!!prev && phase !== "setup"} onClick={() => setKind(k)} className={`btn btn-sm border-0 ${kind === k ? "bg-ink-700" : "bg-transparent"}`}>{l}</button>)}
         </div>
         <p className="hint">{kind === "cloudflare" ? "A D1 database and a Worker on your Cloudflare. Never pauses; sign-in codes are emailed through Resend." : "A Supabase project. Free projects pause after a week without use."}</p>
-        <section aria-label={kind === "cloudflare" ? "Cloudflare" : "Supabase"}>{kind === "cloudflare" ? cf.ui : sb.ui}</section>
+        <section aria-label={kind === "cloudflare" ? "Cloudflare" : "Supabase"}>{kind === "cloudflare" ? <>{pagesKind !== "cloudflare" && cfAcc.ui}{cf.ui}</> : sb.ui}</section>
       </section>
       <section className="card flex flex-col gap-3 p-5" aria-label="Your Studio">
         <h3 className="text-[15px] font-extrabold">3 · Your Studio</h3>
         <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Studio ID" htmlFor="mg-id" hint="Names this Studio's files in Supabase."><input id="mg-id" className="input font-mono" value={id} disabled={!!prev} onChange={(e) => setId(slug(e.target.value))} /></Field>
-          <Field label="Address" htmlFor="mg-site" hint={`${siteName}.netlify.app (add your own domain in Netlify later)`}><input id="mg-site" className="input font-mono" value={siteName} disabled={!!prev} onChange={(e) => setSiteName(slug(e.target.value))} /></Field>
+          <Field label="Studio ID" htmlFor="mg-id" hint="Names this Studio's files in its database."><input id="mg-id" className="input font-mono" value={id} disabled={!!prev} onChange={(e) => setId(slug(e.target.value))} /></Field>
+          <Field label="Address" htmlFor="mg-site" hint={pagesKind === "netlify" ? `${siteName}.netlify.app (add your own domain in Netlify later)` : `${siteName}.<you>.workers.dev (add your own domain in Cloudflare later)`}><input id="mg-site" className="input font-mono" value={siteName} disabled={!!prev} onChange={(e) => setSiteName(slug(e.target.value))} /></Field>
           <Field label="Your email" htmlFor="mg-email" hint="You sign in with it; it becomes the Studio's owner."><input id="mg-email" className="input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} /></Field>
         </div>
         <label className="flex items-start gap-2 text-sm"><input type="checkbox" className="mt-1 accent-brand-400" checked={withData} onChange={(e) => setWithData(e.target.checked)} />
@@ -198,8 +204,8 @@ function MoveStudio({ studio, index, session, nf, setNf, onIndex }: { studio: St
       {err && <p role="alert" className="text-sm text-red-300">{err}</p>}
       {phase === "done" && result && (
         <section className="card flex flex-col gap-2 border-emerald-400/40 p-5" aria-label="Moved">
-          <h3 className="text-[15px] font-extrabold text-emerald-200">✓ Your Studio is on Netlify + {result.backend === "cloudflare" ? "Cloudflare" : "Supabase"}</h3>
-          <p className="text-sm text-ink-300">Open it, sign in with <b className="text-ink-100">{result.owner}</b> and the code you'll get by email. Add your own domain in Netlify → Domain management whenever you like.</p>
+          <h3 className="text-[15px] font-extrabold text-emerald-200">✓ Your Studio is on {PAGES_LABEL[result.pages || "netlify"]} + {result.backend === "cloudflare" ? "Cloudflare" : "Supabase"}</h3>
+          <p className="text-sm text-ink-300">Open it, sign in with <b className="text-ink-100">{result.owner}</b> and the code you'll get by email. Add your own domain whenever you like ({result.pages === "cloudflare" ? "Cloudflare → the Worker → Settings → Domains & Routes" : "Netlify → Domain management"}).</p>
           <a className="btn btn-pri self-start" href={result.url} target="_blank" rel="noopener noreferrer">Open your new Studio ↗</a>
           <p className="hint">Your hosting tokens (GitHub publishing, Netlify, Cloudflare…) stay on each device, so add them once in the new Studio's Settings → Hosting accounts.</p>
         </section>
@@ -210,16 +216,19 @@ function MoveStudio({ studio, index, session, nf, setNf, onIndex }: { studio: St
 
 function HostedHere({ session, nf, setNf, index }: { session: Session; nf: Netlify | null; setNf: (n: Netlify | null) => void; index: StudioIndex }) {
   const toast = useToast();
+  const where: PagesKind = index.hosted?.pages || "netlify";
+  const cfAcc = useCfAccount(session.token, nf, true);
+  const pagesOk = where === "netlify" ? !!nf : cfAcc.ready;
   const [cfg, setCfg] = useState<StudioHostCfg | null>(null), [latest, setLatest] = useState<string | null>(null), [mine, setMine] = useState<string | null>(null);
   const [step, setStep] = useState(""), [err, setErr] = useState("");
   useEffect(() => { loadHostConfig().then((c) => { setCfg(c); if (c?.source) appFiles(c.source).then((m) => setLatest(m.build)).catch(() => setLatest(null)); }); appFiles(appBase()).then((m) => setMine(m.build)).catch(() => setMine(STUDIO_BUILD.id)); }, []);
   const update = async () => {
-    if (!nf || !cfg?.source) return;
+    if (!pagesOk || !cfg?.source) return;
     setErr("");
     try {
       const siteId = index.hosted?.siteId;
-      if (!siteId) throw new Error("Couldn't find this Studio's site on the connected Netlify account.");
-      await deployStudioApp(nf, { siteId, siteName: "", source: cfg.source, config: cfg }, setStep);
+      if (!siteId) throw new Error(`Couldn't find this Studio's site on the connected ${PAGES_LABEL[where]} account.`);
+      await deployStudioApp(await pagesFrom(where, nf, cfAcc, index.hosted?.account, setStep), { siteId, siteName: "", source: cfg.source, config: cfg }, setStep);
       toast("Updated. Reloading…"); setTimeout(() => location.reload(), 1200);
     } catch (e: any) { setErr(e?.message || "Couldn't update."); }
     setStep("");
@@ -227,16 +236,23 @@ function HostedHere({ session, nf, setNf, index }: { session: Session; nf: Netli
   return (
     <div className="flex flex-col gap-4">
       <section className="card flex flex-col gap-2 p-5">
-        <h2 className="text-lg font-extrabold">This Studio runs on Netlify + {cfg?.kind === "cloudflare" ? "Cloudflare" : "Supabase"}</h2>
+        <h2 className="text-lg font-extrabold">This Studio runs on {PAGES_LABEL[where]} + {cfg?.kind === "cloudflare" ? "Cloudflare" : "Supabase"}</h2>
         <p className="text-sm text-ink-300">Studio <b className="text-ink-100">{cfg?.studio}</b> · files in <code className="font-mono text-xs">{cfg ? (cfg.kind === "cloudflare" ? cfg.api : cfg.url) : ""}</code> · signed in as <b className="text-ink-100">{session.username}</b>.</p>
       </section>
       <section className="card flex flex-col gap-3 p-5" aria-label="Update">
         <h3 className="text-[15px] font-extrabold">Studio updates</h3>
         <p className="text-sm text-ink-300">This Studio: build <code className="font-mono text-xs">{mine || "…"}</code>. Latest: <code className="font-mono text-xs">{latest || "…"}</code>{latest && mine && latest === mine ? " · up to date" : ""}.</p>
-        {!nf && <NetlifyAccount session={session} onToken={(t) => setNf(t ? new Netlify(t) : null)} />}
-        <button type="button" className="btn btn-pri self-start" disabled={!nf || !cfg?.source || !!step || (!!latest && latest === mine)} onClick={update}>{step ? step + "…" : "Update to the latest Studio"}</button>
+        {where === "netlify" ? !nf && <NetlifyAccount session={session} onToken={(t) => setNf(t ? new Netlify(t) : null)} /> : !cfAcc.ready && cfAcc.ui}
+        <button type="button" className="btn btn-pri self-start" disabled={!pagesOk || !cfg?.source || !!step || (!!latest && latest === mine)} onClick={update}>{step ? step + "…" : "Update to the latest Studio"}</button>
         {err && <p role="alert" className="text-sm text-red-300">{err}</p>}
       </section>
     </div>
   );
+}
+
+/** The chosen host, ready to deploy to (Cloudflare through the Studio's helper). */
+export async function pagesFrom(kind: PagesKind, nf: Netlify | null, acc: CfAccountHook, account?: string, step?: (s: string) => void): Promise<Pages> {
+  if (kind === "netlify") { if (!nf) throw new Error("Connect Netlify first."); return netlifyPages(nf); }
+  const c = await acc.client(step);
+  return cloudflarePages(c.cf, account || c.account.id, c.account.name);
 }

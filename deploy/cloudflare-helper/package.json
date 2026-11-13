@@ -1,0 +1,12 @@
+{
+  "name": "picaffectz-helper",
+  "private": true,
+  "description": "Picaffectz Studio helper: passes the Studio's setup requests to Cloudflare, Resend, Stripe and Supabase, which don't accept calls from web pages. Stores nothing but the hashed keys of the Studios connected to it.",
+  "scripts": { "deploy": "wrangler deploy" },
+  "devDependencies": { "wrangler": "^4.45.0" },
+  "cloudflare": {
+    "bindings": {
+      "HELPER": { "description": "Holds the hashed keys of the Studios connected to this helper. Created for you." }
+    }
+  }
+}

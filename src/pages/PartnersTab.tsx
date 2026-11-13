@@ -8,7 +8,8 @@ import { Netlify } from "../lib/netlify";
 import { backendOf } from "../lib/backend";
 import { cfAddMembers } from "../lib/cfdb";
 import type { StudioHostCfg } from "../lib/studiohost";
-import { useCloudflarePicker } from "./CfPicker";
+import { useCfAccount, useCloudflarePicker } from "./CfPicker";
+import { loadPages, PAGES_LABEL, type PagesKind } from "../lib/pages";
 const hostFields = (t: StudioHostCfg) => (t.kind === "cloudflare" ? { backend: "cloudflare" as const, api: t.api } : { backend: "supabase" as const, sbUrl: t.url, sbKey: t.key });
 import { useBrand } from "../lib/brand";
 import { appBase, appFiles } from "../lib/migrate";
@@ -18,7 +19,7 @@ import type { Studio, StudioIndex } from "../lib/studio";
 import { timeAgo, uid } from "../lib/util";
 import { Field, Spinner, useConfirm, useToast } from "../ui/kit";
 import { NetlifyAccount } from "./HostDialog";
-import { useSupabasePicker } from "./MigrationTab";
+import { pagesFrom, useSupabasePicker } from "./MigrationTab";
 
 const slug = (s: string) => String(s || "").toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 30);
 const emails = (s: string) => [...new Set(s.split(/[\s,;]+/).map((x) => x.trim().toLowerCase()).filter((x) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(x)))];
@@ -44,7 +45,7 @@ export function PartnersTab({ studio, index, session, onIndex }: { studio: Studi
       </section>
       {adding && <AddPartner nf={nf} setNf={setNf} session={session} index={index} partner={partner} myEmail={myEmail} onCancel={() => setAdding(false)}
         onDone={async (rec) => { await save((l) => [...l.filter((x) => x.id !== rec.id), rec], `Add client Studio ${rec.name}`); setAdding(false); }} />}
-      {(index.partners || []).map((p) => <PartnerCard key={p.id} p={p} studio={studio} index={index} nf={nf} partner={partner}
+      {(index.partners || []).map((p) => <PartnerCard key={p.id} p={p} studio={studio} index={index} nf={nf} studioToken={session.token} partner={partner}
         onChange={(fn, msg) => save((l) => l.map((x) => (x.id === p.id ? fn(x) : x)), msg)} onRemove={() => save((l) => l.filter((x) => x.id !== p.id), `Remove client Studio ${p.name}`)} />)}
     </div>
   );
@@ -57,21 +58,25 @@ function AddPartner({ nf, setNf, session, index, partner, myEmail, onDone, onCan
   const [clientNfTok, setClientNfTok] = useState("");
   const clientNf = accounts === "client" && clientNfTok.trim().length > 20 ? new Netlify(clientNfTok.trim()) : null;
   const [kind, setKind] = useState<"cloudflare" | "supabase">("cloudflare");
+  const [pagesKind, setPagesKind] = useState<PagesKind>("cloudflare");
   const sb = useSupabasePicker(session.token, nf, accounts === "mine");
-  const cf = useCloudflarePicker(session.token, nf, accounts === "mine", partner.name);
+  // One Cloudflare account (yours, or the client's used once) for both the app and the database.
+  const cfAcc = useCfAccount(session.token, nf, accounts === "mine");
+  const cf = useCloudflarePicker(session.token, nf, accounts === "mine", partner.name, cfAcc);
   const [phase, setPhase] = useState<"form" | "code" | "busy" | "done">("form"), [step, setStep] = useState(""), [err, setErr] = useState(""), [code, setCode] = useState("");
   const [target, setTarget] = useState<StudioHostCfg | null>(null), [made, setMade] = useState<PartnerRec | null>(null);
   useEffect(() => { const s = slug(name); setId(s ? s + "-studio" : ""); setSite(s ? s + "-studio" : ""); sb.setName(s ? s + "-studio" : "studio"); }, [name]);
   const list = emails(clients);
   const deployNf = accounts === "mine" ? nf : clientNf;
-  const ok = !!nf && !!deployNf && (kind === "cloudflare" ? cf.ready : sb.ready) && name.trim().length > 1 && list.length > 0 && /^[a-z0-9][a-z0-9-]{1,29}$/.test(id) && /^[a-z0-9][a-z0-9-]{1,40}$/.test(site) && /@/.test(mine);
+  const pagesOk = pagesKind === "netlify" ? !!deployNf : cfAcc.ready;
+  const ok = pagesOk && (kind === "cloudflare" ? cf.ready : sb.ready) && name.trim().length > 1 && list.length > 0 && /^[a-z0-9][a-z0-9-]{1,29}$/.test(id) && /^[a-z0-9][a-z0-9-]{1,40}$/.test(site) && /@/.test(mine);
 
   const finish = async (t: StudioHostCfg) => {
     setPhase("busy");
     const rec: PartnerRec = { id: uid(), name: name.trim(), url: "", studio: id, backend: t.kind, ...(t.kind === "cloudflare" ? { api: t.api } : { sbUrl: t.url, sbKey: t.key }), accounts, clientEmails: list, partnerEmail: mine.trim().toLowerCase(), at: new Date().toISOString(), shared: [] };
     setStep("Setting up the client's Studio"); await seedClientStudio(remoteRepo(rec), { name: rec.name, badge: index.badge, menus: index.menus });
-    const app = await deployClientApp(deployNf!, rec, site, await source(), partner, setStep);
-    const done = { ...rec, url: app.url, siteId: accounts === "mine" ? app.siteId : undefined };
+    const app = await deployClientApp(await pagesFrom(pagesKind, deployNf, cfAcc, undefined, setStep), rec, site, await source(), partner, setStep);
+    const done: PartnerRec = { ...rec, url: app.url, pages: app.kind, ...(accounts === "mine" ? { siteId: app.siteId, ...(app.account ? { pagesAccount: app.account } : {}) } : {}) };
     await onDone(done); setMade(done); setPhase("done"); toast(`${rec.name}'s Studio is ready`);
   };
   const start = async () => {
@@ -117,25 +122,30 @@ function AddPartner({ nf, setNf, session, index, partner, myEmail, onDone, onCan
         <Field label="Client or company name" htmlFor="pt-name"><input id="pt-name" className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Acme Advisory" /></Field>
         <Field label="Client emails (they sign in with these)" htmlFor="pt-emails" hint="Comma-separated. Each becomes an owner of their Studio."><input id="pt-emails" className="input" value={clients} onChange={(e) => setClients(e.target.value)} placeholder="owner@acme.com" /></Field>
         <Field label="Studio ID" htmlFor="pt-id"><input id="pt-id" className="input font-mono" value={id} onChange={(e) => setId(slug(e.target.value))} /></Field>
-        <Field label="Address" htmlFor="pt-site" hint={site ? `${site}.netlify.app` : ""}><input id="pt-site" className="input font-mono" value={site} onChange={(e) => setSite(slug(e.target.value))} /></Field>
+        <Field label="Address" htmlFor="pt-site" hint={site ? (pagesKind === "netlify" ? `${site}.netlify.app` : `${site}.<account>.workers.dev`) : ""}><input id="pt-site" className="input font-mono" value={site} onChange={(e) => setSite(slug(e.target.value))} /></Field>
         <Field label="Your email (partner access)" htmlFor="pt-me" hint="You keep access to their Studio with it, to share and sync sites."><input id="pt-me" className="input" type="email" value={mine} onChange={(e) => setMine(e.target.value)} /></Field>
       </div>
       <div className="flex flex-col gap-1.5"><span className="label">Runs on</span>
         <div className="flex flex-wrap rounded-lg border border-ink-600 self-start" role="radiogroup" aria-label="Runs on">
-          {([["mine", "My Netlify + Supabase"], ["client", "The client's Netlify + Supabase"]] as const).map(([k, l]) => <button key={k} type="button" role="radio" aria-checked={accounts === k} onClick={() => setAccounts(k)} className={`btn btn-sm border-0 ${accounts === k ? "bg-ink-700" : "bg-transparent"}`}>{l}</button>)}
+          {([["mine", "My accounts"], ["client", "The client's accounts"]] as const).map(([k, l]) => <button key={k} type="button" role="radio" aria-checked={accounts === k} onClick={() => setAccounts(k)} className={`btn btn-sm border-0 ${accounts === k ? "bg-ink-700" : "bg-transparent"}`}>{l}</button>)}
         </div>
-        <p className="hint">{accounts === "mine" ? "You host and pay for it; one Supabase project can hold all your client Studios." : "The client owns the accounts: paste their Netlify token and Supabase access token here (used once, not kept). They update their Studio themselves from its Settings → Migration."}</p>
+        <p className="hint">{accounts === "mine" ? "You host and pay for it; one Cloudflare database (or Supabase project) can hold all your client Studios." : "The client owns the accounts: paste their Cloudflare (or Netlify) token and database token here (used once, not kept). They update their Studio themselves from its Settings → Migration."}</p>
       </div>
-      <section aria-label="Netlify" className="flex flex-col gap-2">
-        <b className="text-sm">Netlify</b>
-        {nf ? <p className="text-[13px] text-emerald-300">Your Netlify is connected{accounts === "client" ? " (it runs the Studio's helper)" : ""}.</p> : <NetlifyAccount session={session} onToken={(t) => setNf(t ? new Netlify(t) : null)} />}
-        {accounts === "client" && <Field label="The client's Netlify personal access token" htmlFor="pt-cnf"><input id="pt-cnf" className="input font-mono text-xs" type="password" autoComplete="off" value={clientNfTok} onChange={(e) => setClientNfTok(e.target.value)} /></Field>}
+      <section aria-label="Hosting" className="flex flex-col gap-2">
+        <b className="text-sm">Where their Studio runs {accounts === "mine" ? "(your account)" : "(the client's account)"}</b>
+        <div className="flex flex-wrap rounded-lg border border-ink-600 self-start" role="radiogroup" aria-label="Client Studio host">
+          {([["cloudflare", "Cloudflare (free)"], ["netlify", "Netlify"]] as const).map(([k, l]) => <button key={k} type="button" role="radio" aria-checked={pagesKind === k} onClick={() => setPagesKind(k)} className={`btn btn-sm border-0 ${pagesKind === k ? "bg-ink-700" : "bg-transparent"}`}>{l}</button>)}
+        </div>
+        {pagesKind === "netlify" ? <>
+          {nf ? <p className="text-[13px] text-emerald-300">Your Netlify is connected{accounts === "client" ? " (it runs the Studio's helper)" : ""}.</p> : <NetlifyAccount session={session} onToken={(t) => setNf(t ? new Netlify(t) : null)} />}
+          {accounts === "client" && <Field label="The client's Netlify personal access token" htmlFor="pt-cnf"><input id="pt-cnf" className="input font-mono text-xs" type="password" autoComplete="off" value={clientNfTok} onChange={(e) => setClientNfTok(e.target.value)} /></Field>}
+        </> : <>{accounts === "client" && <p className="text-[13px] text-ink-400">Paste the <b>client's</b> Cloudflare token below (made from the same link while signed in to their Cloudflare). It goes through your Studio's helper and isn't kept.</p>}{cfAcc.ui}</>}
       </section>
       <section aria-label="Database" className="flex flex-col gap-2"><b className="text-sm">Where their Studio keeps its files {accounts === "mine" ? "(your account)" : "(the client's account)"}</b>
         <div className="flex flex-wrap rounded-lg border border-ink-600 self-start" role="radiogroup" aria-label="Client database">
           {([["cloudflare", "Cloudflare"], ["supabase", "Supabase"]] as const).map(([k, l]) => <button key={k} type="button" role="radio" aria-checked={kind === k} onClick={() => setKind(k)} className={`btn btn-sm border-0 ${kind === k ? "bg-ink-700" : "bg-transparent"}`}>{l}</button>)}
         </div>
-        <section aria-label={kind === "cloudflare" ? "Cloudflare" : "Supabase"}>{kind === "cloudflare" ? cf.ui : sb.ui}</section>
+        <section aria-label={kind === "cloudflare" ? "Cloudflare" : "Supabase"}>{kind === "cloudflare" ? <>{pagesKind !== "cloudflare" && cfAcc.ui}{cf.ui}</> : sb.ui}</section>
       </section>
       {phase !== "code" && <button type="button" className="btn btn-pri self-start" disabled={!ok || phase === "busy"} onClick={start}>{phase === "busy" ? step + "…" : "Create the client Studio"}</button>}
       {phase === "code" && (
@@ -155,7 +165,7 @@ const STATE: Record<SiteSync, [string, string]> = {
   theirs: ["Client changed it", "border-amber-400/60 text-amber-200"], both: ["Both changed", "border-rose-400/60 text-rose-200"], gone: ["Missing on one side", "border-ink-500 text-ink-300"],
 };
 
-function PartnerCard({ p, studio, index, nf, partner, onChange, onRemove }: { p: PartnerRec; studio: Studio; index: StudioIndex; nf: Netlify | null; partner: { name: string; url?: string }; onChange: (fn: (p: PartnerRec) => PartnerRec, msg: string) => Promise<void>; onRemove: () => Promise<void> }) {
+function PartnerCard({ p, studio, index, nf, studioToken, partner, onChange, onRemove }: { p: PartnerRec; studio: Studio; index: StudioIndex; nf: Netlify | null; studioToken: string; partner: { name: string; url?: string }; onChange: (fn: (p: PartnerRec) => PartnerRec, msg: string) => Promise<void>; onRemove: () => Promise<void> }) {
   const toast = useToast();
   const confirm = useConfirm();
   const [signed, setSigned] = useState<boolean | null>(null), [code, setCode] = useState(""), [sent, setSent] = useState(false);
@@ -174,7 +184,12 @@ function PartnerCard({ p, studio, index, nf, partner, onChange, onRemove }: { p:
   const send = (s: SharedSite) => run(s.project, async () => { const m = index.projects.find((x) => x.id === s.project)!; await setShared(await sendSite(studio, p, m, partner, setBusy), `Send ${m.name} to ${p.name}`); toast("Sent"); });
   const pull = (s: SharedSite) => run(s.project, async () => { const r = await pullSite(studio, p, s.project, setBusy); await setShared(r.shared, `Bring in ${p.name}'s changes`); toast("Brought in the client's version"); });
   const unshare = (s: SharedSite) => run(s.project, async () => { if (!(await confirm("Stop syncing this site?", "It stays in both Studios; changes just aren't kept in step any more.", "Stop syncing"))) return; await onChange((x) => ({ ...x, shared: x.shared.filter((y) => y.project !== s.project) }), "Stop syncing a site"); });
-  const updateApp = () => run("app", async () => { if (!nf || !p.siteId) return; await deployClientApp(nf, p, "", await source(), partner, setBusy); toast(`${p.name}'s Studio is updated`); });
+  const updateApp = () => run("app", async () => {
+    if (!p.siteId) return;
+    const pages = await loadPages(p.pages || "netlify", studioToken, p.pagesAccount);
+    if (!pages) throw new Error(`Connect ${PAGES_LABEL[p.pages || "netlify"]} in Settings → Hosting accounts first.`);
+    await deployClientApp(pages, p, "", await source(), partner, setBusy); toast(`${p.name}'s Studio is updated`);
+  });
   const notShared = index.projects.filter((m) => !p.shared.some((s) => s.project === m.id) && !m.partner);
 
   return (
@@ -222,7 +237,7 @@ function PartnerCard({ p, studio, index, nf, partner, onChange, onRemove }: { p:
         </div>
       )}
       <div className="flex flex-wrap items-center gap-2 border-t border-ink-700 pt-3 text-[13px] text-ink-400">
-        {p.accounts === "mine" && p.siteId ? <button type="button" className="btn btn-sm" disabled={!nf || !!busy} onClick={updateApp}>{busy === "app" ? "Updating…" : `Update their Studio${latest ? ` to ${latest}` : ""}`}</button> : <span>The client updates their Studio from its Settings → Migration.</span>}
+        {p.accounts === "mine" && p.siteId ? <button type="button" className="btn btn-sm" disabled={!!busy} onClick={updateApp}>{busy === "app" ? "Updating…" : `Update their Studio${latest ? ` to ${latest}` : ""}`}</button> : <span>The client updates their Studio from its Settings → Migration.</span>}
         {busy && !["app", "share", "in", "refresh"].includes(busy) && !p.shared.some((s) => s.project === busy) && <span>{busy}…</span>}
         <button type="button" className="btn btn-ghost btn-sm ml-auto text-rose-300" onClick={() => confirm(`Remove ${p.name} from Studio Partners?`, "Their Studio keeps working; this only removes the card here.", "Remove", true).then((y) => { if (y) onRemove(); })}>Remove card</button>
       </div>

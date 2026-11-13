@@ -13,7 +13,7 @@ export type SbHostCfg = HostCommon & { kind: "supabase"; url: string; key: strin
 export type CfHostCfg = HostCommon & { kind: "cloudflare"; api: string };
 export type StudioHostCfg = SbHostCfg | CfHostCfg;
 /** Where a moved Studio lives (kept in studio.json, no secrets). */
-export type HostedStudio = { url: string; siteId: string; siteName: string; sbUrl?: string; api?: string; backend?: "supabase" | "cloudflare"; studio: string; owner: string; build?: string; at: string };
+export type HostedStudio = { url: string; siteId: string; siteName: string; /** Where the app runs (Netlify when not set). */ pages?: "netlify" | "cloudflare"; account?: string; sbUrl?: string; api?: string; backend?: "supabase" | "cloudflare"; studio: string; owner: string; build?: string; at: string };
 
 export const STUDIO_BUCKET = "studio";
 const TEXT = /\.(json|md|txt|csv|html|css|js|svg)$/i;

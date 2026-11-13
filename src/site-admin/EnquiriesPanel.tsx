@@ -43,7 +43,7 @@ export function EnquiriesPanel({ cfg, cf, hosted, email: contactEmail, form, ghT
       <p>Right now the form opens the visitor's email app, addressed to <b className="text-ink-100">{contactEmail || "your contact email"}</b>, so enquiries arrive in your inbox.</p>
       <p>To collect them here instead:</p>
       <ul className="list-disc space-y-1 pl-5">
-        <li><b className="text-ink-100">Hosted on Netlify with Supabase</b> (Host outside GitHub in the Studio): nothing else to add. Re-run the setup SQL once so the enquiries table exists.</li>
+        <li><b className="text-ink-100">Hosted outside GitHub</b> (Cloudflare or Netlify, from the Studio): nothing else to add. With Supabase, re-run the setup SQL once so the enquiries table exists.</li>
         <li><b className="text-ink-100">On GitHub Pages</b>: create a free Supabase project, run <code className="font-mono text-xs">supabase/enquiries.sql</code> from your site's files (or the SQL shown here once connected), then add the Project URL, public key and a Site ID under <b className="text-ink-100">Contact &amp; form → Enquiry form</b> and publish.</li>
       </ul>
     </section>

@@ -97,7 +97,7 @@ const schema: Category[] = [
     ],
   },
   {
-    id: "layout", label: "Sections & order", group: "Design", desc: "Show, hide and reorder sections. The order here is the order on the page and in the menu.",
+    id: "layout", label: "Menu & order", group: "Design", desc: "Show, hide and reorder sections. The order here is the order on the page and in the menu.",
     cards: [
       { title: "Menu when scrolling", fields: [NAV_MODE_FIELD, { t: "note", text: NAV_MODE_NOTE + " The same setting is under Theme & layout → Layout & elements." }] },
       { title: "Header", fields: [g2({ t: "text", path: "brand.logoText", label: "Logo text" }, { t: "text", path: "brand.contactLabel", label: "Header button label" })] },
@@ -172,7 +172,7 @@ const schema: Category[] = [
     ],
   },
   {
-    id: "projects", label: "Projects", group: "Content", desc: "Project cards with images and links. The section appears once it has a project and is switched on under Sections & order.",
+    id: "projects", label: "Projects", group: "Content", desc: "Project cards with images and links. The section appears once it has a project and is switched on under Menu & order.",
     cards: [
       { title: "Heading", fields: [g2({ t: "text", path: "projects.eyebrow", label: "Small label", ml: true }, { t: "text", path: "projects.title", label: "Title", ml: true }), { t: "text", path: "projects.lede", label: "Intro", ml: true }] },
       { title: "Projects", fields: [{ t: "list", path: "projects.items", title: (it) => it.title,

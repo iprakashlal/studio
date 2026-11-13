@@ -496,8 +496,6 @@
     "backToTop": "Back to top"
   },
   "poweredBy": {
-    "show": true,
-    "text": "Powered by Picaffectz",
-    "url": "https://iprakashlal.github.io/studio/#/themes"
+    "show": true
   }
 }

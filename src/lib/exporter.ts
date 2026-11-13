@@ -2,6 +2,7 @@
 //   template files  +  content.json  +  images  +  cms/ (admin.js, admin.css, site.json)
 // and packs it as a ZIP or pushes it to a GitHub repository in one commit.
 
+import { badgeScript, badgeVersion, type BadgeCfg } from "./badge";
 import { STUDIO_BUILD } from "../build-info";
 import JSZip from "jszip";
 import type { TemplateDef } from "../schema/types";
@@ -65,6 +66,8 @@ export async function buildSite(opts: {
   keep?: Set<string>;
   /** Hosted outside GitHub: pages load the content and photos from this Supabase project. */
   host?: SbCfg;
+  /** The badge's look; defaults to the Studio's current setting. */
+  badge?: BadgeCfg;
 }): Promise<{ files: SiteFile[]; warnings: string[]; admin: string }> {
   const { template, content } = opts;
   const m = await loadManifest(template.id);
@@ -97,10 +100,12 @@ export async function buildSite(opts: {
       catch { warnings.push("The PDF reader for Import from LinkedIn is missing from this Studio build; the data export ZIP still works."); break; }
     }
   }
+  // The "Powered by" badge's look (the Studio-wide setting); each site's content says whether it shows.
+  files.push({ path: "assets/badge.js", data: textToBytes(badgeScript(opts.badge)) });
   if (!opts.host) files.push({ path: ".nojekyll", data: new Uint8Array() });
   files.push({
     path: "cms/site.json",
-    data: textToBytes(JSON.stringify({ template: template.id, name: opts.name, version: opts.version, admin, exportedAt: new Date().toISOString(), generator: "Site Studio", studioBuild: STUDIO_BUILD, ...(opts.host ? { host: { kind: "supabase", url: cleanUrl(opts.host.url), key: opts.host.key, site: opts.host.site } } : {}) }, null, 2)),
+    data: textToBytes(JSON.stringify({ template: template.id, name: opts.name, version: opts.version, admin, exportedAt: new Date().toISOString(), generator: "Site Studio", studioBuild: STUDIO_BUILD, badge: badgeVersion(opts.badge), ...(opts.host ? { host: { kind: "supabase", url: cleanUrl(opts.host.url), key: opts.host.key, site: opts.host.site } } : {}) }, null, 2)),
   });
   if (opts.includeContent) {
     files.push({ path: "content.json", data: textToBytes(JSON.stringify(content, null, 2)) });

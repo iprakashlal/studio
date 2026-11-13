@@ -13,6 +13,7 @@ import { TEMPLATES } from "../schema";
 import { merge } from "./util";
 import type { ProjectMeta, Studio } from "./studio";
 import { STUDIO_BUILD } from "../build-info";
+import { badgeVersion } from "./badge";
 import { relayVault } from "./relay";
 import { Cloudflare, cfVault } from "./cloudflare";
 
@@ -42,7 +43,7 @@ export async function checkTarget(t: LiveTarget): Promise<TargetState> {
   try {
     const f = await t.repo!.getJSON<any>("cms/site.json");
     const b = f?.data?.studioBuild;
-    if (b?.id && b.id === STUDIO_BUILD.id) return { s: "current", at: f!.data.exportedAt };
+    if (b?.id && b.id === STUDIO_BUILD.id && f!.data.badge === badgeVersion()) return { s: "current", at: f!.data.exportedAt };
     return { s: "old", at: f?.data?.exportedAt || null, build: b?.id || null };
   } catch (e) { return { s: "unreachable", msg: explain(e) }; }
 }

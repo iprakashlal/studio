@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { currentBadge } from "../lib/badge";
 import { ShopBackendDialog } from "./ShopBackendDialog";
 import { EnquiryInboxDialog } from "./EnquiryInboxDialog";
 import { EnquiriesPanel, enquiriesCfg } from "../site-admin/EnquiriesPanel";
@@ -152,6 +153,8 @@ export function ProjectView({ studio, index, project, session, onIndex }: { stud
 
   if (!tpl) return <main className="p-10 text-center text-ink-300">This project uses a template this Studio doesn't have ({project.template}).</main>;
   if (err) return <main className="mx-auto max-w-xl px-4 py-16"><div className="card p-6"><h1 className="text-xl font-extrabold">Couldn't open the project</h1><p className="mt-2 text-sm text-ink-300">{err}</p></div></main>;
+  // The preview shows the badge with the Studio's look (sites get it from assets/badge.js when published).
+  const previewContent = useMemo(() => (draft ? { ...draft, poweredBy: { ...(draft.poweredBy || {}), design: currentBadge() } } : draft), [draft, v, index.badge]);
   if (!draft) return <main className="grid min-h-screen place-items-center"><StepLoader title={`Opening ${project.name}`} at={openAt} steps={[`Loading the ${tpl.name} template`, "Reading the project's content", "Opening the editor and preview"]} /></main>;
 
   const cat = index.categories.find((c) => c.id === project.category);
@@ -196,7 +199,7 @@ export function ProjectView({ studio, index, project, session, onIndex }: { stud
           <Editor tpl={tpl} draft={draft} version={v} onChange={bump} upload={upload} img={img} extras={extras} />
         </div>
         <div className={`min-h-0 flex-col border-l border-ink-700 lg:flex lg:w-[46%] ${pane === "preview" ? "flex flex-1" : "hidden"}`}>
-          <Preview tpl={tpl} base={`templates/${tpl.id}/`} content={draft} version={v} assets={assets.map} />
+          <Preview tpl={tpl} base={`templates/${tpl.id}/`} content={previewContent} version={v} assets={assets.map} />
         </div>
       </div>
 

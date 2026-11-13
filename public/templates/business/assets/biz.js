@@ -418,6 +418,7 @@ function backend() {
   const F = C.contact.form;
   if (F.saveTo === "email") return null;
   if (F.saveTo === "file") return /^https:\/\//.test(F.fileUrl || "") ? { file: F.fileUrl } : null;
+  if (HOST && HOST.api && HOST.site) return { cf: HOST.api, site: HOST.site };
   if (HOST && HOST.db && HOST.key && HOST.site) return { url: HOST.db, key: HOST.key, site: HOST.site };
   if (/^https:\/\//.test(F.sbUrl || "") && F.sbKey && F.site) return { url: String(F.sbUrl).replace(/\/+$/, ""), key: F.sbKey, site: F.site };
   return null;
@@ -437,6 +438,10 @@ async function submit(e) {
   try {
     if (cfg && cfg.file) {
       const r = await fetch(cfg.file, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "submit", data, page: location.pathname }) });
+      if (!r.ok) throw new Error("save " + r.status);
+      f.reset(); msg.className = "form-msg ok"; msg.textContent = C.contact.form.success || "Thank you. We'll be in touch.";
+    } else if (cfg && cfg.cf) {
+      const r = await fetch(cfg.cf + "/enquire/" + encodeURIComponent(cfg.site), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ data, page: location.pathname }) });
       if (!r.ok) throw new Error("save " + r.status);
       f.reset(); msg.className = "form-msg ok"; msg.textContent = C.contact.form.success || "Thank you. We'll be in touch.";
     } else if (cfg) {
@@ -472,7 +477,9 @@ if (PREVIEW) {
   try { const c = sessionStorage.getItem(CKEY); if (c) { C = merge(DEFAULT, JSON.parse(c)); render(); shownTxt = c; } } catch (e) {}
   const giveUp = setTimeout(() => { if (!shownTxt) { render(); shownTxt = "default"; } }, 6000);
   const fromFile = () => fetch("content.json", { cache: "no-store" }).then((r) => (r.ok ? r.text() : null));
-  const fromDb = () => fetch(HOST.db + "/rest/v1/site_content?select=content&site=eq." + encodeURIComponent(HOST.site), { cache: "no-store", headers: { apikey: HOST.key, ...(/^sb_/.test(HOST.key) ? {} : { Authorization: "Bearer " + HOST.key }) } })
+  // Hosted on the Studio's Cloudflare database: content is a public file there.
+  const fromCf = () => fetch(HOST.api + "/p/" + encodeURIComponent(HOST.site) + "/content.json", { cache: "no-store" }).then((r) => (r.ok ? r.text() : null)).catch(() => null).then((t) => t || fromFile());
+  const fromDb = () => HOST.api ? fromCf() : fetch(HOST.db + "/rest/v1/site_content?select=content&site=eq." + encodeURIComponent(HOST.site), { cache: "no-store", headers: { apikey: HOST.key, ...(/^sb_/.test(HOST.key) ? {} : { Authorization: "Bearer " + HOST.key }) } })
     .then((r) => (r.ok ? r.json() : null)).then((j) => (j && j[0] && j[0].content ? JSON.stringify(j[0].content) : null)).catch(() => null).then((t) => t || fromFile());
   (HOST ? fromDb() : fromFile()).then((txt) => {
     clearTimeout(giveUp);

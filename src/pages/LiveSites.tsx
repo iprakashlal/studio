@@ -3,8 +3,7 @@
 import { useEffect, useState } from "react";
 import type { Session } from "../lib/auth";
 import { GitHubRepo, explain, type Repo } from "../lib/repo";
-import { SupabaseRepo } from "../lib/supa";
-import { siteAddress } from "../lib/hosting";
+import { siteAddress , hostRepo } from "../lib/hosting";
 import { changedSections, sameContent, type ProjectMeta, type Studio, type StudioIndex } from "../lib/studio";
 import { fmtDate, merge, timeAgo } from "../lib/util";
 import { Modal, Spinner, useConfirm, useToast } from "../ui/kit";
@@ -16,7 +15,7 @@ type Info = { state: "loading" } | { state: "error"; msg: string } | { state: "e
 
 export function liveSitesOf(p: ProjectMeta, token: string): Site[] {
   const out: Site[] = [];
-  if (p.host?.kind === "netlify") out.push({ key: "netlify", kind: "netlify", name: "Netlify", url: siteAddress(p.host), where: "content in Supabase", repo: new SupabaseRepo(p.host.sb), primary: true });
+  if (p.host?.kind === "netlify") out.push({ key: "netlify", kind: "netlify", name: "Netlify", url: siteAddress(p.host), where: p.host.cf ? "content in Cloudflare" : "content in Supabase", repo: hostRepo(p.host), primary: true });
   if (p.publish) {
     const t = p.publish;
     out.push({ key: "github", kind: "github", name: "GitHub", url: `https://${t.owner}.github.io/${t.repo === `${t.owner}.github.io` ? "" : t.repo + "/"}`, where: `${t.owner}/${t.repo}`, repo: new GitHubRepo(t, token), primary: !p.host });

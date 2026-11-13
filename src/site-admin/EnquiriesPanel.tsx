@@ -4,6 +4,8 @@ import { Fragment, useEffect, useMemo, useState } from "react";
 import { enquiriesSql, isAdmin, sbClient, sendCode, setupSql, signedInEmail, verifyCode, type SbCfg } from "../lib/supa";
 import { Field, Spinner, useConfirm, useToast } from "../ui/kit";
 import { inboxCall, type InboxEnquiry } from "../lib/inbox";
+import { cfCall, cfSignedIn } from "../lib/cfdb";
+import type { CfSiteCfg } from "../lib/supa";
 
 type Enquiry = { id: number; site: string; data: Record<string, string>; page: string; status: string; created_at: string };
 const STATUS: [string, string][] = [["new", "New"], ["read", "Read"], ["replied", "Replied"], ["archived", "Archived"]];
@@ -18,7 +20,8 @@ export function enquiriesCfg(content: any, hosted?: SbCfg | null): SbCfg | null 
   return /^https:\/\//.test(F.sbUrl || "") && F.sbKey && F.site ? { url: String(F.sbUrl).replace(/\/+$/, ""), key: F.sbKey, site: F.site } : null;
 }
 
-export function EnquiriesPanel({ cfg, hosted, email: contactEmail, form, ghToken, inStudio }: { cfg: SbCfg | null; hosted?: boolean; email?: string; form?: any; ghToken?: string; inStudio?: boolean }) {
+export function EnquiriesPanel({ cfg, cf, hosted, email: contactEmail, form, ghToken, inStudio }: { cfg: SbCfg | null; cf?: CfSiteCfg; hosted?: boolean; email?: string; form?: any; ghToken?: string; inStudio?: boolean }) {
+  if (cf && form?.saveTo !== "file" && form?.saveTo !== "email") return <CfInbox key={cf.api + cf.site} cf={cf} />;
   if (form?.saveTo === "file") {
     if (!/^https:\/\//.test(form.fileUrl || "")) return (
       <section className="card flex max-w-2xl flex-col gap-3 p-5 text-sm text-ink-300">
@@ -215,4 +218,30 @@ function FileInbox({ url, token }: { url: string; token: string }) {
   if (err) return <section className="card flex max-w-xl flex-col gap-3 p-5"><p className="text-sm text-red-300">{err}</p><button className="btn self-start" onClick={load}>Try again</button></section>;
   if (!rows) return <Spinner label="Loading enquiries…" />;
   return <EnquiryList rows={rows} setStatus={setStatus} remove={remove} load={load} name="site" who={<>{rows.length} enquir{rows.length === 1 ? "y" : "ies"}, saved as JSON files in a private GitHub repository{more ? " (showing the newest 300)" : ""}.</>} />;
+}
+
+/** Enquiries kept in the Studio's Cloudflare database (sites hosted there). */
+function CfInbox({ cf }: { cf: CfSiteCfg }) {
+  const toast = useToast();
+  const confirm = useConfirm();
+  const scope = "scope=" + encodeURIComponent("site:" + cf.site);
+  const [rows, setRows] = useState<Row[] | null>(null), [err, setErr] = useState(""), [who, setWho] = useState("");
+  const load = async () => {
+    setErr("");
+    try { setWho((await cfSignedIn(cf.api)) || ""); setRows((await cfCall<any[]>(cf.api, "/e/list?" + scope)).map((r) => ({ ...r, id: r.id }))); }
+    catch (e: any) { setErr(e?.status === 401 ? "Sign in to this site's admin page (or the Studio's hosting dialog) on this device to read enquiries." : e?.message || "Couldn't load enquiries."); }
+  };
+  useEffect(() => { load(); }, [cf.api, cf.site]);
+  const setStatus = async (r: Row, status: string) => {
+    setRows((x) => (x || []).map((y) => (y.id === r.id ? { ...y, status } : y)));
+    try { await cfCall(cf.api, "/e/status?" + scope, { method: "POST", body: JSON.stringify({ id: r.id, status }) }); } catch (e: any) { toast(e?.message || "Couldn't update it.", "bad"); load(); }
+  };
+  const remove = async (r: Row) => {
+    if (!(await confirm("Delete this enquiry?", `From ${r.data.name || r.data.email || "a visitor"}. This can't be undone.`, "Delete", true))) return;
+    try { await cfCall(cf.api, "/e/delete?" + scope, { method: "POST", body: JSON.stringify({ id: r.id }) }); setRows((x) => (x || []).filter((y) => y.id !== r.id)); toast("Deleted"); }
+    catch (e: any) { toast(e?.message || "Couldn't delete it.", "bad"); }
+  };
+  if (err) return <section className="card flex max-w-xl flex-col gap-3 p-5"><p className="text-sm text-red-300">{err}</p><button className="btn self-start" onClick={load}>Try again</button></section>;
+  if (!rows) return <Spinner label="Loading enquiries…" />;
+  return <EnquiryList rows={rows} setStatus={setStatus} remove={remove} load={load} name={cf.site} who={<>Signed in as {who} · {rows.length} enquir{rows.length === 1 ? "y" : "ies"} for <b className="text-ink-200">{cf.site}</b></>} />;
 }

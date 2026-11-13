@@ -380,7 +380,7 @@ function ThemesField() {
   const cur = all.find((t) => t.id === root.theme?.preset);
   const tweaked = !!cur && themeTweaked(root, tpl, cur);
   const reset = tweaked && cur ? <p className="flex flex-wrap items-center gap-2 text-[13px] text-ink-400">Your changes to {cur.name} are kept when you switch themes and come back.<button type="button" className="text-brand-300 underline" onClick={() => { Object.assign(root.theme, tpl.themeValues(cur)); if (root.themeMemory) delete root.themeMemory[cur.id]; bump(); }}>Reset {cur.name} to its defaults</button></p> : null;
-  if (!site) return <>{reset}<ThemeGallery current={root.theme?.preset} themes={tpl.themes} tags={tpl.themeTags} onPick={pick} /></>;
+  if (!site) return <>{reset}<ThemeDrawer label={`Show ${all.length} themes`} summary={<>Current: <b className="text-ink-100">{cur ? `${themeCode(cur)} · ${cur.name}` : "the template's own look"}</b> · {all.length} themes to choose from</>}><ThemeGallery dense current={root.theme?.preset} themes={tpl.themes} tags={tpl.themeTags} onPick={pick} /></ThemeDrawer></>;
   const { mode, themes } = adminThemeChoice(root, all);
   const drawer = (list: Theme[], tags: string[]) => {
     const gallery = <ThemeGallery dense current={root.theme?.preset} themes={list} tags={tags} onPick={pick} />;

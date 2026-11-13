@@ -483,15 +483,24 @@ function CfDomainCard({ host, acc, onHost }: { host: HostCfg; acc: CfAccountHook
     setBusy("");
   };
   /** Points the domain and www at the site (replacing old records for those two names) and records it. */
-  const attach = async (cf: Cloudflare, dom: string, zoneId: string) => {
-    for (const hn of [dom, "www." + dom]) await cf.addWorkerDomain(account, host.siteId, hn, zoneId);
-    await onHost({ ...host, domain: dom, domainSetup: undefined });
-    toast(`${dom} is connected. Cloudflare is turning on HTTPS; it takes a few minutes. Publish once more so links use https://www.${dom}/.`);
+  const attach = async (cf: Cloudflare, dom: string, zoneId: string, sub = false) => {
+    for (const hn of sub ? [dom] : [dom, "www." + dom]) await cf.addWorkerDomain(account, host.siteId, hn, zoneId);
+    await onHost({ ...host, domain: dom, subdomain: sub || undefined, domainSetup: undefined });
+    toast(`${dom} is connected. Cloudflare is turning on HTTPS; it takes a few minutes. Publish once more so links use https://${sub ? "" : "www."}${dom}/.`);
   };
   const setup = () => run("connect", async () => {
     const dom = cleanDomain(d), { cf } = await acc.client();
     let z = await cf.zoneNamed(dom);
     if (z && z.status === "active") return attach(cf, dom, z.id);
+    // A subdomain (blog.example.com) of a domain already on this Cloudflare: just that name, no www.
+    if (!z) {
+      const parent = await cf.zoneFor(dom).catch(() => null);
+      if (parent && parent.name !== dom) {
+        const pz = await cf.zone(parent.id);
+        if (pz.status !== "active") throw new Error(`${parent.name} is on your Cloudflare but still waiting for its nameservers to be switched. Once that's done, press this again.`);
+        return attach(cf, dom, parent.id, true);
+      }
+    }
     if (!z) { setStatus("Adding " + dom + " to your Cloudflare (it copies the current DNS records, so email keeps working)…"); z = await cf.zoneCreate(account, dom); }
     setStatus("");
     await onHost({ ...host, domainSetup: { name: dom, zoneId: z.id, ns: z.name_servers || [], registrar: registrarHelp(z), at: new Date().toISOString() } });
@@ -511,8 +520,8 @@ function CfDomainCard({ host, acc, onHost }: { host: HostCfg; acc: CfAccountHook
   const cancel = () => run("remove", async () => { await onHost({ ...host, domainSetup: undefined }); setStatus(""); });
   const remove = () => run("remove", async () => {
     const { cf } = await acc.client(), dom = host.domain!;
-    for (const x of await cf.workerDomains(account, host.siteId)) if (x.hostname === dom || x.hostname === "www." + dom) await cf.removeWorkerDomain(account, x.id);
-    await onHost({ ...host, domain: undefined }); setD("");
+    for (const x of await cf.workerDomains(account, host.siteId)) if (x.hostname === dom || (!host.subdomain && x.hostname === "www." + dom)) await cf.removeWorkerDomain(account, x.id);
+    await onHost({ ...host, domain: undefined, subdomain: undefined }); setD("");
     toast("Domain removed. The site is back on its workers.dev address.");
   });
   const useNewToken = () => run("token", async () => { await acc.replaceToken(newTok); setNewTok(""); setNeedPerm(false); toast("New token saved on this device. Press the button again."); });
@@ -521,8 +530,8 @@ function CfDomainCard({ host, acc, onHost }: { host: HostCfg; acc: CfAccountHook
     <section className="flex flex-col gap-3 rounded-xl border border-ink-700 bg-ink-950 p-4" aria-label="Domain">
       <b className="text-sm">3 · Your domain (optional)</b>
       {host.domain ? <div className="flex flex-wrap items-center gap-2 text-[13px]">
-        <span className="h-2 w-2 rounded-full bg-emerald-400" /><span>Live on <b>{host.domain}</b> and <b>www.{host.domain}</b></span>
-        <a className="btn btn-sm" href={`https://www.${host.domain}/`} target="_blank" rel="noopener">Open ↗</a>
+        <span className="h-2 w-2 rounded-full bg-emerald-400" /><span>Live on <b>{host.domain}</b>{!host.subdomain && <> and <b>www.{host.domain}</b></>}</span>
+        <a className="btn btn-sm" href={siteAddress(host)} target="_blank" rel="noopener">Open ↗</a>
         <button type="button" className="btn btn-sm ml-auto" disabled={!!busy} onClick={remove}>{busy === "remove" ? "Removing…" : "Remove domain"}</button>
       </div> : pending ? <div className="flex flex-col gap-2.5 text-[13px]" aria-label="Domain waiting">
         <p className="text-ink-300"><b className="text-ink-100">{pending.name}</b> is added to your Cloudflare. One step left, at <b className="text-ink-100">{pending.registrar?.name || "your domain company"}</b>: switch its nameservers to Cloudflare's.</p>
@@ -537,7 +546,7 @@ function CfDomainCard({ host, acc, onHost }: { host: HostCfg; acc: CfAccountHook
           <button type="button" className="btn btn-sm ml-auto" disabled={!!busy} onClick={cancel}>Cancel</button>
         </div>
       </div> : <>
-        <p className="text-[13px] text-ink-400">Type your domain and press the button. If it's already on your Cloudflare it's connected at once (with www and HTTPS); if not, the Studio adds it and gives you a link for the one step left at the company you bought it from.</p>
+        <p className="text-[13px] text-ink-400">Type your domain (yourname.com) or a subdomain of one already on your Cloudflare (blog.yourname.com) and press the button. If it's on your Cloudflare it's connected at once, with HTTPS (and www for a main domain); if not, the Studio adds it and gives you a link for the one step left at the company you bought it from.</p>
         <div className="flex gap-2">
           <input aria-label="Domain" className="input min-w-0 flex-1" placeholder="yourname.com" value={d} onChange={(e) => setD(e.target.value)} />
           <button type="button" className="btn btn-pri btn-sm" disabled={!!busy || !domainOk(d)} onClick={setup}>{busy === "connect" ? "Setting up…" : "Set up domain"}</button>

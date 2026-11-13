@@ -13,6 +13,7 @@ import type { HostCfg } from "./supa";
 
 export type ExportRec = { version: number; at: string; kind: "zip" | "github" | "netlify"; note: string; target?: string };
 export type PublishTarget = { owner: string; repo: string; branch: string };
+export type WorkerCfg = { account: string; name: string; url: string; dataRepo: string; mailFrom: string; build?: string; deployedAt?: string };
 export type ProjectMeta = {
   id: string;
   name: string;
@@ -29,6 +30,8 @@ export type ProjectMeta = {
   publish?: PublishTarget;
   /** Hosted outside GitHub (Netlify + Supabase). When set, this is the live site the Studio keeps in step with. */
   host?: HostCfg;
+  /** The shop's Cloudflare Worker, when the Studio set it up (no secrets here: they live on the Worker). */
+  worker?: WorkerCfg;
   /** When the Studio's copy of the content last changed (saves and imports). */
   contentAt?: string;
   /** content.json's blob sha on the live site when the two were last in step, and when that was. */

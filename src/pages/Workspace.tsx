@@ -6,6 +6,7 @@ import { siteRepoFor } from "../lib/hosting";
 import { AccountPanel } from "../ui/gate";
 import { NetlifyAccount } from "./HostDialog";
 import { GitHubPublishAccount } from "./GitHubAccount";
+import { SetupAccounts } from "./SetupAccounts";
 import { ghPublish } from "../lib/ghpublish";
 import { Field, Logo, Spinner, useToast } from "../ui/kit";
 import { BrandMark, DEFAULT_NAME, brand as currentBrand, setBrand, shrinkImage, useBrand } from "../lib/brand";
@@ -96,6 +97,7 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
             <GitHubPublishAccount session={session} />
             <h3 className="mt-2 text-sm font-bold">Netlify</h3>
             <NetlifyAccount session={session} />
+            <SetupAccounts session={session} />
           </section>
           <AccountPanel ns={NS} session={session} onUpdated={onSession} onSignOut={onSignOut} onForget={onForget} />
         </main>

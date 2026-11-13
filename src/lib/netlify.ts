@@ -45,7 +45,7 @@ export class Netlify {
   createSite(name: string) { return this.req<NetlifySite>("/sites", { method: "POST", body: JSON.stringify({ name }) }); }
 
   /** Deploys `files` as the whole site. Netlify asks only for contents it doesn't already have. */
-  async deploy(siteId: string, files: SiteFile[], title: string, onProgress?: (done: number, total: number) => void): Promise<{ id: string; url: string }> {
+  async deploy(siteId: string, files: SiteFile[], title: string, onProgress?: (done: number, total: number) => void, functions: { name: string; zip: Uint8Array }[] = []): Promise<{ id: string; url: string }> {
     const digest: Record<string, string> = {};
     const bySha = new Map<string, SiteFile>();
     for (const f of files) {
@@ -54,8 +54,11 @@ export class Netlify {
       digest["/" + f.path] = sha;
       bySha.set(sha, f);
     }
-    const d = await this.req<{ id: string; required?: string[]; state: string; ssl_url?: string; deploy_ssl_url?: string }>(`/sites/${encodeURIComponent(siteId)}/deploys?title=${encodeURIComponent(title)}`, { method: "POST", body: JSON.stringify({ files: digest, async: true }) });
-    let dep = d;
+    // Functions (zipped) go in their own digest, by SHA-256.
+    const fnDigest: Record<string, string> = {}, fnBySha = new Map<string, { name: string; zip: Uint8Array }>();
+    for (const fn of functions) { const sha = await sha256Hex(fn.zip); fnDigest[fn.name] = sha; fnBySha.set(sha, fn); }
+    const d = await this.req<{ id: string; required?: string[]; required_functions?: string[]; state: string; ssl_url?: string; deploy_ssl_url?: string }>(`/sites/${encodeURIComponent(siteId)}/deploys?title=${encodeURIComponent(title)}`, { method: "POST", body: JSON.stringify({ files: digest, ...(functions.length ? { functions: fnDigest } : {}), async: true }) });
+    let dep: typeof d = d;
     for (let i = 0; i < 60 && dep.state === "preparing"; i++) {
       await new Promise((r) => setTimeout(r, 1000));
       dep = await this.req(`/sites/${encodeURIComponent(siteId)}/deploys/${d.id}`);
@@ -77,6 +80,10 @@ export class Netlify {
       }
     };
     await Promise.all(Array.from({ length: Math.min(4, need.length) }, worker));
+    for (const sha of dep.required_functions || d.required_functions || []) {
+      const fn = fnBySha.get(sha);
+      if (fn) await this.req(`/deploys/${d.id}/functions/${encodeURIComponent(fn.name)}?runtime=js`, { method: "PUT", body: fn.zip as unknown as BodyInit }, true);
+    }
     for (let i = 0; i < 90; i++) {
       dep = await this.req(`/sites/${encodeURIComponent(siteId)}/deploys/${d.id}`);
       if (dep.state === "ready") break;
@@ -126,4 +133,9 @@ export async function checkDns(domain: string, netlifyHost: string): Promise<{ a
     www: w.includes(netlifyHost.toLowerCase()) || (w.length === 0 && wA.includes(NETLIFY_APEX_IP)),
     seen: { apex: a, www: wA },
   };
+}
+
+async function sha256Hex(data: Uint8Array): Promise<string> {
+  const h = new Uint8Array(await crypto.subtle.digest("SHA-256", data));
+  return [...h].map((b) => b.toString(16).padStart(2, "0")).join("");
 }

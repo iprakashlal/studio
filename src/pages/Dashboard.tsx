@@ -138,7 +138,7 @@ export function Dashboard({ studio, index, onIndex, token }: { studio: Studio; i
               <article key={p.id} className="card group relative flex flex-col overflow-hidden transition hover:border-ink-500">
                 <div className="h-1.5" style={{ background: c?.color || "#2E3A4C" }} />
                 <div className="flex flex-1 flex-col gap-3 p-5">
-                  <div className="flex items-center gap-2 text-xs">
+                  <div className="flex flex-wrap items-center gap-2 text-xs">
                     <span className="chip">{t?.name || p.template} · {t?.kind}</span>
                     <span className={`chip ${st.cls}`}>{st.label}</span>
                     {live[p.id] === "checking" && <span className="chip border-ink-600 text-ink-400">Checking live site…</span>}
@@ -211,7 +211,8 @@ function NewProject({ studio, index, onClose, onCreated }: { studio: Studio; ind
           {TEMPLATE_LIST.map((t) => (
             <button key={t.id} type="button" role="radio" aria-checked={f.template === t.id} onClick={() => pick(t.id)}
               className={`flex flex-col gap-1.5 rounded-xl border p-4 text-left ${f.template === t.id ? "border-brand-500 bg-brand-500/10" : "border-ink-600 bg-ink-950 hover:border-ink-400"}`}>
-              <span className="flex items-center gap-2 font-extrabold">{t.name}<span className="chip">{t.kind}</span></span>
+              <span className="font-extrabold leading-snug">{t.name}</span>
+              <span className="chip self-start">{t.kind}</span>
               <span className="text-[13px] text-ink-300">{t.description}</span>
               <span className="text-xs text-ink-500">{t.pages.length} page{t.pages.length > 1 ? "s" : ""}: {t.pages.map((p) => p.label).join(", ")}</span>
             </button>

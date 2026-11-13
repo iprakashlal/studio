@@ -79,15 +79,16 @@ export function ThemeGallery({ current, onPick, compact, themes = THEMES, tags =
             className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${tag === x ? "border-brand-500 bg-brand-500/15 text-ink-100" : "border-ink-600 text-ink-400 hover:text-ink-100"}`}>{x || `All ${themes.length}`}</button>
         ))}
       </div>
-      <div className={`grid gap-2.5 ${compact ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-2 sm:grid-cols-3 xl:grid-cols-4"}`} role="radiogroup" aria-label="Themes">
+      <div className="grid gap-2.5" style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${compact ? 150 : 112}px, 1fr))` }} role="radiogroup" aria-label="Themes">
         {list.map((t) => (
           <button key={t.id} type="button" role="radio" aria-checked={current === t.id} onClick={() => onPick(t)} title={t.blurb ? `${t.name}: ${t.blurb}` : `${t.name}: ${t.style.layout} layout, ${t.style.cards} cards, ${t.style.buttons} buttons, ${t.style.motionStyle} animation`}
             className={`flex flex-col overflow-hidden rounded-xl border text-left transition ${current === t.id ? "border-brand-500 ring-2 ring-brand-500/50" : "border-ink-600 hover:border-ink-400"}`}>
             <ThemeSwatch t={t} />
-            <span className="flex items-center justify-between gap-2 bg-ink-950 px-2.5 py-2">
+            <span className="flex flex-1 items-start justify-between gap-2 bg-ink-950 px-2.5 py-2">
               <span className="min-w-0">
-                <b className="block truncate text-[13px]"><span className="mr-1 font-mono text-[11px] text-ink-400">{themeCode(t)}</span>{t.signature && <span className="mr-1 text-brand-400" title="Signature layout">★</span>}{t.name}</b>
-                <span className="block truncate text-[11px] text-ink-400">{t.signature ? "Signature layout · own sections" : <>{t.kit !== "classic" ? "Own layout · " : ""}{Motifs.packs[t.motif]?.name || t.display}{hasFx(t) ? " · " + fxSummary(t) : ""}</>}</span>
+                <span className="block font-mono text-[11px] leading-tight text-ink-400">{themeCode(t)}</span>
+                <b className="line-clamp-2 block text-[13px] leading-snug">{t.signature && <span className="mr-1 text-brand-400" title="Signature layout">★</span>}{t.name}</b>
+                <span className="line-clamp-2 block text-[11px] leading-snug text-ink-400">{t.signature ? "Signature layout · own sections" : <>{t.kit !== "classic" ? "Own layout · " : ""}{Motifs.packs[t.motif]?.name || t.display}{hasFx(t) ? " · " + fxSummary(t) : ""}</>}</span>
               </span>
               {current === t.id ? <span className="text-xs font-bold text-brand-400">✓</span> : hasFx(t) && <span className="shrink-0 rounded-full border border-brand-500/50 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-brand-400" title="Interactive theme: cursor, intro and scroll effects">fx</span>}
             </span>

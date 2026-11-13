@@ -129,3 +129,6 @@ export async function setupCfDb(relay: Relay, token: string, o: { account: CfAcc
 export async function cfAddMembers(relay: Relay, token: string, s: CfDbSetup, scope: string, list: { email: string; role: "owner" | "member" | "partner" }[]) {
   if (list.length) await new Cloudflare(relay, token).d1Query(s.account, s.databaseId, membersSql(scope, list));
 }
+
+/** Resend's test mode (no verified domain) only emails the Resend account's own address; returns it from the error. */
+export const resendTestOnly = (msg: string): string | null => /own email address \(([^)\s]+@[^)\s]+)\)/i.exec(String(msg || ""))?.[1]?.toLowerCase() || null;

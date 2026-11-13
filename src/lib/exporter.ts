@@ -3,6 +3,7 @@
 // and packs it as a ZIP or pushes it to a GitHub repository in one commit.
 
 import { badgeScript, badgeVersion, type BadgeCfg } from "./badge";
+import { currentMenus, menuVersion } from "./menus";
 import { STUDIO_BUILD } from "../build-info";
 import JSZip from "jszip";
 import type { TemplateDef } from "../schema/types";
@@ -105,7 +106,7 @@ export async function buildSite(opts: {
   if (!opts.host) files.push({ path: ".nojekyll", data: new Uint8Array() });
   files.push({
     path: "cms/site.json",
-    data: textToBytes(JSON.stringify({ template: template.id, name: opts.name, version: opts.version, admin, exportedAt: new Date().toISOString(), generator: "Site Studio", studioBuild: STUDIO_BUILD, badge: badgeVersion(opts.badge), ...(opts.host ? { host: { kind: "supabase", url: cleanUrl(opts.host.url), key: opts.host.key, site: opts.host.site } } : {}) }, null, 2)),
+    data: textToBytes(JSON.stringify({ template: template.id, name: opts.name, version: opts.version, admin, exportedAt: new Date().toISOString(), generator: "Site Studio", studioBuild: STUDIO_BUILD, badge: badgeVersion(opts.badge), ...(currentMenus()[template.id] ? { menu: currentMenus()[template.id] } : {}), menuV: menuVersion(currentMenus()[template.id]), ...(opts.host ? { host: { kind: "supabase", url: cleanUrl(opts.host.url), key: opts.host.key, site: opts.host.site } } : {}) }, null, 2)),
   });
   if (opts.includeContent) {
     files.push({ path: "content.json", data: textToBytes(JSON.stringify(content, null, 2)) });

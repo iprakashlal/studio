@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { cleanMenu } from "../lib/menus";
 import { EnquiriesPanel, enquiriesCfg } from "./EnquiriesPanel";
 import { GOTO_EVENT } from "../editor/Editor";
 import { TEMPLATES } from "../schema";
@@ -19,7 +20,7 @@ import { CustomersPanel, OrdersPanel } from "./ShopPanels";
 
 const NS = "site-cms";
 /** host: set when the site is hosted outside GitHub, with its content in Supabase. */
-type SiteInfo = { template: string; name: string; version?: number; admin?: string; exportedAt?: string; generator?: string; host?: { kind: "supabase"; url: string; key: string; site: string } };
+type SiteInfo = { menu?: unknown; template: string; name: string; version?: number; admin?: string; exportedAt?: string; generator?: string; host?: { kind: "supabase"; url: string; key: string; site: string } };
 /** Saved-but-not-published edits live here. The live site never reads this file. */
 const DRAFT = "cms/draft.json";
 /** This CMS page's own file name: from cms/site.json, else the address it was opened at. */
@@ -305,7 +306,7 @@ function Workspace({ info, onInfo, repo, account, onSignOut, hosted, ghToken }: 
       )}
       <div className="flex min-h-0 flex-1">
         <div className={`min-h-0 min-w-0 flex-1 flex-col lg:flex ${pane === "edit" || wide ? "flex" : "hidden"}`}>
-          <Editor site tpl={tpl} draft={draft} version={v} onChange={bump} upload={upload} img={img} extras={extras} onCategory={setCat} />
+          <Editor site menu={cleanMenu(info.menu)} tpl={tpl} draft={draft} version={v} onChange={bump} upload={upload} img={img} extras={extras} onCategory={setCat} />
         </div>
         <div className={`min-h-0 flex-col border-l border-ink-700 lg:w-[46%] ${wide ? "lg:hidden" : "lg:flex"} ${pane === "preview" && !wide ? "flex flex-1" : "hidden"}`}>
           <Preview tpl={tpl} base="" content={draft} version={v} assets={assets} />

@@ -6,6 +6,7 @@
 //   projects/<id>/exports/v<N>.json     content snapshot saved with each export
 
 import { cleanBadge, type BadgeCfg } from "./badge";
+import { cleanMenu, cleanMenus, type MenuCfg } from "./menus";
 import type { Repo } from "./repo";
 import { jsonB64, bytesB64 } from "./repo";
 import { blobToBytes, collectAssetPaths, safeFileName, uid } from "./util";
@@ -48,7 +49,7 @@ export type SiteState =
 export type CategoryRec = { id: string; name: string; color: string };
 /** The Studio's own name and logo (logo: a file in the data repository). */
 export type StudioBrand = { name: string; logo?: string; v?: number };
-export type StudioIndex = { version: 1; categories: CategoryRec[]; projects: ProjectMeta[]; brand?: StudioBrand; /** The "Powered by" badge every site shows (its look; each site only turns it on or off). */ badge?: import("./badge").BadgeCfg };
+export type StudioIndex = { version: 1; categories: CategoryRec[]; projects: ProjectMeta[]; brand?: StudioBrand; /** The "Powered by" badge every site shows (its look; each site only turns it on or off). */ badge?: import("./badge").BadgeCfg; /** Admin menus per template: renamed, reordered, combined sections. */ menus?: import("./menus").Menus };
 
 export const CATEGORY_COLORS = ["#5B7CFF", "#3FB97A", "#F2A541", "#F06A6A", "#B57BFF", "#34C3D9", "#E86FB0", "#9AA6BC"];
 
@@ -225,6 +226,14 @@ export class Studio {
     }, "Update the Studio's name and logo", files);
   }
 
+  async saveMenu(template: string, m: MenuCfg | null): Promise<StudioIndex> {
+    return this.updateIndex((i) => {
+      const all = cleanMenus(i.menus); const c = m && cleanMenu(m);
+      if (c && c.items.length) all[template] = c; else delete all[template];
+      if (Object.keys(all).length) i.menus = all; else delete i.menus;
+    }, "Update the admin menu");
+  }
+
   async saveBadge(b: BadgeCfg): Promise<StudioIndex> {
     return this.updateIndex((i) => { i.badge = cleanBadge(b); }, "Update the “Powered by” badge");
   }
@@ -265,6 +274,7 @@ function normalise(i: any): StudioIndex {
     version: 1,
     ...(i?.brand && typeof i.brand.name === "string" ? { brand: { name: i.brand.name, ...(typeof i.brand.logo === "string" ? { logo: i.brand.logo } : {}), ...(typeof i.brand.v === "number" ? { v: i.brand.v } : {}) } } : {}),
     ...(i?.badge && typeof i.badge === "object" ? { badge: cleanBadge(i.badge) } : {}),
+    ...(i?.menus && Object.keys(cleanMenus(i.menus)).length ? { menus: cleanMenus(i.menus) } : {}),
     categories: Array.isArray(i?.categories) ? i.categories : [],
     projects: (Array.isArray(i?.projects) ? i.projects : []).map((p: any) => ({ exports: [], version: 0, notes: "", client: "", status: "draft", ...p })),
   };

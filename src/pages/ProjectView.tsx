@@ -196,7 +196,7 @@ export function ProjectView({ studio, index, project, session, onIndex }: { stud
       )}
       <div className="flex min-h-0 flex-1">
         <div className={`min-h-0 min-w-0 flex-1 flex-col lg:flex ${pane === "edit" ? "flex" : "hidden"}`}>
-          <Editor tpl={tpl} draft={draft} version={v} onChange={bump} upload={upload} img={img} extras={extras} />
+          <Editor tpl={tpl} draft={draft} version={v} onChange={bump} upload={upload} img={img} extras={extras} menu={index.menus?.[tpl.id]?.studio ? index.menus[tpl.id] : undefined} />
         </div>
         <div className={`min-h-0 flex-col border-l border-ink-700 lg:flex lg:w-[46%] ${pane === "preview" ? "flex flex-1" : "hidden"}`}>
           <Preview tpl={tpl} base={`templates/${tpl.id}/`} content={previewContent} version={v} assets={assets.map} />

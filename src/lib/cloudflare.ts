@@ -8,6 +8,19 @@ export const cfVault = vault<{ token: string; account?: string }>("cloudflare");
 export const CF_TOKEN_PAGE = `https://dash.cloudflare.com/profile/api-tokens?${new URLSearchParams({ permissionGroupKeys: JSON.stringify([{ key: "workers_scripts", type: "edit" }, { key: "account_settings", type: "read" }]), accountId: "*", zoneId: "all", name: "Picaffectz Studio shop" })}`;
 /** Where to add "Zone → DNS → Edit" to the token, so the Studio can add email records too. */
 export const CF_DNS_HINT = "Edit the token (My Profile → API Tokens → Edit) and add the permission Zone → DNS → Edit for your domain.";
+/** What a Cloudflare API call was doing, for error messages. */
+export function cfStep(method: string, path: string): string {
+  if (/\/assets-upload-session$/.test(path)) return "starting the upload of the site's files";
+  if (/\/workers\/assets\/upload/.test(path)) return "uploading the site's files";
+  if (/\/workers\/scripts\/[^/]+\/subdomain$/.test(path)) return "turning on the workers.dev address";
+  if (/\/workers\/scripts\/[^/]+\/settings$/.test(path)) return "reading a Worker";
+  if (/\/workers\/scripts\/[^/]+$/.test(path)) return method === "PUT" ? "putting the new version live" : "reading a Worker";
+  if (/\/workers\/domains/.test(path)) return "connecting the domain";
+  if (/\/d1\//.test(path)) return "using the database";
+  if (/^\/zones/.test(path)) return /dns_records/.test(path) ? "adding DNS records" : "checking the domain";
+  if (/\/workers\/subdomain/.test(path)) return "reading the workers.dev name";
+  return `${method} ${path.split("?")[0]}`;
+}
 export class CfError extends Error { constructor(msg: string, public status = 0, public code = 0) { super(msg); } }
 export type CfAccount = { id: string; name: string };
 export type CfZone = { id: string; name: string; status: string; name_servers?: string[]; original_name_servers?: string[] | null; original_registrar?: string | null };
@@ -27,11 +40,21 @@ export function registrarHelp(z: Pick<CfZone, "name" | "original_registrar" | "o
 export class Cloudflare {
   constructor(private relay: Relay, private token: string) {}
   private async api<T = any>(method: string, path: string, body?: { json?: unknown; bytes?: Uint8Array; text?: string; type?: string; auth?: string }): Promise<T> {
-    const r = await relayCall(this.relay, { target: "cloudflare", method, path, auth: body?.auth || this.token, ...(body?.json !== undefined ? { body: JSON.stringify(body.json), contentType: "application/json" } : body?.bytes ? { body64: b64(body.bytes), contentType: body.type } : body?.text !== undefined ? { body: body.text, contentType: body.type } : {}) });
-    let j: any = null; try { j = JSON.parse(r.body); } catch { /* not JSON */ }
-    if (r.status === 401 || r.status === 403 || j?.errors?.some((e: any) => e.code === 10000 || e.code === 9109)) throw new CfError("Cloudflare refused the token. Create one with the “Edit Cloudflare Workers” template and paste it again.", r.status);
-    if (!j?.success) { const e = j?.errors?.[0]; throw new CfError(`Cloudflare: ${e?.message || r.body.slice(0, 200) || r.status}`, r.status, e?.code || 0); }
-    return j.result as T;
+    const q = { target: "cloudflare" as const, method, path, auth: body?.auth || this.token, ...(body?.json !== undefined ? { body: JSON.stringify(body.json), contentType: "application/json" } : body?.bytes ? { body64: b64(body.bytes), contentType: body.type } : body?.text !== undefined ? { body: body.text, contentType: body.type } : {}) };
+    // Cloudflare's "unknown error" (10013) and 5xx answers are usually momentary: try again twice before giving up.
+    for (let attempt = 0; ; attempt++) {
+      const r = await relayCall(this.relay, q);
+      let j: any = null; try { j = JSON.parse(r.body); } catch { /* not JSON */ }
+      if (r.status === 401 || r.status === 403 || j?.errors?.some((e: any) => e.code === 10000 || e.code === 9109)) throw new CfError("Cloudflare refused the token. Create one with the “Edit Cloudflare Workers” template and paste it again.", r.status);
+      if (j?.success) return j.result as T;
+      const e = j?.errors?.[0], code = e?.code || 0;
+      const passing = r.status >= 500 || code === 10013 || /unknown error/i.test(e?.message || "");
+      if (passing && attempt < 2) { await new Promise((res) => setTimeout(res, attempt ? 5000 : 1500)); continue; }
+      const what = cfStep(method, path);
+      throw new CfError(passing
+        ? `Cloudflare had a problem on its side while ${what} (code ${code || r.status}), even after trying again. Wait a minute and press the button again; nothing is lost.`
+        : `Cloudflare (${what}): ${e?.message || r.body.slice(0, 200) || r.status}${code ? ` [${code}]` : ""}`, r.status, code);
+    }
   }
   accounts() { return this.api<CfAccount[]>("GET", "/accounts?per_page=50"); }
   /** The account's workers.dev name, creating it when the account doesn't have one yet. */

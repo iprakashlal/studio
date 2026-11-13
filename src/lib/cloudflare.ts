@@ -38,12 +38,14 @@ export function registrarHelp(z: Pick<CfZone, "name" | "original_registrar" | "o
 }
 
 export class Cloudflare {
-  constructor(private relay: Relay, private token: string) {}
+  /** Through the Studio's helper with a token, or (`via`) another route that adds the token itself, such as the
+   *  Studio's database publishing for a signed-in owner (see cfdb.ts dbCloudflare). */
+  constructor(private relay: Relay | null, private token: string, private via?: (q: { method: string; path: string; auth?: string; body?: string; body64?: string; contentType?: string }) => Promise<{ status: number; body: string }>) {}
   private async api<T = any>(method: string, path: string, body?: { json?: unknown; bytes?: Uint8Array; text?: string; type?: string; auth?: string }): Promise<T> {
     const q = { target: "cloudflare" as const, method, path, auth: body?.auth || this.token, ...(body?.json !== undefined ? { body: JSON.stringify(body.json), contentType: "application/json" } : body?.bytes ? { body64: b64(body.bytes), contentType: body.type } : body?.text !== undefined ? { body: body.text, contentType: body.type } : {}) };
     // Cloudflare's "unknown error" (10013) and 5xx answers are usually momentary: try again twice before giving up.
     for (let attempt = 0; ; attempt++) {
-      const r = await relayCall(this.relay, q);
+      const r = this.via ? await this.via(q) : await relayCall(this.relay!, q);
       let j: any = null; try { j = JSON.parse(r.body); } catch { /* not JSON */ }
       if (r.status === 401 || r.status === 403 || j?.errors?.some((e: any) => e.code === 10000 || e.code === 9109)) throw new CfError("Cloudflare refused the token. Create one with the “Edit Cloudflare Workers” template and paste it again.", r.status);
       if (j?.success) return j.result as T;
@@ -173,6 +175,7 @@ export class Cloudflare {
   addWorkerDomain(account: string, service: string, hostname: string, zoneId: string) { return this.api("PUT", `/accounts/${account}/workers/domains`, { json: { environment: "production", hostname, service, zone_id: zoneId, override_existing_dns_record: true, override_existing_origin: true } }); }
   removeWorkerDomain(account: string, id: string) { return this.api("DELETE", `/accounts/${account}/workers/domains/${id}`); }
 
+  deleteSecret(account: string, script: string, name: string) { return this.api("DELETE", `/accounts/${account}/workers/scripts/${encodeURIComponent(script)}/secrets/${encodeURIComponent(name)}`); }
   enableWorkersDev(account: string, name: string) { return this.api("POST", `/accounts/${account}/workers/scripts/${encodeURIComponent(name)}/subdomain`, { json: { enabled: true, previews_enabled: false } }); }
 }
 

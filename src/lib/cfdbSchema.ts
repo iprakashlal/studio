@@ -6,5 +6,6 @@ create table if not exists chunks (scope text not null, path text not null, n in
 create table if not exists codes (email text primary key, hash text not null, expires integer not null, tries integer not null default 0, sent integer not null default 0);
 create table if not exists enquiries (id integer primary key autoincrement, site text not null, data text not null, page text not null default '', status text not null default 'new', created_at text not null);
 create index if not exists enquiries_site on enquiries (site, created_at);
+create table if not exists workers (worker text primary key, scope text not null);
 `;
-export const CFDB_VERSION = 1;
+export const CFDB_VERSION = 2;

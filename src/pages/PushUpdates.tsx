@@ -1,7 +1,7 @@
 // Projects → "Push updates to live sites": one place to put this Studio build (template, theme and CMS code)
 // on every published site, without touching any site's content.
 import { useEffect, useMemo, useState } from "react";
-import { loadPages, type Pages } from "../lib/pages";
+import { pagesForHost, type Pages } from "../lib/pages";
 import { explain } from "../lib/repo";
 import { checkTarget, liveTargets, pushTarget, type LiveTarget, type TargetState } from "../lib/pushupdates";
 import type { Studio, StudioIndex } from "../lib/studio";
@@ -26,12 +26,14 @@ export function PushUpdatesDialog({ studio, index, token, onClose }: { studio: S
   const [st, setSt] = useState<Record<string, TargetState>>({});
   const [pick, setPick] = useState<Record<string, boolean>>({});
   const [have, setHave] = useState<Record<string, boolean>>({});
+  const pageCache = useMemo(() => new Map<string, Promise<Pages | null>>(), [token]);
   const [running, setRunning] = useState(false);
   const [finished, setFinished] = useState(false);
   const set = (k: string, v: TargetState) => setSt((m) => ({ ...m, [k]: v }));
 
   useEffect(() => {
-    Promise.all((["netlify", "cloudflare"] as const).map(async (k) => [k, !!(await loadPages(k, token))] as const)).then((l) => setHave(Object.fromEntries(l)));
+    // Each hosted site: this device's own account, or (Cloudflare) publishing through the Studio's database.
+    Promise.all(targets.filter((t) => t.kind === "hosted").map(async (t) => [t.key, !!(await pagesFor(t.project.host!))] as const)).then((l) => setHave(Object.fromEntries(l)));
     targets.forEach((t) => set(t.key, { s: "checking" }));
     Promise.all(targets.map(async (t) => {
       const v = await checkTarget(t);
@@ -41,15 +43,15 @@ export function PushUpdatesDialog({ studio, index, token, onClose }: { studio: S
   }, [targets]);
 
   const chosen = targets.filter((t) => pick[t.key]);
-  const missing = [...new Set(chosen.filter((t) => t.kind === "hosted" && have[t.project.host!.kind] === false).map((t) => t.label))];
-  const cache = new Map<string, Promise<Pages | null>>();
-  const pagesFor = (h: NonNullable<LiveTarget["project"]["host"]>) => { const k = h.kind + ":" + (h.account || ""); if (!cache.has(k)) cache.set(k, loadPages(h.kind, token, h.account)); return cache.get(k)!; };
+  const missingT = chosen.filter((t) => t.kind === "hosted" && have[t.key] === false);
+  const missing = [...new Set(missingT.map((t) => t.label))];
+  const pagesFor = (h: NonNullable<LiveTarget["project"]["host"]>) => { const k = h.kind + ":" + (h.account || "") + ":" + (h.cf ? h.cf.api + "|" + h.cf.site : ""); if (!pageCache.has(k)) pageCache.set(k, pagesForHost(h, token)); return pageCache.get(k)!; };
 
   const run = async () => {
     setRunning(true);
     let ok = 0, bad = 0;
     for (const t of chosen) {
-      if (t.kind === "hosted" && have[t.project.host!.kind] === false) { set(t.key, { s: "skipped", msg: `${t.label} isn't connected on this device (Settings → Hosting accounts).` }); continue; }
+      if (t.kind === "hosted" && have[t.key] === false) { set(t.key, { s: "skipped", msg: `${t.label} isn't connected on this device (Settings → Hosting accounts).` }); continue; }
       set(t.key, { s: "pushing" });
       try {
         await pushTarget(t, { studio, pages: pagesFor, token, step: (d) => set(t.key, { s: "pushing", detail: d }) });
@@ -85,7 +87,7 @@ export function PushUpdatesDialog({ studio, index, token, onClose }: { studio: S
           </ul>
         </div>
       )}
-      {missing.length > 0 && !running && !finished && <p className="rounded-lg border border-amber-400/40 bg-amber-400/5 px-3 py-2.5 text-[13px] text-amber-100">{missing.join(" and ")} isn't connected on this device, so those sites will be skipped. Connect it in Settings → Hosting accounts.</p>}
+      {missing.length > 0 && !running && !finished && <p className="rounded-lg border border-amber-400/40 bg-amber-400/5 px-3 py-2.5 text-[13px] text-amber-100">{missing.join(" and ")} isn't connected on this device, so {missingT.length === 1 ? "that site" : "those sites"} will be skipped.{missingT.some((t) => t.project.host?.cf) ? " For Cloudflare sites: sign in to the site's database on this device (its hosting window), and turn on “Publish from any device” once in Settings → Hosting accounts on a device that has the Cloudflare token." : " Connect it in Settings → Hosting accounts."}</p>}
       {chosen.some((t) => t.kind === "hosted" && t.project.host!.kind === "netlify") && <p className="hint">Netlify allows 3 deploys a minute; with more sites the Studio waits and carries on by itself.</p>}
       {finished && <p className="hint">GitHub Pages sites show the update about a minute after it's pushed; Netlify and Cloudflare sites at once.</p>}
     </Modal>

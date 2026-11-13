@@ -4,7 +4,7 @@
 import { backendOf, isHosted } from "../lib/backend";
 import { cfAddMembers } from "../lib/cfdb";
 import { useCfAccount, useCloudflarePicker, type CfAccountHook } from "./CfPicker";
-import { cloudflarePages, netlifyPages, PAGES_LABEL, type Pages, type PagesKind } from "../lib/pages";
+import { cloudflarePages, netlifyPages, pagesViaDb, PAGES_LABEL, type Pages, type PagesKind } from "../lib/pages";
 import { SbTokenHelp } from "./SbTokenHelp";
 import { useEffect, useState } from "react";
 import type { Session } from "../lib/auth";
@@ -218,17 +218,20 @@ function HostedHere({ session, nf, setNf, index }: { session: Session; nf: Netli
   const toast = useToast();
   const where: PagesKind = index.hosted?.pages || "netlify";
   const cfAcc = useCfAccount(session.token, nf, true);
-  const pagesOk = where === "netlify" ? !!nf : cfAcc.ready;
+  const [viaDb, setViaDb] = useState<Pages | null>(null);
+  const pagesOk = where === "netlify" ? !!nf : cfAcc.ready || !!viaDb;
   const [cfg, setCfg] = useState<StudioHostCfg | null>(null), [latest, setLatest] = useState<string | null>(null), [mine, setMine] = useState<string | null>(null);
   const [step, setStep] = useState(""), [err, setErr] = useState("");
   useEffect(() => { loadHostConfig().then((c) => { setCfg(c); if (c?.source) appFiles(c.source).then((m) => setLatest(m.build)).catch(() => setLatest(null)); }); appFiles(appBase()).then((m) => setMine(m.build)).catch(() => setMine(STUDIO_BUILD.id)); }, []);
+  // Without the token here, the Studio updates itself through its own database (Publish from any device).
+  useEffect(() => { if (where === "cloudflare" && !cfAcc.ready && cfg?.kind === "cloudflare") pagesViaDb(cfg.api, "studio:" + cfg.studio).then(setViaDb).catch(() => setViaDb(null)); }, [where, cfAcc.ready, cfg?.kind]);
   const update = async () => {
     if (!pagesOk || !cfg?.source) return;
     setErr("");
     try {
       const siteId = index.hosted?.siteId;
       if (!siteId) throw new Error(`Couldn't find this Studio's site on the connected ${PAGES_LABEL[where]} account.`);
-      await deployStudioApp(await pagesFrom(where, nf, cfAcc, index.hosted?.account, setStep), { siteId, siteName: "", source: cfg.source, config: cfg }, setStep);
+      await deployStudioApp(!cfAcc.ready && viaDb ? viaDb : await pagesFrom(where, nf, cfAcc, index.hosted?.account, setStep), { siteId, siteName: "", source: cfg.source, config: cfg }, setStep);
       toast("Updated. Reloading…"); setTimeout(() => location.reload(), 1200);
     } catch (e: any) { setErr(e?.message || "Couldn't update."); }
     setStep("");
@@ -242,7 +245,7 @@ function HostedHere({ session, nf, setNf, index }: { session: Session; nf: Netli
       <section className="card flex flex-col gap-3 p-5" aria-label="Update">
         <h3 className="text-[15px] font-extrabold">Studio updates</h3>
         <p className="text-sm text-ink-300">This Studio: build <code className="font-mono text-xs">{mine || "…"}</code>. Latest: <code className="font-mono text-xs">{latest || "…"}</code>{latest && mine && latest === mine ? " · up to date" : ""}.</p>
-        {where === "netlify" ? !nf && <NetlifyAccount session={session} onToken={(t) => setNf(t ? new Netlify(t) : null)} /> : !cfAcc.ready && cfAcc.ui}
+        {where === "netlify" ? !nf && <NetlifyAccount session={session} onToken={(t) => setNf(t ? new Netlify(t) : null)} /> : !cfAcc.ready && (viaDb ? <p className="text-sm text-emerald-300">Updates go through your Cloudflare database: no token needed on this device.</p> : cfAcc.ui)}
         <button type="button" className="btn btn-pri self-start" disabled={!pagesOk || !cfg?.source || !!step || (!!latest && latest === mine)} onClick={update}>{step ? step + "…" : "Update to the latest Studio"}</button>
         {err && <p role="alert" className="text-sm text-red-300">{err}</p>}
       </section>

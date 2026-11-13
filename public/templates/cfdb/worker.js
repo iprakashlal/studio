@@ -9,8 +9,9 @@ create table if not exists chunks (scope text not null, path text not null, n in
 create table if not exists codes (email text primary key, hash text not null, expires integer not null, tries integer not null default 0, sent integer not null default 0);
 create table if not exists enquiries (id integer primary key autoincrement, site text not null, data text not null, page text not null default '', status text not null default 'new', created_at text not null);
 create index if not exists enquiries_site on enquiries (site, created_at);
+create table if not exists workers (worker text primary key, scope text not null);
 `;
-var CFDB_VERSION = 1;
+var CFDB_VERSION = 2;
 
 // worker/db-worker.ts
 var V = CFDB_VERSION;
@@ -85,7 +86,7 @@ var db_worker_default = {
     if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
     const u = new URL(req.url), p = u.pathname.replace(/\/+$/, "") || "/";
     try {
-      if (p === "/") return json({ ok: true, service: "site-studio-db", v: V, mail: !!(env.RESEND_API_KEY && env.MAIL_FROM) });
+      if (p === "/") return json({ ok: true, service: "site-studio-db", v: V, mail: !!(env.RESEND_API_KEY && env.MAIL_FROM), ...env.CF_TOKEN && env.CF_ACCOUNT ? { deploy: true, account: env.CF_ACCOUNT } : {} });
       if (p === "/auth/code" && req.method === "POST") {
         const { email: raw } = await req.json();
         const email2 = String(raw || "").trim().toLowerCase();
@@ -175,6 +176,33 @@ var db_worker_default = {
         const list = (Array.isArray(paths) ? paths : []).filter(pathOk).slice(0, 500);
         await env.DB.batch(list.flatMap((x) => [env.DB.prepare("delete from chunks where scope = ? and path = ?").bind(scope, x), env.DB.prepare("delete from files where scope = ? and path = ?").bind(scope, x)]));
         return json({ ok: true, n: list.length });
+      }
+      if (p === "/cf" && req.method === "POST") {
+        if (!env.CF_TOKEN || !env.CF_ACCOUNT) return err(501, "This database can't publish: no Cloudflare token is kept here.");
+        if (role !== "owner" && role !== "partner") return err(403, "Only the owners of this site can publish it.");
+        const q = await req.json(), method = String(q.method || "GET").toUpperCase(), path2 = String(q.path || ""), A = env.CF_ACCOUNT;
+        const ACC = "/accounts/" + A + "/workers";
+        let worker = "", useJwt = false, m;
+        if (method === "GET" && path2 === ACC + "/subdomain") {
+        } else if (method === "POST" && path2 === ACC + "/assets/upload?base64=true") useJwt = true;
+        else if ((m = path2.match(/^\/accounts\/([\w-]+)\/workers\/scripts\/([a-z0-9][a-z0-9-]{0,62})(\/settings|\/assets-upload-session|\/subdomain)?$/)) && m[1] === A && (method === "GET" && m[3] === "/settings" || method === "POST" && (m[3] === "/assets-upload-session" || m[3] === "/subdomain") || method === "PUT" && !m[3])) worker = m[2];
+        else return err(403, "Not something publishing needs.");
+        if (worker && !await env.DB.prepare("select 1 from workers where worker = ? and scope = ?").bind(worker, scope).first()) return err(403, `The Worker ${worker} isn't registered to ${scope}. Publish once from a device with the Cloudflare token.`);
+        const body = q.body64 ? Uint8Array.from(atob(String(q.body64)), (c) => c.charCodeAt(0)) : q.body != null ? String(q.body) : void 0;
+        if (method === "PUT") {
+          const text = typeof body === "string" ? body : new TextDecoder().decode(body);
+          const mm = /name="metadata"[^\r\n]*\r\n(?:[^\r\n]+\r\n)*\r\n(\{[\s\S]*?\})\r\n--/.exec(text);
+          let meta = null;
+          try {
+            meta = mm ? JSON.parse(mm[1]) : null;
+          } catch {
+            meta = null;
+          }
+          if (!meta || !Array.isArray(meta.bindings) || meta.bindings.some((x) => x?.type !== "assets") || meta.keep_bindings) return err(403, "A site's Worker can only be given its own files.");
+        }
+        if (useJwt && !/^[\w.~+/=-]{8,4096}$/.test(String(q.jwt || ""))) return err(400, "Missing upload token.");
+        const r = await fetch("https://api.cloudflare.com/client/v4" + path2, { method, headers: { Authorization: "Bearer " + (useJwt ? q.jwt : env.CF_TOKEN), ...q.contentType ? { "Content-Type": String(q.contentType) } : {} }, body: method === "GET" ? void 0 : body });
+        return json({ status: r.status, body: await r.text() });
       }
       if (p === "/m") return json((await env.DB.prepare("select email, role, added_at from members where scope = ? order by email").bind(scope).all()).results || []);
       if (p === "/m/add" && req.method === "POST") {

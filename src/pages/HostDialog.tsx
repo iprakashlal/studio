@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useCfAccount, useCloudflarePicker, type CfAccountHook } from "./CfPicker";
-import { cloudflarePages, netlifyPages, PAGES_LABEL, type Pages, type PagesKind } from "../lib/pages";
+import { cloudflarePages, netlifyPages, pagesViaDb, PAGES_LABEL, type Pages, type PagesKind } from "../lib/pages";
 import { CfError, registrarHelp, type Cloudflare } from "../lib/cloudflare";
-import { CF_DB_TOKEN_PAGE, cfAccountVault, cfAddMembers, resendTestOnly, cfRole, cfSendCode, cfSignedIn, cfVerifyCode } from "../lib/cfdb";
+import { CF_DB_TOKEN_PAGE, registerWorkers, cfAccountVault, cfAddMembers, resendTestOnly, cfRole, cfSendCode, cfSignedIn, cfVerifyCode } from "../lib/cfdb";
 import { SupabaseAuto } from "./SupabaseAuto";
 import type { Session } from "../lib/auth";
 import type { ProjectMeta, Studio, StudioIndex } from "../lib/studio";
@@ -105,15 +105,23 @@ export function HostDialog({ studio, project, tpl, draft, dirty, save, onIndex, 
   const [editors, setEditors] = useState(""), [editorsFound, setEditorsFound] = useState<boolean | null>(null);
   const cfAcc = useCfAccount(session.token, nf, true);
   const cfp = useCloudflarePicker(session.token, nf, true, undefined, cfAcc);
-  const pagesOk = pagesKind === "netlify" ? !!nf : cfAcc.ready;
+  // Without the token on this device, an existing Cloudflare site publishes through the Studio's database (when it
+  // keeps the token: Settings → Hosting accounts → Publish from any device) as a signed-in owner.
+  const [viaDb, setViaDb] = useState<Pages | null>(null);
+  const pagesOk = pagesKind === "netlify" ? !!nf : cfAcc.ready || !!viaDb;
   const getPages = async (): Promise<Pages> => {
     if (pagesKind === "netlify") { if (!nf) throw new Error("Connect Netlify first."); return netlifyPages(nf); }
+    if (!cfAcc.ready && viaDb) return viaDb;
     const { cf, account } = await cfAcc.client((x) => setStep({ i: -1, detail: x }));
     return cloudflarePages(cf, host?.kind === "cloudflare" && host.account ? host.account : account.id, account.name);
   };
   const [cfAddr, setCfAddr] = useState("");
   useEffect(() => { if (pagesKind === "cloudflare" && cfAcc.ready) getPages().then(async (p) => { await p.init(); setCfAddr(p.addressOf(siteName || "name")); }).catch(() => {}); }, [pagesKind, cfAcc.ready, siteName]);
   const [cfSigned, setCfSigned] = useState<string | null>(null), [cfAccess, setCfAccess] = useState<"" | "ok" | "no">("");
+  useEffect(() => {
+    if (!host || moving || host.kind !== "cloudflare" || !host.cf || cfAcc.ready || cfAccess !== "ok") { setViaDb(null); return; }
+    pagesViaDb(host.cf.api, "site:" + host.cf.site).then(setViaDb).catch(() => setViaDb(null));
+  }, [host?.cf?.api, moving, cfAcc.ready, cfAccess]);
   const cfCheck = async (c = cfSite) => { if (!c) return; const e = await cfSignedIn(c.api); setCfSigned(e); setCfAccess(e ? ((await cfRole(c.api, "site:" + c.site)) ? "ok" : "no") : ""); };
   useEffect(() => { cfCheck(); }, [cfSite?.api, cfSite?.site]);
   const dbOk = dbKind === "cloudflare" ? !!cfSite && cfAccess === "ok" && (!dbMoving || access === "ok") : sbReady && access === "ok";
@@ -217,6 +225,8 @@ export function HostDialog({ studio, project, tpl, draft, dirty, save, onIndex, 
     try {
       const r = await publishHosted({ pages, host: h, tpl, draft, name: project.name, version: next, withContent: dbMoving ? false : !host || withContent, getBlob, note: note.trim(), step: (i, detail) => setStep({ i, detail }) });
       const { index } = await studio.recordExport(project.id, { kind: pagesKind, note: note.trim(), target: h.siteName }, draft, "published", undefined, r.siteSha, h);
+      // With the token here: let this site be published from any device by its owners (when the database keeps a token).
+      if (pagesKind === "cloudflare" && cfAcc.ready && h.cf) { try { const v = await cfAccountVault.load(session.token); if (v?.setup) await registerWorkers((await cfAcc.client()).cf, v.setup, [{ worker: h.siteId, scope: "site:" + h.cf.site }]); } catch { /* older database: registered when publishing from any device is turned on */ } }
       onIndex(index);
       setDone({ url: siteAddress(h), admin: r.admin, warnings: [...r.warnings, ...(moved?.missing || []).map((x) => `Photo not found in Supabase: ${x}`)], moved });
     } catch (e) {
@@ -275,6 +285,7 @@ export function HostDialog({ studio, project, tpl, draft, dirty, save, onIndex, 
           <NetlifyAccount session={session} onToken={setToken} />
           <p className="text-[13px] text-ink-400">Netlify's free plan has 300 credits a month for the whole account: each publish from the Studio uses 15 and each GB of visitor traffic 20. When they run out, Netlify pauses the sites until the month resets. Edits made in the site's own CMS use none: they go to the database.</p>
         </> : <>
+          {viaDb && !cfAcc.ready ? <p className="flex items-center gap-2 text-[13px] text-emerald-300"><span className="h-2 w-2 rounded-full bg-emerald-400" />Publishing through your Cloudflare database: no Cloudflare token needed on this device. (Connecting a domain or a new site still needs the token, below.)</p> : null}
           {cfAcc.ui}
           <p className="text-[13px] text-ink-400">Cloudflare serves the pages from its network for free, with no traffic limit (a Worker with the site's files on your account). Edits made in the site's own CMS go to the database and don't need a publish.</p>
         </>}
@@ -382,6 +393,7 @@ export function HostDialog({ studio, project, tpl, draft, dirty, save, onIndex, 
           <b>Publish is waiting for:</b>
           <ul className="mt-1 space-y-0.5">
             {pagesKind === "netlify" ? <li>{nf ? "✓" : "✗"} Netlify connected on this device{nf ? "" : " (section 1: paste your Netlify token)"}</li>
+              : viaDb ? <li>✓ Publishing through your Cloudflare database (no token needed on this device)</li>
               : <li>{cfAcc.ready ? "✓" : "✗"} Cloudflare connected on this device{cfAcc.ready ? "" : cfAcc.helper.ready ? " (section 1: paste your Cloudflare token)" : " (section 1: deploy the Studio's helper, then paste your Cloudflare token)"}</li>}
             {dbKind === "cloudflare" ? <>
             {dbMoving && <li>{access === "ok" ? "✓" : "✗"} Signed in to Supabase as an editor of this site (section 2, step a)</li>}

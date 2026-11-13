@@ -13,7 +13,7 @@ export const NAV_MODE_NOTE = "Theme default: most themes keep the menu fixed at 
 export function themeCards(extra: Axis[], note: string, layout: Axis = AXES.layout): Card[] {
   const g = (...fields: Field[]): Field => ({ t: "grid", cols: 2, fields });
   return [
-    { title: "Theme", fields: [{ t: "note", text: `${THEMES.length} themes. Pick one to restyle the whole site: colours, fonts, layout, cards, buttons, animation and background. Your content stays as it is, and every setting below stays editable. Signature themes (marked ★) also change the page layout and add their own content section.` }, { t: "themes" }] },
+    { title: "Theme", fields: [{ t: "note", studio: true, text: `${THEMES.length} themes. Pick one to restyle the whole site: colours, fonts, layout, cards, buttons, animation and background. Your content stays as it is, and every setting below stays editable. Signature themes (marked ★) also change the page layout and add their own content section.` }, { t: "themes" }] },
     { title: "Element pack", fields: [
       { t: "note", text: "Every circle, square, triangle and 3D shape on the site is drawn as an illustrated element from this pack: sun and planets, leaves, coffee and croissants, film reels, tools… Each theme picks a pack that suits it. In shape pickers, each shape chooses a different element from the pack." },
       sel(MOTIF_AXIS),

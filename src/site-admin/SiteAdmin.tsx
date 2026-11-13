@@ -305,7 +305,7 @@ function Workspace({ info, onInfo, repo, account, onSignOut, hosted }: { info: S
       )}
       <div className="flex min-h-0 flex-1">
         <div className={`min-h-0 min-w-0 flex-1 flex-col lg:flex ${pane === "edit" || wide ? "flex" : "hidden"}`}>
-          <Editor tpl={tpl} draft={draft} version={v} onChange={bump} upload={upload} img={img} extras={extras} onCategory={setCat} />
+          <Editor site tpl={tpl} draft={draft} version={v} onChange={bump} upload={upload} img={img} extras={extras} onCategory={setCat} />
         </div>
         <div className={`min-h-0 flex-col border-l border-ink-700 lg:w-[46%] ${wide ? "lg:hidden" : "lg:flex"} ${pane === "preview" && !wide ? "flex flex-1" : "hidden"}`}>
           <Preview tpl={tpl} base="" content={draft} version={v} assets={assets} />

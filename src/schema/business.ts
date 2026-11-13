@@ -18,7 +18,7 @@ const schema: Category[] = [
   {
     id: "look", label: "Theme & layout", group: "Design", desc: `Choose from ${BIZ_THEMES.length} business themes, then fine-tune the layout and style.`,
     cards: [
-      { title: "Theme", fields: [{ t: "note", text: `${BIZ_THEMES.length} business themes (B-01 to B-${BIZ_THEMES.length}). Picking one restyles the whole site: colours, fonts, hero layout, menu, cards, buttons and section style. Your content stays as it is, and every setting below stays editable.` }, { t: "themes" }] },
+      { title: "Theme", fields: [{ t: "note", studio: true, text: `${BIZ_THEMES.length} business themes (B-01 to B-${BIZ_THEMES.length}). Picking one restyles the whole site: colours, fonts, hero layout, menu, cards, buttons and section style. Your content stays as it is, and every setting below stays editable.` }, { t: "themes" }] },
       { title: "Layout", fields: [g2(sel(BIZ_AXES.layout), sel(BIZ_AXES.heroArt), sel(BIZ_AXES.nav), NAV_MODE_FIELD, sel(BIZ_AXES.width), sel(BIZ_AXES.bands))] },
       { title: "Style", fields: [g2(sel(BIZ_AXES.heading), sel(BIZ_AXES.shead), sel(BIZ_AXES.cards), sel(BIZ_AXES.buttons), sel(BIZ_AXES.pattern), sel(BIZ_AXES.motionStyle)),
         { t: "note", text: "“Full-width photo” needs a hero image (Hero → Image); without one the hero uses the split layout. Visitors who ask their device for reduced motion always get a still page." }] },
@@ -154,6 +154,8 @@ const schema: Category[] = [
 function prepareBusiness(c: any) {
   if (!c || typeof c !== "object") return;
   c.site ||= { multiPage: false };
+  // Early business sites stored the default theme as "meridian"; its id is "biz-meridian".
+  if (c.theme?.preset && !BIZ_THEMES.some((t) => t.id === c.theme.preset) && BIZ_THEMES.some((t) => t.id === "biz-" + c.theme.preset)) c.theme.preset = "biz-" + c.theme.preset;
   c.site.pageLabels ||= { home: "Home", services: "Services", work: "Work", about: "About", contact: "Contact" };
   c.sections = Array.isArray(c.sections) ? c.sections : [];
   for (const [id, label] of SECTIONS) if (!c.sections.some((s: any) => s.id === id)) c.sections.push({ id, label, show: true, inNav: ["services", "work", "about", "team", "contact"].includes(id) });

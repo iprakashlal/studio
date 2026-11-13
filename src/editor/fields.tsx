@@ -1,7 +1,8 @@
 import { createContext, useContext, useLayoutEffect, useRef, useState } from "react";
-import { ThemeGallery } from "../themes/ThemeGallery";
+import { ThemeGallery, ThemeSwatch } from "../themes/ThemeGallery";
 import { LinkedInImport } from "./LinkedInImport";
-import { Motifs } from "../themes/catalog";
+import { Motifs, THEMES, type Theme } from "../themes/catalog";
+import { themeCode } from "../themes/codes";
 import type { Field as F, TemplateDef } from "../schema/types";
 import { getP, setP, clone, vpaOk, paypalOk, httpsOk, hostIs, emailOk, phoneOk } from "../lib/util";
 import { Field, Toggle, useConfirm, useToast } from "../ui/kit";
@@ -12,6 +13,8 @@ export type EditorCtx = {
   bump: () => void;
   upload: (file: File) => Promise<{ path: string }>;
   img: (v: any) => string;
+  /** True in the site's own admin page. */
+  site?: boolean;
 };
 export const Ctx = createContext<EditorCtx>(null as any);
 const useCtx = () => useContext(Ctx);
@@ -33,7 +36,7 @@ function checkMsg(kind: string | undefined, v: string): string | undefined {
 }
 
 export function FieldView({ f, obj, base }: { f: F; obj: any; base: string }) {
-  const { bump, root, tpl } = useCtx();
+  const ctx = useCtx(); const { bump, root, tpl } = ctx;
   const id = `f-${base}-${"path" in f ? f.path : ""}`.replace(/[^\w-]/g, "_");
   const val = "path" in f ? getP(obj, f.path) : undefined;
   const set = (v: any) => {
@@ -54,6 +57,7 @@ export function FieldView({ f, obj, base }: { f: F; obj: any; base: string }) {
         </div>
       );
     case "note":
+      if (f.studio && ctx.site) return null;
       return <p className={`rounded-lg border px-3 py-2.5 text-[13px] ${f.tone === "warn" ? "border-amber-400/40 bg-amber-400/5 text-amber-100" : "border-ink-700 bg-ink-850 text-ink-300"}`}>{f.text}</p>;
     case "text":
       if (f.ml) {
@@ -165,9 +169,9 @@ export function FieldView({ f, obj, base }: { f: F; obj: any; base: string }) {
     case "list":
       return <ListField f={f} obj={obj} base={base} />;
     case "themes":
-      return (
-        <ThemeGallery current={root.theme?.preset} themes={tpl.themes} tags={tpl.themeTags} onPick={(th) => { Object.assign(root.theme, tpl.themeValues(th)); bump(); }} />
-      );
+      return <ThemesField />;
+    case "adminThemes":
+      return <AdminThemesField />;
     case "linkedin":
       return <LinkedInImport root={root} bump={bump} />;
     case "presets":
@@ -353,4 +357,67 @@ function GrowText({ id, value, ph, onChange }: { id: string; value: string; ph?:
     el.style.height = el.scrollHeight + 2 + "px";
   }, [value]);
   return <textarea ref={ref} id={id} rows={1} className="input resize-none overflow-hidden leading-snug" value={value} placeholder={ph} onChange={(e) => onChange(e.target.value)} />;
+}
+
+/** Which themes the site's own admin page offers: content.cms.themes = { mode, list }. Default: only the current one. */
+export function adminThemeChoice(root: any, all: Theme[]): { mode: "current" | "some" | "all"; themes: Theme[] } {
+  const cfg = root?.cms?.themes || {}, cur = root?.theme?.preset;
+  const mode = cfg.mode === "all" || cfg.mode === "some" ? cfg.mode : "current";
+  if (mode === "all") return { mode, themes: all };
+  const ids = new Set<string>([...(mode === "some" && Array.isArray(cfg.list) ? cfg.list : []), ...(cur ? [cur] : [])]);
+  return { mode, themes: all.filter((t) => ids.has(t.id)) };
+}
+
+function ThemesField() {
+  const { tpl, root, bump, site } = useCtx();
+  const all = tpl.themes || THEMES;
+  const pick = (th: Theme) => { Object.assign(root.theme, tpl.themeValues(th)); bump(); };
+  if (!site) return <ThemeGallery current={root.theme?.preset} themes={tpl.themes} tags={tpl.themeTags} onPick={pick} />;
+  const { mode, themes } = adminThemeChoice(root, all);
+  if (mode === "all") return <><p className="text-[13px] text-ink-300">{all.length} themes. Picking one restyles the whole site; your content stays as it is.</p><ThemeGallery current={root.theme?.preset} themes={all} tags={tpl.themeTags} onPick={pick} /></>;
+  if (themes.length <= 1) {
+    const t = themes[0];
+    return (
+      <div className="flex flex-col gap-3">
+        <p className="text-[13px] text-ink-300">{t ? <>This site uses the theme <b className="text-ink-100">{themeCode(t)} · {t.name}</b>, set by the site's designer. You can still change colours, fonts and the settings below.</> : "This site uses its own design, set by the site's designer. You can still change colours, fonts and the settings below."}</p>
+        {t && <div className="w-48 overflow-hidden rounded-xl border border-ink-600" aria-label="Current theme"><ThemeSwatch t={t} /><span className="block bg-ink-950 px-2.5 py-2 text-[13px]"><span className="block font-mono text-[11px] text-ink-400">{themeCode(t)}</span><b>{t.name}</b></span></div>}
+      </div>
+    );
+  }
+  return <><p className="text-[13px] text-ink-300">{themes.length} themes chosen for this site. Picking one restyles the whole site; your content stays as it is.</p><ThemeGallery current={root.theme?.preset} themes={themes} tags={[]} onPick={pick} /></>;
+}
+
+function AdminThemesField() {
+  const { tpl, root, bump } = useCtx();
+  const all = tpl.themes || THEMES;
+  root.cms = root.cms || {};
+  const cfg = root.cms.themes || {};
+  const mode: "current" | "some" | "all" = cfg.mode === "all" || cfg.mode === "some" ? cfg.mode : "current";
+  const list: string[] = Array.isArray(cfg.list) ? cfg.list : [];
+  const cur = all.find((t) => t.id === root.theme?.preset);
+  const set = (o: any) => { root.cms.themes = { mode, list, ...o }; bump(); };
+  const opts: [typeof mode, string, string][] = [
+    ["current", "Only the current theme", cur ? `${themeCode(cur)} · ${cur.name}. The admin can still change colours, fonts and layout settings.` : "The template's own look. The admin can still change colours, fonts and layout settings."],
+    ["some", "Themes I choose", "Pick a shortlist below. The current theme is always included."],
+    ["all", `All ${all.length} themes`, "The admin can switch to any theme."],
+  ];
+  return (
+    <div className="flex flex-col gap-3">
+      <p className="text-[13px] text-ink-300">Which themes the site's own admin page shows under Theme. This setting is only in the Studio; it takes effect when you publish.</p>
+      <div role="radiogroup" aria-label="Themes in the admin page" className="flex flex-col gap-2">
+        {opts.map(([v, label, hint]) => (
+          <label key={v} className={`flex cursor-pointer items-start gap-2.5 rounded-lg border px-3 py-2.5 ${mode === v ? "border-brand-500 bg-brand-500/10" : "border-ink-600 hover:border-ink-400"}`}>
+            <input type="radio" name="admin-themes" className="mt-1 accent-brand-400" checked={mode === v} onChange={() => set({ mode: v })} />
+            <span><b className="block text-sm">{label}</b><span className="block text-[12.5px] text-ink-400">{hint}</span></span>
+          </label>
+        ))}
+      </div>
+      {mode === "some" && (
+        <div className="flex flex-col gap-2">
+          <p className="text-[13px] text-ink-300"><b className="text-ink-100">{new Set([...list, ...(cur ? [cur.id] : [])]).size}</b> shown in the admin page{list.length ? "" : " (tick themes below)"}.{list.length > 0 && <> <button type="button" className="text-brand-300 underline" onClick={() => set({ list: [] })}>Clear</button></>}</p>
+          <ThemeGallery chosen={[...list, ...(cur && !list.includes(cur.id) ? [cur.id] : [])]} themes={all} tags={tpl.themeTags} onPick={(t) => { if (t.id === cur?.id) return; set({ list: list.includes(t.id) ? list.filter((x) => x !== t.id) : [...list, t.id] }); }} />
+        </div>
+      )}
+    </div>
+  );
 }

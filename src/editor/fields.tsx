@@ -371,7 +371,12 @@ export function adminThemeChoice(root: any, all: Theme[]): { mode: "current" | "
 function ThemesField() {
   const { tpl, root, bump, site } = useCtx();
   const all = tpl.themes || THEMES;
-  const pick = (th: Theme) => { Object.assign(root.theme, tpl.themeValues(th)); bump(); };
+  const pick = (th: Theme) => {
+    // With a shortlist, the theme being left stays on it: the current theme only counts while it's current.
+    const cfg = root.cms?.themes, prev = root.theme?.preset;
+    if (cfg?.mode === "some" && prev && prev !== th.id) { const list: string[] = Array.isArray(cfg.list) ? cfg.list : []; if (!list.includes(prev)) cfg.list = [...list, prev]; }
+    Object.assign(root.theme, tpl.themeValues(th)); bump();
+  };
   if (!site) return <ThemeGallery current={root.theme?.preset} themes={tpl.themes} tags={tpl.themeTags} onPick={pick} />;
   const { mode, themes } = adminThemeChoice(root, all);
   if (mode === "all") return <><p className="text-[13px] text-ink-300">{all.length} themes. Picking one restyles the whole site; your content stays as it is.</p><ThemeGallery current={root.theme?.preset} themes={all} tags={tpl.themeTags} onPick={pick} /></>;
@@ -389,6 +394,7 @@ function ThemesField() {
 
 function AdminThemesField() {
   const { tpl, root, bump } = useCtx();
+  const toast = useToast();
   const all = tpl.themes || THEMES;
   root.cms = root.cms || {};
   const cfg = root.cms.themes || {};
@@ -407,7 +413,7 @@ function AdminThemesField() {
       <div role="radiogroup" aria-label="Themes in the admin page" className="flex flex-col gap-2">
         {opts.map(([v, label, hint]) => (
           <label key={v} className={`flex cursor-pointer items-start gap-2.5 rounded-lg border px-3 py-2.5 ${mode === v ? "border-brand-500 bg-brand-500/10" : "border-ink-600 hover:border-ink-400"}`}>
-            <input type="radio" name="admin-themes" className="mt-1 accent-brand-400" checked={mode === v} onChange={() => set({ mode: v })} />
+            <input type="radio" name="admin-themes" className="mt-1 accent-brand-400" checked={mode === v} onChange={() => set({ mode: v, ...(v === "some" && cur && !list.includes(cur.id) ? { list: [...list, cur.id] } : {}) })} />
             <span><b className="block text-sm">{label}</b><span className="block text-[12.5px] text-ink-400">{hint}</span></span>
           </label>
         ))}
@@ -415,7 +421,7 @@ function AdminThemesField() {
       {mode === "some" && (
         <div className="flex flex-col gap-2">
           <p className="text-[13px] text-ink-300"><b className="text-ink-100">{new Set([...list, ...(cur ? [cur.id] : [])]).size}</b> shown in the admin page{list.length ? "" : " (tick themes below)"}.{list.length > 0 && <> <button type="button" className="text-brand-300 underline" onClick={() => set({ list: [] })}>Clear</button></>}</p>
-          <ThemeGallery chosen={[...list, ...(cur && !list.includes(cur.id) ? [cur.id] : [])]} themes={all} tags={tpl.themeTags} onPick={(t) => { if (t.id === cur?.id) return; set({ list: list.includes(t.id) ? list.filter((x) => x !== t.id) : [...list, t.id] }); }} />
+          <ThemeGallery chosen={[...list, ...(cur && !list.includes(cur.id) ? [cur.id] : [])]} themes={all} tags={tpl.themeTags} onPick={(t) => { if (t.id === cur?.id) return toast("The current theme is always shown. Pick another theme under Theme & layout first to remove it."); set({ list: list.includes(t.id) ? list.filter((x) => x !== t.id) : [...list, t.id] }); }} />
         </div>
       )}
     </div>

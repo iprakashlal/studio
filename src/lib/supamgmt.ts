@@ -6,6 +6,14 @@ import { vault } from "./vault";
 
 export const SB_TOKENS_PAGE = "https://supabase.com/dashboard/account/tokens";
 export const sbMgmtVault = vault<{ token: string }>("supabase");
+/** What a scoped Supabase access token needs for the Studio's setup (shown next to the token box). */
+export const SB_TOKEN_SCOPES: [string, string][] = [
+  ["Resource access", "Organization → your organisation"],
+  ["Account and organization", "Organizations: Read · Organization Projects: Read-write · Projects (account-wide): Read"],
+  ["Project", "Project Settings: Read-write"],
+  ["Database", "Database: Read-write"],
+  ["Application services", "Auth Config: Read-write · API Keys: Read"],
+];
 export type SbProject = { id: string; ref?: string; name: string; status: string; region: string; organization_id?: string; organization_slug?: string };
 export type SbOrg = { id: string; slug?: string; name: string };
 
@@ -23,6 +31,7 @@ export class SupaMgmt {
     const r = await relayCall(this.relay, { target: "supabase", method, path, auth: this.token, ...(json !== undefined ? { body: JSON.stringify(json), contentType: "application/json" } : {}) });
     let j: any = null; try { j = r.body ? JSON.parse(r.body) : null; } catch { /* not JSON */ }
     if (r.status === 401) throw new SbMgmtError("Supabase refused the access token. Create a new one and paste it again.", 401);
+    if (r.status === 403) throw new SbMgmtError("Supabase says the access token isn't allowed to do this (" + (j?.message || "forbidden") + "). Give the token the permissions listed next to the token box, or create a new one.", 403);
     if (r.status >= 400) throw new SbMgmtError("Supabase: " + (j?.message || j?.error || r.body?.slice(0, 200) || r.status), r.status);
     return j as T;
   }
@@ -46,7 +55,7 @@ export class SupaMgmt {
   }
   /** The key a website uses: the legacy anon key when the project has it, else the publishable key. */
   async publicKey(ref: string): Promise<string> {
-    const keys = await this.api<{ name?: string; type?: string; api_key?: string }[]>("GET", `/v1/projects/${ref}/api-keys?reveal=true`);
+    const keys = await this.api<{ name?: string; type?: string; api_key?: string }[]>("GET", `/v1/projects/${ref}/api-keys`);
     const anon = keys.find((k) => k.name === "anon" && k.api_key), pub = keys.find((k) => k.type === "publishable" && k.api_key);
     const k = anon?.api_key || pub?.api_key;
     if (!k) throw new SbMgmtError("Couldn't find the project's public key.");

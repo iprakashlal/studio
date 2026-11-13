@@ -1,5 +1,6 @@
 // Hosting → Supabase, set up for you: one access token, then the Studio picks or creates the project, fills in
 // its address and public key, runs the setup SQL and switches sign-in emails to 6-digit codes.
+import { SbTokenHelp } from "./SbTokenHelp";
 import { useEffect, useState } from "react";
 import { RELAY_VERSION, relayVault, setupRelay, type Relay } from "../lib/relay";
 import { Netlify } from "../lib/netlify";
@@ -68,6 +69,7 @@ export function SupabaseAuto({ nf, studioToken, site, email, defaultOpen = false
       {open && (
         <div className="flex flex-col gap-2.5">
           <p><a className="btn btn-sm btn-pri" href={SB_TOKENS_PAGE} target="_blank" rel="noopener noreferrer">Open Supabase → Access tokens ↗</a> <span className="text-ink-400">Press <b>Generate new token</b>, name it “Site Studio”, copy it and paste it here. It's kept encrypted on this device only.</span></p>
+          <SbTokenHelp />
           <div className="flex gap-2">
             <input aria-label="Supabase access token" className="input min-w-0 flex-1 font-mono text-xs" type="password" autoComplete="off" placeholder="sbp_…" value={tok} onChange={(e) => { setTok(e.target.value); setSaved(false); setProjects(null); }} />
             <button type="button" className="btn btn-sm" disabled={!tok.trim() || !!busy} onClick={connect}>{busy && !projects ? busy + "…" : "Connect"}</button>

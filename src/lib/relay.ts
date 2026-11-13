@@ -8,17 +8,17 @@ import { Netlify } from "./netlify";
 import { vault } from "./vault";
 import { zip } from "./zip";
 
-export const RELAY_VERSION = 3;
+export const RELAY_VERSION = 4;
 const FN = "studio-relay";
 export type Relay = { siteId: string; url: string; key: string; v: number };
 export const relayVault = vault<Relay>("relay");
 
 /** The function's code (Netlify Functions, Node 18+: fetch is built in). */
 export function relaySource(key: string, origins: string[]): string {
-  return `// Site Studio setup helper (v${RELAY_VERSION}). Passes the Studio's requests to Cloudflare, Resend and Stripe. Stores nothing.
+  return `// Site Studio setup helper (v${RELAY_VERSION}). Passes the Studio's requests to Cloudflare, Resend, Stripe and Supabase. Stores nothing.
 const KEY = ${JSON.stringify(key)};
 const ORIGINS = ${JSON.stringify(origins)};
-const BASES = { cloudflare: "https://api.cloudflare.com/client/v4", resend: "https://api.resend.com", stripe: "https://api.stripe.com" };
+const BASES = { cloudflare: "https://api.cloudflare.com/client/v4", resend: "https://api.resend.com", stripe: "https://api.stripe.com", supabase: "https://api.supabase.com" };
 const METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE"];
 exports.handler = async (event) => {
   const h = Object.fromEntries(Object.entries(event.headers || {}).map(([k, v]) => [k.toLowerCase(), v]));
@@ -56,7 +56,7 @@ exports.handler = async (event) => {
 
 const PAGE = `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Site Studio helper</title>
 <style>body{font:16px/1.6 system-ui,sans-serif;max-width:560px;margin:12vh auto;padding:0 20px;color:#1d2433}code{background:#eef1f6;padding:1px 5px;border-radius:4px}</style>
-<h1>Site Studio helper</h1><p>This small site lets Site Studio set up Cloudflare Workers, Resend email and Stripe webhooks for your sites, because those services don't accept requests straight from a web page.</p>
+<h1>Site Studio helper</h1><p>This small site lets Site Studio set up Cloudflare Workers, Resend email, Stripe webhooks and Supabase projects for your sites, because those services don't accept requests straight from a web page.</p>
 <p>It keeps no keys or data: each request carries what it needs and is passed on once. It only answers Site Studio. You can delete this site in Netlify at any time; the Studio offers to set it up again when needed.</p>`;
 
 const rand = (n: number) => [...crypto.getRandomValues(new Uint8Array(n))].map((b) => b.toString(16).padStart(2, "0")).join("");
@@ -95,7 +95,7 @@ export async function setupRelay(nf: Netlify, studioToken: string, existing?: Re
 export class RelayError extends Error { constructor(msg: string, public status = 0) { super(msg); } }
 
 /** One request through the helper. Returns the upstream status and body text. */
-export async function relayCall(relay: Relay, q: { target: "ping" | "cloudflare" | "resend" | "stripe" | "worker"; method?: string; path?: string; url?: string; auth?: string; body?: string; body64?: string; contentType?: string }): Promise<{ status: number; body: string }> {
+export async function relayCall(relay: Relay, q: { target: "ping" | "cloudflare" | "resend" | "stripe" | "supabase" | "worker"; method?: string; path?: string; url?: string; auth?: string; body?: string; body64?: string; contentType?: string }): Promise<{ status: number; body: string }> {
   let r: Response;
   try { r = await fetch(relay.url + ".netlify/functions/" + FN, { method: "POST", headers: { "Content-Type": "application/json", "x-relay-key": relay.key }, body: JSON.stringify(q) }); }
   catch { throw new RelayError("Couldn't reach the Studio's helper on Netlify. Check your connection, or set the helper up again."); }

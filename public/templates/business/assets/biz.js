@@ -440,7 +440,7 @@ async function submit(e) {
       if (!r.ok) throw new Error("save " + r.status);
       f.reset(); msg.className = "form-msg ok"; msg.textContent = C.contact.form.success || "Thank you. We'll be in touch.";
     } else if (cfg) {
-      const r = await fetch(cfg.url + "/rest/v1/site_enquiries", { method: "POST", headers: { apikey: cfg.key, Authorization: "Bearer " + cfg.key, "Content-Type": "application/json", Prefer: "return=minimal" }, body: JSON.stringify({ site: cfg.site, data, page: location.pathname }) });
+      const r = await fetch(cfg.url + "/rest/v1/site_enquiries", { method: "POST", headers: { apikey: cfg.key, ...(/^sb_/.test(cfg.key) ? {} : { Authorization: "Bearer " + cfg.key }), "Content-Type": "application/json", Prefer: "return=minimal" }, body: JSON.stringify({ site: cfg.site, data, page: location.pathname }) });
       if (!r.ok) throw new Error("save " + r.status);
       f.reset(); msg.className = "form-msg ok"; msg.textContent = C.contact.form.success || "Thank you. We'll be in touch.";
     } else {
@@ -472,7 +472,7 @@ if (PREVIEW) {
   try { const c = sessionStorage.getItem(CKEY); if (c) { C = merge(DEFAULT, JSON.parse(c)); render(); shownTxt = c; } } catch (e) {}
   const giveUp = setTimeout(() => { if (!shownTxt) { render(); shownTxt = "default"; } }, 6000);
   const fromFile = () => fetch("content.json", { cache: "no-store" }).then((r) => (r.ok ? r.text() : null));
-  const fromDb = () => fetch(HOST.db + "/rest/v1/site_content?select=content&site=eq." + encodeURIComponent(HOST.site), { cache: "no-store", headers: { apikey: HOST.key, Authorization: "Bearer " + HOST.key } })
+  const fromDb = () => fetch(HOST.db + "/rest/v1/site_content?select=content&site=eq." + encodeURIComponent(HOST.site), { cache: "no-store", headers: { apikey: HOST.key, ...(/^sb_/.test(HOST.key) ? {} : { Authorization: "Bearer " + HOST.key }) } })
     .then((r) => (r.ok ? r.json() : null)).then((j) => (j && j[0] && j[0].content ? JSON.stringify(j[0].content) : null)).catch(() => null).then((t) => t || fromFile());
   (HOST ? fromDb() : fromFile()).then((txt) => {
     clearTimeout(giveUp);

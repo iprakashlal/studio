@@ -884,7 +884,7 @@ else {
   try { const c = sessionStorage.getItem(CKEY); if (c) { C = merge(DEFAULT, JSON.parse(c)); render(); shown = c; } } catch (e) {}
   const giveUp = setTimeout(() => { if (!shown) { render(); shown = "default"; } }, 6000);
   const fromFile = () => fetch("content.json", { cache: "no-store" }).then((r) => (r.ok ? r.text() : null));
-  const fromDb = () => fetch(HOST.db + "/rest/v1/site_content?select=content&site=eq." + encodeURIComponent(HOST.site), { cache: "no-store", headers: { apikey: HOST.key, Authorization: "Bearer " + HOST.key } })
+  const fromDb = () => fetch(HOST.db + "/rest/v1/site_content?select=content&site=eq." + encodeURIComponent(HOST.site), { cache: "no-store", headers: { apikey: HOST.key, ...(/^sb_/.test(HOST.key) ? {} : { Authorization: "Bearer " + HOST.key }) } })
     .then((r) => (r.ok ? r.json() : null)).then((j) => (j && j[0] && j[0].content ? JSON.stringify(j[0].content) : null)).catch(() => null).then((t) => t || fromFile());
   (HOST ? fromDb() : fromFile()).then((txt) => {
     clearTimeout(giveUp);

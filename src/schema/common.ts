@@ -20,7 +20,15 @@ export function adminCategory(): Category {
       { t: "note", text: "A less obvious name keeps casual visitors away from the sign-in screen. It isn't a password: the editor still needs your GitHub token. After you publish a new name, the old address stops working, so bookmark the new one." },
       { t: "note", text: "Names the site already uses (index, shop, cart, checkout, portfolio, account…) aren't allowed and fall back to admin.", tone: "warn" },
     ] },
-    { title: "Themes in the admin page", studio: true, fields: [{ t: "adminThemes" }] }],
+    { title: "Themes in the admin page", studio: true, fields: [{ t: "adminThemes" }] },
+    { title: "“Powered by” badge", studio: true, fields: [
+      { t: "toggle", path: "poweredBy.show", label: "Show the badge on the site" },
+      { t: "note", text: "A small link in the bottom-right corner of every page, always on screen. Only the Studio can change it: the site's own admin page doesn't show this setting." },
+      { t: "when", path: "poweredBy.show", is: "true", fields: [{ t: "grid", cols: 2, fields: [
+        { t: "text", path: "poweredBy.text", label: "Badge text", ph: "Powered by Picaffectz" },
+        { t: "text", path: "poweredBy.url", label: "Link", ph: "https://…", check: "https", hint: "Where the badge goes when clicked. Opens in a new tab." },
+      ] }] },
+    ] }],
   };
 }
 

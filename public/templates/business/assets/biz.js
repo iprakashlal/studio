@@ -17,6 +17,7 @@ const DEFAULT = {
     introBg: "", introFg: "", introTitle: "", introFont: "display", introCase: "upper", logoRadius: 22, scrollEase: "light", lineBreaks: "typed",
   },
   cms: { adminPage: "admin" },
+  poweredBy: { show: true, text: "Powered by Picaffectz", url: "https://iprakashlal.github.io/studio/#/themes" },
   brand: { name: "Northbeam Partners", tagline: "Strategy, design and engineering for growing companies", logo: null, showName: true },
   site: { multiPage: false, pageLabels: { home: "Home", services: "Services", work: "Work", about: "About", contact: "Contact" } },
   nav: { cta: "Book a call", ctaTarget: "contact" },
@@ -394,7 +395,7 @@ function render() {
   const body = ids.filter((id) => RENDER[id] && shown(id)).map((id) => RENDER[id]()).join("");
   $("#app").innerHTML = `<a class="skip" href="#main">Skip to content</a>${navHTML()}<main id="main">${multi() && PAGE !== "home" ? pageHead() : ""}${body}</main>${footerHTML()}`;
   bind();
-  if (window.SiteFX) try { window.SiteFX.init({ root: $("#app"), brand: C.theme.introTitle || C.brand.name }); } catch (e) {}
+  if (window.SiteFX) try { window.SiteFX.init({ root: $("#app"), brand: C.theme.introTitle || C.brand.name, badge: C.poweredBy }); } catch (e) {}
 }
 
 /* ============================================================

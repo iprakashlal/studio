@@ -8,7 +8,7 @@ import { NetlifyAccount } from "./HostDialog";
 import { GitHubPublishAccount } from "./GitHubAccount";
 import { SetupAccounts } from "./SetupAccounts";
 import { ghPublish } from "../lib/ghpublish";
-import { Field, Logo, Spinner, useToast } from "../ui/kit";
+import { Field, Logo, StepLoader, useToast } from "../ui/kit";
 import { BrandMark, DEFAULT_NAME, brand as currentBrand, setBrand, shrinkImage, useBrand } from "../lib/brand";
 import { Dashboard } from "./Dashboard";
 import { ProjectView } from "./ProjectView";
@@ -32,11 +32,12 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
   }, [repo, session.token]);
   const [index, setIndex] = useState<StudioIndex | null>(null);
   const [err, setErr] = useState("");
+  const [bootAt, setBootAt] = useState(0);
   const hash = useHash();
 
   const load = () => {
-    setErr("");
-    studio.loadIndex().then(setIndex).catch((e) => setErr(explain(e)));
+    setErr(""); setBootAt(1);
+    studio.loadIndex().then((i) => { setBootAt(2); setIndex(i); }).catch((e) => setErr(explain(e)));
   };
   // The publishing token (if any) is unlocked first, so live-site checks can read the sites' repositories.
   useEffect(() => { let on = true; (repo.demo ? Promise.resolve(null) : ghPublish.load(session.token)).finally(() => { if (on) load(); }); return () => { on = false; }; }, [studio]);
@@ -76,7 +77,7 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
   );
 
   if (err) return <>{header}<main className="mx-auto max-w-xl px-4 py-16"><div className="card flex flex-col gap-4 p-6"><h1 className="text-xl font-extrabold">Couldn't load your projects</h1><p className="text-sm text-ink-300">{err}</p><button className="btn btn-pri self-start" onClick={load}>Try again</button></div></main></>;
-  if (!index) return <>{header}<main className="grid place-items-center py-24"><Spinner label="Loading projects…" /></main></>;
+  if (!index) return <>{header}<main className="grid place-items-center py-24"><StepLoader title="Loading the Studio" at={bootAt} steps={[repo.demo ? "Starting the demo" : "Unlocking your publishing token on this device", repo.demo ? "Loading the sample projects" : `Reading your projects from ${session.cfg.owner}/${session.cfg.repo}`, "Preparing the dashboard"]} /></main></>;
 
   if (projectId) {
     if (!project) return <>{header}<main className="mx-auto max-w-xl px-4 py-16"><div className="card flex flex-col gap-4 p-6"><h1 className="text-xl font-extrabold">Project not found</h1><p className="text-sm text-ink-300">It may have been deleted on another device.</p><a className="btn btn-pri self-start" href="#/">Back to projects</a></div></main></>;

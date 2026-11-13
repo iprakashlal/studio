@@ -7,7 +7,8 @@ import { explain } from "../lib/repo";
 import { siteAddress, siteRepoFor } from "../lib/hosting";
 import { loadManifest, loadStarter, type Manifest } from "../lib/exporter";
 import { slugify, timeAgo } from "../lib/util";
-import { Empty, Field, Modal, useConfirm, useToast } from "../ui/kit";
+import { Empty, Field, Logo, Modal, useConfirm, useToast } from "../ui/kit";
+import { BrandMark } from "../lib/brand";
 import { PushUpdatesDialog } from "./PushUpdates";
 
 const STATUS: Record<ProjectMeta["status"], { label: string; cls: string }> = {
@@ -89,7 +90,7 @@ export function Dashboard({ studio, index, onIndex, token }: { studio: Studio; i
     <main className="mx-auto flex max-w-[1400px] flex-col gap-6 px-4 py-8 sm:px-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="font-display text-3xl font-extrabold sm:text-4xl">Projects</h1>
+          <h1 className="flex items-center gap-3 font-display text-3xl font-extrabold sm:text-4xl"><BrandMark size={36} fallback={<Logo size={16} />} />Projects</h1>
           <p className="mt-1 text-sm text-ink-400">Create, preview, export and re-edit websites. Every site ships with its own CMS.</p>
         </div>
         <div className="flex flex-wrap gap-2">

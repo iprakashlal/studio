@@ -57,6 +57,12 @@
   var GRAIN = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E";
   var CSS = [
     ":root{--fxa:var(--c1,var(--accent,#7c5cff));--fxi:var(--text,#111);--fxd:var(--deep,var(--text,#111));--fxo:var(--on-deep,var(--bg,#fff));--fxe:cubic-bezier(.16,1,.3,1)}",
+    /* "Powered by" badge: always on screen, bottom right, small */
+    ".fx-badge{position:fixed;right:max(12px,env(safe-area-inset-right,0px));bottom:max(12px,env(safe-area-inset-bottom,0px));z-index:99980;display:inline-flex;align-items:center;gap:7px;padding:5px 11px 5px 9px;border-radius:999px;background:rgba(14,17,24,.84);color:#fff!important;font:600 11px/1.25 system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;letter-spacing:.01em;text-decoration:none!important;box-shadow:0 8px 22px -10px rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.16);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);opacity:.92;transition:opacity .2s,transform .2s;max-width:calc(100vw - 24px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
+    ".fx-badge:hover,.fx-badge:focus-visible{opacity:1;transform:translateY(-1px)}",
+    ".fx-badge .fx-bm{display:inline-flex;gap:2px;flex:none}.fx-badge .fx-bm i{display:block;width:7px;height:7px}",
+    ".fx-badge .fx-bm i:nth-child(1){background:#5B7CFF;border-radius:50%}.fx-badge .fx-bm i:nth-child(2){background:#FF6A3D}.fx-badge .fx-bm i:nth-child(3){background:#FFC83A;clip-path:polygon(50% 0,100% 100%,0 100%)}",
+    "@media print{.fx-badge{display:none}}",
     /* overlay */
     ".fx-ov{position:fixed;pointer-events:none;z-index:99970;inset:0}",
     "html[data-overlay=grain] .fx-ov{inset:-60%;background-image:url(\"" + GRAIN + "\");opacity:.085;animation:fxgrain .9s steps(5) infinite}",
@@ -510,10 +516,22 @@
   }
 
   /** Call after every render. opts.root: the element holding the site; opts.brand: name for the loader. */
+  /* "Powered by" badge. Shown unless the site turns it off (content.poweredBy.show === false, set in the Studio). */
+  var BADGE_TEXT = "Powered by Picaffectz", BADGE_URL = "https://iprakashlal.github.io/studio/#/themes";
+  function badge(b) {
+    b = b || {};
+    var a = document.querySelector(".fx-badge");
+    if (b.show === false) { if (a) a.remove(); return; }
+    var url = /^https?:\/\//i.test(String(b.url || "")) ? String(b.url) : BADGE_URL, text = String(b.text || "").trim() || BADGE_TEXT;
+    if (!a) { a = document.createElement("a"); a.className = "fx-badge"; a.target = "_blank"; a.rel = "noopener"; a.innerHTML = '<span class="fx-bm" aria-hidden="true"><i></i><i></i><i></i></span><span class="fx-bt"></span>'; document.body.appendChild(a); }
+    a.href = url; a.querySelector(".fx-bt").textContent = text; a.setAttribute("aria-label", text);
+  }
+
   function init(opts) {
     opts = opts || {};
     var root = opts.root || document.body;
     ensureStyle(); wire();
+    try { badge(opts.badge); } catch (e) {}
     var c = cfg(), sig = JSON.stringify(c), changed = sig !== st.sig;
     st.brand = opts.brand || st.brand || document.title;
     st.sig = sig;

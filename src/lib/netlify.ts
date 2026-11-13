@@ -22,10 +22,10 @@ async function sha1Hex(data: Uint8Array): Promise<string> {
 export class Netlify {
   constructor(private token: string, private base = NETLIFY_API) {}
 
-  private async req<T = any>(path: string, init: RequestInit = {}, raw = false): Promise<T> {
+  private async req<T = any>(path: string, init: RequestInit = {}, raw: boolean | "form" = false): Promise<T> {
     let r: Response;
     try {
-      r = await fetch(this.base.replace(/\/+$/, "") + path, { ...init, headers: { Authorization: `Bearer ${this.token}`, ...(raw ? { "Content-Type": "application/octet-stream" } : init.body ? { "Content-Type": "application/json" } : {}), ...(init.headers || {}) } });
+      r = await fetch(this.base.replace(/\/+$/, "") + path, { ...init, headers: { Authorization: `Bearer ${this.token}`, ...(raw === "form" ? {} : raw ? { "Content-Type": "application/octet-stream" } : init.body ? { "Content-Type": "application/json" } : {}), ...(init.headers || {}) } });
     } catch {
       throw new NetlifyError("Couldn't reach Netlify from this browser. Check the connection and try again; a browser extension that blocks requests can also cause this.", 0);
     }
@@ -91,6 +91,32 @@ export class Netlify {
       await new Promise((r) => setTimeout(r, 1000));
     }
     return { id: d.id, url: dep.ssl_url || dep.deploy_ssl_url || "" };
+  }
+
+  /** Netlify's Build API: uploads a zip of source files and lets Netlify build it, which is how functions get
+   *  deployed from a web page (the functions upload endpoint doesn't accept browser requests). */
+  async build(siteId: string, zipBytes: Uint8Array, title: string, onStep?: (s: string) => void): Promise<{ deployId: string }> {
+    const fd = new FormData();
+    fd.append("title", title);
+    fd.append("zip", new Blob([zipBytes as unknown as BlobPart], { type: "application/zip" }), "site.zip");
+    const b = await this.req<{ id: string; deploy_id?: string; done?: boolean; error?: string | null }>(`/sites/${encodeURIComponent(siteId)}/builds`, { method: "POST", body: fd }, "form");
+    let deployId = b.deploy_id || "";
+    onStep?.("Netlify is building it");
+    for (let i = 0; i < 150; i++) {
+      const s = await this.req<{ deploy_id?: string; done?: boolean; error?: string | null }>(`/builds/${b.id}`);
+      deployId = s.deploy_id || deployId;
+      if (s.error) throw new NetlifyError(`Netlify's build failed: ${s.error}`, 500);
+      if (s.done) break;
+      await new Promise((r) => setTimeout(r, 2000));
+    }
+    if (!deployId) throw new NetlifyError("Netlify didn't start the build. Try again in a minute.", 500);
+    for (let i = 0; i < 90; i++) {
+      const d = await this.req<{ state: string; error_message?: string }>(`/sites/${encodeURIComponent(siteId)}/deploys/${deployId}`);
+      if (d.state === "ready") return { deployId };
+      if (d.state === "error") throw new NetlifyError(`Netlify couldn't finish the deploy${d.error_message ? ": " + d.error_message : ""}.`, 500);
+      await new Promise((r) => setTimeout(r, 2000));
+    }
+    throw new NetlifyError("Netlify is still building the helper. Wait a minute and press Set up the helper again.", 504);
   }
 
   /** Uses www.<domain> as the main address (Netlify's advice for external DNS); the bare domain redirects to it.

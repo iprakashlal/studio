@@ -1,5 +1,5 @@
 import { createContext, useContext, useLayoutEffect, useRef, useState } from "react";
-import { ThemeGallery, ThemeSwatch } from "../themes/ThemeGallery";
+import { ThemeDrawer, ThemeGallery, ThemeSwatch } from "../themes/ThemeGallery";
 import { LinkedInImport } from "./LinkedInImport";
 import { Motifs, THEMES, type Theme } from "../themes/catalog";
 import { themeCode } from "../themes/codes";
@@ -382,7 +382,11 @@ function ThemesField() {
   const reset = tweaked && cur ? <p className="flex flex-wrap items-center gap-2 text-[13px] text-ink-400">Your changes to {cur.name} are kept when you switch themes and come back.<button type="button" className="text-brand-300 underline" onClick={() => { Object.assign(root.theme, tpl.themeValues(cur)); if (root.themeMemory) delete root.themeMemory[cur.id]; bump(); }}>Reset {cur.name} to its defaults</button></p> : null;
   if (!site) return <>{reset}<ThemeGallery current={root.theme?.preset} themes={tpl.themes} tags={tpl.themeTags} onPick={pick} /></>;
   const { mode, themes } = adminThemeChoice(root, all);
-  if (mode === "all") return <>{reset}<p className="text-[13px] text-ink-300">{all.length} themes. Picking one restyles the whole site; your content stays as it is.</p><ThemeGallery current={root.theme?.preset} themes={all} tags={tpl.themeTags} onPick={pick} /></>;
+  const drawer = (list: Theme[], tags: string[]) => {
+    const gallery = <ThemeGallery dense current={root.theme?.preset} themes={list} tags={tags} onPick={pick} />;
+    return list.length > 5 ? <ThemeDrawer label={`Show ${list.length} themes`} summary={<>Current: <b className="text-ink-100">{cur ? `${themeCode(cur)} · ${cur.name}` : "the site's own design"}</b> · {list.length} themes to choose from</>}>{gallery}</ThemeDrawer> : gallery;
+  };
+  if (mode === "all") return <>{reset}<p className="text-[13px] text-ink-300">Picking a theme restyles the whole site; your content stays as it is.</p>{drawer(all, tpl.themeTags || [])}</>;
   if (themes.length <= 1) {
     const t = themes[0];
     return (
@@ -392,7 +396,7 @@ function ThemesField() {
       </div>
     );
   }
-  return <>{reset}<p className="text-[13px] text-ink-300">{themes.length} themes chosen for this site. Picking one restyles the whole site; your content stays as it is.</p><ThemeGallery current={root.theme?.preset} themes={themes} tags={[]} onPick={pick} /></>;
+  return <>{reset}<p className="text-[13px] text-ink-300">{themes.length} themes chosen for this site. Picking one restyles the whole site; your content stays as it is.</p>{drawer(themes, [])}</>;
 }
 
 function AdminThemesField() {
@@ -424,7 +428,9 @@ function AdminThemesField() {
       {mode === "some" && (
         <div className="flex flex-col gap-2">
           <p className="text-[13px] text-ink-300"><b className="text-ink-100">{new Set([...list, ...(cur ? [cur.id] : [])]).size}</b> shown in the admin page{list.length ? "" : " (tick themes below)"}.{list.length > 0 && <> <button type="button" className="text-brand-300 underline" onClick={() => set({ list: [] })}>Clear</button></>}</p>
-          <ThemeGallery chosen={[...list, ...(cur && !list.includes(cur.id) ? [cur.id] : [])]} themes={all} tags={tpl.themeTags} onPick={(t) => { if (t.id === cur?.id) return toast("The current theme is always shown. Pick another theme under Theme & layout first to remove it."); set({ list: list.includes(t.id) ? list.filter((x) => x !== t.id) : [...list, t.id] }); }} />
+          <ThemeDrawer label="Choose themes" summary={<>{(() => { const ids = [...new Set([...(cur ? [cur.id] : []), ...list])]; const names = ids.map((id) => all.find((t) => t.id === id)).filter(Boolean).map((t) => themeCode(t!)); return names.length ? <>Shown: <b className="text-ink-100">{names.slice(0, 8).join(", ")}{names.length > 8 ? ` +${names.length - 8}` : ""}</b></> : "None chosen yet"; })()}</>}>
+          <ThemeGallery dense chosen={[...list, ...(cur && !list.includes(cur.id) ? [cur.id] : [])]} themes={all} tags={tpl.themeTags} onPick={(t) => { if (t.id === cur?.id) return toast("The current theme is always shown. Pick another theme under Theme & layout first to remove it."); set({ list: list.includes(t.id) ? list.filter((x) => x !== t.id) : [...list, t.id] }); }} />
+          </ThemeDrawer>
         </div>
       )}
     </div>

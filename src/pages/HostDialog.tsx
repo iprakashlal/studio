@@ -168,12 +168,12 @@ export function HostDialog({ studio, project, tpl, draft, dirty, save, onIndex, 
     await cfSendCode(cfSite!.api, own); setTestOnly(null); setCodeSent(true); toast(`Code sent to ${own}.`);
   });
   // Codes from your own domain: Resend + DNS records in Cloudflare + verify, then the database sends from it.
-  const [mailDom, setMailDom] = useState(host?.domain || host?.domainSetup?.name || ""), [mailMsg, setMailMsg] = useState("");
+  const [mailDom, setMailDom] = useState(host?.domain || host?.domainSetup?.name || ""), [mailMsg, setMailMsg] = useState(""), [fullKey, setFullKey] = useState("");
   const verifyDomain = () => run("maildomain", async () => {
     setMailMsg("");
-    if (!/^re_/.test(cfp.mail.key)) throw new Error("Paste your Resend API key above first (one with Full access, so the Studio can add your domain).");
+    if (!/^re_/.test(fullKey.trim())) throw new Error("Paste a Resend key with Full access in the box next to the domain.");
     const dom = cleanDomain(mailDom), { cf, relay } = await cfAcc.client((x) => setStep({ i: -1, detail: x }));
-    const r = await verifyMailDomain(relay, cf, cfp.mail.key, dom, (x) => setStep({ i: -1, detail: x }));
+    const r = await verifyMailDomain(relay, cf, fullKey.trim(), dom, (x) => setStep({ i: -1, detail: x }));
     if (!r.verified) {
       setStep(null);
       const probs = [...new Set(r.problems)];
@@ -184,7 +184,7 @@ export function HostDialog({ studio, project, tpl, draft, dirty, save, onIndex, 
     }
     const display = (/^(.*?)\s*</.exec(cfp.mail.from)?.[1] || "Picaffectz Studio").trim();
     await cfp.ensure((x) => setStep({ i: -1, detail: x }), { mailFrom: `${display} <codes@${dom}>`, resendKey: r.sendKey });
-    setStep(null); setTestOnly(null);
+    setStep(null); setTestOnly(null); setFullKey("");
     setMailMsg(`✓ ${dom} is verified. Sign-in codes now come from codes@${dom} and reach any editor's email. The database uses its own send-only key, so you can delete the Full access key in Resend now.`);
   });
   const saveMail = () => run("cfsetup", async () => {
@@ -319,9 +319,11 @@ export function HostDialog({ studio, project, tpl, draft, dirty, save, onIndex, 
                 </>}
                 <div className="flex flex-col gap-2 rounded-lg border border-ink-700 bg-ink-950 p-3 text-ink-200" aria-label="Codes from your domain">
                   <b className="text-ink-100">Send codes from your domain</b>
-                  <p className="text-ink-400">The Studio adds the domain to Resend, puts Resend's records into its Cloudflare DNS and verifies it. Needs the domain on your Cloudflare (section 3) and, just for this step, a Resend key with <b>Full access</b> pasted below (<a className="underline" href="https://resend.com/api-keys" target="_blank" rel="noopener noreferrer">create one ↗</a>: Permission → Full access). Afterwards the database gets its own send-only key, and you can delete the Full access one.</p>
-                  <div className="flex gap-2"><input aria-label="Email domain" className="input min-w-0 flex-1" placeholder="yourdomain.com" value={mailDom} onChange={(e) => setMailDom(e.target.value)} />
-                    <button type="button" className="btn btn-pri btn-sm" disabled={!!busy || !domainOk(mailDom)} onClick={verifyDomain}>{busy === "maildomain" ? (step?.detail || "Working") + "…" : "Verify and use it"}</button></div>
+                  <p className="text-ink-400">The Studio adds the domain to Resend, puts Resend's records into its Cloudflare DNS and verifies it. Needs the domain on your Cloudflare (section 3) and, just for this step, a Resend key with <b>Full access</b> (<a className="underline" href="https://resend.com/api-keys" target="_blank" rel="noopener noreferrer">create one ↗</a>: Create API key → Permission: <b>Full access</b>). It's used once and not kept: the database gets its own send-only key, and you can delete the Full access one afterwards.</p>
+                  <div className="grid gap-2 sm:grid-cols-2"><input aria-label="Email domain" className="input min-w-0" placeholder="yourdomain.com" value={mailDom} onChange={(e) => setMailDom(e.target.value)} />
+                    <input aria-label="Resend Full access key" className="input min-w-0 font-mono text-xs" type="password" autoComplete="off" placeholder="Full access key: re_…" value={fullKey} onChange={(e) => setFullKey(e.target.value)} /></div>
+                  <div className="flex gap-2">
+                    <button type="button" className="btn btn-pri btn-sm" disabled={!!busy || !domainOk(mailDom) || !/^re_/.test(fullKey.trim())} onClick={verifyDomain}>{busy === "maildomain" ? (step?.detail || "Working") + "…" : "Verify and use it"}</button></div>
                   {mailMsg && <p role="status" className={mailMsg.startsWith("✓") ? "text-emerald-300" : "text-ink-300"}>{mailMsg}</p>}
                 </div>
                 {mailCfg || testOnly ? <>{cfp.ui}<button type="button" className="btn btn-sm self-start" disabled={!!busy || !cfp.ready} onClick={saveMail}>{busy === "cfsetup" ? (step?.detail || "Saving") + "…" : "Save email settings"}</button></> : null}

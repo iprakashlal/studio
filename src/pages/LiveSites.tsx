@@ -74,7 +74,7 @@ export function LiveSitesDialog({ studio, project, session, dirty, current, defa
 
   return (
     <Modal title="Live sites" wide onClose={onClose} footer={<><button className="btn" onClick={() => setN((x) => x + 1)}>Refresh</button><button className="btn btn-pri" onClick={onClose}>Done</button></>}>
-      {!sites.length ? <p className="text-sm text-ink-300">This project isn't published yet. Publish to GitHub or Host outside GitHub, or link an existing site in Project details.</p> : (
+      {!sites.length ? <p className="text-sm text-ink-300">This project isn't published yet. Publish to GitHub or Host to External Services, or link an existing site in Project details.</p> : (
         <>
           <p className="text-sm text-ink-300">Compares each live site's content with what's in the editor{dirty ? ", including your unsaved edits" : ""}. Pulling replaces the project's content with that site's.</p>
           {sites.map((s) => {

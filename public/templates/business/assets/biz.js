@@ -11,7 +11,7 @@
 const DEFAULT = {
   theme: {
     bg: "#F7F8FA", surface: "#FFFFFF", deep: "#0E1B2C", text: "#0E1B2C", soft: "#5A6678", line: "#DDE2EA", c1: "#1D4ED8", c2: "#0E7490", c3: "#F59E0B",
-    fontDisplay: "Plus Jakarta Sans", fontBody: "Inter", radius: 12, preset: "meridian",
+    fontDisplay: "Plus Jakarta Sans", fontBody: "Inter", radius: 12, preset: "biz-meridian",
     layout: "split", nav: "bar", cards: "outline", buttons: "rounded", heading: "normal", shead: "label", pattern: "none", width: "normal", motionStyle: "rise", bands: "soft", heroArt: "panel",
     cursor: "none", loader: "none", textfx: "none", hoverfx: "none", scrollfx: "none", overlay: "none",
     introBg: "", introFg: "", introTitle: "", introFont: "display", introCase: "upper", logoRadius: 22, scrollEase: "light", lineBreaks: "typed",

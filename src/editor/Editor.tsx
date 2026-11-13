@@ -9,7 +9,7 @@ export const GOTO_EVENT = "studio:goto";
 export type ExtraPanel = { id: string; label: string; group: string; desc: string; render: () => ReactNode };
 
 /** Category navigation + the cards of the selected category. Mutates `draft` and calls `onChange`. */
-export function Editor({ tpl, draft, version, onChange, upload, img, extras = [], onCategory }: {
+export function Editor({ tpl, draft, version, onChange, upload, img, extras = [], onCategory, site = false }: {
   tpl: TemplateDef;
   draft: any;
   version: number;
@@ -18,6 +18,8 @@ export function Editor({ tpl, draft, version, onChange, upload, img, extras = []
   img: EditorCtx["img"];
   extras?: ExtraPanel[];
   onCategory?: (id: string) => void;
+  /** In the site's own admin page: hides Studio-only settings and limits themes to those the Studio allows. */
+  site?: boolean;
 }) {
   tpl.prepare?.(draft);
   const [cat, setCat] = useState(tpl.schema[0].id);
@@ -70,7 +72,7 @@ export function Editor({ tpl, draft, version, onChange, upload, img, extras = []
     }
     return out;
   }, [tpl, extras, shown.map((c) => c.id).join()]);
-  const ctx = useMemo<EditorCtx>(() => ({ tpl, root: draft, bump: onChange, upload, img }), [tpl, draft, onChange, upload, img, version]);
+  const ctx = useMemo<EditorCtx>(() => ({ tpl, root: draft, bump: onChange, upload, img, site }), [tpl, draft, onChange, upload, img, version, site]);
   const extra = extras.find((e) => e.id === cat);
   const current = extra ? undefined : shown.find((c) => c.id === cat) || shown[0];
 
@@ -96,7 +98,7 @@ export function Editor({ tpl, draft, version, onChange, upload, img, extras = []
               <h2 className="text-lg font-extrabold">{current?.label || extra?.label}</h2>
               <p className="mt-1 text-sm text-ink-400">{current?.desc || extra?.desc}</p>
             </div>
-            {current?.cards.map((card) => (
+            {current?.cards.filter((card) => !(site && card.studio)).map((card) => (
               <section key={card.title} className="card flex flex-col gap-4 p-4 sm:p-5">
                 <h3 className="text-[15px] font-extrabold">{card.title}</h3>
                 {card.fields.map((f, i) => <FieldView key={i} f={f} obj={draft} base={cat} />)}

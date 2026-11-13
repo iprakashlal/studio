@@ -12,7 +12,7 @@
     "fontDisplay": "Plus Jakarta Sans",
     "fontBody": "Inter",
     "radius": 12,
-    "preset": "meridian",
+    "preset": "biz-meridian",
     "layout": "split",
     "nav": "bar",
     "cards": "outline",

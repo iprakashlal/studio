@@ -142,6 +142,8 @@ export function Dashboard({ studio, index, onIndex, token }: { studio: Studio; i
                   <div className="flex flex-wrap items-center gap-2 text-xs">
                     <span className="chip">{t?.name || p.template} · {t?.kind}</span>
                     <span className={`chip ${st.cls}`}>{st.label}</span>
+                    {(index.partners || []).filter((x) => x.shared.some((y) => y.project === p.id)).map((x) => <span key={x.id} className="chip border-brand-400/50 text-brand-200" title={`Shared with ${x.name}'s Studio; sync it from Settings → Studio Partners.`}>Shared with {x.name}</span>)}
+                    {p.partner && <span className="chip border-brand-400/50 text-brand-200" title="Shared with you by your Studio Partner; changes are kept in step with them.">Shared by {p.partner.name}</span>}
                     {live[p.id] === "checking" && <span className="chip border-ink-600 text-ink-400">Checking live site…</span>}
                     {live[p.id] === "pulled" && <span className="chip border-emerald-400/60 text-emerald-200" title="Edits made in the site's own CMS were copied into this project.">Updated from live site</span>}
                     {live[p.id] === "conflict" && <span className="chip border-amber-400/60 text-amber-200" title="The site's own CMS and the Studio both changed the content. Open the project to choose which to keep.">Live site edited · review</span>}

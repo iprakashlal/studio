@@ -12,6 +12,7 @@ import { Field, Logo, StepLoader, useToast } from "../ui/kit";
 import { setCurrentMenus } from "../lib/menus";
 import { MenusCard } from "./MenusCard";
 import { MigrationTab } from "./MigrationTab";
+import { PartnersTab } from "./PartnersTab";
 import { BADGE_DEFAULT, cleanBadge, setCurrentBadge, type BadgeCfg } from "../lib/badge";
 import { BrandMark, DEFAULT_NAME, brand as currentBrand, setBrand, shrinkImage, useBrand } from "../lib/brand";
 import { Dashboard } from "./Dashboard";
@@ -94,8 +95,9 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
   if (route.startsWith("settings") && !repo.demo) {
     const tab = route.split("/")[1] || "general";
     const tabs = <div className="flex flex-wrap gap-1 border-b border-ink-700" role="tablist" aria-label="Settings">
-      {[["general", "General"], ["migration", "Migration"]].map(([k, l]) => <a key={k} href={`#/settings${k === "general" ? "" : "/" + k}`} role="tab" aria-selected={tab === k} className={`-mb-px border-b-2 px-3 py-2 text-sm font-semibold ${tab === k ? "border-brand-400 text-ink-100" : "border-transparent text-ink-400 hover:text-ink-100"}`}>{l}</a>)}
+      {[["general", "General"], ["migration", "Migration"], ["partners", "Studio Partners"]].map(([k, l]) => <a key={k} href={`#/settings${k === "general" ? "" : "/" + k}`} role="tab" aria-selected={tab === k} className={`-mb-px border-b-2 px-3 py-2 text-sm font-semibold ${tab === k ? "border-brand-400 text-ink-100" : "border-transparent text-ink-400 hover:text-ink-100"}`}>{l}</a>)}
     </div>;
+    if (tab === "partners") return <>{header}<main className="mx-auto flex max-w-3xl flex-col gap-4 px-4 py-8 sm:px-6"><h1 className="font-display text-3xl font-extrabold">Settings</h1>{tabs}<PartnersTab studio={studio} index={index} session={session} onIndex={setIndex} /></main></>;
     if (tab === "migration") return <>{header}<main className="mx-auto flex max-w-3xl flex-col gap-4 px-4 py-8 sm:px-6"><h1 className="font-display text-3xl font-extrabold">Settings</h1>{tabs}<MigrationTab studio={studio} index={index} session={session} onIndex={setIndex} /></main></>;
     return (
       <>{header}

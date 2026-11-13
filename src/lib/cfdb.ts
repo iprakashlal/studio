@@ -18,7 +18,7 @@ export type CfDbCfg = { api: string };
 
 /** A Cloudflare token page with exactly the permissions the setup needs already ticked. */
 export const CF_DB_TOKEN_PAGE = `https://dash.cloudflare.com/profile/api-tokens?${new URLSearchParams({
-  permissionGroupKeys: JSON.stringify([{ key: "workers_scripts", type: "edit" }, { key: "d1", type: "edit" }, { key: "account_settings", type: "read" }]),
+  permissionGroupKeys: JSON.stringify([{ key: "workers_scripts", type: "edit" }, { key: "d1", type: "edit" }, { key: "account_settings", type: "read" }, { key: "workers_routes", type: "edit" }, { key: "zone", type: "edit" }, { key: "dns", type: "edit" }]),
   accountId: "*", zoneId: "all", name: "Picaffectz Studio",
 })}`;
 

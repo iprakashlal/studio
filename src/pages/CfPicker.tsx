@@ -42,7 +42,7 @@ export function useCfAccount(studioToken: string, nf: Netlify | null | undefined
   const ui = (
     <div className="flex flex-col gap-2.5 text-[13px]">
       {helper.ui}
-      <p><a className="btn btn-sm btn-pri" href={CF_DB_TOKEN_PAGE} target="_blank" rel="noopener noreferrer">Create a Cloudflare token ↗</a> <span className="text-ink-400">The permissions are already ticked (Workers Scripts, D1, Account Settings). Press <b>Continue to summary → Create Token</b>, copy it and paste it here. {persist ? "It's kept encrypted on this device only." : "Used now only, not kept."}</span></p>
+      <p><a className="btn btn-sm btn-pri" href={CF_DB_TOKEN_PAGE} target="_blank" rel="noopener noreferrer">Create a Cloudflare token ↗</a> <span className="text-ink-400">The permissions are already ticked (Workers, D1, account settings, and your domains and their DNS, so the Studio can connect a domain). Press <b>Continue to summary → Create Token</b>, copy it and paste it here. {persist ? "It's kept encrypted on this device only." : "Used now only, not kept."}</span></p>
       <div className="flex gap-2">
         <input aria-label="Cloudflare API token" className="input min-w-0 flex-1 font-mono text-xs" type="password" autoComplete="off" value={tok} onChange={(e) => { setTok(e.target.value); setAccounts(null); }} placeholder="Cloudflare API token" />
         <button type="button" className="btn btn-sm" disabled={!tok.trim() || !!busy || !helper.ready} onClick={connect}>{busy && !accounts ? busy + "…" : "Connect"}</button>
@@ -52,7 +52,16 @@ export function useCfAccount(studioToken: string, nf: Netlify | null | undefined
       {err && <p role="alert" className="text-red-300">{err}</p>}
     </div>
   );
-  return { ui, ready: !!acc && helper.ready, account: acc, token: tok.trim(), client, busy, helper };
+  /** Swaps in a new token (e.g. one with more permissions), keeping the same account when it can see it. */
+  const replaceToken = async (t: string) => {
+    const list = await new Cloudflare(await helper.get(), t.trim()).accounts();
+    if (!list.length) throw new Error("This token can't see any Cloudflare account.");
+    const pick = list.some((x) => x.id === account) ? account : list[0].id;
+    setTok(t.trim()); setAccounts(list); setAccount(pick);
+    if (persist) { const v = await cfAccountVault.load(studioToken); await cfAccountVault.save({ ...(v || {}), token: t.trim(), account: pick }, studioToken); }
+    return new Cloudflare(await helper.get(), t.trim());
+  };
+  return { ui, ready: !!acc && helper.ready, account: acc, token: tok.trim(), client, busy, helper, replaceToken };
 }
 
 /** The Studio's database on Cloudflare. Pass `shared` to use a Cloudflare account picked elsewhere on the page

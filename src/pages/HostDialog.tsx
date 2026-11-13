@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useCfAccount, useCloudflarePicker, type CfAccountHook } from "./CfPicker";
 import { cloudflarePages, netlifyPages, PAGES_LABEL, type Pages, type PagesKind } from "../lib/pages";
-import { CF_DOMAIN_HINT, CfError } from "../lib/cloudflare";
-import { cfAccountVault, cfAddMembers, resendTestOnly, cfRole, cfSendCode, cfSignedIn, cfVerifyCode } from "../lib/cfdb";
+import { CfError, registrarHelp, type Cloudflare } from "../lib/cloudflare";
+import { CF_DB_TOKEN_PAGE, cfAccountVault, cfAddMembers, resendTestOnly, cfRole, cfSendCode, cfSignedIn, cfVerifyCode } from "../lib/cfdb";
 import { SupabaseAuto } from "./SupabaseAuto";
 import type { Session } from "../lib/auth";
 import type { ProjectMeta, Studio, StudioIndex } from "../lib/studio";
@@ -441,38 +441,84 @@ function DomainCard({ host, nf, onHost }: { host: HostCfg; nf: Netlify; onHost: 
  *  attaches it to the site's Worker (Cloudflare adds the DNS records and HTTPS by itself). */
 function CfDomainCard({ host, acc, onHost }: { host: HostCfg; acc: CfAccountHook; onHost: (h: HostCfg) => Promise<void> }) {
   const toast = useToast();
-  const [d, setD] = useState(host.domain || ""), [busy, setBusy] = useState(""), [err, setErr] = useState("");
+  const [d, setD] = useState(host.domain || host.domainSetup?.name || ""), [busy, setBusy] = useState(""), [err, setErr] = useState("");
+  const [needPerm, setNeedPerm] = useState(false), [newTok, setNewTok] = useState("");
+  const [status, setStatus] = useState<string>("");
+  const pending = host.domainSetup;
   const account = host.account || acc.account?.id || "";
-  const run = async (k: string, fn: () => Promise<void>) => { setBusy(k); setErr(""); try { await fn(); } catch (e: any) { setErr(e instanceof CfError && (e.status === 403 || e.status === 401) ? CF_DOMAIN_HINT : e?.message || "Something went wrong"); } setBusy(""); };
-  const connect = () => run("connect", async () => {
+  const permErr = (e: any) => e instanceof CfError && (e.status === 403 || e.status === 401 || e.code === 9109 || e.code === 10000 || e.code === 1068);
+  const run = async (k: string, fn: () => Promise<void>) => {
+    setBusy(k); setErr("");
+    try { await fn(); } catch (e: any) { if (permErr(e)) { setNeedPerm(true); setErr("Your Cloudflare token isn't allowed to add domains yet."); } else setErr(e?.message || "Something went wrong"); }
+    setBusy("");
+  };
+  /** Points the domain and www at the site (replacing old records for those two names) and records it. */
+  const attach = async (cf: Cloudflare, dom: string, zoneId: string) => {
+    for (const hn of [dom, "www." + dom]) await cf.addWorkerDomain(account, host.siteId, hn, zoneId);
+    await onHost({ ...host, domain: dom, domainSetup: undefined });
+    toast(`${dom} is connected. Cloudflare is turning on HTTPS; it takes a few minutes. Publish once more so links use https://www.${dom}/.`);
+  };
+  const setup = () => run("connect", async () => {
     const dom = cleanDomain(d), { cf } = await acc.client();
-    const zone = await cf.zoneFor(dom);
-    if (!zone) throw new Error(`Couldn't find ${dom} on your Cloudflare account. If it isn't there yet, add it (free): Cloudflare dashboard → Add a domain, then change its nameservers where you bought it, and press Connect again once Cloudflare shows it as active. If it is there, ${CF_DOMAIN_HINT.charAt(0).toLowerCase() + CF_DOMAIN_HINT.slice(1)}`);
-    for (const hn of [dom, "www." + dom]) await cf.addWorkerDomain(account, host.siteId, hn, zone.id);
-    await onHost({ ...host, domain: dom });
-    toast(`Connected. Cloudflare is turning on HTTPS for ${dom}; it takes a few minutes. Publish once more so links use https://www.${dom}/.`);
+    let z = await cf.zoneNamed(dom);
+    if (z && z.status === "active") return attach(cf, dom, z.id);
+    if (!z) { setStatus("Adding " + dom + " to your Cloudflare (it copies the current DNS records, so email keeps working)…"); z = await cf.zoneCreate(account, dom); }
+    setStatus("");
+    await onHost({ ...host, domainSetup: { name: dom, zoneId: z.id, ns: z.name_servers || [], registrar: registrarHelp(z), at: new Date().toISOString() } });
   });
+  const check = async (manual = false) => {
+    if (!pending || busy) return;
+    try {
+      const { cf } = await acc.client();
+      if (manual) await cf.zoneCheck(pending.zoneId);
+      const z = await cf.zone(pending.zoneId);
+      if (z.status === "active") { setBusy("connect"); try { await attach(cf, pending.name, z.id); } finally { setBusy(""); } return; }
+      setStatus(manual ? "Not yet: Cloudflare still sees the old nameservers. Changes usually show within an hour (sometimes up to a day)." : "");
+    } catch (e: any) { if (manual) setErr(e?.message || "Couldn't check."); }
+  };
+  // While waiting, check every 30 seconds (and once when the window opens).
+  useEffect(() => { if (!pending || !acc.ready) return; check(); const t = setInterval(() => check(), 30_000); return () => clearInterval(t); }, [pending?.zoneId, acc.ready]);
+  const cancel = () => run("remove", async () => { await onHost({ ...host, domainSetup: undefined }); setStatus(""); });
   const remove = () => run("remove", async () => {
     const { cf } = await acc.client(), dom = host.domain!;
     for (const x of await cf.workerDomains(account, host.siteId)) if (x.hostname === dom || x.hostname === "www." + dom) await cf.removeWorkerDomain(account, x.id);
     await onHost({ ...host, domain: undefined }); setD("");
     toast("Domain removed. The site is back on its workers.dev address.");
   });
+  const useNewToken = () => run("token", async () => { await acc.replaceToken(newTok); setNewTok(""); setNeedPerm(false); toast("New token saved on this device. Press the button again."); });
+  const copy = (t: string) => { navigator.clipboard?.writeText(t).then(() => toast("Copied " + t)).catch(() => {}); };
   return (
     <section className="flex flex-col gap-3 rounded-xl border border-ink-700 bg-ink-950 p-4" aria-label="Domain">
       <b className="text-sm">3 · Your domain (optional)</b>
-      {!host.domain ? <>
-        <p className="text-[13px] text-ink-400">Your domain's DNS needs to be on Cloudflare (free; <a className="text-brand-300 underline" href="https://dash.cloudflare.com/?to=/:account/add-site" target="_blank" rel="noopener noreferrer">add a domain ↗</a> and switch its nameservers where you bought it). Then the Studio connects it, with www, and Cloudflare adds the records and HTTPS itself.</p>
-        <div className="flex gap-2">
-          <input aria-label="Domain" className="input min-w-0 flex-1" placeholder="yourname.com" value={d} onChange={(e) => setD(e.target.value)} />
-          <button type="button" className="btn btn-pri btn-sm" disabled={!!busy || !domainOk(d)} onClick={connect}>{busy === "connect" ? "Connecting…" : "Connect domain"}</button>
-        </div>
-      </> : <div className="flex flex-wrap items-center gap-2 text-[13px]">
+      {host.domain ? <div className="flex flex-wrap items-center gap-2 text-[13px]">
         <span className="h-2 w-2 rounded-full bg-emerald-400" /><span>Live on <b>{host.domain}</b> and <b>www.{host.domain}</b></span>
         <a className="btn btn-sm" href={`https://www.${host.domain}/`} target="_blank" rel="noopener">Open ↗</a>
         <button type="button" className="btn btn-sm ml-auto" disabled={!!busy} onClick={remove}>{busy === "remove" ? "Removing…" : "Remove domain"}</button>
-      </div>}
+      </div> : pending ? <div className="flex flex-col gap-2.5 text-[13px]" aria-label="Domain waiting">
+        <p className="text-ink-300"><b className="text-ink-100">{pending.name}</b> is added to your Cloudflare. One step left, at <b className="text-ink-100">{pending.registrar?.name || "your domain company"}</b>: switch its nameservers to Cloudflare's.</p>
+        <ol className="list-decimal space-y-2 pl-5 text-ink-300">
+          <li><a className="btn btn-pri btn-sm" href={pending.registrar?.url} target="_blank" rel="noopener noreferrer">Open {pending.registrar?.name || "your domain's"} nameserver settings ↗</a> <span className="text-ink-400">{pending.registrar?.how}.</span></li>
+          <li><span>The two nameservers:</span>
+            <div className="mt-1 flex flex-col gap-1">{pending.ns.map((n) => <div key={n} className="flex items-center gap-2"><code className="flex-1 rounded bg-ink-900 px-2 py-1 font-mono text-xs text-ink-100">{n}</code><button type="button" className="btn btn-sm" onClick={() => copy(n)}>Copy</button></div>)}</div></li>
+          <li>That's all. The Studio connects <b>{pending.name}</b> and <b>www.{pending.name}</b> by itself as soon as Cloudflare sees the change (usually within an hour), with HTTPS. You can close this; it finishes the next time you open it.</li>
+        </ol>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" className="btn btn-sm" disabled={!!busy} onClick={() => run("check", () => check(true))}>{busy === "check" ? "Checking…" : busy === "connect" ? "Connecting…" : "Check now"}</button>
+          <button type="button" className="btn btn-sm ml-auto" disabled={!!busy} onClick={cancel}>Cancel</button>
+        </div>
+      </div> : <>
+        <p className="text-[13px] text-ink-400">Type your domain and press the button. If it's already on your Cloudflare it's connected at once (with www and HTTPS); if not, the Studio adds it and gives you a link for the one step left at the company you bought it from.</p>
+        <div className="flex gap-2">
+          <input aria-label="Domain" className="input min-w-0 flex-1" placeholder="yourname.com" value={d} onChange={(e) => setD(e.target.value)} />
+          <button type="button" className="btn btn-pri btn-sm" disabled={!!busy || !domainOk(d)} onClick={setup}>{busy === "connect" ? "Setting up…" : "Set up domain"}</button>
+        </div>
+      </>}
+      {status && <p className="text-[13px] text-ink-300" role="status">{status}</p>}
       {err && <p role="alert" className="text-[13px] text-red-300">{err}</p>}
+      {needPerm && <div className="flex flex-col gap-2 rounded-lg border border-amber-400/40 bg-amber-400/5 p-3 text-[13px] text-amber-100" aria-label="Token for domains">
+        <p><a className="btn btn-pri btn-sm" href={CF_DB_TOKEN_PAGE} target="_blank" rel="noopener noreferrer">Create a token that can add domains ↗</a> Everything is ticked; press <b>Continue to summary → Create Token</b>, then paste it here. It replaces the old one on this device.</p>
+        <div className="flex gap-2"><input aria-label="New Cloudflare token" className="input min-w-0 flex-1 font-mono text-xs" type="password" autoComplete="off" value={newTok} onChange={(e) => setNewTok(e.target.value)} placeholder="New Cloudflare API token" /><button type="button" className="btn btn-sm" disabled={!!busy || newTok.trim().length < 20} onClick={useNewToken}>{busy === "token" ? "Checking…" : "Use it"}</button></div>
+      </div>}
     </section>
   );
 }

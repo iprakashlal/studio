@@ -10,6 +10,19 @@ export const CF_TOKEN_PAGE = `https://dash.cloudflare.com/profile/api-tokens?${n
 export const CF_DNS_HINT = "Edit the token (My Profile → API Tokens → Edit) and add the permission Zone → DNS → Edit for your domain.";
 export class CfError extends Error { constructor(msg: string, public status = 0, public code = 0) { super(msg); } }
 export type CfAccount = { id: string; name: string };
+export type CfZone = { id: string; name: string; status: string; name_servers?: string[]; original_name_servers?: string[] | null; original_registrar?: string | null };
+/** Where to change nameservers, for the registrars people use most (else Cloudflare's guide). */
+export function registrarHelp(z: Pick<CfZone, "name" | "original_registrar" | "original_name_servers">): { name: string; url: string; how: string } {
+  const r = `${z.original_registrar || ""} ${(z.original_name_servers || []).join(" ")}`.toLowerCase(), d = encodeURIComponent(z.name);
+  if (/godaddy|domaincontrol/.test(r)) return { name: "GoDaddy", url: `https://dcc.godaddy.com/control/portfolio/${d}/settings?tab=dns&subtab=nameservers`, how: "Nameservers → Change Nameservers → I'll use my own nameservers, paste the two below, Save" };
+  if (/namecheap|registrar-servers/.test(r)) return { name: "Namecheap", url: `https://ap.www.namecheap.com/domains/domaincontrolpanel/${d}/domain`, how: "Nameservers → Custom DNS, paste the two below, ✓" };
+  if (/hostinger|dns-parking/.test(r)) return { name: "Hostinger", url: `https://hpanel.hostinger.com/domain/${d}/dns`, how: "Change nameservers → paste the two below, Save" };
+  if (/bigrock|resellerclub|publicdomainregistry|bigrock/.test(r)) return { name: "BigRock", url: "https://manage.bigrock.in/", how: "Domain → Name Servers, paste the two below, Update" };
+  if (/squarespace|google/.test(r)) return { name: "Squarespace", url: `https://account.squarespace.com/domains/managed/${d}/dns/domain-nameservers`, how: "Use custom nameservers, paste the two below, Save" };
+  if (/porkbun/.test(r)) return { name: "Porkbun", url: "https://porkbun.com/account/domainsSpeedy", how: "Details → Authoritative nameservers → Edit, paste the two below" };
+  if (/hostgator|bluehost|ionos|1and1/.test(r)) return { name: (/hostgator/.test(r) ? "HostGator" : /bluehost/.test(r) ? "Bluehost" : "IONOS"), url: "https://developers.cloudflare.com/dns/zone-setups/full-setup/setup/#update-your-nameservers", how: "In your domain's settings, set custom nameservers to the two below" };
+  return { name: "your domain company", url: "https://developers.cloudflare.com/dns/zone-setups/full-setup/setup/#update-your-nameservers", how: "Find Nameservers in the domain's settings, set them to the two below (remove the others)" };
+}
 
 export class Cloudflare {
   constructor(private relay: Relay, private token: string) {}
@@ -60,6 +73,14 @@ export class Cloudflare {
     }
     return null;
   }
+  // ---- Adding your domain to Cloudflare (the one step left for you: switching its nameservers where you bought it)
+  async zone(id: string) { return this.api<CfZone>("GET", `/zones/${id}`); }
+  /** The zone named exactly `name` on this account, whatever its status. */
+  async zoneNamed(name: string): Promise<CfZone | null> { const z = await this.api<CfZone[]>("GET", `/zones?name=${encodeURIComponent(name)}`); return z?.[0] || null; }
+  /** Adds the domain to the account; Cloudflare copies its current DNS records first (jump_start), so email keeps working. */
+  zoneCreate(account: string, name: string) { return this.api<CfZone>("POST", "/zones", { json: { name, account: { id: account }, type: "full", jump_start: true } }); }
+  /** Asks Cloudflare to look at the nameservers again now (it otherwise checks every few hours). */
+  zoneCheck(id: string) { return this.api("PUT", `/zones/${id}/activation_check`).catch(() => null); }
   /** Adds DNS records (names relative to `base`), skipping ones already there. Returns what it did per record. */
   async addRecords(zone: { id: string; name: string }, base: string, recs: { type: string; name: string; value: string; priority?: number }[]) {
     const out: { name: string; type: string; done: "added" | "there" | "conflict" }[] = [];
@@ -125,7 +146,8 @@ export class Cloudflare {
 
   // ---- Your own domain on a Worker (the domain's DNS must be on this Cloudflare account)
   workerDomains(account: string, service: string) { return this.api<{ id: string; hostname: string; service: string }[]>("GET", `/accounts/${account}/workers/domains?service=${encodeURIComponent(service)}`); }
-  addWorkerDomain(account: string, service: string, hostname: string, zoneId: string) { return this.api("PUT", `/accounts/${account}/workers/domains`, { json: { environment: "production", hostname, service, zone_id: zoneId } }); }
+  /** Points hostname at the Worker. Old records for that exact name (say, pointing at Netlify) are replaced. */
+  addWorkerDomain(account: string, service: string, hostname: string, zoneId: string) { return this.api("PUT", `/accounts/${account}/workers/domains`, { json: { environment: "production", hostname, service, zone_id: zoneId, override_existing_dns_record: true, override_existing_origin: true } }); }
   removeWorkerDomain(account: string, id: string) { return this.api("DELETE", `/accounts/${account}/workers/domains/${id}`); }
 
   enableWorkersDev(account: string, name: string) { return this.api("POST", `/accounts/${account}/workers/scripts/${encodeURIComponent(name)}/subdomain`, { json: { enabled: true, previews_enabled: false } }); }

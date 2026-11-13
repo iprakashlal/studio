@@ -20,7 +20,9 @@ export type SbCfg = { url: string; key: string; site: string };
 export type CfSiteCfg = { api: string; site: string };
 /** Hosted outside GitHub: Netlify or Cloudflare serves the pages (`kind`; on Cloudflare siteId is the Worker's
  *  name in `account`); the content lives in Supabase (sb) or the Cloudflare database (cf). */
-export type HostCfg = { kind: "netlify" | "cloudflare"; siteId: string; siteName: string; url: string; account?: string; domain?: string; sb?: SbCfg; cf?: CfSiteCfg };
+export type HostCfg = { kind: "netlify" | "cloudflare"; siteId: string; siteName: string; url: string; account?: string; domain?: string; sb?: SbCfg; cf?: CfSiteCfg;
+  /** A domain added to Cloudflare that's waiting for its nameservers to be switched; connected by itself once active. */
+  domainSetup?: { name: string; zoneId: string; ns: string[]; registrar?: { name: string; url: string; how: string }; at: string } };
 
 export const BUCKET = "site-assets";
 export const cleanUrl = (u: string) => String(u || "").trim().replace(/\/+$/, "");

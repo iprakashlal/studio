@@ -320,7 +320,7 @@ export function ShopBackendDialog({ session, studio, project, draft, onConnect, 
       </Section>
 
       <Section n={4} title="Cloudflare" state={cfState}>
-        <p className="text-[13px] text-ink-300"><a className="text-brand-300 underline" href={CF_TOKEN_PAGE} target="_blank" rel="noopener noreferrer">Create an API token ↗</a> with the <b>Edit Cloudflare Workers</b> template (free plan is enough). It's kept on this device only, so the Studio can update the Worker when you push updates.</p>
+        <p className="text-[13px] text-ink-300"><a className="text-brand-300 underline" href={CF_TOKEN_PAGE} target="_blank" rel="noopener noreferrer">Create an API token ↗</a>: the permissions are already ticked, so just press <b>Continue to summary → Create Token</b> (free plan is enough). It's kept on this device only, so the Studio can update the Worker when you push updates.</p>
         <div className="flex gap-2"><input aria-label="Cloudflare API token" className="input min-w-0 flex-1 font-mono" type="password" autoComplete="off" value={cfTok} onChange={(e) => { setCfTok(e.target.value); setAccounts([]); setCfSaved(false); }} placeholder="Cloudflare API token" />
           <button type="button" className="btn btn-sm" disabled={!relay || !cfTok.trim() || cfBusy} onClick={connectCf}>{cfBusy ? "Checking…" : "Connect"}</button></div>
         {cfErr && <p role="alert" className="text-[13px] text-red-300">{cfErr}</p>}

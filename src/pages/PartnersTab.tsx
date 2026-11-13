@@ -1,14 +1,19 @@
 // Settings → Studio Partners: set up Studios for clients (on your accounts or theirs), share sites with them and
 // keep those sites in step both ways. Each client Studio shows as a card with its shared sites and their status.
+import { isHosted } from "../lib/backend";
 import { useEffect, useState } from "react";
 import type { Session } from "../lib/auth";
 import { netlifyToken } from "../lib/hosting";
 import { Netlify } from "../lib/netlify";
-import { sendCode, verifyCode } from "../lib/supa";
+import { backendOf } from "../lib/backend";
+import { cfAddMembers } from "../lib/cfdb";
+import type { StudioHostCfg } from "../lib/studiohost";
+import { useCloudflarePicker } from "./CfPicker";
+const hostFields = (t: StudioHostCfg) => (t.kind === "cloudflare" ? { backend: "cloudflare" as const, api: t.api } : { backend: "supabase" as const, sbUrl: t.url, sbKey: t.key });
 import { useBrand } from "../lib/brand";
 import { appBase, appFiles } from "../lib/migrate";
 import { loadHostConfig } from "../lib/studiohost";
-import { deployClientApp, partnerSignedIn, prepareClientSupabase, pullSite, remoteRepo, seedClientStudio, sendSite, siteSync, type PartnerRec, type SharedSite, type SiteSync } from "../lib/partners";
+import { deployClientApp, hostOf, partnerSignedIn, prepareClientSupabase, pullSite, remoteRepo, seedClientStudio, sendSite, siteSync, type PartnerRec, type SharedSite, type SiteSync } from "../lib/partners";
 import type { Studio, StudioIndex } from "../lib/studio";
 import { timeAgo, uid } from "../lib/util";
 import { Field, Spinner, useConfirm, useToast } from "../ui/kit";
@@ -26,8 +31,8 @@ export function PartnersTab({ studio, index, session, onIndex }: { studio: Studi
   useEffect(() => { netlifyToken.load(session.token).then((t) => setNf(t ? new Netlify(t.token) : null)); }, [session.token]);
   const [adding, setAdding] = useState(!(index.partners || []).length);
   const brand = useBrand();
-  const partner = { name: brand.name, url: index.hosted?.url || (session.cfg.owner === "supabase" ? appBase() : undefined) };
-  const myEmail = session.cfg.owner === "supabase" ? session.username : (() => { try { return localStorage.getItem("site-studio:host-email") || ""; } catch { return ""; } })();
+  const partner = { name: brand.name, url: index.hosted?.url || (isHosted(session) ? appBase() : undefined) };
+  const myEmail = isHosted(session) ? session.username : (() => { try { return localStorage.getItem("site-studio:host-email") || ""; } catch { return ""; } })();
   const save = async (fn: (list: PartnerRec[]) => PartnerRec[], msg: string) => onIndex(await studio.updateIndex((i) => { i.partners = fn(i.partners || []); }, msg));
   if (nf === undefined) return <Spinner label="Checking Netlify…" />;
   return (
@@ -51,17 +56,19 @@ function AddPartner({ nf, setNf, session, index, partner, myEmail, onDone, onCan
   const [accounts, setAccounts] = useState<"mine" | "client">("mine");
   const [clientNfTok, setClientNfTok] = useState("");
   const clientNf = accounts === "client" && clientNfTok.trim().length > 20 ? new Netlify(clientNfTok.trim()) : null;
+  const [kind, setKind] = useState<"cloudflare" | "supabase">("cloudflare");
   const sb = useSupabasePicker(session.token, nf, accounts === "mine");
+  const cf = useCloudflarePicker(session.token, nf, accounts === "mine", partner.name);
   const [phase, setPhase] = useState<"form" | "code" | "busy" | "done">("form"), [step, setStep] = useState(""), [err, setErr] = useState(""), [code, setCode] = useState("");
-  const [target, setTarget] = useState<{ url: string; key: string } | null>(null), [made, setMade] = useState<PartnerRec | null>(null);
+  const [target, setTarget] = useState<StudioHostCfg | null>(null), [made, setMade] = useState<PartnerRec | null>(null);
   useEffect(() => { const s = slug(name); setId(s ? s + "-studio" : ""); setSite(s ? s + "-studio" : ""); sb.setName(s ? s + "-studio" : "studio"); }, [name]);
   const list = emails(clients);
   const deployNf = accounts === "mine" ? nf : clientNf;
-  const ok = !!nf && !!deployNf && sb.ready && name.trim().length > 1 && list.length > 0 && /^[a-z0-9][a-z0-9-]{1,29}$/.test(id) && /^[a-z0-9][a-z0-9-]{1,40}$/.test(site) && /@/.test(mine);
+  const ok = !!nf && !!deployNf && (kind === "cloudflare" ? cf.ready : sb.ready) && name.trim().length > 1 && list.length > 0 && /^[a-z0-9][a-z0-9-]{1,29}$/.test(id) && /^[a-z0-9][a-z0-9-]{1,40}$/.test(site) && /@/.test(mine);
 
-  const finish = async (t: { url: string; key: string }) => {
+  const finish = async (t: StudioHostCfg) => {
     setPhase("busy");
-    const rec: PartnerRec = { id: uid(), name: name.trim(), url: "", studio: id, sbUrl: t.url, sbKey: t.key, accounts, clientEmails: list, partnerEmail: mine.trim().toLowerCase(), at: new Date().toISOString(), shared: [] };
+    const rec: PartnerRec = { id: uid(), name: name.trim(), url: "", studio: id, backend: t.kind, ...(t.kind === "cloudflare" ? { api: t.api } : { sbUrl: t.url, sbKey: t.key }), accounts, clientEmails: list, partnerEmail: mine.trim().toLowerCase(), at: new Date().toISOString(), shared: [] };
     setStep("Setting up the client's Studio"); await seedClientStudio(remoteRepo(rec), { name: rec.name, badge: index.badge, menus: index.menus });
     const app = await deployClientApp(deployNf!, rec, site, await source(), partner, setStep);
     const done = { ...rec, url: app.url, siteId: accounts === "mine" ? app.siteId : undefined };
@@ -71,18 +78,27 @@ function AddPartner({ nf, setNf, session, index, partner, myEmail, onDone, onCan
     setErr("");
     try {
       setPhase("busy");
-      const { m, ref } = await sb.ensure(setStep);
-      const t = await prepareClientSupabase(m, ref, { studio: id, clientEmails: list, partnerEmail: mine.trim().toLowerCase() }, setStep);
+      let t: StudioHostCfg;
+      if (kind === "cloudflare") {
+        const { setup, relay, token } = await cf.ensure(setStep);
+        setStep("Adding the client's owners and you as partner");
+        await cfAddMembers(relay, token, setup, "studio:" + id, [...list.map((email) => ({ email, role: "owner" as const })), { email: mine.trim().toLowerCase(), role: "partner" as const }]);
+        t = { kind: "cloudflare", api: setup.api, studio: id, name: name.trim() };
+      } else {
+        const { m, ref } = await sb.ensure(setStep);
+        const s = await prepareClientSupabase(m, ref, { studio: id, clientEmails: list, partnerEmail: mine.trim().toLowerCase() }, setStep);
+        t = { kind: "supabase", url: s.url, key: s.key, studio: id, name: name.trim() };
+      }
       setTarget(t);
-      if (await partnerSignedIn({ sbUrl: t.url, sbKey: t.key, partnerEmail: mine })) await finish(t);
-      else { setStep("Sending you a sign-in code"); await sendCode(t, mine.trim()); setPhase("code"); }
+      if (await partnerSignedIn({ ...hostFields(t), studio: id, name: name.trim(), partnerEmail: mine })) await finish(t);
+      else { setStep("Sending you a sign-in code"); await backendOf(t).sendCode(mine.trim()); setPhase("code"); }
     } catch (e: any) { setErr(e?.message || "Something went wrong."); setPhase(target ? "code" : "form"); }
     setStep("");
   };
   const verify = async () => {
     if (!target) return;
     setErr("");
-    try { setPhase("busy"); setStep("Checking the code"); await verifyCode(target, mine.trim(), code); await finish(target); }
+    try { setPhase("busy"); setStep("Checking the code"); await backendOf(target).verifyCode(mine.trim(), code); await finish(target); }
     catch (e: any) { setErr(e?.message || "Something went wrong."); setPhase("code"); }
     setStep("");
   };
@@ -115,7 +131,12 @@ function AddPartner({ nf, setNf, session, index, partner, myEmail, onDone, onCan
         {nf ? <p className="text-[13px] text-emerald-300">Your Netlify is connected{accounts === "client" ? " (it runs the Studio's helper)" : ""}.</p> : <NetlifyAccount session={session} onToken={(t) => setNf(t ? new Netlify(t) : null)} />}
         {accounts === "client" && <Field label="The client's Netlify personal access token" htmlFor="pt-cnf"><input id="pt-cnf" className="input font-mono text-xs" type="password" autoComplete="off" value={clientNfTok} onChange={(e) => setClientNfTok(e.target.value)} /></Field>}
       </section>
-      <section aria-label="Supabase" className="flex flex-col gap-2"><b className="text-sm">{accounts === "mine" ? "Your Supabase" : "The client's Supabase"}</b>{sb.ui}</section>
+      <section aria-label="Database" className="flex flex-col gap-2"><b className="text-sm">Where their Studio keeps its files {accounts === "mine" ? "(your account)" : "(the client's account)"}</b>
+        <div className="flex flex-wrap rounded-lg border border-ink-600 self-start" role="radiogroup" aria-label="Client database">
+          {([["cloudflare", "Cloudflare"], ["supabase", "Supabase"]] as const).map(([k, l]) => <button key={k} type="button" role="radio" aria-checked={kind === k} onClick={() => setKind(k)} className={`btn btn-sm border-0 ${kind === k ? "bg-ink-700" : "bg-transparent"}`}>{l}</button>)}
+        </div>
+        <section aria-label={kind === "cloudflare" ? "Cloudflare" : "Supabase"}>{kind === "cloudflare" ? cf.ui : sb.ui}</section>
+      </section>
       {phase !== "code" && <button type="button" className="btn btn-pri self-start" disabled={!ok || phase === "busy"} onClick={start}>{phase === "busy" ? step + "…" : "Create the client Studio"}</button>}
       {phase === "code" && (
         <div className="flex flex-col gap-2" aria-label="Confirm your email">
@@ -169,8 +190,8 @@ function PartnerCard({ p, studio, index, nf, partner, onChange, onRemove }: { p:
       {signed === false && (
         <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-400/40 bg-amber-400/5 p-3 text-[13px] text-amber-100">
           <span>Sign in to {p.name}'s Studio as <b>{p.partnerEmail}</b> on this device to share and sync.</span>
-          {!sent ? <button type="button" className="btn btn-sm ml-auto" onClick={() => run("in", async () => { await sendCode({ url: p.sbUrl, key: p.sbKey }, p.partnerEmail); setSent(true); })}>Email me a code</button>
-            : <span className="ml-auto flex gap-2"><input aria-label={`Code for ${p.name}`} className="input w-28 py-1 font-mono" value={code} maxLength={10} onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))} /><button type="button" className="btn btn-sm btn-pri" disabled={code.length < 6} onClick={() => run("in", async () => { await verifyCode({ url: p.sbUrl, key: p.sbKey }, p.partnerEmail, code); await check(); })}>Sign in</button></span>}
+          {!sent ? <button type="button" className="btn btn-sm ml-auto" onClick={() => run("in", async () => { await backendOf(hostOf(p)).sendCode(p.partnerEmail); setSent(true); })}>Email me a code</button>
+            : <span className="ml-auto flex gap-2"><input aria-label={`Code for ${p.name}`} className="input w-28 py-1 font-mono" value={code} maxLength={10} onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))} /><button type="button" className="btn btn-sm btn-pri" disabled={code.length < 6} onClick={() => run("in", async () => { await backendOf(hostOf(p)).verifyCode(p.partnerEmail, code); await check(); })}>Sign in</button></span>}
         </div>
       )}
       {p.shared.length > 0 && (

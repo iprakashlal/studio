@@ -1,24 +1,25 @@
 // Sign-in for a Studio hosted outside GitHub: a 6-digit code by email. Only emails listed as members of this
 // Studio (studio_members) get in; anyone else is told so and signed out again.
 import { useEffect, useState } from "react";
-import { sbClient, sendCode, signedInEmail, verifyCode } from "../lib/supa";
-import { studioRole, type StudioHostCfg } from "../lib/studiohost";
+import { type StudioHostCfg } from "../lib/studiohost";
+import { backendOf } from "../lib/backend";
 import { Field, Logo, Spinner } from "./kit";
 import { BrandMark } from "../lib/brand";
 
 export function StudioGate({ cfg, brand, onIn }: { cfg: StudioHostCfg; brand: string; onIn: (email: string, role: string) => void }) {
   const [email, setEmail] = useState(""), [code, setCode] = useState(""), [sent, setSent] = useState(false);
   const [busy, setBusy] = useState(true), [err, setErr] = useState("");
+  const be = backendOf(cfg);
   const admit = async () => {
-    const who = await signedInEmail(cfg);
-    const role = await studioRole(cfg);
+    const who = await be.signedIn();
+    const role = who ? await be.role() : null;
     if (who && role) return onIn(who, role);
-    await sbClient(cfg).auth.signOut().catch(() => {});
+    await be.signOut().catch(() => {});
     setErr(`${who || "This email"} isn't a member of this Studio. Ask its owner to add you.`);
   };
-  useEffect(() => { signedInEmail(cfg).then((e) => (e ? admit() : undefined)).catch(() => {}).finally(() => setBusy(false)); }, []);
-  const send = async (e?: React.FormEvent) => { e?.preventDefault(); setErr(""); setBusy(true); try { await sendCode(cfg, email); setSent(true); } catch (x: any) { setErr(x?.message || "Couldn't send the code."); } setBusy(false); };
-  const verify = async (e: React.FormEvent) => { e.preventDefault(); setErr(""); setBusy(true); try { await verifyCode(cfg, email, code); await admit(); } catch (x: any) { setErr(x?.message || "Couldn't sign in."); } setBusy(false); };
+  useEffect(() => { be.signedIn().then((e) => (e ? admit() : undefined)).catch(() => {}).finally(() => setBusy(false)); }, []);
+  const send = async (e?: React.FormEvent) => { e?.preventDefault(); setErr(""); setBusy(true); try { await be.sendCode(email); setSent(true); } catch (x: any) { setErr(x?.message || "Couldn't send the code."); } setBusy(false); };
+  const verify = async (e: React.FormEvent) => { e.preventDefault(); setErr(""); setBusy(true); try { await be.verifyCode(email, code); await admit(); } catch (x: any) { setErr(x?.message || "Couldn't sign in."); } setBusy(false); };
   return (
     <div className="grid min-h-screen place-items-center px-4 py-10">
       <div className="card flex w-full max-w-sm flex-col gap-4 p-6">

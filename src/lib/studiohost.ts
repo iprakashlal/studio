@@ -8,9 +8,12 @@ import { RepoError, gitBlobSha, type FileIn, type Repo } from "./repo";
 import type { RepoCfg } from "./crypto";
 import { cleanUrl, sbClient } from "./supa";
 
-export type StudioHostCfg = { kind: "supabase"; url: string; key: string; studio: string; name?: string; source?: string; partner?: { name: string; url?: string; logo?: string } };
+type HostCommon = { studio: string; name?: string; source?: string; partner?: { name: string; url?: string; logo?: string } };
+export type SbHostCfg = HostCommon & { kind: "supabase"; url: string; key: string };
+export type CfHostCfg = HostCommon & { kind: "cloudflare"; api: string };
+export type StudioHostCfg = SbHostCfg | CfHostCfg;
 /** Where a moved Studio lives (kept in studio.json, no secrets). */
-export type HostedStudio = { url: string; siteId: string; siteName: string; sbUrl: string; studio: string; owner: string; build?: string; at: string };
+export type HostedStudio = { url: string; siteId: string; siteName: string; sbUrl?: string; api?: string; backend?: "supabase" | "cloudflare"; studio: string; owner: string; build?: string; at: string };
 
 export const STUDIO_BUCKET = "studio";
 const TEXT = /\.(json|md|txt|csv|html|css|js|svg)$/i;
@@ -146,12 +149,14 @@ export async function loadHostConfig(): Promise<StudioHostCfg | null> {
     const r = await fetch("studio.config.json", { cache: "no-store" });
     if (!r.ok) return null;
     const j = await r.json();
-    return j?.kind === "supabase" && /^https:\/\//.test(j.url) && j.key && /^[a-z0-9-]+$/.test(j.studio) ? { ...j, url: cleanUrl(j.url) } : null;
+    if (!/^[a-z0-9-]+$/.test(j?.studio || "")) return null;
+    if (j.kind === "cloudflare") return /^https:\/\//.test(j.api) ? { ...j, api: String(j.api).replace(/\/+$/, "") } : null;
+    return j?.kind === "supabase" && /^https:\/\//.test(j.url) && j.key ? { ...j, url: cleanUrl(j.url) } : null;
   } catch { return null; }
 }
 
 /** Is this email a member of the Studio, and how? */
-export async function studioRole(cfg: StudioHostCfg): Promise<string | null> {
+export async function studioRole(cfg: SbHostCfg): Promise<string | null> {
   const { data, error } = await sbClient(cfg).rpc("studio_role", { s: cfg.studio });
   if (error) return null;
   return (data as string) || null;

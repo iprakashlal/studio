@@ -69,6 +69,9 @@ export function Editor({ tpl, draft, version, onChange, upload, img, extras = []
     }, 80);
     return () => clearTimeout(t);
   }, [focus]);
+  // Menu headings fold their sections away (the open section stays visible); remembered in this browser.
+  const [folded, setFolded] = useState<string[]>(() => { try { return JSON.parse(localStorage.getItem("studio-menu-fold") || "[]"); } catch { return []; } });
+  const foldGroup = (g: string) => setFolded((f) => { const n = f.includes(g) ? f.filter((x) => x !== g) : [...f, g]; try { localStorage.setItem("studio-menu-fold", JSON.stringify(n)); } catch { /* private mode */ } return n; });
   const groups: { group: string; items: typeof nav }[] = [];
   for (const it of nav) {
     let g = groups.find((x) => x.group === it.group);
@@ -84,17 +87,19 @@ export function Editor({ tpl, draft, version, onChange, upload, img, extras = []
     <Ctx.Provider value={ctx}>
       <div className="flex min-h-0 flex-1 flex-col md:flex-row">
         <nav aria-label="Content categories" className="scroll-thin flex flex-none gap-1 overflow-x-auto border-b border-ink-700 bg-ink-900 p-2 md:w-52 md:flex-col md:overflow-y-auto md:border-b-0 md:border-r md:p-3">
-          {groups.map((g) => (
+          {groups.map((g) => { const shut = folded.includes(g.group); return (
             <div key={g.group} className="flex gap-1 md:flex-col">
-              <div className="hidden px-2.5 pb-1 pt-3 text-[10.5px] font-bold uppercase tracking-widest text-ink-500 md:block">{g.group}</div>
-              {g.items.map((it) => (
+              <button type="button" onClick={() => foldGroup(g.group)} aria-expanded={!shut} className="hidden items-center px-2.5 pb-1 pt-3 text-left text-[10.5px] font-bold uppercase tracking-widest text-ink-500 hover:text-ink-300 md:flex">
+                <span className="flex-1">{g.group}</span><span aria-hidden className={`inline-block text-[9px] transition-transform ${shut ? "-rotate-90" : ""}`}>▾</span>
+              </button>
+              {g.items.filter((it) => !shut || curId === it.id).map((it) => (
                 <button key={it.id} type="button" onClick={() => setCat(it.id)} aria-current={curId === it.id ? "page" : undefined}
                   className={`flex-none whitespace-nowrap rounded-lg px-2.5 py-2 text-left text-[13.5px] font-semibold transition md:w-full ${curId === it.id ? "bg-brand-500/15 text-ink-100" : "text-ink-400 hover:bg-ink-800 hover:text-ink-100"}`}>
                   {it.label}
                 </button>
               ))}
             </div>
-          ))}
+          ); })}
         </nav>
         <div ref={scroller} className="scroll-thin min-w-0 flex-1 overflow-y-auto">
           <div className="mx-auto flex max-w-5xl flex-col gap-4 px-4 py-5 sm:px-6">

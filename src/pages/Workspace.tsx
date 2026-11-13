@@ -16,6 +16,7 @@ import { MigrationTab } from "./MigrationTab";
 import { PartnersTab } from "./PartnersTab";
 import { BADGE_DEFAULT, cleanBadge, setCurrentBadge, type BadgeCfg } from "../lib/badge";
 import { MARK_URI } from "../ui/logo";
+import { FoldAll, FoldCards } from "../ui/fold";
 import { BrandMark, DEFAULT_NAME, brand as currentBrand, setBrand, shrinkImage, useBrand } from "../lib/brand";
 import { Dashboard } from "./Dashboard";
 import { ProjectView } from "./ProjectView";
@@ -99,19 +100,21 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
     const tabs = <div className="flex flex-wrap gap-1 border-b border-ink-700" role="tablist" aria-label="Settings">
       {[["general", "General"], ["migration", "Migration"], ["partners", "Studio Partners"]].map(([k, l]) => <a key={k} href={`#/settings${k === "general" ? "" : "/" + k}`} role="tab" aria-selected={tab === k} className={`-mb-px border-b-2 px-3 py-2 text-sm font-semibold ${tab === k ? "border-brand-400 text-ink-100" : "border-transparent text-ink-400 hover:text-ink-100"}`}>{l}</a>)}
     </div>;
-    if (tab === "partners") return <>{header}<main className="mx-auto flex max-w-3xl flex-col gap-4 px-4 py-8 sm:px-6"><h1 className="font-display text-3xl font-extrabold">Settings</h1>{tabs}<PartnersTab studio={studio} index={index} session={session} onIndex={setIndex} /></main></>;
-    if (tab === "migration") return <>{header}<main className="mx-auto flex max-w-3xl flex-col gap-4 px-4 py-8 sm:px-6"><h1 className="font-display text-3xl font-extrabold">Settings</h1>{tabs}<MigrationTab studio={studio} index={index} session={session} onIndex={setIndex} /></main></>;
+    if (tab === "partners") return <>{header}<main className="mx-auto flex max-w-3xl flex-col gap-4 px-4 py-8 sm:px-6"><h1 className="font-display text-3xl font-extrabold">Settings</h1>{tabs}<FoldAll /><FoldCards scope="partners"><PartnersTab studio={studio} index={index} session={session} onIndex={setIndex} /></FoldCards></main></>;
+    if (tab === "migration") return <>{header}<main className="mx-auto flex max-w-3xl flex-col gap-4 px-4 py-8 sm:px-6"><h1 className="font-display text-3xl font-extrabold">Settings</h1>{tabs}<FoldAll /><FoldCards scope="migration"><MigrationTab studio={studio} index={index} session={session} onIndex={setIndex} /></FoldCards></main></>;
     return (
       <>{header}
         <main className="mx-auto flex max-w-3xl flex-col gap-4 px-4 py-8 sm:px-6">
           <h1 className="font-display text-3xl font-extrabold">Settings</h1>
           {tabs}
+          <FoldAll />
+          <FoldCards scope="general">
           <p className="text-sm text-ink-300">Your Studio keeps everything as files in <b className="text-ink-100">{isHosted(session) ? `${session.cfg.owner === "cloudflare" ? "Cloudflare" : "Supabase"} (Studio “${session.cfg.repo}”)` : `${session.cfg.owner}/${session.cfg.repo}`}</b>: <code className="font-mono text-xs">studio.json</code> for the project list and <code className="font-mono text-xs">projects/</code> for each site's content, images and export snapshots.</p>
           <BrandCard studio={studio} onIndex={setIndex} />
           <BadgeCard studio={studio} saved={index.badge} onIndex={setIndex} />
           <MenusCard studio={studio} menus={index.menus || {}} onIndex={setIndex} />
           <section className="card flex flex-col gap-3 p-5" aria-label="Hosting accounts">
-            <h2 className="text-lg font-extrabold">Hosting accounts</h2>
+            <h3 className="text-[15px] font-extrabold">Hosting accounts</h3>
             <p className="text-sm text-ink-300">GitHub publishing creates each site's repository and turns on GitHub Pages; Cloudflare (free, no traffic limit) or Netlify hosts sites outside GitHub. Tokens stay on this device, encrypted. Each site's database details are kept with its project.</p>
             <h3 className="mt-2 text-sm font-bold">GitHub (publishing)</h3>
             <GitHubPublishAccount session={session} />
@@ -122,6 +125,7 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
           {isHosted(session)
             ? <section className="card flex flex-col gap-3 p-5" aria-label="Account"><h3 className="text-[15px] font-extrabold">Account</h3><p className="text-sm text-ink-300">Signed in as <b className="text-ink-100">{session.username}</b> with an email code.</p><button type="button" className="btn self-start" onClick={onSignOut}>Sign out</button></section>
             : <AccountPanel ns={NS} session={session} onUpdated={onSession} onSignOut={onSignOut} onForget={onForget} />}
+          </FoldCards>
         </main>
       </>
     );

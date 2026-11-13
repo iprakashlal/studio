@@ -45,3 +45,10 @@
   0%, 35% { box-shadow: 0 0 0 3px rgba(91, 124, 255, 0.85), 0 0 0 8px rgba(91, 124, 255, 0.18); background: rgba(91, 124, 255, 0.08); }
   100% { box-shadow: 0 0 0 0 rgba(91, 124, 255, 0); background: transparent; }
 }
+
+/* Foldable cards (ui/fold.tsx) */
+.fold-cards section.card > [data-fold-head] { cursor: pointer; user-select: none; display: flex; align-items: center; gap: .5rem; }
+.fold-cards section.card > [data-fold-head]::after { content: ""; margin-left: auto; width: .55rem; height: .55rem; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; opacity: .55; transform: rotate(45deg) translateY(-2px); transition: transform .15s; flex: none; }
+.fold-cards section.card[data-fold="closed"] > [data-fold-head]::after { transform: rotate(-45deg); }
+.fold-cards section.card > [data-fold-head]:focus-visible { outline: 2px solid rgb(91 124 255 / .7); outline-offset: 4px; border-radius: 4px; }
+.fold-cards section.card[data-fold="closed"] > :not([data-fold-head]) { display: none !important; }

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useCfAccount, useCloudflarePicker, type CfAccountHook } from "./CfPicker";
 import { cloudflarePages, netlifyPages, PAGES_LABEL, type Pages, type PagesKind } from "../lib/pages";
 import { CF_DOMAIN_HINT, CfError } from "../lib/cloudflare";
-import { cfAccountVault, cfAddMembers, cfRole, cfSendCode, cfSignedIn, cfVerifyCode } from "../lib/cfdb";
+import { cfAccountVault, cfAddMembers, resendTestOnly, cfRole, cfSendCode, cfSignedIn, cfVerifyCode } from "../lib/cfdb";
 import { SupabaseAuto } from "./SupabaseAuto";
 import type { Session } from "../lib/auth";
 import type { ProjectMeta, Studio, StudioIndex } from "../lib/studio";
@@ -152,7 +152,24 @@ export function HostDialog({ studio, project, tpl, draft, dirty, save, onIndex, 
     const c = { api: setup.api, site: sb.site.trim() }; setCfSite(c); setStep(null); await cfCheck(c);
     toast("The site's database is ready on Cloudflare");
   });
-  const cfSend = () => run("send", async () => { await cfSendCode(cfSite!.api, email.trim()); setCodeSent(true); toast("Code sent. Check the inbox (and spam)."); });
+  // Resend without a verified domain only emails its account's own address: offer that address, or new email settings.
+  const [testOnly, setTestOnly] = useState<string | null>(null), [mailCfg, setMailCfg] = useState(false);
+  const cfSend = (to = email.trim()) => run("send", async () => {
+    try { await cfSendCode(cfSite!.api, to); setTestOnly(null); setCodeSent(true); toast("Code sent. Check the inbox (and spam)."); }
+    catch (e: any) { const own = resendTestOnly(e?.message || ""); if (own && own !== to.toLowerCase()) { setTestOnly(own); throw new Error(`Resend can only email ${own} until you verify a domain there. Use that address, or change the email settings.`); } throw e; }
+  });
+  const useOwn = () => run("send", async () => {
+    const own = testOnly!; const v = await cfAccountVault.load(session.token);
+    if (!v?.setup) throw new Error("Set up the database on Cloudflare on this device first.");
+    const { relay, token: t } = await cfAcc.client((x) => setStep({ i: -1, detail: x }));
+    await cfAddMembers(relay, t, v.setup, "site:" + cfSite!.site, [{ email: own, role: "owner" }]);
+    setStep(null); setEmail(own); setEditors((cur) => (cur.split(/\s+/).includes(own) ? cur : (cur.trim() + "\n" + own).trim()));
+    await cfSendCode(cfSite!.api, own); setTestOnly(null); setCodeSent(true); toast(`Code sent to ${own}.`);
+  });
+  const saveMail = () => run("cfsetup", async () => {
+    await cfp.ensure((x) => setStep({ i: -1, detail: x })); setStep(null); setMailCfg(false); setTestOnly(null);
+    toast("Email settings saved. Send the code again.");
+  });
   const cfVerify = () => run("verify", async () => { await cfVerifyCode(cfSite!.api, email.trim(), code); setCode(""); setCodeSent(false); await cfCheck(); });
 
   const publish = () => run("publish", async () => {
@@ -271,7 +288,17 @@ export function HostDialog({ studio, project, tpl, draft, dirty, save, onIndex, 
             {!cfSite ? <>
               <section aria-label="Cloudflare">{pagesKind !== "cloudflare" && cfAcc.ui}{pagesKind === "cloudflare" && !cfAcc.ready && <p className="mb-2 text-[13px] text-amber-200">Connect Cloudflare in section 1 first: the same account holds the database.</p>}{cfp.ui}</section>
               <button type="button" className="btn btn-pri btn-sm self-start" disabled={!!busy || !cfp.ready || !siteIdOk(sb.site) || !email.includes("@")} onClick={setupCf}>{busy === "cfsetup" ? (step?.detail || "Setting up") + "…" : "Set up on Cloudflare"}</button>
-            </> : <p className="flex flex-wrap items-center gap-2 text-[13px] text-ink-300"><span className="h-2 w-2 rounded-full bg-emerald-400" />Site <b className="text-ink-100">{cfSite.site}</b> in the database at <code className="font-mono text-xs">{cfSite.api}</code>.</p>}
+            </> : <p className="flex flex-wrap items-center gap-2 text-[13px] text-ink-300"><span className="h-2 w-2 rounded-full bg-emerald-400" />Site <b className="text-ink-100">{cfSite.site}</b> in the database at <code className="font-mono text-xs">{cfSite.api}</code>.<button type="button" className="text-brand-300 underline" onClick={() => setMailCfg(!mailCfg)}>Email settings</button></p>}
+            {cfSite && (mailCfg || testOnly) && (
+              <div className="flex flex-col gap-2 rounded-lg border border-amber-400/40 bg-amber-400/5 p-3 text-[13px] text-amber-100" aria-label="Sign-in email">
+                {testOnly && <>
+                  <p>Resend is in test mode: it only emails <b>{testOnly}</b>, the address of your Resend account. Either:</p>
+                  <button type="button" className="btn btn-pri btn-sm self-start" disabled={!!busy} onClick={useOwn}>Sign in as {testOnly}</button>
+                  <p className="text-ink-300">(adds it as an editor of this site), or <b>verify your domain</b> at <a className="underline" href="https://resend.com/domains" target="_blank" rel="noopener noreferrer">resend.com/domains ↗</a>, then put an address on it below (like <code className="font-mono">Prakash &lt;codes@yourdomain&gt;</code>) so codes reach any editor.</p>
+                </>}
+                {mailCfg || testOnly ? <>{cfp.ui}<button type="button" className="btn btn-sm self-start" disabled={!!busy || !cfp.ready} onClick={saveMail}>{busy === "cfsetup" ? (step?.detail || "Saving") + "…" : "Save email settings"}</button></> : null}
+              </div>
+            )}
             {cfSite && (cfSigned ? (
               <div className="flex flex-wrap items-center gap-2 text-sm">
                 <span className={`h-2 w-2 rounded-full ${cfAccess === "ok" ? "bg-emerald-400" : "bg-amber-400"}`} />
@@ -280,7 +307,7 @@ export function HostDialog({ studio, project, tpl, draft, dirty, save, onIndex, 
               </div>
             ) : (
               <div className="flex flex-wrap items-end gap-2">
-                <button type="button" className="btn btn-sm" disabled={!!busy || !email.includes("@")} onClick={cfSend}>{busy === "send" ? "Sending…" : codeSent ? "Send a new code" : "Email me a sign-in code"}</button>
+                <button type="button" className="btn btn-sm" disabled={!!busy || !email.includes("@")} onClick={() => cfSend()}>{busy === "send" ? "Sending…" : codeSent ? "Send a new code" : "Email me a sign-in code"}</button>
                 {codeSent && <><input aria-label="Code from the email" className="input w-32 font-mono" inputMode="numeric" maxLength={10} placeholder="123456" value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))} />
                   <button type="button" className="btn btn-pri btn-sm" disabled={!!busy || code.length < 6} onClick={cfVerify}>{busy === "verify" ? "Checking…" : "Sign in"}</button></>}
               </div>

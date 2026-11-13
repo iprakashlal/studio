@@ -181,7 +181,7 @@ export function ProjectView({ studio, index, project, session, onIndex }: { stud
           <button type="button" className="btn btn-sm" onClick={() => setModal("publish")}>Publish to GitHub</button>
           {project.host
             ? <button type="button" className="btn btn-sm" onClick={() => setModal("host")}>Publish to {project.host.kind === "cloudflare" ? "Cloudflare" : "Netlify"}</button>
-            : <button type="button" className="btn btn-sm" onClick={() => setModal("host")} title="Move the site to Cloudflare or Netlify hosting, with content and photos in your own database, and your own domain">Host outside GitHub</button>}
+            : <button type="button" className="btn btn-sm" onClick={() => setModal("host")} title="Move the site to Cloudflare or Netlify hosting, with content and photos in your own database, and your own domain">Host to External Services</button>}
           <button type="button" className="btn btn-pri btn-sm" disabled={!dirty || saving} onClick={() => save()}>Save</button>
         </div>
       </header>

@@ -7,7 +7,8 @@ import { ensureRepo, ghPublish } from "../lib/ghpublish";
 import { netlifyToken, siteAddress } from "../lib/hosting";
 import { Netlify } from "../lib/netlify";
 import { RELAY_VERSION, relayVault, setupRelay, type Relay } from "../lib/relay";
-import { CF_TOKEN_PAGE, Cloudflare, cfVault, workerCheck, type CfAccount } from "../lib/cloudflare";
+import { CF_DNS_HINT, CF_TOKEN_PAGE, Cloudflare, cfVault, workerCheck, type CfAccount } from "../lib/cloudflare";
+import { stripeWebhook } from "../lib/stripe";
 import { RESEND_KEYS_PAGE, Resend, type ResendDomain } from "../lib/resend";
 import { STUDIO_BUILD } from "../build-info";
 import { Field, Modal, Spinner, useToast } from "../ui/kit";
@@ -20,6 +21,8 @@ type Check = { setting: string; ok: boolean; detail: string };
 const slug = (s: string) => String(s || "").toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40);
 const ghPages = (t: { owner: string; repo: string }) => `https://${t.owner}.github.io/${t.repo.toLowerCase() === `${t.owner}.github.io`.toLowerCase() ? "" : t.repo + "/"}`;
 const emailOk = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e.trim());
+const RZP_WEBHOOKS = "https://dashboard.razorpay.com/app/webhooks";
+const stripeHooks = (key: string) => `https://dashboard.stripe.com/${/^(sk|rk)_test_/.test(key) ? "test/" : ""}webhooks`;
 const tokenLink = (owner: string, repo: string) => `https://github.com/settings/personal-access-tokens/new?${new URLSearchParams({ name: `${repo} worker`.slice(0, 40), description: `Lets the shop's Cloudflare Worker save orders in ${owner}/${repo}. Repository access: only ${repo}.`, target_name: owner, expires_in: "366", contents: "write" })}`;
 
 function Section({ n, title, state, children }: { n: number; title: string; state: Step; children: React.ReactNode }) {
@@ -46,8 +49,14 @@ export function ShopBackendDialog({ session, studio, project, draft, onConnect, 
   const [relay, setRelay] = useState<Relay | null>(null);
   const [relayBusy, setRelayBusy] = useState(""), [relayErr, setRelayErr] = useState("");
   useEffect(() => {
-    netlifyToken.load(session.token).then((t) => setNf(t ? new Netlify(t.token) : null));
-    relayVault.load(session.token).then((r) => setRelay(r && r.v === RELAY_VERSION ? r : null));
+    (async () => {
+      const t = await netlifyToken.load(session.token), n = t ? new Netlify(t.token) : null;
+      setNf(n);
+      const r = await relayVault.load(session.token);
+      if (r && r.v === RELAY_VERSION) { setRelay(r); return; }
+      // An older helper: update it in place (same site and key) so it can do what this Studio asks of it.
+      if (r && n) { try { setRelay(await setupRelay(n, session.token, r, (x) => setRelayBusy("Updating the helper: " + x.toLowerCase()))); } catch { setRelay(null); } setRelayBusy(""); }
+    })();
   }, [session.token]);
   const makeRelay = async () => {
     if (!nf) return;
@@ -119,6 +128,21 @@ export function ShopBackendDialog({ session, studio, project, draft, onConnect, 
     catch (e: any) { setRsErr(e?.message || "Couldn't check the domain."); }
     setRsBusy(false);
   };
+  const [dnsBusy, setDnsBusy] = useState(false), [dnsMsg, setDnsMsg] = useState<{ ok: boolean; t: string } | null>(null);
+  const dnsViaCloudflare = async () => {
+    if (!relay || !domain || !cfTok.trim()) return;
+    setDnsBusy(true); setDnsMsg(null);
+    try {
+      const cf = new Cloudflare(relay, cfTok.trim());
+      const zone = await cf.zoneFor(domain.name).catch(() => null);
+      if (!zone) throw new Error(`${domain.name} isn't on this Cloudflare account, or the token can't see its DNS. ${CF_DNS_HINT}`);
+      const done = await cf.addRecords(zone, domain.name, domain.records || []).catch((e: any) => { throw new Error(/permission|auth|refused/i.test(e?.message || "") ? `The token can't change DNS. ${CF_DNS_HINT}` : e?.message); });
+      const added = done.filter((d) => d.done === "added").length, clash = done.filter((d) => d.done === "conflict");
+      setDnsMsg({ ok: !clash.length, t: `${added ? `Added ${added} record${added === 1 ? "" : "s"} in Cloudflare` : "The records were already in Cloudflare"}${clash.length ? `. ${clash.map((c) => `${c.type} ${c.name}`).join(", ")} already has a different value: change it in Cloudflare → DNS` : ""}. Checking with Resend…` });
+      await checkDomain();
+    } catch (e: any) { setDnsMsg({ ok: false, t: e?.message || "Couldn't add the records." }); }
+    setDnsBusy(false);
+  };
   const mailFrom = testSender ? `${fromName} <onboarding@resend.dev>` : rsMode === "full" && domain ? `${fromName} <${fromLocal}@${domain.name}>` : manualFrom;
   const fromOk = /^[^<>@]*<[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+>$/.test(mailFrom) || emailOk(mailFrom);
   const emailState: Step = !rsKey ? (prev ? "done" : "todo") : rsMode && fromOk ? "done" : rsErr ? "error" : "todo";
@@ -148,6 +172,7 @@ export function ShopBackendDialog({ session, studio, project, draft, onConnect, 
   const [ownerEmail, setOwnerEmail] = useState(() => { try { return localStorage.getItem("site-studio:host-email") || ""; } catch { return ""; } });
   const [admins, setAdmins] = useState("");
   const [rz, setRz] = useState({ id: "", secret: "", hook: "" }), [st, setSt] = useState({ key: "", hook: "" });
+  const [stripeOut, setStripeOut] = useState<{ ok: boolean; t: string } | null>(null);
   const [log, setLog] = useState<{ t: string; ok?: boolean }[]>([]);
   const [deploying, setDeploying] = useState(false);
   const [result, setResult] = useState<{ url: string; checks: Check[]; status: string } | null>(null);
@@ -158,7 +183,7 @@ export function ShopBackendDialog({ session, studio, project, draft, onConnect, 
 
   const deploy = async () => {
     if (!relay) return;
-    setDeploying(true); setResult(null); setLog([]);
+    setDeploying(true); setResult(null); setLog([]); setStripeOut(null);
     const say = (t: string) => setLog((l) => [...l.map((x) => (x.ok === undefined ? { ...x, ok: true } : x)), { t }]);
     try {
       const cf = new Cloudflare(relay, cfTok.trim());
@@ -173,15 +198,30 @@ export function ShopBackendDialog({ session, studio, project, draft, onConnect, 
         if (rsMode === "full" && domain && !testSender) { say("Creating a send-only email key for the Worker"); secrets.RESEND_API_KEY = (await new Resend(relay, rsKey.trim()).sendingKey(`${wName} worker`, domain.id)).token; }
         else secrets.RESEND_API_KEY = rsKey.trim();
       }
-      if (rz.id) secrets.RAZORPAY_KEY_ID = rz.id.trim(); if (rz.secret) secrets.RAZORPAY_KEY_SECRET = rz.secret.trim(); if (rz.hook) secrets.RAZORPAY_WEBHOOK_SECRET = rz.hook.trim();
-      if (st.key) secrets.STRIPE_SECRET_KEY = st.key.trim(); if (st.hook) secrets.STRIPE_WEBHOOK_SECRET = st.hook.trim();
+      // Razorpay: the webhook secret is any string both sides share, so the Studio makes one.
+      let rzHook = rz.hook.trim();
+      if (rz.id.trim() && !rzHook) { rzHook = crypto.randomUUID().replace(/-/g, ""); setRz((x) => ({ ...x, hook: rzHook })); }
+      if (rz.id) secrets.RAZORPAY_KEY_ID = rz.id.trim(); if (rz.secret) secrets.RAZORPAY_KEY_SECRET = rz.secret.trim(); if (rzHook) secrets.RAZORPAY_WEBHOOK_SECRET = rzHook;
+      say("Getting the workers.dev address");
+      const sub = await cf.subdomain(account, owner);
+      const url = `https://${wName}.${sub}.workers.dev`;
+      if (st.key.trim()) {
+        secrets.STRIPE_SECRET_KEY = st.key.trim();
+        say("Adding the order webhook in Stripe");
+        try {
+          const w = await stripeWebhook(relay, st.key.trim(), url + "/stripe-webhook");
+          secrets.STRIPE_WEBHOOK_SECRET = w.secret;
+          setStripeOut({ ok: true, t: `Added in Stripe${w.replaced ? " (replaced the earlier one)" : ""}: ${url}/stripe-webhook, event checkout.session.completed. Its signing secret is on the Worker.` });
+        } catch (e: any) {
+          if (st.hook.trim()) secrets.STRIPE_WEBHOOK_SECRET = st.hook.trim();
+          setStripeOut({ ok: false, t: `Couldn't add the webhook in Stripe (${e?.message || "error"}). Add it by hand below.` });
+        }
+      }
       const vars = { DATA_REPO: dataRepo, SITE_URL: siteUrl.trim().replace(/\/?$/, "/"), MAIL_FROM: mailFrom, OWNER_EMAIL: ownerEmail.trim().toLowerCase(), ADMIN_EMAILS: admins.trim() };
       say(`Uploading the Worker “${wName}” with its settings`);
       await cf.upload(account, wName, code, { vars, secrets, keep: true });
       say("Turning on its workers.dev address");
-      const sub = await cf.subdomain(account, owner);
       await cf.enableWorkersDev(account, wName);
-      const url = `https://${wName}.${sub}.workers.dev`;
       say("Running the Worker's own check");
       let chk: any = null;
       for (let i = 0; i < 6; i++) { try { chk = await workerCheck(relay, url); if (chk?.checks?.length) break; } catch { /* still starting */ } await new Promise((res) => setTimeout(res, 2500)); }
@@ -253,7 +293,15 @@ export function ShopBackendDialog({ session, studio, project, draft, onConnect, 
               </div>
               {domain && (
                 <div className="flex flex-col gap-2">
-                  <p className="text-sm">Status: <b className={domain.status === "verified" ? "text-emerald-300" : "text-amber-200"}>{domain.status === "verified" ? "Verified" : domain.status.replace(/_/g, " ")}</b>{domain.status !== "verified" && " · add these records where your domain's DNS is managed (e.g. GoDaddy → DNS), then check."}</p>
+                  <p className="text-sm">Status: <b className={domain.status === "verified" ? "text-emerald-300" : "text-amber-200"}>{domain.status === "verified" ? "Verified" : domain.status.replace(/_/g, " ")}</b>{domain.status !== "verified" && " · these DNS records prove the domain is yours."}</p>
+                  {domain.status !== "verified" && (
+                    <div className="flex flex-col gap-1.5 rounded-lg border border-brand-400/30 bg-brand-400/5 p-3 text-[13px] text-ink-200">
+                      <p><b>Quickest:</b> <a className="text-brand-300 underline" href={`https://resend.com/domains/${domain.id}`} target="_blank" rel="noopener noreferrer">open this domain in Resend ↗</a> and press <b>Auto configure</b>. If your domain is at GoDaddy or Cloudflare, you sign in there once and the records are added for you.</p>
+                      {cfTok.trim() && relay && <p className="flex flex-wrap items-center gap-2">Domain's DNS on Cloudflare? <button type="button" className="btn btn-sm" disabled={dnsBusy || rsBusy} onClick={dnsViaCloudflare}>{dnsBusy ? "Adding…" : "Add them with my Cloudflare token"}</button></p>}
+                      <p className="text-ink-400">Anywhere else: add the records below in your domain provider's DNS page, then press Check verification.</p>
+                      {dnsMsg && <p role="status" className={dnsMsg.ok ? "text-emerald-300" : "text-amber-200"}>{dnsMsg.t}</p>}
+                    </div>
+                  )}
                   {domain.status !== "verified" && (domain.records || []).length > 0 && (
                     <div className="overflow-x-auto rounded-lg border border-ink-700"><table className="w-full text-left text-[12.5px]"><thead className="text-ink-400"><tr><th className="p-2">Type</th><th className="p-2">Name / host</th><th className="p-2">Value</th><th className="p-2">Priority</th><th className="p-2"></th></tr></thead>
                       <tbody>{domain.records!.map((r, i) => <tr key={i} className="border-t border-ink-700 align-top"><td className="p-2 font-mono">{r.type}</td><td className="p-2 font-mono">{r.name}<Copy v={r.name} /></td><td className="max-w-[320px] break-all p-2 font-mono">{r.value}</td><td className="p-2">{r.priority ?? ""}</td><td className="p-2"><Copy v={r.value} /></td></tr>)}</tbody></table></div>
@@ -294,11 +342,11 @@ export function ShopBackendDialog({ session, studio, project, draft, onConnect, 
           <div className="mt-3 grid gap-2 sm:grid-cols-3">
             <Field label="Razorpay Key ID" htmlFor="sb-rzi"><input id="sb-rzi" className="input font-mono" value={rz.id} onChange={(e) => setRz({ ...rz, id: e.target.value })} placeholder="rzp_test_…" /></Field>
             <Field label="Razorpay Key Secret" htmlFor="sb-rzs"><input id="sb-rzs" className="input font-mono" type="password" value={rz.secret} onChange={(e) => setRz({ ...rz, secret: e.target.value })} /></Field>
-            <Field label="Razorpay webhook secret" htmlFor="sb-rzh"><div className="flex gap-1"><input id="sb-rzh" className="input min-w-0 flex-1 font-mono" value={rz.hook} onChange={(e) => setRz({ ...rz, hook: e.target.value })} /><button type="button" className="btn btn-sm" onClick={() => setRz({ ...rz, hook: crypto.randomUUID().replace(/-/g, "") })}>Make one</button></div></Field>
-            <Field label="Stripe secret key" htmlFor="sb-sk"><input id="sb-sk" className="input font-mono" type="password" value={st.key} onChange={(e) => setSt({ ...st, key: e.target.value })} placeholder="sk_test_…" /></Field>
-            <Field label="Stripe webhook signing secret" htmlFor="sb-sh"><input id="sb-sh" className="input font-mono" type="password" value={st.hook} onChange={(e) => setSt({ ...st, hook: e.target.value })} placeholder="whsec_…" /></Field>
+            <Field label="Razorpay webhook secret" htmlFor="sb-rzh" hint="Leave empty: the Studio makes one."><input id="sb-rzh" className="input font-mono" value={rz.hook} onChange={(e) => setRz({ ...rz, hook: e.target.value })} /></Field>
+            <Field label="Stripe secret key" htmlFor="sb-sk" hint="The Studio adds the webhook in Stripe for you."><input id="sb-sk" className="input font-mono" type="password" value={st.key} onChange={(e) => setSt({ ...st, key: e.target.value })} placeholder="sk_test_…" /></Field>
+            {stripeOut && !stripeOut.ok && <Field label="Stripe webhook signing secret" htmlFor="sb-sh" hint="Only if you added the webhook by hand."><input id="sb-sh" className="input font-mono" type="password" value={st.hook} onChange={(e) => setSt({ ...st, hook: e.target.value })} placeholder="whsec_…" /></Field>}
           </div>
-          <p className="mt-2 text-[13px] text-ink-400">Webhook addresses appear after deploying; add them in Razorpay/Stripe, then come back to paste Stripe's signing secret and press Update the Worker.</p>
+          <p className="mt-2 text-[13px] text-ink-400">Stripe's webhook is added for you. Razorpay doesn't let other apps add webhooks, so after deploying you get a link to the right page and everything to paste.</p>
         </details>
         {!ready && !deploying && !result && <p className="text-[13px] text-ink-400">Still needed: {missing.join(", ")}.</p>}
         {log.length > 0 && <ul aria-label="Progress" className="flex flex-col gap-1 text-sm">{log.map((l, i) => <li key={i} className={l.ok === false ? "text-red-300" : l.ok ? "text-ink-300" : "text-ink-100"}>{l.ok === false ? "✕" : l.ok ? "✓" : "…"} {l.t}</li>)}</ul>}
@@ -309,9 +357,18 @@ export function ShopBackendDialog({ session, studio, project, draft, onConnect, 
             {result.checks.length > 0 && <ul aria-label="Worker checks" className="grid gap-1 text-[13px]">{result.checks.map((c, i) => <li key={i} className={c.ok ? "text-ink-300" : "text-amber-200"}>{c.ok ? "✓" : "!"} <b>{c.setting}</b>: {c.detail}</li>)}</ul>}
             <p className="text-sm text-ink-300">The shop is now set to use this Worker (Accounts &amp; backend). <b>Publish</b> the shop to put it live.</p>
             <div className="flex flex-wrap items-center gap-2"><button type="button" className="btn btn-sm" onClick={testMail}>Send a test email</button>{mail && <span role="status" className="text-[13px] text-ink-300">{mail}</span>}</div>
-            {(rz.id || st.key) && <div className="rounded-lg border border-ink-700 p-3 text-[13px] text-ink-300">
-              {rz.id && <p>Razorpay → Settings → Webhooks → Add: <code className="font-mono">{result.url}/razorpay-webhook</code> <Copy v={result.url + "/razorpay-webhook"} /> · events <i>payment.captured</i>, <i>order.paid</i> · secret: the webhook secret above.</p>}
-              {st.key && <p className="mt-1">Stripe → Developers → Webhooks → Add endpoint: <code className="font-mono">{result.url}/stripe-webhook</code> <Copy v={result.url + "/stripe-webhook"} /> · event <i>checkout.session.completed</i>.</p>}
+            {rz.id && <div aria-label="Razorpay webhook" className="flex flex-col gap-1.5 rounded-lg border border-ink-700 p-3 text-[13px] text-ink-300">
+              <p className="font-semibold text-ink-100">Razorpay: one last step (about a minute)</p>
+              <p><a className="btn btn-sm btn-pri" href={RZP_WEBHOOKS} target="_blank" rel="noopener noreferrer">Open Razorpay's webhooks page ↗</a> → <b>Add New Webhook</b>, and paste:</p>
+              <p>Webhook URL: <code className="break-all font-mono">{result.url}/razorpay-webhook</code> <Copy v={result.url + "/razorpay-webhook"} /></p>
+              <p>Secret: <code className="break-all font-mono">{rz.hook}</code> <Copy v={rz.hook} /></p>
+              <p>Active events: tick <i>payment.captured</i> and <i>order.paid</i>, then Create webhook.</p>
+            </div>}
+            {st.key && <div aria-label="Stripe webhook" className="rounded-lg border border-ink-700 p-3 text-[13px] text-ink-300">
+              {stripeOut?.ok ? <p className="text-emerald-300">✓ Stripe: {stripeOut.t}</p> : <>
+                <p className="text-amber-200">{stripeOut?.t || "Stripe's webhook wasn't added."}</p>
+                <p className="mt-1"><a className="text-brand-300 underline" href={stripeHooks(st.key)} target="_blank" rel="noopener noreferrer">Open Stripe's webhooks page ↗</a> → Add endpoint: <code className="font-mono">{result.url}/stripe-webhook</code> <Copy v={result.url + "/stripe-webhook"} /> · event <i>checkout.session.completed</i>. Then paste its signing secret in Card payments and press Update the Worker.</p>
+              </>}
             </div>}
           </div>
         )}

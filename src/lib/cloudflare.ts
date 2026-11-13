@@ -5,6 +5,8 @@ import { vault } from "./vault";
 
 export const cfVault = vault<{ token: string; account?: string }>("cloudflare");
 export const CF_TOKEN_PAGE = "https://dash.cloudflare.com/profile/api-tokens";
+/** Where to add "Zone → DNS → Edit" to the token, so the Studio can add email records too. */
+export const CF_DNS_HINT = "Edit the token (My Profile → API Tokens → Edit) and add the permission Zone → DNS → Edit for your domain.";
 export class CfError extends Error { constructor(msg: string, public status = 0, public code = 0) { super(msg); } }
 export type CfAccount = { id: string; name: string };
 
@@ -40,6 +42,30 @@ export class Cloudflare {
       `--${boundary}\r\nContent-Disposition: form-data; name="metadata"; filename="metadata.json"\r\nContent-Type: application/json\r\n\r\n${JSON.stringify(meta)}\r\n` +
       `--${boundary}\r\nContent-Disposition: form-data; name="worker.js"; filename="worker.js"\r\nContent-Type: application/javascript+module\r\n\r\n${code}\r\n--${boundary}--\r\n`);
     return this.api("PUT", `/accounts/${account}/workers/scripts/${encodeURIComponent(name)}`, { bytes: body, type: "multipart/form-data; boundary=" + boundary });
+  }
+  /** The Cloudflare zone that holds `domain` (or one of its parents), when this token can see it. */
+  async zoneFor(domain: string): Promise<{ id: string; name: string } | null> {
+    const parts = domain.toLowerCase().split(".");
+    for (let i = 0; i < parts.length - 1; i++) {
+      const name = parts.slice(i).join(".");
+      try { const z = await this.api<{ id: string; name: string }[]>("GET", `/zones?name=${encodeURIComponent(name)}`); if (z?.length) return z[0]; } catch (e) { if (!(e instanceof CfError) || i === 0) throw e; }
+    }
+    return null;
+  }
+  /** Adds DNS records (names relative to `base`), skipping ones already there. Returns what it did per record. */
+  async addRecords(zone: { id: string; name: string }, base: string, recs: { type: string; name: string; value: string; priority?: number }[]) {
+    const out: { name: string; type: string; done: "added" | "there" | "conflict" }[] = [];
+    for (const r of recs) {
+      const fq = !r.name || r.name === "@" ? base : r.name.endsWith("." + base) || r.name === base ? r.name : `${r.name}.${base}`;
+      const have = await this.api<{ content: string; type: string }[]>("GET", `/zones/${zone.id}/dns_records?type=${r.type}&name=${encodeURIComponent(fq)}`);
+      const clean = (v: string) => v.replace(/^"|"$/g, "").replace(/\.$/, "").toLowerCase();
+      if (have.some((h) => clean(h.content) === clean(r.value))) { out.push({ name: fq, type: r.type, done: "there" }); continue; }
+      // One CNAME per name, and one SPF TXT: don't add a second one that would break the first.
+      if (have.length && (r.type === "CNAME" || (r.type === "TXT" && /^"?v=spf1/i.test(r.value) && have.some((h) => /^"?v=spf1/i.test(h.content))))) { out.push({ name: fq, type: r.type, done: "conflict" }); continue; }
+      await this.api("POST", `/zones/${zone.id}/dns_records`, { json: { type: r.type, name: fq, content: r.value, ttl: 1, proxied: false, ...(r.type === "MX" ? { priority: r.priority ?? 10 } : {}) } });
+      out.push({ name: fq, type: r.type, done: "added" });
+    }
+    return out;
   }
   enableWorkersDev(account: string, name: string) { return this.api("POST", `/accounts/${account}/workers/scripts/${encodeURIComponent(name)}/subdomain`, { json: { enabled: true, previews_enabled: false } }); }
 }

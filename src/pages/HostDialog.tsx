@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
+import { useCloudflarePicker } from "./CfPicker";
+import { cfAddMembers, cfRole, cfSendCode, cfSignedIn, cfVerifyCode } from "../lib/cfdb";
 import { SupabaseAuto } from "./SupabaseAuto";
 import type { Session } from "../lib/auth";
 import type { ProjectMeta, Studio, StudioIndex } from "../lib/studio";
@@ -6,13 +8,13 @@ import type { TEMPLATES } from "../schema";
 import { explain } from "../lib/repo";
 import { slugify } from "../lib/util";
 import { Netlify, checkDns, cleanDomain, dnsRecords, domainOk, type DnsRecord } from "../lib/netlify";
-import { cleanUrl, isAdmin, sbUrlOk, sendCode, setupSql, signedInEmail, siteIdOk, verifyCode, type HostCfg, type SbCfg } from "../lib/supa";
+import { cleanUrl, isAdmin, sbUrlOk, sendCode, setupSql, signedInEmail, siteIdOk, verifyCode, type CfSiteCfg, type HostCfg, type SbCfg } from "../lib/supa";
 import { netlifyToken, publishToNetlify, siteAddress } from "../lib/hosting";
 import { Field, Modal, Spinner, Toggle, useConfirm, useToast } from "../ui/kit";
 
 const TOKEN_PAGE = "https://app.netlify.com/user/applications#personal-access-tokens";
 const SB_NEW = "https://supabase.com/dashboard/new";
-const STEPS = ["Upload new photos to Supabase", "Save the content in Supabase", "Deploy the pages to Netlify", "Live"];
+const STEPS = ["Upload new photos to the database", "Save the content in the database", "Deploy the pages to Netlify", "Live"];
 
 function copy(text: string, toast: (m: string) => void) {
   navigator.clipboard?.writeText(text).then(() => toast("Copied"), () => toast("Select the text and copy it"));
@@ -85,6 +87,14 @@ export function HostDialog({ studio, project, tpl, draft, dirty, save, onIndex, 
   const [step, setStep] = useState<{ i: number; detail?: string } | null>(null);
   const [done, setDone] = useState<{ url: string; admin: string; warnings: string[] } | null>(null);
   const sbReady = sbUrlOk(sb.url) && sb.key.trim().length > 30 && siteIdOk(sb.site);
+  // The Studio's database on Cloudflare instead of Supabase.
+  const [dbKind, setDbKind] = useState<"cloudflare" | "supabase">(host ? (host.cf ? "cloudflare" : "supabase") : "cloudflare");
+  const [cfSite, setCfSite] = useState<CfSiteCfg | null>(host?.cf || null);
+  const cfp = useCloudflarePicker(session.token, nf, true);
+  const [cfSigned, setCfSigned] = useState<string | null>(null), [cfAccess, setCfAccess] = useState<"" | "ok" | "no">("");
+  const cfCheck = async (c = cfSite) => { if (!c) return; const e = await cfSignedIn(c.api); setCfSigned(e); setCfAccess(e ? ((await cfRole(c.api, "site:" + c.site)) ? "ok" : "no") : ""); };
+  useEffect(() => { cfCheck(); }, [cfSite?.api, cfSite?.site]);
+  const dbOk = dbKind === "cloudflare" ? !!cfSite && cfAccess === "ok" : sbReady && access === "ok";
   const demo = studio.repo.demo;
 
   useEffect(() => {
@@ -105,19 +115,31 @@ export function HostDialog({ studio, project, tpl, draft, dirty, save, onIndex, 
   const verify = () => run("verify", async () => { await verifyCode(cfg(), email, code); setSigned(await signedInEmail(cfg())); setCode(""); setCodeSent(false); await check(); });
   const check = async () => { const ok = await isAdmin(cfg()); setAccess(ok ? "ok" : "no"); if (!ok) toast("Signed in, but this email isn't listed for this site yet. Run the setup SQL with this email.", "bad"); };
 
+  const setupCf = () => run("cfsetup", async () => {
+    if (!siteIdOk(sb.site)) throw new Error("Pick a Site ID first: lowercase letters, numbers and dashes.");
+    if (!email.includes("@")) throw new Error("Type your email first: it becomes the site's editor.");
+    const { setup, relay, token: t } = await cfp.ensure((x) => setStep({ i: -1, detail: x }));
+    await cfAddMembers(relay, t, setup, "site:" + sb.site.trim(), [{ email: email.trim().toLowerCase(), role: "owner" }]);
+    const c = { api: setup.api, site: sb.site.trim() }; setCfSite(c); setStep(null); await cfCheck(c);
+    toast("The site's database is ready on Cloudflare");
+  });
+  const cfSend = () => run("send", async () => { await cfSendCode(cfSite!.api, email.trim()); setCodeSent(true); toast("Code sent. Check the inbox (and spam)."); });
+  const cfVerify = () => run("verify", async () => { await cfVerifyCode(cfSite!.api, email.trim(), code); setCode(""); setCodeSent(false); await cfCheck(); });
+
   const publish = () => run("publish", async () => {
     if (!nf) throw new Error("Connect Netlify first.");
     if (dirty && !(await save(true))) return;
     if (!host && !/^[a-z0-9][a-z0-9-]{1,61}$/.test(siteName)) throw new Error("The Netlify site name can use lowercase letters, numbers and dashes.");
     const next = project.version + 1;
     let h: HostCfg;
-    if (host) h = { ...host, sb: cfg() };
+    const db = dbKind === "cloudflare" ? { cf: cfSite!, sb: undefined } : { sb: cfg(), cf: undefined };
+    if (host) h = { ...host, ...db };
     else {
       setStep({ i: -1, detail: "Creating the Netlify site…" });
       let s = await nf.getSite(`${siteName}.netlify.app`).catch(() => null);
       if (s && !(await confirm(`Use your Netlify site “${s.name}”?`, "It already exists in your Netlify account. Publishing replaces what it shows with this project.", "Use it"))) { setStep(null); return; }
       if (!s) s = await nf.createSite(siteName);
-      h = { kind: "netlify", siteId: s.id, siteName: s.name, url: s.ssl_url || `https://${s.name}.netlify.app`, sb: cfg() };
+      h = { kind: "netlify", siteId: s.id, siteName: s.name, url: s.ssl_url || `https://${s.name}.netlify.app`, ...db };
     }
     try {
       const r = await publishToNetlify({ nf, host: h, tpl, draft, name: project.name, version: next, withContent: !host || withContent, getBlob, note: note.trim(), step: (i, detail) => setStep({ i, detail }) });
@@ -141,7 +163,7 @@ export function HostDialog({ studio, project, tpl, draft, dirty, save, onIndex, 
     <Modal title="Live on Netlify" wide onClose={onClose} footer={<button className="btn btn-pri" onClick={onClose}>Done</button>}>
       <ol className="list-decimal space-y-2 pl-5 text-sm text-ink-200">
         <li>The site is live at <a className="font-semibold text-brand-300 underline" href={done.url} target="_blank" rel="noopener">{done.url}</a>.</li>
-        <li>Its own CMS is at <a className="font-semibold text-brand-300 underline" href={done.url + done.admin} target="_blank" rel="noopener">{done.url}{done.admin}</a>. The owner signs in there with an email code; only emails listed in <code className="font-mono text-xs">site_admins</code> can edit.</li>
+        <li>Its own CMS is at <a className="font-semibold text-brand-300 underline" href={done.url + done.admin} target="_blank" rel="noopener">{done.url}{done.admin}</a>. The owner signs in there with an email code; only the site's editors can sign in.</li>
         <li>Edits made in that CMS go live at once and come back into this project, as with GitHub sites.</li>
       </ol>
       {done.warnings.length > 0 && <p className="rounded-lg border border-amber-400/40 bg-amber-400/5 px-3 py-2 text-[13px] text-amber-100">{done.warnings.length} image(s) weren't found: {done.warnings.slice(0, 3).join("; ")}</p>}
@@ -152,9 +174,9 @@ export function HostDialog({ studio, project, tpl, draft, dirty, save, onIndex, 
   const sql = setupSql(sb.site || "my-site", email || "you@example.com");
   return (
     <Modal title={host ? "Hosted on Netlify" : "Host outside GitHub"} wide onClose={onClose}
-      footer={<><button className="btn" onClick={onClose}>Close</button><button className="btn btn-pri" disabled={!!busy || !nf || !sbReady || access !== "ok"} onClick={publish}>{busy === "publish" ? "Publishing…" : host ? `Publish v${project.version + 1}` : `Move the site and publish v${project.version + 1}`}</button></>}>
-      {!host && <p className="text-sm text-ink-300">Moves this site off GitHub: <b>Netlify</b> serves the pages, and <b>Supabase</b> holds the content, photos and who can edit. The site keeps its own CMS (with email sign-in), and stays in step with this project.{project.publish ? " The GitHub copy isn't deleted; it simply stops being updated." : ""}</p>}
-      {host && <p className="text-sm text-ink-300">Live at <a className="font-semibold text-brand-300 underline" href={siteAddress(host)} target="_blank" rel="noopener">{siteAddress(host)}</a> · Netlify site <b>{host.siteName}</b> · content in Supabase.</p>}
+      footer={<><button className="btn" onClick={onClose}>Close</button><button className="btn btn-pri" disabled={!!busy || !nf || !dbOk} onClick={publish}>{busy === "publish" ? "Publishing…" : host ? `Publish v${project.version + 1}` : `Move the site and publish v${project.version + 1}`}</button></>}>
+      {!host && <p className="text-sm text-ink-300">Moves this site off GitHub: <b>Netlify</b> serves the pages, and <b>Cloudflare</b> or <b>Supabase</b> holds the content, photos and who can edit. The site keeps its own CMS (with email sign-in), and stays in step with this project.{project.publish ? " The GitHub copy isn't deleted; it simply stops being updated." : ""}</p>}
+      {host && <p className="text-sm text-ink-300">Live at <a className="font-semibold text-brand-300 underline" href={siteAddress(host)} target="_blank" rel="noopener">{siteAddress(host)}</a> · Netlify site <b>{host.siteName}</b> · content in {host.cf ? "Cloudflare" : "Supabase"}.</p>}
 
       <section className="flex flex-col gap-3 rounded-xl border border-ink-700 bg-ink-950 p-4" aria-label="Netlify">
         <b className="text-sm">1 · Netlify (hosting)</b>
@@ -168,12 +190,37 @@ export function HostDialog({ studio, project, tpl, draft, dirty, save, onIndex, 
       </section>
 
       <section className="flex flex-col gap-3 rounded-xl border border-ink-700 bg-ink-950 p-4" aria-label="Supabase">
-        <b className="text-sm">2 · Supabase (content, photos and logins)</b>
-        <p className="text-[13px] text-ink-400">One free Supabase project can hold several sites. A free project pauses after a week with no activity; restore it from the Supabase dashboard.</p>
+        <b className="text-sm">2 · Database (content, photos and logins)</b>
+        <div className="flex flex-wrap rounded-lg border border-ink-600 self-start" role="radiogroup" aria-label="Site database">
+          {([["cloudflare", "Cloudflare (free, never pauses)"], ["supabase", "Supabase"]] as const).map(([k, l]) => <button key={k} type="button" role="radio" aria-checked={dbKind === k} disabled={!!host} onClick={() => setDbKind(k)} className={`btn btn-sm border-0 ${dbKind === k ? "bg-ink-700" : "bg-transparent"}`}>{l}</button>)}
+        </div>
+        <p className="text-[13px] text-ink-400">{dbKind === "cloudflare" ? "The Studio's database on your Cloudflare (one Worker and a D1 database for all your sites). Sign-in codes are emailed through Resend." : "One free Supabase project can hold several sites. A free project pauses after a week with no activity; restore it from the Supabase dashboard."}</p>
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Site ID" htmlFor="sb-site" hint="Names this site's rows and photo folder." warn={sb.site && !siteIdOk(sb.site) ? "Lowercase letters, numbers and dashes" : undefined}><input id="sb-site" className="input" disabled={!!host} value={sb.site} onChange={(e) => setSb({ ...sb, site: e.target.value.toLowerCase() })} /></Field>
           <Field label="Your email" htmlFor="sb-email" hint="Becomes the site's first editor. Used for the sign-in code."><input id="sb-email" className="input" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} /></Field>
         </div>
+        {dbKind === "cloudflare" ? (
+          <div className="flex flex-col gap-3" aria-label="Cloudflare database">
+            {!cfSite ? <>
+              <section aria-label="Cloudflare">{cfp.ui}</section>
+              <button type="button" className="btn btn-pri btn-sm self-start" disabled={!!busy || !nf || !cfp.ready || !siteIdOk(sb.site) || !email.includes("@")} onClick={setupCf}>{busy === "cfsetup" ? (step?.detail || "Setting up") + "…" : "Set up on Cloudflare"}</button>
+              {!nf && <p className="text-[13px] text-amber-200">Connect Netlify above first: the Studio's helper on Netlify talks to Cloudflare for you.</p>}
+            </> : <p className="flex flex-wrap items-center gap-2 text-[13px] text-ink-300"><span className="h-2 w-2 rounded-full bg-emerald-400" />Site <b className="text-ink-100">{cfSite.site}</b> in the database at <code className="font-mono text-xs">{cfSite.api}</code>.</p>}
+            {cfSite && (cfSigned ? (
+              <div className="flex flex-wrap items-center gap-2 text-sm">
+                <span className={`h-2 w-2 rounded-full ${cfAccess === "ok" ? "bg-emerald-400" : "bg-amber-400"}`} />
+                <span>Signed in as <b>{cfSigned}</b>{cfAccess === "ok" ? " · can edit this site" : " · not an editor of this site"}</span>
+                <button type="button" className="btn btn-sm ml-auto" disabled={!!busy} onClick={() => run("check", () => cfCheck())}>Check access</button>
+              </div>
+            ) : (
+              <div className="flex flex-wrap items-end gap-2">
+                <button type="button" className="btn btn-sm" disabled={!!busy || !email.includes("@")} onClick={cfSend}>{busy === "send" ? "Sending…" : codeSent ? "Send a new code" : "Email me a sign-in code"}</button>
+                {codeSent && <><input aria-label="Code from the email" className="input w-32 font-mono" inputMode="numeric" maxLength={10} placeholder="123456" value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))} />
+                  <button type="button" className="btn btn-pri btn-sm" disabled={!!busy || code.length < 6} onClick={cfVerify}>{busy === "verify" ? "Checking…" : "Sign in"}</button></>}
+              </div>
+            ))}
+          </div>
+        ) : <>
         {!demo && <SupabaseAuto nf={nf} studioToken={session.token} site={sb.site} email={email} defaultOpen={!sbReady} onFill={(url, key) => { setSb((x) => ({ ...x, url, key })); setManual(false); }} />}
         {sbReady && !manual && <p className="flex flex-wrap items-center gap-2 text-[13px] text-ink-300"><span className="h-2 w-2 rounded-full bg-emerald-400" />Project <code className="font-mono text-xs">{cleanUrl(sb.url)}</code> and its public key are filled in.<button type="button" className="text-brand-300 underline" onClick={() => setManual(true)}>Change by hand</button></p>}
         {!manual ? (!sbReady && <button type="button" className="self-start text-[13px] text-brand-300 underline" onClick={() => setManual(true)}>Or enter the details by hand</button>) : (
@@ -207,10 +254,11 @@ export function HostDialog({ studio, project, tpl, draft, dirty, save, onIndex, 
               <button type="button" className="btn btn-pri btn-sm" disabled={!!busy || code.length < 6} onClick={verify}>{busy === "verify" ? "Checking…" : "Sign in"}</button></>}
           </div>
         ))}
+        </>}
       </section>
 
       {host && <Toggle id="hd-content" label="Replace the site's content with this version" checked={withContent} onChange={setWithContent} />}
-      {host && <p className="hint">{withContent ? "Overwrites the live content in Supabase, including edits made in the site's own CMS. Photos it already has aren't uploaded again." : "Updates pages, design code and the CMS only. Content edited in the site's own CMS is kept."}</p>}
+      {host && <p className="hint">{withContent ? "Overwrites the live content in the database, including edits made in the site's own CMS. Photos it already has aren't uploaded again." : "Updates pages, design code and the CMS only. Content edited in the site's own CMS is kept."}</p>}
       <Field label="Version note (optional)" htmlFor="hd-note"><input id="hd-note" className="input" value={note} onChange={(e) => setNote(e.target.value)} /></Field>
       {step && (
         <ol className="flex flex-col gap-1 rounded-lg border border-brand-500/40 bg-ink-950 p-3 text-[13px]" aria-live="polite">
@@ -218,13 +266,18 @@ export function HostDialog({ studio, project, tpl, draft, dirty, save, onIndex, 
           {STEPS.map((s, i) => <li key={s} className={i < step.i ? "text-emerald-300" : i === step.i ? "text-ink-100" : "text-ink-500"}>{i < step.i ? "✓" : i === step.i ? "…" : "·"} {s}{i === step.i && step.detail ? ` (${step.detail})` : ""}</li>)}
         </ol>
       )}
-      {!nf || !sbReady || access !== "ok" ? (
+      {!nf || !dbOk ? (
         <div className="rounded-lg border border-amber-400/40 bg-amber-400/5 px-3 py-2.5 text-[13px] text-amber-100" role="status">
           <b>Publish is waiting for:</b>
           <ul className="mt-1 space-y-0.5">
             <li>{nf ? "✓" : "✗"} Netlify connected on this device{nf ? "" : " (section 1: paste your Netlify token)"}</li>
+            {dbKind === "cloudflare" ? <>
+            <li>{cfSite ? "✓" : "✗"} The site's database on Cloudflare{cfSite ? "" : " (section 2: token, Resend key, then Set up on Cloudflare)"}</li>
+            <li>{cfAccess === "ok" ? "✓" : "✗"} {cfSigned ? (cfAccess === "ok" ? `Signed in as ${cfSigned}` : `Signed in as ${cfSigned}, but that email isn't an editor of this site`) : "Signed in to the database on this device (section 2: email me a sign-in code)"}</li>
+            </> : <>
             <li>{sbReady ? "✓" : "✗"} Supabase details{sbReady ? "" : " (section 2: Project URL with nothing after .supabase.co, the anon key, and the Site ID)"}</li>
             <li>{access === "ok" ? "✓" : "✗"} {signed ? (access === "no" ? `Signed in as ${signed}, but that email isn't an editor of this site: run the setup SQL with it` : access === "error" ? `Couldn't check your access: ${accessErr}` : `Signed in as ${signed}, checking access…`) : "Signed in to Supabase on this device (section 2: email me a sign-in code). Each browser signs in once."}</li>
+            </>}
           </ul>
         </div>
       ) : null}

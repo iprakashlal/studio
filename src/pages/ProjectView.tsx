@@ -39,7 +39,7 @@ export function ProjectView({ studio, index, project, session, onIndex }: { stud
   const [openAt, setOpenAt] = useState(0);
   const [conflict, setConflict] = useState<{ siteAt: string | null } | null>(null);
   const [syncBusy, setSyncBusy] = useState(false);
-  const site = useMemo(() => (studio.repo.demo ? null : siteRepoFor(project, session.token)), [project.publish?.owner, project.publish?.repo, project.publish?.branch, project.host?.siteId, project.host?.sb.url, session.token]);
+  const site = useMemo(() => (studio.repo.demo ? null : siteRepoFor(project, session.token)), [project.publish?.owner, project.publish?.repo, project.publish?.branch, project.host?.siteId, project.host?.sb?.url, project.host?.cf?.api, session.token]);
 
   useEffect(() => {
     let live = true;
@@ -137,7 +137,7 @@ export function ProjectView({ studio, index, project, session, onIndex }: { stud
   const extras = useMemo(() => [
     ...(project.template === "business" ? [{
       id: "enquiries", label: "Enquiries", group: "Content", desc: "Messages sent through the website's enquiry form.",
-      render: () => <EnquiriesPanel cfg={enquiriesCfg(draft, project.host?.sb)} hosted={!!project.host} email={draft?.contact?.email} form={draft?.contact?.form} ghToken={ghPublish.token(session.token)} inStudio />,
+      render: () => <EnquiriesPanel cfg={project.host?.cf ? null : enquiriesCfg(draft, project.host?.sb)} cf={project.host?.cf} hosted={!!project.host} email={draft?.contact?.email} form={draft?.contact?.form} ghToken={ghPublish.token(session.token)} inStudio />,
     }] : []),
     {
       id: "backup", label: "Backup & reset", group: "Project", desc: "Copy, restore or reset this project's content.",

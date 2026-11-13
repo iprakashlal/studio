@@ -16,12 +16,17 @@ import type { RepoCfg } from "./crypto";
 
 /** Where a site's data lives. `key` is the project's public (anon) key: safe in the browser, guarded by RLS. */
 export type SbCfg = { url: string; key: string; site: string };
-export type HostCfg = { kind: "netlify"; siteId: string; siteName: string; url: string; domain?: string; sb: SbCfg };
+/** A site's content, photos and editors on the Studio's Cloudflare database (its Worker address and the site ID). */
+export type CfSiteCfg = { api: string; site: string };
+/** Hosted outside GitHub: Netlify serves the pages; the content lives in Supabase (sb) or the Cloudflare database (cf). */
+export type HostCfg = { kind: "netlify"; siteId: string; siteName: string; url: string; domain?: string; sb?: SbCfg; cf?: CfSiteCfg };
 
 export const BUCKET = "site-assets";
 export const cleanUrl = (u: string) => String(u || "").trim().replace(/\/+$/, "");
 export const sbUrlOk = (u: string) => /^https:\/\/[a-z0-9-]+\.supabase\.(co|in|net)$/i.test(cleanUrl(u)) || /^https:\/\/[^\s/]+$/i.test(cleanUrl(u));
 export const siteIdOk = (s: string) => /^[a-z0-9][a-z0-9-]{1,48}$/.test(s);
+/** Where a site on the Cloudflare database serves its photos from (public). */
+export const cfAssetBase = (c: CfSiteCfg) => `${c.api.replace(/\/+$/, "")}/p/${encodeURIComponent(c.site)}/`;
 export const assetBase = (sb: SbCfg) => `${cleanUrl(sb.url)}/storage/v1/object/public/${BUCKET}/${encodeURIComponent(sb.site)}/`;
 
 const clients = new Map<string, SupabaseClient>();

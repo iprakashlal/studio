@@ -3,10 +3,9 @@
 // photos, including edits made in its own admin page; only the pages and code change.
 
 import { GitHubRepo, explain, type Repo } from "./repo";
-import { SupabaseRepo } from "./supa";
 import { Netlify, NetlifyError } from "./netlify";
 import { buildSite, loadDefaults, publishSite } from "./exporter";
-import { publishToNetlify, siteAddress } from "./hosting";
+import { hostRepo, publishToNetlify, siteAddress } from "./hosting";
 import { ghPublish } from "./ghpublish";
 import { adminFile } from "../schema/common";
 import { TEMPLATES } from "../schema";
@@ -30,7 +29,7 @@ export function liveTargets(projects: ProjectMeta[], token: string): LiveTarget[
   const out: LiveTarget[] = [];
   for (const p of projects) {
     if (!TEMPLATES[p.template]) continue;
-    if (p.host?.kind === "netlify") out.push({ key: p.id + ":netlify", project: p, kind: "netlify", label: "Netlify", url: siteAddress(p.host), repo: new SupabaseRepo(p.host.sb) });
+    if (p.host?.kind === "netlify") out.push({ key: p.id + ":netlify", project: p, kind: "netlify", label: "Netlify", url: siteAddress(p.host), repo: hostRepo(p.host) });
     if (p.publish) out.push({ key: p.id + ":github", project: p, kind: "github", label: "GitHub Pages", url: ghUrl(p.publish), repo: new GitHubRepo(p.publish, ghPublish.token(token)) });
     // The shop's server code, when the Studio set up its Cloudflare Worker.
     if (p.worker) out.push({ key: p.id + ":worker", project: p, kind: "worker", label: "Shop server (Cloudflare Worker)", url: p.worker.url, repo: null });

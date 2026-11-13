@@ -7,18 +7,23 @@ import type { ProjectMeta } from "./studio";
 import type { TemplateDef } from "../schema/types";
 import { buildSite } from "./exporter";
 import { Netlify } from "./netlify";
-import { SupabaseRepo, type HostCfg } from "./supa";
+import { SupabaseRepo, type CfSiteCfg, type HostCfg, type SbCfg } from "./supa";
+import { CfRepo } from "./cfdb";
 import { blobToBytes, collectAssetPaths } from "./util";
 import { adminFile } from "../schema/common";
 import { ghPublish } from "./ghpublish";
 
 /** The live site of a project: its Supabase data when hosted outside GitHub, else its GitHub repository. */
 export function siteRepoFor(p: ProjectMeta, token: string): Repo | null {
-  if (p.host?.kind === "netlify") return new SupabaseRepo(p.host.sb);
+  if (p.host?.kind === "netlify") return hostRepo(p.host);
   if (p.publish) return new GitHubRepo(p.publish, ghPublish.token(token));
   return null;
 }
 
+/** A hosted site's own data: its rows in Supabase, or its files in the Studio's Cloudflare database. */
+export const hostRepo = (h: HostCfg): Repo => (h.cf ? new CfRepo(h.cf.api, "site:" + h.cf.site) : new SupabaseRepo(h.sb!));
+/** What the pages are told about where their content lives. */
+export const hostDb = (h: HostCfg): SbCfg | CfSiteCfg => (h.cf ? h.cf : h.sb!);
 export const siteAddress = (h: HostCfg) => (h.domain ? `https://www.${h.domain}/` : h.url.replace(/\/?$/, "/"));
 
 // The Netlify personal access token, encrypted on this device with a key made from the GitHub login's token,
@@ -61,7 +66,7 @@ export async function publishToNetlify(o: {
   getBlob: (p: string) => Promise<Blob | null>; note: string; step: (i: number, detail?: string) => void;
 }): Promise<{ warnings: string[]; siteSha?: string; admin: string; url: string }> {
   const { nf, host, tpl, draft } = o;
-  const db = new SupabaseRepo(host.sb);
+  const db = hostRepo(host);
   await db.check();
   const warnings: string[] = [];
   const live = (await db.getJSON("content.json").catch(() => null))?.data || null;
@@ -89,7 +94,7 @@ export async function publishToNetlify(o: {
   // 3. Pages
   o.step(2);
   const base = siteAddress(host);
-  const { files, warnings: w, admin } = await buildSite({ template: tpl, content: draft, name: o.name, version: o.version, includeContent: false, getAsset: o.getBlob, admin: adminFile(content), headContent: content, base, host: host.sb });
+  const { files, warnings: w, admin } = await buildSite({ template: tpl, content: draft, name: o.name, version: o.version, includeContent: false, getAsset: o.getBlob, admin: adminFile(content), headContent: content, base, host: hostDb(host) });
   warnings.push(...w);
   // A copy of the content goes with the pages, used only if Supabase can't be reached.
   files.push({ path: "content.json", data: enc.encode(JSON.stringify(content, null, 2)) });

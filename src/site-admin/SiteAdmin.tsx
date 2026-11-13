@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { CfAccount, CfGate } from "./CfGate";
+import { CfRepo, cfSession } from "../lib/cfdb";
 import { cleanMenu } from "../lib/menus";
 import { EnquiriesPanel, enquiriesCfg } from "./EnquiriesPanel";
 import { GOTO_EVENT } from "../editor/Editor";
 import { TEMPLATES } from "../schema";
 import { device, session as sess, watchIdle, type Session } from "../lib/auth";
 import { GitHubRepo, explain, jsonB64, bytesB64, type Repo } from "../lib/repo";
-import { SupabaseRepo, assetBase, type SbCfg } from "../lib/supa";
+import { SupabaseRepo, assetBase, cfAssetBase, type CfSiteCfg, type SbCfg } from "../lib/supa";
 import { SbGate, SbAccount, sbSignOut } from "./SbGate";
 import { blobToBytes, clone, safeFileName, textToB64 } from "../lib/util";
 import { adminFile } from "../schema/common";
@@ -20,7 +22,7 @@ import { CustomersPanel, OrdersPanel } from "./ShopPanels";
 
 const NS = "site-cms";
 /** host: set when the site is hosted outside GitHub, with its content in Supabase. */
-type SiteInfo = { menu?: unknown; template: string; name: string; version?: number; admin?: string; exportedAt?: string; generator?: string; host?: { kind: "supabase"; url: string; key: string; site: string } };
+type SiteInfo = { menu?: unknown; template: string; name: string; version?: number; admin?: string; exportedAt?: string; generator?: string; host?: { kind: "supabase"; url: string; key: string; site: string } | { kind: "cloudflare"; api: string; site: string } };
 /** Saved-but-not-published edits live here. The live site never reads this file. */
 const DRAFT = "cms/draft.json";
 /** This CMS page's own file name: from cms/site.json, else the address it was opened at. */
@@ -47,7 +49,7 @@ export function SiteAdmin() {
   useEffect(() => {
     if (!sbIn || !info?.host) return;
     const h = info.host;
-    return watchIdle(NS, () => { sbSignOut(h).finally(() => setSbIn(false)); toast("Signed out after 30 minutes without activity"); });
+    return watchIdle(NS, () => { (h.kind === "cloudflare" ? Promise.resolve(cfSession.clear(h.api)) : sbSignOut(h)).finally(() => setSbIn(false)); toast("Signed out after 30 minutes without activity"); });
   }, [sbIn]);
   useEffect(() => {
     if (!session) return;
@@ -56,6 +58,11 @@ export function SiteAdmin() {
 
   if (infoErr) return <div className="grid min-h-screen place-items-center px-4"><div className="card max-w-md p-6"><h1 className="text-lg font-extrabold">Site CMS can't start</h1><p className="mt-2 text-sm text-ink-300">{infoErr}</p></div></div>;
   if (!info) return <div className="grid min-h-screen place-items-center"><StepLoader title="Opening the admin page" at={0} steps={["Reading the site's settings (cms/site.json)", "Signing in", "Loading the content"]} /></div>;
+  if (info.host?.kind === "cloudflare") {
+    const cf: CfSiteCfg = { api: info.host.api, site: info.host.site };
+    if (!sbIn) return <CfGate cf={cf} brand={`${info.name} · CMS`} onIn={() => setSbIn(true)} />;
+    return <CfWorkspace info={info} onInfo={setInfo} cf={cf} onSignOut={() => setSbIn(false)} />;
+  }
   if (info.host?.kind === "supabase") {
     const sb: SbCfg = { url: info.host.url, key: info.host.key, site: info.host.site };
     if (!sbIn) return <SbGate sb={sb} brand={`${info.name} · CMS`} onIn={() => setSbIn(true)} />;
@@ -83,8 +90,14 @@ function HostedWorkspace({ info, onInfo, sb, onSignOut }: { info: SiteInfo; onIn
     account={<SbAccount sb={sb} onSignOut={onSignOut} />} />;
 }
 
-/** hosted: the site is on Netlify with content and photos in Supabase (pages change only when the Studio publishes). */
-function Workspace({ info, onInfo, repo, account, onSignOut, hosted, ghToken }: { info: SiteInfo; onInfo: (i: SiteInfo) => void; repo: Repo; account: React.ReactNode; onSignOut: () => void; hosted?: SbCfg; ghToken?: string }) {
+function CfWorkspace({ info, onInfo, cf, onSignOut }: { info: SiteInfo; onInfo: (i: SiteInfo) => void; cf: CfSiteCfg; onSignOut: () => void }) {
+  const repo = useMemo(() => new CfRepo(cf.api, "site:" + cf.site), [cf.api, cf.site]);
+  return <Workspace info={info} onInfo={onInfo} repo={repo} hosted={cf} onSignOut={() => { cfSession.clear(cf.api); onSignOut(); }}
+    account={<CfAccount cf={cf} onSignOut={onSignOut} />} />;
+}
+
+/** hosted: the site is on Netlify with content and photos in Supabase or the Cloudflare database (pages change only when the Studio publishes). */
+function Workspace({ info, onInfo, repo, account, onSignOut, hosted, ghToken }: { info: SiteInfo; onInfo: (i: SiteInfo) => void; repo: Repo; account: React.ReactNode; onSignOut: () => void; hosted?: SbCfg | CfSiteCfg; ghToken?: string }) {
   const toast = useToast();
   const confirm = useConfirm();
   const tpl = TEMPLATES[info.template];
@@ -142,7 +155,7 @@ function Workspace({ info, onInfo, repo, account, onSignOut, hosted, ghToken }: 
     setAssets((m) => ({ ...m, [path]: URL.createObjectURL(file) }));
     return { path };
   }, [repo]);
-  const photoBase = hosted ? assetBase(hosted) : "";
+  const photoBase = hosted ? ("api" in hosted ? cfAssetBase(hosted) : assetBase(hosted)) : "";
   const img = useCallback((val: any) => (val?.path ? assets[val.path] || (photoBase && val.path.startsWith("assets/uploads/") ? photoBase + val.path.split("/").map(encodeURIComponent).join("/") : val.path) : ""), [assets, photoBase]);
 
   const conflict = async (e: any, path: string, setter: (x: string | null) => void) => {
@@ -263,7 +276,7 @@ function Workspace({ info, onInfo, repo, account, onSignOut, hosted, ghToken }: 
       { id: "shop-customers", label: "Customers", group: "Shop", desc: "Signed-up customers by account number and email, with their orders.", render: () => <CustomersPanel content={saved} /> },
     ] : []),
     ...(tpl.id === "business" ? [
-      { id: "enquiries", label: "Enquiries", group: "Content", desc: "Messages sent through your website's enquiry form.", render: () => <EnquiriesPanel cfg={enquiriesCfg(saved, hosted)} hosted={!!hosted} email={saved?.contact?.email} form={saved?.contact?.form} ghToken={ghToken} /> },
+      { id: "enquiries", label: "Enquiries", group: "Content", desc: "Messages sent through your website's enquiry form.", render: () => <EnquiriesPanel cfg={hosted && "api" in hosted ? null : enquiriesCfg(saved, hosted)} cf={hosted && "api" in hosted ? hosted : undefined} hosted={!!hosted} email={saved?.contact?.email} form={saved?.contact?.form} ghToken={ghToken} /> },
     ] : []),
     { id: "backup", label: "Backup & reset", group: "Settings", desc: "Copy, restore or reset the site's content.", render: () => <BackupPanel draft={draft} onReplace={(c) => { setDraft(clone(c)); bump(); }} loadDefaults={async () => clone(saved)} hosted={!!hosted} /> },
     { id: "account", label: "Account", group: "Settings", desc: "Your login on this device.", render: () => account },

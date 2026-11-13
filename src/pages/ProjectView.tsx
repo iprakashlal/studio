@@ -19,7 +19,7 @@ import { Editor } from "../editor/Editor";
 import { Preview } from "../editor/Preview";
 import { BackupPanel } from "../editor/BackupPanel";
 import { useAssetMap } from "../editor/useAssets";
-import { Field, Modal, Spinner, Toggle, useConfirm, useToast } from "../ui/kit";
+import { Field, Modal, StepLoader, Toggle, useConfirm, useToast } from "../ui/kit";
 
 export function ProjectView({ studio, index, project, session, onIndex }: { studio: Studio; index: StudioIndex; project: ProjectMeta; session: Session; onIndex: (i: StudioIndex) => void }) {
   const toast = useToast();
@@ -35,6 +35,7 @@ export function ProjectView({ studio, index, project, session, onIndex }: { stud
   useEffect(() => { const on = () => setPane("edit"); addEventListener(GOTO_EVENT, on); return () => removeEventListener(GOTO_EVENT, on); }, []);
   const [modal, setModal] = useState<"" | "export" | "publish" | "host" | "live" | "history" | "details" | "backend" | "inbox">("");
   const defaults = useRef<any>(null);
+  const [openAt, setOpenAt] = useState(0);
   const [conflict, setConflict] = useState<{ siteAt: string | null } | null>(null);
   const [syncBusy, setSyncBusy] = useState(false);
   const site = useMemo(() => (studio.repo.demo ? null : siteRepoFor(project, session.token)), [project.publish?.owner, project.publish?.repo, project.publish?.branch, project.host?.siteId, project.host?.sb.url, session.token]);
@@ -43,8 +44,11 @@ export function ProjectView({ studio, index, project, session, onIndex }: { stud
     let live = true;
     (async () => {
       try {
+        setOpenAt(0);
         defaults.current = await loadDefaults(project.template);
+        setOpenAt(1);
         const c = await studio.loadContent(project.id);
+        setOpenAt(2);
         if (live) setDraft(merge(defaults.current, c || {}));
       } catch (e) {
         if (live) setErr(explain(e));
@@ -148,7 +152,7 @@ export function ProjectView({ studio, index, project, session, onIndex }: { stud
 
   if (!tpl) return <main className="p-10 text-center text-ink-300">This project uses a template this Studio doesn't have ({project.template}).</main>;
   if (err) return <main className="mx-auto max-w-xl px-4 py-16"><div className="card p-6"><h1 className="text-xl font-extrabold">Couldn't open the project</h1><p className="mt-2 text-sm text-ink-300">{err}</p></div></main>;
-  if (!draft) return <main className="grid min-h-screen place-items-center"><Spinner label="Opening project…" /></main>;
+  if (!draft) return <main className="grid min-h-screen place-items-center"><StepLoader title={`Opening ${project.name}`} at={openAt} steps={[`Loading the ${tpl.name} template`, "Reading the project's content", "Opening the editor and preview"]} /></main>;
 
   const cat = index.categories.find((c) => c.id === project.category);
 

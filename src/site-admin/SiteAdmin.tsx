@@ -14,7 +14,7 @@ import { Editor } from "../editor/Editor";
 import { Preview } from "../editor/Preview";
 import { BackupPanel } from "../editor/BackupPanel";
 import { AccountPanel, Gate } from "../ui/gate";
-import { Logo, Spinner, useConfirm, useToast } from "../ui/kit";
+import { Logo, StepLoader, useConfirm, useToast } from "../ui/kit";
 import { CustomersPanel, OrdersPanel } from "./ShopPanels";
 
 const NS = "site-cms";
@@ -54,7 +54,7 @@ export function SiteAdmin() {
   }, [session]);
 
   if (infoErr) return <div className="grid min-h-screen place-items-center px-4"><div className="card max-w-md p-6"><h1 className="text-lg font-extrabold">Site CMS can't start</h1><p className="mt-2 text-sm text-ink-300">{infoErr}</p></div></div>;
-  if (!info) return <div className="grid min-h-screen place-items-center"><Spinner label="Loading…" /></div>;
+  if (!info) return <div className="grid min-h-screen place-items-center"><StepLoader title="Opening the admin page" at={0} steps={["Reading the site's settings (cms/site.json)", "Signing in", "Loading the content"]} /></div>;
   if (info.host?.kind === "supabase") {
     const sb: SbCfg = { url: info.host.url, key: info.host.key, site: info.host.site };
     if (!sbIn) return <SbGate sb={sb} brand={`${info.name} · CMS`} onIn={() => setSbIn(true)} />;
@@ -269,7 +269,7 @@ function Workspace({ info, onInfo, repo, account, onSignOut, hosted, ghToken }: 
   ], [draft, saved, account, tpl.id, hosted, ghToken]);
 
   if (err) return <div className="grid min-h-screen place-items-center px-4"><div className="card flex max-w-md flex-col gap-3 p-6"><h1 className="text-lg font-extrabold">Couldn't load the site's content</h1><p className="text-sm text-ink-300">{err}</p><div className="flex gap-2"><button className="btn btn-pri" onClick={load}>Try again</button><button className="btn" onClick={onSignOut}>Sign out</button></div></div></div>;
-  if (!draft) return <div className="grid min-h-screen place-items-center"><Spinner label={hosted ? "Loading the latest content…" : "Loading the latest content from GitHub…"} /></div>;
+  if (!draft) return <div className="grid min-h-screen place-items-center"><StepLoader title="Opening the admin page" at={2} steps={["Reading the site's settings (cms/site.json)", "Signing in", hosted ? "Loading the latest content" : "Loading the latest content from GitHub"]} /></div>;
 
   return (
     <div className="flex h-[100dvh] flex-col">

@@ -92,10 +92,41 @@ export function Toggle({ id, label, checked, onChange }: { id: string; label: st
 }
 
 export function Spinner({ label }: { label?: string }) {
+  // After two seconds, a seconds counter shows it's still working.
+  const [s, setS] = useState(0);
+  useEffect(() => { const t0 = Date.now(), i = setInterval(() => setS(Math.floor((Date.now() - t0) / 1000)), 500); return () => clearInterval(i); }, []);
   return (
-    <div className="flex items-center gap-3 text-sm text-ink-300">
+    <div className="flex items-center gap-3 text-sm text-ink-300" role="status">
       <span className="h-4 w-4 animate-spin rounded-full border-2 border-ink-500 border-t-brand-400" />
-      {label}
+      {label}{s >= 2 && <span className="font-mono text-xs text-ink-500">{s}s</span>}
+    </div>
+  );
+}
+
+/** A page load in steps: a percentage counter, a progress bar, and what is happening now. */
+export function StepLoader({ title, steps, at, detail }: { title: string; steps: string[]; at: number; detail?: string }) {
+  // Each finished step counts fully; the current one creeps forward (up to 90% of its share) while it runs.
+  const share = 100 / Math.max(1, steps.length), floor = Math.min(100, at * share);
+  const [pct, setPct] = useState(0);
+  useEffect(() => {
+    const i = setInterval(() => setPct((p) => { const cap = at >= steps.length ? 100 : floor + share * 0.9; const target = Math.max(p, floor); return Math.min(cap, target + (cap - target) * 0.08 + (target < floor ? 0 : 0.2)); }), 60);
+    return () => clearInterval(i);
+  }, [at, steps.length]);
+  const n = Math.round(Math.max(pct, floor));
+  return (
+    <div className="flex w-[min(420px,calc(100vw-48px))] flex-col gap-3" role="status" aria-live="polite">
+      <div className="flex items-end justify-between gap-3">
+        <span className="flex items-center gap-2.5 text-[15px] font-extrabold text-ink-100"><Logo size={10} />{title}</span>
+        <span className="font-mono text-2xl font-bold tabular-nums text-ink-100" aria-label={`${n} percent`}>{n}%</span>
+      </div>
+      <div className="h-1.5 overflow-hidden rounded-full bg-ink-700"><div className="h-full rounded-full bg-brand-400 transition-[width] duration-150" style={{ width: `${n}%` }} /></div>
+      <ol className="flex flex-col gap-1 text-[13px]">
+        {steps.map((s, i) => (
+          <li key={i} className={i < at ? "text-ink-400" : i === at ? "text-ink-100" : "text-ink-600"}>
+            <span className="inline-block w-5 font-mono">{i < at ? "✓" : i === at ? "›" : "·"}</span>{s}{i === at && detail ? <span className="text-ink-400"> · {detail}</span> : null}
+          </li>
+        ))}
+      </ol>
     </div>
   );
 }

@@ -413,5 +413,10 @@
   },
   "cms": {
     "adminPage": "admin"
+  },
+  "poweredBy": {
+    "show": true,
+    "text": "Powered by Picaffectz",
+    "url": "https://iprakashlal.github.io/studio/#/themes"
   }
 }

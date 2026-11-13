@@ -76,6 +76,7 @@ export function HelperStatus({ studioToken, nf }: { studioToken: string; nf: Net
         <span>Studio helper: {shown ? <><b>{shown.kind === "cloudflare" ? "Cloudflare" : "Netlify"}</b> · <a className="text-brand-300 underline" href={shown.url} target="_blank" rel="noopener noreferrer">{shown.url.replace(/^https:\/\//, "")}</a></> : <span className="text-ink-400">not set up</span>}</span>
         {shown && <button type="button" className="btn btn-sm ml-auto" onClick={() => { relayVault.clear(); setShown(null); location.reload(); }} title="Forget it on this device. Delete the Worker (or Netlify site) to remove it completely.">Forget</button>}
       </div>
+      <p className="pl-4 text-[12.5px] text-ink-400">The go-between: passes the Studio's requests to Cloudflare (which doesn't accept them straight from a web page). Holds no permissions and keeps none of your keys.</p>
       {!shown && h.ui}
     </div>
   );

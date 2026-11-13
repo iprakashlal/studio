@@ -34,6 +34,7 @@ function CloudflareAccount({ session, nf }: { session: Session; nf: Netlify | nu
     <div className="flex flex-wrap items-center gap-2">
       <span className="h-2 w-2 rounded-full bg-emerald-400" /><span>Cloudflare: <b>{acc.account.name}</b></span>
       <button type="button" className="btn btn-sm ml-auto" onClick={() => { cfAccountVault.clear(); location.reload(); }} title="Forget the token on this device (the database's setup is forgotten too; running a setup again finds it).">Disconnect</button>
+      <p className="w-full pl-4 text-[12.5px] text-ink-400">The permission: your API token, kept encrypted on this device only. It goes with each request through the helper and lets the Studio publish sites, run the database and connect domains.</p>
     </div>
   );
   return acc.ui;

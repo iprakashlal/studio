@@ -20,12 +20,12 @@ const slug = (s: string) => String(s || "").toLowerCase().replace(/[^a-z0-9-]+/g
 type Phase = "setup" | "code" | "moving" | "done";
 
 /** The Supabase access token and project choice, shared by Migration and Studio Partners. */
-export function useSupabasePicker(studioToken: string, nf: Netlify | null) {
+export function useSupabasePicker(studioToken: string, nf: Netlify | null, persist = true) {
   const [tok, setTok] = useState(""), [saved, setSaved] = useState(false);
   const [projects, setProjects] = useState<SbProject[] | null>(null), [orgs, setOrgs] = useState<SbOrg[]>([]);
   const [pick, setPick] = useState(""), [org, setOrg] = useState(""), [region, setRegion] = useState<"apac" | "emea" | "americas">("apac"), [name, setName] = useState("studio");
   const [busy, setBusy] = useState(""), [err, setErr] = useState("");
-  useEffect(() => { sbMgmtVault.load(studioToken).then((v) => { if (v?.token) { setTok(v.token); setSaved(true); } }); }, [studioToken]);
+  useEffect(() => { if (!persist) { setTok(""); setSaved(false); setProjects(null); return; } sbMgmtVault.load(studioToken).then((v) => { if (v?.token) { setTok(v.token); setSaved(true); } }); }, [studioToken, persist]);
   const helper = async (): Promise<Relay> => {
     const r = await relayVault.load(studioToken);
     if (r && r.v === RELAY_VERSION) return r;
@@ -40,7 +40,7 @@ export function useSupabasePicker(studioToken: string, nf: Netlify | null) {
       const [ps, os] = await Promise.all([m.projects(), m.orgs()]);
       setProjects(ps); setOrgs(os); setOrg(os[0]?.id || "");
       const ok = ps.find((p) => p.status === "ACTIVE_HEALTHY"); setPick(ok ? refOf(ok) : "new");
-      await sbMgmtVault.save({ token: tok.trim() }, studioToken); setSaved(true);
+      if (persist) { await sbMgmtVault.save({ token: tok.trim() }, studioToken); setSaved(true); }
     } catch (e: any) { setErr(e?.message || "Couldn't reach Supabase."); }
     setBusy("");
   };
@@ -55,7 +55,7 @@ export function useSupabasePicker(studioToken: string, nf: Netlify | null) {
   };
   const ui = (
     <div className="flex flex-col gap-2.5 text-[13px]">
-      <p><a className="btn btn-sm btn-pri" href={SB_TOKENS_PAGE} target="_blank" rel="noopener noreferrer">Open Supabase → Access tokens ↗</a> <span className="text-ink-400">Press <b>Generate new token</b>, copy it and paste it here. It's kept encrypted on this device only.</span></p>
+      <p><a className="btn btn-sm btn-pri" href={SB_TOKENS_PAGE} target="_blank" rel="noopener noreferrer">Open Supabase → Access tokens ↗</a> <span className="text-ink-400">Press <b>Generate new token</b>, copy it and paste it here. {persist ? "It's kept encrypted on this device only." : "Used now only, not kept."}</span></p>
       <div className="flex gap-2">
         <input aria-label="Supabase access token" className="input min-w-0 flex-1 font-mono text-xs" type="password" autoComplete="off" placeholder="sbp_…" value={tok} onChange={(e) => { setTok(e.target.value); setSaved(false); setProjects(null); }} />
         <button type="button" className="btn btn-sm" disabled={!tok.trim() || !!busy || !nf} onClick={connect}>{busy && !projects ? busy + "…" : "Connect"}</button>
@@ -143,6 +143,7 @@ function MoveStudio({ studio, index, session, nf, setNf, onIndex }: { studio: St
       <section className="card flex flex-col gap-2 p-5">
         <h2 className="text-lg font-extrabold">Move the Studio outside GitHub</h2>
         <p className="text-sm text-ink-300">Puts this whole Studio on <b className="text-ink-100">your Netlify</b>, with its projects, content and photos in <b className="text-ink-100">your Supabase</b>. You sign in there with a 6-digit code sent to your email, no GitHub token needed. This Studio keeps working until you stop using it.</p>
+        <p className="text-[13px] text-ink-400">Setting up Studios for clients (B2B)? Each client gets their own Studio, on your accounts or theirs, with the sites you share kept in step: <a className="text-brand-300 underline" href="#/settings/partners">Studio Partners →</a></p>
         {prev && phase !== "done" && <p className="rounded-lg border border-emerald-400/30 bg-emerald-400/5 px-3 py-2.5 text-[13px] text-emerald-100">Moved before to <a className="underline" href={prev.url} target="_blank" rel="noopener noreferrer">{prev.url}</a>. Running it again updates that Studio to this build{withData ? " and copies your files again" : ""}.</p>}
       </section>
       <section className="card flex flex-col gap-3 p-5" aria-label="Netlify">

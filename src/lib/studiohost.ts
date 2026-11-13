@@ -16,7 +16,7 @@ export const STUDIO_BUCKET = "studio";
 const TEXT = /\.(json|md|txt|csv|html|css|js|svg)$/i;
 
 /** Tables, rules and the storage bucket for hosted Studios. Safe to run again. */
-export function studioSql(studio: string, owner: string, role: "owner" | "member" | "partner" = "owner") {
+export function studioSql(studio: string, owner: string, role: "owner" | "member" | "partner" = "owner", extra: { email: string; role: "owner" | "member" | "partner" }[] = []) {
   const q = (s: string) => "'" + String(s).replace(/'/g, "''") + "'";
   return `-- Site Studio (hosted): the Studio's own files and who may use it. Safe to run again.
 create table if not exists public.studio_files (
@@ -52,7 +52,8 @@ create policy "studio storage: members" on storage.objects for all to authentica
   with check (bucket_id = '${STUDIO_BUCKET}' and public.studio_role(split_part(name, '/', 1)) is not null);
 insert into public.studio_members (studio, email, role) values (${q(studio)}, lower(${q(owner)}), ${q(role)})
   on conflict (studio, email) do update set role = excluded.role;
-`;
+${extra.map((m) => `insert into public.studio_members (studio, email, role) values (${q(studio)}, lower(${q(m.email)}), ${q(m.role)})
+  on conflict (studio, email) do update set role = excluded.role;`).join("\n")}`;
 }
 
 const b64Bytes = (b: string) => Uint8Array.from(atob(String(b).replace(/\s/g, "")), (c) => c.charCodeAt(0));

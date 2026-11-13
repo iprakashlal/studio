@@ -34,6 +34,8 @@ export type ProjectMeta = {
   host?: HostCfg;
   /** The shop's Cloudflare Worker, when the Studio set it up (no secrets here: they live on the Worker). */
   worker?: WorkerCfg;
+  /** Shared into this Studio by a Studio Partner (their name). */
+  partner?: { name: string; url?: string };
   /** Business sites: the enquiry inbox function and its private repository (no secrets: the token lives in the function). */
   inbox?: import("./inbox").InboxCfg;
   /** When the Studio's copy of the content last changed (saves and imports). */

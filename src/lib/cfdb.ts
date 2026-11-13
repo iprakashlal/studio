@@ -95,7 +95,7 @@ export const membersSql = (scope: string, list: { email: string; role: "owner" |
   list.map((m) => `insert into members (scope, email, role) values (${q(scope)}, lower(${q(m.email.trim())}), ${q(m.role)}) on conflict (scope, email) do update set role = excluded.role;`).join("\n");
 
 /** Finds or creates the database, its tables and the Worker, and checks the Worker answers. Safe to run again. */
-export async function setupCfDb(relay: Relay, token: string, o: { account: CfAccount; resendKey: string; mailFrom: string; name: string; existing?: CfDbSetup | null }, step: (s: string) => void): Promise<CfDbSetup> {
+export async function setupCfDb(relay: Relay, token: string, o: { account: CfAccount; resendKey: string; mailFrom: string; name: string; existing?: CfDbSetup | null; deployToken?: string }, step: (s: string) => void): Promise<CfDbSetup> {
   const cf = new Cloudflare(relay, token), acc = o.account.id;
   step("Finding the Studio's database");
   let db = (await cf.d1List(acc)).find((d) => d.name === CFDB_DATABASE);
@@ -107,8 +107,8 @@ export async function setupCfDb(relay: Relay, token: string, o: { account: CfAcc
   step("Uploading the Worker");
   const secret = [...crypto.getRandomValues(new Uint8Array(32))].map((b) => b.toString(16).padStart(2, "0")).join("");
   await cf.upload(acc, CFDB_WORKER, await r.text(), {
-    vars: { MAIL_FROM: o.mailFrom, NAME: o.name },
-    secrets: { ...(o.existing ? {} : { SECRET: secret }), ...(o.resendKey ? { RESEND_API_KEY: o.resendKey } : {}) },
+    vars: { MAIL_FROM: o.mailFrom, NAME: o.name, ...(o.deployToken ? { CF_ACCOUNT: acc } : {}) },
+    secrets: { ...(o.existing ? {} : { SECRET: secret }), ...(o.resendKey ? { RESEND_API_KEY: o.resendKey } : {}), ...(o.deployToken ? { CF_TOKEN: o.deployToken } : {}) },
     d1: [{ name: "DB", id: db.uuid }], keep: !!o.existing,
   });
   step("Turning on its workers.dev address");
@@ -132,3 +132,25 @@ export async function cfAddMembers(relay: Relay, token: string, s: CfDbSetup, sc
 
 /** Resend's test mode (no verified domain) only emails the Resend account's own address; returns it from the error. */
 export const resendTestOnly = (msg: string): string | null => /own email address \(([^)\s]+@[^)\s]+)\)/i.exec(String(msg || ""))?.[1]?.toLowerCase() || null;
+
+// ---------------------------------------------------------------- publishing from any device
+/** Whether this database keeps a Cloudflare token for publishing (and for which account). */
+export async function cfDeployInfo(api: string): Promise<{ deploy: boolean; account?: string }> {
+  try { const j = await (await fetch(clean(api) + "/", { cache: "no-store" })).json(); return { deploy: !!j?.deploy, account: j?.account }; } catch { return { deploy: false }; }
+}
+/** A Cloudflare client that publishes through the database (its kept token), as the signed-in owner of `scope`. */
+export function dbCloudflare(api: string, scope: string): Cloudflare {
+  return new Cloudflare(null, "", async (q) => {
+    const s = cfSession.load(api);
+    let r: Response;
+    try { r = await fetch(clean(api) + "/cf?scope=" + encodeURIComponent(scope), { method: "POST", cache: "no-store", headers: { "Content-Type": "application/json", ...(s ? { Authorization: "Bearer " + s.token } : {}) }, body: JSON.stringify({ method: q.method, path: q.path, body: q.body, body64: q.body64, contentType: q.contentType, ...(q.auth ? { jwt: q.auth } : {}) }) }); }
+    catch { return { status: 502, body: JSON.stringify({ success: false, errors: [{ code: 0, message: "Couldn't reach the Studio's database on Cloudflare." }] }) }; }
+    const j = await r.json().catch(() => null);
+    if (!r.ok) return { status: r.status === 401 || r.status === 403 ? 400 : r.status, body: JSON.stringify({ success: false, errors: [{ code: r.status, message: j?.error || `The database answered ${r.status}.` }] }) };
+    return j as { status: number; body: string };
+  });
+}
+/** Lets these Workers be published from any device by the owners of their scope (needs the token, via D1). */
+export async function registerWorkers(cf: Cloudflare, s: CfDbSetup, list: { worker: string; scope: string }[]) {
+  for (const x of list) await cf.d1Query(s.account, s.databaseId, "insert into workers (worker, scope) values (?, ?) on conflict (worker) do update set scope = excluded.scope", [x.worker, x.scope]);
+}

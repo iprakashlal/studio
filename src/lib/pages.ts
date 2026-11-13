@@ -4,7 +4,8 @@
 import { Netlify } from "./netlify";
 import { Cloudflare } from "./cloudflare";
 import { getHelper } from "./relay";
-import { cfAccountVault } from "./cfdb";
+import { cfAccountVault, cfDeployInfo, cfSignedIn, dbCloudflare } from "./cfdb";
+import type { HostCfg } from "./supa";
 import { netlifyToken } from "./hosting";
 import type { SiteFile } from "./exporter";
 
@@ -87,3 +88,17 @@ export async function loadPages(kind: PagesKind, studioToken: string, account?: 
 }
 
 export const PAGES_LABEL: Record<PagesKind, string> = { netlify: "Netlify", cloudflare: "Cloudflare" };
+
+/** Publishing through the Studio's database (its kept Cloudflare token) as a signed-in owner of `scope`; null when
+ *  the database doesn't keep a token or this device isn't signed in to it. */
+export async function pagesViaDb(api: string, scope: string): Promise<Pages | null> {
+  const info = await cfDeployInfo(api);
+  if (!info.deploy || !info.account || !(await cfSignedIn(api))) return null;
+  return { ...cloudflarePages(dbCloudflare(api, scope), info.account), label: "Cloudflare" };
+}
+/** The way to publish a hosted site from this device: its own token if connected here, else through the database. */
+export async function pagesForHost(h: HostCfg, studioToken: string): Promise<Pages | null> {
+  const own = await loadPages(h.kind, studioToken, h.account).catch(() => null);
+  if (own || h.kind !== "cloudflare" || !h.cf) return own;
+  return pagesViaDb(h.cf.api, "site:" + h.cf.site);
+}

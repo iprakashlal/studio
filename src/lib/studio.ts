@@ -49,7 +49,7 @@ export type SiteState =
 export type CategoryRec = { id: string; name: string; color: string };
 /** The Studio's own name and logo (logo: a file in the data repository). */
 export type StudioBrand = { name: string; logo?: string; v?: number };
-export type StudioIndex = { version: 1; categories: CategoryRec[]; projects: ProjectMeta[]; brand?: StudioBrand; /** The "Powered by" badge every site shows (its look; each site only turns it on or off). */ badge?: import("./badge").BadgeCfg; /** Admin menus per template: renamed, reordered, combined sections. */ menus?: import("./menus").Menus };
+export type StudioIndex = { version: 1; categories: CategoryRec[]; projects: ProjectMeta[]; brand?: StudioBrand; /** The "Powered by" badge every site shows (its look; each site only turns it on or off). */ badge?: import("./badge").BadgeCfg; /** Admin menus per template: renamed, reordered, combined sections. */ menus?: import("./menus").Menus; /** Where this Studio was moved (Netlify + Supabase). */ hosted?: import("./studiohost").HostedStudio; /** Client Studios (Studio Partners). */ partners?: import("./partners").PartnerRec[] };
 
 export const CATEGORY_COLORS = ["#5B7CFF", "#3FB97A", "#F2A541", "#F06A6A", "#B57BFF", "#34C3D9", "#E86FB0", "#9AA6BC"];
 
@@ -275,6 +275,8 @@ function normalise(i: any): StudioIndex {
     ...(i?.brand && typeof i.brand.name === "string" ? { brand: { name: i.brand.name, ...(typeof i.brand.logo === "string" ? { logo: i.brand.logo } : {}), ...(typeof i.brand.v === "number" ? { v: i.brand.v } : {}) } } : {}),
     ...(i?.badge && typeof i.badge === "object" ? { badge: cleanBadge(i.badge) } : {}),
     ...(i?.menus && Object.keys(cleanMenus(i.menus)).length ? { menus: cleanMenus(i.menus) } : {}),
+    ...(i?.hosted && typeof i.hosted.url === "string" ? { hosted: i.hosted } : {}),
+    ...(Array.isArray(i?.partners) ? { partners: i.partners.filter((x: any) => x && typeof x.id === "string") } : {}),
     categories: Array.isArray(i?.categories) ? i.categories : [],
     projects: (Array.isArray(i?.projects) ? i.projects : []).map((p: any) => ({ exports: [], version: 0, notes: "", client: "", status: "draft", ...p })),
   };

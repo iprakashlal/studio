@@ -93,6 +93,37 @@ export class Netlify {
     return { id: d.id, url: dep.ssl_url || dep.deploy_ssl_url || "" };
   }
 
+  /** Deploys files known by their SHA-1 (e.g. an app's file list) and fetches only the ones Netlify asks for. */
+  async deployDigest(siteId: string, digest: Record<string, string>, get: (path: string) => Promise<Uint8Array>, title: string, onProgress?: (done: number, total: number) => void): Promise<{ id: string }> {
+    const files: Record<string, string> = {}, byShaPath = new Map<string, string>();
+    for (const [p, sha] of Object.entries(digest)) { files["/" + p.replace(/^\/+/, "")] = sha; if (!byShaPath.has(sha)) byShaPath.set(sha, p.replace(/^\/+/, "")); }
+    const d = await this.req<{ id: string; required?: string[]; state: string }>(`/sites/${encodeURIComponent(siteId)}/deploys?title=${encodeURIComponent(title)}`, { method: "POST", body: JSON.stringify({ files, async: true }) });
+    let dep: { id: string; required?: string[]; state: string } = d;
+    for (let i = 0; i < 60 && dep.state === "preparing"; i++) { await new Promise((r) => setTimeout(r, 1000)); dep = await this.req(`/sites/${encodeURIComponent(siteId)}/deploys/${d.id}`); }
+    const need = dep.required || [];
+    let done = 0; onProgress?.(0, need.length);
+    const queue = [...need];
+    const worker = async () => {
+      for (let sha = queue.shift(); sha; sha = queue.shift()) {
+        const path = byShaPath.get(sha); if (!path) continue;
+        const data = await get(path);
+        for (let attempt = 0; ; attempt++) {
+          try { await this.req(`/deploys/${d.id}/files/${path.split("/").map(encodeURIComponent).join("/")}`, { method: "PUT", body: data as unknown as BodyInit }, true); break; }
+          catch (e) { if (attempt >= 2) throw e; await new Promise((r) => setTimeout(r, 1500)); }
+        }
+        onProgress?.(++done, need.length);
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(4, need.length) }, worker));
+    for (let i = 0; i < 90; i++) {
+      const x = await this.req<{ state: string }>(`/sites/${encodeURIComponent(siteId)}/deploys/${d.id}`);
+      if (x.state === "ready") return { id: d.id };
+      if (x.state === "error") throw new NetlifyError("Netlify couldn't finish the deploy. Try again.", 500);
+      await new Promise((r) => setTimeout(r, 1000));
+    }
+    return { id: d.id };
+  }
+
   /** Netlify's Build API: uploads a zip of source files and lets Netlify build it, which is how functions get
    *  deployed from a web page (the functions upload endpoint doesn't accept browser requests). */
   async build(siteId: string, zipBytes: Uint8Array, title: string, onStep?: (s: string) => void): Promise<{ deployId: string }> {

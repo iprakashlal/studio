@@ -40,8 +40,11 @@ export interface Repo {
   lastChange(path: string): Promise<string | null>;
 }
 
+/** Said when a GitHub copy can't be reached because this Studio has no GitHub token yet. */
+export const NO_GH_TOKEN = "This Studio has no GitHub token yet (it signs in by email). Add one in Settings → Hosting accounts → GitHub publishing to check or publish this GitHub copy, or ignore it if you no longer use it.";
 export function explain(e: unknown): string {
   const err = e as RepoError;
+  if (err && err.message === NO_GH_TOKEN) return NO_GH_TOKEN;
   if (err && err.status === 401) return "GitHub rejected the token. It may have expired; add a new one in Settings.";
   if (err && err.status === 403) return "The token can't write to this repository. Give it Contents: Read and write.";
   if (err && err.status === 404) return "Repository, branch or file not found. Check the details and the token's repository access.";
@@ -58,6 +61,7 @@ export class GitHubRepo implements Repo {
 
   private async api(path: string, opts: RequestInit & { raw?: boolean } = {}): Promise<any> {
     const { raw, ...init } = opts;
+    if (!this.token) throw new RepoError(NO_GH_TOKEN, 401);
     const r = await fetch(`https://api.github.com/repos/${encodeURIComponent(this.cfg.owner)}/${encodeURIComponent(this.cfg.repo)}${path}`, {
       ...init,
       cache: "no-store",

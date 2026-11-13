@@ -19,10 +19,14 @@ async function keyFor(secret: string, salt: Uint8Array) {
 }
 
 let cached: { token: string; login: string } | null = null;
+/** A Studio moved off GitHub signs in by email, so its login isn't a GitHub token and mustn't be sent to GitHub. */
+let loginIsGitHub = true;
 /** The publishing token on this device, encrypted with the Studio's own GitHub token. Never written to a repository. */
 export const ghPublish = {
   /** The token to use for site repositories: the publishing token when set, else the Studio's own. */
-  token: (fallback: string) => cached?.token || fallback,
+  token: (fallback: string) => cached?.token || (loginIsGitHub ? fallback : ""),
+  /** Set by the app: false in a Studio that signs in by email (moved off GitHub). */
+  setLoginIsGitHub(v: boolean) { loginIsGitHub = v; },
   login: () => cached?.login || "",
   async load(studioToken: string) {
     try {

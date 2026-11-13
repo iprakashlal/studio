@@ -8,7 +8,7 @@ import { Netlify } from "./netlify";
 import { vault } from "./vault";
 import { zip } from "./zip";
 
-export const RELAY_VERSION = 2;
+export const RELAY_VERSION = 3;
 const FN = "studio-relay";
 export type Relay = { siteId: string; url: string; key: string; v: number };
 export const relayVault = vault<Relay>("relay");
@@ -74,8 +74,13 @@ export async function setupRelay(nf: Netlify, studioToken: string, existing?: Re
   }
   step?.("Uploading the helper");
   const enc = new TextEncoder();
-  const fn = zip([{ name: FN + ".js", data: enc.encode(relaySource(key, [location.origin])) }]);
-  await nf.deploy(siteId, [{ path: "index.html", data: enc.encode(PAGE) }], `Site Studio helper v${RELAY_VERSION}`, undefined, [{ name: FN, zip: fn }]);
+  // Sent as source for Netlify to build: Netlify's direct function upload doesn't accept requests from web pages.
+  const src = zip([
+    { name: "index.html", data: enc.encode(PAGE) },
+    { name: "netlify.toml", data: enc.encode(`[build]\n  publish = "."\n  command = ""\n\n[functions]\n  directory = "netlify/functions"\n  node_bundler = "esbuild"\n`) },
+    { name: `netlify/functions/${FN}.js`, data: enc.encode(relaySource(key, [location.origin])) },
+  ]);
+  await nf.build(siteId, src, `Site Studio helper v${RELAY_VERSION}`, step);
   const relay: Relay = { siteId, url: url.replace(/^http:/, "https:").replace(/\/?$/, "/"), key, v: RELAY_VERSION };
   step?.("Checking the helper answers");
   let lastErr: any;

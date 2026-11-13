@@ -1,5 +1,6 @@
 // Settings → Migration: move the whole Studio to Netlify + Supabase in a few clicks, from the Studio itself.
 // On a moved Studio, the same tab shows where it runs and updates it to the latest Studio build.
+import { SbTokenHelp } from "./SbTokenHelp";
 import { useEffect, useState } from "react";
 import type { Session } from "../lib/auth";
 import { netlifyToken } from "../lib/hosting";
@@ -56,6 +57,7 @@ export function useSupabasePicker(studioToken: string, nf: Netlify | null, persi
   const ui = (
     <div className="flex flex-col gap-2.5 text-[13px]">
       <p><a className="btn btn-sm btn-pri" href={SB_TOKENS_PAGE} target="_blank" rel="noopener noreferrer">Open Supabase → Access tokens ↗</a> <span className="text-ink-400">Press <b>Generate new token</b>, copy it and paste it here. {persist ? "It's kept encrypted on this device only." : "Used now only, not kept."}</span></p>
+          <SbTokenHelp />
       <div className="flex gap-2">
         <input aria-label="Supabase access token" className="input min-w-0 flex-1 font-mono text-xs" type="password" autoComplete="off" placeholder="sbp_…" value={tok} onChange={(e) => { setTok(e.target.value); setSaved(false); setProjects(null); }} />
         <button type="button" className="btn btn-sm" disabled={!tok.trim() || !!busy || !nf} onClick={connect}>{busy && !projects ? busy + "…" : "Connect"}</button>

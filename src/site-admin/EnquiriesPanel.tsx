@@ -3,6 +3,7 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { enquiriesSql, isAdmin, sbClient, sendCode, setupSql, signedInEmail, verifyCode, type SbCfg } from "../lib/supa";
 import { Field, Spinner, useConfirm, useToast } from "../ui/kit";
+import { inboxCall, type InboxEnquiry } from "../lib/inbox";
 
 type Enquiry = { id: number; site: string; data: Record<string, string>; page: string; status: string; created_at: string };
 const STATUS: [string, string][] = [["new", "New"], ["read", "Read"], ["replied", "Replied"], ["archived", "Archived"]];
@@ -17,7 +18,22 @@ export function enquiriesCfg(content: any, hosted?: SbCfg | null): SbCfg | null 
   return /^https:\/\//.test(F.sbUrl || "") && F.sbKey && F.site ? { url: String(F.sbUrl).replace(/\/+$/, ""), key: F.sbKey, site: F.site } : null;
 }
 
-export function EnquiriesPanel({ cfg, hosted, email: contactEmail }: { cfg: SbCfg | null; hosted?: boolean; email?: string }) {
+export function EnquiriesPanel({ cfg, hosted, email: contactEmail, form, ghToken, inStudio }: { cfg: SbCfg | null; hosted?: boolean; email?: string; form?: any; ghToken?: string; inStudio?: boolean }) {
+  if (form?.saveTo === "file") {
+    if (!/^https:\/\//.test(form.fileUrl || "")) return (
+      <section className="card flex max-w-2xl flex-col gap-3 p-5 text-sm text-ink-300">
+        <h3 className="text-[15px] font-extrabold text-ink-100">The enquiry inbox isn't set up yet</h3>
+        <p>{inStudio ? <>Press <b className="text-ink-100">Enquiry inbox</b> at the top of the project to set it up, then publish.</> : "Ask the site's designer to set up the enquiry inbox in Site Studio."} Until then, enquiries can't be saved.</p>
+      </section>
+    );
+    if (!ghToken) return (
+      <section className="card flex max-w-2xl flex-col gap-3 p-5 text-sm text-ink-300">
+        <h3 className="text-[15px] font-extrabold text-ink-100">Enquiries are saved as JSON files in a private GitHub repository</h3>
+        <p>Reading them needs a GitHub sign-in that can edit this site. Open <b className="text-ink-100">Enquiries</b> in Site Studio to read them.</p>
+      </section>
+    );
+    return <FileInbox key={form.fileUrl} url={form.fileUrl} token={ghToken} />;
+  }
   if (!cfg) return (
     <section className="card flex max-w-2xl flex-col gap-3 p-5 text-sm text-ink-300">
       <h3 className="text-[15px] font-extrabold text-ink-100">Enquiries aren't being saved yet</h3>
@@ -40,9 +56,6 @@ function Connected({ cfg, hosted }: { cfg: SbCfg; hosted: boolean }) {
   const [rows, setRows] = useState<Enquiry[] | null>(null);
   const [err, setErr] = useState("");
   const [missing, setMissing] = useState(false);
-  const [filter, setFilter] = useState("open");
-  const [q, setQ] = useState("");
-  const [open, setOpen] = useState<number | null>(null);
   const db = sbClient(cfg);
 
   useEffect(() => { signedInEmail(cfg).then(setMe).catch(() => setMe(null)); }, [cfg.url, cfg.key]);
@@ -58,8 +71,6 @@ function Connected({ cfg, hosted }: { cfg: SbCfg; hosted: boolean }) {
   };
   useEffect(() => { if (me) load(); }, [me]);
 
-  const list = useMemo(() => (rows || []).filter((r) => (filter === "open" ? r.status !== "archived" : filter === "all" ? true : r.status === filter) && (!q || JSON.stringify(r.data).toLowerCase().includes(q.toLowerCase()))), [rows, filter, q]);
-  const counts = useMemo(() => ({ new: (rows || []).filter((r) => r.status === "new").length }), [rows]);
 
   const setStatus = async (r: Enquiry, status: string) => {
     const { error } = await db.from("site_enquiries").update({ status }).eq("id", r.id);
@@ -72,13 +83,6 @@ function Connected({ cfg, hosted }: { cfg: SbCfg; hosted: boolean }) {
     if (error) return toast(error.message, "bad");
     setRows((x) => (x || []).filter((y) => y.id !== r.id)); toast("Deleted");
   };
-  const csv = () => {
-    const keys = ["created_at", "status", "name", "email", "phone", "company", "service", "budget", "message"];
-    const cell = (v: any) => `"${String(v ?? "").replace(/"/g, '""')}"`;
-    const text = [keys.join(","), ...list.map((r) => keys.map((k) => cell(k === "created_at" || k === "status" ? (r as any)[k] : r.data[k])).join(","))].join("\n");
-    const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([text], { type: "text/csv" })); a.download = `enquiries-${cfg.site}.csv`; a.click();
-  };
-
   if (me === undefined) return <Spinner label="Connecting to Supabase…" />;
   if (!me) return <SignIn cfg={cfg} onIn={setMe} />;
   if (admin === null && !err) return <Spinner label="Checking your access…" />;
@@ -99,6 +103,45 @@ function Connected({ cfg, hosted }: { cfg: SbCfg; hosted: boolean }) {
       <div className="flex gap-2"><button className="btn" onClick={() => { navigator.clipboard?.writeText(hosted ? setupSql(cfg.site, me) : enquiriesSql(cfg.site, me)); toast("SQL copied"); }}>Copy SQL</button><button className="btn btn-pri" onClick={load}>Check again</button></div>
     </section>
   );
+  return <EnquiryList rows={rows || []} setStatus={setStatus} remove={remove} load={load} name={cfg.site} who={<>Signed in as {me} · {rows?.length || 0} enquir{rows?.length === 1 ? "y" : "ies"} for <b className="text-ink-200">{cfg.site}</b></>} />;
+}
+
+function SignIn({ cfg, onIn }: { cfg: SbCfg; onIn: (email: string) => void }) {
+  const [email, setEmail] = useState(""), [code, setCode] = useState(""), [step, setStep] = useState<"email" | "code">("email"), [busy, setBusy] = useState(false), [err, setErr] = useState("");
+  return (
+    <section className="card flex max-w-lg flex-col gap-4 p-5">
+      <h3 className="text-[15px] font-extrabold">Sign in to read enquiries</h3>
+      <p className="text-sm text-ink-300">{step === "email" ? "Use an email listed for this site in Supabase (site_admins). We'll send a 6-digit code." : <>Enter the code sent to <b className="text-ink-100">{email}</b>.</>}</p>
+      <form className="flex flex-col gap-3" onSubmit={async (e) => {
+        e.preventDefault(); setErr(""); setBusy(true);
+        try { if (step === "email") { await sendCode(cfg, email); setStep("code"); } else { await verifyCode(cfg, email, code); onIn(email.trim().toLowerCase()); } } catch (x: any) { setErr(x.message); }
+        setBusy(false);
+      }}>
+        {step === "email"
+          ? <Field label="Email" htmlFor="enq-email"><input id="enq-email" className="input" type="email" required autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} /></Field>
+          : <Field label="6-digit code" htmlFor="enq-code"><input id="enq-code" className="input font-mono tracking-[.3em]" inputMode="numeric" maxLength={6} required autoComplete="one-time-code" value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))} /></Field>}
+        <p role="alert" className="text-sm text-red-300">{err}</p>
+        <div className="flex gap-2"><button className="btn btn-pri" disabled={busy}>{busy ? "Working…" : step === "email" ? "Send code" : "Sign in"}</button>{step === "code" && <button type="button" className="btn btn-ghost" onClick={() => { setStep("email"); setCode(""); }}>Use a different email</button>}</div>
+      </form>
+    </section>
+  );
+}
+
+type Row = { id: string | number; data: Record<string, string>; page?: string; status: string; created_at: string };
+
+/** The list of enquiries with filters, search, status, reply, delete and CSV, for either store. */
+function EnquiryList<R extends Row>({ rows, setStatus, remove, load, name, who }: { rows: R[]; setStatus: (r: R, s: string) => void; remove: (r: R) => void; load: () => void; name: string; who: React.ReactNode }) {
+  const [filter, setFilter] = useState("open");
+  const [q, setQ] = useState("");
+  const [open, setOpen] = useState<string | number | null>(null);
+  const list = useMemo(() => rows.filter((r) => (filter === "open" ? r.status !== "archived" : filter === "all" ? true : r.status === filter) && (!q || JSON.stringify(r.data).toLowerCase().includes(q.toLowerCase()))), [rows, filter, q]);
+  const counts = useMemo(() => ({ new: rows.filter((r) => r.status === "new").length }), [rows]);
+  const csv = () => {
+    const keys = ["created_at", "status", "name", "email", "phone", "company", "service", "budget", "message"];
+    const cell = (v: any) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+    const text = [keys.join(","), ...list.map((r) => keys.map((k) => cell(k === "created_at" || k === "status" ? (r as any)[k] : r.data[k])).join(","))].join("\n");
+    const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([text], { type: "text/csv" })); a.download = `enquiries-${name}.csv`; a.click();
+  };
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">
@@ -110,8 +153,8 @@ function Connected({ cfg, hosted }: { cfg: SbCfg; hosted: boolean }) {
         <input className="input w-48 py-1.5 text-sm" placeholder="Search" aria-label="Search enquiries" value={q} onChange={(e) => setQ(e.target.value)} />
         <span className="ml-auto flex gap-2"><button className="btn btn-sm" onClick={load}>↻ Refresh</button><button className="btn btn-sm" disabled={!list.length} onClick={csv}>Download CSV</button></span>
       </div>
-      <p className="text-[13px] text-ink-400">Signed in as {me} · {rows?.length || 0} enquir{rows?.length === 1 ? "y" : "ies"} for <b className="text-ink-200">{cfg.site}</b></p>
-      {!list.length && <p className="card p-5 text-sm text-ink-400">{rows?.length ? "Nothing here with this filter." : "No enquiries yet. When someone sends the form on your site, it appears here."}</p>}
+      <p className="text-[13px] text-ink-400">{who}</p>
+      {!list.length && <p className="card p-5 text-sm text-ink-400">{rows.length ? "Nothing here with this filter." : "No enquiries yet. When someone sends the form on your site, it appears here."}</p>}
       <ul className="flex flex-col gap-2" aria-label="Enquiries">
         {list.map((r) => {
           const d = r.data || {}, isOpen = open === r.id;
@@ -148,23 +191,28 @@ function Connected({ cfg, hosted }: { cfg: SbCfg; hosted: boolean }) {
   );
 }
 
-function SignIn({ cfg, onIn }: { cfg: SbCfg; onIn: (email: string) => void }) {
-  const [email, setEmail] = useState(""), [code, setCode] = useState(""), [step, setStep] = useState<"email" | "code">("email"), [busy, setBusy] = useState(false), [err, setErr] = useState("");
-  return (
-    <section className="card flex max-w-lg flex-col gap-4 p-5">
-      <h3 className="text-[15px] font-extrabold">Sign in to read enquiries</h3>
-      <p className="text-sm text-ink-300">{step === "email" ? "Use an email listed for this site in Supabase (site_admins). We'll send a 6-digit code." : <>Enter the code sent to <b className="text-ink-100">{email}</b>.</>}</p>
-      <form className="flex flex-col gap-3" onSubmit={async (e) => {
-        e.preventDefault(); setErr(""); setBusy(true);
-        try { if (step === "email") { await sendCode(cfg, email); setStep("code"); } else { await verifyCode(cfg, email, code); onIn(email.trim().toLowerCase()); } } catch (x: any) { setErr(x.message); }
-        setBusy(false);
-      }}>
-        {step === "email"
-          ? <Field label="Email" htmlFor="enq-email"><input id="enq-email" className="input" type="email" required autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} /></Field>
-          : <Field label="6-digit code" htmlFor="enq-code"><input id="enq-code" className="input font-mono tracking-[.3em]" inputMode="numeric" maxLength={6} required autoComplete="one-time-code" value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))} /></Field>}
-        <p role="alert" className="text-sm text-red-300">{err}</p>
-        <div className="flex gap-2"><button className="btn btn-pri" disabled={busy}>{busy ? "Working…" : step === "email" ? "Send code" : "Sign in"}</button>{step === "code" && <button type="button" className="btn btn-ghost" onClick={() => { setStep("email"); setCode(""); }}>Use a different email</button>}</div>
-      </form>
-    </section>
-  );
+
+function FileInbox({ url, token }: { url: string; token: string }) {
+  const toast = useToast();
+  const confirm = useConfirm();
+  const [rows, setRows] = useState<(InboxEnquiry & { id: string })[] | null>(null);
+  const [err, setErr] = useState(""), [more, setMore] = useState(false);
+  const load = async () => {
+    setErr("");
+    try { const j = await inboxCall<{ items: InboxEnquiry[]; more?: boolean }>(url, token, { action: "list" }); setRows(j.items.map((x) => ({ ...x, id: x.path }))); setMore(!!j.more); }
+    catch (e: any) { setErr(e?.message || "Couldn't load enquiries."); }
+  };
+  useEffect(() => { load(); }, [url, token]);
+  const setStatus = async (r: InboxEnquiry, status: string) => {
+    setRows((x) => (x || []).map((y) => (y.path === r.path ? { ...y, status } : y)));
+    try { await inboxCall(url, token, { action: "status", path: r.path, status }); } catch (e: any) { toast(e?.message || "Couldn't update it.", "bad"); load(); }
+  };
+  const remove = async (r: InboxEnquiry) => {
+    if (!(await confirm("Delete this enquiry?", `From ${r.data.name || r.data.email || "a visitor"}. Its file is deleted from the repository.`, "Delete", true))) return;
+    try { await inboxCall(url, token, { action: "delete", path: r.path }); setRows((x) => (x || []).filter((y) => y.path !== r.path)); toast("Deleted"); }
+    catch (e: any) { toast(e?.message || "Couldn't delete it.", "bad"); }
+  };
+  if (err) return <section className="card flex max-w-xl flex-col gap-3 p-5"><p className="text-sm text-red-300">{err}</p><button className="btn self-start" onClick={load}>Try again</button></section>;
+  if (!rows) return <Spinner label="Loading enquiries…" />;
+  return <EnquiryList rows={rows} setStatus={setStatus} remove={remove} load={load} name="site" who={<>{rows.length} enquir{rows.length === 1 ? "y" : "ies"}, saved as JSON files in a private GitHub repository{more ? " (showing the newest 300)" : ""}.</>} />;
 }

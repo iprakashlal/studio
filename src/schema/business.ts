@@ -136,8 +136,9 @@ const schema: Category[] = [
           { t: "when", path: "contact.form.askBudget", is: "true", fields: [{ t: "strings", path: "contact.form.budgets", label: "Budget choices", addLabel: "Add choice" }] },
           g2({ t: "text", path: "contact.form.submit", label: "Button label" }, { t: "text", path: "contact.form.consent", label: "Consent checkbox (empty hides it)" }),
           { t: "textarea", path: "contact.form.success", label: "Message after sending", rows: 2 },
-          { t: "select", path: "contact.form.saveTo", label: "Where enquiries go", options: [{ value: "auto", label: "Save to Supabase when the site has it, otherwise email" }, { value: "email", label: "Always open the visitor's email app" }] },
-          { t: "note", text: "Sites hosted on Netlify with Supabase save enquiries automatically and list them under Enquiries in the admin page. On GitHub Pages, add a Supabase project below (run supabase/enquiries.sql from the site's files once). Without Supabase, the form opens the visitor's email app with everything filled in, addressed to your email above." },
+          { t: "select", path: "contact.form.saveTo", label: "Where enquiries go", options: [{ value: "auto", label: "Save to Supabase when the site has it, otherwise email" }, { value: "file", label: "Save to a JSON file in a private GitHub repository (no email)" }, { value: "email", label: "Always open the visitor's email app" }] },
+          { t: "when", path: "contact.form.saveTo", is: "file", fields: [{ t: "note", text: "Each enquiry is saved as a JSON file in a private GitHub repository and shows under Enquiries. No email is sent. Set it up in the Studio with the Enquiry inbox button at the top of the project (it fills in the address below), then publish." }, { t: "text", path: "contact.form.fileUrl", label: "Inbox address", check: "https", hint: "Filled in by Enquiry inbox in the Studio." }] },
+          { t: "when", path: "contact.form.saveTo", not: "file", fields: [{ t: "note", text: "Sites hosted on Netlify with Supabase save enquiries automatically and list them under Enquiries in the admin page. On GitHub Pages, add a Supabase project below (run supabase/enquiries.sql from the site's files once). Without Supabase, the form opens the visitor's email app with everything filled in, addressed to your email above." }] },
           { t: "when", path: "contact.form.saveTo", is: "auto", fields: [g3({ t: "text", path: "contact.form.sbUrl", label: "Supabase Project URL (GitHub sites)", check: "https" }, { t: "text", path: "contact.form.sbKey", label: "Public (anon) key" }, { t: "text", path: "contact.form.site", label: "Site ID", ph: "my-company" })] },
         ] }] },
     ],
@@ -185,7 +186,8 @@ export const businessTemplate: TemplateDef = {
   checks: (c) => {
     const w: string[] = [];
     const F = c?.contact?.form || {};
-    if (F.enabled && !c?.contact?.email) w.push("The enquiry form has no email to fall back on. Add one under Contact & form → Details.");
+    if (F.enabled && F.saveTo === "file" && !/^https:\/\//.test(F.fileUrl || "")) w.push("Enquiries are set to save as JSON files, but the inbox isn't set up. Press Enquiry inbox at the top of the project.");
+    if (F.enabled && F.saveTo !== "file" && !c?.contact?.email) w.push("The enquiry form has no email to fall back on. Add one under Contact & form → Details.");
     if (F.enabled && F.saveTo !== "email" && (F.sbUrl || F.sbKey) && !(F.sbUrl && F.sbKey && F.site)) w.push("The enquiry form's Supabase settings are incomplete (Project URL, public key and Site ID are all needed).");
     if (/northbeam/i.test(JSON.stringify(c?.brand || {}))) w.push("The company name is still the sample (Northbeam Partners).");
     return w;

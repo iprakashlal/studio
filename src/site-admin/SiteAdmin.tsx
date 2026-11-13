@@ -72,7 +72,7 @@ export function SiteAdmin() {
 
 function GitHubWorkspace({ info, onInfo, session, onSession, onSignOut, onForget }: { info: SiteInfo; onInfo: (i: SiteInfo) => void; session: Session; onSession: (s: Session) => void; onSignOut: () => void; onForget: () => void }) {
   const repo = useMemo(() => new GitHubRepo(session.cfg, session.token), [session]);
-  return <Workspace info={info} onInfo={onInfo} repo={repo} onSignOut={onSignOut}
+  return <Workspace info={info} onInfo={onInfo} repo={repo} onSignOut={onSignOut} ghToken={session.token}
     account={<AccountPanel ns={NS} session={session} onUpdated={onSession} onSignOut={onSignOut} onForget={onForget} />} />;
 }
 
@@ -83,7 +83,7 @@ function HostedWorkspace({ info, onInfo, sb, onSignOut }: { info: SiteInfo; onIn
 }
 
 /** hosted: the site is on Netlify with content and photos in Supabase (pages change only when the Studio publishes). */
-function Workspace({ info, onInfo, repo, account, onSignOut, hosted }: { info: SiteInfo; onInfo: (i: SiteInfo) => void; repo: Repo; account: React.ReactNode; onSignOut: () => void; hosted?: SbCfg }) {
+function Workspace({ info, onInfo, repo, account, onSignOut, hosted, ghToken }: { info: SiteInfo; onInfo: (i: SiteInfo) => void; repo: Repo; account: React.ReactNode; onSignOut: () => void; hosted?: SbCfg; ghToken?: string }) {
   const toast = useToast();
   const confirm = useConfirm();
   const tpl = TEMPLATES[info.template];
@@ -262,11 +262,11 @@ function Workspace({ info, onInfo, repo, account, onSignOut, hosted }: { info: S
       { id: "shop-customers", label: "Customers", group: "Shop", desc: "Signed-up customers by account number and email, with their orders.", render: () => <CustomersPanel content={saved} /> },
     ] : []),
     ...(tpl.id === "business" ? [
-      { id: "enquiries", label: "Enquiries", group: "Content", desc: "Messages sent through your website's enquiry form.", render: () => <EnquiriesPanel cfg={enquiriesCfg(saved, hosted)} hosted={!!hosted} email={saved?.contact?.email} /> },
+      { id: "enquiries", label: "Enquiries", group: "Content", desc: "Messages sent through your website's enquiry form.", render: () => <EnquiriesPanel cfg={enquiriesCfg(saved, hosted)} hosted={!!hosted} email={saved?.contact?.email} form={saved?.contact?.form} ghToken={ghToken} /> },
     ] : []),
     { id: "backup", label: "Backup & reset", group: "Settings", desc: "Copy, restore or reset the site's content.", render: () => <BackupPanel draft={draft} onReplace={(c) => { setDraft(clone(c)); bump(); }} loadDefaults={async () => clone(saved)} hosted={!!hosted} /> },
     { id: "account", label: "Account", group: "Settings", desc: "Your login on this device.", render: () => account },
-  ], [draft, saved, account, tpl.id, hosted]);
+  ], [draft, saved, account, tpl.id, hosted, ghToken]);
 
   if (err) return <div className="grid min-h-screen place-items-center px-4"><div className="card flex max-w-md flex-col gap-3 p-6"><h1 className="text-lg font-extrabold">Couldn't load the site's content</h1><p className="text-sm text-ink-300">{err}</p><div className="flex gap-2"><button className="btn btn-pri" onClick={load}>Try again</button><button className="btn" onClick={onSignOut}>Sign out</button></div></div></div>;
   if (!draft) return <div className="grid min-h-screen place-items-center"><Spinner label={hosted ? "Loading the latest content…" : "Loading the latest content from GitHub…"} /></div>;

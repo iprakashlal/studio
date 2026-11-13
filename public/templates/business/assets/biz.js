@@ -120,7 +120,7 @@ const DEFAULT = {
       enabled: true, title: "Tell us about your project", askPhone: true, askCompany: true, askService: true, askBudget: true,
       budgets: ["Under ₹5L", "₹5L – ₹25L", "₹25L – ₹1Cr", "Above ₹1Cr"], submit: "Send enquiry",
       success: "Thank you. We've received your enquiry and will reply within one working day.", consent: "I agree to be contacted about this enquiry.",
-      saveTo: "auto", sbUrl: "", sbKey: "", site: "",
+      saveTo: "auto", fileUrl: "", sbUrl: "", sbKey: "", site: "",
     },
   },
   footer: { text: "Strategy, design and engineering for growing companies.", legal: "© {year} Northbeam Partners LLP. All rights reserved.", links: [{ label: "Privacy", url: "" }, { label: "Terms", url: "" }] },
@@ -416,6 +416,7 @@ function bind() {
 function backend() {
   const F = C.contact.form;
   if (F.saveTo === "email") return null;
+  if (F.saveTo === "file") return /^https:\/\//.test(F.fileUrl || "") ? { file: F.fileUrl } : null;
   if (HOST && HOST.db && HOST.key && HOST.site) return { url: HOST.db, key: HOST.key, site: HOST.site };
   if (/^https:\/\//.test(F.sbUrl || "") && F.sbKey && F.site) return { url: String(F.sbUrl).replace(/\/+$/, ""), key: F.sbKey, site: F.site };
   return null;
@@ -428,11 +429,16 @@ async function submit(e) {
   delete data.website; data.consent = data.consent ? "yes" : "";
   const bad = [...f.querySelectorAll("[required]")].find((i) => (i.type === "checkbox" ? !i.checked : !String(i.value).trim()) || (i.type === "email" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(i.value)));
   if (bad) { msg.className = "form-msg bad"; msg.textContent = bad.type === "email" ? "Please enter a valid email address." : "Please fill in the required fields."; bad.focus(); return; }
-  if (PREVIEW) { msg.className = "form-msg ok"; msg.textContent = "Preview: the form works on the live site. " + (backend() ? "Enquiries are saved to Enquiries in the admin page." : "It opens the visitor's email app addressed to " + (C.contact.email || "your email") + "."); return; }
+  if (PREVIEW) { msg.className = "form-msg ok"; msg.textContent = "Preview: the form works on the live site. " + (backend() ? (backend().file ? "Enquiries are saved as JSON files and listed under Enquiries in the admin page. No email is sent." : "Enquiries are saved to Enquiries in the admin page.") : C.contact.form.saveTo === "file" ? "Set up the enquiry inbox in the Studio, then publish." : "It opens the visitor's email app addressed to " + (C.contact.email || "your email") + "."); return; }
   btnEl.disabled = true; msg.className = "form-msg"; msg.textContent = "Sending…";
   const cfg = backend();
+  if (!cfg && C.contact.form.saveTo === "file") { msg.className = "form-msg bad"; msg.textContent = "This form isn't connected yet. Please contact us another way."; btnEl.disabled = false; return; }
   try {
-    if (cfg) {
+    if (cfg && cfg.file) {
+      const r = await fetch(cfg.file, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "submit", data, page: location.pathname }) });
+      if (!r.ok) throw new Error("save " + r.status);
+      f.reset(); msg.className = "form-msg ok"; msg.textContent = C.contact.form.success || "Thank you. We'll be in touch.";
+    } else if (cfg) {
       const r = await fetch(cfg.url + "/rest/v1/site_enquiries", { method: "POST", headers: { apikey: cfg.key, Authorization: "Bearer " + cfg.key, "Content-Type": "application/json", Prefer: "return=minimal" }, body: JSON.stringify({ site: cfg.site, data, page: location.pathname }) });
       if (!r.ok) throw new Error("save " + r.status);
       f.reset(); msg.className = "form-msg ok"; msg.textContent = C.contact.form.success || "Thank you. We'll be in touch.";
@@ -443,7 +449,7 @@ async function submit(e) {
       msg.className = "form-msg ok"; msg.textContent = "Your email app should open with the enquiry filled in. Press Send there to reach us.";
     }
   } catch (x) {
-    msg.className = "form-msg bad"; msg.innerHTML = `Couldn't send just now. Please email us at <a href="mailto:${esc(C.contact.email)}">${esc(C.contact.email)}</a>.`;
+    msg.className = "form-msg bad"; msg.innerHTML = C.contact.email ? `Couldn't send just now. Please email us at <a href="mailto:${esc(C.contact.email)}">${esc(C.contact.email)}</a>.` : "Couldn't send just now. Please try again in a moment.";
   }
   btnEl.disabled = false;
 }

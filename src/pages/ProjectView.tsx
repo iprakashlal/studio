@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ShopBackendDialog } from "./ShopBackendDialog";
+import { EnquiryInboxDialog } from "./EnquiryInboxDialog";
 import { EnquiriesPanel, enquiriesCfg } from "../site-admin/EnquiriesPanel";
 import { GOTO_EVENT } from "../editor/Editor";
 import { TEMPLATES } from "../schema";
@@ -32,7 +33,7 @@ export function ProjectView({ studio, index, project, session, onIndex }: { stud
   const [pane, setPane] = useState<"edit" | "preview">("edit");
   // Click-to-edit from the preview: on small screens, switch to the editor to show the field.
   useEffect(() => { const on = () => setPane("edit"); addEventListener(GOTO_EVENT, on); return () => removeEventListener(GOTO_EVENT, on); }, []);
-  const [modal, setModal] = useState<"" | "export" | "publish" | "host" | "live" | "history" | "details" | "backend">("");
+  const [modal, setModal] = useState<"" | "export" | "publish" | "host" | "live" | "history" | "details" | "backend" | "inbox">("");
   const defaults = useRef<any>(null);
   const [conflict, setConflict] = useState<{ siteAt: string | null } | null>(null);
   const [syncBusy, setSyncBusy] = useState(false);
@@ -131,12 +132,12 @@ export function ProjectView({ studio, index, project, session, onIndex }: { stud
   const extras = useMemo(() => [
     ...(project.template === "business" ? [{
       id: "enquiries", label: "Enquiries", group: "Content", desc: "Messages sent through the website's enquiry form.",
-      render: () => <EnquiriesPanel cfg={enquiriesCfg(draft, project.host?.sb)} hosted={!!project.host} email={draft?.contact?.email} />,
+      render: () => <EnquiriesPanel cfg={enquiriesCfg(draft, project.host?.sb)} hosted={!!project.host} email={draft?.contact?.email} form={draft?.contact?.form} ghToken={ghPublish.token(session.token)} inStudio />,
     }] : []),
     {
       id: "backup", label: "Backup & reset", group: "Project", desc: "Copy, restore or reset this project's content.",
       render: () => <BackupPanel draft={draft} onReplace={replaceDraft} loadDefaults={() => loadDefaults(project.template)} />,
-    }], [draft, project.template, project.host]);
+    }], [draft, project.template, project.host, session.token]);
 
   // The confirm is async, so stop the link first and navigate ourselves.
   const onBack = async (e: React.MouseEvent) => {
@@ -169,6 +170,7 @@ export function ProjectView({ studio, index, project, session, onIndex }: { stud
           <button type="button" className="btn btn-sm" onClick={() => setModal("history")}>History{project.exports.length ? ` (${project.exports.length})` : ""}</button>
           <button type="button" className="btn btn-sm" onClick={() => setModal("export")}>Export ZIP</button>
           {project.template === "store" && !studio.repo.demo && <button type="button" className="btn btn-sm" onClick={() => setModal("backend")} title="Set up the shop server (Cloudflare Worker), its private orders repository and email (Resend) from here">{project.worker ? "Shop backend ✓" : "Shop backend"}</button>}
+          {project.template === "business" && !studio.repo.demo && <button type="button" className="btn btn-sm" onClick={() => setModal("inbox")} title="Save the enquiry form's enquiries as JSON files in a private GitHub repository (no email)">{project.inbox ? "Enquiry inbox ✓" : "Enquiry inbox"}</button>}
           <button type="button" className="btn btn-sm" onClick={() => setModal("publish")}>Publish to GitHub</button>
           {project.host
             ? <button type="button" className="btn btn-sm" onClick={() => setModal("host")}>Publish to Netlify</button>
@@ -198,6 +200,10 @@ export function ProjectView({ studio, index, project, session, onIndex }: { stud
       {modal === "backend" && <ShopBackendDialog {...{ session, studio, project, draft, onIndex }} onClose={() => setModal("")} onConnect={async (url) => {
         draft.backend = { ...(draft.backend || {}), enabled: true, provider: "cloudflare", workerUrl: url };
         // Save first, then move both counters on together, so the editor and preview see it and it isn't "unsaved".
+        if (await save(true)) { setV((n) => n + 1); setSavedV((n) => n + 1); } else bump();
+      }} />}
+      {modal === "inbox" && <EnquiryInboxDialog {...{ session, studio, project, onIndex }} onClose={() => setModal("")} onConnect={async (url) => {
+        draft.contact = draft.contact || {}; draft.contact.form = { ...(draft.contact.form || {}), enabled: true, saveTo: "file", fileUrl: url };
         if (await save(true)) { setV((n) => n + 1); setSavedV((n) => n + 1); } else bump();
       }} />}
       {modal === "publish" && <PublishDialog {...{ studio, project, tpl, draft, dirty, save, onIndex, getBlob, session }} onClose={() => setModal("")} />}

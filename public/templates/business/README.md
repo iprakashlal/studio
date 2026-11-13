@@ -16,6 +16,7 @@ Switch between one page and several pages in the CMS under **Sections & pages**.
 
 ## How enquiries work
 
+- **Saved as JSON files** (Where enquiries go → Save to a JSON file): each enquiry becomes a file in a private GitHub repository, through a small function on your Netlify set up with **Enquiry inbox** in the Studio. No email is sent. Read them under Enquiries in the Studio or the admin page.
 - **Hosted on Netlify with Supabase** (Host outside GitHub in the Studio): enquiries are saved to your Supabase project automatically. Re-run the setup SQL from the Studio once so the `site_enquiries` table exists.
 - **On GitHub Pages with Supabase**: run `supabase/enquiries.sql` in Supabase → SQL Editor (change the site ID and email at the bottom), then add the Project URL, public key and site ID under **Contact → Enquiry form** in the CMS.
 - **Without Supabase**: the form opens the visitor's email app with the enquiry filled in, addressed to your contact email.

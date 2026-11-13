@@ -1649,7 +1649,7 @@ if(PREVIEW){
   window.parent.postMessage({type:"cms:ready",page:"index.html"},location.origin);
 }
 if(PREVIEW)renderSite(saved);
-else(async()=>{let got=null;try{const ac=new AbortController(),tm=setTimeout(()=>ac.abort(),5000);if(HOST){const r=await fetch(HOST.db+"/rest/v1/site_content?select=content&site=eq."+encodeURIComponent(HOST.site),{cache:"no-store",signal:ac.signal,headers:{apikey:HOST.key,Authorization:"Bearer "+HOST.key}});if(r.ok){const j=await r.json();if(j&&j[0]&&j[0].content)got=j[0].content}}}catch(e){}
+else(async()=>{let got=null;try{const ac=new AbortController(),tm=setTimeout(()=>ac.abort(),5000);if(HOST){const r=await fetch(HOST.db+"/rest/v1/site_content?select=content&site=eq."+encodeURIComponent(HOST.site),{cache:"no-store",signal:ac.signal,headers:{apikey:HOST.key,...(/^sb_/.test(HOST.key)?{}:{Authorization:"Bearer "+HOST.key})}});if(r.ok){const j=await r.json();if(j&&j[0]&&j[0].content)got=j[0].content}}}catch(e){}
   try{if(!got){const ac=new AbortController(),tm=setTimeout(()=>ac.abort(),5000);const r=await fetch("content.json",{cache:"no-store",signal:ac.signal});clearTimeout(tm);if(r.ok)got=await r.json()}}catch(e){}
   if(got)saved=merge(DEFAULT,got);renderSite(saved)})();
 })();

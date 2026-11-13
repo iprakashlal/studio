@@ -78,6 +78,7 @@ export function HostDialog({ studio, project, tpl, draft, dirty, save, onIndex, 
   const [access, setAccess] = useState<"" | "ok" | "no" | "error">("");
   const [accessErr, setAccessErr] = useState("");
   const [showSql, setShowSql] = useState(false);
+  const [manual, setManual] = useState(false);
   const [busy, setBusy] = useState("");
   const [withContent, setWithContent] = useState(true);
   const [note, setNote] = useState("");
@@ -168,16 +169,23 @@ export function HostDialog({ studio, project, tpl, draft, dirty, save, onIndex, 
 
       <section className="flex flex-col gap-3 rounded-xl border border-ink-700 bg-ink-950 p-4" aria-label="Supabase">
         <b className="text-sm">2 · Supabase (content, photos and logins)</b>
-        <p className="text-[13px] text-ink-400">Use a free project: <a className="text-brand-300 underline" href={SB_NEW} target="_blank" rel="noopener noreferrer">create one ↗</a>, then copy the values from <b>Project Settings → API</b>. One Supabase project can hold several sites. A free project pauses after a week with no activity; restore it from the Supabase dashboard.</p>
-        {!demo && <SupabaseAuto nf={nf} studioToken={session.token} site={sb.site} email={email} onFill={(url, key) => setSb((x) => ({ ...x, url, key }))} />}
+        <p className="text-[13px] text-ink-400">One free Supabase project can hold several sites. A free project pauses after a week with no activity; restore it from the Supabase dashboard.</p>
         <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Project URL" htmlFor="sb-url" warn={sb.url && !sbUrlOk(sb.url) ? "Like https://abcd.supabase.co" : undefined}><input id="sb-url" className="input" inputMode="url" placeholder="https://abcd.supabase.co" value={sb.url} onChange={(e) => setSb({ ...sb, url: e.target.value })} /></Field>
           <Field label="Site ID" htmlFor="sb-site" hint="Names this site's rows and photo folder." warn={sb.site && !siteIdOk(sb.site) ? "Lowercase letters, numbers and dashes" : undefined}><input id="sb-site" className="input" disabled={!!host} value={sb.site} onChange={(e) => setSb({ ...sb, site: e.target.value.toLowerCase() })} /></Field>
+          <Field label="Your email" htmlFor="sb-email" hint="Becomes the site's first editor. Used for the sign-in code."><input id="sb-email" className="input" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} /></Field>
+        </div>
+        {!demo && <SupabaseAuto nf={nf} studioToken={session.token} site={sb.site} email={email} defaultOpen={!sbReady} onFill={(url, key) => { setSb((x) => ({ ...x, url, key })); setManual(false); }} />}
+        {sbReady && !manual && <p className="flex flex-wrap items-center gap-2 text-[13px] text-ink-300"><span className="h-2 w-2 rounded-full bg-emerald-400" />Project <code className="font-mono text-xs">{cleanUrl(sb.url)}</code> and its public key are filled in.<button type="button" className="text-brand-300 underline" onClick={() => setManual(true)}>Change by hand</button></p>}
+        {!manual ? (!sbReady && <button type="button" className="self-start text-[13px] text-brand-300 underline" onClick={() => setManual(true)}>Or enter the details by hand</button>) : (
+        <div className="flex flex-col gap-3 rounded-lg border border-ink-700 p-3" aria-label="Enter by hand">
+          <div className="flex items-center gap-2"><b className="text-[13px] text-ink-100">By hand</b><button type="button" className="ml-auto text-[13px] text-brand-300 underline" onClick={() => setManual(false)}>Hide</button></div>
+          <p className="text-[13px] text-ink-400"><a className="text-brand-300 underline" href={SB_NEW} target="_blank" rel="noopener noreferrer">Create a free project ↗</a>, then copy the values from <b>Project Settings → API</b>.</p>
+        <div className="grid gap-3">
+          <Field label="Project URL" htmlFor="sb-url" warn={sb.url && !sbUrlOk(sb.url) ? "Like https://abcd.supabase.co" : undefined}><input id="sb-url" className="input" inputMode="url" placeholder="https://abcd.supabase.co" value={sb.url} onChange={(e) => setSb({ ...sb, url: e.target.value })} /></Field>
         </div>
         <Field label="anon public key" htmlFor="sb-key" hint="The public key (never the service_role key). It's safe in a website: the setup SQL's rules decide what it can do."><input id="sb-key" className="input font-mono text-xs" autoComplete="off" value={sb.key} onChange={(e) => setSb({ ...sb, key: e.target.value })} /></Field>
-        <Field label="Your email" htmlFor="sb-email" hint="Becomes the site's first editor. Used for the sign-in code."><input id="sb-email" className="input" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} /></Field>
         <div className="flex flex-col gap-2 rounded-lg border border-ink-700 p-3 text-[13px] text-ink-300">
-          <b className="text-ink-100">Once per Supabase project (done for you by “Set it all up for me”)</b>
+          <b className="text-ink-100">Once per Supabase project </b>
           <ol className="list-decimal space-y-1 pl-4">
             <li>Run the setup SQL in <b>SQL Editor</b> (run it again for each new site or editor email).</li>
             <li>In <b>Authentication → Emails → Magic Link</b>, put <code className="font-mono">{"{{ .Token }}"}</code> in the message, so sign-in emails carry a 6-digit code.</li>
@@ -185,6 +193,7 @@ export function HostDialog({ studio, project, tpl, draft, dirty, save, onIndex, 
           <div className="flex gap-2"><button type="button" className="btn btn-sm" onClick={() => setShowSql(!showSql)}>{showSql ? "Hide setup SQL" : "Show setup SQL"}</button><button type="button" className="btn btn-sm" disabled={!email.includes("@") || !siteIdOk(sb.site)} onClick={() => copy(sql, toast)}>Copy setup SQL</button></div>
           {showSql && <textarea readOnly aria-label="Setup SQL" className="input h-48 font-mono text-[11px]" value={sql} />}
         </div>
+        </div>)}
         {sbReady && (signed ? (
           <div className="flex flex-wrap items-center gap-2 text-sm">
             <span className={`h-2 w-2 rounded-full ${access === "ok" ? "bg-emerald-400" : access === "no" ? "bg-amber-400" : "bg-ink-400"}`} />

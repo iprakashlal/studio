@@ -6,10 +6,10 @@ import { Netlify } from "../lib/netlify";
 import { setupSql } from "../lib/supa";
 import { SB_TOKENS_PAGE, SupaMgmt, refOf, sbMgmtVault, type SbOrg, type SbProject } from "../lib/supamgmt";
 
-type Props = { nf: Netlify | null; studioToken: string; site: string; email: string; onFill: (url: string, key: string) => void };
+type Props = { nf: Netlify | null; studioToken: string; site: string; email: string; defaultOpen?: boolean; onFill: (url: string, key: string) => void };
 
-export function SupabaseAuto({ nf, studioToken, site, email, onFill }: Props) {
-  const [open, setOpen] = useState(false);
+export function SupabaseAuto({ nf, studioToken, site, email, defaultOpen = false, onFill }: Props) {
+  const [open, setOpen] = useState(defaultOpen);
   const [tok, setTok] = useState(""), [saved, setSaved] = useState(false);
   const [projects, setProjects] = useState<SbProject[] | null>(null), [orgs, setOrgs] = useState<SbOrg[]>([]);
   const [pick, setPick] = useState(""), [org, setOrg] = useState(""), [region, setRegion] = useState<"apac" | "emea" | "americas">("apac"), [name, setName] = useState("studio-sites");
@@ -62,7 +62,7 @@ export function SupabaseAuto({ nf, studioToken, site, email, onFill }: Props) {
     <div className="flex flex-col gap-2 rounded-lg border border-brand-400/40 bg-brand-400/5 p-3 text-[13px] text-ink-200" aria-label="Set up Supabase for me">
       <div className="flex flex-wrap items-center gap-2">
         <b className="text-ink-100">Set it all up for me</b>
-        <span className="text-ink-400">One access token: the Studio picks or creates the project, fills in the fields below, runs the setup SQL and turns on sign-in codes.</span>
+        <span className="text-ink-400">One access token: the Studio picks or creates the project, fills in its address and key, runs the setup SQL and turns on sign-in codes.</span>
         <button type="button" className="btn btn-sm ml-auto" aria-expanded={open} onClick={() => setOpen(!open)}>{open ? "Hide" : "Set up automatically"}</button>
       </div>
       {open && (
@@ -88,7 +88,7 @@ export function SupabaseAuto({ nf, studioToken, site, email, onFill }: Props) {
                   <p className="text-ink-400 sm:col-span-3">The free plan allows two active projects. One project can hold all your sites. Its database password is random; reset it in Supabase if you ever need it.</p>
                 </div>
               )}
-              {!email.includes("@") && <p className="text-amber-200">Type your email below first: it becomes the site's editor.</p>}
+              {!email.includes("@") && <p className="text-amber-200">Type your email above first: it becomes the site's editor.</p>}
               <button type="button" className="btn btn-pri btn-sm self-start" disabled={!ready || !!busy} onClick={run}>{busy && projects ? busy + "…" : "Set up Supabase"}</button>
             </div>
           )}

@@ -15,7 +15,7 @@ export class Resend {
     if (r.status >= 400) {
       const restricted = j?.name === "restricted_api_key";
       if (r.status === 401 && !restricted) throw new ResendError("Resend refused the API key. Copy it again from Resend → API Keys.", 401);
-      throw new ResendError(restricted ? "This key can only send email. To add your domain from here, use a key with Full access (you can delete it afterwards)." : `Resend: ${j?.message || r.status}`, r.status, restricted);
+      throw new ResendError(restricted ? "This Resend key can only send email. To add your domain, paste a key with Full access (resend.com/api-keys → Create API key → Permission: Full access). The Studio then makes its own send-only key, so you can delete the Full access one afterwards." : `Resend: ${j?.message || r.status}`, r.status, restricted);
     }
     return j as T;
   }

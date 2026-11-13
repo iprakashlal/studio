@@ -183,9 +183,9 @@ export function HostDialog({ studio, project, tpl, draft, dirty, save, onIndex, 
       return;
     }
     const display = (/^(.*?)\s*</.exec(cfp.mail.from)?.[1] || "Picaffectz Studio").trim();
-    await cfp.ensure((x) => setStep({ i: -1, detail: x }), { mailFrom: `${display} <codes@${dom}>` });
+    await cfp.ensure((x) => setStep({ i: -1, detail: x }), { mailFrom: `${display} <codes@${dom}>`, resendKey: r.sendKey });
     setStep(null); setTestOnly(null);
-    setMailMsg(`✓ ${dom} is verified. Sign-in codes now come from codes@${dom} and reach any editor's email.`);
+    setMailMsg(`✓ ${dom} is verified. Sign-in codes now come from codes@${dom} and reach any editor's email. The database uses its own send-only key, so you can delete the Full access key in Resend now.`);
   });
   const saveMail = () => run("cfsetup", async () => {
     await cfp.ensure((x) => setStep({ i: -1, detail: x })); setStep(null); setMailCfg(false); setTestOnly(null);
@@ -319,7 +319,7 @@ export function HostDialog({ studio, project, tpl, draft, dirty, save, onIndex, 
                 </>}
                 <div className="flex flex-col gap-2 rounded-lg border border-ink-700 bg-ink-950 p-3 text-ink-200" aria-label="Codes from your domain">
                   <b className="text-ink-100">Send codes from your domain</b>
-                  <p className="text-ink-400">The Studio adds the domain to Resend, puts Resend's records into its Cloudflare DNS and verifies it. Needs the domain on your Cloudflare (section 3) and a Resend key with <b>Full access</b> below.</p>
+                  <p className="text-ink-400">The Studio adds the domain to Resend, puts Resend's records into its Cloudflare DNS and verifies it. Needs the domain on your Cloudflare (section 3) and, just for this step, a Resend key with <b>Full access</b> pasted below (<a className="underline" href="https://resend.com/api-keys" target="_blank" rel="noopener noreferrer">create one ↗</a>: Permission → Full access). Afterwards the database gets its own send-only key, and you can delete the Full access one.</p>
                   <div className="flex gap-2"><input aria-label="Email domain" className="input min-w-0 flex-1" placeholder="yourdomain.com" value={mailDom} onChange={(e) => setMailDom(e.target.value)} />
                     <button type="button" className="btn btn-pri btn-sm" disabled={!!busy || !domainOk(mailDom)} onClick={verifyDomain}>{busy === "maildomain" ? (step?.detail || "Working") + "…" : "Verify and use it"}</button></div>
                   {mailMsg && <p role="status" className={mailMsg.startsWith("✓") ? "text-emerald-300" : "text-ink-300"}>{mailMsg}</p>}

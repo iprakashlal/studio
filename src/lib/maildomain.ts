@@ -4,7 +4,7 @@ import type { Relay } from "./relay";
 import { Resend, type ResendDomain } from "./resend";
 import { CfError, type Cloudflare } from "./cloudflare";
 
-export type MailDomainResult = { domain: ResendDomain; verified: boolean; added: number; problems: string[] };
+export type MailDomainResult = { domain: ResendDomain; verified: boolean; added: number; problems: string[]; sendKey?: string };
 
 export async function verifyMailDomain(relay: Relay, cf: Cloudflare, resendKey: string, name: string, step: (s: string) => void): Promise<MailDomainResult> {
   const rs = new Resend(relay, resendKey), dom = name.trim().toLowerCase();
@@ -37,5 +37,9 @@ export async function verifyMailDomain(relay: Relay, cf: Cloudflare, resendKey: 
     step(`Waiting for Resend to see the records (${d.status})`);
     await new Promise((res) => setTimeout(res, 4000));
   }
-  return { domain: d, verified: d.status === "verified", added, problems };
+  // The database Worker gets its own key that can only send, and only from this domain: the Full access key isn't
+  // kept anywhere, so it can be deleted in Resend afterwards.
+  let sendKey: string | undefined;
+  if (d.status === "verified") { step("Making a send-only key for the database"); sendKey = (await rs.sendingKey(`Studio sign-in codes (${dom})`, d.id)).token; }
+  return { domain: d, verified: d.status === "verified", added, problems, sendKey };
 }

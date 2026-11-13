@@ -54,14 +54,15 @@
   function escHtml(s) { return String(s || "").replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
 
   /* ---------------------------------------------------------------- styles */
+  /* The Studio's mark (PA monogram) for the "Powered by" badge. */
+  var MARK = "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%22425%2083%201056%201741%22%3E%3Cg%20fill%3D%22%23343366%22%3E%3Cpath%20d%3D%22M431%20240%20644%2089%20644%201308%20431%201176Z%22%2F%3E%3Cpath%20d%3D%22M644%2089%201267%20447%201048%20570%20644%20339Z%22%2F%3E%3Cpath%20d%3D%22M1048%20570%201267%20447%201269%20694%20666%201043%20666%20782Z%22%2F%3E%3C%2Fg%3E%3Cg%20fill%3D%22%2323233F%22%3E%3Cpath%20d%3D%22M644%2089%20666%20349%20644%20339Z%22%2F%3E%3Cpath%20d%3D%22M1028%20558%201267%20447%201048%20570Z%22%2F%3E%3C%2Fg%3E%3Cg%20fill%3D%22%2333679A%22%3E%3Cpath%20d%3D%22M1269%20727%201475%20853%201475%201818%201269%201691Z%22%2F%3E%3Cpath%20d%3D%22M666%201076%201269%20727%201269%20972%20886%201195Z%22%2F%3E%3Cpath%20d%3D%22M666%201076%20876%201201%201243%201420%201243%201676%20666%201322Z%22%2F%3E%3C%2Fg%3E%3Cg%20fill%3D%22%23244870%22%3E%3Cpath%20d%3D%22M1269%20727%201249%20983%201269%20972Z%22%2F%3E%3Cpath%20d%3D%22M666%201076%20897%201189%20876%201201Z%22%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E";
   var GRAIN = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E";
   var CSS = [
     ":root{--fxa:var(--c1,var(--accent,#7c5cff));--fxi:var(--text,#111);--fxd:var(--deep,var(--text,#111));--fxo:var(--on-deep,var(--bg,#fff));--fxe:cubic-bezier(.16,1,.3,1)}",
     /* "Powered by" badge: always on screen, bottom right, small */
     ".fx-badge{position:fixed;right:max(12px,env(safe-area-inset-right,0px));bottom:max(12px,env(safe-area-inset-bottom,0px));z-index:99980;display:inline-flex;align-items:center;gap:7px;padding:5px 11px 5px 9px;border-radius:999px;background:#0E1118;color:#fff;font:600 11px/1.25 system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;letter-spacing:.01em;text-decoration:none!important;box-shadow:0 8px 22px -10px rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.16);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);opacity:.92;transition:opacity .2s,transform .2s;max-width:calc(100vw - 24px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
     ".fx-badge:hover,.fx-badge:focus-visible{opacity:1;transform:translateY(-1px)}",
-    ".fx-badge .fx-bm{display:inline-flex;align-items:center;gap:2px;flex:none}.fx-badge .fx-bm i{display:block;width:7px;height:7px}",
-    ".fx-badge .fx-bm i:nth-child(1){background:#5B7CFF;border-radius:50%}.fx-badge .fx-bm i:nth-child(2){background:#FF6A3D}.fx-badge .fx-bm i:nth-child(3){background:#FFC83A;clip-path:polygon(50% 0,100% 100%,0 100%)}",
+    ".fx-badge .fx-bm{display:inline-block;flex:none;border-radius:3px}.fx-badge .fx-bm.m{background:#fff url(\"" + MARK + "\") center/auto 80% no-repeat}",
     "@media print{.fx-badge{display:none}}",
     /* overlay */
     ".fx-ov{position:fixed;pointer-events:none;z-index:99970;inset:0}",
@@ -538,7 +539,8 @@
       m.setAttribute("data-k", ic + (ic === "custom" ? g.iconData.length : "") + z[3]);
       m.style.display = ic === "none" ? "none" : "";
       if (ic === "custom") { m.innerHTML = ""; var im = document.createElement("img"); im.src = g.iconData; im.alt = ""; im.style.cssText = "display:block;width:" + z[3] + "px;height:" + z[3] + "px;border-radius:3px;object-fit:cover"; m.appendChild(im); }
-      else if (ic === "mark") { var d = Math.round(z[3] / 2); m.innerHTML = "<i></i><i></i><i></i>"; [].forEach.call(m.children, function (i) { i.style.width = i.style.height = d + "px"; }); }
+      else if (ic === "mark") { m.innerHTML = ""; m.style.width = m.style.height = z[3] + "px"; }
+      m.className = "fx-bm" + (ic === "mark" ? " m" : "");
     }
   }
 

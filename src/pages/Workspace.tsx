@@ -15,6 +15,7 @@ import { MenusCard } from "./MenusCard";
 import { MigrationTab } from "./MigrationTab";
 import { PartnersTab } from "./PartnersTab";
 import { BADGE_DEFAULT, cleanBadge, setCurrentBadge, type BadgeCfg } from "../lib/badge";
+import { MARK_URI } from "../ui/logo";
 import { BrandMark, DEFAULT_NAME, brand as currentBrand, setBrand, shrinkImage, useBrand } from "../lib/brand";
 import { Dashboard } from "./Dashboard";
 import { ProjectView } from "./ProjectView";
@@ -216,10 +217,9 @@ function BadgeCard({ studio, saved, onIndex }: { studio: Studio; saved?: BadgeCf
 /** The badge as sites draw it (fx.js), for the Settings preview. */
 function BadgePreview({ b }: { b: BadgeCfg }) {
   const z = ({ s: [10, 4, 9, 11], m: [11, 5, 11, 14], l: [13, 7, 14, 18] } as const)[b.size];
-  const d = Math.round(z[3] / 2);
   return (
     <span className="inline-flex items-center rounded-full border border-white/15 font-semibold shadow-lg" style={{ background: b.bg, color: b.fg, fontSize: z[0], padding: `${z[1]}px ${z[2] + 2}px ${z[1]}px ${z[2]}px`, gap: Math.round(z[3] / 2), lineHeight: 1.25, fontFamily: "system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" }}>
-      {b.icon === "mark" && <span className="inline-flex items-center gap-[2px]" aria-hidden><i className="block rounded-full" style={{ width: d, height: d, background: "#5B7CFF" }} /><i className="block" style={{ width: d, height: d, background: "#FF6A3D" }} /><i className="block" style={{ width: d, height: d, background: "#FFC83A", clipPath: "polygon(50% 0,100% 100%,0 100%)" }} /></span>}
+      {b.icon === "mark" && <span className="inline-grid flex-none place-items-center rounded-[3px] bg-white" style={{ width: z[3], height: z[3] }} aria-hidden><img src={MARK_URI} alt="" style={{ height: Math.round(z[3] * 0.8), width: "auto" }} /></span>}
       {b.icon === "custom" && b.iconData && <img src={b.iconData} alt="" className="block rounded-[3px] object-cover" style={{ width: z[3], height: z[3] }} />}
       {b.text || BADGE_DEFAULT.text}
     </span>

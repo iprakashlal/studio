@@ -12,6 +12,7 @@ import { StudioGate } from "../ui/StudioGate";
 import { StepLoader } from "../ui/kit";
 import { HelperLanding } from "./HelperBox";
 import { helperHandoff } from "../lib/relay";
+import { ghPublish } from "../lib/ghpublish";
 
 export const NS = "site-studio";
 
@@ -27,6 +28,7 @@ export function App() {
   // A Studio moved to Netlify + Supabase finds its Supabase in studio.config.json (none on GitHub Pages).
   const [host, setHost] = useState<StudioHostCfg | null | undefined>(undefined);
   useEffect(() => { loadHostConfig().then(setHost); }, []);
+  ghPublish.setLoginIsGitHub(!(session && isHosted(session)));
   const repo = useMemo<Repo | null>(() => (demo ? new MemoryRepo() : session ? (isHosted(session) && host ? backendOf(host).repo() : new GitHubRepo(session.cfg, session.token)) : null), [demo, session, host]);
 
   const signOut = () => {

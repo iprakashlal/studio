@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import type { Session } from "../lib/auth";
 import { GitHubRepo, explain, type Repo } from "../lib/repo";
+import { ghPublish } from "../lib/ghpublish";
 import { siteAddress , hostRepo } from "../lib/hosting";
 import { changedSections, sameContent, type ProjectMeta, type Studio, type StudioIndex } from "../lib/studio";
 import { fmtDate, merge, timeAgo } from "../lib/util";
@@ -30,7 +31,7 @@ const label = (k: string) => LABELS[k] || k.replace(/([A-Z])/g, " $1").replace(/
 export function LiveSitesDialog({ studio, project, session, dirty, current, defaults, onIndex, onImported, onClose }: { studio: Studio; project: ProjectMeta; session: Session; dirty: boolean; current: any; defaults: any; onIndex: (i: StudioIndex) => void; onImported: (c: any) => void; onClose: () => void }) {
   const toast = useToast();
   const confirm = useConfirm();
-  const sites = liveSitesOf(project, session.token);
+  const sites = liveSitesOf(project, ghPublish.token(session.token));
   const [info, setInfo] = useState<Record<string, Info>>({});
   const [busy, setBusy] = useState("");
   const [n, setN] = useState(0);

@@ -51,7 +51,7 @@ export function PushUpdatesDialog({ studio, index, token, onClose }: { studio: S
       if (t.kind === "netlify" && !nf) { set(t.key, { s: "skipped", msg: "Netlify isn't connected on this device (Settings → Hosting accounts)." }); continue; }
       set(t.key, { s: "pushing" });
       try {
-        await pushTarget(t, { studio, nf, step: (d) => set(t.key, { s: "pushing", detail: d }) });
+        await pushTarget(t, { studio, nf, token, step: (d) => set(t.key, { s: "pushing", detail: d }) });
         set(t.key, { s: "done" }); ok++;
       } catch (e) { set(t.key, { s: "failed", msg: explain(e) }); bad++; }
     }
@@ -95,7 +95,7 @@ function Row({ t, v, on, lock, onPick }: { t: LiveTarget; v: TargetState; on: bo
   const [label, cls] = BADGE[v.s];
   const id = "pu-" + t.key.replace(/[^a-z0-9]/gi, "-");
   const canPick = v.s === "old" || v.s === "current";
-  const sub = v.s === "old" ? (v.at ? `Last built ${timeAgo(v.at)}${v.build ? ` with build ${v.build}` : " with an earlier Studio"}` : "Built with an earlier Studio")
+  const sub = v.s === "old" ? (v.at ? `Last ${t.kind === "worker" ? "deployed" : "built"} ${timeAgo(v.at)}${v.build ? ` with build ${v.build}` : " with an earlier Studio"}` : "Built with an earlier Studio")
     : v.s === "current" ? `Already on this build · ${timeAgo(v.at)}`
     : v.s === "pushing" ? v.detail || "Starting…"
     : v.s === "failed" || v.s === "unreachable" || v.s === "skipped" ? v.msg : "";

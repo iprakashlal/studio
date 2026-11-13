@@ -60,11 +60,11 @@ export async function ghWhoAmI(token: string): Promise<{ login: string; name: st
 }
 
 /** Creates owner/name when it doesn't exist yet. Returns true when it was created. */
-export async function ensureRepo(token: string, owner: string, name: string, description: string): Promise<boolean> {
-  try { await gh(token, `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}`); return false; }
+export async function ensureRepo(token: string, owner: string, name: string, description: string, priv = false): Promise<boolean> {
+  try { const r = await gh(token, `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}`); if (priv && !r.private) throw new RepoError(`${owner}/${name} already exists and is public. Orders hold customer details, so use a private repository: make it private on GitHub (Settings → Danger Zone) or pick another name.`, 409); return false; }
   catch (e: any) { if (e.status !== 404) throw e; }
   const me = await gh(token, "/user");
-  const body = JSON.stringify({ name, description, private: false, auto_init: true, has_issues: false, has_wiki: false, has_projects: false });
+  const body = JSON.stringify({ name, description, private: priv, auto_init: true, has_issues: false, has_wiki: false, has_projects: false });
   try {
     if (String(me.login).toLowerCase() === owner.toLowerCase()) await gh(token, "/user/repos", { method: "POST", body });
     else await gh(token, `/orgs/${encodeURIComponent(owner)}/repos`, { method: "POST", body });

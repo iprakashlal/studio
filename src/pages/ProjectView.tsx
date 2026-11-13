@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ShopBackendDialog } from "./ShopBackendDialog";
 import { EnquiriesPanel, enquiriesCfg } from "../site-admin/EnquiriesPanel";
 import { GOTO_EVENT } from "../editor/Editor";
 import { TEMPLATES } from "../schema";
@@ -31,7 +32,7 @@ export function ProjectView({ studio, index, project, session, onIndex }: { stud
   const [pane, setPane] = useState<"edit" | "preview">("edit");
   // Click-to-edit from the preview: on small screens, switch to the editor to show the field.
   useEffect(() => { const on = () => setPane("edit"); addEventListener(GOTO_EVENT, on); return () => removeEventListener(GOTO_EVENT, on); }, []);
-  const [modal, setModal] = useState<"" | "export" | "publish" | "host" | "live" | "history" | "details">("");
+  const [modal, setModal] = useState<"" | "export" | "publish" | "host" | "live" | "history" | "details" | "backend">("");
   const defaults = useRef<any>(null);
   const [conflict, setConflict] = useState<{ siteAt: string | null } | null>(null);
   const [syncBusy, setSyncBusy] = useState(false);
@@ -167,6 +168,7 @@ export function ProjectView({ studio, index, project, session, onIndex }: { stud
           {(project.publish || project.host) && !studio.repo.demo && <button type="button" className="btn btn-sm" onClick={() => setModal("live")} title="When each live site last changed, and pull its content">Live sites</button>}
           <button type="button" className="btn btn-sm" onClick={() => setModal("history")}>History{project.exports.length ? ` (${project.exports.length})` : ""}</button>
           <button type="button" className="btn btn-sm" onClick={() => setModal("export")}>Export ZIP</button>
+          {project.template === "store" && !studio.repo.demo && <button type="button" className="btn btn-sm" onClick={() => setModal("backend")} title="Set up the shop server (Cloudflare Worker), its private orders repository and email (Resend) from here">{project.worker ? "Shop backend ✓" : "Shop backend"}</button>}
           <button type="button" className="btn btn-sm" onClick={() => setModal("publish")}>Publish to GitHub</button>
           {project.host
             ? <button type="button" className="btn btn-sm" onClick={() => setModal("host")}>Publish to Netlify</button>
@@ -193,6 +195,11 @@ export function ProjectView({ studio, index, project, session, onIndex }: { stud
       </div>
 
       {modal === "export" && <ExportDialog {...{ studio, project, tpl, draft, dirty, save, onIndex, getBlob }} onClose={() => setModal("")} />}
+      {modal === "backend" && <ShopBackendDialog {...{ session, studio, project, draft, onIndex }} onClose={() => setModal("")} onConnect={async (url) => {
+        draft.backend = { ...(draft.backend || {}), enabled: true, provider: "cloudflare", workerUrl: url };
+        // Save first, then move both counters on together, so the editor and preview see it and it isn't "unsaved".
+        if (await save(true)) { setV((n) => n + 1); setSavedV((n) => n + 1); } else bump();
+      }} />}
       {modal === "publish" && <PublishDialog {...{ studio, project, tpl, draft, dirty, save, onIndex, getBlob, session }} onClose={() => setModal("")} />}
       {modal === "host" && <HostDialog {...{ studio, project, tpl, draft, dirty, save, onIndex, getBlob, session }} onClose={() => setModal("")} />}
       {modal === "live" && <LiveSitesDialog {...{ studio, project, session, dirty, onIndex }} current={draft} defaults={defaults.current} onImported={(c) => { replaceDraft(c); setSavedV(v + 1); setConflict(null); }} onClose={() => setModal("")} />}

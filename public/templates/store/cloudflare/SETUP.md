@@ -8,6 +8,8 @@ You get the same features as the Supabase option:
 - Razorpay or Stripe checkout with the exact order total
 - **Orders** and **Customers** in the shop CMS
 
+**Faster: let Site Studio do it.** In the Studio, open the shop project and press **Shop backend**. It creates the private orders repository, adds your domain to Resend (showing the DNS records and checking them), deploys this Worker with all its settings and secrets, turns on its address, runs its check and connects the shop. You only paste three keys (a GitHub token, a Resend key and a Cloudflare token). Later Studio updates reach the Worker through **Push updates to live sites**. The manual steps below do the same by hand.
+
 Allow about 20 minutes. Use test keys first (Razorpay `rzp_test_…`, Stripe `sk_test_…`).
 
 **Good for:** small shops with up to a few thousand orders. Cloudflare's free plan allows 100,000 requests a day, and GitHub allows 5,000 API calls an hour. If you outgrow it, switch to Supabase. The shop's pages stay the same.

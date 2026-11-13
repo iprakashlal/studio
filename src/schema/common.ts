@@ -22,12 +22,8 @@ export function adminCategory(): Category {
     ] },
     { title: "Themes in the admin page", studio: true, fields: [{ t: "adminThemes" }] },
     { title: "“Powered by” badge", studio: true, fields: [
-      { t: "toggle", path: "poweredBy.show", label: "Show the badge on the site" },
-      { t: "note", text: "A small link in the bottom-right corner of every page, always on screen. Only the Studio can change it: the site's own admin page doesn't show this setting." },
-      { t: "when", path: "poweredBy.show", is: "true", fields: [{ t: "grid", cols: 2, fields: [
-        { t: "text", path: "poweredBy.text", label: "Badge text", ph: "Powered by Picaffectz" },
-        { t: "text", path: "poweredBy.url", label: "Link", ph: "https://…", check: "https", hint: "Where the badge goes when clicked. Opens in a new tab." },
-      ] }] },
+      { t: "toggle", path: "poweredBy.show", label: "Show the badge on this site" },
+      { t: "note", text: "A small link in the bottom-right corner of every page, always on screen. Its text, link, size, colours and icon are set once for all sites in Settings → “Powered by” badge. Only the Studio can show or hide it: the site's own admin page doesn't have this setting." },
     ] }],
   };
 }

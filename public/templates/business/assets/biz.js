@@ -17,7 +17,7 @@ const DEFAULT = {
     introBg: "", introFg: "", introTitle: "", introFont: "display", introCase: "upper", logoRadius: 22, scrollEase: "light", lineBreaks: "typed",
   },
   cms: { adminPage: "admin" },
-  poweredBy: { show: true, text: "Powered by Picaffectz", url: "https://iprakashlal.github.io/studio/#/themes" },
+  poweredBy: { show: true },
   brand: { name: "Northbeam Partners", tagline: "Strategy, design and engineering for growing companies", logo: null, showName: true },
   site: { multiPage: false, pageLabels: { home: "Home", services: "Services", work: "Work", about: "About", contact: "Contact" } },
   nav: { cta: "Book a call", ctaTarget: "contact" },

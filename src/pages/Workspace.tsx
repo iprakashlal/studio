@@ -9,6 +9,7 @@ import { GitHubPublishAccount } from "./GitHubAccount";
 import { SetupAccounts } from "./SetupAccounts";
 import { ghPublish } from "../lib/ghpublish";
 import { Field, Logo, StepLoader, useToast } from "../ui/kit";
+import { BADGE_DEFAULT, cleanBadge, setCurrentBadge, type BadgeCfg } from "../lib/badge";
 import { BrandMark, DEFAULT_NAME, brand as currentBrand, setBrand, shrinkImage, useBrand } from "../lib/brand";
 import { Dashboard } from "./Dashboard";
 import { ProjectView } from "./ProjectView";
@@ -43,6 +44,8 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
   useEffect(() => { let on = true; (repo.demo ? Promise.resolve(null) : ghPublish.load(session.token)).finally(() => { if (on) load(); }); return () => { on = false; }; }, [studio]);
   const b = useBrand();
   useEffect(() => { document.title = b.name; }, [b.name]);
+  // The "Powered by" badge's look, used when building sites and in previews.
+  useEffect(() => { setCurrentBadge(index?.badge); }, [index?.badge]);
   // Name and logo come from studio.json, so every signed-in device shows the same.
   useEffect(() => {
     const sb = index?.brand;
@@ -91,6 +94,7 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
           <h1 className="font-display text-3xl font-extrabold">Settings</h1>
           <p className="text-sm text-ink-300">Your Studio keeps everything as files in <b className="text-ink-100">{session.cfg.owner}/{session.cfg.repo}</b>: <code className="font-mono text-xs">studio.json</code> for the project list and <code className="font-mono text-xs">projects/</code> for each site's content, images and export snapshots.</p>
           <BrandCard studio={studio} onIndex={setIndex} />
+          <BadgeCard studio={studio} saved={index.badge} onIndex={setIndex} />
           <section className="card flex flex-col gap-3 p-5" aria-label="Hosting accounts">
             <h2 className="text-lg font-extrabold">Hosting accounts</h2>
             <p className="text-sm text-ink-300">GitHub publishing creates each site's repository and turns on GitHub Pages; Netlify is for sites hosted outside GitHub. Tokens stay on this device. Each site's Supabase details are kept with its project.</p>
@@ -140,5 +144,68 @@ function BrandCard({ studio, onIndex }: { studio: Studio; onIndex: (i: StudioInd
       </div>
       <button type="button" className="btn btn-pri self-start" disabled={busy || (name.trim() === b.name && logo === null)} onClick={save}>{busy ? "Saving…" : "Save name & logo"}</button>
     </section>
+  );
+}
+
+/** Settings → the "Powered by" badge every site shows: one look for all sites. Each project only shows or hides it. */
+function BadgeCard({ studio, saved, onIndex }: { studio: Studio; saved?: BadgeCfg; onIndex: (i: StudioIndex) => void }) {
+  const toast = useToast();
+  const start = cleanBadge(saved || BADGE_DEFAULT);
+  const [b, setB] = useState<BadgeCfg>(start);
+  const [busy, setBusy] = useState(false);
+  const dirty = JSON.stringify(cleanBadge(b)) !== JSON.stringify(start);
+  const set = (o: Partial<BadgeCfg>) => setB((x) => ({ ...x, ...o }));
+  const save = async () => {
+    if (!/^https?:\/\//i.test(b.url)) return toast("The link must start with https://", "bad");
+    setBusy(true);
+    try { onIndex(await studio.saveBadge(b)); toast("Saved. Publish a site or use Push updates to live sites to show it there."); }
+    catch (e) { toast(explain(e), "bad"); }
+    setBusy(false);
+  };
+  return (
+    <section className="card flex flex-col gap-4 p-5" aria-label="Powered by badge">
+      <h3 className="text-[15px] font-extrabold">“Powered by” badge</h3>
+      <p className="text-sm text-ink-300">The small link in the bottom-right corner of every site. Set its look once here; show or hide it per site in each project under <b className="text-ink-100">Admin page → “Powered by” badge</b>.</p>
+      <div className="grid place-items-end rounded-xl border border-ink-700 bg-[repeating-linear-gradient(45deg,#1a2030_0_10px,#151a26_10px_20px)] p-4" aria-label="Badge preview"><BadgePreview b={b} /></div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field label="Text" htmlFor="bd-text"><input id="bd-text" className="input" maxLength={60} value={b.text} onChange={(e) => set({ text: e.target.value })} placeholder={BADGE_DEFAULT.text} /></Field>
+        <Field label="Link" htmlFor="bd-url" hint="Opens in a new tab."><input id="bd-url" className="input" value={b.url} onChange={(e) => set({ url: e.target.value.trim() })} placeholder="https://…" /></Field>
+      </div>
+      <div className="flex flex-wrap items-end gap-4">
+        <div className="flex flex-col gap-1.5"><span className="label">Size</span>
+          <div className="flex rounded-lg border border-ink-600" role="radiogroup" aria-label="Badge size">
+            {([["s", "Small"], ["m", "Medium"], ["l", "Large"]] as const).map(([k, l]) => <button key={k} type="button" role="radio" aria-checked={b.size === k} onClick={() => set({ size: k })} className={`btn btn-sm border-0 ${b.size === k ? "bg-ink-700" : "bg-transparent"}`}>{l}</button>)}
+          </div>
+        </div>
+        <label className="flex flex-col gap-1.5"><span className="label">Background</span><span className="flex items-center gap-2"><input type="color" aria-label="Badge background colour" className="h-9 w-12 cursor-pointer rounded border border-ink-600 bg-transparent" value={b.bg} onChange={(e) => set({ bg: e.target.value.toUpperCase() })} /><code className="font-mono text-xs text-ink-400">{b.bg}</code></span></label>
+        <label className="flex flex-col gap-1.5"><span className="label">Text colour</span><span className="flex items-center gap-2"><input type="color" aria-label="Badge text colour" className="h-9 w-12 cursor-pointer rounded border border-ink-600 bg-transparent" value={b.fg} onChange={(e) => set({ fg: e.target.value.toUpperCase() })} /><code className="font-mono text-xs text-ink-400">{b.fg}</code></span></label>
+      </div>
+      <div className="flex flex-col gap-1.5"><span className="label">Icon</span>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex rounded-lg border border-ink-600" role="radiogroup" aria-label="Badge icon">
+            {([["mark", "Picaffectz mark"], ["custom", "My icon"], ["none", "No icon"]] as const).map(([k, l]) => <button key={k} type="button" role="radio" aria-checked={b.icon === k} disabled={k === "custom" && !b.iconData} onClick={() => set({ icon: k })} className={`btn btn-sm border-0 ${b.icon === k ? "bg-ink-700" : "bg-transparent"}`}>{l}</button>)}
+          </div>
+          <label className="btn btn-sm relative cursor-pointer">{b.iconData ? "Replace icon" : "Upload icon"}<input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" className="sr-only" onChange={async (e) => { const f = e.target.files?.[0]; e.target.value = ""; if (!f) return; try { set({ iconData: await shrinkImage(f, 64), icon: "custom" }); } catch (x) { toast(explain(x), "bad"); } }} /></label>
+          <span className="hint">A square image works best; it's shrunk to a small icon.</span>
+        </div>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <button type="button" className="btn btn-pri" disabled={busy || !dirty} onClick={save}>{busy ? "Saving…" : "Save badge"}</button>
+        <button type="button" className="btn" disabled={busy} onClick={() => setB({ ...BADGE_DEFAULT })}>Reset to default</button>
+      </div>
+    </section>
+  );
+}
+
+/** The badge as sites draw it (fx.js), for the Settings preview. */
+function BadgePreview({ b }: { b: BadgeCfg }) {
+  const z = ({ s: [10, 4, 9, 11], m: [11, 5, 11, 14], l: [13, 7, 14, 18] } as const)[b.size];
+  const d = Math.round(z[3] / 2);
+  return (
+    <span className="inline-flex items-center rounded-full border border-white/15 font-semibold shadow-lg" style={{ background: b.bg, color: b.fg, fontSize: z[0], padding: `${z[1]}px ${z[2] + 2}px ${z[1]}px ${z[2]}px`, gap: Math.round(z[3] / 2), lineHeight: 1.25, fontFamily: "system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" }}>
+      {b.icon === "mark" && <span className="inline-flex items-center gap-[2px]" aria-hidden><i className="block rounded-full" style={{ width: d, height: d, background: "#5B7CFF" }} /><i className="block" style={{ width: d, height: d, background: "#FF6A3D" }} /><i className="block" style={{ width: d, height: d, background: "#FFC83A", clipPath: "polygon(50% 0,100% 100%,0 100%)" }} /></span>}
+      {b.icon === "custom" && b.iconData && <img src={b.iconData} alt="" className="block rounded-[3px] object-cover" style={{ width: z[3], height: z[3] }} />}
+      {b.text || BADGE_DEFAULT.text}
+    </span>
   );
 }

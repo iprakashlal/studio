@@ -10,6 +10,8 @@ import { deviceSecret, loadHostConfig, type StudioHostCfg } from "../lib/studioh
 import { backendOf, isHosted } from "../lib/backend";
 import { StudioGate } from "../ui/StudioGate";
 import { StepLoader } from "../ui/kit";
+import { HelperLanding } from "./HelperBox";
+import { helperHandoff } from "../lib/relay";
 
 export const NS = "site-studio";
 
@@ -42,6 +44,10 @@ export function App() {
       toast("Signed out after 30 minutes without activity");
     });
   }, [session]);
+
+  // The helper's page hands its address back here (#helper=…): confirm it, then the Studio tab connects it.
+  const handed = helperHandoff.fromHash(hash);
+  if (handed) return <HelperLanding url={handed} />;
 
   // The theme gallery is public: anyone with the link can browse it without signing in.
   if (/^#\/themes(\?|$)/.test(hash)) return <ThemesPage signedIn={!!repo} />;

@@ -112,6 +112,24 @@ export const helperOk = (r: Relay | null | undefined): boolean => !!r && (r.kind
 // ---------------------------------------------------------------- the helper on Cloudflare
 /** "Deploy to Cloudflare": copies the helper (deploy/cloudflare-helper in the Studio's repository) to the user's account. */
 export const CF_HELPER_DEPLOY = "https://deploy.workers.cloudflare.com/?url=https://github.com/iprakashlal/studio/tree/main/deploy/cloudflare-helper";
+export const CF_HELPER_NAME = "studio-helper";
+/**
+ * The helper's page hands its address back to the Studio (…#helper=<address>). It's only taken when this browser
+ * started a deploy in the last two hours and the user confirms it, so a link from elsewhere can't swap the helper.
+ */
+const PENDING = "studio-helper-pending", FOUND = "studio-helper-found";
+const ls = { get: (k: string) => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k: string, v: string) => { try { localStorage.setItem(k, v); } catch { /* private mode */ } }, del: (k: string) => { try { localStorage.removeItem(k); } catch { /* private mode */ } } };
+export const helperHandoff = {
+  /** Called when the Deploy button is pressed. */
+  started() { ls.set(PENDING, String(Date.now())); },
+  expected() { return Date.now() - Number(ls.get(PENDING) || 0) < 2 * 3600_000; },
+  /** The address in a #helper=… link, if it is a workers.dev address. */
+  fromHash(hash: string) { const m = /^#helper=([^&]+)/.exec(hash); return m ? cleanHelperUrl(decodeURIComponent(m[1])) : null; },
+  accept(url: string) { ls.set(FOUND, url); },
+  found() { return cleanHelperUrl(ls.get(FOUND) || ""); },
+  done() { ls.del(FOUND); ls.del(PENDING); },
+  KEY: FOUND,
+};
 export const cleanHelperUrl = (u: string) => {
   const m = /^(?:https?:\/\/)?([a-z0-9-]+\.[a-z0-9-]+\.workers\.dev)\/?$/i.exec(String(u || "").trim());
   return m ? `https://${m[1].toLowerCase()}/` : null;
@@ -120,9 +138,17 @@ export class HelperClaimed extends Error { constructor() { super("This helper is
 
 /** Connects this Studio (on this device) to the helper Worker the user deployed. With `cfToken`, joins a helper
  *  another Studio or device connected first. */
-export async function connectCfHelper(address: string, studioToken: string, cfToken?: string): Promise<Relay> {
+const inflight = new Map<string, Promise<Relay>>();
+export function connectCfHelper(address: string, studioToken: string, cfToken?: string): Promise<Relay> {
+  // Several helper boxes on one page (or a box and a handed-back address) connect once, together.
+  const k = (cleanHelperUrl(address) || address) + "|" + (cfToken ? "t" : "");
+  let p = inflight.get(k);
+  if (!p) { p = connectCfHelperOnce(address, studioToken, cfToken).finally(() => setTimeout(() => inflight.delete(k), 2000)); inflight.set(k, p); }
+  return p;
+}
+async function connectCfHelperOnce(address: string, studioToken: string, cfToken?: string): Promise<Relay> {
   const url = cleanHelperUrl(address);
-  if (!url) throw new RelayError("Paste the Worker's address, like https://picaffectz-helper.yourname.workers.dev");
+  if (!url) throw new RelayError("Paste the Worker's address, like https://studio-helper.yourname.workers.dev");
   let info: any = null, text = "", status = 0;
   try { const r = await fetch(url, { cache: "no-store", headers: { Accept: "application/json" } }); status = r.status; text = await r.text(); } 
   catch { throw new RelayError(`Couldn't reach ${url.replace(/^https:\/\/|\/$/g, "")}. If you just deployed it, wait a minute and press Connect again; otherwise check the address (Cloudflare → Workers & Pages → the helper → Settings → Domains & Routes).`); }
@@ -130,9 +156,10 @@ export async function connectCfHelper(address: string, studioToken: string, cfTo
   if (info?.service !== "site-studio-helper") {
     const said = (info?.error || text.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim()).slice(0, 140);
     if (info?.error) throw new RelayError(`The helper is deployed but not ready: ${info.error}`);
-    throw new RelayError(`That address is a Worker, but not the Studio's helper (it answered ${status}${said ? `: “${said}”` : ""}). Press “Deploy the helper to Cloudflare” above and paste the address of the Worker it creates (named picaffectz-helper).`);
+    throw new RelayError(`That address is a Worker, but not the Studio's helper (it answered ${status}${said ? `: “${said}”` : ""}). Press “Deploy the helper to Cloudflare” above, then open the Worker it creates (named studio-helper) and press Connect to my Studio.`);
   }
   const prev = await relayVault.load(studioToken);
+  if (prev?.kind === "cloudflare" && prev.url === url && !cfToken) { try { await relayCall(prev, { target: "ping" }); return prev; } catch { /* claim again below */ } }
   const key = prev?.kind === "cloudflare" && prev.url === url ? prev.key : rand(24);
   const r = await fetch(url + "claim", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key, ...(cfToken ? { cf: cfToken } : {}) }) });
   const j = await r.json().catch(() => null);

@@ -123,9 +123,15 @@ export class HelperClaimed extends Error { constructor() { super("This helper is
 export async function connectCfHelper(address: string, studioToken: string, cfToken?: string): Promise<Relay> {
   const url = cleanHelperUrl(address);
   if (!url) throw new RelayError("Paste the Worker's address, like https://picaffectz-helper.yourname.workers.dev");
-  let info: any = null;
-  try { info = await (await fetch(url, { cache: "no-store", headers: { Accept: "application/json" } })).json(); } catch { /* below */ }
-  if (info?.service !== "site-studio-helper") throw new RelayError("That address doesn't answer as the Studio's helper. Check it, or wait a minute if Cloudflare is still deploying it.");
+  let info: any = null, text = "", status = 0;
+  try { const r = await fetch(url, { cache: "no-store", headers: { Accept: "application/json" } }); status = r.status; text = await r.text(); } 
+  catch { throw new RelayError(`Couldn't reach ${url.replace(/^https:\/\/|\/$/g, "")}. If you just deployed it, wait a minute and press Connect again; otherwise check the address (Cloudflare → Workers & Pages → the helper → Settings → Domains & Routes).`); }
+  try { info = JSON.parse(text); } catch { /* not JSON */ }
+  if (info?.service !== "site-studio-helper") {
+    const said = (info?.error || text.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim()).slice(0, 140);
+    if (info?.error) throw new RelayError(`The helper is deployed but not ready: ${info.error}`);
+    throw new RelayError(`That address is a Worker, but not the Studio's helper (it answered ${status}${said ? `: “${said}”` : ""}). Press “Deploy the helper to Cloudflare” above and paste the address of the Worker it creates (named picaffectz-helper).`);
+  }
   const prev = await relayVault.load(studioToken);
   const key = prev?.kind === "cloudflare" && prev.url === url ? prev.key : rand(24);
   const r = await fetch(url + "claim", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key, ...(cfToken ? { cf: cfToken } : {}) }) });

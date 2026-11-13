@@ -4,7 +4,7 @@
 import { useEffect, useState } from "react";
 import type { Netlify } from "../lib/netlify";
 import { CF_HELPER_DEPLOY, CF_HELPER_NAME, HelperClaimed, connectCfHelper, getHelper, helperHandoff, helperOk, relayVault, type Relay } from "../lib/relay";
-import { cfAccountVault } from "../lib/cfdb";
+import { CF_DB_TOKEN_PAGE, cfAccountVault } from "../lib/cfdb";
 
 export function useHelper(studioToken: string, nf: Netlify | null | undefined, what = "Cloudflare") {
   const [relay, setRelay] = useState<Relay | null | undefined>(undefined);
@@ -52,7 +52,10 @@ export function useHelper(studioToken: string, nf: Netlify | null | undefined, w
           <button type="button" className="btn btn-sm" disabled={busy || !addr.trim()} onClick={() => connect()}>{busy ? "Connecting…" : "Connect"}</button>
         </div>
       </details>
-      {needTok && <input aria-label="Cloudflare API token for the helper" className="input font-mono text-xs" type="password" autoComplete="off" placeholder="Cloudflare API token" value={cfTok} onChange={(e) => setCfTok(e.target.value)} />}
+      {needTok && <div className="flex flex-col gap-1.5">
+        <p className="text-ink-300">This helper is already connected to your other Studio. To connect this one too, prove it's your Cloudflare account with an API token: <a className="text-brand-300 underline" href={CF_DB_TOKEN_PAGE} target="_blank" rel="noopener noreferrer">create one ↗</a> (everything is ticked; press <b>Continue to summary → Create Token</b> and copy it). Cloudflare shows a token only once, so make a new one if you don't have it.</p>
+        <input aria-label="Cloudflare API token for the helper" className="input font-mono text-xs" type="password" autoComplete="off" placeholder="Cloudflare API token" value={cfTok} onChange={(e) => setCfTok(e.target.value)} />
+      </div>}
       {err && <p role="alert" className="text-red-300">{err}</p>}
       {!nf && <p className="text-ink-500">Prefer Netlify? Connect it in Settings → Hosting accounts and the Studio puts the helper there by itself.</p>}
     </div>

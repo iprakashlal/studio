@@ -79,12 +79,13 @@ export function useCloudflarePicker(studioToken: string, nf: Netlify | null | un
   const ready = acc.ready && /^re_/.test(resendKey.trim()) && fromOk;
 
   /** Creates or updates the database; returns it with what's needed to add members. */
-  const ensure = async (step: (s: string) => void, over?: { mailFrom?: string }) => {
+  const ensure = async (step: (s: string) => void, over?: { mailFrom?: string; resendKey?: string }) => {
     const { relay, account, token } = await acc.client(step);
-    const from = (over?.mailFrom || mailFrom).trim();
+    const from = (over?.mailFrom || mailFrom).trim(), key = (over?.resendKey || resendKey).trim();
     if (over?.mailFrom) setMailFrom(from);
-    const setup = await setupCfDb(relay, token, { account, resendKey: resendKey.trim(), mailFrom: from, name: defaultName, existing: prev && prev.account === account.id ? prev : null }, step);
-    if (persist) { const v = await cfAccountVault.load(studioToken); await cfAccountVault.save({ ...(v || {}), token, account: account.id, resendKey: resendKey.trim(), mailFrom: from, setup }, studioToken); setPrev(setup); }
+    if (over?.resendKey) setResendKey(key);
+    const setup = await setupCfDb(relay, token, { account, resendKey: key, mailFrom: from, name: defaultName, existing: prev && prev.account === account.id ? prev : null }, step);
+    if (persist) { const v = await cfAccountVault.load(studioToken); await cfAccountVault.save({ ...(v || {}), token, account: account.id, resendKey: key, mailFrom: from, setup }, studioToken); setPrev(setup); }
     return { setup, relay, token };
   };
 

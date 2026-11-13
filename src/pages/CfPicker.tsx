@@ -79,10 +79,12 @@ export function useCloudflarePicker(studioToken: string, nf: Netlify | null | un
   const ready = acc.ready && /^re_/.test(resendKey.trim()) && fromOk;
 
   /** Creates or updates the database; returns it with what's needed to add members. */
-  const ensure = async (step: (s: string) => void) => {
+  const ensure = async (step: (s: string) => void, over?: { mailFrom?: string }) => {
     const { relay, account, token } = await acc.client(step);
-    const setup = await setupCfDb(relay, token, { account, resendKey: resendKey.trim(), mailFrom: mailFrom.trim(), name: defaultName, existing: prev && prev.account === account.id ? prev : null }, step);
-    if (persist) { const v = await cfAccountVault.load(studioToken); await cfAccountVault.save({ ...(v || {}), token, account: account.id, resendKey: resendKey.trim(), mailFrom: mailFrom.trim(), setup }, studioToken); setPrev(setup); }
+    const from = (over?.mailFrom || mailFrom).trim();
+    if (over?.mailFrom) setMailFrom(from);
+    const setup = await setupCfDb(relay, token, { account, resendKey: resendKey.trim(), mailFrom: from, name: defaultName, existing: prev && prev.account === account.id ? prev : null }, step);
+    if (persist) { const v = await cfAccountVault.load(studioToken); await cfAccountVault.save({ ...(v || {}), token, account: account.id, resendKey: resendKey.trim(), mailFrom: from, setup }, studioToken); setPrev(setup); }
     return { setup, relay, token };
   };
 
@@ -97,5 +99,5 @@ export function useCloudflarePicker(studioToken: string, nf: Netlify | null | un
       <p className="text-ink-400"><a className="text-brand-300 underline" href="https://resend.com/api-keys" target="_blank" rel="noopener noreferrer">Create a Resend key ↗</a> (free: 3,000 emails a month). <b>onboarding@resend.dev</b> only delivers to your own Resend email; for clients' sign-in, use an address on a domain you verified in Resend.</p>
     </div>
   );
-  return { ui, ready, ensure, busy: acc.busy };
+  return { ui, ready, ensure, busy: acc.busy, mail: { key: resendKey.trim(), from: mailFrom.trim() } };
 }

@@ -13,7 +13,7 @@ import { TEMPLATES } from "../schema";
 import { merge } from "./util";
 import type { ProjectMeta, Studio } from "./studio";
 import { STUDIO_BUILD } from "../build-info";
-import { relayVault, RELAY_VERSION } from "./relay";
+import { relayVault } from "./relay";
 import { Cloudflare, cfVault } from "./cloudflare";
 
 export type LiveTarget = { key: string; project: ProjectMeta; kind: "netlify" | "github" | "worker"; label: string; url: string; repo: Repo | null };
@@ -56,7 +56,7 @@ export async function pushTarget(t: LiveTarget, o: { studio: Studio; nf: Netlify
     // New code only: the Worker's settings and secrets stay as they are.
     const w = p.worker!;
     const relay = o.token ? await relayVault.load(o.token) : null, cf = o.token ? await cfVault.load(o.token) : null;
-    if (!relay || relay.v !== RELAY_VERSION || !cf?.token) throw new Error("Open the shop project → Shop backend on this device once (it needs the Studio helper and your Cloudflare token).");
+    if (!relay || !cf?.token) throw new Error("Open the shop project → Shop backend on this device once (it needs the Studio helper and your Cloudflare token).");
     o.step("Getting the new server code");
     const r = await fetch(`templates/store/cloudflare/worker.js?v=${STUDIO_BUILD.id}`, { cache: "no-store" });
     if (!r.ok) throw new Error("Couldn't load the Worker code from the Studio.");

@@ -1,5 +1,5 @@
 // "Host outside GitHub": a site's content, drafts and photos live in the owner's Supabase project, and
-// the site itself is served by Netlify. This file is shared by the Studio and the site CMS.
+// the site itself is served by Cloudflare or Netlify. This file is shared by the Studio and the site CMS.
 //
 //   site_content  one row per site: the live content (public read), info (cms/site.json), version
 //   site_drafts   saved-but-not-published edits (owners only)
@@ -18,8 +18,9 @@ import type { RepoCfg } from "./crypto";
 export type SbCfg = { url: string; key: string; site: string };
 /** A site's content, photos and editors on the Studio's Cloudflare database (its Worker address and the site ID). */
 export type CfSiteCfg = { api: string; site: string };
-/** Hosted outside GitHub: Netlify serves the pages; the content lives in Supabase (sb) or the Cloudflare database (cf). */
-export type HostCfg = { kind: "netlify"; siteId: string; siteName: string; url: string; domain?: string; sb?: SbCfg; cf?: CfSiteCfg };
+/** Hosted outside GitHub: Netlify or Cloudflare serves the pages (`kind`; on Cloudflare siteId is the Worker's
+ *  name in `account`); the content lives in Supabase (sb) or the Cloudflare database (cf). */
+export type HostCfg = { kind: "netlify" | "cloudflare"; siteId: string; siteName: string; url: string; account?: string; domain?: string; sb?: SbCfg; cf?: CfSiteCfg };
 
 export const BUCKET = "site-assets";
 export const cleanUrl = (u: string) => String(u || "").trim().replace(/\/+$/, "");
@@ -257,7 +258,7 @@ export class SupabaseRepo implements Repo {
       if (error) throw sbError(error, "upload the photo");
       return "a" + Date.now();
     }
-    // Pages, scripts and the CMS itself are hosted by Netlify and change only when the Studio publishes.
+    // Pages, scripts and the CMS itself are hosted by Cloudflare or Netlify and change only when the Studio publishes.
     return "";
   }
   async pushFiles(files: FileIn[], message: string, remove: string[] = []) {

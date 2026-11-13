@@ -1,15 +1,15 @@
-// Settings → Migration: put a copy of this Studio on Netlify with its files in Supabase.
-import { Netlify } from "./netlify";
+// Settings → Migration: put a copy of this Studio on Cloudflare or Netlify with its files in the Studio's
+// Cloudflare database or Supabase.
+import type { Pages } from "./pages";
 import { bytesB64, type Repo } from "./repo";
 import { blobToBytes } from "./util";
 import { SupaMgmt } from "./supamgmt";
 import { studioSql, type StudioHostCfg } from "./studiohost";
 
-const sha1 = async (b: Uint8Array) => [...new Uint8Array(await crypto.subtle.digest("SHA-1", b as BufferSource))].map((x) => x.toString(16).padStart(2, "0")).join("");
 /** This app's address (the folder index.html is in), e.g. https://you.github.io/studio/. */
 export const appBase = () => location.origin + location.pathname.replace(/[^/]*$/, "");
 
-export type AppFiles = { build: string; at?: string; files: Record<string, string> };
+export type AppFiles = { build: string; at?: string; files: Record<string, string>; cf?: Record<string, [string, number]> };
 export async function appFiles(base: string): Promise<AppFiles> {
   const r = await fetch(base + "app-files.json?x=" + Date.now(), { cache: "no-store" });
   if (!r.ok) throw new Error("This Studio build has no file list (app-files.json). Wait for the next GitHub build and try again.");
@@ -39,29 +39,29 @@ export async function transferFiles(from: Repo, to: Repo, step: (done: number, t
   return paths.length;
 }
 
-/** Puts the Studio app on Netlify (a new site, or the existing one) with its studio.config.json. */
-export async function deployStudioApp(nf: Netlify, o: { siteId?: string; siteName: string; source: string; config: StudioHostCfg }, step: (s: string) => void) {
+/** Puts the Studio app on Netlify or Cloudflare (a new site, or the existing one) with its studio.config.json. */
+export async function deployStudioApp(pages: Pages, o: { siteId?: string; siteName: string; source: string; config: StudioHostCfg }, step: (s: string) => void) {
   step("Reading the Studio's files");
   const r0 = await fetch(o.source + "app-files.json?x=" + Date.now(), { cache: "no-store" });
   if (!r0.ok) throw new Error("This Studio build has no file list (app-files.json). Wait for the next GitHub build and try again.");
   const listBytes = new Uint8Array(await r0.arrayBuffer()), m = JSON.parse(new TextDecoder().decode(listBytes)) as AppFiles;
   const cfg = new TextEncoder().encode(JSON.stringify({ ...o.config, source: o.source }, null, 2));
-  const digest = { ...m.files, "studio.config.json": await sha1(cfg), "app-files.json": await sha1(listBytes) };
-  let siteId = o.siteId || "", url = "";
-  if (siteId) { try { const s = await nf.getSite(siteId); url = s.ssl_url || s.url; } catch { siteId = ""; } }
-  if (!siteId) {
-    step("Creating the Studio's site on Netlify");
-    for (let i = 0; i < 4 && !siteId; i++) {
-      try { const s = await nf.createSite(i ? `${o.siteName}-${Math.random().toString(36).slice(2, 6)}` : o.siteName); siteId = s.id; url = s.ssl_url || s.url; }
+  let site = o.siteId ? await pages.get(o.siteId) : null;
+  if (!site) {
+    step(`Creating the Studio's site on ${pages.label}`);
+    for (let i = 0; i < 4 && !site; i++) {
+      const name = i ? `${o.siteName}-${Math.random().toString(36).slice(2, 6)}` : o.siteName;
+      // A Cloudflare name that's taken on the account is this Studio's own earlier copy only when it was recorded; pick another.
+      if (pages.kind === "cloudflare" && (await pages.find(name))) continue;
+      try { site = await pages.create(name); }
       catch (e: any) { if (e?.status !== 422 || i === 3) throw e; }
     }
+    if (!site) throw new Error("Couldn't find a free name for the Studio's site. Try another address.");
   }
-  await nf.deployDigest(siteId, digest, async (p) => {
-    if (p === "studio.config.json") return cfg;
-    if (p === "app-files.json") return listBytes;
+  const dep = await pages.deployApp(site.siteId, m, [{ path: "studio.config.json", data: cfg }, { path: "app-files.json", data: listBytes }], async (p) => {
     const r = await fetch(o.source + p, { cache: "no-store" });
     if (!r.ok) throw new Error(`Couldn't read ${p} from the Studio.`);
     return new Uint8Array(await r.arrayBuffer());
   }, `Site Studio ${m.build}`, (d, t) => step(t ? `Uploading the Studio (${d} of ${t} files)` : "Uploading the Studio"));
-  return { siteId, url: url.replace(/^http:/, "https:").replace(/\/?$/, "/"), build: m.build };
+  return { siteId: site.siteId, url: (dep.url || site.url).replace(/^http:/, "https:").replace(/\/?$/, "/"), build: m.build, kind: pages.kind, account: pages.account };
 }

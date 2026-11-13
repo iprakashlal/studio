@@ -111,7 +111,7 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
           <MenusCard studio={studio} menus={index.menus || {}} onIndex={setIndex} />
           <section className="card flex flex-col gap-3 p-5" aria-label="Hosting accounts">
             <h2 className="text-lg font-extrabold">Hosting accounts</h2>
-            <p className="text-sm text-ink-300">GitHub publishing creates each site's repository and turns on GitHub Pages; Netlify is for sites hosted outside GitHub. Tokens stay on this device. Each site's Supabase details are kept with its project.</p>
+            <p className="text-sm text-ink-300">GitHub publishing creates each site's repository and turns on GitHub Pages; Cloudflare (free, no traffic limit) or Netlify hosts sites outside GitHub. Tokens stay on this device, encrypted. Each site's database details are kept with its project.</p>
             <h3 className="mt-2 text-sm font-bold">GitHub (publishing)</h3>
             <GitHubPublishAccount session={session} />
             <h3 className="mt-2 text-sm font-bold">Netlify</h3>

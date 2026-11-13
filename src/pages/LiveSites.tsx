@@ -1,4 +1,4 @@
-// Live sites: every place a project is published (Netlify and/or GitHub), when each last changed, whether it
+// Live sites: every place a project is published (Netlify or Cloudflare, and/or GitHub), when each last changed, whether it
 // matches the Studio's copy, and a button to pull its content into the project.
 import { useEffect, useState } from "react";
 import type { Session } from "../lib/auth";
@@ -9,13 +9,13 @@ import { fmtDate, merge, timeAgo } from "../lib/util";
 import { Modal, Spinner, useConfirm, useToast } from "../ui/kit";
 import { TEMPLATES } from "../schema";
 
-type Site = { key: string; kind: "netlify" | "github"; name: string; url: string; where: string; repo: Repo; primary: boolean };
+type Site = { key: string; kind: "hosted" | "github"; name: string; url: string; where: string; repo: Repo; primary: boolean };
 type Info = { state: "loading" } | { state: "error"; msg: string } | { state: "empty" }
   | { state: "ok"; at: string | null; same: boolean; sections: string[]; content: any };
 
 export function liveSitesOf(p: ProjectMeta, token: string): Site[] {
   const out: Site[] = [];
-  if (p.host?.kind === "netlify") out.push({ key: "netlify", kind: "netlify", name: "Netlify", url: siteAddress(p.host), where: p.host.cf ? "content in Cloudflare" : "content in Supabase", repo: hostRepo(p.host), primary: true });
+  if (p.host) out.push({ key: "hosted", kind: "hosted", name: p.host.kind === "cloudflare" ? "Cloudflare" : "Netlify", url: siteAddress(p.host), where: p.host.cf ? "content in Cloudflare" : "content in Supabase", repo: hostRepo(p.host), primary: true });
   if (p.publish) {
     const t = p.publish;
     out.push({ key: "github", kind: "github", name: "GitHub", url: `https://${t.owner}.github.io/${t.repo === `${t.owner}.github.io` ? "" : t.repo + "/"}`, where: `${t.owner}/${t.repo}`, repo: new GitHubRepo(t, token), primary: !p.host });
@@ -66,7 +66,7 @@ export function LiveSitesDialog({ studio, project, session, dirty, current, defa
       if (!s.primary) missing = await studio.copyMissingAssets(project.id, r.content, s.repo);
       onIndex(r.index);
       onImported(r.content);
-      toast(`Pulled from ${s.name}.${missing ? ` ${missing} photo(s) weren't found.` : ""}${!s.primary && project.host ? " Publish to Netlify to make it live there." : ""}`);
+      toast(`Pulled from ${s.name}.${missing ? ` ${missing} photo(s) weren't found.` : ""}${!s.primary && project.host ? ` Publish to ${project.host.kind === "cloudflare" ? "Cloudflare" : "Netlify"} to make it live there.` : ""}`);
       setN((x) => x + 1);
     } catch (e) { toast(explain(e), "bad"); }
     setBusy("");

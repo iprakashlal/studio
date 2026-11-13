@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { useCloudflarePicker } from "./CfPicker";
+import { useCfAccount, useCloudflarePicker, type CfAccountHook } from "./CfPicker";
+import { cloudflarePages, netlifyPages, PAGES_LABEL, type Pages, type PagesKind } from "../lib/pages";
+import { CF_DOMAIN_HINT, CfError } from "../lib/cloudflare";
 import { cfAddMembers, cfRole, cfSendCode, cfSignedIn, cfVerifyCode } from "../lib/cfdb";
 import { SupabaseAuto } from "./SupabaseAuto";
 import type { Session } from "../lib/auth";
@@ -9,12 +11,12 @@ import { explain } from "../lib/repo";
 import { slugify } from "../lib/util";
 import { Netlify, checkDns, cleanDomain, dnsRecords, domainOk, type DnsRecord } from "../lib/netlify";
 import { cleanUrl, isAdmin, sbUrlOk, sendCode, setupSql, signedInEmail, siteIdOk, verifyCode, type CfSiteCfg, type HostCfg, type SbCfg } from "../lib/supa";
-import { netlifyToken, publishToNetlify, siteAddress } from "../lib/hosting";
+import { netlifyToken, publishHosted, siteAddress } from "../lib/hosting";
 import { Field, Modal, Spinner, Toggle, useConfirm, useToast } from "../ui/kit";
 
 const TOKEN_PAGE = "https://app.netlify.com/user/applications#personal-access-tokens";
 const SB_NEW = "https://supabase.com/dashboard/new";
-const STEPS = ["Upload new photos to the database", "Save the content in the database", "Deploy the pages to Netlify", "Live"];
+const stepsFor = (k: PagesKind) => ["Upload new photos to the database", "Save the content in the database", `Deploy the pages to ${PAGES_LABEL[k]}`, "Live"];
 
 function copy(text: string, toast: (m: string) => void) {
   navigator.clipboard?.writeText(text).then(() => toast("Copied"), () => toast("Select the text and copy it"));
@@ -90,7 +92,20 @@ export function HostDialog({ studio, project, tpl, draft, dirty, save, onIndex, 
   // The Studio's database on Cloudflare instead of Supabase.
   const [dbKind, setDbKind] = useState<"cloudflare" | "supabase">(host ? (host.cf ? "cloudflare" : "supabase") : "cloudflare");
   const [cfSite, setCfSite] = useState<CfSiteCfg | null>(host?.cf || null);
-  const cfp = useCloudflarePicker(session.token, nf, true);
+  // Where the pages are served: Cloudflare (free, no traffic limit) or Netlify. One Cloudflare account on the
+  // page serves both the pages and the database.
+  const [pagesKind, setPagesKind] = useState<PagesKind>(host?.kind || "cloudflare");
+  const moving = !!host && host.kind !== pagesKind;
+  const cfAcc = useCfAccount(session.token, nf, true);
+  const cfp = useCloudflarePicker(session.token, nf, true, undefined, cfAcc);
+  const pagesOk = pagesKind === "netlify" ? !!nf : cfAcc.ready;
+  const getPages = async (): Promise<Pages> => {
+    if (pagesKind === "netlify") { if (!nf) throw new Error("Connect Netlify first."); return netlifyPages(nf); }
+    const { cf, account } = await cfAcc.client((x) => setStep({ i: -1, detail: x }));
+    return cloudflarePages(cf, host?.kind === "cloudflare" && host.account ? host.account : account.id, account.name);
+  };
+  const [cfAddr, setCfAddr] = useState("");
+  useEffect(() => { if (pagesKind === "cloudflare" && cfAcc.ready) getPages().then(async (p) => { await p.init(); setCfAddr(p.addressOf(siteName || "name")); }).catch(() => {}); }, [pagesKind, cfAcc.ready, siteName]);
   const [cfSigned, setCfSigned] = useState<string | null>(null), [cfAccess, setCfAccess] = useState<"" | "ok" | "no">("");
   const cfCheck = async (c = cfSite) => { if (!c) return; const e = await cfSignedIn(c.api); setCfSigned(e); setCfAccess(e ? ((await cfRole(c.api, "site:" + c.site)) ? "ok" : "no") : ""); };
   useEffect(() => { cfCheck(); }, [cfSite?.api, cfSite?.site]);
@@ -127,28 +142,28 @@ export function HostDialog({ studio, project, tpl, draft, dirty, save, onIndex, 
   const cfVerify = () => run("verify", async () => { await cfVerifyCode(cfSite!.api, email.trim(), code); setCode(""); setCodeSent(false); await cfCheck(); });
 
   const publish = () => run("publish", async () => {
-    if (!nf) throw new Error("Connect Netlify first.");
+    const pages = await getPages();
     if (dirty && !(await save(true))) return;
-    if (!host && !/^[a-z0-9][a-z0-9-]{1,61}$/.test(siteName)) throw new Error("The Netlify site name can use lowercase letters, numbers and dashes.");
+    if ((!host || moving) && !/^[a-z0-9][a-z0-9-]{1,61}$/.test(siteName)) throw new Error(`The ${pages.label} site name can use lowercase letters, numbers and dashes.`);
     const next = project.version + 1;
     let h: HostCfg;
     const db = dbKind === "cloudflare" ? { cf: cfSite!, sb: undefined } : { sb: cfg(), cf: undefined };
-    if (host) h = { ...host, ...db };
+    if (host && !moving) h = { ...host, ...db };
     else {
-      setStep({ i: -1, detail: "Creating the Netlify site…" });
-      let s = await nf.getSite(`${siteName}.netlify.app`).catch(() => null);
-      if (s && !(await confirm(`Use your Netlify site “${s.name}”?`, "It already exists in your Netlify account. Publishing replaces what it shows with this project.", "Use it"))) { setStep(null); return; }
-      if (!s) s = await nf.createSite(siteName);
-      h = { kind: "netlify", siteId: s.id, siteName: s.name, url: s.ssl_url || `https://${s.name}.netlify.app`, ...db };
+      setStep({ i: -1, detail: `Creating the ${pages.label} site…` });
+      let s = await pages.find(siteName);
+      if (s && !(await confirm(`Use your ${pages.label} site “${s.siteName}”?`, `It already exists in your ${pages.label} account. Publishing replaces what it shows with this project.`, "Use it"))) { setStep(null); return; }
+      if (!s) s = await pages.create(siteName);
+      h = { kind: pagesKind, siteId: s.siteId, siteName: s.siteName, url: s.url, ...(pages.account ? { account: pages.account } : {}), ...db };
     }
     try {
-      const r = await publishToNetlify({ nf, host: h, tpl, draft, name: project.name, version: next, withContent: !host || withContent, getBlob, note: note.trim(), step: (i, detail) => setStep({ i, detail }) });
-      const { index } = await studio.recordExport(project.id, { kind: "netlify", note: note.trim(), target: h.siteName }, draft, "published", undefined, r.siteSha, h);
+      const r = await publishHosted({ pages, host: h, tpl, draft, name: project.name, version: next, withContent: !host || withContent, getBlob, note: note.trim(), step: (i, detail) => setStep({ i, detail }) });
+      const { index } = await studio.recordExport(project.id, { kind: pagesKind, note: note.trim(), target: h.siteName }, draft, "published", undefined, r.siteSha, h);
       onIndex(index);
       setDone({ url: siteAddress(h), admin: r.admin, warnings: r.warnings });
     } catch (e) {
       // Remember a newly created site even if the first deploy failed, so trying again uses it.
-      if (!host) { try { onIndex(await studio.updateMeta(project.id, { host: h }, "Link Netlify site")); } catch { /* keep the first error */ } }
+      if (!host || moving) { try { onIndex(await studio.updateMeta(project.id, { host: h }, `Link ${pages.label} site`)); } catch { /* keep the first error */ } }
       throw e;
     } finally { setStep(null); }
   });
@@ -160,7 +175,7 @@ export function HostDialog({ studio, project, tpl, draft, dirty, save, onIndex, 
   );
 
   if (done) return (
-    <Modal title="Live on Netlify" wide onClose={onClose} footer={<button className="btn btn-pri" onClick={onClose}>Done</button>}>
+    <Modal title={`Live on ${PAGES_LABEL[pagesKind]}`} wide onClose={onClose} footer={<button className="btn btn-pri" onClick={onClose}>Done</button>}>
       <ol className="list-decimal space-y-2 pl-5 text-sm text-ink-200">
         <li>The site is live at <a className="font-semibold text-brand-300 underline" href={done.url} target="_blank" rel="noopener">{done.url}</a>.</li>
         <li>Its own CMS is at <a className="font-semibold text-brand-300 underline" href={done.url + done.admin} target="_blank" rel="noopener">{done.url}{done.admin}</a>. The owner signs in there with an email code; only the site's editors can sign in.</li>
@@ -173,17 +188,26 @@ export function HostDialog({ studio, project, tpl, draft, dirty, save, onIndex, 
 
   const sql = setupSql(sb.site || "my-site", email || "you@example.com");
   return (
-    <Modal title={host ? "Hosted on Netlify" : "Host outside GitHub"} wide onClose={onClose}
-      footer={<><button className="btn" onClick={onClose}>Close</button><button className="btn btn-pri" disabled={!!busy || !nf || !dbOk} onClick={publish}>{busy === "publish" ? "Publishing…" : host ? `Publish v${project.version + 1}` : `Move the site and publish v${project.version + 1}`}</button></>}>
-      {!host && <p className="text-sm text-ink-300">Moves this site off GitHub: <b>Netlify</b> serves the pages, and <b>Cloudflare</b> or <b>Supabase</b> holds the content, photos and who can edit. The site keeps its own CMS (with email sign-in), and stays in step with this project.{project.publish ? " The GitHub copy isn't deleted; it simply stops being updated." : ""}</p>}
-      {host && <p className="text-sm text-ink-300">Live at <a className="font-semibold text-brand-300 underline" href={siteAddress(host)} target="_blank" rel="noopener">{siteAddress(host)}</a> · Netlify site <b>{host.siteName}</b> · content in {host.cf ? "Cloudflare" : "Supabase"}.</p>}
+    <Modal title={host ? `Hosted on ${PAGES_LABEL[host.kind]}` : "Host outside GitHub"} wide onClose={onClose}
+      footer={<><button className="btn" onClick={onClose}>Close</button><button className="btn btn-pri" disabled={!!busy || !pagesOk || !dbOk} onClick={publish}>{busy === "publish" ? "Publishing…" : host && !moving ? `Publish v${project.version + 1}` : `Move the site and publish v${project.version + 1}`}</button></>}>
+      {!host && <p className="text-sm text-ink-300">Moves this site off GitHub: <b>Cloudflare</b> or <b>Netlify</b> serves the pages, and <b>Cloudflare</b> or <b>Supabase</b> holds the content, photos and who can edit. The site keeps its own CMS (with email sign-in), and stays in step with this project.{project.publish ? " The GitHub copy isn't deleted; it simply stops being updated." : ""}</p>}
+      {host && <p className="text-sm text-ink-300">Live at <a className="font-semibold text-brand-300 underline" href={siteAddress(host)} target="_blank" rel="noopener">{siteAddress(host)}</a> · {PAGES_LABEL[host.kind]} site <b>{host.siteName}</b> · content in {host.cf ? "Cloudflare" : "Supabase"}.</p>}
 
-      <section className="flex flex-col gap-3 rounded-xl border border-ink-700 bg-ink-950 p-4" aria-label="Netlify">
-        <b className="text-sm">1 · Netlify (hosting)</b>
-        <NetlifyAccount session={session} onToken={setToken} />
-        <p className="text-[13px] text-ink-400">Netlify's free plan has 300 credits a month for the whole account: each publish from the Studio uses 15 and each GB of visitor traffic 20. When they run out, Netlify pauses the sites until the month resets. Edits made in the site's own CMS use none: they go to Supabase.</p>
-        {!host && nf && (
-          <Field label="Site name" htmlFor="nf-name" hint={`Address before you add a domain: https://${siteName || "name"}.netlify.app`}>
+      <section className="flex flex-col gap-3 rounded-xl border border-ink-700 bg-ink-950 p-4" aria-label="Hosting">
+        <b className="text-sm">1 · Hosting (serves the pages)</b>
+        <div className="flex flex-wrap rounded-lg border border-ink-600 self-start" role="radiogroup" aria-label="Pages host">
+          {([["cloudflare", "Cloudflare (free, unlimited traffic)"], ["netlify", "Netlify"]] as const).map(([k, l]) => <button key={k} type="button" role="radio" aria-checked={pagesKind === k} onClick={() => setPagesKind(k)} className={`btn btn-sm border-0 ${pagesKind === k ? "bg-ink-700" : "bg-transparent"}`}>{l}</button>)}
+        </div>
+        {moving && <p className="rounded-lg border border-sky-400/30 bg-sky-400/5 px-3 py-2 text-[13px] text-sky-100">Publishing moves the pages from {PAGES_LABEL[host!.kind]} to {PAGES_LABEL[pagesKind]}. The content and its editors stay where they are. Your {PAGES_LABEL[host!.kind]} site isn't deleted{host!.domain ? `, and ${host!.domain} needs connecting again afterwards` : ""}.</p>}
+        {pagesKind === "netlify" ? <>
+          <NetlifyAccount session={session} onToken={setToken} />
+          <p className="text-[13px] text-ink-400">Netlify's free plan has 300 credits a month for the whole account: each publish from the Studio uses 15 and each GB of visitor traffic 20. When they run out, Netlify pauses the sites until the month resets. Edits made in the site's own CMS use none: they go to the database.</p>
+        </> : <>
+          {cfAcc.ui}
+          <p className="text-[13px] text-ink-400">Cloudflare serves the pages from its network for free, with no traffic limit (a Worker with the site's files on your account). Edits made in the site's own CMS go to the database and don't need a publish.</p>
+        </>}
+        {(!host || moving) && pagesOk && (
+          <Field label="Site name" htmlFor="nf-name" hint={`Address before you add a domain: ${pagesKind === "netlify" ? `https://${siteName || "name"}.netlify.app` : cfAddr || "…"}`}>
             <input id="nf-name" className="input" value={siteName} onChange={(e) => setSiteName(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "-"))} />
           </Field>
         )}
@@ -202,9 +226,8 @@ export function HostDialog({ studio, project, tpl, draft, dirty, save, onIndex, 
         {dbKind === "cloudflare" ? (
           <div className="flex flex-col gap-3" aria-label="Cloudflare database">
             {!cfSite ? <>
-              <section aria-label="Cloudflare">{cfp.ui}</section>
-              <button type="button" className="btn btn-pri btn-sm self-start" disabled={!!busy || !nf || !cfp.ready || !siteIdOk(sb.site) || !email.includes("@")} onClick={setupCf}>{busy === "cfsetup" ? (step?.detail || "Setting up") + "…" : "Set up on Cloudflare"}</button>
-              {!nf && <p className="text-[13px] text-amber-200">Connect Netlify above first: the Studio's helper on Netlify talks to Cloudflare for you.</p>}
+              <section aria-label="Cloudflare">{pagesKind !== "cloudflare" && cfAcc.ui}{pagesKind === "cloudflare" && !cfAcc.ready && <p className="mb-2 text-[13px] text-amber-200">Connect Cloudflare in section 1 first: the same account holds the database.</p>}{cfp.ui}</section>
+              <button type="button" className="btn btn-pri btn-sm self-start" disabled={!!busy || !cfp.ready || !siteIdOk(sb.site) || !email.includes("@")} onClick={setupCf}>{busy === "cfsetup" ? (step?.detail || "Setting up") + "…" : "Set up on Cloudflare"}</button>
             </> : <p className="flex flex-wrap items-center gap-2 text-[13px] text-ink-300"><span className="h-2 w-2 rounded-full bg-emerald-400" />Site <b className="text-ink-100">{cfSite.site}</b> in the database at <code className="font-mono text-xs">{cfSite.api}</code>.</p>}
             {cfSite && (cfSigned ? (
               <div className="flex flex-wrap items-center gap-2 text-sm">
@@ -263,14 +286,15 @@ export function HostDialog({ studio, project, tpl, draft, dirty, save, onIndex, 
       {step && (
         <ol className="flex flex-col gap-1 rounded-lg border border-brand-500/40 bg-ink-950 p-3 text-[13px]" aria-live="polite">
           {step.i < 0 && <li>{step.detail}</li>}
-          {STEPS.map((s, i) => <li key={s} className={i < step.i ? "text-emerald-300" : i === step.i ? "text-ink-100" : "text-ink-500"}>{i < step.i ? "✓" : i === step.i ? "…" : "·"} {s}{i === step.i && step.detail ? ` (${step.detail})` : ""}</li>)}
+          {stepsFor(pagesKind).map((s, i) => <li key={s} className={i < step.i ? "text-emerald-300" : i === step.i ? "text-ink-100" : "text-ink-500"}>{i < step.i ? "✓" : i === step.i ? "…" : "·"} {s}{i === step.i && step.detail ? ` (${step.detail})` : ""}</li>)}
         </ol>
       )}
-      {!nf || !dbOk ? (
+      {!pagesOk || !dbOk ? (
         <div className="rounded-lg border border-amber-400/40 bg-amber-400/5 px-3 py-2.5 text-[13px] text-amber-100" role="status">
           <b>Publish is waiting for:</b>
           <ul className="mt-1 space-y-0.5">
-            <li>{nf ? "✓" : "✗"} Netlify connected on this device{nf ? "" : " (section 1: paste your Netlify token)"}</li>
+            {pagesKind === "netlify" ? <li>{nf ? "✓" : "✗"} Netlify connected on this device{nf ? "" : " (section 1: paste your Netlify token)"}</li>
+              : <li>{cfAcc.ready ? "✓" : "✗"} Cloudflare connected on this device{cfAcc.ready ? "" : cfAcc.helper.ready ? " (section 1: paste your Cloudflare token)" : " (section 1: deploy the Studio's helper, then paste your Cloudflare token)"}</li>}
             {dbKind === "cloudflare" ? <>
             <li>{cfSite ? "✓" : "✗"} The site's database on Cloudflare{cfSite ? "" : " (section 2: token, Resend key, then Set up on Cloudflare)"}</li>
             <li>{cfAccess === "ok" ? "✓" : "✗"} {cfSigned ? (cfAccess === "ok" ? `Signed in as ${cfSigned}` : `Signed in as ${cfSigned}, but that email isn't an editor of this site`) : "Signed in to the database on this device (section 2: email me a sign-in code)"}</li>
@@ -282,7 +306,8 @@ export function HostDialog({ studio, project, tpl, draft, dirty, save, onIndex, 
         </div>
       ) : null}
 
-      {host && nf && <DomainCard host={host} nf={nf} onHost={async (h) => onIndex(await studio.updateMeta(project.id, { host: h }, "Update the site's domain"))} />}
+      {host && !moving && host.kind === "netlify" && nf && <DomainCard host={host} nf={nf} onHost={async (h) => onIndex(await studio.updateMeta(project.id, { host: h }, "Update the site's domain"))} />}
+      {host && !moving && host.kind === "cloudflare" && cfAcc.ready && <CfDomainCard host={host} acc={cfAcc} onHost={async (h) => onIndex(await studio.updateMeta(project.id, { host: h }, "Update the site's domain"))} />}
     </Modal>
   );
 }
@@ -349,6 +374,46 @@ function DomainCard({ host, nf, onHost }: { host: HostCfg; nf: Netlify; onHost: 
           </div>
         </>
       )}
+    </section>
+  );
+}
+
+/** Your own domain on a Cloudflare-hosted site: the domain's DNS is on the same Cloudflare account, so the Studio
+ *  attaches it to the site's Worker (Cloudflare adds the DNS records and HTTPS by itself). */
+function CfDomainCard({ host, acc, onHost }: { host: HostCfg; acc: CfAccountHook; onHost: (h: HostCfg) => Promise<void> }) {
+  const toast = useToast();
+  const [d, setD] = useState(host.domain || ""), [busy, setBusy] = useState(""), [err, setErr] = useState("");
+  const account = host.account || acc.account?.id || "";
+  const run = async (k: string, fn: () => Promise<void>) => { setBusy(k); setErr(""); try { await fn(); } catch (e: any) { setErr(e instanceof CfError && (e.status === 403 || e.status === 401) ? CF_DOMAIN_HINT : e?.message || "Something went wrong"); } setBusy(""); };
+  const connect = () => run("connect", async () => {
+    const dom = cleanDomain(d), { cf } = await acc.client();
+    const zone = await cf.zoneFor(dom);
+    if (!zone) throw new Error(`Couldn't find ${dom} on your Cloudflare account. If it isn't there yet, add it (free): Cloudflare dashboard → Add a domain, then change its nameservers where you bought it, and press Connect again once Cloudflare shows it as active. If it is there, ${CF_DOMAIN_HINT.charAt(0).toLowerCase() + CF_DOMAIN_HINT.slice(1)}`);
+    for (const hn of [dom, "www." + dom]) await cf.addWorkerDomain(account, host.siteId, hn, zone.id);
+    await onHost({ ...host, domain: dom });
+    toast(`Connected. Cloudflare is turning on HTTPS for ${dom}; it takes a few minutes. Publish once more so links use https://www.${dom}/.`);
+  });
+  const remove = () => run("remove", async () => {
+    const { cf } = await acc.client(), dom = host.domain!;
+    for (const x of await cf.workerDomains(account, host.siteId)) if (x.hostname === dom || x.hostname === "www." + dom) await cf.removeWorkerDomain(account, x.id);
+    await onHost({ ...host, domain: undefined }); setD("");
+    toast("Domain removed. The site is back on its workers.dev address.");
+  });
+  return (
+    <section className="flex flex-col gap-3 rounded-xl border border-ink-700 bg-ink-950 p-4" aria-label="Domain">
+      <b className="text-sm">3 · Your domain (optional)</b>
+      {!host.domain ? <>
+        <p className="text-[13px] text-ink-400">Your domain's DNS needs to be on Cloudflare (free; <a className="text-brand-300 underline" href="https://dash.cloudflare.com/?to=/:account/add-site" target="_blank" rel="noopener noreferrer">add a domain ↗</a> and switch its nameservers where you bought it). Then the Studio connects it, with www, and Cloudflare adds the records and HTTPS itself.</p>
+        <div className="flex gap-2">
+          <input aria-label="Domain" className="input min-w-0 flex-1" placeholder="yourname.com" value={d} onChange={(e) => setD(e.target.value)} />
+          <button type="button" className="btn btn-pri btn-sm" disabled={!!busy || !domainOk(d)} onClick={connect}>{busy === "connect" ? "Connecting…" : "Connect domain"}</button>
+        </div>
+      </> : <div className="flex flex-wrap items-center gap-2 text-[13px]">
+        <span className="h-2 w-2 rounded-full bg-emerald-400" /><span>Live on <b>{host.domain}</b> and <b>www.{host.domain}</b></span>
+        <a className="btn btn-sm" href={`https://www.${host.domain}/`} target="_blank" rel="noopener">Open ↗</a>
+        <button type="button" className="btn btn-sm ml-auto" disabled={!!busy} onClick={remove}>{busy === "remove" ? "Removing…" : "Remove domain"}</button>
+      </div>}
+      {err && <p role="alert" className="text-[13px] text-red-300">{err}</p>}
     </section>
   );
 }

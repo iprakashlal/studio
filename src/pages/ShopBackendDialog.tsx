@@ -6,7 +6,8 @@ import type { ProjectMeta, Studio, StudioIndex, WorkerCfg } from "../lib/studio"
 import { ensureRepo, ghPublish } from "../lib/ghpublish";
 import { netlifyToken, siteAddress } from "../lib/hosting";
 import { Netlify } from "../lib/netlify";
-import { RELAY_VERSION, relayVault, setupRelay, type Relay } from "../lib/relay";
+import { helperOk, relayVault, setupRelay, type Relay } from "../lib/relay";
+import { useHelper } from "./HelperBox";
 import { CF_DNS_HINT, CF_TOKEN_PAGE, Cloudflare, cfVault, workerCheck, type CfAccount } from "../lib/cloudflare";
 import { stripeWebhook } from "../lib/stripe";
 import { RESEND_KEYS_PAGE, Resend, type ResendDomain } from "../lib/resend";
@@ -53,11 +54,13 @@ export function ShopBackendDialog({ session, studio, project, draft, onConnect, 
       const t = await netlifyToken.load(session.token), n = t ? new Netlify(t.token) : null;
       setNf(n);
       const r = await relayVault.load(session.token);
-      if (r && r.v === RELAY_VERSION) { setRelay(r); return; }
+      if (helperOk(r)) { setRelay(r); return; }
       // An older helper: update it in place (same site and key) so it can do what this Studio asks of it.
-      if (r && n) { try { setRelay(await setupRelay(n, session.token, r, (x) => setRelayBusy("Updating the helper: " + x.toLowerCase()))); } catch { setRelay(null); } setRelayBusy(""); }
+      if (r && n && r.kind !== "cloudflare") { try { setRelay(await setupRelay(n, session.token, r, (x) => setRelayBusy("Updating the helper: " + x.toLowerCase()))); } catch { setRelay(null); } setRelayBusy(""); }
     })();
   }, [session.token]);
+  const hb = useHelper(session.token, null, "Cloudflare");
+  useEffect(() => { if (hb.relay) setRelay(hb.relay); }, [hb.relay]);
   const makeRelay = async () => {
     if (!nf) return;
     setRelayErr("");
@@ -253,12 +256,13 @@ export function ShopBackendDialog({ session, studio, project, draft, onConnect, 
       <p className="text-sm text-ink-300">Sets up the free shop server (orders, customer accounts, order emails, Razorpay/Stripe checkout) on your Cloudflare account, saves orders in a private GitHub repository and sends email through Resend. Nothing to paste into dashboards except the keys below.</p>
       {prev && !result && <p className="rounded-lg border border-emerald-400/30 bg-emerald-400/5 px-3 py-2.5 text-[13px] text-emerald-100">Connected: <a className="underline" href={prev.url} target="_blank" rel="noopener noreferrer">{prev.url}</a>. Change anything below and press <b>Update the Worker</b>; settings you leave empty stay as they are.</p>}
 
-      <Section n={1} title="Studio helper on your Netlify" state={relay ? "done" : relayErr ? "error" : "todo"}>
-        <p className="text-[13px] text-ink-400">Cloudflare and Resend don't accept requests straight from a web page, so the Studio adds a tiny helper site to your Netlify account once. It keeps no keys or data and only answers the Studio.</p>
+      <Section n={1} title="Studio helper" state={relay ? "done" : relayErr ? "error" : "todo"}>
+        <p className="text-[13px] text-ink-400">Cloudflare and Resend don't accept requests straight from a web page, so the Studio passes them through a tiny helper once set up: a Worker on your Cloudflare, or a site on your Netlify. It keeps no keys or data and only answers the Studio.</p>
         {nf === undefined ? <Spinner label="Checking Netlify…" /> : relay
-          ? <p className="flex flex-wrap items-center gap-2 text-sm"><span className="h-2 w-2 rounded-full bg-emerald-400" />Ready: <a className="text-brand-300 underline" href={relay.url} target="_blank" rel="noopener noreferrer">{relay.url.replace(/^https:\/\//, "")}</a><button type="button" className="btn btn-sm ml-auto" disabled={!nf || !!relayBusy} onClick={makeRelay}>Set up again</button></p>
-          : nf ? <div className="flex flex-wrap items-center gap-3"><button type="button" className="btn btn-pri btn-sm" disabled={!!relayBusy} onClick={makeRelay}>{relayBusy ? relayBusy + "…" : "Set up the helper"}</button>{relayErr && <span role="alert" className="text-sm text-red-300">{relayErr}</span>}</div>
-          : <NetlifyAccount session={session} onToken={(t) => setNf(t ? new Netlify(t) : null)} />}
+          ? <p className="flex flex-wrap items-center gap-2 text-sm"><span className="h-2 w-2 rounded-full bg-emerald-400" />Ready: <a className="text-brand-300 underline" href={relay.url} target="_blank" rel="noopener noreferrer">{relay.url.replace(/^https:\/\//, "")}</a>{relay.kind !== "cloudflare" && <button type="button" className="btn btn-sm ml-auto" disabled={!nf || !!relayBusy} onClick={makeRelay}>Set up again</button>}</p>
+          : <>{hb.ui}
+            {nf ? <div className="flex flex-wrap items-center gap-3"><span className="text-[13px] text-ink-400">Or on Netlify:</span><button type="button" className="btn btn-pri btn-sm" disabled={!!relayBusy} onClick={makeRelay}>{relayBusy ? relayBusy + "…" : "Set up the helper"}</button>{relayErr && <span role="alert" className="text-sm text-red-300">{relayErr}</span>}</div>
+            : <details className="text-[13px]"><summary className="cursor-pointer text-ink-400">Or put the helper on Netlify</summary><div className="mt-2"><NetlifyAccount session={session} onToken={(t) => setNf(t ? new Netlify(t) : null)} /></div></details>}</>}
       </Section>
 
       <Section n={2} title="Private repository for orders" state={repoState === "done" && ghState === "done" ? "done" : repoState === "error" || ghState === "error" ? "error" : "todo"}>

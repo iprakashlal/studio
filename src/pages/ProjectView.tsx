@@ -15,6 +15,8 @@ import { clone, fmtDate, merge, slugify, timeAgo } from "../lib/util";
 import { siteAddress, siteRepoFor } from "../lib/hosting";
 import { HostDialog } from "./HostDialog";
 import { WriteFromSiteDialog } from "./WriteFromSite";
+import { PamphletDialog } from "./PamphletDialog";
+import { PAMPHLET_EVENT } from "../editor/fields";
 import { GitHubPublishAccount } from "./GitHubAccount";
 import { ensurePages, ensureRepo, ghPublish } from "../lib/ghpublish";
 import { LiveSitesDialog } from "./LiveSites";
@@ -23,6 +25,8 @@ import { Preview } from "../editor/Preview";
 import { BackupPanel } from "../editor/BackupPanel";
 import { useAssetMap } from "../editor/useAssets";
 import { Field, Modal, StepLoader, Toggle, useConfirm, useToast } from "../ui/kit";
+
+type Modal = "" | "export" | "publish" | "host" | "live" | "history" | "details" | "backend" | "inbox" | "write" | "pamphlet";
 
 export function ProjectView({ studio, index, project, session, onIndex }: { studio: Studio; index: StudioIndex; project: ProjectMeta; session: Session; onIndex: (i: StudioIndex) => void }) {
   const toast = useToast();
@@ -36,7 +40,8 @@ export function ProjectView({ studio, index, project, session, onIndex }: { stud
   const [pane, setPane] = useState<"edit" | "preview">("edit");
   // Click-to-edit from the preview: on small screens, switch to the editor to show the field.
   useEffect(() => { const on = () => setPane("edit"); addEventListener(GOTO_EVENT, on); return () => removeEventListener(GOTO_EVENT, on); }, []);
-  const [modal, setModal] = useState<"" | "export" | "publish" | "host" | "live" | "history" | "details" | "backend" | "inbox" | "write">("");
+  useEffect(() => { const on = () => setModal("pamphlet"); addEventListener(PAMPHLET_EVENT, on); return () => removeEventListener(PAMPHLET_EVENT, on); }, []);
+  const [modal, setModal] = useState<Modal>("");
   const defaults = useRef<any>(null);
   const [openAt, setOpenAt] = useState(0);
   const [conflict, setConflict] = useState<{ siteAt: string | null } | null>(null);
@@ -136,6 +141,26 @@ export function ProjectView({ studio, index, project, session, onIndex }: { stud
 
   const replaceDraft = (c: any) => { setDraft(merge(defaults.current || {}, clone(c))); setV((n) => n + 1); };
 
+  // Project tools: in Settings → Publish & tools, and in the top bar when pinned (a Studio-wide choice).
+  const demo = studio.repo.demo;
+  const tools: { id: Modal; label: string; hint: string }[] = [
+    ...(project.host
+      ? [{ id: "host" as Modal, label: `Publish to ${project.host.kind === "cloudflare" ? "Cloudflare" : "Netlify"}`, hint: "Publish this site to its hosting, with content and photos in your own database." }]
+      : [{ id: "host" as Modal, label: "Host to External Services", hint: "Move the site to Cloudflare or Netlify hosting, with content and photos in your own database, and your own domain." }]),
+    { id: "publish", label: "Publish to GitHub", hint: "Publish (or update) a copy of the site on GitHub Pages." },
+    ...((project.publish || project.host) && !demo ? [{ id: "live" as Modal, label: "Live sites", hint: "When each live site last changed, and pull its content." }] : []),
+    { id: "history", label: `History${project.exports.length ? ` (${project.exports.length})` : ""}`, hint: "Earlier versions you published or exported: download them or load one into the editor." },
+    { id: "export", label: "Export ZIP", hint: "Download the whole site as a ZIP file." },
+    ...(!demo ? [{ id: "write" as Modal, label: "Write text from a site", hint: "Write new, original text for your brand from a site in the same line of business." }] : []),
+  ];
+  const pinned = index.pinned ?? ["host"];
+  const [pinBusy, setPinBusy] = useState(false);
+  const pin = async (id: string, on: boolean) => {
+    setPinBusy(true);
+    try { onIndex(await studio.savePinned(on ? [...pinned, id] : pinned.filter((x) => x !== id))); } catch (e: any) { toast(e?.message || "Couldn't save that.", "bad"); }
+    setPinBusy(false);
+  };
+
   const extras = useMemo(() => [
     ...(project.template === "business" ? [{
       id: "enquiries", label: "Enquiries", group: "Content", desc: "Messages sent through the website's enquiry form.",
@@ -146,9 +171,24 @@ export function ProjectView({ studio, index, project, session, onIndex }: { stud
       render: () => <WarrantyPanel repo={site} cfg={draft?.warranty} why={studio.repo.demo ? "Sign in with your repository to keep records." : "Publish the site first (to GitHub or Host to External Services): records are saved straight to the live site."} />,
     }] : []),
     {
+      id: "tools", label: "Publish & tools", group: "Settings", desc: "Publish, live sites, history, ZIP export and writing text. Pin the ones you use most to the top bar.",
+      render: () => (
+        <div className="flex flex-col gap-2.5" aria-label="Project tools">
+          {tools.map((t) => (
+            <div key={t.id} className="card flex flex-wrap items-center gap-3 p-3.5">
+              <div className="min-w-0 flex-1"><b className="text-ink-100">{t.label}</b><p className="text-[12.5px] text-ink-400">{t.hint}</p></div>
+              <Toggle id={`pin-${t.id}`} checked={pinned.includes(t.id)} onChange={(on) => { if (!pinBusy && !demo) pin(t.id, on); }} label="Pin to top bar" />
+              <button type="button" className="btn btn-sm btn-pri" onClick={() => setModal(t.id)}>Open</button>
+            </div>
+          ))}
+          <p className="text-[12.5px] text-ink-400">Pinned tools show next to Save at the top of every project{demo ? "" : " in this Studio, on every device"}.</p>
+        </div>
+      ),
+    },
+    {
       id: "backup", label: "Backup & reset", group: "Project", desc: "Copy, restore or reset this project's content.",
       render: () => <BackupPanel draft={draft} onReplace={replaceDraft} loadDefaults={() => loadDefaults(project.template)} />,
-    }], [draft, project.template, project.host, session.token, site]);
+    }], [draft, project.template, project.host, session.token, site, pinned.join(), pinBusy, project.exports.length, project.publish]);
 
   // The confirm is async, so stop the link first and navigate ourselves.
   const onBack = async (e: React.MouseEvent) => {
@@ -179,16 +219,9 @@ export function ProjectView({ studio, index, project, session, onIndex }: { stud
             <button type="button" aria-pressed={pane === "edit"} className={`btn btn-sm border-0 ${pane === "edit" ? "bg-ink-700" : "bg-transparent"}`} onClick={() => setPane("edit")}>Edit</button>
             <button type="button" aria-pressed={pane === "preview"} className={`btn btn-sm border-0 ${pane === "preview" ? "bg-ink-700" : "bg-transparent"}`} onClick={() => setPane("preview")}>Preview</button>
           </div>
-          {(project.publish || project.host) && !studio.repo.demo && <button type="button" className="btn btn-sm" onClick={() => setModal("live")} title="When each live site last changed, and pull its content">Live sites</button>}
-          <button type="button" className="btn btn-sm" onClick={() => setModal("history")}>History{project.exports.length ? ` (${project.exports.length})` : ""}</button>
-          {!studio.repo.demo && <button type="button" className="btn btn-sm" onClick={() => setModal("write")} title="Write new, original text for your brand from a site in the same line of business">Write text from a site</button>}
-          <button type="button" className="btn btn-sm" onClick={() => setModal("export")}>Export ZIP</button>
           {project.template === "store" && !studio.repo.demo && <button type="button" className="btn btn-sm" onClick={() => setModal("backend")} title="Set up the shop server (Cloudflare Worker), its private orders repository and email (Resend) from here">{project.worker ? "Shop backend ✓" : "Shop backend"}</button>}
           {project.template === "business" && !studio.repo.demo && <button type="button" className="btn btn-sm" onClick={() => setModal("inbox")} title="Save the enquiry form's enquiries as JSON files in a private GitHub repository (no email)">{project.inbox ? "Enquiry inbox ✓" : "Enquiry inbox"}</button>}
-          <button type="button" className="btn btn-sm" onClick={() => setModal("publish")}>Publish to GitHub</button>
-          {project.host
-            ? <button type="button" className="btn btn-sm" onClick={() => setModal("host")}>Publish to {project.host.kind === "cloudflare" ? "Cloudflare" : "Netlify"}</button>
-            : <button type="button" className="btn btn-sm" onClick={() => setModal("host")} title="Move the site to Cloudflare or Netlify hosting, with content and photos in your own database, and your own domain">Host to External Services</button>}
+          {tools.filter((t) => pinned.includes(t.id)).map((t) => <button key={t.id} type="button" className="btn btn-sm" onClick={() => setModal(t.id)} title={t.hint}>{t.label}</button>)}
           <button type="button" className="btn btn-pri btn-sm" disabled={!dirty || saving} onClick={() => save()}>Save</button>
         </div>
       </header>
@@ -223,6 +256,7 @@ export function ProjectView({ studio, index, project, session, onIndex }: { stud
       {modal === "publish" && <PublishDialog {...{ studio, project, tpl, draft, dirty, save, onIndex, getBlob, session }} onClose={() => setModal("")} />}
       {modal === "host" && <HostDialog {...{ studio, project, tpl, draft, dirty, save, onIndex, getBlob, session }} onClose={() => setModal("")} />}
       {modal === "live" && <LiveSitesDialog {...{ studio, project, session, dirty, onIndex }} current={draft} defaults={defaults.current} onImported={(c) => { replaceDraft(c); setSavedV(v + 1); setConflict(null); }} onClose={() => setModal("")} />}
+      {modal === "pamphlet" && <PamphletDialog {...{ session, project, draft, upload }} onApply={(c, n) => { replaceDraft(c); toast(`${n} product${n === 1 ? "" : "s"} filled in. Check them, then Save.`); }} onClose={() => setModal("")} />}
       {modal === "write" && <WriteFromSiteDialog {...{ session, project, draft }} onApply={(c) => { replaceDraft(c); toast("New text is in the editor. Check it, then Save."); }} onClose={() => setModal("")} />}
       {modal === "history" && <HistoryDialog {...{ studio, project, tpl, getBlob }} onLoad={(c) => { replaceDraft(c); setModal(""); toast("Loaded into the editor. Save to keep it."); }} onClose={() => setModal("")} />}
       {modal === "details" && <DetailsDialog {...{ studio, index, project, session, onIndex }} onImported={(c) => { replaceDraft(c); setSavedV(v + 1); }} onClose={() => setModal("")} />}

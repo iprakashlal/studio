@@ -107,6 +107,53 @@ export function copiedBits(o: any, src: string, n = 6): string[] {
   walk(o, ""); return hit;
 }
 const BRIEF_KEYS = "brand_tagline, hero_eyebrow, hero_title, hero_text, hero_cta, about_title, about_text, mission, vision, values (4 × {title, text}), services_title, services_intro, services (up to 6 × {title, text}), process (4 × {title, text}), faq (up to 6 × {q, a}), banner_title, banner_text, cta_title, cta_text, seo_title, seo_description, footer_text";
+// ---------------------------------------------------------------- reading a product pamphlet (/ai/products)
+const VISION = ["@cf/meta/llama-4-scout-17b-16e-instruct", "@cf/meta/llama-3.2-11b-vision-instruct"];
+/** The text in a photo or scanned page, read by a vision model. */
+async function readImage(env: Env, dataUri: string): Promise<string> {
+  const ask = "Transcribe ALL the text in this product pamphlet image exactly as printed: product names, prices, specifications, features, model numbers, contact details. Keep tables as 'label: value' lines. Output only the text.";
+  let last: any;
+  for (const model of VISION) {
+    try {
+      if (model.includes("3.2")) await env.AI.run(model, { prompt: "agree" }).catch(() => null); // that model asks once for its licence to be accepted
+      const r: any = await env.AI.run(model, { messages: [{ role: "user", content: [{ type: "text", text: ask }, { type: "image_url", image_url: { url: dataUri } }] }], max_tokens: 2048 });
+      const t = String(r?.response ?? "").trim(); if (t) return t;
+    } catch (e) { last = e; }
+  }
+  throw last || new Error("Couldn't read the image.");
+}
+const PRODUCT_KEYS = `{"products":[{"name":"","category":"","summary":"one or two sentences","price":"exactly as printed, or empty","features":["short points"],"details":"a fuller description in paragraphs","specs":[{"label":"","value":""}],"page":1}]}`;
+async function readPamphlet(env: Env, q: any) {
+  const pages: string[] = [];
+  const text = String(q.text || "").slice(0, 60000); if (text.trim()) pages.push(text);
+  const imgs = (Array.isArray(q.images) ? q.images : []).slice(0, 8);
+  try {
+    for (const im of imgs) {
+      const uri = String(im?.data || ""); if (!/^data:image\/(jpeg|png|webp);base64,/.test(uri) || uri.length > 4_500_000) continue;
+      pages.push(`--- PAGE ${+im.page || pages.length + 1} ---\n` + (await readImage(env, uri)));
+    }
+  } catch (e: any) { return { error: /neuron|quota|limit|429/i.test(String(e?.message || e)) ? "Today's free AI allowance is used up. Try again tomorrow." : "Couldn't read the pamphlet's pictures: " + (e?.message || e) }; }
+  const all = pages.join("\n\n").slice(0, 24000);
+  if (words(all).length < 12) return { error: "Couldn't find any text in that pamphlet. Try a clearer photo or the original PDF." };
+  const sys = `You turn a business's own product pamphlet into catalogue entries. Return ONLY JSON shaped like ${PRODUCT_KEYS}. One entry per distinct product or model. Rules: use only what the pamphlet says; never invent prices, numbers, ratings, certifications or features; copy prices, model numbers and specification values exactly as printed; leave a field empty ("" or []) when the pamphlet doesn't say; category is a short group name the pamphlet suggests (or ""); summary is one or two plain sentences; features are short points; specs are label/value pairs from tables or lists; page is the page number (from the --- PAGE n --- markers) where the product appears, or 1. Skip company contact details, terms and general marketing text.`;
+  const model = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
+  let out: any;
+  try {
+    const r: any = await env.AI.run(model, { messages: [{ role: "system", content: sys }, { role: "user", content: (q.hint ? "Note from the owner: " + String(q.hint).slice(0, 500) + "\n\n" : "") + "PAMPHLET TEXT:\n" + all }], max_tokens: 4000, temperature: 0.1, response_format: { type: "json_object" } });
+    const t = typeof r?.response === "string" ? r.response : JSON.stringify(r?.response ?? r);
+    try { out = JSON.parse(t); } catch { const m = /\{[\s\S]*\}/.exec(t); out = m ? JSON.parse(m[0]) : null; }
+  } catch (e: any) { return { error: /neuron|quota|limit|429/i.test(String(e?.message || e)) ? "Today's free AI allowance is used up. Try again tomorrow." : "Couldn't read the pamphlet: " + (e?.message || e) }; }
+  const S = (v: any, n = 2000) => (typeof v === "string" || typeof v === "number" ? String(v).trim().slice(0, n) : "");
+  const products = (Array.isArray(out?.products) ? out.products : []).map((p: any) => ({
+    name: S(p?.name, 120), category: S(p?.category, 60), summary: S(p?.summary, 400), price: S(p?.price, 60),
+    features: (Array.isArray(p?.features) ? p.features : []).map((x: any) => S(x, 160)).filter(Boolean).slice(0, 12),
+    details: S(p?.details, 3000), specs: (Array.isArray(p?.specs) ? p.specs : []).map((x: any) => ({ label: S(x?.label, 80), value: S(x?.value, 200) })).filter((x: any) => x.label || x.value).slice(0, 30),
+    page: Math.max(1, Math.min(99, parseInt(p?.page, 10) || 1)),
+  })).filter((p: any) => p.name).slice(0, 60);
+  if (!products.length) return { error: "No products were found in that pamphlet." };
+  return { products, read: words(all).length };
+}
+
 async function writeSite(env: Env, q: any) {
   const brand = String(q.brand || "").trim().slice(0, 80), notes = String(q.notes || "").slice(0, 1500), kind = String(q.kind || "business");
   if (!brand) return { error: "Enter your brand name." };
@@ -200,6 +247,12 @@ export default {
       }
 
       // ---- new site text from a reference site's outline (Workers AI), for any Studio or site owner
+      if (p === "/ai/products" && req.method === "POST") {
+        const email = await who(env, req); if (!email) return err(401, "Sign in first.");
+        if (!(await env.DB.prepare("select 1 from members where email = ? and role in ('owner', 'partner') limit 1").bind(email).first())) return err(403, "Only owners can use this.");
+        if (!env.AI) return err(501, "Reading pamphlets needs the database updated once (from a device with the Cloudflare token).");
+        return json(await readPamphlet(env, (await req.json()) as any));
+      }
       if (p === "/ai/write" && req.method === "POST") {
         const email = await who(env, req); if (!email) return err(401, "Sign in first.");
         if (!(await env.DB.prepare("select 1 from members where email = ? and role in ('owner', 'partner') limit 1").bind(email).first())) return err(403, "Only owners can use this.");

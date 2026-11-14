@@ -75,6 +75,7 @@ const schema: Category[] = [
         g2({ t: "toggle", path: "products.showPrice", label: "Show prices" }, { t: "toggle", path: "products.filter", label: "Category filter on the products page" }, { t: "toggle", path: "products.related", label: "Show more from the same category on each product page" }),
         { t: "note", text: "View more opens the product's own page (product.html). Enquire opens the enquiry form with the product filled in. Without the form, it opens WhatsApp, or else email, with a message about the product. The section shows the first products; the rest are on the products page." },
       ] },
+      { title: "Fill in from a pamphlet", studio: true, fields: [{ t: "pamphlet" }] },
       { title: "Products", fields: [{ t: "list", path: "products.items", max: 200, title: (it) => `${it.name || "Product"}${it.category ? " · " + it.category : ""}`, add: () => ({ name: "New product", category: "", badge: "", summary: "", price: "", images: [], features: [], details: "", specs: [] }),
         item: [g2({ t: "text", path: "name", label: "Name" }, { t: "text", path: "category", label: "Category" }),
           g2({ t: "text", path: "price", label: "Price (optional)", ph: "₹12,500 or On request" }, { t: "text", path: "badge", label: "Badge (optional)", ph: "New, Bestseller" }),

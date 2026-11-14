@@ -128,8 +128,9 @@ const schema: Category[] = [
   {
     id: "testimonials", label: "Testimonials", group: "Content", desc: "What clients say.",
     cards: [{ title: "Heading", fields: [g2({ t: "text", path: "testimonials.eyebrow", label: "Small label above" }, { t: "text", path: "testimonials.title", label: "Heading", ml: true })] },
+      { title: "Reviews from Google", studio: true, fields: [{ t: "googleReviews" }] },
       { title: "Testimonials", fields: [{ t: "list", path: "testimonials.items", max: 12, title: (it) => it.name || "Testimonial", add: () => ({ quote: "", name: "", role: "", company: "" }),
-        item: [{ t: "textarea", path: "quote", label: "Quote", rows: 3 }, g3({ t: "text", path: "name", label: "Name" }, { t: "text", path: "role", label: "Role" }, { t: "text", path: "company", label: "Company" })] }] }],
+        item: [{ t: "textarea", path: "quote", label: "Quote", rows: 3 }, g3({ t: "text", path: "name", label: "Name" }, { t: "text", path: "role", label: "Role" }, { t: "text", path: "company", label: "Company" }), { t: "select", path: "rating", label: "Stars", options: [{ value: "", label: "None" }, { value: "5", label: "★★★★★" }, { value: "4", label: "★★★★" }, { value: "3", label: "★★★" }, { value: "2", label: "★★" }, { value: "1", label: "★" }] }] }] }],
   },
   {
     id: "pricing", label: "Pricing", group: "Content", desc: "Packages, engagements or plans.",

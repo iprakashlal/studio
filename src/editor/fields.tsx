@@ -18,6 +18,8 @@ export type EditorCtx = {
 };
 /** Asks the project view to open "Fill in from a pamphlet". */
 export const PAMPHLET_EVENT = "studio:pamphlet";
+/** Asks the project view to open "Add reviews from Google". */
+export const GOOGLE_EVENT = "studio:google-reviews";
 export const Ctx = createContext<EditorCtx>(null as any);
 const useCtx = () => useContext(Ctx);
 
@@ -174,6 +176,13 @@ export function FieldView({ f, obj, base }: { f: F; obj: any; base: string }) {
       return <ThemesField />;
     case "adminThemes":
       return <AdminThemesField />;
+    case "googleReviews":
+      return (
+        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-brand-500/40 bg-brand-500/5 p-3">
+          <p className="min-w-0 flex-1 text-[13px] text-ink-300">Show your Google reviews here, with the stars you choose, the reviewer's name and your Google rating.</p>
+          <button type="button" className="btn btn-sm btn-pri" onClick={() => dispatchEvent(new CustomEvent(GOOGLE_EVENT))}>Add reviews from Google</button>
+        </div>
+      );
     case "pamphlet":
       return (
         <div className="flex flex-wrap items-center gap-3 rounded-lg border border-brand-500/40 bg-brand-500/5 p-3">

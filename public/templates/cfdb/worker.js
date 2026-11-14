@@ -124,6 +124,56 @@ function copiedBits(o, src, n = 6) {
   return hit;
 }
 var BRIEF_KEYS = "brand_tagline, hero_eyebrow, hero_title, hero_text, hero_cta, about_title, about_text, mission, vision, values (4 \xD7 {title, text}), services_title, services_intro, services (up to 6 \xD7 {title, text}), process (4 \xD7 {title, text}), faq (up to 6 \xD7 {q, a}), banner_title, banner_text, cta_title, cta_text, seo_title, seo_description, footer_text";
+var GOOGLE_HOSTS = /^(?:[\w-]+\.)*(?:google\.[a-z.]{2,6}|goo\.gl|g\.co|g\.page)$/i;
+async function placesCall(key, url, body, mask) {
+  const r = await fetch(url, { method: body ? "POST" : "GET", headers: { "X-Goog-Api-Key": key, "X-Goog-FieldMask": mask, ...body ? { "Content-Type": "application/json" } : {} }, body: body ? JSON.stringify(body) : void 0 });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    const m = String(j?.error?.message || r.status), st = String(j?.error?.status || "");
+    if (/API key not valid|API_KEY_INVALID/i.test(m)) throw new Error("Google says that API key isn't valid. Check you copied all of it.");
+    if (st === "PERMISSION_DENIED" || /not been used|disabled|not authorized/i.test(m)) throw new Error('Turn on "Places API (New)" for this key in Google Cloud (APIs & Services \u2192 Library), then try again.');
+    if (r.status === 429) throw new Error("Google's limit for this key was reached. Try again later.");
+    throw new Error("Google answered: " + m);
+  }
+  return j;
+}
+async function googleReviews(q) {
+  const key = String(q.key || "").trim(), raw = String(q.link || "").trim().slice(0, 600);
+  if (!/^AIza[\w-]{30,}$/.test(key)) return { error: "Paste a Google Maps Platform API key (it starts with AIza)." };
+  if (!raw) return { error: "Paste the business's Google Maps link, or its name and city." };
+  let id = "", text = "", ll = null;
+  try {
+    if (/^https?:\/\//i.test(raw)) {
+      let u = new URL(raw);
+      if (!GOOGLE_HOSTS.test(u.hostname)) return { error: "That isn't a Google Maps link. Open the business on Google Maps, press Share, and copy the link." };
+      if (!/google\./i.test(u.hostname)) {
+        const r = await fetch(u.href, { redirect: "follow", headers: { "User-Agent": "Mozilla/5.0" } });
+        u = new URL(r.url);
+        if (!GOOGLE_HOSTS.test(u.hostname)) return { error: "That link didn't lead to Google Maps." };
+      }
+      const full = decodeURIComponent(u.href);
+      id = (/(ChIJ[\w-]{10,})/.exec(full) || [])[1] || u.searchParams.get("query_place_id") || "";
+      const name = (/\/maps\/place\/([^/@?]+)/.exec(u.pathname) || [])[1];
+      text = (name ? decodeURIComponent(name) : u.searchParams.get("q") || u.searchParams.get("query") || "").replace(/\+/g, " ").trim();
+      const m = /@(-?\d+\.\d+),(-?\d+\.\d+)/.exec(full) || /[?&](?:ll|center)=(-?\d+\.\d+),(-?\d+\.\d+)/.exec(full);
+      if (m) ll = { latitude: +m[1], longitude: +m[2] };
+      if (!id && !text) return { error: "Couldn't find the business in that link. Paste its name, area and city instead." };
+    } else text = raw;
+    if (!id) {
+      const s = await placesCall(key, "https://places.googleapis.com/v1/places:searchText", { textQuery: text, maxResultCount: 1, ...ll ? { locationBias: { circle: { center: ll, radius: 500 } } } : {} }, "places.id");
+      id = s?.places?.[0]?.id || "";
+      if (!id) return { error: `Google found no place for "${text}". Try the name with its area and city.` };
+    }
+    const d = await placesCall(key, `https://places.googleapis.com/v1/places/${encodeURIComponent(id)}`, null, "id,displayName,formattedAddress,rating,userRatingCount,reviews,googleMapsUri");
+    const S = (v, n) => String(v ?? "").trim().slice(0, n);
+    return {
+      place: { id: d.id, name: S(d.displayName?.text, 120), address: S(d.formattedAddress, 200), rating: +d.rating || 0, count: +d.userRatingCount || 0, url: S(d.googleMapsUri, 300) },
+      reviews: (d.reviews || []).map((r) => ({ rating: +r.rating || 0, text: S(r.text?.text || r.originalText?.text, 1500), author: S(r.authorAttribution?.displayName, 80), authorUrl: S(r.authorAttribution?.uri, 300), when: S(r.relativePublishTimeDescription, 40), time: S(r.publishTime, 40) })).filter((r) => r.text && r.author)
+    };
+  } catch (e) {
+    return { error: e?.message || String(e) };
+  }
+}
 var VISION = ["@cf/meta/llama-4-scout-17b-16e-instruct", "@cf/meta/llama-3.2-11b-vision-instruct"];
 async function readImage(env, dataUri) {
   const ask = "Transcribe ALL the text in this product pamphlet image exactly as printed: product names, prices, specifications, features, model numbers, contact details. Keep tables as 'label: value' lines. Output only the text.";
@@ -251,7 +301,7 @@ var db_worker_default = {
     if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
     const u = new URL(req.url), p = u.pathname.replace(/\/+$/, "") || "/";
     try {
-      if (p === "/") return json({ ok: true, service: "site-studio-db", v: V, mail: !!(env.RESEND_API_KEY && env.MAIL_FROM), ...env.CF_TOKEN && env.CF_ACCOUNT ? { deploy: true, account: env.CF_ACCOUNT } : {}, ...env.GH_TOKEN ? { gh: true } : {}, ...env.AI ? { ai: true } : {} });
+      if (p === "/") return json({ ok: true, service: "site-studio-db", v: V, mail: !!(env.RESEND_API_KEY && env.MAIL_FROM), ...env.CF_TOKEN && env.CF_ACCOUNT ? { deploy: true, account: env.CF_ACCOUNT } : {}, ...env.GH_TOKEN ? { gh: true } : {}, ...env.AI ? { ai: true } : {}, reviews: true });
       if (p === "/auth/code" && req.method === "POST") {
         const { email: raw } = await req.json();
         const email2 = String(raw || "").trim().toLowerCase();
@@ -304,6 +354,12 @@ var db_worker_default = {
         if (!Object.keys(data).length) return err(400, "The form was empty.");
         await env.DB.prepare("insert into enquiries (site, data, page, created_at) values (?, ?, ?, ?)").bind(site, JSON.stringify(data), String(q.page || "").slice(0, 200), (/* @__PURE__ */ new Date()).toISOString()).run();
         return json({ ok: true });
+      }
+      if (p === "/reviews/google" && req.method === "POST") {
+        const email2 = await who(env, req);
+        if (!email2) return err(401, "Sign in first.");
+        if (!await env.DB.prepare("select 1 from members where email = ? and role in ('owner', 'partner') limit 1").bind(email2).first()) return err(403, "Only owners can use this.");
+        return json(await googleReviews(await req.json()));
       }
       if (p === "/ai/products" && req.method === "POST") {
         const email2 = await who(env, req);

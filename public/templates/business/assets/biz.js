@@ -325,10 +325,13 @@ function teamHTML() {
     return `<article class="person rv" style="--i:${i}"><div class="pp">${ph ? `<img src="${esc(ph)}" alt="${esc(m.name)}" loading="lazy">` : `<span>${esc(initials(m.name))}</span>`}</div><h3 class="h3">${esc(m.name)}</h3><p class="role">${esc(m.role)}</p>${li ? `<a class="pl" href="${esc(li)}" target="_blank" rel="noopener" aria-label="${esc(m.name)} on LinkedIn">in</a>` : ""}</article>`;
   }).join("")}</div></div></section>`;
 }
+/** Five stars, filled up to the rating. */
+const starRow = (n) => { const r = Math.max(0, Math.min(5, Math.round(+n || 0))); return "★".repeat(r) + `<span class="off">${"★".repeat(5 - r)}</span>`; };
 function testimonialsHTML() {
   const T = C.testimonials;
   if (!T.items.length) return "";
-  return `<section class="testimonials band" id="testimonials"><div class="wrap">${head(T)}<div class="quotes">${T.items.map((q, i) => `<figure class="card quote rv" style="--i:${i}"><span class="qm" aria-hidden="true">“</span><blockquote>${rich(q.quote)}</blockquote>
+  const G = T.google && T.google.rating && T.items.some((q) => q.source === "google") ? T.google : null;
+  return `<section class="testimonials band" id="testimonials"><div class="wrap">${head(T)}${G ? `<p class="g-sum"><a href="${esc(G.url || "#")}" target="_blank" rel="noopener"><span class="stars" aria-hidden="true">${starRow(G.rating)}</span> <b>${(+G.rating).toFixed(1)}</b> from ${esc(String(G.count))} reviews on Google</a></p>` : ""}<div class="quotes">${T.items.map((q, i) => `<figure class="card quote rv" style="--i:${i}"><span class="qm" aria-hidden="true">“</span>${q.rating ? `<span class="stars" role="img" aria-label="${+q.rating} out of 5 stars">${starRow(q.rating)}</span>` : ""}<blockquote>${rich(q.quote)}</blockquote>
       <figcaption><span class="qa">${esc(initials(q.name))}</span><span><b>${esc(q.name)}</b><small>${[q.role, q.company].filter(Boolean).map(esc).join(", ")}</small></span></figcaption></figure>`).join("")}</div></div></section>`;
 }
 function pricingHTML() {

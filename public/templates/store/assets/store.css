@@ -606,3 +606,7 @@ html[data-hero-art=frame] .hero .art{outline:1px solid var(--line);outline-offse
 html[data-hero-art=none] .hero .art{display:none}
 html[data-hero-art=none] .hero:not(.hx) .wrap{grid-template-columns:1fr}
 .hero.hs-solo .wrap{grid-template-columns:1fr}.hero.hs-host .btn:not(.pri){color:inherit;border-color:color-mix(in srgb,currentColor 45%,transparent)}
+
+/* Star ratings (Google reviews) */
+.stars{color:#F5A623;letter-spacing:2px;font-size:16px;line-height:1;display:block;margin-bottom:8px}.stars .off{color:color-mix(in srgb,currentColor 25%,transparent)}
+.g-sum{margin:-6px 0 22px}.g-sum a{display:inline-flex;align-items:center;gap:8px;text-decoration:none;color:inherit;opacity:.8;font-size:15px}.g-sum .stars{display:inline;margin:0}.g-sum a:hover{opacity:1}

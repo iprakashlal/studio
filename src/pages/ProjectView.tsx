@@ -16,7 +16,8 @@ import { siteAddress, siteRepoFor } from "../lib/hosting";
 import { HostDialog } from "./HostDialog";
 import { WriteFromSiteDialog } from "./WriteFromSite";
 import { PamphletDialog } from "./PamphletDialog";
-import { PAMPHLET_EVENT } from "../editor/fields";
+import { GOOGLE_EVENT, PAMPHLET_EVENT } from "../editor/fields";
+import { GoogleReviewsDialog } from "./GoogleReviewsDialog";
 import { GitHubPublishAccount } from "./GitHubAccount";
 import { ensurePages, ensureRepo, ghPublish } from "../lib/ghpublish";
 import { LiveSitesDialog } from "./LiveSites";
@@ -26,7 +27,7 @@ import { BackupPanel } from "../editor/BackupPanel";
 import { useAssetMap } from "../editor/useAssets";
 import { Field, Modal, StepLoader, Toggle, useConfirm, useToast } from "../ui/kit";
 
-type Modal = "" | "export" | "publish" | "host" | "live" | "history" | "details" | "backend" | "inbox" | "write" | "pamphlet";
+type Modal = "" | "export" | "publish" | "host" | "live" | "history" | "details" | "backend" | "inbox" | "write" | "pamphlet" | "reviews";
 
 export function ProjectView({ studio, index, project, session, onIndex }: { studio: Studio; index: StudioIndex; project: ProjectMeta; session: Session; onIndex: (i: StudioIndex) => void }) {
   const toast = useToast();
@@ -41,6 +42,7 @@ export function ProjectView({ studio, index, project, session, onIndex }: { stud
   // Click-to-edit from the preview: on small screens, switch to the editor to show the field.
   useEffect(() => { const on = () => setPane("edit"); addEventListener(GOTO_EVENT, on); return () => removeEventListener(GOTO_EVENT, on); }, []);
   useEffect(() => { const on = () => setModal("pamphlet"); addEventListener(PAMPHLET_EVENT, on); return () => removeEventListener(PAMPHLET_EVENT, on); }, []);
+  useEffect(() => { const on = () => setModal("reviews"); addEventListener(GOOGLE_EVENT, on); return () => removeEventListener(GOOGLE_EVENT, on); }, []);
   const [modal, setModal] = useState<Modal>("");
   const defaults = useRef<any>(null);
   const [openAt, setOpenAt] = useState(0);
@@ -256,6 +258,7 @@ export function ProjectView({ studio, index, project, session, onIndex }: { stud
       {modal === "publish" && <PublishDialog {...{ studio, project, tpl, draft, dirty, save, onIndex, getBlob, session }} onClose={() => setModal("")} />}
       {modal === "host" && <HostDialog {...{ studio, project, tpl, draft, dirty, save, onIndex, getBlob, session }} onClose={() => setModal("")} />}
       {modal === "live" && <LiveSitesDialog {...{ studio, project, session, dirty, onIndex }} current={draft} defaults={defaults.current} onImported={(c) => { replaceDraft(c); setSavedV(v + 1); setConflict(null); }} onClose={() => setModal("")} />}
+      {modal === "reviews" && <GoogleReviewsDialog {...{ session, project, draft }} onApply={(c, n) => { replaceDraft(c); toast(`${n} Google review${n === 1 ? "" : "s"} added. Check them, then Save.`); }} onClose={() => setModal("")} />}
       {modal === "pamphlet" && <PamphletDialog {...{ session, project, draft, upload }} onApply={(c, n) => { replaceDraft(c); toast(`${n} product${n === 1 ? "" : "s"} filled in. Check them, then Save.`); }} onClose={() => setModal("")} />}
       {modal === "write" && <WriteFromSiteDialog {...{ session, project, draft }} onApply={(c) => { replaceDraft(c); toast("New text is in the editor. Check it, then Save."); }} onClose={() => setModal("")} />}
       {modal === "history" && <HistoryDialog {...{ studio, project, tpl, getBlob }} onLoad={(c) => { replaceDraft(c); setModal(""); toast("Loaded into the editor. Save to keep it."); }} onClose={() => setModal("")} />}

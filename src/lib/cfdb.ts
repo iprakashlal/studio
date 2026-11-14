@@ -137,8 +137,8 @@ export const resendTestOnly = (msg: string): string | null => /own email address
 
 // ---------------------------------------------------------------- publishing from any device
 /** Whether this database keeps a Cloudflare token for publishing (and for which account). */
-export async function cfDeployInfo(api: string): Promise<{ deploy: boolean; account?: string; gh?: boolean; ai?: boolean }> {
-  try { const j = await (await fetch(clean(api) + "/", { cache: "no-store" })).json(); return { deploy: !!j?.deploy, account: j?.account, gh: !!j?.gh, ai: !!j?.ai }; } catch { return { deploy: false }; }
+export async function cfDeployInfo(api: string): Promise<{ deploy: boolean; account?: string; gh?: boolean; ai?: boolean; reviews?: boolean }> {
+  try { const j = await (await fetch(clean(api) + "/", { cache: "no-store" })).json(); return { deploy: !!j?.deploy, account: j?.account, gh: !!j?.gh, ai: !!j?.ai, reviews: !!j?.reviews }; } catch { return { deploy: false }; }
 }
 /** GitHub calls through the database (its kept token) as a signed-in owner of `scope`: a fetch-like Response. */
 export function dbGitHub(api: string, scope: string) {
@@ -188,4 +188,16 @@ export async function cfProducts(api: string, o: { text?: string; images?: { pag
   const j = await cfCall<any>(api, "/ai/products", { method: "POST", body: JSON.stringify(o) });
   if (j?.error) throw new Error(j.error);
   return j.products || [];
+}
+
+// ---------------------------------------------------------------- Google reviews
+export type GooglePlace = { id: string; name: string; address: string; rating: number; count: number; url: string };
+export type GoogleReview = { rating: number; text: string; author: string; authorUrl: string; when: string; time: string };
+/** A Google Maps Platform key, kept encrypted on this device only. */
+export const googleKeyVault = vault<{ key: string }>("google-places");
+/** The place's rating and the reviews Google gives (up to 5), through the database (the key isn't kept there). */
+export async function cfGoogleReviews(api: string, link: string, key: string): Promise<{ place: GooglePlace; reviews: GoogleReview[] }> {
+  const j = await cfCall<any>(api, "/reviews/google", { method: "POST", body: JSON.stringify({ link, key }) });
+  if (j?.error) throw new Error(j.error);
+  return j;
 }

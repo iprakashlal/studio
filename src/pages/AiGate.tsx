@@ -20,7 +20,8 @@ async function findApi(project: ProjectMeta, token: string): Promise<string | nu
 }
 
 /** `ready` once the database has AI and this device is signed in; `ui` shows what's missing (or null). */
-export function useAiDb(session: Session, project: ProjectMeta) {
+/** `need`: "ai" for the writing tools, "reviews" for Google reviews (no AI needed, but a database from after they were added). */
+export function useAiDb(session: Session, project: ProjectMeta, need: "ai" | "reviews" = "ai") {
   const [api, setApi] = useState<string | null | undefined>(undefined);
   const [ai, setAi] = useState<boolean | null>(null);
   const [who, setWho] = useState<string | null>(null);
@@ -29,7 +30,7 @@ export function useAiDb(session: Session, project: ProjectMeta) {
   const [nf, setNf] = useState<Netlify | null | undefined>(undefined);
   useEffect(() => { netlifyToken.load(session.token).then((t) => setNf(t ? new Netlify(t.token) : null)); }, [session.token]);
   const acc = useCfAccount(session.token, nf, true);
-  const check = async (a: string | null) => { setApi(a); if (!a) return; setAi(!!(await cfDeployInfo(a)).ai); setWho(await cfSignedIn(a)); };
+  const check = async (a: string | null) => { setApi(a); if (!a) return; const info = await cfDeployInfo(a); setAi(!!info[need]); setWho(await cfSignedIn(a)); };
   useEffect(() => { findApi(project, session.token).then(check); }, []);
   const run = (label: string, f: () => Promise<void>) => async () => { setErr(""); setBusy(label); try { await f(); } catch (e: any) { setErr(e?.message || "Something went wrong."); } setBusy(""); };
   const sendCode = run("Sending", async () => { await cfSendCode(api!, email.trim()); setSent(true); });
@@ -48,7 +49,7 @@ export function useAiDb(session: Session, project: ProjectMeta) {
       {api === null && <p className="rounded-lg border border-amber-400/30 bg-amber-400/5 px-3 py-2.5 text-amber-100">This needs the Studio's database on Cloudflare (free). Set it up in <b>Settings → Accounts → Cloudflare</b>, then come back.</p>}
       {api && ai === false && (
         <div className="rounded-lg border border-amber-400/30 bg-amber-400/5 px-3 py-2.5 text-amber-100">
-          <p>Your database was set up before the AI tools were added. Update it once to turn on Cloudflare's free AI (Workers AI). Sign-ins and data are kept.</p>
+          <p>{need === "ai" ? "Your database was set up before the AI tools were added. Update it once to turn on Cloudflare's free AI (Workers AI)." : "Your database was set up before Google reviews were added. Update it once to add them."} Sign-ins and data are kept.</p>
           {acc.ready ? <button type="button" className="btn btn-sm btn-pri mt-2" disabled={!!busy} onClick={update}>{busy ? busy + "…" : "Update the database"}</button> : <div className="mt-2">{acc.ui}</div>}
         </div>
       )}

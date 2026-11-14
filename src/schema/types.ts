@@ -34,7 +34,9 @@ export type Field =
   /** Import name, experience, education and skills from a LinkedIn profile PDF or data export. */
   | { t: "linkedin" }
   /** Studio only: "Fill in from a pamphlet" (business products), opened by the project view. */
-  | { t: "pamphlet" };
+  | { t: "pamphlet" }
+  /** Studio only: "Add reviews from Google" (business and shop testimonials). */
+  | { t: "googleReviews" };
 
 export type Card = { title: string; fields: Field[]; /** Shown in the Studio only, not in the site's admin page. */ studio?: boolean };
 export type Category = { id: string; label: string; group: string; desc: string; cards: Card[]; /** Show the category only when this returns true for the current content. */ showIf?: (content: any) => boolean };

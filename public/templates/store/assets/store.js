@@ -423,7 +423,7 @@ const PAGES = {
     ${list.length ? `<section class="sec" style="padding-top:12px"><div class="wrap"><div class="sec-h"><div><h2 class="fit">${ml(H.featuredTitle)}</h2>${H.featuredText ? `<p class="soft" style="margin-top:8px">${ml(H.featuredText)}</p>` : ""}</div><a class="link" href="shop.html">${esc(lab("viewAll", "View all"))}</a></div><div class="grid">${list.map(pcard).join("")}</div></div></section>` : ""}
     ${H.showCategories && C.categories.length ? `<section class="sec" style="padding-top:0"><div class="wrap"><div class="sec-h"><h2 class="fit">${ml(H.categoriesTitle)}</h2></div><div class="cats">${C.categories.map((c) => `<a class="cat" href="shop.html?c=${encodeURIComponent(c.id)}">${c.image ? `<img src="${esc(imgUrl(c.image))}" alt="">` : ph(c.name)}<span>${esc(c.name)}<small>${C.products.filter((p) => p.category === c.id).length} products</small></span></a>`).join("")}</div></div></section>` : ""}
     ${H.banner.show ? `<section class="sec" style="padding-top:0"><div class="wrap"><div class="banner"><div class="tx"><h2 class="fit">${ml(H.banner.title)}</h2><p>${ml(H.banner.text)}</p>${C.nav.showPortfolio && H.banner.cta ? `<a class="btn" href="portfolio.html">${esc(H.banner.cta)} →</a>` : ""}</div><div class="im">${H.banner.image ? `<img src="${esc(imgUrl(H.banner.image))}" alt="">` : ph(H.banner.title)}</div></div></div></section>` : ""}
-    ${H.testimonials.length ? `<section class="sec" style="padding-top:0"><div class="wrap"><div class="sec-h"><h2 class="fit">${ml(H.testimonialsTitle)}</h2></div><div class="quotes">${H.testimonials.map((t) => `<figure class="quote" style="margin:0"><p>“${esc(t.quote)}”</p><span><b>${esc(t.name)}</b>${t.role ? ` · ${esc(t.role)}` : ""}</span></figure>`).join("")}</div></div></section>` : ""}`;
+    ${H.testimonials.length ? `<section class="sec" style="padding-top:0"><div class="wrap"><div class="sec-h"><h2 class="fit">${ml(H.testimonialsTitle)}</h2></div>${H.google && H.google.rating && H.testimonials.some((t) => t.source === "google") ? `<p class="g-sum"><a href="${esc(H.google.url || "#")}" target="_blank" rel="noopener"><span class="stars" aria-hidden="true">${starRow(H.google.rating)}</span> <b>${(+H.google.rating).toFixed(1)}</b> from ${esc(String(H.google.count))} reviews on Google</a></p>` : ""}<div class="quotes">${H.testimonials.map((t) => `<figure class="quote" style="margin:0">${t.rating ? `<span class="stars" role="img" aria-label="${+t.rating} out of 5 stars">${starRow(t.rating)}</span>` : ""}<p>“${esc(t.quote)}”</p><span><b>${esc(t.name)}</b>${t.role ? ` · ${esc(t.role)}` : ""}</span></figure>`).join("")}</div></div></section>` : ""}`;
   },
   shop() {
     const S = C.shop, q = new URLSearchParams(location.search);
@@ -624,6 +624,8 @@ const swOn = () => !!(C.warranty && C.warranty.enabled);
 const swOpts = () => ({ cfg: C.warranty, url: (HOST && HOST.assets ? HOST.assets : "") + "assets/data/warranty.json", preview: PREVIEW, esc });
 const swOpen = () => SW().then((w) => w.open(swOpts())).catch(() => {});
 const swMount = () => { const el = document.getElementById("sw-page"); if (el) SW().then((w) => w.mount(el, swOpts())).catch(() => {}); };
+/** Five stars, filled up to the rating. */
+const starRow = (n) => { const r = Math.max(0, Math.min(5, Math.round(+n || 0))); return "★".repeat(r) + `<span class="off">${"★".repeat(5 - r)}</span>`; };
 function render() {
   applyTheme(C.theme);
   if (!PREVIEW && PAGE === "warranty" && !swOn()) { location.replace("index.html"); return; }

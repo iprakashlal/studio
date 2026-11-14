@@ -3,18 +3,26 @@
 //           the database address and Studio ID) into dist/, so both Studios show the same projects.
 //   deploy  Puts this build on the moved Studio's Cloudflare Worker, keeping its studio.config.json. Only the app
 //           files change; projects live in the database and aren't touched. Needs CLOUDFLARE_API_TOKEN.
-// Which Studio: studio.share.json { "studio": "https://studio.example.com/" } in the repository.
+// Which Studio: studio.share.json { "studio": "https://studio.example.com/" } in the repository, or, with no moved
+// Studio address, { "config": { kind, api | url + key, studio, source } }: GitHub Pages uses that database directly
+// and there's nothing to deploy to.
 import { readFileSync, writeFileSync, readdirSync, statSync, existsSync } from "node:fs";
 import { join, relative } from "node:path";
 import { Cloudflare } from "../src/lib/cloudflare";
 
 const cmd = process.argv[2];
 const share = existsSync("studio.share.json") ? JSON.parse(readFileSync("studio.share.json", "utf8")) : null;
-const STUDIO = String(share?.studio || "").replace(/\/?$/, "/");
-if (!share?.studio) { console.log("No studio.share.json: nothing to do."); process.exit(0); }
+const STUDIO = share?.studio ? String(share.studio).replace(/\/?$/, "/") : "";
+const FIXED = share?.config && typeof share.config === "object" ? share.config : null;
+if (!STUDIO && !FIXED) { console.log("No studio.share.json: nothing to do."); process.exit(0); }
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 async function liveConfig() {
+  if (FIXED) {
+    const ok = FIXED.studio && (FIXED.kind === "cloudflare" ? /^https:\/\//.test(FIXED.api) : FIXED.kind === "supabase" && /^https:\/\//.test(FIXED.url) && FIXED.key);
+    if (!ok) throw new Error("studio.share.json: config needs kind, studio and api (Cloudflare) or url + key (Supabase).");
+    return FIXED;
+  }
   for (let i = 0; ; i++) {
     try {
       const r = await fetch(STUDIO + "studio.config.json?x=" + Date.now(), { cache: "no-store" } as any);
@@ -33,6 +41,7 @@ if (cmd === "share") {
   writeFileSync("dist/studio.config.json", JSON.stringify(cfg, null, 2));
   console.log(`GitHub Pages now uses the projects of Studio "${cfg.studio}" (${cfg.kind === "cloudflare" ? cfg.api : cfg.url}).`);
 } else if (cmd === "deploy") {
+  if (!STUDIO) { console.log("No moved Studio address in studio.share.json: nothing to deploy."); process.exit(0); }
   const token = process.env.CLOUDFLARE_API_TOKEN || "";
   if (!token) { console.log("::notice::CLOUDFLARE_API_TOKEN isn't set, so the moved Studio wasn't updated by CI (it still updates itself when an owner opens it)."); process.exit(0); }
   const cf = new Cloudflare(null, token, async (q) => {

@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import type { Relay } from "../lib/relay";
 import { Netlify } from "../lib/netlify";
 import { Cloudflare, type CfAccount } from "../lib/cloudflare";
-import { CF_DB_TOKEN_PAGE, cfAccountVault, setupCfDb, type CfDbSetup } from "../lib/cfdb";
+import { CF_DB_TOKEN_PAGE, cfAccountVault, setupCfDb, type CfDbSetup, type CfMoreToken } from "../lib/cfdb";
 import { useHelper } from "./HelperBox";
 
 export type CfAccountHook = ReturnType<typeof useCfAccount>;
@@ -14,10 +14,25 @@ export function useCfAccount(studioToken: string, nf: Netlify | null | undefined
   const helper = useHelper(studioToken, nf, "Cloudflare");
   const [tok, setTok] = useState(""), [accounts, setAccounts] = useState<CfAccount[] | null>(null), [account, setAccount] = useState("");
   const [busy, setBusy] = useState(""), [err, setErr] = useState("");
+  // Other Cloudflare accounts (their own tokens), for sites hosted there.
+  const [more, setMore] = useState<CfMoreToken[]>([]), [addOpen, setAddOpen] = useState(false), [addTok, setAddTok] = useState(""), [addBusy, setAddBusy] = useState(""), [addErr, setAddErr] = useState("");
   useEffect(() => {
-    if (!persist) { setTok(""); setAccounts(null); return; }
-    cfAccountVault.load(studioToken).then((v) => { if (!v) return; setTok(v.token || ""); if (v.account) setAccount(v.account); });
+    if (!persist) { setTok(""); setAccounts(null); setMore([]); return; }
+    cfAccountVault.load(studioToken).then((v) => { if (!v) return; setTok(v.token || ""); if (v.account) setAccount(v.account); setMore(v.more || []); });
   }, [studioToken, persist]);
+  const saveMore = async (list: CfMoreToken[]) => { setMore(list); const v = await cfAccountVault.load(studioToken); await cfAccountVault.save({ ...(v || { token: "" }), more: list }, studioToken); };
+  /** Adds another account's token (kept encrypted on this device, like the main one). */
+  const addOther = async () => {
+    setAddErr(""); setAddBusy("Connecting");
+    try {
+      const t = addTok.trim(), list = await new Cloudflare(await helper.get(setAddBusy), t).accounts();
+      if (!list.length) throw new Error("This token can't see any Cloudflare account. Create it while signed in to that account.");
+      const next = [...more.filter((m) => m.token !== t), { token: t, accounts: list.map((a) => ({ id: a.id, name: a.name })) }];
+      await saveMore(next); setAddTok(""); setAddOpen(false);
+    } catch (e: any) { setAddErr(e?.message || "Couldn't reach Cloudflare."); }
+    setAddBusy("");
+  };
+  const removeOther = (i: number) => saveMore(more.filter((_, k) => k !== i));
   const connect = async () => {
     setErr(""); setBusy("Connecting");
     try {
@@ -32,6 +47,20 @@ export function useCfAccount(studioToken: string, nf: Netlify | null | undefined
   useEffect(() => { if (persist && tok && !accounts && !busy && helper.ready) connect(); }, [tok && persist, helper.ready]);
   const pickAccount = async (id: string) => { setAccount(id); if (persist) { const v = await cfAccountVault.load(studioToken); if (v) await cfAccountVault.save({ ...v, account: id }, studioToken); } };
   const acc = accounts?.find((a) => a.id === account) || null;
+  /** Every Cloudflare account this device can manage: the main token's, then the other tokens'. */
+  const allAccounts: { id: string; name: string; main: boolean }[] = [...(accounts || []).map((a) => ({ id: a.id, name: a.name, main: true }))];
+  for (const m of more) for (const a of m.accounts) if (!allAccounts.some((x) => x.id === a.id)) allAccounts.push({ ...a, main: false });
+  /** A client for a given account, with the token that can manage it. */
+  const clientFor = async (id: string | undefined, step?: (s: string) => void): Promise<{ cf: Cloudflare; relay: Relay; account: CfAccount; token: string }> => {
+    const other = id ? more.find((m) => m.accounts.some((a) => a.id === id)) : null;
+    if (!other || (accounts || []).some((a) => a.id === id)) {
+      if (!id || id === acc?.id) return client(step);
+      const a = (accounts || []).find((x) => x.id === id); if (!a) throw new Error("No Cloudflare token on this device can manage that account. Add it under Other Cloudflare accounts.");
+      const relay = await helper.get(step); return { cf: new Cloudflare(relay, tok.trim()), relay, account: a, token: tok.trim() };
+    }
+    const relay = await helper.get(step), a = other.accounts.find((x) => x.id === id)!;
+    return { cf: new Cloudflare(relay, other.token), relay, account: { id: a.id, name: a.name } as CfAccount, token: other.token };
+  };
   /** A Cloudflare API client through the helper, for the chosen account. */
   const client = async (step?: (s: string) => void): Promise<{ cf: Cloudflare; relay: Relay; account: CfAccount; token: string }> => {
     if (!acc) throw new Error("Connect your Cloudflare account first.");
@@ -50,6 +79,21 @@ export function useCfAccount(studioToken: string, nf: Netlify | null | undefined
       {accounts && accounts.length > 1 && <label className="flex flex-col gap-1"><span className="label">Cloudflare account</span><select className="input" aria-label="Cloudflare account" value={account} onChange={(e) => pickAccount(e.target.value)}>{accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select></label>}
       {acc && <p className="text-emerald-300">Connected to {acc.name}.</p>}
       {err && <p role="alert" className="text-red-300">{err}</p>}
+      {persist && acc && (
+        <div className="flex flex-col gap-1.5 rounded-lg border border-ink-700 p-2.5" aria-label="Other Cloudflare accounts">
+          <span className="font-semibold text-ink-200">Other Cloudflare accounts</span>
+          <span className="text-ink-400">For sites hosted on another Cloudflare account (an old one, or a client's). Each site picks its account in Publish to Cloudflare.</span>
+          {more.map((m, i) => <span key={i} className="flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-emerald-400" /><span className="min-w-0 flex-1 truncate">{m.accounts.map((a) => a.name).join(", ")}</span><button type="button" className="btn btn-ghost btn-sm" onClick={() => removeOther(i)}>Remove</button></span>)}
+          {!addOpen ? <button type="button" className="self-start text-brand-300 underline" onClick={() => setAddOpen(true)}>+ Add another Cloudflare account</button> : <>
+            <span className="text-ink-400">Sign in to that account on dash.cloudflare.com in this browser, then <a className="text-brand-300 underline" href={CF_DB_TOKEN_PAGE} target="_blank" rel="noopener noreferrer">create its token ↗</a> (same permissions, already ticked) and paste it here.</span>
+            <div className="flex gap-2">
+              <input aria-label="Other Cloudflare account token" className="input min-w-0 flex-1 font-mono text-xs" type="password" autoComplete="off" value={addTok} onChange={(e) => setAddTok(e.target.value)} placeholder="That account's API token" />
+              <button type="button" className="btn btn-sm" disabled={!addTok.trim() || !!addBusy || !helper.ready} onClick={addOther}>{addBusy ? addBusy + "…" : "Add"}</button>
+            </div>
+          </>}
+          {addErr && <p role="alert" className="text-red-300">{addErr}</p>}
+        </div>
+      )}
     </div>
   );
   /** Swaps in a new token (e.g. one with more permissions), keeping the same account when it can see it. */
@@ -61,7 +105,7 @@ export function useCfAccount(studioToken: string, nf: Netlify | null | undefined
     if (persist) { const v = await cfAccountVault.load(studioToken); await cfAccountVault.save({ ...(v || {}), token: t.trim(), account: pick }, studioToken); }
     return new Cloudflare(await helper.get(), t.trim());
   };
-  return { ui, ready: !!acc && helper.ready, account: acc, token: tok.trim(), client, busy, helper, replaceToken };
+  return { ui, ready: !!acc && helper.ready, account: acc, token: tok.trim(), client, clientFor, allAccounts, busy, helper, replaceToken };
 }
 
 /** The Studio's database on Cloudflare. Pass `shared` to use a Cloudflare account picked elsewhere on the page

@@ -10,7 +10,14 @@ import { STUDIO_BUILD } from "../build-info";
 import { vault } from "./vault";
 
 /** The Cloudflare account on this device (one token for hosting, the database and Workers) and the database's setup. */
-export const cfAccountVault = vault<{ token: string; account?: string; resendKey?: string; mailFrom?: string; setup?: CfDbSetup }>("cfdb");
+export const cfAccountVault = vault<{ token: string; account?: string; resendKey?: string; mailFrom?: string; setup?: CfDbSetup; more?: CfMoreToken[] }>("cfdb");
+/** More Cloudflare tokens on this device, for sites hosted on other Cloudflare accounts (an old account, a client's). */
+export type CfMoreToken = { token: string; accounts: { id: string; name: string }[] };
+/** The token on this device that can manage `account`: another account's own token, else the main one. */
+export function cfTokenFor(v: { token?: string; more?: CfMoreToken[] } | null | undefined, account?: string): string {
+  const other = account ? (v?.more || []).find((m) => m.accounts.some((a) => a.id === account)) : null;
+  return other?.token || v?.token || "";
+}
 
 export const CFDB_WORKER = "picaffectz-db";
 export const CFDB_DATABASE = "picaffectz-db";

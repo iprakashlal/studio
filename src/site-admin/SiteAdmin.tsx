@@ -12,6 +12,7 @@ import { SupabaseRepo, assetBase, cfAssetBase, type CfSiteCfg, type SbCfg } from
 import { SbGate, SbAccount, sbSignOut } from "./SbGate";
 import { blobToBytes, clone, safeFileName, textToB64 } from "../lib/util";
 import { adminFile } from "../schema/common";
+import { pagesViaDb } from "../lib/pages";
 import { bakeHead, headChanged, pageLabel } from "../lib/head";
 import ACCOUNT_HTML from "../../public/templates/store/account.html?raw";
 import { Editor } from "../editor/Editor";
@@ -23,10 +24,37 @@ import { CustomersPanel, OrdersPanel } from "./ShopPanels";
 
 const NS = "site-cms";
 /** host: set when the site is hosted outside GitHub, with its content in Supabase. */
-type SiteInfo = { menu?: unknown; template: string; name: string; version?: number; admin?: string; exportedAt?: string; generator?: string; host?: { kind: "supabase"; url: string; key: string; site: string } | { kind: "cloudflare"; api: string; site: string } };
+type SiteInfo = { menu?: unknown; template: string; name: string; version?: number; admin?: string; worker?: string; files?: string[]; exportedAt?: string; generator?: string; host?: { kind: "supabase"; url: string; key: string; site: string } | { kind: "cloudflare"; api: string; site: string } };
 /** Saved-but-not-published edits live here. The live site never reads this file. */
 const DRAFT = "cms/draft.json";
 /** This CMS page's own file name: from cms/site.json, else the address it was opened at. */
+/** A site on Cloudflare moves its own admin page: the files it was published with are read back from the live site
+ *  and deployed again under the new name, through the database's kept Cloudflare token (Publish from any device).
+ *  Returns the new address. */
+async function moveHostedAdmin(cf: CfSiteCfg, info: SiteInfo, oldAdmin: string, newAdmin: string, content: any, step: (s: string) => void): Promise<string> {
+  if (!info.worker || !info.files?.length) throw new Error("The new admin page address is saved. It takes effect after the site is next published from Site Studio (sites published before this update don't list their files yet).");
+  const pages = await pagesViaDb(cf.api, "site:" + cf.site);
+  if (!pages) throw new Error("The new admin page address is saved. To move the page from here, turn on Publish from any device in Site Studio (Settings → Accounts). Or publish the site from Site Studio.");
+  const base = new URL("./", location.href);
+  const files: { path: string; data: Uint8Array }[] = [];
+  let n = 0;
+  for (const p of info.files) {
+    if (p === "cms/site.json") continue;
+    if (++n % 10 === 0) step(`Moving the admin page: reading the site (${n} of ${info.files.length})`);
+    if (p === "content.json") { files.push({ path: p, data: new TextEncoder().encode(JSON.stringify(content, null, 2)) }); continue; }
+    const r = await fetch(new URL(p, base).href, { cache: "no-store" });
+    if (!r.ok) throw new Error(`Couldn't read ${p} from the live site (${r.status}). The new address is saved; publish the site from Site Studio to apply it.`);
+    files.push({ path: p === oldAdmin ? newAdmin : p, data: new Uint8Array(await r.arrayBuffer()) });
+  }
+  if (!files.some((f) => f.path === newAdmin)) throw new Error(`Couldn't find ${oldAdmin} on the live site. Publish the site from Site Studio to apply the new address.`);
+  const list = info.files.map((p) => (p === oldAdmin ? newAdmin : p));
+  files.push({ path: "cms/site.json", data: new TextEncoder().encode(JSON.stringify({ ...info, admin: newAdmin, files: list }, null, 2)) });
+  step("Moving the admin page: publishing");
+  await pages.deploy(info.worker, files, `Move the admin page to ${newAdmin}`);
+  await new CfRepo(cf.api, "site:" + cf.site).putFile("cms/site.json", bytesB64(files[files.length - 1].data), "Site info").catch(() => {});
+  return new URL(newAdmin, base).href;
+}
+
 function currentAdmin(info: SiteInfo): string {
   if (info.admin) return info.admin;
   const here = decodeURIComponent(location.pathname.split("/").pop() || "");
@@ -201,8 +229,13 @@ function Workspace({ info, onInfo, repo, account, onSignOut, hosted, ghToken }: 
         setSha(next);
         if (draftSha) await repo.pushFiles([], "Delete the CMS draft", [DRAFT]).catch(() => {});
         setSaved(clone(draft)); setBase(clone(draft)); setDraftSha(null); setDraftAt(""); setSavedV(at);
-        toast(bake || oldAdmin !== newAdmin
-          ? "Published. The new title, metadata or CMS address show in search results and links after the site is next published from Site Studio."
+        let movedTo = "";
+        if (oldAdmin !== newAdmin && "api" in hosted) {
+          try { movedTo = await moveHostedAdmin(hosted, info, oldAdmin, newAdmin, draft, (s) => toast(s)); onInfo({ ...info, admin: newAdmin }); setMoved(new URL(newAdmin, location.href).href); }
+          catch (e: any) { toast("Published. " + (e?.message || "Couldn't move the admin page."), "bad"); setSaving(false); return; }
+        }
+        toast(movedTo ? "Published, and the admin page moved: see the note at the top."
+          : bake || oldAdmin !== newAdmin ? "Published. The new title, metadata or admin page address take effect after the site is next published from Site Studio."
           : "Published. Refresh the site to see it.");
         setSaving(false);
         return;

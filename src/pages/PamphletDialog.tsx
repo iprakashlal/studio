@@ -16,7 +16,7 @@ const pdfBase = () => new URL("runtime/", location.href).href;
 const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
 
 export function PamphletDialog({ session, project, draft, upload, onApply, onClose }: { session: Session; project: ProjectMeta; draft: any; upload: (f: File) => Promise<{ path: string }>; onApply: (c: any, n: number) => void; onClose: () => void }) {
-  const db = useAiDb(session, project);
+  const db = useAiDb(session, project, "pamphlet");
   const [files, setFiles] = useState<File[]>([]);
   const [hint, setHint] = useState("");
   // Product photos: cut out and restyled (three looks), used as they are, the whole page, or none.
@@ -26,7 +26,7 @@ export function PamphletDialog({ session, project, draft, upload, onApply, onClo
   const [preview, setPreview] = useState<{ i: number; urls: string[] } | null>(null);
   const accent: string = draft?.theme?.c1 || "#5B7CFF";
   const [busy, setBusy] = useState(""), [err, setErr] = useState("");
-  const [found, setFound] = useState<PamphletProduct[] | null>(null);
+  const [found, setFound] = useState<PamphletProduct[] | null>(null), [guessed, setGuessed] = useState(false);
   const [pick, setPick] = useState<Set<number>>(new Set());
   const doc = useRef<Pamphlet | null>(null);
   const [drag, setDrag] = useState(false);
@@ -55,7 +55,7 @@ export function PamphletDialog({ session, project, draft, upload, onApply, onClo
       setBusy(pics ? `Reading ${pics} page picture${pics > 1 ? "s" : ""} and finding the products` : "Finding the products");
       const inp = pamphletInput(doc.current);
       const list = await cfProducts(db.api!, { ...inp, hint: [inp.hint, hint.trim()].filter(Boolean).join("\n") });
-      setFound(list); setPick(new Set(list.map((_, i) => i))); setPicOf(guessPics(list, doc.current.pics));
+      setFound(list); setGuessed(!!list.guessed); setPick(new Set(list.map((_, i) => i))); setPicOf(guessPics(list, doc.current.pics));
       if (!doc.current.pics.length && photos === "styled") setPhotos(doc.current.kind === "pdf" ? "page" : "none");
     } catch (e: any) { setErr(e?.message || "Couldn't read the pamphlet."); }
     setBusy("");
@@ -123,6 +123,7 @@ export function PamphletDialog({ session, project, draft, upload, onApply, onClo
         </>}
         {found && <>
           <p className="text-ink-300">Found {found.length} product{found.length === 1 ? "" : "s"}. Untick any you don't want. Products already in your catalogue with the same name only get what they're missing.</p>
+          {guessed && <p role="status" className="rounded-lg border border-amber-400/30 bg-amber-400/5 px-3 py-2 text-[12.5px] text-amber-100">The AI didn't return the products this time, so they were read straight from the pamphlet's text. Check the name, type and details before adding.</p>}
           <PhotoChoice photos={photos} setPhotos={setPhotos} styles={styles} setStyles={setStyles} hasPics={!!doc.current?.pics.length} />
           <div className="flex flex-col gap-2" aria-label="Products found">
             {found.map((p, i) => {

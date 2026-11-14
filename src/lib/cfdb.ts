@@ -137,8 +137,8 @@ export const resendTestOnly = (msg: string): string | null => /own email address
 
 // ---------------------------------------------------------------- publishing from any device
 /** Whether this database keeps a Cloudflare token for publishing (and for which account). */
-export async function cfDeployInfo(api: string): Promise<{ deploy: boolean; account?: string; gh?: boolean; ai?: boolean; reviews?: boolean }> {
-  try { const j = await (await fetch(clean(api) + "/", { cache: "no-store" })).json(); return { deploy: !!j?.deploy, account: j?.account, gh: !!j?.gh, ai: !!j?.ai, reviews: !!j?.reviews }; } catch { return { deploy: false }; }
+export async function cfDeployInfo(api: string): Promise<{ deploy: boolean; account?: string; gh?: boolean; ai?: boolean; reviews?: boolean; pamphlet?: boolean }> {
+  try { const j = await (await fetch(clean(api) + "/", { cache: "no-store" })).json(); return { deploy: !!j?.deploy, account: j?.account, gh: !!j?.gh, ai: !!j?.ai, reviews: !!j?.reviews, pamphlet: (+j?.pamphlet || 0) >= 2 }; } catch { return { deploy: false }; }
 }
 /** GitHub calls through the database (its kept token) as a signed-in owner of `scope`: a fetch-like Response. */
 export function dbGitHub(api: string, scope: string) {
@@ -184,10 +184,10 @@ export async function cfWrite(api: string, o: { url?: string; text?: string; bra
 // ---------------------------------------------------------------- reading a product pamphlet
 export type PamphletProduct = { name: string; category: string; summary: string; price: string; features: string[]; details: string; specs: { label: string; value: string }[]; page: number };
 /** Turns a pamphlet's text (and pictures of pages without text) into catalogue entries, with Workers AI on the database. */
-export async function cfProducts(api: string, o: { text?: string; images?: { page: number; data: string }[]; hint?: string }): Promise<PamphletProduct[]> {
+export async function cfProducts(api: string, o: { text?: string; images?: { page: number; data: string }[]; hint?: string }): Promise<PamphletProduct[] & { guessed?: boolean }> {
   const j = await cfCall<any>(api, "/ai/products", { method: "POST", body: JSON.stringify(o) });
   if (j?.error) throw new Error(j.error);
-  return j.products || [];
+  return Object.assign(j.products || [], { guessed: !!j.guessed });
 }
 
 // ---------------------------------------------------------------- Google reviews

@@ -12,7 +12,7 @@ create index if not exists enquiries_site on enquiries (site, created_at);
 create table if not exists workers (worker text primary key, scope text not null);
 create table if not exists repos (repo text primary key, scope text not null);
 `;
-var CFDB_VERSION = 3;
+var CFDB_VERSION = 4;
 
 // worker/db-worker.ts
 var V = CFDB_VERSION;
@@ -190,6 +190,84 @@ async function readImage(env, dataUri) {
   }
   throw last || new Error("Couldn't read the image.");
 }
+function productsIn(v, depth = 0) {
+  if (typeof v === "string") {
+    const t = v.replace(/```(?:json)?/gi, "");
+    for (const m of [/\{[\s\S]*/, /\[[\s\S]*/]) {
+      const x = m.exec(t.trim());
+      if (x) {
+        const o = parseLoose(x[0].replace(/\s*```?\s*$/, ""));
+        if (o) return productsIn(o, depth);
+      }
+    }
+    return [];
+  }
+  if (Array.isArray(v)) return v.filter((x) => x && typeof x === "object");
+  if (!v || typeof v !== "object" || depth > 3) return [];
+  if (Array.isArray(v.products)) return productsIn(v.products);
+  if (v.name || v.product_name || v.model || v.title) return [v];
+  for (const k of Object.keys(v)) {
+    const x = productsIn(v[k], depth + 1);
+    if (x.length) return x;
+  }
+  return [];
+}
+function parseLoose(t) {
+  try {
+    return JSON.parse(t);
+  } catch {
+  }
+  for (let end = t.length; end > 0; end = t.lastIndexOf("}", end - 1)) {
+    const full = end === t.length, head = full ? t : t.slice(0, end + 1);
+    let st = [], inStr = false;
+    for (let i = 0; i < head.length; i++) {
+      const c = head[i];
+      if (inStr) {
+        if (c === "\\") i++;
+        else if (c === '"') inStr = false;
+      } else if (c === '"') inStr = true;
+      else if (c === "{" || c === "[") st.push(c === "{" ? "}" : "]");
+      else if (c === "}" || c === "]") st.pop();
+    }
+    if (inStr && !full) continue;
+    try {
+      return JSON.parse(head.replace(/[,:]\s*$/, "") + (inStr ? '"' : "") + st.reverse().join(""));
+    } catch {
+    }
+    if (end < t.length - 2e4) break;
+  }
+  return null;
+}
+var specList = (v) => Array.isArray(v) ? v : v && typeof v === "object" ? Object.entries(v).map(([label, value]) => ({ label, value: String(value) })) : [];
+function fromText(all) {
+  const lines = all.split(/\n/).map((l) => l.replace(/^[-•*#>\s]+|\s+$/g, "").replace(/\*\*/g, "")).filter((l) => l && !/^--- PAGE/.test(l));
+  const model = /\b[A-Z]{1,6}[- ]?\d{2,5}[A-Z]?\b/;
+  let name = "", at = -1;
+  for (let i = 0; i < lines.length && !name; i++) {
+    const l = lines[i];
+    if (l.length > 60 || !model.test(l) || /:|\|/.test(l)) continue;
+    at = i;
+    const prev = lines[i - 1] || "";
+    name = (/^[A-Z][A-Z0-9&.\- ]{1,24}$/.test(prev) && !model.test(prev) && !l.toUpperCase().includes(prev.toUpperCase()) ? prev + " " : "") + l;
+  }
+  if (!name) name = lines.find((l) => l.length >= 3 && l.length <= 50 && /^[A-Z0-9][A-Z0-9&.\- ]+$/.test(l)) || "";
+  if (!name) return [];
+  const specs = [];
+  for (const l of lines) {
+    const m = /^([A-Za-z][^:|]{1,60}?)\s*[:|]\s*([^|]{1,120}?)\s*\|?$/.exec(l);
+    if (m && !/https?$/i.test(m[1]) && !/phone|email|call|www/i.test(m[1])) specs.push({ label: m[1].trim(), value: m[2].trim() });
+  }
+  const summary = lines.filter((l) => l.length > 70 && /[a-z]/.test(l) && !/:/.test(l)).sort((a, b) => b.length - a.length)[0] || "";
+  const fi = lines.findIndex((l) => /^key\s*features|^features/i.test(l)), features = [];
+  if (fi >= 0) for (const l of lines.slice(fi + 1)) {
+    if (/:|\|/.test(l) || l.length > 90 || !/[a-z]/.test(l) || features.length >= 8) break;
+    if (l.length > 3) features.push(l);
+  }
+  const next = lines[at + 1] || "", kind = /welder|machine|system|series|inverter|pump|motor|printer|unit/i;
+  const cat = at >= 0 && next.length < 50 && !/:/.test(next) && /^[A-Z]/.test(next) && next.split(" ").length >= 2 ? next : lines.find((l) => l.length < 50 && kind.test(l) && l !== name) || "";
+  const category = cat.replace(/\s*[-–]\s*premium$/i, "").toLowerCase().replace(/^./, (c) => c.toUpperCase()).replace(/\b(saw|mig|tig|mma|igbt|ac|dc)\b/gi, (w) => w.toUpperCase());
+  return [{ name: name.replace(/\s+/g, " "), category, summary, features, specs, details: "", price: "", page: 1 }];
+}
 var PRODUCT_KEYS = `{"products":[{"name":"","category":"","summary":"one or two sentences","price":"exactly as printed, or empty","features":["short points"],"details":"a fuller description in paragraphs","specs":[{"label":"","value":""}],"page":1}]}`;
 async function readPamphlet(env, q) {
   const pages = [];
@@ -210,32 +288,37 @@ async function readPamphlet(env, q) {
   if (words(all).length < 12) return { error: "Couldn't find any text in that pamphlet. Try a clearer photo or the original PDF." };
   const sys = `You turn a business's own product pamphlet into catalogue entries. Return ONLY JSON shaped like ${PRODUCT_KEYS}. One entry per distinct product or model. Rules: use only what the pamphlet says; never invent prices, numbers, ratings, certifications or features; copy prices, model numbers and specification values exactly as printed; leave a field empty ("" or []) when the pamphlet doesn't say; category is a short group name the pamphlet suggests (or ""); summary is one or two plain sentences; features are short points; specs are label/value pairs from tables or lists; page is the page number (from the --- PAGE n --- markers) where the product appears, or 1. Skip company contact details, terms and general marketing text.`;
   const model = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
-  let out;
-  try {
-    const r = await env.AI.run(model, { messages: [{ role: "system", content: sys }, { role: "user", content: (q.hint ? "Note from the owner: " + String(q.hint).slice(0, 500) + "\n\n" : "") + "PAMPHLET TEXT:\n" + all }], max_tokens: 4e3, temperature: 0.1, response_format: { type: "json_object" } });
-    const t = typeof r?.response === "string" ? r.response : JSON.stringify(r?.response ?? r);
-    try {
-      out = JSON.parse(t);
-    } catch {
-      const m = /\{[\s\S]*\}/.exec(t);
-      out = m ? JSON.parse(m[0]) : null;
-    }
-  } catch (e) {
-    return { error: /neuron|quota|limit|429/i.test(String(e?.message || e)) ? "Today's free AI allowance is used up. Try again tomorrow." : "Couldn't read the pamphlet: " + (e?.message || e) };
-  }
+  const user = (q.hint ? "Note from the owner: " + String(q.hint).slice(0, 500) + "\n\n" : "") + "PAMPHLET TEXT:\n" + all;
   const S = (v, n = 2e3) => typeof v === "string" || typeof v === "number" ? String(v).trim().slice(0, n) : "";
-  const products = (Array.isArray(out?.products) ? out.products : []).map((p) => ({
-    name: S(p?.name, 120),
+  const clean = (list) => list.map((p) => ({
+    name: S(p?.name ?? p?.product_name ?? p?.productName ?? p?.product ?? p?.model ?? p?.title, 120),
     category: S(p?.category, 60),
-    summary: S(p?.summary, 400),
+    summary: S(p?.summary ?? p?.description, 400),
     price: S(p?.price, 60),
     features: (Array.isArray(p?.features) ? p.features : []).map((x) => S(x, 160)).filter(Boolean).slice(0, 12),
     details: S(p?.details, 3e3),
-    specs: (Array.isArray(p?.specs) ? p.specs : []).map((x) => ({ label: S(x?.label, 80), value: S(x?.value, 200) })).filter((x) => x.label || x.value).slice(0, 30),
+    specs: specList(p?.specs ?? p?.specifications).map((x) => ({ label: S(x?.label, 80), value: S(x?.value, 200) })).filter((x) => x.label || x.value).slice(0, 30),
     page: Math.max(1, Math.min(99, parseInt(p?.page, 10) || 1))
   })).filter((p) => p.name).slice(0, 60);
-  if (!products.length) return { error: "No products were found in that pamphlet." };
-  return { products, read: words(all).length };
+  let products = [], guessed = false;
+  for (const json2 of [true, false]) {
+    let r;
+    try {
+      r = await env.AI.run(model, { messages: [{ role: "system", content: sys }, { role: "user", content: user }], max_tokens: json2 ? 4e3 : 6e3, temperature: 0.1, ...json2 ? { response_format: { type: "json_object" } } : {} });
+    } catch (e) {
+      if (/neuron|quota|limit|429/i.test(String(e?.message || e))) return { error: "Today's free AI allowance is used up. Try again tomorrow." };
+      if (!json2) break;
+      continue;
+    }
+    products = clean(productsIn(r?.response ?? r));
+    if (products.length) break;
+  }
+  if (!products.length) {
+    products = clean(fromText(all));
+    guessed = products.length > 0;
+  }
+  if (!products.length) return { error: 'No products were found in that pamphlet. Add a note naming the product (for example "one product: MZ 1250 welder") and try again.' };
+  return { products, read: words(all).length, ...guessed ? { guessed: true } : {} };
 }
 async function writeSite(env, q) {
   const brand = String(q.brand || "").trim().slice(0, 80), notes = String(q.notes || "").slice(0, 1500), kind = String(q.kind || "business");
@@ -301,7 +384,7 @@ var db_worker_default = {
     if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
     const u = new URL(req.url), p = u.pathname.replace(/\/+$/, "") || "/";
     try {
-      if (p === "/") return json({ ok: true, service: "site-studio-db", v: V, mail: !!(env.RESEND_API_KEY && env.MAIL_FROM), ...env.CF_TOKEN && env.CF_ACCOUNT ? { deploy: true, account: env.CF_ACCOUNT } : {}, ...env.GH_TOKEN ? { gh: true } : {}, ...env.AI ? { ai: true } : {}, reviews: true });
+      if (p === "/") return json({ ok: true, service: "site-studio-db", v: V, mail: !!(env.RESEND_API_KEY && env.MAIL_FROM), ...env.CF_TOKEN && env.CF_ACCOUNT ? { deploy: true, account: env.CF_ACCOUNT } : {}, ...env.GH_TOKEN ? { gh: true } : {}, ...env.AI ? { ai: true, pamphlet: 2 } : {}, reviews: true });
       if (p === "/auth/code" && req.method === "POST") {
         const { email: raw } = await req.json();
         const email2 = String(raw || "").trim().toLowerCase();

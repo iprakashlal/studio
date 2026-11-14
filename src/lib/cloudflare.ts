@@ -74,9 +74,10 @@ export class Cloudflare {
   d1Create(account: string, name: string) { return this.api<{ uuid: string; name: string }>("POST", `/accounts/${account}/d1/database`, { json: { name } }); }
   d1Query(account: string, id: string, sql: string, params: unknown[] = []) { return this.api<any[]>("POST", `/accounts/${account}/d1/database/${id}/query`, { json: { sql, ...(params.length ? { params } : {}) } }); }
 
-  async upload(account: string, name: string, code: string, opts: { vars?: Record<string, string>; secrets?: Record<string, string>; keep?: boolean; d1?: { name: string; id: string }[]; assets?: { jwt: string; config: Record<string, unknown> } }) {
+  async upload(account: string, name: string, code: string, opts: { vars?: Record<string, string>; secrets?: Record<string, string>; keep?: boolean; d1?: { name: string; id: string }[]; assets?: { jwt: string; config: Record<string, unknown> }; ai?: boolean }) {
     const bindings = [
       ...(opts.assets ? [{ type: "assets", name: "ASSETS" }] : []),
+      ...(opts.ai ? [{ type: "ai", name: "AI" }] : []),
       ...(opts.d1 || []).map((d) => ({ type: "d1", name: d.name, id: d.id })),
       ...Object.entries(opts.vars || {}).filter(([, v]) => v !== "").map(([n, text]) => ({ type: "plain_text", name: n, text })),
       ...Object.entries(opts.secrets || {}).filter(([, v]) => v !== "").map(([n, text]) => ({ type: "secret_text", name: n, text })),

@@ -14,6 +14,7 @@ import { adminFile } from "../schema/common";
 import { clone, fmtDate, merge, slugify, timeAgo } from "../lib/util";
 import { siteAddress, siteRepoFor } from "../lib/hosting";
 import { HostDialog } from "./HostDialog";
+import { WriteFromSiteDialog } from "./WriteFromSite";
 import { GitHubPublishAccount } from "./GitHubAccount";
 import { ensurePages, ensureRepo, ghPublish } from "../lib/ghpublish";
 import { LiveSitesDialog } from "./LiveSites";
@@ -35,7 +36,7 @@ export function ProjectView({ studio, index, project, session, onIndex }: { stud
   const [pane, setPane] = useState<"edit" | "preview">("edit");
   // Click-to-edit from the preview: on small screens, switch to the editor to show the field.
   useEffect(() => { const on = () => setPane("edit"); addEventListener(GOTO_EVENT, on); return () => removeEventListener(GOTO_EVENT, on); }, []);
-  const [modal, setModal] = useState<"" | "export" | "publish" | "host" | "live" | "history" | "details" | "backend" | "inbox">("");
+  const [modal, setModal] = useState<"" | "export" | "publish" | "host" | "live" | "history" | "details" | "backend" | "inbox" | "write">("");
   const defaults = useRef<any>(null);
   const [openAt, setOpenAt] = useState(0);
   const [conflict, setConflict] = useState<{ siteAt: string | null } | null>(null);
@@ -180,6 +181,7 @@ export function ProjectView({ studio, index, project, session, onIndex }: { stud
           </div>
           {(project.publish || project.host) && !studio.repo.demo && <button type="button" className="btn btn-sm" onClick={() => setModal("live")} title="When each live site last changed, and pull its content">Live sites</button>}
           <button type="button" className="btn btn-sm" onClick={() => setModal("history")}>History{project.exports.length ? ` (${project.exports.length})` : ""}</button>
+          {!studio.repo.demo && <button type="button" className="btn btn-sm" onClick={() => setModal("write")} title="Write new, original text for your brand from a site in the same line of business">Write text from a site</button>}
           <button type="button" className="btn btn-sm" onClick={() => setModal("export")}>Export ZIP</button>
           {project.template === "store" && !studio.repo.demo && <button type="button" className="btn btn-sm" onClick={() => setModal("backend")} title="Set up the shop server (Cloudflare Worker), its private orders repository and email (Resend) from here">{project.worker ? "Shop backend ✓" : "Shop backend"}</button>}
           {project.template === "business" && !studio.repo.demo && <button type="button" className="btn btn-sm" onClick={() => setModal("inbox")} title="Save the enquiry form's enquiries as JSON files in a private GitHub repository (no email)">{project.inbox ? "Enquiry inbox ✓" : "Enquiry inbox"}</button>}
@@ -221,6 +223,7 @@ export function ProjectView({ studio, index, project, session, onIndex }: { stud
       {modal === "publish" && <PublishDialog {...{ studio, project, tpl, draft, dirty, save, onIndex, getBlob, session }} onClose={() => setModal("")} />}
       {modal === "host" && <HostDialog {...{ studio, project, tpl, draft, dirty, save, onIndex, getBlob, session }} onClose={() => setModal("")} />}
       {modal === "live" && <LiveSitesDialog {...{ studio, project, session, dirty, onIndex }} current={draft} defaults={defaults.current} onImported={(c) => { replaceDraft(c); setSavedV(v + 1); setConflict(null); }} onClose={() => setModal("")} />}
+      {modal === "write" && <WriteFromSiteDialog {...{ session, project, draft }} onApply={(c) => { replaceDraft(c); toast("New text is in the editor. Check it, then Save."); }} onClose={() => setModal("")} />}
       {modal === "history" && <HistoryDialog {...{ studio, project, tpl, getBlob }} onLoad={(c) => { replaceDraft(c); setModal(""); toast("Loaded into the editor. Save to keep it."); }} onClose={() => setModal("")} />}
       {modal === "details" && <DetailsDialog {...{ studio, index, project, session, onIndex }} onImported={(c) => { replaceDraft(c); setSavedV(v + 1); }} onClose={() => setModal("")} />}
     </div>

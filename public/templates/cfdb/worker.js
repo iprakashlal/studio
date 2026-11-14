@@ -82,12 +82,113 @@ async function sendMail(env, to, subject, html) {
   const r = await fetch("https://api.resend.com/emails", { method: "POST", headers: { Authorization: "Bearer " + env.RESEND_API_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ from: env.MAIL_FROM, to: [to], subject, html }) });
   if (!r.ok) throw new Error("Resend didn't accept the email (" + r.status + "): " + (await r.text()).slice(0, 200));
 }
+var ENT = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ", rsquo: "\u2019", lsquo: "\u2018", rdquo: "\u201D", ldquo: "\u201C", ndash: "\u2013", mdash: "\u2014", hellip: "\u2026" };
+var unent = (t) => t.replace(/&(#x?[0-9a-f]+|\w+);/gi, (m, e) => e[0] === "#" ? String.fromCodePoint(parseInt(e[1] === "x" || e[1] === "X" ? e.slice(2) : e.slice(1), e[1] === "x" || e[1] === "X" ? 16 : 10) || 32) : ENT[e.toLowerCase()] ?? m);
+function outlineOf(html) {
+  const h = html.replace(/<(script|style|noscript|svg|template|iframe)[\s\S]*?<\/\1>/gi, " ").replace(/<!--[\s\S]*?-->/g, " ");
+  const clean = (x) => unent(x.replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim();
+  const out = [];
+  const t = /<title[^>]*>([\s\S]*?)<\/title>/i.exec(h);
+  if (t) out.push("TITLE: " + clean(t[1]));
+  const d = /<meta[^>]+name=["']description["'][^>]*content=["']([^"']*)["']/i.exec(h) || /<meta[^>]+content=["']([^"']*)["'][^>]*name=["']description["']/i.exec(h);
+  if (d) out.push("DESCRIPTION: " + clean(d[1]));
+  const re = /<(h[1-4]|li|p|dt|dd|blockquote|figcaption)\b[^>]*>([\s\S]*?)<\/\1>/gi;
+  let m;
+  const seen = /* @__PURE__ */ new Set();
+  while (m = re.exec(h)) {
+    const x = clean(m[2]);
+    if (x.length < 3 || seen.has(x)) continue;
+    seen.add(x);
+    const tag = m[1].toLowerCase();
+    out.push(tag[0] === "h" ? "\n" + tag.toUpperCase() + ": " + x : tag === "li" ? "- " + x : x);
+  }
+  return out.join("\n").slice(0, 9e3);
+}
+var words = (s) => s.toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, " ").split(/\s+/).filter(Boolean);
+function copiedBits(o, src, n = 6) {
+  const grams = /* @__PURE__ */ new Set();
+  const w = words(src);
+  for (let i = 0; i + n <= w.length; i++) grams.add(w.slice(i, i + n).join(" "));
+  const hit = [];
+  const walk = (v, path) => {
+    if (typeof v === "string") {
+      const x = words(v);
+      for (let i = 0; i + n <= x.length; i++) if (grams.has(x.slice(i, i + n).join(" "))) {
+        hit.push(path);
+        return;
+      }
+    } else if (Array.isArray(v)) v.forEach((y, i) => walk(y, path + "." + i));
+    else if (v && typeof v === "object") for (const k of Object.keys(v)) walk(v[k], path ? path + "." + k : k);
+  };
+  walk(o, "");
+  return hit;
+}
+var BRIEF_KEYS = "brand_tagline, hero_eyebrow, hero_title, hero_text, hero_cta, about_title, about_text, mission, vision, values (4 \xD7 {title, text}), services_title, services_intro, services (up to 6 \xD7 {title, text}), process (4 \xD7 {title, text}), faq (up to 6 \xD7 {q, a}), banner_title, banner_text, cta_title, cta_text, seo_title, seo_description, footer_text";
+async function writeSite(env, q) {
+  const brand = String(q.brand || "").trim().slice(0, 80), notes = String(q.notes || "").slice(0, 1500), kind = String(q.kind || "business");
+  if (!brand) return { error: "Enter your brand name." };
+  let src = String(q.text || "").slice(0, 2e4);
+  if (!src.trim()) {
+    const url = String(q.url || "").trim();
+    if (!/^https:\/\/[^\s/]+\.[^\s]+$/i.test(url)) return { error: "Enter the site's address (https://\u2026)." };
+    const host = new URL(url).hostname.toLowerCase();
+    if (/^(localhost|[\d.]+|\[.*\])$/.test(host) || /\.(local|internal|localhost)$/.test(host)) return { error: "Use the site's public address." };
+    let r;
+    try {
+      r = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0 (site-studio reference reader)", Accept: "text/html" }, redirect: "follow" });
+    } catch {
+      return { error: "Couldn't open that address." };
+    }
+    if (!r.ok) return { error: `That site answered ${r.status}.` };
+    const html = (await r.text()).slice(0, 3e6);
+    src = outlineOf(html);
+  }
+  if (words(src).length < 40) return { error: "That page has almost no text to read (it may build its text with JavaScript). Paste the page's text into the box instead.", thin: true };
+  const sys = `You write website copy for small businesses. You are given a REFERENCE website's outline only to understand what kind of business it is and which topics a site like it covers. Write completely NEW, original copy for a different business named "${brand}". Rules: never reuse the reference's sentences, phrases, slogans or distinctive wording; never mention the reference business, its name, people, clients, prices, numbers, years, awards or locations; do not invent facts (no years, statistics, client names, awards, certifications, prices or testimonials); keep claims general and honest; use the name ${brand} naturally; plain, warm, professional English; short sentences. Site type: ${kind}. Return ONLY a JSON object with these keys: ${BRIEF_KEYS}. Every value is a string or an array as described; use "" when a key doesn't fit.`;
+  const user = `${notes ? "About " + brand + " (from the owner, use this): " + notes + "\n\n" : ""}REFERENCE OUTLINE (for topics only, do not copy):
+${src.slice(0, 7e3)}`;
+  const model = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
+  const ask = async (messages) => {
+    const r = await env.AI.run(model, { messages, max_tokens: 3e3, temperature: 0.8, response_format: { type: "json_object" } });
+    const t = typeof r?.response === "string" ? r.response : JSON.stringify(r?.response ?? r);
+    try {
+      return JSON.parse(t);
+    } catch {
+      const m = /\{[\s\S]*\}/.exec(t);
+      if (m) return JSON.parse(m[0]);
+      throw new Error("The writer returned something unreadable. Try again.");
+    }
+  };
+  let brief;
+  try {
+    brief = await ask([{ role: "system", content: sys }, { role: "user", content: user }]);
+  } catch (e) {
+    return { error: /neuron|quota|limit|429/i.test(String(e?.message || e)) ? "Today's free AI allowance is used up. Try again tomorrow." : "Couldn't write the text: " + (e?.message || e) };
+  }
+  let flagged = copiedBits(brief, src);
+  if (flagged.length) {
+    try {
+      const again = await ask([
+        { role: "system", content: sys },
+        { role: "user", content: user },
+        { role: "assistant", content: JSON.stringify(brief) },
+        { role: "user", content: `These fields reuse wording from the reference: ${flagged.join(", ")}. Rewrite them in completely different words (keep the rest). Return the whole JSON again.` }
+      ]);
+      if (again && typeof again === "object") {
+        brief = again;
+        flagged = copiedBits(brief, src);
+      }
+    } catch {
+    }
+  }
+  return { brief, flagged, words: words(src).length };
+}
 var db_worker_default = {
   async fetch(req, env) {
     if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
     const u = new URL(req.url), p = u.pathname.replace(/\/+$/, "") || "/";
     try {
-      if (p === "/") return json({ ok: true, service: "site-studio-db", v: V, mail: !!(env.RESEND_API_KEY && env.MAIL_FROM), ...env.CF_TOKEN && env.CF_ACCOUNT ? { deploy: true, account: env.CF_ACCOUNT } : {}, ...env.GH_TOKEN ? { gh: true } : {} });
+      if (p === "/") return json({ ok: true, service: "site-studio-db", v: V, mail: !!(env.RESEND_API_KEY && env.MAIL_FROM), ...env.CF_TOKEN && env.CF_ACCOUNT ? { deploy: true, account: env.CF_ACCOUNT } : {}, ...env.GH_TOKEN ? { gh: true } : {}, ...env.AI ? { ai: true } : {} });
       if (p === "/auth/code" && req.method === "POST") {
         const { email: raw } = await req.json();
         const email2 = String(raw || "").trim().toLowerCase();
@@ -140,6 +241,13 @@ var db_worker_default = {
         if (!Object.keys(data).length) return err(400, "The form was empty.");
         await env.DB.prepare("insert into enquiries (site, data, page, created_at) values (?, ?, ?, ?)").bind(site, JSON.stringify(data), String(q.page || "").slice(0, 200), (/* @__PURE__ */ new Date()).toISOString()).run();
         return json({ ok: true });
+      }
+      if (p === "/ai/write" && req.method === "POST") {
+        const email2 = await who(env, req);
+        if (!email2) return err(401, "Sign in first.");
+        if (!await env.DB.prepare("select 1 from members where email = ? and role in ('owner', 'partner') limit 1").bind(email2).first()) return err(403, "Only owners can use this.");
+        if (!env.AI) return err(501, "Writing needs the database updated once (Settings \u2192 Hosting accounts, from a device with the Cloudflare token).");
+        return json(await writeSite(env, await req.json()));
       }
       const email = await who(env, req);
       if (!email) return err(401, "Sign in first.");
@@ -254,5 +362,7 @@ var db_worker_default = {
 };
 export {
   SCHEMA,
-  db_worker_default as default
+  copiedBits,
+  db_worker_default as default,
+  outlineOf
 };

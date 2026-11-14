@@ -8,6 +8,7 @@ import { cfAccountVault, cfDeployInfo, cfSignedIn, cfTokenFor, dbCloudflare } fr
 import type { HostCfg } from "./supa";
 import { netlifyToken } from "./hosting";
 import type { SiteFile } from "./exporter";
+import { loadHostConfig } from "./studiohost";
 
 export type PagesKind = "netlify" | "cloudflare";
 export type PagesSite = { siteId: string; siteName: string; url: string };
@@ -88,19 +89,37 @@ export async function loadPages(kind: PagesKind, studioToken: string, account?: 
   return cloudflarePages(new Cloudflare(relay, tok), acc);
 }
 
+/** Whether a Cloudflare token on this device was set up for `account` (the main one's chosen account, or another's). */
+async function ownsAccount(studioToken: string, account: string) {
+  const v = await cfAccountVault.load(studioToken).catch(() => null);
+  return !!v && (v.account === account || (v.more || []).some((m) => m.accounts.some((a) => a.id === account)));
+}
 export const PAGES_LABEL: Record<PagesKind, string> = { netlify: "Netlify", cloudflare: "Cloudflare" };
 
 /** Publishing through the Studio's database (its kept Cloudflare token) as a signed-in owner of `scope`; null when
  *  the database doesn't keep a token or this device isn't signed in to it. */
 export async function pagesViaDb(api: string, scope: string, account?: string): Promise<Pages | null> {
   const info = await cfDeployInfo(api);
-  if (!info.deploy || !info.account || !(await cfSignedIn(api))) return null;
-  if (account && info.account !== account) return null; // the database's token is for another Cloudflare account
-  return { ...cloudflarePages(dbCloudflare(api, scope), info.account), label: "Cloudflare" };
+  if (!(await cfSignedIn(api))) return null;
+  // The database's main token, or another account's token kept there (Other Cloudflare accounts, for all devices).
+  if (info.deploy && info.account && (!account || account === info.account)) return { ...cloudflarePages(dbCloudflare(api, scope), info.account), label: "Cloudflare" };
+  if (account && info.more) return { ...cloudflarePages(dbCloudflare(api, scope), account), label: "Cloudflare" };
+  return null;
+}
+/** Publishing a hosted site through a database: the site's own, then this Studio's (other accounts kept there). */
+export async function pagesViaDbs(h: HostCfg): Promise<Pages | null> {
+  if (h.kind !== "cloudflare") return null;
+  const own = h.cf ? await pagesViaDb(h.cf.api, "site:" + h.cf.site, h.account).catch(() => null) : null;
+  if (own) return own;
+  const hc = await loadHostConfig().catch(() => null);
+  if (hc?.kind !== "cloudflare" || !h.account || hc.api === h.cf?.api && !(await cfDeployInfo(hc.api)).more) return null;
+  return pagesViaDb(hc.api, "studio:" + hc.studio, h.account).catch(() => null);
 }
 /** The way to publish a hosted site from this device: its own token if connected here, else through the database. */
 export async function pagesForHost(h: HostCfg, studioToken: string): Promise<Pages | null> {
   const own = await loadPages(h.kind, studioToken, h.account).catch(() => null);
-  if (own || h.kind !== "cloudflare" || !h.cf) return own;
-  return pagesViaDb(h.cf.api, "site:" + h.cf.site, h.account);
+  // A token on this device only counts when it can manage the site's account.
+  if (own && (h.kind !== "cloudflare" || !h.account || await ownsAccount(studioToken, h.account))) return own;
+  if (h.kind !== "cloudflare") return own;
+  return (await pagesViaDbs(h)) || own;
 }

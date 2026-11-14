@@ -56,6 +56,7 @@ function CloudflareAccount({ session, nf, index }: { session: Session; nf: Netli
 function AnyDevice({ session, acc, index }: { session: Session; acc: CfAccountHook; index: StudioIndex }) {
   const toast = useToast();
   const [api, setApi] = useState<string | null>(null), [on, setOn] = useState<boolean | null>(null), [gh, setGh] = useState(false), [busy, setBusy] = useState(""), [err, setErr] = useState("");
+  const [others, setOthers] = useState(0), [kept, setKept] = useState(0);
   // GitHub Pages sites: the Studio that signs in by email (this one, or where this Studio was moved) uses the kept token.
   const ghToken = ghPublish.token(session.token);
   const emailStudio = isHosted(session) ? session.cfg.repo : index.hosted?.backend === "cloudflare" ? index.hosted.studio : "";
@@ -66,7 +67,8 @@ function AnyDevice({ session, acc, index }: { session: Session; acc: CfAccountHo
     (async () => {
       const v = await cfAccountVault.load(session.token);
       const a = v?.setup?.api || cfProjects[0]?.host?.cf?.api || studioApp?.api || null;
-      setApi(a); const i = a ? await cfDeployInfo(a) : null; setOn(i ? i.deploy : false); setGh(!!i?.gh);
+      setApi(a); const i = a ? await cfDeployInfo(a) : null; setOn(i ? i.deploy : false); setGh(!!i?.gh); setKept(i?.more || 0);
+      setOthers(new Set((v?.more || []).flatMap((m) => m.accounts.map((x) => x.id)).filter((id) => id !== v?.setup?.account)).size);
     })();
   }, [session.token, acc.account?.id]);
   const register = async (cf: Cloudflare, setup: CfDbSetup) => registerWorkers(cf, setup, [
@@ -75,6 +77,22 @@ function AnyDevice({ session, acc, index }: { session: Session; acc: CfAccountHo
     // Client Studios on this Cloudflare (Studio Partners): their apps, for updating them from any device.
     ...(index.partners || []).filter((p) => p.pages === "cloudflare" && p.backend === "cloudflare" && p.siteId).map((p) => ({ worker: p.siteId!, scope: "studio:" + p.studio })),
   ]);
+  /** Other Cloudflare accounts (their own tokens on this device): kept on the database as CFX_<account> secrets, and
+   *  their sites registered to this Studio, so any device signed in to the Studio can publish them. */
+  const keepOthers = async (cf: Cloudflare, setup: CfDbSetup) => {
+    const v = await cfAccountVault.load(session.token), more = v?.more || [];
+    for (const m of more) for (const a of m.accounts) {
+      if (a.id === setup.account) continue;
+      await cf.putSecret(setup.account, CFDB_WORKER, "CFX_" + a.id.replace(/-/g, "_"), JSON.stringify({ t: m.token, n: a.name }));
+    }
+    const ids = new Set(more.flatMap((m) => m.accounts.map((a) => a.id)));
+    const sites = index.projects.filter((p) => p.host?.kind === "cloudflare" && p.host.account && ids.has(p.host.account) && p.host.account !== setup.account);
+    await registerWorkers(cf, setup, sites.flatMap((p) => [
+      ...(emailStudio ? [{ worker: `${p.host!.account}/${p.host!.siteId}@studio:${emailStudio}`, scope: "studio:" + emailStudio }] : []),
+      // A site whose content is in this database: its owners can publish it too.
+      ...(p.host!.cf && p.host!.cf.api === setup.api ? [{ worker: `${p.host!.account}/${p.host!.siteId}@site:${p.host!.cf.site}`, scope: "site:" + p.host!.cf.site }] : []),
+    ]));
+  };
   /** Keeps the GitHub token on the database and registers the GitHub sites for the Studio that signs in by email. */
   const addGitHub = async () => {
     setErr(""); setBusy("Keeping the GitHub token");
@@ -97,6 +115,7 @@ function AnyDevice({ session, acc, index }: { session: Session; acc: CfAccountHo
         const setup = await setupCfDb(relay, token, { account, resendKey: "", mailFrom: v?.mailFrom || "", name: brand().name, existing: v?.setup && v.setup.account === account.id ? v.setup : null, deployToken: token, requireMail: false }, (x) => setBusy(x));
         await cfAccountVault.save({ ...(v || {}), token, account: account.id, setup }, session.token);
         setBusy("Letting your sites be published from any device"); await register(cf, setup);
+        if ((v?.more || []).length) { setBusy("Keeping your other Cloudflare accounts for all devices"); await keepOthers(cf, setup); }
         if (ghToken && emailStudio && ghProjects.length) {
           setBusy("Keeping the GitHub token for your GitHub sites");
           await cf.putSecret(setup.account, CFDB_WORKER, "GH_TOKEN", ghToken);
@@ -106,10 +125,11 @@ function AnyDevice({ session, acc, index }: { session: Session; acc: CfAccountHo
         toast("On. Any device signed in to your Cloudflare database as a site's owner can now publish and push updates to it.");
       } else {
         await cf.deleteSecret(account.id, CFDB_WORKER, "CF_TOKEN");
+        for (const m of v?.more || []) for (const a of m.accounts) await cf.deleteSecret(account.id, CFDB_WORKER, "CFX_" + a.id.replace(/-/g, "_")).catch(() => null);
         await cf.deleteSecret(account.id, CFDB_WORKER, "GH_TOKEN").catch(() => null);
         toast("Off. Only devices with the Cloudflare token can publish now.");
       }
-      const i = await cfDeployInfo((await cfAccountVault.load(session.token))?.setup?.api || api!); setOn(i.deploy); setGh(!!i.gh);
+      const i = await cfDeployInfo((await cfAccountVault.load(session.token))?.setup?.api || api!); setOn(i.deploy); setGh(!!i.gh); setKept(i.more || 0);
     } catch (e: any) { setErr(e?.message || "Something went wrong."); }
     setBusy("");
   };
@@ -127,6 +147,10 @@ function AnyDevice({ session, acc, index }: { session: Session; acc: CfAccountHo
           ? "Turn on to let any device where you've signed in with your email code publish and push updates to your Cloudflare sites. The token is stored once as a secret on your own database Worker, never in the Studio's data or on GitHub."
           : "Off. To turn it on, connect Cloudflare on this device (just above), then press Turn on: the Studio finds or sets up its database by itself."}</p>
       {on && acc.account && <button type="button" className="self-start text-[12.5px] text-brand-300 underline" disabled={!!busy} onClick={async () => { setBusy("Registering"); try { const v = await cfAccountVault.load(session.token); if (v?.setup) { await register((await acc.client()).cf, v.setup); toast("Sites registered."); } } catch (e: any) { setErr(e?.message || "Couldn't register."); } setBusy(""); }}>Include sites published since</button>}
+      {on && acc.account && others > 0 && <div className="flex flex-wrap items-center gap-2 text-[12.5px] text-ink-400" aria-label="Other accounts on all devices">
+        <span>Other Cloudflare accounts ({others}): {kept >= others ? "kept here too, so any signed-in device can publish their sites." : "only on this device so far."}</span>
+        <button type="button" className={`btn btn-sm ${kept >= others ? "" : "btn-pri"}`} disabled={!!busy} onClick={turn(true)}>{kept >= others ? "Update" : "Keep them for all devices"}</button>
+      </div>}
       {on && acc.account && emailStudio && ghProjects.length > 0 && ghToken && <button type="button" className="btn btn-sm self-start" disabled={!!busy} onClick={addGitHub}>{gh ? "Update GitHub sites (token and list)" : "Include GitHub sites"}</button>}
       {emailStudio && ghProjects.length > 0 && <p className="text-[12.5px] text-ink-400">GitHub Pages sites ({ghProjects.length}): {gh ? "on, so the Studio that signs in by email checks, publishes and pushes updates to them with the kept GitHub token." : ghToken ? "turned on with the same button (the GitHub token on this device is kept as a secret too)." : "add a GitHub token in GitHub (publishing) above, then press Turn on (or Turn off and on again) to include them."}</p>}
       {err && <p role="alert" className="text-[12.5px] text-red-300">{err}</p>}

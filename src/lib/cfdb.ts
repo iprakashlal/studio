@@ -149,8 +149,8 @@ export const resendTestOnly = (msg: string): string | null => /own email address
 
 // ---------------------------------------------------------------- publishing from any device
 /** Whether this database keeps a Cloudflare token for publishing (and for which account). */
-export async function cfDeployInfo(api: string): Promise<{ deploy: boolean; account?: string; gh?: boolean; ai?: boolean; reviews?: boolean; pamphlet?: boolean }> {
-  try { const j = await (await fetch(clean(api) + "/", { cache: "no-store" })).json(); return { deploy: !!j?.deploy, account: j?.account, gh: !!j?.gh, ai: !!j?.ai, reviews: !!j?.reviews, pamphlet: (+j?.pamphlet || 0) >= 2 }; } catch { return { deploy: false }; }
+export async function cfDeployInfo(api: string): Promise<{ deploy: boolean; account?: string; gh?: boolean; ai?: boolean; reviews?: boolean; pamphlet?: boolean; accounts?: boolean; more?: number }> {
+  try { const j = await (await fetch(clean(api) + "/", { cache: "no-store" })).json(); return { deploy: !!j?.deploy, account: j?.account, gh: !!j?.gh, ai: !!j?.ai, reviews: !!j?.reviews, pamphlet: (+j?.pamphlet || 0) >= 2, accounts: (+j?.accounts || 0) >= 2, more: +j?.more || 0 }; } catch { return { deploy: false }; }
 }
 /** GitHub calls through the database (its kept token) as a signed-in owner of `scope`: a fetch-like Response. */
 export function dbGitHub(api: string, scope: string) {

@@ -1,7 +1,7 @@
 import type { Category, Field, TemplateDef } from "./types";
 import { uid, vpaOk, paypalOk, httpsOk } from "../lib/util";
 import { BODY_FONTS, DISPLAY_FONTS, LINE_BREAKS_AXIS, STORE_AXES, THEMES, onColor, storeThemeValues } from "../themes/catalog";
-import { adminCategory, seoCategory, warrantyCategory } from "./common";
+import { adminCategory, heroSlidesCard, prepareSlides, seoCategory, warrantyCategory } from "./common";
 import { NAV_MODE_FIELD, themeCards } from "../themes/fields";
 
 const CURRENCIES = ["INR", "USD", "EUR", "GBP", "AED", "SGD", "AUD", "CAD"];
@@ -47,6 +47,7 @@ const schema: Category[] = [
     cards: [
       { title: "Hero", fields: [{ t: "text", path: "home.hero.eyebrow", label: "Small label", ml: true }, { t: "text", path: "home.hero.title", label: "Headline", ml: true }, { t: "textarea", path: "home.hero.text", label: "Text", hint: "Line breaks you type show on the site." },
         { t: "text", path: "home.hero.cta", label: "Button label" }, { t: "image", path: "home.hero.image", label: "Hero image", hint: "Wide images look best. Without one, a pattern in your colours is used." }] },
+      heroSlidesCard("home.hero", "the hero image or collage"),
       { title: "Featured products", fields: [g2({ t: "text", path: "home.featuredTitle", label: "Title", ml: true }, { t: "text", path: "home.featuredText", label: "Line under the title", ml: true }),
         { t: "note", text: "Mark products as featured under Products. Up to 8 are shown." }] },
       { title: "Categories", fields: [{ t: "toggle", path: "home.showCategories", label: "Show categories on the home page" }, { t: "text", path: "home.categoriesTitle", label: "Title", ml: true }] },
@@ -192,6 +193,7 @@ const schema: Category[] = [
 /** Defaults for settings added after a shop was made. */
 export const STORE_LABELS = { allProducts: "All products", viewAll: "View all", help: "Help", contact: "Contact" };
 export function prepareStore(c: any) {
+  if (c && typeof c === "object" && c.home?.hero) prepareSlides(c.home.hero, "#000000");
   if (!c || typeof c !== "object") return;
   const t = c.theme && typeof c.theme === "object" ? c.theme : (c.theme = {});
   if (!t.introBg) t.introBg = t.deep || t.text || "#111111";

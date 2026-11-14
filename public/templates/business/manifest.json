@@ -2,6 +2,8 @@
   "files": [
     "index.html",
     "services.html",
+    "products.html",
+    "product.html",
     "work.html",
     "about.html",
     "contact.html",
@@ -11,6 +13,7 @@
     "assets/biz.css",
     "assets/biz.js",
     "assets/fx.js",
+    "assets/slides.js",
     "assets/motifs.js",
     "assets/warranty.js",
     "README.md",

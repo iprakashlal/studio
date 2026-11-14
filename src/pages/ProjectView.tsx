@@ -9,7 +9,7 @@ import { TEMPLATES } from "../schema";
 import type { Session } from "../lib/auth";
 import { GitHubRepo, explain } from "../lib/repo";
 import type { ProjectMeta, PublishTarget, Studio, StudioIndex, ExportRec } from "../lib/studio";
-import { buildSite, downloadBlob, loadDefaults, publishSite, zipName, zipSite } from "../lib/exporter";
+import { buildSite, downloadBlob, loadDefaults, loadMergeBase, publishSite, zipName, zipSite } from "../lib/exporter";
 import { adminFile } from "../schema/common";
 import { clone, fmtDate, merge, slugify, timeAgo } from "../lib/util";
 import { siteAddress, siteRepoFor } from "../lib/hosting";
@@ -48,7 +48,7 @@ export function ProjectView({ studio, index, project, session, onIndex }: { stud
     (async () => {
       try {
         setOpenAt(0);
-        defaults.current = await loadDefaults(project.template);
+        defaults.current = await loadMergeBase(project.template);
         setOpenAt(1);
         const c = await studio.loadContent(project.id);
         setOpenAt(2);

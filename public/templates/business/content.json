@@ -55,7 +55,8 @@
       "services": "Services",
       "work": "Work",
       "about": "About",
-      "contact": "Contact"
+      "contact": "Contact",
+      "products": "Products"
     }
   },
   "nav": {
@@ -78,6 +79,12 @@
     {
       "id": "services",
       "label": "Services",
+      "show": true,
+      "inNav": true
+    },
+    {
+      "id": "products",
+      "label": "Products",
       "show": true,
       "inNav": true
     },
@@ -155,7 +162,23 @@
       "ISO 27001 certified",
       "120+ projects delivered",
       "Offices in Mumbai & London"
-    ]
+    ],
+    "slides": {
+      "enabled": false,
+      "items": [],
+      "effect": "fade",
+      "interval": 6,
+      "speed": 1.2,
+      "overlay": 45,
+      "overlayColor": "#0E1B2C",
+      "overlayStyle": "left",
+      "textColor": "light",
+      "height": "tall",
+      "dots": true,
+      "arrows": false,
+      "pause": true,
+      "hideArt": true
+    }
   },
   "clients": {
     "title": "Trusted by teams at",
@@ -590,6 +613,107 @@
         "id": "not-covered",
         "label": "Not covered",
         "tone": "bad"
+      }
+    ]
+  },
+  "products": {
+    "eyebrow": "Ready-to-start packages",
+    "title": "Products",
+    "lede": "Fixed-scope packages your team can start this month.",
+    "homeCount": 3,
+    "enquire": "Enquire",
+    "more": "View more",
+    "all": "View all products",
+    "showPrice": true,
+    "filter": true,
+    "related": true,
+    "items": [
+      {
+        "name": "Digital Health Check",
+        "category": "Assessments",
+        "badge": "Popular",
+        "summary": "A two-week review of your product, data and delivery, with a clear list of what to fix first.",
+        "price": "From ₹3.5L",
+        "images": [],
+        "features": [
+          "Interviews with 8–12 stakeholders",
+          "Architecture and security review",
+          "Prioritised 90-day plan"
+        ],
+        "details": "We look at how your product is built, run and used, and where time and money are being lost.\n\nYou get a short report, a workshop with your leadership team and a costed plan you can act on, with or without us.",
+        "specs": [
+          {
+            "label": "Duration",
+            "value": "2 weeks"
+          },
+          {
+            "label": "Team",
+            "value": "Lead consultant + architect"
+          },
+          {
+            "label": "Output",
+            "value": "Report, workshop, 90-day plan"
+          }
+        ]
+      },
+      {
+        "name": "Claims Automation Kit",
+        "category": "Accelerators",
+        "badge": "",
+        "summary": "Pre-built workflows and integrations that cut manual steps in insurance claims.",
+        "price": "From ₹18L",
+        "images": [],
+        "features": [
+          "Document intake and checks",
+          "Rules for fast-track claims",
+          "Dashboards for claim teams"
+        ],
+        "details": "A starting point for automating claims, adapted to your products and systems.\n\nIncludes setup, integration with your core system and training for your team.",
+        "specs": [
+          {
+            "label": "Duration",
+            "value": "8–10 weeks"
+          },
+          {
+            "label": "Works with",
+            "value": "Most core insurance systems"
+          }
+        ]
+      },
+      {
+        "name": "Secure Onboarding Toolkit",
+        "category": "Accelerators",
+        "badge": "New",
+        "summary": "Customer sign-up with identity checks and consent, ready for regulated businesses.",
+        "price": "On request",
+        "images": [],
+        "features": [
+          "KYC and identity checks",
+          "Consent records",
+          "Accessible, mobile-first screens"
+        ],
+        "details": "Get customers through sign-up faster without cutting corners on checks.",
+        "specs": [
+          {
+            "label": "Duration",
+            "value": "6 weeks"
+          }
+        ]
+      },
+      {
+        "name": "Analytics Starter Pack",
+        "category": "Assessments",
+        "badge": "",
+        "summary": "Set up the numbers that matter, with dashboards your teams will actually use.",
+        "price": "From ₹6L",
+        "images": [],
+        "features": [
+          "Metrics workshop",
+          "Tracking plan",
+          "Three starter dashboards"
+        ],
+        "details": "",
+        "specs": []
       }
     ]
   }

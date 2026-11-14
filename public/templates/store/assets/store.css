@@ -605,3 +605,4 @@ html[data-hero-art=tilt] .hero .art{transform:rotate(-3deg);box-shadow:14px 14px
 html[data-hero-art=frame] .hero .art{outline:1px solid var(--line);outline-offset:10px;border-radius:2px}
 html[data-hero-art=none] .hero .art{display:none}
 html[data-hero-art=none] .hero:not(.hx) .wrap{grid-template-columns:1fr}
+.hero.hs-solo .wrap{grid-template-columns:1fr}.hero.hs-host .btn:not(.pri){color:inherit;border-color:color-mix(in srgb,currentColor 45%,transparent)}

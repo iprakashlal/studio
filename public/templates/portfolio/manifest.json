@@ -2,6 +2,7 @@
   "files": [
     "index.html",
     "assets/fx.js",
+    "assets/slides.js",
     "assets/motifs.js",
     "assets/layouts.js",
     "admin.html",

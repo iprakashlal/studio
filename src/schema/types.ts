@@ -60,4 +60,6 @@ export type TemplateDef = {
   themeTags?: string[];
   /** Fills in content keys added by newer template versions, so older projects open safely. */
   prepare?: (content: any) => void;
+  /** Lists that are only samples in the starting content: an older project that lacks them opens with them empty. */
+  sampleOnly?: string[];
 };

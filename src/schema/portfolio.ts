@@ -1,6 +1,6 @@
 import type { Category, Field, TemplateDef } from "./types";
 import { AXES, BODY_FONTS, DISPLAY_FONTS, KIT_AXIS, LINE_BREAKS_AXIS, PORTFOLIO_AXES, THEMES, onColor, portfolioThemeValues } from "../themes/catalog";
-import { adminCategory, seoCategory } from "./common";
+import { adminCategory, heroSlidesCard, prepareSlides, seoCategory } from "./common";
 import VELOCITY_DEFAULTS from "./velocity-defaults.json";
 import { NAV_MODE_FIELD, NAV_MODE_NOTE, themeCards } from "../themes/fields";
 
@@ -130,6 +130,7 @@ const schema: Category[] = [
         { t: "note", text: "Every graphic is drawn in the theme's colours, so it suits any theme. Floating elements uses the list below; the others are built from your name, work, skills and highlights." }] },
       { title: "Hero elements", fields: [{ t: "when", path: "hero.graphic", is: "elements", fields: [{ t: "note", text: "Each entry is an illustrated element from the theme's element pack (or a 3D solid with plain geometric shapes). The type picks which element." }, { t: "list", path: "hero.solids", add: () => ({ type: "sphere", color: "c1" }), max: 6, title: (it) => SOLIDS.find((s) => s[0] === it.type)?.[1] || it.type,
         item: [{ t: "select", path: "type", label: "Solid", options: SOLIDS.map(([value, label]) => ({ value, label })) }, { t: "colorKey", path: "color", label: "Colour" }] }] }, { t: "when", path: "hero.graphic", not: "elements", fields: [{ t: "note", text: "Hidden while Hero graphic isn't Floating elements." }] }] },
+      heroSlidesCard("hero", "the hero graphic", { title: "Badge text for this slide (optional)", titleKeep: "the badge above your name", text: "Intro line for this slide (optional)", textKeep: "your intro line" }),
       { title: "Scrolling skills band", fields: [{ t: "strings", path: "ticker", label: "Words in the band", addLabel: "Add word" },
         { t: "toggle", path: "theme.beltCustom", label: "Use my own band colours" },
         { t: "when", path: "theme.beltCustom", is: "true", fields: [
@@ -224,6 +225,7 @@ export const portfolioTemplate: TemplateDef = {
   prepare: (c) => {
     if (!c || typeof c !== "object") return;
     if (c.hero && typeof c.hero === "object" && !c.hero.graphic) c.hero.graphic = "elements";
+    if (c.hero && typeof c.hero === "object") prepareSlides(c.hero, "#000000");
     // Hero → Photo was replaced by the logo icon / disc image (Brand & theme): an existing photo moves to the disc.
     if (c.hero && c.hero.photo) {
       if (!c.hero.discImage) c.hero.discImage = c.hero.photo;

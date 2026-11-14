@@ -2,13 +2,13 @@ import type { Category, Field, TemplateDef } from "./types";
 import { BODY_FONTS, DISPLAY_FONTS, FX_AXES, LINE_BREAKS_AXIS, type Axis } from "../themes/catalog";
 import { BIZ_AXES, BIZ_TAGS, BIZ_THEMES, businessThemeValues } from "../themes/business";
 import { NAV_MODE_FIELD } from "../themes/fields";
-import { adminCategory, seoCategory, warrantyCategory } from "./common";
+import { adminCategory, heroSlidesCard, prepareSlides, seoCategory, warrantyCategory } from "./common";
 
 const g2 = (...fields: Field[]): Field => ({ t: "grid", cols: 2, fields });
 const g3 = (...fields: Field[]): Field => ({ t: "grid", cols: 3, fields });
 const sel = (a: Axis): Field => ({ t: "select", path: "theme." + a.key, label: a.label, options: a.options.map(([value, label]) => ({ value, label })) });
 
-const SECTIONS: [string, string][] = [["hero", "Hero"], ["clients", "Clients"], ["services", "Services"], ["stats", "Numbers"], ["work", "Case studies"], ["about", "About"], ["process", "Process"], ["team", "Team"], ["testimonials", "Testimonials"], ["pricing", "Pricing"], ["faq", "FAQ"], ["cta", "Call to action"], ["contact", "Contact"]];
+const SECTIONS: [string, string][] = [["hero", "Hero"], ["clients", "Clients"], ["services", "Services"], ["products", "Products"], ["stats", "Numbers"], ["work", "Case studies"], ["about", "About"], ["process", "Process"], ["team", "Team"], ["testimonials", "Testimonials"], ["pricing", "Pricing"], ["faq", "FAQ"], ["cta", "Call to action"], ["contact", "Contact"]];
 const TARGETS = SECTIONS.filter(([id]) => id !== "hero").map(([value, label]) => ({ value, label }));
 const ICONS: [string, string][] = [["compass", "Compass (strategy)"], ["layers", "Layers (design)"], ["code", "Code"], ["chart", "Chart (growth)"], ["shield", "Shield (security)"], ["people", "People"], ["cloud", "Cloud"], ["globe", "Globe"], ["cog", "Cog (operations)"], ["spark", "Spark (ideas)"], ["briefcase", "Briefcase"], ["scale", "Scales (legal)"], ["building", "Building"], ["heart", "Heart (care)"], ["leaf", "Leaf (sustainability)"], ["rocket", "Rocket (launch)"]];
 const head = (k: string, title = "Section heading"): Card => ({ title, fields: [g2({ t: "text", path: k + ".eyebrow", label: "Small label above" }, { t: "text", path: k + ".title", label: "Heading", ml: true }), { t: "textarea", path: k + ".lede", label: "Intro line", rows: 2 }] });
@@ -45,9 +45,9 @@ const schema: Category[] = [
   {
     id: "pages", label: "Sections & pages", group: "Design", desc: "One page or several, which sections show, their order and the menu.",
     cards: [
-      { title: "Pages", fields: [{ t: "toggle", path: "site.multiPage", label: "Use several pages (Home, Services, Work, About, Contact)" },
+      { title: "Pages", fields: [{ t: "toggle", path: "site.multiPage", label: "Use several pages (Home, Services, Products, Work, About, Contact)" },
         { t: "note", text: "Off: one page with every section, and the menu scrolls to them. On: Home shows the highlights (hero, clients, a few services, numbers, a few case studies, testimonials) and the menu opens Services, Work, About and Contact pages." },
-        { t: "when", path: "site.multiPage", is: "true", fields: [g3({ t: "text", path: "site.pageLabels.home", label: "Home page name" }, { t: "text", path: "site.pageLabels.services", label: "Services page name" }, { t: "text", path: "site.pageLabels.work", label: "Work page name" },
+        { t: "when", path: "site.multiPage", is: "true", fields: [g3({ t: "text", path: "site.pageLabels.home", label: "Home page name" }, { t: "text", path: "site.pageLabels.services", label: "Services page name" }, { t: "text", path: "site.pageLabels.products", label: "Products page name" }, { t: "text", path: "site.pageLabels.work", label: "Work page name" },
           { t: "text", path: "site.pageLabels.about", label: "About page name" }, { t: "text", path: "site.pageLabels.contact", label: "Contact page name" })] }] },
       { title: "Sections", fields: [{ t: "note", text: "Reorder with the arrows. Hidden sections stay in your content. On one page, sections with “In the menu” get a menu link." },
         { t: "list", path: "sections", fixed: true, add: () => ({}), title: (it) => `${it.label || it.id}${it.show === false ? " (hidden)" : ""}`,
@@ -62,6 +62,28 @@ const schema: Category[] = [
       { title: "Buttons", fields: [g2({ t: "text", path: "hero.ctaPrimary", label: "Main button" }, { t: "select", path: "hero.ctaPrimaryTarget", label: "Goes to", options: TARGETS }, { t: "text", path: "hero.ctaSecondary", label: "Second button" }, { t: "select", path: "hero.ctaSecondaryTarget", label: "Goes to", options: TARGETS })] },
       { title: "Trust badges", fields: [{ t: "strings", path: "hero.badges", label: "Short proof points under the buttons", addLabel: "Add badge" }] },
       { title: "Image", fields: [{ t: "image", path: "hero.image", label: "Hero image (optional)", hint: "A team photo, your office or your product. Without one, the hero shows a panel built from your numbers and services." }] },
+      heroSlidesCard("hero", "the hero image or panel"),
+    ],
+  },
+  {
+    id: "products", label: "Products", group: "Content", desc: "A catalogue: product cards with View more and Enquire, a page listing them all, and a page for each product.",
+    cards: [
+      head("products"),
+      { title: "How the catalogue shows", fields: [
+        g2({ t: "number", path: "products.homeCount", label: "Products shown in the section", min: 1, step: 1 }, { t: "text", path: "products.all", label: "Link to all products" }),
+        g2({ t: "text", path: "products.more", label: "View more button" }, { t: "text", path: "products.enquire", label: "Enquire button" }),
+        g2({ t: "toggle", path: "products.showPrice", label: "Show prices" }, { t: "toggle", path: "products.filter", label: "Category filter on the products page" }, { t: "toggle", path: "products.related", label: "Show more from the same category on each product page" }),
+        { t: "note", text: "View more opens the product's own page (product.html). Enquire opens the enquiry form with the product filled in. Without the form, it opens WhatsApp, or else email, with a message about the product. The section shows the first products; the rest are on the products page." },
+      ] },
+      { title: "Products", fields: [{ t: "list", path: "products.items", max: 200, title: (it) => `${it.name || "Product"}${it.category ? " · " + it.category : ""}`, add: () => ({ name: "New product", category: "", badge: "", summary: "", price: "", images: [], features: [], details: "", specs: [] }),
+        item: [g2({ t: "text", path: "name", label: "Name" }, { t: "text", path: "category", label: "Category" }),
+          g2({ t: "text", path: "price", label: "Price (optional)", ph: "₹12,500 or On request" }, { t: "text", path: "badge", label: "Badge (optional)", ph: "New, Bestseller" }),
+          { t: "textarea", path: "summary", label: "Short description (on the card)", rows: 2 },
+          { t: "images", path: "images", label: "Photos", hint: "The first photo is shown on the card. All of them show on the product page." },
+          { t: "strings", path: "features", label: "Key features", addLabel: "Add feature" },
+          { t: "textarea", path: "details", label: "Full description (product page)", rows: 5, hint: "Leave an empty line between paragraphs." },
+          { t: "list", path: "specs", max: 30, title: (it) => `${it.label || "Spec"}${it.value ? ": " + it.value : ""}`, add: () => ({ label: "", value: "" }), item: [g2({ t: "text", path: "label", label: "Specification" }, { t: "text", path: "value", label: "Value" })] },
+          { t: "text", path: "id", label: "Page address (optional)", hint: "Used in the product page link: product.html?p=… Made from the name when empty." }] }] },
     ],
   },
   {
@@ -159,8 +181,17 @@ function prepareBusiness(c: any) {
   // Early business sites stored the default theme as "meridian"; its id is "biz-meridian".
   if (c.theme?.preset && !BIZ_THEMES.some((t) => t.id === c.theme.preset) && BIZ_THEMES.some((t) => t.id === "biz-" + c.theme.preset)) c.theme.preset = "biz-" + c.theme.preset;
   c.site.pageLabels ||= { home: "Home", services: "Services", work: "Work", about: "About", contact: "Contact" };
+  c.site.pageLabels.products ||= "Products";
+  c.products = { eyebrow: "Catalogue", title: "Products", lede: "", homeCount: 6, enquire: "Enquire", more: "View more", all: "View all products", showPrice: true, filter: true, related: true, ...(c.products && typeof c.products === "object" ? c.products : {}) };
+  if (!Array.isArray(c.products.items)) c.products.items = [];
+  c.hero ||= {}; prepareSlides(c.hero, c.theme?.deep || "#0E1B2C");
   c.sections = Array.isArray(c.sections) ? c.sections : [];
-  for (const [id, label] of SECTIONS) if (!c.sections.some((s: any) => s.id === id)) c.sections.push({ id, label, show: true, inNav: ["services", "work", "about", "team", "contact"].includes(id) });
+  // A section added in a newer version goes in after the one before it in the default order.
+  SECTIONS.forEach(([id, label], k) => {
+    if (c.sections.some((s: any) => s.id === id)) return;
+    const after = k ? c.sections.findIndex((s: any) => s.id === SECTIONS[k - 1][0]) : -1;
+    c.sections.splice(after + 1, 0, { id, label, show: true, inNav: ["services", "products", "work", "about", "team", "contact"].includes(id) });
+  });
   c.contact ||= {}; c.contact.form ||= { enabled: true };
 }
 
@@ -172,6 +203,8 @@ export const businessTemplate: TemplateDef = {
   pages: [
     { file: "index.html", label: "Home" },
     { file: "services.html", label: "Services" },
+    { file: "products.html", label: "Products" },
+    { file: "product.html", label: "Product page" },
     { file: "work.html", label: "Work" },
     { file: "about.html", label: "About" },
     { file: "contact.html", label: "Contact" },
@@ -183,7 +216,8 @@ export const businessTemplate: TemplateDef = {
   themes: BIZ_THEMES,
   themeTags: BIZ_TAGS,
   prepare: prepareBusiness,
-  summary: (c) => `${(c?.services?.items || []).length} services · ${(c?.work?.items || []).length} case studies`,
+  sampleOnly: ["products.items"],
+  summary: (c) => `${(c?.services?.items || []).length} services${(c?.products?.items || []).length ? ` · ${c.products.items.length} products` : ""} · ${(c?.work?.items || []).length} case studies`,
   checks: (c) => {
     const w: string[] = [];
     const F = c?.contact?.form || {};

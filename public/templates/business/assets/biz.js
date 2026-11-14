@@ -19,13 +19,14 @@ const DEFAULT = {
   cms: { adminPage: "admin" },
   poweredBy: { show: true },
   brand: { name: "Northbeam Partners", tagline: "Strategy, design and engineering for growing companies", logo: null, showName: true },
-  site: { multiPage: false, pageLabels: { home: "Home", services: "Services", work: "Work", about: "About", contact: "Contact" } },
+  site: { multiPage: false, pageLabels: { home: "Home", services: "Services", products: "Products", work: "Work", about: "About", contact: "Contact" } },
   nav: { cta: "Book a call", ctaTarget: "contact" },
   sections: [
     { id: "hero", label: "Home", show: true, inNav: false },
     { id: "clients", label: "Clients", show: true, inNav: false },
     { id: "services", label: "Services", show: true, inNav: true },
     { id: "stats", label: "Numbers", show: true, inNav: false },
+    { id: "products", label: "Products", show: true, inNav: true },
     { id: "work", label: "Work", show: true, inNav: true },
     { id: "about", label: "About", show: true, inNav: true },
     { id: "process", label: "Process", show: true, inNav: false },
@@ -42,7 +43,9 @@ const DEFAULT = {
     lede: "Northbeam is an independent team of strategists, designers and engineers. We plan, design and ship digital products for banks, insurers and healthcare companies.",
     ctaPrimary: "Book a consultation", ctaPrimaryTarget: "contact", ctaSecondary: "See our work", ctaSecondaryTarget: "work",
     image: null, badges: ["ISO 27001 certified", "120+ projects delivered", "Offices in Mumbai & London"],
+    slides: { enabled: false, items: [], effect: "fade", interval: 6, speed: 1.2, overlay: 45, overlayColor: "#0E1B2C", overlayStyle: "left", textColor: "light", height: "tall", dots: true, arrows: false, pause: true, hideArt: true },
   },
+  products: { eyebrow: "Catalogue", title: "Products", lede: "", homeCount: 6, enquire: "Enquire", more: "View more", all: "View all products", showPrice: true, filter: true, related: true, items: [] },
   clients: { title: "Trusted by teams at", logos: [{ name: "Arcadia Bank", logo: null }, { name: "Helix Health", logo: null }, { name: "Orbit Insurance", logo: null }, { name: "Lumen Retail", logo: null }, { name: "Stratus Cloud", logo: null }, { name: "Vertex Labs", logo: null }] },
   services: {
     eyebrow: "What we do", title: "Services built around outcomes", lede: "Pick one engagement or bring us in end to end. Every project has a single lead who owns delivery.",
@@ -192,24 +195,27 @@ const imgUrl = (img) => (!img ? "" : img.path ? ASSETS[img.path] || hostPhoto(im
 let C = merge(DEFAULT, {});
 const PAGE = document.body.dataset.page || "home";
 const PREVIEW = window.name === "cms-preview" && window.parent !== window;
-const PAGES = { home: "index.html", services: "services.html", work: "work.html", about: "about.html", contact: "contact.html", warranty: "warranty.html" };
+const PAGES = { home: "index.html", services: "services.html", products: "products.html", product: "product.html", work: "work.html", about: "about.html", contact: "contact.html", warranty: "warranty.html" };
 /** Which sections each page shows when the site has several pages (home follows the section order). */
 const PAGE_SECTIONS = {
-  home: ["hero", "clients", "services", "stats", "work", "testimonials", "cta"],
+  home: ["hero", "clients", "services", "products", "stats", "work", "testimonials", "cta"],
+  products: ["products", "cta"],
   services: ["services", "process", "pricing", "faq", "cta"],
   work: ["work", "clients", "testimonials", "cta"],
   about: ["about", "stats", "team", "process", "cta"],
   contact: ["contact", "faq"],
 };
 /** The page a section lives on in several-page mode. */
-const HOME_OF = { services: "services", process: "services", pricing: "services", faq: "services", work: "work", about: "about", team: "about", contact: "contact", testimonials: "work", clients: "work" };
+const HOME_OF = { products: "products", services: "services", process: "services", pricing: "services", faq: "services", work: "work", about: "about", team: "about", contact: "contact", testimonials: "work", clients: "work" };
 const multi = () => !!C.site.multiPage;
+/** On one-page sites, section links from the products pages go back to the home page. */
+const AT = PAGE === "home" ? "" : PAGES.home;
 const shown = (id) => { const s = C.sections.find((x) => x.id === id); return !s || s.show !== false; };
 /** A link to a section: an anchor on one page, or its page when the site has several. */
 function href(id) {
   if (!id) return "#top";
   if (/^(https?:|mailto:|tel:)/i.test(id)) return id;
-  if (!multi()) return "#" + id;
+  if (!multi()) return (PAGE === "home" ? "" : PAGES.home) + "#" + id;
   if (id === "hero" || id === "home") return PAGES.home;
   const pg = HOME_OF[id] || "home";
   return PAGES[pg] + (PAGE === pg ? "#" + id : pg === id ? "" : "#" + id);
@@ -244,7 +250,8 @@ function applyTheme(t) {
 }
 function setTitle() {
   const one = (x) => String(x || "").replace(/\s*\n\s*/g, " ").trim();
-  const label = PAGE === "home" || !multi() ? "" : PAGE === "warranty" ? C.warranty.navLabel || "Warranty" : (C.site.pageLabels || {})[PAGE] || "";
+  const pr = PAGE === "product" ? curProduct() : null;
+  const label = pr ? pr.name : PAGE === "products" ? (C.site.pageLabels || {}).products || C.products.title || "Products" : PAGE === "home" || !multi() ? "" : PAGE === "warranty" ? C.warranty.navLabel || "Warranty" : (C.site.pageLabels || {})[PAGE] || "";
   document.title = !label ? one(C.seo.title || C.brand.name) : one((C.seo.titlePattern || "{page} · {site}").replace(/\{page\}/g, label).replace(/\{site\}/g, one(C.brand.name)));
 }
 
@@ -361,19 +368,79 @@ function contactHTML() {
         ${K.whatsapp || K.linkedin ? `<div class="cta-row">${K.whatsapp ? `<a class="btn sec" href="https://wa.me/${esc(String(K.whatsapp).replace(/\D/g, ""))}" target="_blank" rel="noopener">WhatsApp</a>` : ""}${safeUrl(K.linkedin) ? `<a class="btn sec" href="${esc(safeUrl(K.linkedin))}" target="_blank" rel="noopener">LinkedIn</a>` : ""}</div>` : ""}</aside>
       ${form}</div></div></section>`;
 }
-const RENDER = { hero: heroHTML, clients: clientsHTML, services: () => servicesHTML(PAGE === "services"), stats: statsHTML, work: () => workHTML(PAGE === "work"), about: aboutHTML, process: processHTML, team: teamHTML, testimonials: testimonialsHTML, pricing: pricingHTML, faq: faqHTML, cta: ctaHTML, contact: contactHTML };
+/* ---------- Products (catalogue): a section, a page listing them all, and a page per product. ---------- */
+const slug = (s) => String(s || "").toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60) || "item";
+/** The products with a unique id each (the one set in the content, or one made from the name). */
+function products() {
+  const seen = new Set();
+  return (C.products.items || []).filter((p) => p && (p.name || "").trim()).map((p) => {
+    let id = slug(p.id || p.name), n = 2; while (seen.has(id)) id = slug(p.id || p.name) + "-" + n++; seen.add(id);
+    return { ...p, id, pics: (Array.isArray(p.images) ? p.images : []).map(imgUrl).filter(Boolean) };
+  });
+}
+const prodShown = () => shown("products") && products().length > 0 && C.sections.some((s) => s.id === "products");
+const prodUrl = (p) => PAGES.product + "?p=" + encodeURIComponent(p.id);
+function curProduct() { const L = products(); if (!L.length) return null; const q = new URLSearchParams(location.search).get("p"); return L.find((p) => p.id === q) || (PREVIEW || !q ? L[0] : null); }
+/** Where "Enquire" goes: the enquiry form with the product filled in, else WhatsApp, else email. */
+function enquireUrl(p) {
+  const K = C.contact, msg = `Hello, I'd like to know more about ${p.name}.`;
+  if (K.form.enabled && shown("contact")) return (multi() ? PAGES.contact : PAGES.home) + "?enquire=" + encodeURIComponent(p.id) + "#contact";
+  if (K.whatsapp) return "https://wa.me/" + String(K.whatsapp).replace(/\D/g, "") + "?text=" + encodeURIComponent(msg);
+  if (K.email) return "mailto:" + K.email + "?subject=" + encodeURIComponent("Enquiry: " + p.name) + "&body=" + encodeURIComponent(msg);
+  return href("contact");
+}
+const enqBtn = (p, kind = "pri") => { const u = enquireUrl(p), ext = /^https:/.test(u); return `<a class="btn ${kind}" href="${esc(u)}" data-enquire="${esc(p.id)}"${ext ? ' target="_blank" rel="noopener"' : ""}>${esc(C.products.enquire || "Enquire")}</a>`; };
+function prodCard(p, i) {
+  const P = C.products, im = p.pics[0];
+  return `<article class="card prod rv" style="--i:${i}"><a class="prod-media" href="${esc(prodUrl(p))}" tabindex="-1" aria-hidden="true">${im ? `<img src="${esc(im)}" alt="" loading="lazy">` : `<span class="case-ph"><b>${esc(initials(p.name))}</b></span>`}${p.badge ? `<span class="prod-badge">${esc(p.badge)}</span>` : ""}</a>
+    <div class="prod-body">${p.category ? `<p class="case-meta">${esc(p.category)}</p>` : ""}<h3 class="h3"><a href="${esc(prodUrl(p))}">${esc(p.name)}</a></h3>${p.summary ? `<p>${rich(p.summary)}</p>` : ""}${P.showPrice !== false && p.price ? `<p class="prod-price">${esc(p.price)}</p>` : ""}
+      <div class="prod-acts"><a class="btn sec" href="${esc(prodUrl(p))}">${esc(P.more || "View more")}</a>${enqBtn(p)}</div></div></article>`;
+}
+function productsHTML() {
+  const P = C.products, L = products();
+  if (!L.length) return "";
+  const full = PAGE === "products", n = Math.max(1, +P.homeCount || 6), items = full ? L : L.slice(0, n);
+  const cats = full && P.filter !== false ? [...new Set(L.map((p) => (p.category || "").trim()).filter(Boolean))] : [];
+  return `<section class="products band" id="products"><div class="wrap">${full ? "" : head(P)}
+    ${cats.length > 1 ? `<div class="chips" role="group" aria-label="Filter by category"><button type="button" class="chip" aria-pressed="true" data-cat="">All</button>${cats.map((c) => `<button type="button" class="chip" aria-pressed="false" data-cat="${esc(c)}">${esc(c)}</button>`).join("")}</div>` : ""}
+    <div class="pgrid">${items.map(prodCard).join("")}</div>
+    ${!full && L.length > items.length ? `<p class="more"><a class="link" href="${PAGES.products}">${esc(P.all || "View all products")} (${L.length}) ${arrow}</a></p>` : ""}</div></section>`;
+}
+function productsPage() {
+  const P = C.products, home = C.site.pageLabels.home || "Home", label = C.site.pageLabels.products || P.title || "Products";
+  return `<section class="phead" id="page"><div class="wrap"><p class="crumbs"><a href="${PAGES.home}">${esc(home)}</a> / ${esc(label)}</p><h1 class="h1">${rich(P.title || label)}</h1>${P.lede ? `<p class="hero-lede">${rich(P.lede)}</p>` : ""}</div></section>${productsHTML()}${shown("cta") ? ctaHTML() : ""}`;
+}
+function productPage() {
+  const P = C.products, p = curProduct(), home = C.site.pageLabels.home || "Home", label = C.site.pageLabels.products || P.title || "Products";
+  const crumbs = `<p class="crumbs"><a href="${PAGES.home}">${esc(home)}</a> / <a href="${PAGES.products}">${esc(label)}</a>${p ? " / " + esc(p.name) : ""}</p>`;
+  if (!p) return `<section class="phead" id="page"><div class="wrap">${crumbs}<h1 class="h1">This product isn't listed any more</h1><p class="hero-lede"><a class="link" href="${PAGES.products}">${esc(P.all || "View all products")} ${arrow}</a></p></div></section>`;
+  const specs = (p.specs || []).filter((x) => x && (x.label || x.value)), feats = (p.features || []).filter(Boolean);
+  const rel = P.related !== false ? products().filter((x) => x.id !== p.id && (!p.category || x.category === p.category)).slice(0, 3) : [];
+  return `<section class="pd-wrap" id="page"><div class="wrap">${crumbs}<div class="pd">
+      <div class="pd-gal">${p.pics.length ? `<div class="pd-main"><img id="pd-img" src="${esc(p.pics[0])}" alt="${esc(p.name)}"></div>${p.pics.length > 1 ? `<div class="pd-thumbs">${p.pics.map((u, i) => `<button type="button" class="pd-th" aria-label="Photo ${i + 1}" aria-pressed="${i === 0}" data-src="${esc(u)}"><img src="${esc(u)}" alt="" loading="lazy"></button>`).join("")}</div>` : ""}` : `<div class="pd-main"><span class="case-ph"><b>${esc(initials(p.name))}</b></span></div>`}</div>
+      <div class="pd-info">${p.category ? `<p class="eyebrow">${esc(p.category)}</p>` : ""}<h1 class="h1">${esc(p.name)}</h1>${p.badge ? `<span class="prod-badge static">${esc(p.badge)}</span>` : ""}
+        ${p.summary ? `<p class="hero-lede">${rich(p.summary)}</p>` : ""}${P.showPrice !== false && p.price ? `<p class="prod-price big">${esc(p.price)}</p>` : ""}
+        <div class="cta-row">${enqBtn(p)}${C.contact.phone ? `<a class="btn sec" href="tel:${esc(C.contact.phone.replace(/[^\d+]/g, ""))}">${esc(C.contact.phone)}</a>` : ""}</div>
+        ${feats.length ? `<ul class="ticks">${feats.map((f) => `<li>${esc(f)}</li>`).join("")}</ul>` : ""}</div></div>
+      ${p.details || specs.length ? `<div class="pd-more">${p.details ? `<div class="prose">${paras(p.details)}</div>` : ""}${specs.length ? `<dl class="pd-specs">${specs.map((x) => `<div><dt>${esc(x.label)}</dt><dd>${ml(x.value)}</dd></div>`).join("")}</dl>` : ""}</div>` : ""}
+    </div></section>
+    ${rel.length ? `<section class="products band" id="related"><div class="wrap"><header class="sh"><h2 class="h2">More ${p.category ? esc(p.category.toLowerCase()) : "products"}</h2></header><div class="pgrid">${rel.map(prodCard).join("")}</div></div></section>` : ""}`;
+}
+const RENDER = { products: productsHTML, hero: heroHTML, clients: clientsHTML, services: () => servicesHTML(PAGE === "services"), stats: statsHTML, work: () => workHTML(PAGE === "work"), about: aboutHTML, process: processHTML, team: teamHTML, testimonials: testimonialsHTML, pricing: pricingHTML, faq: faqHTML, cta: ctaHTML, contact: contactHTML };
 
 /* ============================================================
    PAGE
    ============================================================ */
+/** The pages in the menu when the site has several (Products only when there are products to show). */
+const mpages = () => ["services", ...(prodShown() ? ["products"] : []), "work", "about", "contact"];
 function navHTML() {
   const B = C.brand, logo = imgUrl(B.logo);
   const items = multi()
-    ? ["services", "work", "about", "contact"].map((p) => ({ label: C.site.pageLabels[p] || p, url: PAGES[p], on: PAGE === p }))
-    : C.sections.filter((s) => s.show !== false && s.inNav && RENDER[s.id]).map((s) => ({ label: s.label, url: "#" + s.id }));
+    ? mpages().map((p) => ({ label: C.site.pageLabels[p] || p, url: PAGES[p], on: PAGE === p || (p === "products" && PAGE === "product") }))
+    : C.sections.filter((s) => s.show !== false && s.inNav && RENDER[s.id]).map((s) => ({ label: s.label, url: AT + "#" + s.id }));
   if (swOn() && C.warranty.inNav) items.push({ label: C.warranty.navLabel || "Warranty", url: multi() ? PAGES.warranty : "#warranty", on: PAGE === "warranty" });
   return `<header class="nav" id="top"><div class="wrap nav-in">
-      <a class="brand" href="${multi() ? PAGES.home : "#top"}">${logo ? `<img class="logo" src="${esc(logo)}" alt="">` : `<span class="logo mark">${esc(initials(B.name))}</span>`}${B.showName !== false ? `<span class="bn">${esc(B.name)}</span>` : ""}</a>
+      <a class="brand" href="${multi() || PAGE !== "home" ? PAGES.home : "#top"}">${logo ? `<img class="logo" src="${esc(logo)}" alt="">` : `<span class="logo mark">${esc(initials(B.name))}</span>`}${B.showName !== false ? `<span class="bn">${esc(B.name)}</span>` : ""}</a>
       <nav class="links" aria-label="Main">${items.map((i) => `<a href="${esc(i.url)}"${i.on ? ' aria-current="page"' : ""}>${esc(i.label)}</a>`).join("")}</nav>
       ${C.nav.cta ? `<a class="btn pri nav-cta" href="${esc(href(C.nav.ctaTarget || "contact"))}">${esc(C.nav.cta)}</a>` : ""}
       <button class="burger" type="button" aria-expanded="false" aria-controls="mnav" aria-label="Menu"><span></span><span></span></button></div>
@@ -386,10 +453,10 @@ function pageHead() {
 }
 function footerHTML() {
   const F = C.footer, B = C.brand, K = C.contact;
-  const cols = multi() ? ["services", "work", "about", "contact"].map((p) => `<a href="${PAGES[p]}">${esc(C.site.pageLabels[p])}</a>`) : C.sections.filter((s) => s.show !== false && s.inNav && RENDER[s.id]).map((s) => `<a href="#${s.id}">${esc(s.label)}</a>`);
+  const cols = multi() ? mpages().map((p) => `<a href="${PAGES[p]}">${esc(C.site.pageLabels[p] || p)}</a>`) : C.sections.filter((s) => s.show !== false && s.inNav && RENDER[s.id]).map((s) => `<a href="${AT}#${s.id}">${esc(s.label)}</a>`);
   if (swOn() && C.warranty.inFooter) cols.push(`<a href="${multi() ? PAGES.warranty : "#warranty"}">${esc(C.warranty.navLabel || "Warranty")}</a>`);
   return `<footer class="foot" id="footer"><div class="wrap"><div class="foot-grid">
-      <div><a class="brand" href="${multi() ? PAGES.home : "#top"}">${imgUrl(B.logo) ? `<img class="logo" src="${esc(imgUrl(B.logo))}" alt="">` : `<span class="logo mark">${esc(initials(B.name))}</span>`}<span class="bn">${esc(B.name)}</span></a><p>${rich(F.text)}</p></div>
+      <div><a class="brand" href="${multi() || PAGE !== "home" ? PAGES.home : "#top"}">${imgUrl(B.logo) ? `<img class="logo" src="${esc(imgUrl(B.logo))}" alt="">` : `<span class="logo mark">${esc(initials(B.name))}</span>`}<span class="bn">${esc(B.name)}</span></a><p>${rich(F.text)}</p></div>
       <nav aria-label="Footer">${cols.join("")}</nav>
       <div class="fc">${K.email ? `<a href="mailto:${esc(K.email)}">${esc(K.email)}</a>` : ""}${K.phone ? `<a href="tel:${esc(K.phone.replace(/[^\d+]/g, ""))}">${esc(K.phone)}</a>` : ""}${K.address ? `<span>${ml(K.address)}</span>` : ""}</div></div>
     <div class="foot-legal"><span>${esc(String(F.legal || "").replace(/\{year\}/g, new Date().getFullYear()))}</span><span>${(F.links || []).filter((l) => l.label).map((l) => safeUrl(l.url) ? `<a href="${esc(safeUrl(l.url))}">${esc(l.label)}</a>` : `<span>${esc(l.label)}</span>`).join("")}</span></div></div></footer>`;
@@ -409,14 +476,16 @@ const swOpen = () => SW().then((w) => w.open(swOpts())).catch(() => {});
 const swMount = () => { const el = document.getElementById("sw-page"); if (el) SW().then((w) => w.mount(el, swOpts())).catch(() => {}); };
 function render() {
   // A several-page link opened while the site is one page goes to that section.
-  if (!PREVIEW && !multi() && PAGE !== "home") { location.replace(PAGES.home + "#" + (PAGE === "work" ? "work" : PAGE)); return; }
+  if (!PREVIEW && !multi() && !["home", "products", "product"].includes(PAGE)) { location.replace(PAGES.home + "#" + (PAGE === "work" ? "work" : PAGE)); return; }
   applyTheme(C.theme); setTitle();
   if (!PREVIEW && PAGE === "warranty" && !swOn()) { location.replace(PAGES.home); return; }
-  const ids = PAGE === "warranty" ? [] : multi() ? (PAGE === "home" ? C.sections.map((s) => s.id).filter((id) => PAGE_SECTIONS.home.includes(id)) : PAGE_SECTIONS[PAGE]) : C.sections.map((s) => s.id);
-  const body = PAGE === "warranty" ? warrantyPage() : ids.filter((id) => RENDER[id] && shown(id)).map((id) => RENDER[id]()).join("");
-  $("#app").innerHTML = `<a class="skip" href="#main">Skip to content</a>${navHTML()}<main id="main">${multi() && PAGE !== "home" && PAGE !== "warranty" ? pageHead() : ""}${body}</main>${footerHTML()}`;
+  const special = { warranty: warrantyPage, products: productsPage, product: productPage }[PAGE];
+  const ids = special ? [] : multi() ? (PAGE === "home" ? C.sections.map((s) => s.id).filter((id) => PAGE_SECTIONS.home.includes(id)) : PAGE_SECTIONS[PAGE]) : C.sections.map((s) => s.id);
+  const body = special ? special() : ids.filter((id) => RENDER[id] && shown(id)).map((id) => RENDER[id]()).join("");
+  $("#app").innerHTML = `<a class="skip" href="#main">Skip to content</a>${navHTML()}<main id="main">${multi() && !special && PAGE !== "home" ? pageHead() : ""}${body}</main>${footerHTML()}`;
   bind();
   if (PAGE === "warranty") swMount();
+  slides();
   if (window.SiteFX) try { window.SiteFX.init({ root: $("#app"), brand: C.theme.introTitle || C.brand.name, badge: C.poweredBy }); } catch (e) {}
 }
 
@@ -433,12 +502,43 @@ function bind() {
   if (C.theme.motionStyle === "none" || matchMedia("(prefers-reduced-motion: reduce)").matches || !("IntersectionObserver" in window)) rv.forEach((e) => e.classList.add("in"));
   else { const io = new IntersectionObserver((es) => es.forEach((e) => { if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); } }), { rootMargin: "0px 0px -8% 0px" }); rv.forEach((e) => io.observe(e)); }
   const f = $("#enquiry"); if (f) f.addEventListener("submit", submit);
+  bindProducts();
   if (swOn() && !multi()) {
     $$('a[href="#warranty"]').forEach((a) => a.addEventListener("click", (e) => { e.preventDefault(); const b = $(".burger"), m = $("#mnav"); b && b.setAttribute("aria-expanded", "false"); m && m.classList.remove("open"); swOpen(); }));
     if (location.hash === "#warranty" && !$(".sw-ov")) swOpen();
   }
 }
 
+/* Hero background slides (assets/slides.js, loaded when switched on). */
+let slP, slGen = 0;
+function slides() {
+  const S = C.hero.slides, g = ++slGen, host = $("#hero");
+  if (!host || !S || !S.enabled || !(S.items || []).some((x) => x && x.image)) { if (window.SiteSlides) window.SiteSlides.stop(); return; }
+  (slP ||= new Promise((ok, no) => { if (window.SiteSlides) return ok(window.SiteSlides); const s = document.createElement("script"); s.src = "assets/slides.js"; s.onload = () => ok(window.SiteSlides); s.onerror = no; document.head.appendChild(s); }))
+    .then((w) => { if (g === slGen) w.mount(host, S, { imgUrl, title: ".h1", text: ".hero-lede", hide: ".hero-media,.hero-bg" }); }).catch(() => {});
+}
+/** Product filters and photos, and "Enquire": fills the enquiry form with the product. */
+function bindProducts() {
+  $$(".chips .chip").forEach((b) => b.addEventListener("click", () => {
+    const c = b.dataset.cat; $$(".chips .chip").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+    const L = products(); $$(".pgrid .prod").forEach((el, i) => { el.hidden = !!c && (L[i] || {}).category !== c; });
+  }));
+  $$(".pd-th").forEach((b) => b.addEventListener("click", () => { const im = $("#pd-img"); if (im) im.src = b.dataset.src; $$(".pd-th").forEach((x) => x.setAttribute("aria-pressed", String(x === b))); }));
+  const form = $("#enquiry");
+  if (form) $$("a[data-enquire]").forEach((a) => a.addEventListener("click", (e) => { if (!a.getAttribute("href").includes("?enquire=") || !$("#contact")) return; e.preventDefault(); prefill(a.dataset.enquire, true); }));
+  const q = new URLSearchParams(location.search).get("enquire");
+  if (q && form) prefill(q, false);
+}
+function prefill(id, scroll) {
+  const p = products().find((x) => x.id === id), f = $("#enquiry"); if (!p || !f) return;
+  let h = f.querySelector('input[name="product"]'); if (!h) { h = document.createElement("input"); h.type = "hidden"; h.name = "product"; f.prepend(h); } h.value = p.name;
+  let chip = $(".enq-about", f); if (!chip) { chip = document.createElement("p"); chip.className = "enq-about"; const t = $(".h3", f); t ? t.after(chip) : f.prepend(chip); }
+  chip.innerHTML = `<span>About: <b>${esc(p.name)}</b></span><button type="button" aria-label="Not about this product">×</button>`;
+  chip.querySelector("button").onclick = () => { chip.remove(); h.remove(); const m = $("#f-message", f); if (m && m.dataset.auto === m.value) m.value = ""; };
+  const m = $("#f-message", f); if (m && (!m.value.trim() || m.dataset.auto === m.value)) { m.value = `Hello, I'd like to know more about ${p.name}.`; m.dataset.auto = m.value; }
+  if (scroll) { $("#contact").scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" }); setTimeout(() => { const n = $("#f-name", f); n && n.focus({ preventScroll: true }); }, 500); }
+  else setTimeout(() => $("#contact") && $("#contact").scrollIntoView(), 60);
+}
 /** Where enquiries go: the hosted site's Supabase, the form's own Supabase settings, or email. */
 function backend() {
   const F = C.contact.form;
@@ -484,6 +584,7 @@ async function submit(e) {
     msg.className = "form-msg bad"; msg.innerHTML = C.contact.email ? `Couldn't send just now. Please email us at <a href="mailto:${esc(C.contact.email)}">${esc(C.contact.email)}</a>.` : "Couldn't send just now. Please try again in a moment.";
   }
   btnEl.disabled = false;
+  if (/ok/.test(msg.className) && cfg) { const c = $(".enq-about", f), h = f.querySelector('input[name="product"]'); c && c.remove(); h && h.remove(); }
 }
 
 /* ============================================================

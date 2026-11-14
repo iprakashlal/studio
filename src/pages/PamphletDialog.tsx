@@ -50,7 +50,7 @@ export function PamphletDialog({ session, project, draft, upload, onApply, onClo
   const read = async () => {
     setErr(""); setBusy("Reading the pamphlet");
     try {
-      doc.current?.close(); doc.current = await readPamphlet(files, pdfBase());
+      doc.current?.close(); doc.current = await readPamphlet(files, pdfBase(), { find: true, step: setBusy });
       const pics = doc.current.pages.filter((p) => p.image).length;
       setBusy(pics ? `Reading ${pics} page picture${pics > 1 ? "s" : ""} and finding the products` : "Finding the products");
       const inp = pamphletInput(doc.current);
@@ -165,7 +165,7 @@ function PhotoChoice({ photos, setPhotos, styles, setStyles, hasPics = true }: {
       {photos === "styled" && <div className="ml-6 flex flex-wrap gap-3" aria-label="Photo looks">
         {SHOT_STYLES.map((st) => <label key={st.id} className="flex items-center gap-1.5"><input type="checkbox" checked={styles.has(st.id)} onChange={(e) => { const n = new Set(styles); e.target.checked ? n.add(st.id) : n.delete(st.id); if (n.size) setStyles(n); }} /> {st.label}</label>)}
       </div>}
-      <p className="text-[12.5px] text-ink-400">{photos === "styled" ? "Each product's picture is taken from the pamphlet or sheet, its plain background removed, and placed in the looks you tick: one photo for each, shown on the product page. The product itself isn't redrawn. A picture with a busy background is placed whole, framed." : !hasPics ? "No separate product pictures were found in this file." : "The pictures are taken from the pamphlet or sheet."}</p>
+      <p className="text-[12.5px] text-ink-400">{photos === "styled" ? "Each product's photo is found in the pamphlet or sheet (also inside a designed page, like a brochure image), cut out from its background, and placed in the looks you tick: one photo for each, shown on the product page. The product itself isn't redrawn. If a product can't be separated from its background, its picture is placed whole, framed." : !hasPics ? "No separate product pictures were found in this file." : "The pictures are taken from the pamphlet or sheet."}</p>
     </fieldset>
   );
 }

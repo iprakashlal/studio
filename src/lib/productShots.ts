@@ -9,18 +9,33 @@ export type ShotStyle = "studio" | "gradient" | "podium";
 export const SHOT_STYLES: { id: ShotStyle; label: string }[] = [
   { id: "studio", label: "Studio white" }, { id: "gradient", label: "Soft gradient" }, { id: "podium", label: "Podium" },
 ];
+import { cutSingle } from "./saliency";
 type Cut = { img: HTMLCanvasElement; cutout: boolean };
 
 const canvas = (w: number, h: number) => { const c = document.createElement("canvas"); c.width = Math.max(1, Math.round(w)); c.height = Math.max(1, Math.round(h)); return c; };
 const toBlob = (c: HTMLCanvasElement, type = "image/jpeg", q = 0.9) => new Promise<Blob>((ok, no) => c.toBlob((b) => (b ? ok(b) : no(new Error("Couldn't make the picture."))), type, q));
 
-/** The product with its background removed (flood-filled from the edges), trimmed; or the photo as it is. */
+/** The product with its background removed, trimmed: already see-through (found in a page), a plain background
+ *  flood-filled from the edges, or the product finder for a busy one. Otherwise the photo as it is. */
 export async function cutOut(src: Blob): Promise<Cut> {
+  const flat = await plainCut(src);
+  if (flat.cutout) return flat;
+  const blob = await cutSingle(flat.img);
+  return blob ? plainCut(blob) : flat;
+}
+async function plainCut(src: Blob): Promise<Cut> {
   const bmp = await createImageBitmap(src);
   const k = Math.min(1, 1100 / Math.max(bmp.width, bmp.height));
   const c = canvas(bmp.width * k, bmp.height * k), g = c.getContext("2d", { willReadFrequently: true })!;
   g.drawImage(bmp, 0, 0, c.width, c.height); bmp.close?.();
   const { width: W, height: H } = c, im = g.getImageData(0, 0, W, H), d = im.data;
+  // Already cut out: trim to what's visible.
+  let clear = 0; for (let i = 3; i < d.length; i += 16) if (d[i] < 20) clear++;
+  if (clear > d.length / 16 * 0.04) {
+    let x0 = W, y0 = H, x1 = -1, y1 = -1;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (d[(y * W + x) * 4 + 3] > 25) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+    if (x1 > x0 && y1 > y0) { const t = canvas(x1 - x0 + 1, y1 - y0 + 1); t.getContext("2d")!.drawImage(c, x0, y0, t.width, t.height, 0, 0, t.width, t.height); return { img: t, cutout: true }; }
+  }
   // The background colour: the most common colour around the edges.
   const edge: number[] = [];
   const at = (x: number, y: number) => (y * W + x) * 4;

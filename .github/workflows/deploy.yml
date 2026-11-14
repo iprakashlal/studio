@@ -26,9 +26,20 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: touch dist/.nojekyll
+      # studio.share.json: GitHub Pages uses the moved Studio's projects (its public studio.config.json).
+      - name: Share the moved Studio's projects
+        if: hashFiles('studio.share.json') != ''
+        run: npx esbuild scripts/studio-ci.ts --bundle --platform=node --format=esm --target=node20 --outfile=studio-ci.mjs --log-level=warning && node studio-ci.mjs share
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
+      # The same build goes to the moved Studio (app files only; its projects stay as they are).
+      # Needs the repository secret CLOUDFLARE_API_TOKEN; without it the moved Studio updates itself when opened.
+      - name: Update the moved Studio
+        if: hashFiles('studio.share.json') != ''
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: node studio-ci.mjs deploy
   deploy:
     needs: build
     runs-on: ubuntu-latest

@@ -124,6 +124,10 @@ const DEFAULT = {
       saveTo: "auto", fileUrl: "", sbUrl: "", sbKey: "", site: "",
     },
   },
+  warranty: { enabled: false, title: "Warranty & service status", intro: "Enter the number on your invoice or product to see its warranty and service status.", navLabel: "Warranty", inNav: true, inFooter: true,
+    label: "Serial or invoice number", placeholder: "", verify: "none", verifyLabel: "", button: "Check status", notFound: "We couldn't find that number. Check it and try again.", help: "Need help? Contact us and we'll look it up.",
+    showWarranty: true, showHistory: true, showCustomer: false,
+    statuses: [{ id: "registered", label: "Registered", tone: "info" }, { id: "received", label: "Received for service", tone: "progress" }, { id: "in-repair", label: "In repair", tone: "progress" }, { id: "ready", label: "Ready for pickup", tone: "ok" }, { id: "delivered", label: "Delivered", tone: "ok" }, { id: "not-covered", label: "Not covered", tone: "bad" }] },
   footer: { text: "Strategy, design and engineering for growing companies.", legal: "© {year} Northbeam Partners LLP. All rights reserved.", links: [{ label: "Privacy", url: "" }, { label: "Terms", url: "" }] },
   seo: { title: "Northbeam Partners · Strategy, design and engineering", description: "Independent consultancy helping banks, insurers and healthcare companies plan, design and ship digital products.", titlePattern: "{page} · {site}", keywords: "", author: "", image: null, siteUrl: "", themeColor: "", noindex: false, googleVerification: "", meta: [] },
 };
@@ -188,7 +192,7 @@ const imgUrl = (img) => (!img ? "" : img.path ? ASSETS[img.path] || hostPhoto(im
 let C = merge(DEFAULT, {});
 const PAGE = document.body.dataset.page || "home";
 const PREVIEW = window.name === "cms-preview" && window.parent !== window;
-const PAGES = { home: "index.html", services: "services.html", work: "work.html", about: "about.html", contact: "contact.html" };
+const PAGES = { home: "index.html", services: "services.html", work: "work.html", about: "about.html", contact: "contact.html", warranty: "warranty.html" };
 /** Which sections each page shows when the site has several pages (home follows the section order). */
 const PAGE_SECTIONS = {
   home: ["hero", "clients", "services", "stats", "work", "testimonials", "cta"],
@@ -210,6 +214,7 @@ function href(id) {
   const pg = HOME_OF[id] || "home";
   return PAGES[pg] + (PAGE === pg ? "#" + id : pg === id ? "" : "#" + id);
 }
+addEventListener("hashchange", () => { if (location.hash === "#warranty" && C.warranty && C.warranty.enabled && !C.site.multiPage && !document.querySelector(".sw-ov")) swOpen(); });
 let toastT;
 function toast(html) { let t = $("#toast"); if (!t) { t = document.createElement("div"); t.id = "toast"; t.className = "toast"; t.setAttribute("role", "status"); document.body.appendChild(t); } t.innerHTML = html; t.classList.add("on"); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove("on"), 3600); }
 
@@ -239,7 +244,7 @@ function applyTheme(t) {
 }
 function setTitle() {
   const one = (x) => String(x || "").replace(/\s*\n\s*/g, " ").trim();
-  const label = PAGE === "home" || !multi() ? "" : (C.site.pageLabels || {})[PAGE] || "";
+  const label = PAGE === "home" || !multi() ? "" : PAGE === "warranty" ? C.warranty.navLabel || "Warranty" : (C.site.pageLabels || {})[PAGE] || "";
   document.title = !label ? one(C.seo.title || C.brand.name) : one((C.seo.titlePattern || "{page} · {site}").replace(/\{page\}/g, label).replace(/\{site\}/g, one(C.brand.name)));
 }
 
@@ -366,6 +371,7 @@ function navHTML() {
   const items = multi()
     ? ["services", "work", "about", "contact"].map((p) => ({ label: C.site.pageLabels[p] || p, url: PAGES[p], on: PAGE === p }))
     : C.sections.filter((s) => s.show !== false && s.inNav && RENDER[s.id]).map((s) => ({ label: s.label, url: "#" + s.id }));
+  if (swOn() && C.warranty.inNav) items.push({ label: C.warranty.navLabel || "Warranty", url: multi() ? PAGES.warranty : "#warranty", on: PAGE === "warranty" });
   return `<header class="nav" id="top"><div class="wrap nav-in">
       <a class="brand" href="${multi() ? PAGES.home : "#top"}">${logo ? `<img class="logo" src="${esc(logo)}" alt="">` : `<span class="logo mark">${esc(initials(B.name))}</span>`}${B.showName !== false ? `<span class="bn">${esc(B.name)}</span>` : ""}</a>
       <nav class="links" aria-label="Main">${items.map((i) => `<a href="${esc(i.url)}"${i.on ? ' aria-current="page"' : ""}>${esc(i.label)}</a>`).join("")}</nav>
@@ -381,20 +387,36 @@ function pageHead() {
 function footerHTML() {
   const F = C.footer, B = C.brand, K = C.contact;
   const cols = multi() ? ["services", "work", "about", "contact"].map((p) => `<a href="${PAGES[p]}">${esc(C.site.pageLabels[p])}</a>`) : C.sections.filter((s) => s.show !== false && s.inNav && RENDER[s.id]).map((s) => `<a href="#${s.id}">${esc(s.label)}</a>`);
+  if (swOn() && C.warranty.inFooter) cols.push(`<a href="${multi() ? PAGES.warranty : "#warranty"}">${esc(C.warranty.navLabel || "Warranty")}</a>`);
   return `<footer class="foot" id="footer"><div class="wrap"><div class="foot-grid">
       <div><a class="brand" href="${multi() ? PAGES.home : "#top"}">${imgUrl(B.logo) ? `<img class="logo" src="${esc(imgUrl(B.logo))}" alt="">` : `<span class="logo mark">${esc(initials(B.name))}</span>`}<span class="bn">${esc(B.name)}</span></a><p>${rich(F.text)}</p></div>
       <nav aria-label="Footer">${cols.join("")}</nav>
       <div class="fc">${K.email ? `<a href="mailto:${esc(K.email)}">${esc(K.email)}</a>` : ""}${K.phone ? `<a href="tel:${esc(K.phone.replace(/[^\d+]/g, ""))}">${esc(K.phone)}</a>` : ""}${K.address ? `<span>${ml(K.address)}</span>` : ""}</div></div>
     <div class="foot-legal"><span>${esc(String(F.legal || "").replace(/\{year\}/g, new Date().getFullYear()))}</span><span>${(F.links || []).filter((l) => l.label).map((l) => safeUrl(l.url) ? `<a href="${esc(safeUrl(l.url))}">${esc(l.label)}</a>` : `<span>${esc(l.label)}</span>`).join("")}</span></div></div></footer>`;
 }
+function warrantyPage() {
+  const W = C.warranty;
+  return `<section class="phead" id="page"><div class="wrap"><p class="crumbs"><a href="${PAGES.home}">${esc(C.site.pageLabels.home || "Home")}</a> / ${esc(W.navLabel || "Warranty")}</p><h1 class="h1">${esc(W.title)}</h1>${W.intro ? `<p class="hero-lede">${esc(W.intro)}</p>` : ""}</div></section>
+    <section class="about" id="warranty"><div class="wrap"><div id="sw-page" style="max-width:720px"></div></div></section>`;
+}
+/* Warranty & service status (assets/warranty.js, loaded when needed). Records: assets/data/warranty.json, next to the
+   photos (on the Studio's database for hosted sites). */
+let swP;
+const SW = () => (swP ||= new Promise((ok, no) => { if (window.SiteWarranty) return ok(window.SiteWarranty); const s = document.createElement("script"); s.src = "assets/warranty.js"; s.onload = () => ok(window.SiteWarranty); s.onerror = no; document.head.appendChild(s); }));
+const swOn = () => !!(C.warranty && C.warranty.enabled);
+const swOpts = () => ({ cfg: C.warranty, url: (HOST && HOST.assets ? HOST.assets : "") + "assets/data/warranty.json", preview: PREVIEW, esc });
+const swOpen = () => SW().then((w) => w.open(swOpts())).catch(() => {});
+const swMount = () => { const el = document.getElementById("sw-page"); if (el) SW().then((w) => w.mount(el, swOpts())).catch(() => {}); };
 function render() {
   // A several-page link opened while the site is one page goes to that section.
   if (!PREVIEW && !multi() && PAGE !== "home") { location.replace(PAGES.home + "#" + (PAGE === "work" ? "work" : PAGE)); return; }
   applyTheme(C.theme); setTitle();
-  const ids = multi() ? (PAGE === "home" ? C.sections.map((s) => s.id).filter((id) => PAGE_SECTIONS.home.includes(id)) : PAGE_SECTIONS[PAGE]) : C.sections.map((s) => s.id);
-  const body = ids.filter((id) => RENDER[id] && shown(id)).map((id) => RENDER[id]()).join("");
-  $("#app").innerHTML = `<a class="skip" href="#main">Skip to content</a>${navHTML()}<main id="main">${multi() && PAGE !== "home" ? pageHead() : ""}${body}</main>${footerHTML()}`;
+  if (!PREVIEW && PAGE === "warranty" && !swOn()) { location.replace(PAGES.home); return; }
+  const ids = PAGE === "warranty" ? [] : multi() ? (PAGE === "home" ? C.sections.map((s) => s.id).filter((id) => PAGE_SECTIONS.home.includes(id)) : PAGE_SECTIONS[PAGE]) : C.sections.map((s) => s.id);
+  const body = PAGE === "warranty" ? warrantyPage() : ids.filter((id) => RENDER[id] && shown(id)).map((id) => RENDER[id]()).join("");
+  $("#app").innerHTML = `<a class="skip" href="#main">Skip to content</a>${navHTML()}<main id="main">${multi() && PAGE !== "home" && PAGE !== "warranty" ? pageHead() : ""}${body}</main>${footerHTML()}`;
   bind();
+  if (PAGE === "warranty") swMount();
   if (window.SiteFX) try { window.SiteFX.init({ root: $("#app"), brand: C.theme.introTitle || C.brand.name, badge: C.poweredBy }); } catch (e) {}
 }
 
@@ -411,6 +433,10 @@ function bind() {
   if (C.theme.motionStyle === "none" || matchMedia("(prefers-reduced-motion: reduce)").matches || !("IntersectionObserver" in window)) rv.forEach((e) => e.classList.add("in"));
   else { const io = new IntersectionObserver((es) => es.forEach((e) => { if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); } }), { rootMargin: "0px 0px -8% 0px" }); rv.forEach((e) => io.observe(e)); }
   const f = $("#enquiry"); if (f) f.addEventListener("submit", submit);
+  if (swOn() && !multi()) {
+    $$('a[href="#warranty"]').forEach((a) => a.addEventListener("click", (e) => { e.preventDefault(); const b = $(".burger"), m = $("#mnav"); b && b.setAttribute("aria-expanded", "false"); m && m.classList.remove("open"); swOpen(); }));
+    if (location.hash === "#warranty" && !$(".sw-ov")) swOpen();
+  }
 }
 
 /** Where enquiries go: the hosted site's Supabase, the form's own Supabase settings, or email. */

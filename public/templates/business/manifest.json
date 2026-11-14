@@ -5,12 +5,14 @@
     "work.html",
     "about.html",
     "contact.html",
+    "warranty.html",
     "404.html",
     "admin.html",
     "assets/biz.css",
     "assets/biz.js",
     "assets/fx.js",
     "assets/motifs.js",
+    "assets/warranty.js",
     "README.md",
     "supabase/enquiries.sql"
   ],
@@ -21,5 +23,11 @@
       "description": "A sample consultancy with services, case studies, team, pricing and an enquiry form.",
       "file": "content.json"
     }
-  ]
+  ],
+  "when": {
+    "warranty.html": [
+      "warranty.enabled",
+      "site.multiPage"
+    ]
+  }
 }

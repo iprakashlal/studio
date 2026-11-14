@@ -12,6 +12,10 @@ const DEFAULT = {
     preset: "ivory-classic", layout: "split", nav: "pill", cards: "soft", buttons: "rounded", motionStyle: "none", pattern: "none", ornament: "none", heading: "normal", shead: "plain", width: "normal", grid: "auto", product: "classic",
     cursor: "none", loader: "none", textfx: "none", hoverfx: "none", scrollfx: "none", overlay: "none",
     introBg: "", introFg: "", introTitle: "", introFont: "display", introCase: "upper", logoRadius: 26, scrollEase: "light", lineBreaks: "typed" },
+  warranty: { enabled: false, title: "Warranty & service status", intro: "Enter the number on your invoice or product to see its warranty and service status.", navLabel: "Warranty", inNav: true, inFooter: true,
+    label: "Serial or invoice number", placeholder: "", verify: "none", verifyLabel: "", button: "Check status", notFound: "We couldn't find that number. Check it and try again.", help: "Need help? Contact us and we'll look it up.",
+    showWarranty: true, showHistory: true, showCustomer: false,
+    statuses: [{ id: "registered", label: "Registered", tone: "info" }, { id: "received", label: "Received for service", tone: "progress" }, { id: "in-repair", label: "In repair", tone: "progress" }, { id: "ready", label: "Ready for pickup", tone: "ok" }, { id: "delivered", label: "Delivered", tone: "ok" }, { id: "not-covered", label: "Not covered", tone: "bad" }] },
   labels: { allProducts: "All products", viewAll: "View all", help: "Help", contact: "Contact" },
   cms: { adminPage: "admin" },
   brand: { name: "Picaffectz Studio", tagline: "Small-batch goods for slow mornings", logo: null, announcement: "Free shipping on orders over ₹1,999", showAnnouncement: true },
@@ -355,7 +359,7 @@ function header() {
   return `${B.showAnnouncement && B.announcement ? `<div class="announce">${ml(B.announcement)}</div>` : ""}
   <header class="hdr"><div class="wrap" style="position:relative">
     <a class="brand" href="index.html"><span class="mark">${B.logo ? `<img src="${esc(imgUrl(B.logo))}" alt="">` : esc(initials)}</span><b>${esc(B.name)}</b></a>
-    <nav class="nav" id="nav" aria-label="Main"><a href="index.html"${cur("home")}>${esc(N.home)}</a><a href="shop.html"${cur("shop")}>${esc(N.shop)}</a>${N.showPortfolio ? `<a href="portfolio.html"${cur("portfolio")}>${esc(N.portfolio)}</a>` : ""}${ACCOUNTS() ? `<a href="account.html"${cur("account")}>${esc(N.account)}</a>` : ""}</nav>
+    <nav class="nav" id="nav" aria-label="Main"><a href="index.html"${cur("home")}>${esc(N.home)}</a><a href="shop.html"${cur("shop")}>${esc(N.shop)}</a>${swOn() && C.warranty.inNav ? `<a href="warranty.html"${cur("warranty")}>${esc(C.warranty.navLabel || "Warranty")}</a>` : ""}${N.showPortfolio ? `<a href="portfolio.html"${cur("portfolio")}>${esc(N.portfolio)}</a>` : ""}${ACCOUNTS() ? `<a href="account.html"${cur("account")}>${esc(N.account)}</a>` : ""}</nav>
     <a class="cartlink" href="cart.html"${cur("cart")}><span class="t">${esc(N.cart)}</span><span class="n" data-cartcount>${cartCount()}</span></a>
     <button class="menubtn" type="button" aria-controls="nav" aria-expanded="false" aria-label="Menu">☰</button>
   </div></header>`;
@@ -365,7 +369,7 @@ function footer() {
   return `<footer class="ftr"><div class="wrap"><div class="cols">
     <div class="about"><b style="font-family:var(--fd);font-size:22px">${esc(C.brand.name)}</b><p>${ml(C.footer.text || C.brand.tagline)}</p>${ms.length ? `<div class="pm">${ms.map((m) => `<span>${esc(m.label)}</span>`).join("")}</div>` : ""}</div>
     <div><h4>${esc(C.nav.shop)}</h4><ul><li><a href="shop.html">${esc(lab("allProducts", "All products"))}</a></li>${C.categories.map((c) => `<li><a href="shop.html?c=${encodeURIComponent(c.id)}">${esc(c.name)}</a></li>`).join("")}</ul></div>
-    <div><h4>${esc(lab("help", "Help"))}</h4><ul>${C.policies.map((p) => `<li><a href="policies.html#${esc(p.id || slugify(p.title))}">${esc(p.title)}</a></li>`).join("")}${C.nav.showPortfolio ? `<li><a href="portfolio.html">${esc(C.nav.portfolio)}</a></li>` : ""}</ul></div>
+    <div><h4>${esc(lab("help", "Help"))}</h4><ul>${swOn() && C.warranty.inFooter ? `<li><a href="warranty.html">${esc(C.warranty.navLabel || "Warranty")}</a></li>` : ""}${C.policies.map((p) => `<li><a href="policies.html#${esc(p.id || slugify(p.title))}">${esc(p.title)}</a></li>`).join("")}${C.nav.showPortfolio ? `<li><a href="portfolio.html">${esc(C.nav.portfolio)}</a></li>` : ""}</ul></div>
     <div><h4>${esc(lab("contact", "Contact"))}</h4><ul>${K.email ? `<li><a href="mailto:${esc(K.email)}">${esc(K.email)}</a></li>` : ""}${K.phone ? `<li><a href="tel:${esc(digits(K.phone))}">${esc(K.phone)}</a></li>` : ""}${K.whatsapp ? `<li><a href="https://wa.me/${digits(K.whatsapp)}" target="_blank" rel="noopener">WhatsApp</a></li>` : ""}${safeUrl(K.instagram) ? `<li><a href="${esc(safeUrl(K.instagram))}" target="_blank" rel="noopener">Instagram</a></li>` : ""}${K.address ? `<li class="soft" style="white-space:pre-line">${esc(K.address)}</li>` : ""}</ul></div>
   </div><div class="base"><span>© ${new Date().getFullYear()} ${esc(C.brand.name)}</span><span>Prices in ${esc(C.settings.currency)}</span></div></div></footer>`;
 }
@@ -500,6 +504,10 @@ const PAGES = {
   account() {
     return `<section class="page-h"><div class="wrap"><h1>${esc(C.accountPage.title)}</h1></div></section><div class="wrap" style="padding-bottom:80px"><div id="acct" aria-live="polite"><p class="soft">Loading…</p></div></div>`;
   },
+  warranty() {
+    const W = C.warranty;
+    return `<section class="page-h"><div class="wrap"><h1>${esc(W.title)}</h1>${W.intro ? `<p class="soft" style="margin-top:8px">${esc(W.intro)}</p>` : ""}</div></section><section class="sec" style="padding-top:8px"><div class="wrap"><div id="sw-page" style="max-width:720px"></div></div></section>`;
+  },
   policies() {
     return `<section class="page-h"><div class="wrap"><h1>Policies</h1></div></section><div class="wrap pol">${C.policies.map((p) => `<section id="${esc(p.id || slugify(p.title))}"><h2>${esc(p.title)}</h2><p>${esc(p.text)}</p></section>`).join("")}</div>`;
   },
@@ -608,9 +616,18 @@ function orderDone(o) {
 /* ============================================================
    RENDER + EVENTS
    ============================================================ */
+/* Warranty & service status (assets/warranty.js, loaded when needed). Records: assets/data/warranty.json, next to the
+   photos (on the Studio's database for hosted sites). */
+let swP;
+const SW = () => (swP ||= new Promise((ok, no) => { if (window.SiteWarranty) return ok(window.SiteWarranty); const s = document.createElement("script"); s.src = "assets/warranty.js"; s.onload = () => ok(window.SiteWarranty); s.onerror = no; document.head.appendChild(s); }));
+const swOn = () => !!(C.warranty && C.warranty.enabled);
+const swOpts = () => ({ cfg: C.warranty, url: (HOST && HOST.assets ? HOST.assets : "") + "assets/data/warranty.json", preview: PREVIEW, esc });
+const swOpen = () => SW().then((w) => w.open(swOpts())).catch(() => {});
+const swMount = () => { const el = document.getElementById("sw-page"); if (el) SW().then((w) => w.mount(el, swOpts())).catch(() => {}); };
 function render() {
   applyTheme(C.theme);
-  if (PAGE !== "product") setTitle(PAGE === "home" ? "" : { shop: C.shop.title, cart: C.nav.cart, checkout: C.checkout.title, portfolio: C.nav.portfolio, policies: "Policies", account: C.accountPage.title }[PAGE] || "");
+  if (!PREVIEW && PAGE === "warranty" && !swOn()) { location.replace("index.html"); return; }
+  if (PAGE !== "product") setTitle(PAGE === "home" ? "" : { shop: C.shop.title, cart: C.nav.cart, checkout: C.checkout.title, portfolio: C.nav.portfolio, policies: "Policies", account: C.accountPage.title, warranty: C.warranty.title }[PAGE] || "");
   applyMeta();
   const fn = PAGES[PAGE] || PAGES.home;
   $("#app").innerHTML = `<a class="skip" href="#main">Skip to content</a>${header()}<main id="main">${fn()}</main>${footer()}`;
@@ -638,6 +655,7 @@ function bind() {
   if (PAGE === "cart") bindCart();
   if (PAGE === "checkout") bindCheckout();
   if (PAGE === "account") bindAccount();
+  if (PAGE === "warranty") swMount();
   if (location.hash && PAGE === "policies") { const el = document.getElementById(location.hash.slice(1)); if (el) el.scrollIntoView(); }
 }
 function bindShop() {

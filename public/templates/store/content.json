@@ -416,5 +416,55 @@
   },
   "poweredBy": {
     "show": true
+  },
+  "warranty": {
+    "enabled": false,
+    "title": "Warranty & service status",
+    "intro": "Enter the number on your invoice or product to see its warranty and service status.",
+    "navLabel": "Warranty",
+    "inNav": true,
+    "inFooter": true,
+    "label": "Serial or invoice number",
+    "placeholder": "",
+    "verify": "none",
+    "verifyLabel": "",
+    "button": "Check status",
+    "notFound": "We couldn't find that number. Check it and try again.",
+    "help": "Need help? Contact us and we'll look it up.",
+    "showWarranty": true,
+    "showHistory": true,
+    "showCustomer": false,
+    "statuses": [
+      {
+        "id": "registered",
+        "label": "Registered",
+        "tone": "info"
+      },
+      {
+        "id": "received",
+        "label": "Received for service",
+        "tone": "progress"
+      },
+      {
+        "id": "in-repair",
+        "label": "In repair",
+        "tone": "progress"
+      },
+      {
+        "id": "ready",
+        "label": "Ready for pickup",
+        "tone": "ok"
+      },
+      {
+        "id": "delivered",
+        "label": "Delivered",
+        "tone": "ok"
+      },
+      {
+        "id": "not-covered",
+        "label": "Not covered",
+        "tone": "bad"
+      }
+    ]
   }
 }

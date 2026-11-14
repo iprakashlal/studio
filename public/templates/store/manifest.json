@@ -7,12 +7,14 @@
     "checkout.html",
     "portfolio.html",
     "policies.html",
+    "warranty.html",
     "404.html",
     "admin.html",
     "assets/store.css",
     "assets/store.js",
     "assets/fx.js",
     "assets/motifs.js",
+    "assets/warranty.js",
     "README.md",
     "supabase/schema.sql",
     "supabase/functions/shop/index.ts",
@@ -32,6 +34,9 @@
     "account.html": [
       "backend.enabled",
       "backend.accounts"
+    ],
+    "warranty.html": [
+      "warranty.enabled"
     ]
   }
 }

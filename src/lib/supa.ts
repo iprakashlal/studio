@@ -256,7 +256,7 @@ export class SupabaseRepo implements Repo {
       return "d" + savedAt;
     }
     if (path.startsWith("assets/")) {
-      const { error } = await this.db.storage.from(BUCKET).upload(`${this.sb.site}/${path}`, new Blob([b64Bytes(base64)], { type: mimeOf(path) }), { upsert: true, contentType: mimeOf(path), cacheControl: "31536000" });
+      const { error } = await this.db.storage.from(BUCKET).upload(`${this.sb.site}/${path}`, new Blob([b64Bytes(base64)], { type: mimeOf(path) }), { upsert: true, contentType: mimeOf(path), cacheControl: path.startsWith("assets/data/") ? "60" : "31536000" });
       if (error) throw sbError(error, "upload the photo");
       return "a" + Date.now();
     }

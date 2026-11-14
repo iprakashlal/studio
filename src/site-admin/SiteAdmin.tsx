@@ -3,6 +3,7 @@ import { CfAccount, CfGate } from "./CfGate";
 import { CfRepo, cfSession } from "../lib/cfdb";
 import { cleanMenu } from "../lib/menus";
 import { EnquiriesPanel, enquiriesCfg } from "./EnquiriesPanel";
+import { WarrantyPanel } from "./WarrantyPanel";
 import { GOTO_EVENT } from "../editor/Editor";
 import { TEMPLATES } from "../schema";
 import { device, session as sess, watchIdle, type Session } from "../lib/auth";
@@ -278,9 +279,12 @@ function Workspace({ info, onInfo, repo, account, onSignOut, hosted, ghToken }: 
     ...(tpl.id === "business" ? [
       { id: "enquiries", label: "Enquiries", group: "Content", desc: "Messages sent through your website's enquiry form.", render: () => <EnquiriesPanel cfg={hosted && "api" in hosted ? null : enquiriesCfg(saved, hosted)} cf={hosted && "api" in hosted ? hosted : undefined} hosted={!!hosted} email={saved?.contact?.email} form={saved?.contact?.form} ghToken={ghToken} /> },
     ] : []),
+    ...(tpl.id === "store" || tpl.id === "business" ? [
+      { id: "warranty-records", label: "Warranty records", group: "Content", desc: "Products' numbers, warranty and service status, for the site's warranty & status check.", render: () => <WarrantyPanel repo={repo} cfg={draft?.warranty} /> },
+    ] : []),
     { id: "backup", label: "Backup & reset", group: "Settings", desc: "Copy, restore or reset the site's content.", render: () => <BackupPanel draft={draft} onReplace={(c) => { setDraft(clone(c)); bump(); }} loadDefaults={async () => clone(saved)} hosted={!!hosted} /> },
     { id: "account", label: "Account", group: "Settings", desc: "Your login on this device.", render: () => account },
-  ], [draft, saved, account, tpl.id, hosted, ghToken]);
+  ], [draft, saved, account, tpl.id, hosted, ghToken, repo]);
 
   if (err) return <div className="grid min-h-screen place-items-center px-4"><div className="card flex max-w-md flex-col gap-3 p-6"><h1 className="text-lg font-extrabold">Couldn't load the site's content</h1><p className="text-sm text-ink-300">{err}</p><div className="flex gap-2"><button className="btn btn-pri" onClick={load}>Try again</button><button className="btn" onClick={onSignOut}>Sign out</button></div></div></div>;
   if (!draft) return <div className="grid min-h-screen place-items-center"><StepLoader title="Opening the admin page" at={2} steps={["Reading the site's settings (cms/site.json)", "Signing in", hosted ? "Loading the latest content" : "Loading the latest content from GitHub"]} /></div>;

@@ -125,7 +125,7 @@ var db_worker_default = {
         if (!/^[a-z0-9][a-z0-9-]{0,59}$/.test(site) || !pathOk(path2) || !publicPath(path2)) return err(404, "Not found.");
         const f = await readFile(env, "site:" + site, path2);
         if (!f) return err(404, "Not found.");
-        return new Response(f.bytes, { headers: { ...cors, "Content-Type": f.type || typeOf(path2), "Cache-Control": path2.startsWith("assets/") ? "public, max-age=31536000, immutable" : "no-store", "x-sha": f.sha, "x-updated": f.updated_at } });
+        return new Response(f.bytes, { headers: { ...cors, "Content-Type": f.type || typeOf(path2), "Cache-Control": path2.startsWith("assets/") && !path2.startsWith("assets/data/") ? "public, max-age=31536000, immutable" : "no-store", "x-sha": f.sha, "x-updated": f.updated_at } });
       }
       if (p.startsWith("/enquire/") && req.method === "POST") {
         const site = p.split("/")[2];

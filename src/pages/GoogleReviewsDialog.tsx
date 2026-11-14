@@ -9,6 +9,10 @@ import { clone } from "../lib/util";
 import { Modal } from "../ui/kit";
 import { useAiDb } from "./AiGate";
 
+/** Google's own setup for tools that need a Maps key: creates the project and billing if needed, then shows a key. */
+const GOOGLE_SETUP = "https://console.cloud.google.com/google/maps-hosted";
+const PLACES_API = "https://console.cloud.google.com/apis/library/places.googleapis.com";
+const isKey = (k: string) => /^AIza[\w-]{30,}$/.test(k.trim());
 const STARS = [{ v: 5, label: "5 stars only" }, { v: 4, label: "4 stars and up" }, { v: 3, label: "3 stars and up" }, { v: 1, label: "Any rating" }];
 const stars = (n: number) => "★".repeat(Math.round(n)) + "☆".repeat(5 - Math.round(n));
 
@@ -32,11 +36,30 @@ export function GoogleReviewsDialog({ session, project, draft, onApply, onClose 
   useEffect(() => { googleKeyVault.load(session.token).then((v) => { if (v?.key) { setKey(v.key); setKeySaved(true); } }); }, []);
 
   const shown = (r: GoogleReview) => r.rating >= min;
-  const find = async () => {
+  const [setupOpen, setSetupOpen] = useState(false), [pasteHint, setPasteHint] = useState("");
+  // Opens Google's setup in a window beside the Studio; when you come back, the paste button is ready.
+  const openSetup = () => {
+    const w = 570, h = 720, left = Math.max(0, (screen.width - w) / 2), top = Math.max(0, (screen.height - h) / 2);
+    const win = window.open(GOOGLE_SETUP, "google-maps-setup", `resizable,width=${w},height=${h},left=${left},top=${top}`);
+    if (!win) window.open(GOOGLE_SETUP, "_blank", "noopener");
+    setSetupOpen(true);
+  };
+  /** Reads the key from the clipboard (one click after copying it in Google Cloud), then gets the reviews. */
+  const pasteKey = async () => {
+    setPasteHint("");
+    let t = "";
+    try { t = (await navigator.clipboard.readText()).trim(); } catch { setPasteHint("This browser didn't allow reading the clipboard. Paste the key in the box (Ctrl+V or long-press)."); return; }
+    const k = (t.match(/AIza[\w-]{30,}/) || [])[0] || "";
+    if (!k) { setPasteHint("The clipboard doesn't hold a Google key yet. In Google Cloud, press the copy button next to the key, then press Paste the key again."); return; }
+    setKey(k);
+    if (link.trim()) await find(k);
+  };
+  const find = async (k = key) => {
     setErr(""); setBusy("Finding the business on Google");
     try {
-      const out = await cfGoogleReviews(db.api!, link.trim(), key.trim());
-      if (remember && !keySaved) { await googleKeyVault.save({ key: key.trim() }, session.token); setKeySaved(true); }
+      const out = await cfGoogleReviews(db.api!, link.trim(), k.trim());
+      key !== k && setKey(k);
+      if (remember && !keySaved) { await googleKeyVault.save({ key: k.trim() }, session.token); setKeySaved(true); }
       setRes(out); setPick(new Set(out.reviews.map((r, i) => (r.rating >= min ? i : -1)).filter((i) => i >= 0)));
     } catch (e: any) { setErr(e?.message || "Couldn't get the reviews."); }
     setBusy("");
@@ -54,7 +77,7 @@ export function GoogleReviewsDialog({ session, project, draft, onApply, onClose 
   };
   const footer = res
     ? <><button className="btn" onClick={() => setRes(null)}>Back</button><button className="btn btn-pri" disabled={!pick.size && mode === "add"} onClick={apply}>{mode === "replace" ? "Replace the testimonials" : `Add ${[...pick].filter((i) => shown(res.reviews[i])).length} to testimonials`}</button></>
-    : <><button className="btn" onClick={onClose}>Cancel</button>{db.ready && <button className="btn btn-pri" disabled={!link.trim() || !key.trim() || !!busy} onClick={find}>{busy ? busy + "…" : "Get the reviews"}</button>}</>;
+    : <><button className="btn" onClick={onClose}>Cancel</button>{db.ready && <button className="btn btn-pri" disabled={!link.trim() || !isKey(key) || !!busy} onClick={() => find()}>{busy ? busy + "…" : "Get the reviews"}</button>}</>;
 
   return (
     <Modal title="Add reviews from Google" onClose={onClose} wide footer={footer}>
@@ -70,8 +93,17 @@ export function GoogleReviewsDialog({ session, project, draft, onApply, onClose 
           <label className="flex flex-col gap-1.5"><span className="label">Google Maps Platform API key</span>
             {keySaved
               ? <span className="flex items-center gap-2 text-ink-300">Saved on this device, encrypted. <button type="button" className="underline" onClick={() => { googleKeyVault.clear(); setKey(""); setKeySaved(false); }}>Use another key</button></span>
-              : <input id="gr-key" className="input" type="password" autoComplete="off" placeholder="AIza…" value={key} onChange={(e) => setKey(e.target.value)} />}
-            {!keySaved && <span className="text-[12.5px] text-ink-400">In Google Cloud: create a project, turn on <b>Places API (New)</b>, then <b>APIs &amp; Services → Credentials → Create credentials → API key</b>. Restrict the key to Places API (New). Google bills Places requests beyond its free monthly allowance, and this uses two requests each time. The key stays on this device and is only passed to your own database for each request.</span>}
+              : <div className="flex flex-col gap-2 rounded-lg border border-ink-700 p-3" aria-label="Google key setup">
+                  <ol className="flex flex-col gap-2 text-[13px] text-ink-300">
+                    <li className="flex flex-wrap items-center gap-2"><b className="text-ink-100">1.</b> <button type="button" className="btn btn-sm btn-pri" onClick={openSetup}>Get a key from Google</button> <span>Sign in, and Google sets up a project and a key for you (it asks for billing details once; you pay only beyond Google's free monthly allowance).</span></li>
+                    <li className="flex flex-wrap items-center gap-2"><b className="text-ink-100">2.</b> <a className="btn btn-sm" href={PLACES_API} target="_blank" rel="noopener noreferrer">Turn on Places API (New)</a> <span>Press <b>Enable</b> on that page, in the same project.</span></li>
+                    <li className="flex flex-wrap items-center gap-2"><b className="text-ink-100">3.</b> <button type="button" className={`btn btn-sm ${setupOpen ? "btn-pri" : ""}`} onClick={pasteKey} disabled={!!busy}>Paste the key</button> <span>Copy the key in Google Cloud (the copy button next to it), then press this.{link.trim() ? " The reviews come straight away." : ""}</span></li>
+                  </ol>
+                  <input id="gr-key" aria-label="Google Maps Platform API key" className="input" type="password" autoComplete="off" placeholder="Or paste the key here: AIza…" value={key} onChange={(e) => setKey(e.target.value)} />
+                  {key.trim() && !isKey(key) && <span className="text-[12.5px] text-amber-200">That doesn't look like a Google Maps key (they start with AIza).</span>}
+                  {pasteHint && <span role="status" className="text-[12.5px] text-amber-200">{pasteHint}</span>}
+                  <span className="text-[12.5px] text-ink-400">The key stays on this device (encrypted) and is only passed to your own database for each request. Each fetch uses two Google requests.</span>
+                </div>}
           </label>
           {!keySaved && <label className="flex items-center gap-2"><input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} /> Keep the key on this device (encrypted)</label>}
         </>}
@@ -100,7 +132,7 @@ export function GoogleReviewsDialog({ session, project, draft, onApply, onClose 
           </div>
           <p className="text-[12.5px] text-ink-400">The site shows each review with the reviewer's name, its stars, "Google review", and a link to your Google rating, as Google's terms ask.</p>
         </>}
-        {err && <p role="alert" className="text-red-300">{err}</p>}
+        {err && <p role="alert" className="text-red-300">{err}{/Places API \(New\)/.test(err) && <> <a className="underline" href={PLACES_API} target="_blank" rel="noopener noreferrer">Turn it on</a>, then try again.</>}</p>}
       </div>
     </Modal>
   );

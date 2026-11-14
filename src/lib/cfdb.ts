@@ -111,7 +111,7 @@ export async function setupCfDb(relay: Relay, token: string, o: { account: CfAcc
   await cf.upload(acc, CFDB_WORKER, await r.text(), {
     vars: { MAIL_FROM: o.mailFrom, NAME: o.name, ...(o.deployToken ? { CF_ACCOUNT: acc } : {}) },
     secrets: { ...(keep ? {} : { SECRET: secret }), ...(o.resendKey ? { RESEND_API_KEY: o.resendKey } : {}), ...(o.deployToken ? { CF_TOKEN: o.deployToken } : {}) },
-    d1: [{ name: "DB", id: db.uuid }], keep,
+    d1: [{ name: "DB", id: db.uuid }], keep, ai: true,
   });
   step("Turning on its workers.dev address");
   const sub = await cf.subdomain(acc, o.account.name || "studio");
@@ -137,8 +137,8 @@ export const resendTestOnly = (msg: string): string | null => /own email address
 
 // ---------------------------------------------------------------- publishing from any device
 /** Whether this database keeps a Cloudflare token for publishing (and for which account). */
-export async function cfDeployInfo(api: string): Promise<{ deploy: boolean; account?: string; gh?: boolean }> {
-  try { const j = await (await fetch(clean(api) + "/", { cache: "no-store" })).json(); return { deploy: !!j?.deploy, account: j?.account, gh: !!j?.gh }; } catch { return { deploy: false }; }
+export async function cfDeployInfo(api: string): Promise<{ deploy: boolean; account?: string; gh?: boolean; ai?: boolean }> {
+  try { const j = await (await fetch(clean(api) + "/", { cache: "no-store" })).json(); return { deploy: !!j?.deploy, account: j?.account, gh: !!j?.gh, ai: !!j?.ai }; } catch { return { deploy: false }; }
 }
 /** GitHub calls through the database (its kept token) as a signed-in owner of `scope`: a fetch-like Response. */
 export function dbGitHub(api: string, scope: string) {
@@ -170,4 +170,13 @@ export function dbCloudflare(api: string, scope: string): Cloudflare {
 /** Lets these Workers be published from any device by the owners of their scope (needs the token, via D1). */
 export async function registerWorkers(cf: Cloudflare, s: CfDbSetup, list: { worker: string; scope: string }[]) {
   for (const x of list) await cf.d1Query(s.account, s.databaseId, "insert into workers (worker, scope) values (?, ?) on conflict (worker) do update set scope = excluded.scope", [x.worker, x.scope]);
+}
+
+// ---------------------------------------------------------------- writing site text from a reference site
+export type Brief = Partial<Record<"brand_tagline" | "hero_eyebrow" | "hero_title" | "hero_text" | "hero_cta" | "about_title" | "about_text" | "mission" | "vision" | "services_title" | "services_intro" | "banner_title" | "banner_text" | "cta_title" | "cta_text" | "seo_title" | "seo_description" | "footer_text", string>> & { values?: { title: string; text: string }[]; services?: { title: string; text: string }[]; process?: { title: string; text: string }[]; faq?: { q: string; a: string }[] };
+/** Reads the reference (link or pasted text) and writes new text for `brand` with Workers AI on the database. */
+export async function cfWrite(api: string, o: { url?: string; text?: string; brand: string; notes?: string; kind: string }): Promise<{ brief: Brief; flagged: string[] }> {
+  const j = await cfCall<any>(api, "/ai/write", { method: "POST", body: JSON.stringify(o) });
+  if (j?.error) { const e: any = new Error(j.error); e.thin = !!j.thin; throw e; }
+  return j;
 }

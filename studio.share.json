@@ -1,9 +1,4 @@
 {
-  "config": {
-    "kind": "cloudflare",
-    "api": "https://picaffectz-db.imprakashlal.workers.dev",
-    "studio": "picaffectz-studio",
-    "source": "https://iprakashlal.github.io/studio/"
-  },
-  "_about": "GitHub Pages (iprakashlal.github.io/studio) uses this database's projects. No moved Studio address, so nothing else is deployed. ?data=github still opens the older GitHub data. See scripts/studio-ci.ts."
+  "studio": "https://studio.picaffectz.in/",
+  "_about": "GitHub Pages (iprakashlal.github.io/studio) uses this Studio's projects, and every build is deployed to it. See scripts/studio-ci.ts. Delete this file to stop both."
 }

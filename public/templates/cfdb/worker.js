@@ -12,12 +12,31 @@ create index if not exists enquiries_site on enquiries (site, created_at);
 create table if not exists workers (worker text primary key, scope text not null);
 create table if not exists repos (repo text primary key, scope text not null);
 `;
-var CFDB_VERSION = 4;
+var CFDB_VERSION = 5;
 
 // worker/db-worker.ts
 var V = CFDB_VERSION;
 var CHUNK = 9e5;
 var enc = new TextEncoder();
+function otherToken(env, account) {
+  if (!/^[\w-]{1,64}$/.test(account)) return "";
+  try {
+    return String(JSON.parse(env["CFX_" + account.replace(/-/g, "_")] || "null")?.t || "");
+  } catch {
+    return "";
+  }
+}
+function otherAccounts(env) {
+  const out = [];
+  for (const k of Object.keys(env)) if (k.startsWith("CFX_")) {
+    try {
+      const j = JSON.parse(env[k]);
+      if (j?.t) out.push({ id: k.slice(4), name: String(j.n || "").slice(0, 80) });
+    } catch {
+    }
+  }
+  return out;
+}
 var SCHEMA = CFDB_SCHEMA;
 var cors = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, content-type, x-sha", "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS", "Access-Control-Max-Age": "86400", "Access-Control-Expose-Headers": "x-sha, x-updated" };
 var json = (o, status = 200) => new Response(JSON.stringify(o), { status, headers: { ...cors, "Content-Type": "application/json" } });
@@ -384,7 +403,7 @@ var db_worker_default = {
     if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
     const u = new URL(req.url), p = u.pathname.replace(/\/+$/, "") || "/";
     try {
-      if (p === "/") return json({ ok: true, service: "site-studio-db", v: V, mail: !!(env.RESEND_API_KEY && env.MAIL_FROM), ...env.CF_TOKEN && env.CF_ACCOUNT ? { deploy: true, account: env.CF_ACCOUNT } : {}, ...env.GH_TOKEN ? { gh: true } : {}, ...env.AI ? { ai: true, pamphlet: 2 } : {}, reviews: true });
+      if (p === "/") return json({ ok: true, service: "site-studio-db", v: V, mail: !!(env.RESEND_API_KEY && env.MAIL_FROM), ...env.CF_TOKEN && env.CF_ACCOUNT ? { deploy: true, account: env.CF_ACCOUNT } : {}, ...env.GH_TOKEN ? { gh: true } : {}, ...env.AI ? { ai: true, pamphlet: 2 } : {}, reviews: true, accounts: 2, ...otherAccounts(env).length ? { more: otherAccounts(env).length } : {} });
       if (p === "/auth/code" && req.method === "POST") {
         const { email: raw } = await req.json();
         const email2 = String(raw || "").trim().toLowerCase();
@@ -496,16 +515,19 @@ var db_worker_default = {
         return json({ ok: true, n: list.length });
       }
       if (p === "/cf" && req.method === "POST") {
-        if (!env.CF_TOKEN || !env.CF_ACCOUNT) return err(501, "This database can't publish: no Cloudflare token is kept here.");
         if (role !== "owner" && role !== "partner") return err(403, "Only the owners of this site can publish it.");
-        const q = await req.json(), method = String(q.method || "GET").toUpperCase(), path2 = String(q.path || ""), A = env.CF_ACCOUNT;
+        const q = await req.json(), method = String(q.method || "GET").toUpperCase(), path2 = String(q.path || "");
+        const A = (/^\/accounts\/([\w-]+)\//.exec(path2) || [])[1] || env.CF_ACCOUNT || "";
+        const tokenOf = otherToken(env, A) || (A === env.CF_ACCOUNT ? env.CF_TOKEN : "");
+        if (!tokenOf) return err(501, "This database can't publish there: no Cloudflare token for that account is kept here.");
+        const main = A === env.CF_ACCOUNT;
         const ACC = "/accounts/" + A + "/workers";
         let worker = "", useJwt = false, m;
         if (method === "GET" && path2 === ACC + "/subdomain") {
         } else if (method === "POST" && path2 === ACC + "/assets/upload?base64=true") useJwt = true;
         else if ((m = path2.match(/^\/accounts\/([\w-]+)\/workers\/scripts\/([a-z0-9][a-z0-9-]{0,62})(\/settings|\/assets-upload-session|\/subdomain)?$/)) && m[1] === A && (method === "GET" && m[3] === "/settings" || method === "POST" && (m[3] === "/assets-upload-session" || m[3] === "/subdomain") || method === "PUT" && !m[3])) worker = m[2];
         else return err(403, "Not something publishing needs.");
-        if (worker && !await env.DB.prepare("select 1 from workers where worker = ? and scope = ?").bind(worker, scope).first()) return err(403, `The Worker ${worker} isn't registered to ${scope}. Publish once from a device with the Cloudflare token.`);
+        if (worker && !await env.DB.prepare("select 1 from workers where worker = ? and scope = ?").bind(main ? worker : A + "/" + worker + "@" + scope, scope).first()) return err(403, `The Worker ${worker} isn't registered to ${scope}. Publish once from a device with the Cloudflare token.`);
         const body = q.body64 ? Uint8Array.from(atob(String(q.body64)), (c) => c.charCodeAt(0)) : q.body != null ? String(q.body) : void 0;
         if (method === "PUT") {
           const text = typeof body === "string" ? body : new TextDecoder().decode(body);
@@ -519,7 +541,7 @@ var db_worker_default = {
           if (!meta || !Array.isArray(meta.bindings) || meta.bindings.some((x) => x?.type !== "assets") || meta.keep_bindings) return err(403, "A site's Worker can only be given its own files.");
         }
         if (useJwt && !/^[\w.~+/=-]{8,4096}$/.test(String(q.jwt || ""))) return err(400, "Missing upload token.");
-        const r = await fetch("https://api.cloudflare.com/client/v4" + path2, { method, headers: { Authorization: "Bearer " + (useJwt ? q.jwt : env.CF_TOKEN), ...q.contentType ? { "Content-Type": String(q.contentType) } : {} }, body: method === "GET" ? void 0 : body });
+        const r = await fetch("https://api.cloudflare.com/client/v4" + path2, { method, headers: { Authorization: "Bearer " + (useJwt ? q.jwt : tokenOf), ...q.contentType ? { "Content-Type": String(q.contentType) } : {} }, body: method === "GET" ? void 0 : body });
         return json({ status: r.status, body: await r.text() });
       }
       if (p === "/gh" && req.method === "POST") {

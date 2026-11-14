@@ -13,6 +13,16 @@ type Env = { DB: any; SECRET: string; RESEND_API_KEY?: string; MAIL_FROM?: strin
 const V = CFDB_VERSION;
 const CHUNK = 900_000;
 const enc = new TextEncoder();
+// Other Cloudflare accounts kept here (secrets CFX_<account id> = {"t": token, "n": name}), for sites hosted on them.
+function otherToken(env: any, account: string): string {
+  if (!/^[\w-]{1,64}$/.test(account)) return "";
+  try { return String(JSON.parse(env["CFX_" + account.replace(/-/g, "_")] || "null")?.t || ""); } catch { return ""; }
+}
+function otherAccounts(env: any): { id: string; name: string }[] {
+  const out: { id: string; name: string }[] = [];
+  for (const k of Object.keys(env)) if (k.startsWith("CFX_")) { try { const j = JSON.parse(env[k]); if (j?.t) out.push({ id: k.slice(4), name: String(j.n || "").slice(0, 80) }); } catch { /* not ours */ } }
+  return out;
+}
 
 import { CFDB_SCHEMA, CFDB_VERSION } from "../src/lib/cfdbSchema";
 export const SCHEMA = CFDB_SCHEMA;
@@ -299,7 +309,7 @@ export default {
     if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
     const u = new URL(req.url), p = u.pathname.replace(/\/+$/, "") || "/";
     try {
-      if (p === "/") return json({ ok: true, service: "site-studio-db", v: V, mail: !!(env.RESEND_API_KEY && env.MAIL_FROM), ...(env.CF_TOKEN && env.CF_ACCOUNT ? { deploy: true, account: env.CF_ACCOUNT } : {}), ...(env.GH_TOKEN ? { gh: true } : {}), ...(env.AI ? { ai: true, pamphlet: 2 } : {}), reviews: true });
+      if (p === "/") return json({ ok: true, service: "site-studio-db", v: V, mail: !!(env.RESEND_API_KEY && env.MAIL_FROM), ...(env.CF_TOKEN && env.CF_ACCOUNT ? { deploy: true, account: env.CF_ACCOUNT } : {}), ...(env.GH_TOKEN ? { gh: true } : {}), ...(env.AI ? { ai: true, pamphlet: 2 } : {}), reviews: true, accounts: 2, ...(otherAccounts(env).length ? { more: otherAccounts(env).length } : {}) });
 
       // ---- sign in with an emailed code (members only)
       if (p === "/auth/code" && req.method === "POST") {
@@ -402,9 +412,13 @@ export default {
       // Only Workers registered to this scope (the `workers` table, written by the Studio with the token), only by
       // its owners and partners, and only with no bindings but its own files, so nobody gets more than the pages.
       if (p === "/cf" && req.method === "POST") {
-        if (!env.CF_TOKEN || !env.CF_ACCOUNT) return err(501, "This database can't publish: no Cloudflare token is kept here.");
         if (role !== "owner" && role !== "partner") return err(403, "Only the owners of this site can publish it.");
-        const q = (await req.json()) as any, method = String(q.method || "GET").toUpperCase(), path = String(q.path || ""), A = env.CF_ACCOUNT;
+        const q = (await req.json()) as any, method = String(q.method || "GET").toUpperCase(), path = String(q.path || "");
+        // Which account: the main one (CF_TOKEN) or another account kept here (CFX_<account id>), from the call's path.
+        const A = (/^\/accounts\/([\w-]+)\//.exec(path) || [])[1] || env.CF_ACCOUNT || "";
+        const tokenOf = otherToken(env, A) || (A === env.CF_ACCOUNT ? env.CF_TOKEN : "");
+        if (!tokenOf) return err(501, "This database can't publish there: no Cloudflare token for that account is kept here.");
+        const main = A === env.CF_ACCOUNT;
         const ACC = "/accounts/" + A + "/workers";
         let worker = "", useJwt = false, m: RegExpMatchArray | null;
         if (method === "GET" && path === ACC + "/subdomain") { /* the account's workers.dev name */ }
@@ -412,7 +426,7 @@ export default {
         else if ((m = path.match(/^\/accounts\/([\w-]+)\/workers\/scripts\/([a-z0-9][a-z0-9-]{0,62})(\/settings|\/assets-upload-session|\/subdomain)?$/)) && m[1] === A
           && ((method === "GET" && m[3] === "/settings") || (method === "POST" && (m[3] === "/assets-upload-session" || m[3] === "/subdomain")) || (method === "PUT" && !m[3]))) worker = m[2];
         else return err(403, "Not something publishing needs.");
-        if (worker && !(await env.DB.prepare("select 1 from workers where worker = ? and scope = ?").bind(worker, scope).first())) return err(403, `The Worker ${worker} isn't registered to ${scope}. Publish once from a device with the Cloudflare token.`);
+        if (worker && !(await env.DB.prepare("select 1 from workers where worker = ? and scope = ?").bind(main ? worker : A + "/" + worker + "@" + scope, scope).first())) return err(403, `The Worker ${worker} isn't registered to ${scope}. Publish once from a device with the Cloudflare token.`);
         const body = q.body64 ? Uint8Array.from(atob(String(q.body64)), (c) => c.charCodeAt(0)) : q.body != null ? String(q.body) : undefined;
         if (method === "PUT") {
           const text = typeof body === "string" ? body : new TextDecoder().decode(body);
@@ -421,7 +435,7 @@ export default {
           if (!meta || !Array.isArray(meta.bindings) || meta.bindings.some((x: any) => x?.type !== "assets") || meta.keep_bindings) return err(403, "A site's Worker can only be given its own files.");
         }
         if (useJwt && !/^[\w.~+/=-]{8,4096}$/.test(String(q.jwt || ""))) return err(400, "Missing upload token.");
-        const r = await fetch("https://api.cloudflare.com/client/v4" + path, { method, headers: { Authorization: "Bearer " + (useJwt ? q.jwt : env.CF_TOKEN), ...(q.contentType ? { "Content-Type": String(q.contentType) } : {}) }, body: method === "GET" ? undefined : body });
+        const r = await fetch("https://api.cloudflare.com/client/v4" + path, { method, headers: { Authorization: "Bearer " + (useJwt ? q.jwt : tokenOf), ...(q.contentType ? { "Content-Type": String(q.contentType) } : {}) }, body: method === "GET" ? undefined : body });
         return json({ status: r.status, body: await r.text() });
       }
       // ---- GitHub Pages sites from any device: calls on repositories registered to this scope, with the kept token.

@@ -9,7 +9,7 @@ import { backendOf } from "../lib/backend";
 import { cfAddMembers } from "../lib/cfdb";
 import type { StudioHostCfg } from "../lib/studiohost";
 import { useCfAccount, useCloudflarePicker } from "./CfPicker";
-import { loadPages, PAGES_LABEL, type PagesKind } from "../lib/pages";
+import { loadPages, pagesViaDb, PAGES_LABEL, type PagesKind } from "../lib/pages";
 const hostFields = (t: StudioHostCfg) => (t.kind === "cloudflare" ? { backend: "cloudflare" as const, api: t.api } : { backend: "supabase" as const, sbUrl: t.url, sbKey: t.key });
 import { useBrand } from "../lib/brand";
 import { appBase, appFiles } from "../lib/migrate";
@@ -186,8 +186,8 @@ function PartnerCard({ p, studio, index, nf, studioToken, partner, onChange, onR
   const unshare = (s: SharedSite) => run(s.project, async () => { if (!(await confirm("Stop syncing this site?", "It stays in both Studios; changes just aren't kept in step any more.", "Stop syncing"))) return; await onChange((x) => ({ ...x, shared: x.shared.filter((y) => y.project !== s.project) }), "Stop syncing a site"); });
   const updateApp = () => run("app", async () => {
     if (!p.siteId) return;
-    const pages = await loadPages(p.pages || "netlify", studioToken, p.pagesAccount);
-    if (!pages) throw new Error(`Connect ${PAGES_LABEL[p.pages || "netlify"]} in Settings → Hosting accounts first.`);
+    const pages = (await loadPages(p.pages || "netlify", studioToken, p.pagesAccount)) || (p.pages === "cloudflare" && p.backend === "cloudflare" && p.api ? await pagesViaDb(p.api, "studio:" + p.studio) : null);
+    if (!pages) throw new Error(p.pages === "cloudflare" ? "Connect Cloudflare in Settings → Hosting accounts, or turn on Publish from any device there and sign in to the client's Studio database on this device." : `Connect ${PAGES_LABEL[p.pages || "netlify"]} in Settings → Hosting accounts first.`);
     await deployClientApp(pages, p, "", await source(), partner, setBusy); toast(`${p.name}'s Studio is updated`);
   });
   const notShared = index.projects.filter((m) => !p.shared.some((s) => s.project === m.id) && !m.partner);

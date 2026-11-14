@@ -51,7 +51,7 @@ export type SiteState =
 export type CategoryRec = { id: string; name: string; color: string };
 /** The Studio's own name and logo (logo: a file in the data repository). */
 export type StudioBrand = { name: string; logo?: string; v?: number };
-export type StudioIndex = { version: 1; categories: CategoryRec[]; projects: ProjectMeta[]; brand?: StudioBrand; /** The "Powered by" badge every site shows (its look; each site only turns it on or off). */ badge?: import("./badge").BadgeCfg; /** Admin menus per template: renamed, reordered, combined sections. */ menus?: import("./menus").Menus; /** Where this Studio was moved (Netlify + Supabase). */ hosted?: import("./studiohost").HostedStudio; /** Client Studios (Studio Partners). */ partners?: import("./partners").PartnerRec[] };
+export type StudioIndex = { version: 1; categories: CategoryRec[]; projects: ProjectMeta[]; brand?: StudioBrand; /** The "Powered by" badge every site shows (its look; each site only turns it on or off). */ badge?: import("./badge").BadgeCfg; /** Admin menus per template: renamed, reordered, combined sections. */ menus?: import("./menus").Menus; /** Where this Studio was moved (Netlify + Supabase). */ hosted?: import("./studiohost").HostedStudio; /** Client Studios (Studio Partners). */ partners?: import("./partners").PartnerRec[]; /** Project tools shown in the project's top bar (the rest are in Settings → Publish & tools). */ pinned?: string[] };
 
 export const CATEGORY_COLORS = ["#5B7CFF", "#3FB97A", "#F2A541", "#F06A6A", "#B57BFF", "#34C3D9", "#E86FB0", "#9AA6BC"];
 
@@ -236,6 +236,10 @@ export class Studio {
     }, "Update the admin menu");
   }
 
+  async savePinned(list: string[]): Promise<StudioIndex> {
+    return this.updateIndex((i) => { i.pinned = [...new Set(list)]; }, "Update the pinned project tools");
+  }
+
   async saveBadge(b: BadgeCfg): Promise<StudioIndex> {
     return this.updateIndex((i) => { i.badge = cleanBadge(b); }, "Update the “Powered by” badge");
   }
@@ -279,6 +283,7 @@ function normalise(i: any): StudioIndex {
     ...(i?.menus && Object.keys(cleanMenus(i.menus)).length ? { menus: cleanMenus(i.menus) } : {}),
     ...(i?.hosted && typeof i.hosted.url === "string" ? { hosted: i.hosted } : {}),
     ...(Array.isArray(i?.partners) ? { partners: i.partners.filter((x: any) => x && typeof x.id === "string") } : {}),
+    ...(Array.isArray(i?.pinned) ? { pinned: i.pinned.filter((x: any) => typeof x === "string").slice(0, 20) } : {}),
     categories: Array.isArray(i?.categories) ? i.categories : [],
     projects: (Array.isArray(i?.projects) ? i.projects : []).map((p: any) => ({ exports: [], version: 0, notes: "", client: "", status: "draft", ...p })),
   };

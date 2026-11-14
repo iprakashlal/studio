@@ -19,7 +19,8 @@ const DEVICES = [
   { id: "phone", label: "Phone", w: 390 },
 ] as const;
 
-export function Preview({ tpl, base, content, version, assets }: { tpl: TemplateDef; base: string; content: any; version: number; assets: Record<string, string> }) {
+/** `editable: false` (the Themes page): no click-to-edit, since there are no fields to open there. */
+export function Preview({ tpl, base, content, version, assets, editable = true }: { tpl: TemplateDef; base: string; content: any; version: number; assets: Record<string, string>; editable?: boolean }) {
   const frame = useRef<HTMLIFrameElement>(null);
   const box = useRef<HTMLDivElement>(null);
   const [device, setDevice] = useState<(typeof DEVICES)[number]["id"]>("desktop");
@@ -28,12 +29,12 @@ export function Preview({ tpl, base, content, version, assets }: { tpl: Template
   const [size, setSize] = useState({ w: 600, h: 600 });
   const latest = useRef({ content, assets });
   latest.current = { content, assets };
-  const [editOn, setEditOn] = useState(editPref);
+  const [editOn, setEditOn] = useState(() => editable && editPref());
   const live = useRef({ editOn, idx: contentIndex(content), tpl, content, assets });
   live.current = { editOn, idx: live.current.content === content && live.current.idx ? live.current.idx : contentIndex(content), tpl, content, assets };
   useEffect(() => { live.current.idx = contentIndex(content); }, [version]);
-  useEffect(() => { try { localStorage.setItem(EDIT_KEY, editOn ? "on" : "off"); } catch { /* private mode */ } if (!editOn) frame.current?.contentDocument?.getElementById("cms-edit-ui")?.remove(); }, [editOn]);
-  const wire = () => { try { const d = frame.current?.contentDocument; if (d) clickToEdit(d, live); } catch { /* another origin */ } };
+  useEffect(() => { if (editable) try { localStorage.setItem(EDIT_KEY, editOn ? "on" : "off"); } catch { /* private mode */ } if (!editOn) frame.current?.contentDocument?.getElementById("cms-edit-ui")?.remove(); }, [editOn]);
+  const wire = () => { if (!editable) return; try { const d = frame.current?.contentDocument; if (d) clickToEdit(d, live); } catch { /* another origin */ } };
 
   const send = () => {
     const w = frame.current?.contentWindow;
@@ -86,7 +87,7 @@ export function Preview({ tpl, base, content, version, assets }: { tpl: Template
             <button key={d.id} type="button" aria-pressed={device === d.id} onClick={() => setDevice(d.id)} className={`btn btn-sm ${device === d.id ? "border-brand-500 text-brand-300" : ""}`}>{d.label}</button>
           ))}
           <button type="button" className="btn btn-sm" title="Reload preview" aria-label="Reload preview" onClick={() => go(page)}>↻</button>
-          <button type="button" aria-pressed={editOn} onClick={() => setEditOn(!editOn)} title="Point at text or a picture in the preview to see its field; Ctrl+click (⌘+click on a Mac), or press and hold on touch, to open it" className={`btn btn-sm ${editOn ? "border-brand-500 text-brand-300" : ""}`}>✎ Click to edit</button>
+          {editable && <button type="button" aria-pressed={editOn} onClick={() => setEditOn(!editOn)} title="Point at text or a picture in the preview to see its field; Ctrl+click (⌘+click on a Mac), or press and hold on touch, to open it" className={`btn btn-sm ${editOn ? "border-brand-500 text-brand-300" : ""}`}>✎ Click to edit</button>}
         </div>
       </div>
       <div ref={box} className="relative min-h-0 flex-1 overflow-hidden">

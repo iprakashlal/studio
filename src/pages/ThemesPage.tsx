@@ -253,7 +253,7 @@ function ThemeModal(p: { theme: Theme; kind: Kind; setKind: (k: Kind) => void; s
           </div>
         </div>
         {p.sample ? (
-          <Preview key={t.id + p.kind} tpl={TEMPLATES[p.kind]} base={`templates/${p.kind}/`} content={withTheme(p.sample, p.kind, t)} version={v} assets={{}} />
+          <Preview key={t.id + p.kind} tpl={TEMPLATES[p.kind]} base={`templates/${p.kind}/`} content={withTheme(p.sample, p.kind, t)} version={v} assets={{}} editable={false} />
         ) : <div className="grid flex-1 place-items-center text-ink-400">Loading preview…</div>}
         <p className="border-t border-ink-700 px-4 py-2 text-xs text-ink-400">Sample content shown. Your own text, photos and products replace it. To choose this design, quote <b className="text-ink-200">{themeCode(t)} · {t.name}</b>.</p>
       </div>

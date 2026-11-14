@@ -16,6 +16,8 @@ export type EditorCtx = {
   /** True in the site's own admin page. */
   site?: boolean;
 };
+/** Asks the project view to open "Fill in from a pamphlet". */
+export const PAMPHLET_EVENT = "studio:pamphlet";
 export const Ctx = createContext<EditorCtx>(null as any);
 const useCtx = () => useContext(Ctx);
 
@@ -172,6 +174,13 @@ export function FieldView({ f, obj, base }: { f: F; obj: any; base: string }) {
       return <ThemesField />;
     case "adminThemes":
       return <AdminThemesField />;
+    case "pamphlet":
+      return (
+        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-brand-500/40 bg-brand-500/5 p-3">
+          <p className="min-w-0 flex-1 text-[13px] text-ink-300">Have a product pamphlet or brochure? Upload it and the products are filled in for you.</p>
+          <button type="button" className="btn btn-sm btn-pri" onClick={() => dispatchEvent(new CustomEvent(PAMPHLET_EVENT))}>Fill in from a pamphlet</button>
+        </div>
+      );
     case "linkedin":
       return <LinkedInImport root={root} bump={bump} />;
     case "presets":

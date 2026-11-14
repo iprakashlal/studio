@@ -20,6 +20,8 @@ import { useBrand } from "../lib/brand";
 import { STUDIO_BUILD } from "../build-info";
 import { Field, Spinner, useToast } from "../ui/kit";
 import { NetlifyAccount } from "./HostDialog";
+import { BringAcross } from "./BringAcross";
+import { autoUpdatePref } from "../lib/autoupdate";
 
 const slug = (s: string) => String(s || "").toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 30);
 type Phase = "setup" | "code" | "moving" | "done";
@@ -105,7 +107,8 @@ function MoveStudio({ studio, index, session, nf, setNf, onIndex }: { studio: St
   const [id, setId] = useState(prev?.studio || slug(brand.name) || "studio");
   const [siteName, setSiteName] = useState(prev?.siteName || (/studio$/.test(slug(brand.name)) ? slug(brand.name) : `${slug(brand.name) || "my"}-studio`));
   const [email, setEmail] = useState(() => prev?.owner || (() => { try { return localStorage.getItem("site-studio:host-email") || ""; } catch { return ""; } })());
-  const [withData, setWithData] = useState(true);
+  // Updating an existing moved Studio never copies data by default: its projects may be newer than these.
+  const [withData, setWithData] = useState(!prev);
   const [count, setCount] = useState<number | null>(null);
   useEffect(() => { studio.repo.list("").then((l) => setCount(l.filter((p) => !p.startsWith(".")).length)).catch(() => setCount(null)); }, []);
   const [phase, setPhase] = useState<Phase>("setup"), [step, setStep] = useState(""), [err, setErr] = useState("");
@@ -186,9 +189,10 @@ function MoveStudio({ studio, index, session, nf, setNf, onIndex }: { studio: St
           <Field label="Your email" htmlFor="mg-email" hint="You sign in with it; it becomes the Studio's owner."><input id="mg-email" className="input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} /></Field>
         </div>
         <label className="flex items-start gap-2 text-sm"><input type="checkbox" className="mt-1 accent-brand-400" checked={withData} onChange={(e) => setWithData(e.target.checked)} />
-          <span><b>Transfer my Studio data</b> <span className="text-ink-400">— projects, content, photos, export history and settings{count != null ? ` (${count} files)` : ""}. Untick to start the new Studio empty.</span></span></label>
+          <span><b>Transfer my Studio data</b> <span className="text-ink-400">— projects, content, photos, export history and settings{count != null ? ` (${count} files)` : ""}. Untick to start the new Studio empty.</span>{prev && withData && <span className="mt-1 block rounded-md border border-amber-400/40 bg-amber-400/10 px-2 py-1.5 text-amber-100">This replaces the moved Studio's projects with this Studio's copies, including any newer changes made there. To bring over only what's missing, use <b>Projects in both Studios</b> below instead.</span>}</span></label>
       </section>
 
+      {prev?.backend === "cloudflare" && prev.api && phase === "setup" && <BringAcross here={studio} prev={prev} />}
       {phase === "setup" && <button type="button" className="btn btn-pri self-start" disabled={!ok || !!step || !!sb.busy || !!cf.busy} onClick={start}>{step ? step + "…" : prev ? "Update the moved Studio" : "Move my Studio"}</button>}
       {(phase === "code" || phase === "moving") && (
         <section className="card flex flex-col gap-3 p-5" aria-label="Confirm your email">
@@ -222,6 +226,7 @@ function HostedHere({ session, nf, setNf, index }: { session: Session; nf: Netli
   const pagesOk = where === "netlify" ? !!nf : cfAcc.ready || !!viaDb;
   const [cfg, setCfg] = useState<StudioHostCfg | null>(null), [latest, setLatest] = useState<string | null>(null), [mine, setMine] = useState<string | null>(null);
   const [step, setStep] = useState(""), [err, setErr] = useState("");
+  const [auto, setAuto] = useState(autoUpdatePref.on);
   useEffect(() => { loadHostConfig().then((c) => { setCfg(c); if (c?.source) appFiles(c.source).then((m) => setLatest(m.build)).catch(() => setLatest(null)); }); appFiles(appBase()).then((m) => setMine(m.build)).catch(() => setMine(STUDIO_BUILD.id)); }, []);
   // Without the token here, the Studio updates itself through its own database (Publish from any device).
   useEffect(() => { if (where === "cloudflare" && !cfAcc.ready && cfg?.kind === "cloudflare") pagesViaDb(cfg.api, "studio:" + cfg.studio).then(setViaDb).catch(() => setViaDb(null)); }, [where, cfAcc.ready, cfg?.kind]);
@@ -247,6 +252,8 @@ function HostedHere({ session, nf, setNf, index }: { session: Session; nf: Netli
         <p className="text-sm text-ink-300">This Studio: build <code className="font-mono text-xs">{mine || "…"}</code>. Latest: <code className="font-mono text-xs">{latest || "…"}</code>{latest && mine && latest === mine ? " · up to date" : ""}.</p>
         {where === "netlify" ? !nf && <NetlifyAccount session={session} onToken={(t) => setNf(t ? new Netlify(t) : null)} /> : !cfAcc.ready && (viaDb ? <p className="text-sm text-emerald-300">Updates go through your Cloudflare database: no token needed on this device.</p> : cfAcc.ui)}
         <button type="button" className="btn btn-pri self-start" disabled={!pagesOk || !cfg?.source || !!step || (!!latest && latest === mine)} onClick={update}>{step ? step + "…" : "Update to the latest Studio"}</button>
+        <label className="flex items-start gap-2 text-sm"><input type="checkbox" className="mt-1 accent-brand-400" checked={auto} onChange={(e) => { autoUpdatePref.set(e.target.checked); setAuto(e.target.checked); }} />
+          <span><b>Update automatically</b> <span className="text-ink-400">— when this Studio opens on this device and a newer build is out, it updates itself (your projects aren't touched). Needs the Cloudflare token on this device, or Publish from any device turned on.</span></span></label>
         {err && <p role="alert" className="text-sm text-red-300">{err}</p>}
       </section>
     </div>

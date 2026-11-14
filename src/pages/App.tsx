@@ -8,7 +8,7 @@ import { ThemesPage } from "./ThemesPage";
 import { useBrand } from "../lib/brand";
 import { deviceSecret, loadHostConfig, type StudioHostCfg } from "../lib/studiohost";
 import { backendOf, isHosted } from "../lib/backend";
-import { StudioGate } from "../ui/StudioGate";
+import { StudioGate, sharedSource } from "../ui/StudioGate";
 import { StepLoader } from "../ui/kit";
 import { HelperLanding } from "./HelperBox";
 import { helperHandoff } from "../lib/relay";
@@ -17,6 +17,15 @@ import { ghRoute } from "../lib/repo";
 import { cfDeployInfo, dbGitHub } from "../lib/cfdb";
 
 export const NS = "site-studio";
+
+/** ?data=github (remembered for this tab) opens the GitHub data on a Studio that shares the moved Studio's database. */
+function githubData() {
+  try {
+    const q = new URLSearchParams(location.search).get("data");
+    if (q === "github") sessionStorage.setItem("site-studio:data", "github"); else if (q === "shared") sessionStorage.removeItem("site-studio:data");
+    return sessionStorage.getItem("site-studio:data") === "github";
+  } catch { return false; }
+}
 
 export function App() {
   const toast = useToast();
@@ -29,7 +38,8 @@ export function App() {
 
   // A Studio moved to Netlify + Supabase finds its Supabase in studio.config.json (none on GitHub Pages).
   const [host, setHost] = useState<StudioHostCfg | null | undefined>(undefined);
-  useEffect(() => { loadHostConfig().then(setHost); }, []);
+  // GitHub Pages can share the moved Studio's database (studio.share.json); ?data=github opens the older GitHub data.
+  useEffect(() => { loadHostConfig().then((c) => setHost(c && sharedSource(c) && githubData() ? null : c)); }, []);
   // A Studio that signs in by email reaches its GitHub sites through its database, when that keeps a GitHub token.
   useEffect(() => {
     if (host?.kind !== "cloudflare") return;
@@ -38,6 +48,9 @@ export function App() {
     // Turned on from another Studio or tab: noticed when you come back to this one.
     addEventListener("focus", check); return () => removeEventListener("focus", check);
   }, [host]);
+  // A GitHub sign-in from before this Studio shared the moved Studio's database: sign in again by email.
+  // …and the other way round: an email sign-in, when this tab now opens the GitHub data (?data=github).
+  useEffect(() => { if (host !== undefined && session && isHosted(session) !== !!host) { sess.clear(NS); setSession(null); } }, [host, session]);
   ghPublish.setLoginIsGitHub(!(session && isHosted(session)));
   const repo = useMemo<Repo | null>(() => (demo ? new MemoryRepo() : session ? (isHosted(session) && host ? backendOf(host).repo() : new GitHubRepo(session.cfg, session.token)) : null), [demo, session, host]);
 

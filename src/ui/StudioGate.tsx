@@ -40,7 +40,10 @@ export function StudioGate({ cfg, brand, onIn }: { cfg: StudioHostCfg; brand: st
           </form>
         )}
         {err && <p role="alert" className="rounded-lg border border-amber-400/40 bg-amber-400/5 px-3 py-2 text-[13px] text-amber-100">{err}</p>}
+        {sharedSource(cfg) && <p className="text-center text-[12.5px] text-ink-400">This Studio uses the same projects as <a className="underline" href={cfg.source}>your moved Studio</a>. <a className="underline" href="?data=github">Open the older GitHub data instead</a> (for example to bring projects across).</p>}
       </div>
     </div>
   );
 }
+/** True on the Studio's own source (GitHub Pages) when it shares the moved Studio's database. */
+export const sharedSource = (cfg: StudioHostCfg) => !!cfg.source && location.origin + location.pathname.replace(/[^/]*$/, "") === cfg.source.replace(/\/?$/, "/");

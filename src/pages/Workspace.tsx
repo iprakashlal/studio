@@ -21,6 +21,7 @@ import { BrandMark, DEFAULT_NAME, brand as currentBrand, setBrand, shrinkImage, 
 import { Dashboard } from "./Dashboard";
 import { ProjectView } from "./ProjectView";
 import { NS } from "./App";
+import { autoUpdateStudio } from "../lib/autoupdate";
 
 function useHash() {
   const [h, setH] = useState(location.hash);
@@ -31,6 +32,8 @@ function useHash() {
   }, []);
   return h;
 }
+
+const olderData = () => { try { return sessionStorage.getItem("site-studio:data") === "github"; } catch { return false; } };
 
 export function Workspace({ repo, session, onSession, onSignOut, onForget }: { repo: Repo; session: Session; onSession: (s: Session) => void; onSignOut: () => void; onForget: () => void }) {
   const studio = useMemo(() => {
@@ -54,6 +57,14 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
   // The "Powered by" badge's look, used when building sites and in previews.
   useEffect(() => { setCurrentBadge(index?.badge); }, [index?.badge]);
   useEffect(() => { setCurrentMenus(index?.menus); }, [index?.menus]);
+  // A moved Studio updates itself to the latest build when it opens (projects aren't touched).
+  const [updating, setUpdating] = useState("");
+  const hostedId = index?.hosted?.siteId;
+  useEffect(() => {
+    if (!index || repo.demo || !isHosted(session)) return;
+    autoUpdateStudio(session, index, setUpdating).then((r) => { if (r === "updated") { setUpdating("Updated. Reloading"); setTimeout(() => location.reload(), 900); } else setUpdating(""); })
+      .catch((e) => { console.warn("Studio update:", e?.message || e); setUpdating(""); });
+  }, [hostedId]);
   // Name and logo come from studio.json, so every signed-in device shows the same.
   useEffect(() => {
     const sb = index?.brand;
@@ -71,11 +82,13 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
   const projectId = route.startsWith("p/") ? route.slice(2) : null;
   const project = projectId && index ? index.projects.find((p) => p.id === projectId) : null;
 
-  const header = (
+  const updBanner = updating ? <div role="status" className="fixed bottom-4 left-4 z-50 max-w-sm rounded-lg border border-brand-500/40 bg-ink-900 px-4 py-2.5 text-[13px] text-ink-100 shadow-xl">Updating the Studio to the latest version: {updating}…<br /><span className="text-ink-400">Your projects aren't touched.</span></div> : null;
+  const header = (<>{updBanner}
     <header className="sticky top-0 z-40 border-b border-ink-700 bg-ink-950/90 pt-[env(safe-area-inset-top)] backdrop-blur">
       <div className="mx-auto flex max-w-[1400px] flex-wrap items-center gap-3 px-4 py-3 sm:px-6">
         <a href="#/" className="flex items-center gap-2.5 font-extrabold"><BrandMark fallback={<Logo />} />{b.name}</a>
         {repo.demo && <span className="chip border-amber-400/50 text-amber-200">Demo · nothing is saved</span>}
+        {!repo.demo && !isHosted(session) && olderData() && <a href="?data=shared" className="chip border-amber-400/50 text-amber-200" title="This tab shows the GitHub data from before the Studio moved. Press to go back to the shared projects.">Older GitHub data · switch back</a>}
         <nav className="ml-auto flex items-center gap-1" aria-label="Studio">
           <a href="#/" className={`btn btn-ghost btn-sm ${!route || route === "/" ? "text-ink-100" : "text-ink-400"}`}>Projects</a>
           <a href="#/themes" className="btn btn-ghost btn-sm text-ink-400">Themes</a>
@@ -84,7 +97,7 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
           <button type="button" className="btn btn-sm" onClick={onSignOut}>{repo.demo ? "Exit demo" : "Sign out"}</button>
         </nav>
       </div>
-    </header>
+    </header></>
   );
 
   if (err) return <>{header}<main className="mx-auto max-w-xl px-4 py-16"><div className="card flex flex-col gap-4 p-6"><h1 className="text-xl font-extrabold">Couldn't load your projects</h1><p className="text-sm text-ink-300">{err}</p><button className="btn btn-pri self-start" onClick={load}>Try again</button></div></main></>;
@@ -92,7 +105,7 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
 
   if (projectId) {
     if (!project) return <>{header}<main className="mx-auto max-w-xl px-4 py-16"><div className="card flex flex-col gap-4 p-6"><h1 className="text-xl font-extrabold">Project not found</h1><p className="text-sm text-ink-300">It may have been deleted on another device.</p><a className="btn btn-pri self-start" href="#/">Back to projects</a></div></main></>;
-    return <ProjectView key={project.id} studio={studio} index={index} project={project} session={session} onIndex={setIndex} />;
+    return <>{updBanner}<ProjectView key={project.id} studio={studio} index={index} project={project} session={session} onIndex={setIndex} /></>;
   }
 
   if (route.startsWith("settings") && !repo.demo) {

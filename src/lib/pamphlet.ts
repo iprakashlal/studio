@@ -5,11 +5,12 @@
 //  - photos of a pamphlet (made smaller), each also a candidate product picture.
 import JSZip from "jszip";
 import { parseCsv } from "./warranty";
+import { findProducts } from "./saliency";
 
 const load = new Function("u", "return import(u)") as (u: string) => Promise<any>;
 export type PamphletPage = { n: number; text: string; image?: string };
 /** A picture that may show a product: its page (or spreadsheet row) and where it sits, top to bottom. */
-export type PamphletPic = { page: number; blob: Blob; y: number; x: number };
+export type PamphletPic = { page: number; blob: Blob; y: number; x: number; /** already cut out (see-through background) */ cut?: boolean };
 export type Pamphlet = { kind: "pdf" | "sheet" | "photos"; pages: PamphletPage[]; pics: PamphletPic[]; photo(n: number): Promise<Blob | null>; close(): void };
 const MAX_PAGES = 12, MAX_ROWS = 300;
 
@@ -27,18 +28,32 @@ async function shrink(file: Blob, max = 1600): Promise<Blob> {
 const isPdf = (f: File) => /\.pdf$/i.test(f.name) || f.type === "application/pdf";
 const isSheet = (f: File) => /\.(xlsx|csv)$/i.test(f.name) || /spreadsheetml|text\/csv/.test(f.type);
 
-export async function readPamphlet(files: File[], pdfBase: string): Promise<Pamphlet> {
+/** `find`: also look for product photos inside designed pages (needs the product finder; skipped if it can't load). */
+export async function readPamphlet(files: File[], pdfBase: string, o: { find?: boolean; step?: (s: string) => void } = {}): Promise<Pamphlet> {
   const sheet = files.find(isSheet); if (sheet) return readSheet(sheet);
-  const pdf = files.find(isPdf); if (pdf) return readPdf(pdf, pdfBase);
+  const pdf = files.find(isPdf); if (pdf) return readPdf(pdf, pdfBase, o);
   const imgs = files.filter((f) => /^image\/(jpeg|png|webp)$/.test(f.type) || /\.(jpe?g|png|webp)$/i.test(f.name)).slice(0, 8);
   if (!imgs.length) throw new Error("Choose a PDF, an Excel (.xlsx) or CSV file, or photos (JPG, PNG or WebP) of the pamphlet.");
   const small = await Promise.all(imgs.map((f) => shrink(f)));
   const pages = await Promise.all(small.map(async (b, i) => ({ n: i + 1, text: "", image: await blobUri(b) })));
-  return { kind: "photos", pages, pics: small.map((blob, i) => ({ page: i + 1, blob, x: 0, y: 0 })), photo: async (n) => small[n - 1] || null, close() {} };
+  const pics: PamphletPic[] = [];
+  for (const [i, b] of small.entries()) {
+    // A photo of a designed pamphlet: find the product photos in it. A plain product photo: use it whole.
+    const found = o.find ? await find(await toCanvas(b), i + 1, small.length, o.step) : [];
+    if (found.length) pics.push(...found); else pics.push({ page: i + 1, blob: b, x: 0, y: 0 });
+  }
+  return { kind: "photos", pages, pics, photo: async (n) => small[n - 1] || null, close() {} };
+}
+
+const toCanvas = async (b: Blob) => { const bmp = await createImageBitmap(b); const c = document.createElement("canvas"); c.width = bmp.width; c.height = bmp.height; c.getContext("2d")!.drawImage(bmp, 0, 0); bmp.close?.(); return c; };
+/** Product photos inside a designed page, cut out. Empty when the finder can't load. */
+async function find(c: HTMLCanvasElement, page: number, of: number, step?: (s: string) => void): Promise<PamphletPic[]> {
+  step?.(`Finding the product photos${of > 1 ? ` (page ${page} of ${of})` : ""}`);
+  try { return (await findProducts(c)).map((f) => ({ page, blob: f.blob, x: f.x, y: f.y, cut: true })); } catch { return []; }
 }
 
 // ---------------------------------------------------------------- PDF
-async function readPdf(pdf: File, pdfBase: string): Promise<Pamphlet> {
+async function readPdf(pdf: File, pdfBase: string, o: { find?: boolean; step?: (s: string) => void } = {}): Promise<Pamphlet> {
   let pdfjs: any;
   try { pdfjs = await load(new URL("pdf.min.js", pdfBase).href); } catch { throw new Error("The PDF reader didn't load. Check your connection and try again."); }
   pdfjs.GlobalWorkerOptions.workerSrc = new URL("pdf.worker.min.js", pdfBase).href;
@@ -84,7 +99,7 @@ async function readPdf(pdf: File, pdfBase: string): Promise<Pamphlet> {
     if (pictureOnly || boxes.length) {
       const { c, vp } = await render(n, 1600);
       if (pictureOnly) pages.push({ n, text, image: await blobUri(await canvasJpeg(c)) }); else pages.push({ n, text });
-      const area = c.width * c.height;
+      const area = c.width * c.height, before = pics.length;
       for (const b of boxes) {
         const [x1, y1, x2, y2] = vp.convertToViewportRectangle(b);
         const x = Math.max(0, Math.min(x1, x2)), yy = Math.max(0, Math.min(y1, y2)), w = Math.min(c.width, Math.max(x1, x2)) - x, h = Math.min(c.height, Math.max(y1, y2)) - yy;
@@ -94,6 +109,9 @@ async function readPdf(pdf: File, pdfBase: string): Promise<Pamphlet> {
         cut.getContext("2d")!.drawImage(c, x, yy, w, h, 0, 0, cut.width, cut.height);
         pics.push({ page: n, blob: await canvasJpeg(cut, 0.92), x, y: yy });
       }
+      // The page draws pictures, but none is a separate product picture (a flattened design or a scan): find the
+      // products in it. Pages with only text and drawn shapes have no product photos, so they're skipped.
+      if (pics.length === before && o.find && boxes.length) pics.push(...(await find(c, n, Math.min(doc.numPages, MAX_PAGES), o.step)));
     } else pages.push({ n, text });
   }
   pics.sort((a, b) => a.page - b.page || a.y - b.y || a.x - b.x);

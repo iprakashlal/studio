@@ -66,6 +66,11 @@ export class CfRepo implements Repo {
   private q(path?: string) { return `scope=${encodeURIComponent(this.scope)}${path !== undefined ? "&path=" + encodeURIComponent(path) : ""}`; }
   private fail(e: any, what: string): never {
     if (e?.status === 409) throw new RepoError("The file changed since it was loaded. Try again.", 409);
+    if (e?.status === 401) {
+      const host = this.api.replace(/^https:\/\//, "").replace(/\/.*$/, "");
+      const x: any = new RepoError(`This browser isn't signed in to the database that holds this ${this.scope.startsWith("site:") ? "site" : "Studio"} (${host}). Open Publish to Cloudflare for the project and sign in there with an email code.`, 401);
+      x.db = this.api; throw x;
+    }
     throw new RepoError(e?.status === 403 ? `This sign-in can't ${what} here.` : `Couldn't ${what}: ${e?.message || e}`, e?.status || 500);
   }
   async check() { try { await cfCall(this.api, `/f/list?${this.q()}&prefix=studio.json`); } catch (e) { this.fail(e, "read files"); } }

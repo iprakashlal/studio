@@ -177,7 +177,19 @@
       "dots": true,
       "arrows": false,
       "pause": true,
-      "hideArt": true
+      "hideArt": true,
+      "artOpacity": 100
+    },
+    "panel": {
+      "show": true,
+      "source": "auto",
+      "aLabel": "",
+      "aValue": "",
+      "bars": true,
+      "rows": [],
+      "cLabel": "",
+      "cValue": "",
+      "dot": true
     }
   },
   "clients": {

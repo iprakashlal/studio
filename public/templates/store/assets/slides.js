@@ -5,7 +5,8 @@
    settings (content: hero.slides, or home.hero.slides in the shop):
      enabled, items: [{ image, title, text, position }], effect: fade | slide | zoom | kenburns, interval (s),
      speed (s), overlay (0-90 %), overlayColor, overlayStyle: solid | left | bottom, textColor: light | dark | theme,
-     height: auto | tall | full, dots, arrows, pause (pause while hovered or focused), hideArt
+     height: auto | tall | full, dots, arrows, pause (pause while hovered or focused), hideArt,
+     artOpacity (10-100 %: how solid the hero's own picture or cards are over the photos, when they aren't hidden)
    options: { imgUrl(img), title: selector, text: selector, hide: selector (the hero's own picture) } */
 (function () {
   "use strict";
@@ -19,8 +20,8 @@
     ".hs-ov{position:absolute;inset:0}" +
     ".hs-h-tall{min-height:min(86svh,900px)}.hs-h-full{min-height:100svh}" +
     ".hs-host.hs-light{color:#fff}.hs-host.hs-dark{color:#10141c}" +
-    ".hs-host:is(.hs-light,.hs-dark) :is(h1,h2,h3,p,li,dt,dd,small,b,em,i,strong,.eyebrow,.lead,.lede,.hero-lede):not(.btn):not(.btn *):not(.hs-ui *){color:inherit!important;-webkit-text-fill-color:currentColor}" +
-    ".hs-host.hs-light :is(h1,p,.eyebrow){text-shadow:0 1px 22px rgba(0,0,0,.35)}" +
+    ".hs-host:is(.hs-light,.hs-dark) :is(h1,h2,h3,p,li,dt,dd,small,b,em,i,strong,.eyebrow,.lead,.lede,.hero-lede):not(.btn):not(.btn *):not(.hs-ui *):not(.hs-keep *){color:inherit!important;-webkit-text-fill-color:currentColor}" +
+    ".hs-host.hs-light :is(h1,p,.eyebrow):not(.hs-keep *){text-shadow:0 1px 22px rgba(0,0,0,.35)}" +
     ".hs-ui{position:absolute;z-index:3;left:50%;bottom:max(14px,env(safe-area-inset-bottom,0px));transform:translateX(-50%);display:flex;align-items:center;gap:6px;padding:6px 8px;border-radius:99px;background:rgba(0,0,0,.28);backdrop-filter:blur(6px)}" +
     ".hs-ui button{all:unset;cursor:pointer;display:grid;place-items:center;width:20px;height:20px;border-radius:50%;color:#fff}" +
     ".hs-ui button:focus-visible,.hs-arr:focus-visible{outline:2px solid #fff;outline-offset:2px}" +
@@ -38,7 +39,7 @@
   function stop() {
     if (!cur) return;
     clearInterval(cur.t); cur.off.forEach(function (f) { try { f(); } catch (e) {} });
-    var h = cur.host; if (h && h.isConnected) { cur.made.forEach(function (n) { n.remove(); }); h.classList.remove.apply(h.classList, cur.cls); cur.hidden.forEach(function (n) { n.style.display = n.dataset.hsD || ""; }); cur.caps.forEach(function (c) { c.el.innerHTML = c.html; c.el.classList.remove("hs-cap", "hs-fade"); }); }
+    var h = cur.host; if (h && h.isConnected) { cur.made.forEach(function (n) { n.remove(); }); h.classList.remove.apply(h.classList, cur.cls); cur.hidden.forEach(function (n) { n.style.display = n.dataset.hsD || ""; }); cur.faded.forEach(function (n) { n.style.opacity = n.dataset.hsO || ""; delete n.dataset.hsO; }); cur.kept.forEach(function (n) { n.classList.remove("hs-keep"); n.style.color = n.dataset.hsC || ""; delete n.dataset.hsC; }); cur.caps.forEach(function (c) { c.el.innerHTML = c.html; c.el.classList.remove("hs-cap", "hs-fade"); }); }
     cur = null;
   }
   function mount(host, S, o) {
@@ -54,8 +55,9 @@
     var iv = Math.max(2, Math.min(30, +S.interval || 6)), sp = Math.max(.2, Math.min(4, S.speed == null ? 1 : +S.speed));
     var tone = S.textColor === "dark" ? "hs-dark" : S.textColor === "theme" ? "" : "hs-light";
     var cls = ["hs-host"].concat(tone ? [tone] : [], S.height === "tall" ? ["hs-h-tall"] : S.height === "full" ? ["hs-h-full"] : [], S.hideArt !== false ? ["hs-solo"] : []);
-    var st = { host: host, made: [], cls: cls, hidden: [], caps: [], off: [], t: 0 };
+    var st = { host: host, made: [], cls: cls, hidden: [], faded: [], kept: [], caps: [], off: [], t: 0 };
     cur = st;
+    var ink = getComputedStyle(host).color; // the page's own text colour, for the picture or cards kept over the photos
     host.classList.add.apply(host.classList, cls);
     if (getComputedStyle(host).position === "static") { host.style.position = "relative"; st.off.push(function () { host.style.position = ""; }); }
     var bg = document.createElement("div");
@@ -72,6 +74,10 @@
     var load = function (i) { var s = slides[i]; if (s && !s.style.backgroundImage) s.style.backgroundImage = "url(\"" + s.dataset.u.replace(/"/g, "%22") + "\")"; };
     load(0); load(1 % slides.length);
     if (S.hideArt !== false && o.hide) [].slice.call(host.querySelectorAll(o.hide)).forEach(function (n) { n.dataset.hsD = n.style.display; n.style.display = "none"; st.hidden.push(n); });
+    // Kept over the photos: as solid as asked (the photos show through the cards or picture).
+    var ao = S.artOpacity == null || S.artOpacity === "" ? 100 : Math.max(10, Math.min(100, +S.artOpacity || 100));
+    // The picture or cards keep their own colours (the words-over-photos colour is for the hero's text).
+    if (S.hideArt === false && o.hide) [].slice.call(host.querySelectorAll(o.hide)).forEach(function (n) { n.classList.add("hs-keep"); n.dataset.hsC = n.style.color; n.style.color = ink; st.kept.push(n); if (ao < 100) { n.dataset.hsO = n.style.opacity; n.style.opacity = String(ao / 100); st.faded.push(n); } });
     // Slides with their own heading or text swap the hero's words while they show.
     var capEl = function (sel) { var e = sel && host.querySelector(sel); if (e) { st.caps.push({ el: e, html: e.innerHTML }); e.classList.add("hs-cap"); } return e; };
     var hasCaps = items.some(function (x) { return x.it.title || x.it.text; });

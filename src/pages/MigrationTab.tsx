@@ -2,7 +2,7 @@
 // in a few clicks, from the Studio itself.
 // On a moved Studio, the same tab shows where it runs and updates it to the latest Studio build.
 import { backendOf, isHosted } from "../lib/backend";
-import { cfAddMembers } from "../lib/cfdb";
+import { cfAddMembers, cfCall } from "../lib/cfdb";
 import { useCfAccount, useCloudflarePicker, type CfAccountHook } from "./CfPicker";
 import { cloudflarePages, netlifyPages, pagesViaDb, PAGES_LABEL, type Pages, type PagesKind } from "../lib/pages";
 import { SbTokenHelp } from "./SbTokenHelp";
@@ -85,19 +85,26 @@ export function useSupabasePicker(studioToken: string, nf: Netlify | null, persi
   return { ui, ready: !!projects && (pick !== "new" || !!org), ensure, setName, busy };
 }
 
-export function MigrationTab({ studio, index, session, onIndex }: { studio: Studio; index: StudioIndex; session: Session; onIndex: (i: StudioIndex) => void }) {
+/** `update`: a moved Studio's own updates. `move` (Migration): put this Studio, its app and its projects, on
+ *  another service; from GitHub, or from a Studio already on Cloudflare or Netlify (to another database or host). */
+export function MigrationTab({ studio, index, session, onIndex, mode = "move" }: { studio: Studio; index: StudioIndex; session: Session; onIndex: (i: StudioIndex) => void; mode?: "update" | "move" }) {
   const hostedHere = isHosted(session);
   const [nf, setNf] = useState<Netlify | null | undefined>(undefined);
   useEffect(() => { netlifyToken.load(session.token).then((t) => setNf(t ? new Netlify(t.token) : null)); }, [session.token]);
   if (nf === undefined) return <Spinner label="Checking Netlify…" />;
-  return hostedHere ? <HostedHere session={session} nf={nf} setNf={setNf} index={index} /> : <MoveStudio studio={studio} index={index} session={session} nf={nf} setNf={setNf} onIndex={onIndex} />;
+  return hostedHere && mode === "update" ? <HostedHere session={session} nf={nf} setNf={setNf} index={index} /> : <MoveStudio studio={studio} index={index} session={session} nf={nf} setNf={setNf} onIndex={onIndex} hosted={hostedHere} />;
 }
 
-function MoveStudio({ studio, index, session, nf, setNf, onIndex }: { studio: Studio; index: StudioIndex; session: Session; nf: Netlify | null; setNf: (n: Netlify | null) => void; onIndex: (i: StudioIndex) => void }) {
+function MoveStudio({ studio, index, session, nf, setNf, onIndex, hosted = false }: { studio: Studio; index: StudioIndex; session: Session; nf: Netlify | null; setNf: (n: Netlify | null) => void; onIndex: (i: StudioIndex) => void; hosted?: boolean }) {
   const toast = useToast();
   const brand = useBrand();
   const sb = useSupabasePicker(session.token, nf);
-  const prev = index.hosted;
+  // From a moved Studio, `here` is where it runs now; a move goes somewhere new (prev is only the GitHub Studio's earlier move).
+  const here = hosted ? index.hosted : undefined;
+  const prev = hosted ? undefined : index.hosted;
+  const [srcCfg, setSrcCfg] = useState<StudioHostCfg | null>(null);
+  useEffect(() => { if (hosted) loadHostConfig().then((c) => { setSrcCfg(c); if (c?.studio) setId(c.studio); }); }, [hosted]);
+  const [keepAddress, setKeepAddress] = useState(true);
   const [kind, setKind] = useState<"supabase" | "cloudflare">(prev?.backend || "cloudflare");
   const [pagesKind, setPagesKind] = useState<PagesKind>(prev ? prev.pages || "netlify" : "cloudflare");
   const cfAcc = useCfAccount(session.token, nf, true);
@@ -105,8 +112,8 @@ function MoveStudio({ studio, index, session, nf, setNf, onIndex }: { studio: St
   const pagesOk = pagesKind === "netlify" ? !!nf : cfAcc.ready;
   const getPages = () => pagesFrom(pagesKind, nf, cfAcc, prev?.pages === pagesKind ? prev?.account : undefined, setStep);
   const [id, setId] = useState(prev?.studio || slug(brand.name) || "studio");
-  const [siteName, setSiteName] = useState(prev?.siteName || (/studio$/.test(slug(brand.name)) ? slug(brand.name) : `${slug(brand.name) || "my"}-studio`));
-  const [email, setEmail] = useState(() => prev?.owner || (() => { try { return localStorage.getItem("site-studio:host-email") || ""; } catch { return ""; } })());
+  const [siteName, setSiteName] = useState(prev?.siteName || here?.siteName || (/studio$/.test(slug(brand.name)) ? slug(brand.name) : `${slug(brand.name) || "my"}-studio`));
+  const [email, setEmail] = useState(() => prev?.owner || (hosted ? session.username : "") || (() => { try { return localStorage.getItem("site-studio:host-email") || ""; } catch { return ""; } })());
   // Updating an existing moved Studio never copies data by default: its projects may be newer than these.
   const [withData, setWithData] = useState(!prev);
   const [count, setCount] = useState<number | null>(null);
@@ -124,7 +131,11 @@ function MoveStudio({ studio, index, session, nf, setNf, onIndex }: { studio: St
       let t: StudioHostCfg;
       if (kind === "cloudflare") {
         const { setup, relay, token } = await cf.ensure(setStep);
-        setStep("Making you the Studio's owner"); await cfAddMembers(relay, token, setup, "studio:" + id, [{ email: email.trim().toLowerCase(), role: "owner" }]);
+        if (hosted && srcCfg?.kind === "cloudflare" && srcCfg.api.replace(/\/+$/, "") === setup.api.replace(/\/+$/, "") && srcCfg.studio === id) throw new Error("That's the database this Studio already uses. Pick another Cloudflare account, or change the Studio ID to make a separate copy.");
+        // The people who can sign in here come along too (from a Studio on the Cloudflare database).
+        const people: { email: string; role: "owner" | "member" | "partner" }[] = [];
+        if (hosted && srcCfg?.kind === "cloudflare") { setStep("Reading who can sign in to this Studio"); for (const m of await cfCall<any[]>(srcCfg.api, "/m?scope=" + encodeURIComponent("studio:" + srcCfg.studio)).catch(() => [])) if (m?.email) people.push({ email: String(m.email), role: ["owner", "member", "partner"].includes(m.role) ? m.role : "member" }); }
+        setStep("Making you the Studio's owner"); await cfAddMembers(relay, token, setup, "studio:" + id, [...people.filter((m) => m.email !== email.trim().toLowerCase()), { email: email.trim().toLowerCase(), role: "owner" }]);
         t = { kind: "cloudflare", api: setup.api, studio: id, name: brand.name };
       } else {
         const { m, ref } = await sb.ensure(setStep);
@@ -145,8 +156,15 @@ function MoveStudio({ studio, index, session, nf, setNf, onIndex }: { studio: St
       const be = backendOf(target);
       setStep("Checking the code"); await be.verifyCode(email.trim(), code);
       const dest = be.repo(id);
-      if (withData) await transferFiles(studio.repo, dest, (d, t, p) => setStep(`Moving your Studio's files (${d} of ${t})${p ? " · " + p : ""}`));
-      const app = await deployStudioApp(await getPages(), { siteId: prev && (prev.pages || "netlify") === pagesKind ? prev.siteId : undefined, siteName, source: appBase(), config: target }, setStep);
+      if (withData) {
+        const n = await transferFiles(studio.repo, dest, (d, t, p) => setStep(`Copying your Studio's files (${d} of ${t})${p ? " · " + p : ""}`));
+        // Check every file arrived before pointing the app at the new place.
+        setStep("Checking the copy"); const got = new Set(await dest.list("")); const missing = (await studio.repo.list("")).filter((p) => !p.startsWith(".") && !got.has(p));
+        if (missing.length) throw new Error(`${missing.length} of ${n} files didn't arrive (for example ${missing[0]}). Nothing was switched; press Finish moving to try again.`);
+      }
+      const reuse = hosted ? (keepAddress && here && (here.pages || "netlify") === pagesKind ? here.siteId : undefined) : prev && (prev.pages || "netlify") === pagesKind ? prev.siteId : undefined;
+      const source = hosted ? srcCfg?.source || appBase() : appBase();
+      const app = await deployStudioApp(await getPages(), { siteId: reuse, siteName, source, config: target }, setStep);
       const rec: HostedStudio = { url: app.url, siteId: app.siteId, siteName, pages: app.kind, ...(app.account ? { account: app.account } : {}), backend: target.kind, ...(target.kind === "cloudflare" ? { api: target.api } : { sbUrl: target.url }), studio: id, owner: email.trim().toLowerCase(), build: app.build, at: new Date().toISOString() };
       setStep("Recording where the Studio moved");
       const cur = await dest.getJSON<any>("studio.json").catch(() => null);
@@ -160,7 +178,8 @@ function MoveStudio({ studio, index, session, nf, setNf, onIndex }: { studio: St
   return (
     <div className="flex flex-col gap-4">
       <section className="card flex flex-col gap-2 p-5">
-        <h2 className="text-lg font-extrabold">Move the Studio outside GitHub</h2>
+        <h2 className="text-lg font-extrabold">{hosted ? "Move this Studio to another service" : "Move the Studio outside GitHub"}</h2>
+        {hosted && here && <p className="rounded-lg border border-sky-400/30 bg-sky-400/5 px-3 py-2.5 text-[13px] text-sky-100">This Studio runs at <a className="underline" href={here.url} target="_blank" rel="noopener noreferrer">{here.url}</a> with its projects in {here.backend === "cloudflare" ? "your Cloudflare database" : "Supabase"}. Moving copies the app, your projects, photos, settings and the people who can sign in to the new place and checks the copy, then switches the app over. The current database is left as it is, so you can go back.</p>}
         <p className="text-sm text-ink-300">Puts this whole Studio on <b className="text-ink-100">your Cloudflare</b> (free, no traffic limit) or <b className="text-ink-100">your Netlify</b>, with its projects, content and photos in <b className="text-ink-100">your Cloudflare</b> (a free D1 database) or <b className="text-ink-100">your Supabase</b>. You sign in there with a 6-digit code sent to your email, no GitHub token needed. This Studio keeps working until you stop using it.</p>
         <p className="text-[13px] text-ink-400">Setting up Studios for clients (B2B)? Each client gets their own Studio, on your accounts or theirs, with the sites you share kept in step: <a className="text-brand-300 underline" href="#/settings/partners">Studio Partners →</a></p>
         {prev && phase !== "done" && <p className="rounded-lg border border-emerald-400/30 bg-emerald-400/5 px-3 py-2.5 text-[13px] text-emerald-100">Moved before to <a className="underline" href={prev.url} target="_blank" rel="noopener noreferrer">{prev.url}</a>. Running it again updates that Studio to this build{withData ? " and copies your files again" : ""}.</p>}
@@ -192,7 +211,11 @@ function MoveStudio({ studio, index, session, nf, setNf, onIndex }: { studio: St
           <span><b>Transfer my Studio data</b> <span className="text-ink-400">— projects, content, photos, export history and settings{count != null ? ` (${count} files)` : ""}. Untick to start the new Studio empty.</span>{prev && withData && <span className="mt-1 block rounded-md border border-amber-400/40 bg-amber-400/10 px-2 py-1.5 text-amber-100">This replaces the moved Studio's projects with this Studio's copies, including any newer changes made there. To bring over only what's missing, use <b>Projects in both Studios</b> below instead.</span>}</span></label>
       </section>
 
-      {prev?.backend === "cloudflare" && prev.api && phase === "setup" && <BringAcross here={studio} prev={prev} />}
+      {!hosted && prev?.backend === "cloudflare" && prev.api && phase === "setup" && <BringAcross here={studio} prev={prev} />}
+      {hosted && here && phase === "setup" && (here.pages || "netlify") === pagesKind && (
+        <label className="flex items-start gap-2 text-sm"><input type="checkbox" className="mt-1 accent-brand-400" checked={keepAddress} onChange={(e) => setKeepAddress(e.target.checked)} />
+          <span><b>Keep this Studio's address</b> <span className="text-ink-400">— {here.url.replace(/^https:\/\//, "")} and your own domain stay the same; only where the projects live changes. Untick to put the Studio on a new address too.</span></span></label>
+      )}
       {phase === "setup" && <button type="button" className="btn btn-pri self-start" disabled={!ok || !!step || !!sb.busy || !!cf.busy} onClick={start}>{step ? step + "…" : prev ? "Update the moved Studio" : "Move my Studio"}</button>}
       {(phase === "code" || phase === "moving") && (
         <section className="card flex flex-col gap-3 p-5" aria-label="Confirm your email">

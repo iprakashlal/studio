@@ -111,10 +111,10 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
   if (route.startsWith("settings") && !repo.demo) {
     const tab = route.split("/")[1] || "general";
     const tabs = <div className="flex flex-wrap gap-1 border-b border-ink-700" role="tablist" aria-label="Settings">
-      {[["general", "General"], ["migration", "Migration"], ["partners", "Studio Partners"]].map(([k, l]) => <a key={k} href={`#/settings${k === "general" ? "" : "/" + k}`} role="tab" aria-selected={tab === k} className={`-mb-px border-b-2 px-3 py-2 text-sm font-semibold ${tab === k ? "border-brand-400 text-ink-100" : "border-transparent text-ink-400 hover:text-ink-100"}`}>{l}</a>)}
+      {[["general", "General"], ...(isHosted(session) ? [["update", "Update"]] : []), ["migration", "Migration"], ["partners", "Studio Partners"]].map(([k, l]) => <a key={k} href={`#/settings${k === "general" ? "" : "/" + k}`} role="tab" aria-selected={tab === k} className={`-mb-px border-b-2 px-3 py-2 text-sm font-semibold ${tab === k ? "border-brand-400 text-ink-100" : "border-transparent text-ink-400 hover:text-ink-100"}`}>{l}</a>)}
     </div>;
     if (tab === "partners") return <>{header}<main className="mx-auto flex max-w-3xl flex-col gap-4 px-4 py-8 sm:px-6"><h1 className="font-display text-3xl font-extrabold">Settings</h1>{tabs}<FoldAll /><FoldCards scope="partners"><PartnersTab studio={studio} index={index} session={session} onIndex={setIndex} /></FoldCards></main></>;
-    if (tab === "migration") return <>{header}<main className="mx-auto flex max-w-3xl flex-col gap-4 px-4 py-8 sm:px-6"><h1 className="font-display text-3xl font-extrabold">Settings</h1>{tabs}<FoldAll /><FoldCards scope="migration"><MigrationTab studio={studio} index={index} session={session} onIndex={setIndex} /></FoldCards></main></>;
+    if (tab === "migration" || (tab === "update" && isHosted(session))) return <>{header}<main className="mx-auto flex max-w-3xl flex-col gap-4 px-4 py-8 sm:px-6"><h1 className="font-display text-3xl font-extrabold">Settings</h1>{tabs}<FoldAll /><FoldCards scope={tab}><MigrationTab key={tab} studio={studio} index={index} session={session} onIndex={setIndex} mode={tab === "update" ? "update" : "move"} /></FoldCards></main></>;
     return (
       <>{header}
         <main className="mx-auto flex max-w-3xl flex-col gap-4 px-4 py-8 sm:px-6">

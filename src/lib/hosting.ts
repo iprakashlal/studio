@@ -100,7 +100,11 @@ export async function publishHosted(o: {
   // A copy of the content goes with the pages, used only if Supabase can't be reached.
   files.push({ path: "content.json", data: enc.encode(JSON.stringify(content, null, 2)) });
   const info = files.find((f) => f.path === "cms/site.json");
-  if (info) await db.putFile("cms/site.json", bytesB64(info.data), "Site info").catch(() => {});
+  if (info) {
+    // The Worker and the list of files, so the site's own admin page can redeploy them (to move itself to a new address).
+    if (host.kind === "cloudflare") info.data = enc.encode(JSON.stringify({ ...JSON.parse(new TextDecoder().decode(info.data)), worker: host.siteId, files: files.map((f) => f.path) }, null, 2));
+    await db.putFile("cms/site.json", bytesB64(info.data), "Site info").catch(() => {});
+  }
   const dep = await pages.deploy(host.siteId, files, `v${o.version} from Site Studio${o.note ? ": " + o.note : ""}`, (d, t) => o.step(2, t ? `${d} of ${t} files` : ""));
   o.step(3);
   return { warnings, siteSha, admin, url: dep.url || base };

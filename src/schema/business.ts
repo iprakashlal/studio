@@ -61,7 +61,21 @@ const schema: Category[] = [
       { title: "Text", fields: [{ t: "text", path: "hero.eyebrow", label: "Small label above" }, { t: "text", path: "hero.title", label: "Headline", ml: true, hint: "Enter starts a new line. Wrap words in *asterisks* to highlight them." }, { t: "textarea", path: "hero.lede", label: "Intro", rows: 3 }] },
       { title: "Buttons", fields: [g2({ t: "text", path: "hero.ctaPrimary", label: "Main button" }, { t: "select", path: "hero.ctaPrimaryTarget", label: "Goes to", options: TARGETS }, { t: "text", path: "hero.ctaSecondary", label: "Second button" }, { t: "select", path: "hero.ctaSecondaryTarget", label: "Goes to", options: TARGETS })] },
       { title: "Trust badges", fields: [{ t: "strings", path: "hero.badges", label: "Short proof points under the buttons", addLabel: "Add badge" }] },
-      { title: "Image", fields: [{ t: "image", path: "hero.image", label: "Hero image (optional)", hint: "A team photo, your office or your product. Without one, the hero shows a panel built from your numbers and services." }] },
+      { title: "Image", fields: [{ t: "image", path: "hero.image", label: "Hero image (optional)", hint: "A team photo, your office or your product. Without one, the hero shows cards built from your numbers and services (edit them below)." }] },
+      { title: "Cards beside the headline", fields: [
+        { t: "when", path: "hero.image", not: "", fields: [{ t: "note", text: "These cards show when there's no hero image. Remove the image above to use them." }] },
+        { t: "toggle", path: "hero.panel.show", label: "Show the cards" },
+        { t: "when", path: "hero.panel.show", is: "true", fields: [
+          { t: "select", path: "hero.panel.source", label: "What the cards say", options: [{ value: "auto", label: "My first numbers and services" }, { value: "own", label: "What I write here" }] },
+          { t: "when", path: "hero.panel.source", is: "auto", fields: [{ t: "note", text: "The big card shows your first number, the dark card your second, and the list your first three services. Change them in Numbers and Services, or choose What I write here." }] },
+          { t: "when", path: "hero.panel.source", is: "own", fields: [
+            g2({ t: "text", path: "hero.panel.aLabel", label: "Big card: label", ph: "Years in business" }, { t: "text", path: "hero.panel.aValue", label: "Big card: number", ph: "12+" }),
+            { t: "toggle", path: "hero.panel.bars", label: "Show the bar chart on the big card" },
+            { t: "list", path: "hero.panel.rows", label: "List card", max: 4, title: (it) => it.title || "Line", add: () => ({ icon: "spark", title: "" }),
+              item: [g2({ t: "text", path: "title", label: "Text" }, { t: "select", path: "icon", label: "Icon", options: ICONS.map(([value, label]) => ({ value, label })) })] },
+            g2({ t: "text", path: "hero.panel.cLabel", label: "Dark card: label", ph: "Projects delivered" }, { t: "text", path: "hero.panel.cValue", label: "Dark card: number", ph: "120+" }),
+            { t: "note", text: "An empty card is left out." }] },
+          { t: "toggle", path: "hero.panel.dot", label: "Show the round accent" }] }] },
       heroSlidesCard("hero", "the hero image or panel"),
     ],
   },
@@ -187,6 +201,8 @@ function prepareBusiness(c: any) {
   c.products = { eyebrow: "Catalogue", title: "Products", lede: "", homeCount: 6, enquire: "Enquire", more: "View more", all: "View all products", showPrice: true, filter: true, related: true, ...(c.products && typeof c.products === "object" ? c.products : {}) };
   if (!Array.isArray(c.products.items)) c.products.items = [];
   c.hero ||= {}; prepareSlides(c.hero, c.theme?.deep || "#0E1B2C");
+  c.hero.panel = { show: true, source: "auto", aLabel: "", aValue: "", bars: true, rows: [], cLabel: "", cValue: "", dot: true, ...(c.hero.panel && typeof c.hero.panel === "object" ? c.hero.panel : {}) };
+  if (!Array.isArray(c.hero.panel.rows)) c.hero.panel.rows = [];
   c.sections = Array.isArray(c.sections) ? c.sections : [];
   // A section added in a newer version goes in after the one before it in the default order.
   SECTIONS.forEach(([id, label], k) => {

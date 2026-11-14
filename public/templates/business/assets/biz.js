@@ -43,7 +43,8 @@ const DEFAULT = {
     lede: "Northbeam is an independent team of strategists, designers and engineers. We plan, design and ship digital products for banks, insurers and healthcare companies.",
     ctaPrimary: "Book a consultation", ctaPrimaryTarget: "contact", ctaSecondary: "See our work", ctaSecondaryTarget: "work",
     image: null, badges: ["ISO 27001 certified", "120+ projects delivered", "Offices in Mumbai & London"],
-    slides: { enabled: false, items: [], effect: "fade", interval: 6, speed: 1.2, overlay: 45, overlayColor: "#0E1B2C", overlayStyle: "left", textColor: "light", height: "tall", dots: true, arrows: false, pause: true, hideArt: true },
+    slides: { enabled: false, items: [], effect: "fade", interval: 6, speed: 1.2, overlay: 45, overlayColor: "#0E1B2C", overlayStyle: "left", textColor: "light", height: "tall", dots: true, arrows: false, pause: true, hideArt: true, artOpacity: 100 },
+    panel: { show: true, source: "auto", aLabel: "", aValue: "", bars: true, rows: [], cLabel: "", cValue: "", dot: true },
   },
   products: { eyebrow: "Catalogue", title: "Products", lede: "", homeCount: 6, enquire: "Enquire", more: "View more", all: "View all products", showPrice: true, filter: true, related: true, items: [] },
   clients: { title: "Trusted by teams at", logos: [{ name: "Arcadia Bank", logo: null }, { name: "Helix Health", logo: null }, { name: "Orbit Insurance", logo: null }, { name: "Lumen Retail", logo: null }, { name: "Stratus Cloud", logo: null }, { name: "Vertex Labs", logo: null }] },
@@ -264,17 +265,20 @@ const arrow = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" strok
 
 /** Without a hero image: a calm composition of the business's own numbers and services, in the theme's colours. */
 function heroPanel() {
-  const st = C.stats.items.slice(0, 2), sv = C.services.items.slice(0, 3);
+  const P = C.hero.panel || {}, own = P.source === "own";
+  const st = own ? [{ label: P.aLabel, value: P.aValue }, { label: P.cLabel, value: P.cValue }] : C.stats.items.slice(0, 2).map((s) => ({ label: s.label || "", value: s.value || "" }));
+  const sv = (own ? P.rows || [] : C.services.items.slice(0, 3)).filter((s) => s && s.title);
+  const a = st[0] || {}, c = st[1] || {}, bars = P.bars !== false;
   return `<div class="hp" aria-hidden="true">
-    <div class="hp-card hp-a"><span class="hp-k">${esc((st[0] || {}).label || "Projects")}</span><b>${esc((st[0] || {}).value || "120+")}</b><i class="hp-bars">${[38, 54, 46, 70, 62, 84, 96].map((h) => `<span style="--h:${h}%"></span>`).join("")}</i></div>
-    <div class="hp-card hp-b">${sv.map((s) => `<span class="hp-row">${icon(s.icon, "hp-ic")}<span>${esc(s.title)}</span></span>`).join("")}</div>
-    <div class="hp-card hp-c"><span class="hp-k">${esc((st[1] || {}).label || "Clients")}</span><b>${esc((st[1] || {}).value || "98%")}</b></div>
-    <span class="hp-dot"></span>
+    ${a.label || a.value || (bars && own) ? `<div class="hp-card hp-a">${a.label ? `<span class="hp-k">${esc(a.label)}</span>` : ""}${a.value ? `<b>${esc(a.value)}</b>` : ""}${bars ? `<i class="hp-bars">${[38, 54, 46, 70, 62, 84, 96].map((h) => `<span style="--h:${h}%"></span>`).join("")}</i>` : ""}</div>` : ""}
+    ${sv.length ? `<div class="hp-card hp-b">${sv.map((s) => `<span class="hp-row">${icon(s.icon, "hp-ic")}<span>${esc(s.title)}</span></span>`).join("")}</div>` : ""}
+    ${c.label || c.value ? `<div class="hp-card hp-c">${c.label ? `<span class="hp-k">${esc(c.label)}</span>` : ""}${c.value ? `<b>${esc(c.value)}</b>` : ""}</div>` : ""}
+    ${P.dot !== false ? `<span class="hp-dot"></span>` : ""}
   </div>`;
 }
 function heroHTML() {
   const H = C.hero, im = imgUrl(H.image);
-  const media = im ? `<div class="hero-media" data-edit="hero.image"><img src="${esc(im)}" alt=""></div>` : `<div class="hero-media none" data-edit="hero.image">${heroPanel()}</div>`;
+  const media = im ? `<div class="hero-media" data-edit="hero.image"><img src="${esc(im)}" alt=""></div>` : (H.panel || {}).show === false ? "" : `<div class="hero-media none" data-edit="hero.panel.show">${heroPanel()}</div>`;
   const badges = (H.badges || []).filter(Boolean).length ? `<ul class="badges">${H.badges.filter(Boolean).map((b) => `<li>${icon("shield", "bi")}${esc(b)}</li>`).join("")}</ul>` : "";
   return `<section class="hero${im ? " has-img" : ""}" id="hero">${C.theme.layout === "full" && im ? `<div class="hero-bg" data-edit="hero.image" style="background-image:url('${esc(im)}')"></div>` : ""}
     <div class="wrap hero-in"><div class="hero-text">${H.eyebrow ? `<p class="eyebrow">${esc(H.eyebrow)}</p>` : ""}<h1 class="h1 fit">${rich(H.title)}</h1>${H.lede ? `<p class="hero-lede">${rich(H.lede)}</p>` : ""}

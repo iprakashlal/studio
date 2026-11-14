@@ -137,8 +137,23 @@ export const resendTestOnly = (msg: string): string | null => /own email address
 
 // ---------------------------------------------------------------- publishing from any device
 /** Whether this database keeps a Cloudflare token for publishing (and for which account). */
-export async function cfDeployInfo(api: string): Promise<{ deploy: boolean; account?: string }> {
-  try { const j = await (await fetch(clean(api) + "/", { cache: "no-store" })).json(); return { deploy: !!j?.deploy, account: j?.account }; } catch { return { deploy: false }; }
+export async function cfDeployInfo(api: string): Promise<{ deploy: boolean; account?: string; gh?: boolean }> {
+  try { const j = await (await fetch(clean(api) + "/", { cache: "no-store" })).json(); return { deploy: !!j?.deploy, account: j?.account, gh: !!j?.gh }; } catch { return { deploy: false }; }
+}
+/** GitHub calls through the database (its kept token) as a signed-in owner of `scope`: a fetch-like Response. */
+export function dbGitHub(api: string, scope: string) {
+  return async (repo: string, path: string, init: RequestInit, raw: boolean): Promise<Response> => {
+    const s = cfSession.load(api);
+    const r = await fetch(clean(api) + "/gh?scope=" + encodeURIComponent(scope), { method: "POST", cache: "no-store", headers: { "Content-Type": "application/json", ...(s ? { Authorization: "Bearer " + s.token } : {}) }, body: JSON.stringify({ repo, path, method: init.method || "GET", raw, ...(init.body != null ? { body: String(init.body) } : {}) }) });
+    const j = await r.json().catch(() => null);
+    if (!r.ok) return new Response(JSON.stringify({ message: j?.error || `The database answered ${r.status}.` }), { status: r.status === 401 ? 403 : r.status, headers: { "Content-Type": "application/json" } });
+    const bytes = Uint8Array.from(atob(j.b64 || ""), (c) => c.charCodeAt(0));
+    return new Response(j.status === 204 ? null : bytes, { status: j.status, headers: { "Content-Type": j.type || "application/json" } });
+  };
+}
+/** Lets these GitHub repositories be published from Studios that sign in by email (owners of `scope`). */
+export async function registerRepos(cf: Cloudflare, s: CfDbSetup, list: { repo: string; scope: string }[]) {
+  for (const x of list) await cf.d1Query(s.account, s.databaseId, "insert into repos (repo, scope) values (?, ?) on conflict (repo) do update set scope = excluded.scope", [x.repo.toLowerCase(), x.scope]);
 }
 /** A Cloudflare client that publishes through the database (its kept token), as the signed-in owner of `scope`. */
 export function dbCloudflare(api: string, scope: string): Cloudflare {

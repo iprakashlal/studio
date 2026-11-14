@@ -13,6 +13,8 @@ import { StepLoader } from "../ui/kit";
 import { HelperLanding } from "./HelperBox";
 import { helperHandoff } from "../lib/relay";
 import { ghPublish } from "../lib/ghpublish";
+import { ghRoute } from "../lib/repo";
+import { cfDeployInfo, dbGitHub } from "../lib/cfdb";
 
 export const NS = "site-studio";
 
@@ -28,6 +30,14 @@ export function App() {
   // A Studio moved to Netlify + Supabase finds its Supabase in studio.config.json (none on GitHub Pages).
   const [host, setHost] = useState<StudioHostCfg | null | undefined>(undefined);
   useEffect(() => { loadHostConfig().then(setHost); }, []);
+  // A Studio that signs in by email reaches its GitHub sites through its database, when that keeps a GitHub token.
+  useEffect(() => {
+    if (host?.kind !== "cloudflare") return;
+    const check = () => cfDeployInfo(host.api).then((i) => { ghRoute.via = i.gh ? dbGitHub(host.api, "studio:" + host.studio) : undefined; });
+    check();
+    // Turned on from another Studio or tab: noticed when you come back to this one.
+    addEventListener("focus", check); return () => removeEventListener("focus", check);
+  }, [host]);
   ghPublish.setLoginIsGitHub(!(session && isHosted(session)));
   const repo = useMemo<Repo | null>(() => (demo ? new MemoryRepo() : session ? (isHosted(session) && host ? backendOf(host).repo() : new GitHubRepo(session.cfg, session.token)) : null), [demo, session, host]);
 

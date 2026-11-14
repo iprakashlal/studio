@@ -55,14 +55,17 @@ export function explain(e: unknown): string {
 
 const encPath = (p: string) => p.split("/").map(encodeURIComponent).join("/");
 
+/** GitHub through the Studio's database (its kept GitHub token), for Studios that sign in by email; set by the app. */
+export const ghRoute: { via?: (repo: string, path: string, init: RequestInit, raw: boolean) => Promise<Response> } = {};
+
 export class GitHubRepo implements Repo {
   readonly demo = false;
   constructor(readonly cfg: RepoCfg, private token: string) {}
 
   private async api(path: string, opts: RequestInit & { raw?: boolean } = {}): Promise<any> {
     const { raw, ...init } = opts;
-    if (!this.token) throw new RepoError(NO_GH_TOKEN, 401);
-    const r = await fetch(`https://api.github.com/repos/${encodeURIComponent(this.cfg.owner)}/${encodeURIComponent(this.cfg.repo)}${path}`, {
+    if (!this.token && !ghRoute.via) throw new RepoError(NO_GH_TOKEN, 401);
+    const r = !this.token ? await ghRoute.via!(`${this.cfg.owner}/${this.cfg.repo}`, path, init, !!raw) : await fetch(`https://api.github.com/repos/${encodeURIComponent(this.cfg.owner)}/${encodeURIComponent(this.cfg.repo)}${path}`, {
       ...init,
       cache: "no-store",
       headers: {

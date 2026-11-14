@@ -175,6 +175,7 @@ export class Cloudflare {
   addWorkerDomain(account: string, service: string, hostname: string, zoneId: string) { return this.api("PUT", `/accounts/${account}/workers/domains`, { json: { environment: "production", hostname, service, zone_id: zoneId, override_existing_dns_record: true, override_existing_origin: true } }); }
   removeWorkerDomain(account: string, id: string) { return this.api("DELETE", `/accounts/${account}/workers/domains/${id}`); }
 
+  putSecret(account: string, script: string, name: string, text: string) { return this.api("PUT", `/accounts/${account}/workers/scripts/${encodeURIComponent(script)}/secrets`, { json: { name, text, type: "secret_text" } }); }
   deleteSecret(account: string, script: string, name: string) { return this.api("DELETE", `/accounts/${account}/workers/scripts/${encodeURIComponent(script)}/secrets/${encodeURIComponent(name)}`); }
   enableWorkersDev(account: string, name: string) { return this.api("POST", `/accounts/${account}/workers/scripts/${encodeURIComponent(name)}/subdomain`, { json: { enabled: true, previews_enabled: false } }); }
 }

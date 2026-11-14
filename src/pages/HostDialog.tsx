@@ -108,20 +108,25 @@ export function HostDialog({ studio, project, tpl, draft, dirty, save, onIndex, 
   // Without the token on this device, an existing Cloudflare site publishes through the Studio's database (when it
   // keeps the token: Settings → Hosting accounts → Publish from any device) as a signed-in owner.
   const [viaDb, setViaDb] = useState<Pages | null>(null);
-  const pagesOk = pagesKind === "netlify" ? !!nf : cfAcc.ready || !!viaDb;
+  // Which Cloudflare account this site's pages are on (sites can live on different accounts: an old one, a client's).
+  const [siteAccount, setSiteAccount] = useState(host?.kind === "cloudflare" && host.account ? host.account : "");
+  const siteAcc = siteAccount || cfAcc.account?.id || "";
+  const siteAccKnown = cfAcc.allAccounts.some((a) => a.id === siteAcc);
+  const siteClient = (step?: (s: string) => void) => cfAcc.clientFor(siteAcc, step);
+  const pagesOk = pagesKind === "netlify" ? !!nf : (cfAcc.ready && siteAccKnown) || !!viaDb;
   const getPages = async (): Promise<Pages> => {
     if (pagesKind === "netlify") { if (!nf) throw new Error("Connect Netlify first."); return netlifyPages(nf); }
-    if (!cfAcc.ready && viaDb) return viaDb;
-    const { cf, account } = await cfAcc.client((x) => setStep({ i: -1, detail: x }));
-    return cloudflarePages(cf, host?.kind === "cloudflare" && host.account ? host.account : account.id, account.name);
+    if ((!cfAcc.ready || !siteAccKnown) && viaDb) return viaDb;
+    const { cf, account } = await siteClient((x) => setStep({ i: -1, detail: x }));
+    return cloudflarePages(cf, account.id, account.name);
   };
   const [cfAddr, setCfAddr] = useState("");
-  useEffect(() => { if (pagesKind === "cloudflare" && cfAcc.ready) getPages().then(async (p) => { await p.init(); setCfAddr(p.addressOf(siteName || "name")); }).catch(() => {}); }, [pagesKind, cfAcc.ready, siteName]);
+  useEffect(() => { if (pagesKind === "cloudflare" && cfAcc.ready && siteAccKnown) getPages().then(async (p) => { await p.init(); setCfAddr(p.addressOf(siteName || "name")); }).catch(() => {}); }, [pagesKind, cfAcc.ready, siteName, siteAcc, siteAccKnown]);
   const [cfSigned, setCfSigned] = useState<string | null>(null), [cfAccess, setCfAccess] = useState<"" | "ok" | "no">("");
   useEffect(() => {
-    if (!host || moving || host.kind !== "cloudflare" || !host.cf || cfAcc.ready || cfAccess !== "ok") { setViaDb(null); return; }
-    pagesViaDb(host.cf.api, "site:" + host.cf.site).then(setViaDb).catch(() => setViaDb(null));
-  }, [host?.cf?.api, moving, cfAcc.ready, cfAccess]);
+    if (!host || moving || host.kind !== "cloudflare" || !host.cf || (cfAcc.ready && siteAccKnown) || cfAccess !== "ok") { setViaDb(null); return; }
+    pagesViaDb(host.cf.api, "site:" + host.cf.site, host.account).then(setViaDb).catch(() => setViaDb(null));
+  }, [host?.cf?.api, moving, cfAcc.ready, cfAccess, siteAccKnown]);
   const cfCheck = async (c = cfSite) => { if (!c) return; const e = await cfSignedIn(c.api); setCfSigned(e); setCfAccess(e ? ((await cfRole(c.api, "site:" + c.site)) ? "ok" : "no") : ""); };
   useEffect(() => { cfCheck(); }, [cfSite?.api, cfSite?.site]);
   const dbOk = dbKind === "cloudflare" ? !!cfSite && cfAccess === "ok" && (!dbMoving || access === "ok") : sbReady && access === "ok";
@@ -180,7 +185,7 @@ export function HostDialog({ studio, project, tpl, draft, dirty, save, onIndex, 
   const verifyDomain = () => run("maildomain", async () => {
     setMailMsg("");
     if (!/^re_/.test(fullKey.trim())) throw new Error("Paste a Resend key with Full access in the box next to the domain.");
-    const dom = cleanDomain(mailDom), { cf, relay } = await cfAcc.client((x) => setStep({ i: -1, detail: x }));
+    const dom = cleanDomain(mailDom), { cf, relay } = await siteClient((x) => setStep({ i: -1, detail: x }));
     const r = await verifyMailDomain(relay, cf, fullKey.trim(), dom, (x) => setStep({ i: -1, detail: x }));
     if (!r.verified) {
       setStep(null);
@@ -226,7 +231,7 @@ export function HostDialog({ studio, project, tpl, draft, dirty, save, onIndex, 
       const r = await publishHosted({ pages, host: h, tpl, draft, name: project.name, version: next, withContent: dbMoving ? false : !host || withContent, getBlob, note: note.trim(), step: (i, detail) => setStep({ i, detail }) });
       const { index } = await studio.recordExport(project.id, { kind: pagesKind, note: note.trim(), target: h.siteName }, draft, "published", undefined, r.siteSha, h);
       // With the token here: let this site be published from any device by its owners (when the database keeps a token).
-      if (pagesKind === "cloudflare" && cfAcc.ready && h.cf) { try { const v = await cfAccountVault.load(session.token); if (v?.setup) await registerWorkers((await cfAcc.client()).cf, v.setup, [{ worker: h.siteId, scope: "site:" + h.cf.site }]); } catch { /* older database: registered when publishing from any device is turned on */ } }
+      if (pagesKind === "cloudflare" && cfAcc.ready && h.cf) { try { const v = await cfAccountVault.load(session.token); if (v?.setup && v.setup.api === h.cf.api && h.account === v.setup.account) await registerWorkers((await cfAcc.client()).cf, v.setup, [{ worker: h.siteId, scope: "site:" + h.cf.site }]); } catch { /* older database: registered when publishing from any device is turned on */ } }
       onIndex(index);
       setDone({ url: siteAddress(h), admin: r.admin, warnings: [...r.warnings, ...(moved?.missing || []).map((x) => `Photo not found in Supabase: ${x}`)], moved });
     } catch (e) {
@@ -287,6 +292,16 @@ export function HostDialog({ studio, project, tpl, draft, dirty, save, onIndex, 
         </> : <>
           {viaDb && !cfAcc.ready ? <p className="flex items-center gap-2 text-[13px] text-emerald-300"><span className="h-2 w-2 rounded-full bg-emerald-400" />Publishing through your Cloudflare database: no Cloudflare token needed on this device. (Connecting a domain or a new site still needs the token, below.)</p> : null}
           {cfAcc.ui}
+          {cfAcc.ready && (cfAcc.allAccounts.length > 1 || (siteAccount && !siteAccKnown)) && (
+            <label className="flex flex-col gap-1 text-[13px]"><span className="label">Cloudflare account for this site</span>
+              <select className="input" aria-label="Cloudflare account for this site" value={siteAcc} onChange={(e) => setSiteAccount(e.target.value)}>
+                {!siteAccKnown && siteAcc && <option value={siteAcc}>The site's account (no token for it on this device yet)</option>}
+                {cfAcc.allAccounts.map((a) => <option key={a.id} value={a.id}>{a.name}{a.main ? "" : " (other token)"}</option>)}
+              </select>
+              <span className="text-ink-400">{host?.kind === "cloudflare" ? "Where this site's pages and domain are. Publishing, Push updates and its domain use this account's token." : "The site's pages and domain go on this account. Its content stays in the database chosen below."}</span>
+            </label>
+          )}
+          {cfAcc.ready && siteAccount && !siteAccKnown && !viaDb && <p className="text-[13px] text-amber-200">This site is on a Cloudflare account this device has no token for. Add that account under <b>Other Cloudflare accounts</b> above.</p>}
           <p className="text-[13px] text-ink-400">Cloudflare serves the pages from its network for free, with no traffic limit (a Worker with the site's files on your account). Edits made in the site's own CMS go to the database and don't need a publish.</p>
         </>}
         {(!host || moving) && pagesOk && (
@@ -408,7 +423,7 @@ export function HostDialog({ studio, project, tpl, draft, dirty, save, onIndex, 
       ) : null}
 
       {host && !moving && host.kind === "netlify" && nf && <DomainCard host={host} nf={nf} onHost={async (h) => onIndex(await studio.updateMeta(project.id, { host: h }, "Update the site's domain"))} />}
-      {host && !moving && host.kind === "cloudflare" && cfAcc.ready && <CfDomainCard host={host} acc={cfAcc} onHost={async (h) => onIndex(await studio.updateMeta(project.id, { host: h }, "Update the site's domain"))} />}
+      {host && !moving && host.kind === "cloudflare" && cfAcc.ready && siteAccKnown && <CfDomainCard host={host} acc={{ ...cfAcc, client: siteClient }} onHost={async (h) => onIndex(await studio.updateMeta(project.id, { host: h }, "Update the site's domain"))} />}
     </Modal>
   );
 }

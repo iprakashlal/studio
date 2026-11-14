@@ -4,7 +4,7 @@
 import { Netlify } from "./netlify";
 import { Cloudflare } from "./cloudflare";
 import { getHelper } from "./relay";
-import { cfAccountVault, cfDeployInfo, cfSignedIn, dbCloudflare } from "./cfdb";
+import { cfAccountVault, cfDeployInfo, cfSignedIn, cfTokenFor, dbCloudflare } from "./cfdb";
 import type { HostCfg } from "./supa";
 import { netlifyToken } from "./hosting";
 import type { SiteFile } from "./exporter";
@@ -81,24 +81,26 @@ export async function loadPages(kind: PagesKind, studioToken: string, account?: 
   const t = await netlifyToken.load(studioToken), nf = t ? new Netlify(t.token) : null;
   if (kind === "netlify") return nf ? netlifyPages(nf) : null;
   const v = await cfAccountVault.load(studioToken);
-  if (!v?.token || !(account || v.account)) return null;
+  const acc = account || v?.account, tok = cfTokenFor(v, acc);
+  if (!tok || !acc) return null;
   const relay = await getHelper(studioToken, nf).catch(() => null);
   if (!relay) return null;
-  return cloudflarePages(new Cloudflare(relay, v.token), (account || v.account)!);
+  return cloudflarePages(new Cloudflare(relay, tok), acc);
 }
 
 export const PAGES_LABEL: Record<PagesKind, string> = { netlify: "Netlify", cloudflare: "Cloudflare" };
 
 /** Publishing through the Studio's database (its kept Cloudflare token) as a signed-in owner of `scope`; null when
  *  the database doesn't keep a token or this device isn't signed in to it. */
-export async function pagesViaDb(api: string, scope: string): Promise<Pages | null> {
+export async function pagesViaDb(api: string, scope: string, account?: string): Promise<Pages | null> {
   const info = await cfDeployInfo(api);
   if (!info.deploy || !info.account || !(await cfSignedIn(api))) return null;
+  if (account && info.account !== account) return null; // the database's token is for another Cloudflare account
   return { ...cloudflarePages(dbCloudflare(api, scope), info.account), label: "Cloudflare" };
 }
 /** The way to publish a hosted site from this device: its own token if connected here, else through the database. */
 export async function pagesForHost(h: HostCfg, studioToken: string): Promise<Pages | null> {
   const own = await loadPages(h.kind, studioToken, h.account).catch(() => null);
   if (own || h.kind !== "cloudflare" || !h.cf) return own;
-  return pagesViaDb(h.cf.api, "site:" + h.cf.site);
+  return pagesViaDb(h.cf.api, "site:" + h.cf.site, h.account);
 }

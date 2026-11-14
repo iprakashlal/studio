@@ -45,6 +45,7 @@ export const NO_GH_TOKEN = "This Studio has no GitHub token yet (it signs in by 
 export function explain(e: unknown): string {
   const err = e as RepoError;
   if (err && err.message === NO_GH_TOKEN) return NO_GH_TOKEN;
+  if (err && (err as any).db) return err.message; // the Studio's Cloudflare database, not GitHub
   if (err && err.status === 401) return "GitHub rejected the token. It may have expired; add a new one in Settings.";
   if (err && err.status === 403) return "The token can't write to this repository. Give it Contents: Read and write.";
   if (err && err.status === 404) return "Repository, branch or file not found. Check the details and the token's repository access.";

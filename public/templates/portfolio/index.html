@@ -92,6 +92,7 @@ html[data-ornament=soft] .solids .shp.mo{filter:blur(3px);opacity:.35;scale:1.15
 
 .hero{position:relative;padding-block:130px 60px;min-height:min(860px,100svh);display:flex;align-items:center}
 #net{position:absolute;inset:0;width:100%;height:100%;z-index:0;pointer-events:none}
+.hero.hs-solo .hero-grid{grid-template-columns:1fr}
 .hero .wrap{z-index:2;width:100%}
 .hero-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:24px;align-items:center}
 .stage-wrap{position:relative}
@@ -1458,9 +1459,16 @@ function renderSite(c){
   if(K){renderKit(c,K)}else{
   siteRoot.innerHTML=`<div id="siteInner">${siteHTML(c)}</div>`;
   initSite(c);}
+  heroSlides(c);
   if(window.SiteFX)try{window.SiteFX.init({root:$("#siteInner"),brand:c.theme.introTitle||c.brand.logoText,badge:c.poweredBy})}catch(e){}
   setIcon(c);fitLines();
 }
+/* hero background slides (assets/slides.js, loaded when switched on) */
+let slP,slGen=0;
+function heroSlides(c){const S=c.hero&&c.hero.slides,g=++slGen,host=document.querySelector("#hero,.kp-hero,.ks-hero,.kt-hero");
+  if(!host||!S||!S.enabled||!(S.items||[]).some(x=>x&&x.image)){if(window.SiteSlides)SiteSlides.stop();return}
+  (slP||=new Promise((ok,no)=>{if(window.SiteSlides)return ok(window.SiteSlides);const e=document.createElement("script");e.src="assets/slides.js";e.onload=()=>ok(window.SiteSlides);e.onerror=no;document.head.appendChild(e)}))
+  .then(w=>{if(g===slGen)w.mount(host,S,{imgUrl,title:".eyebrow",text:".h-role",hide:".stage-wrap,#net,.vx-portrait"})}).catch(()=>{})}
 /* the browser-tab icon: initials in the primary colour, in the chosen shape (0 = square, 50 = circle) */
 let iconKey="";
 function setIcon(c){

@@ -7,6 +7,7 @@ import { currentMenus, menuVersion } from "./menus";
 import { STUDIO_BUILD } from "../build-info";
 import JSZip from "jszip";
 import type { TemplateDef } from "../schema/types";
+import { TEMPLATES } from "../schema";
 import type { Repo } from "./repo";
 import { bytesB64 } from "./repo";
 import { blobToBytes, collectAssetPaths, getP, textToBytes } from "./util";
@@ -40,6 +41,13 @@ export async function loadStarter(templateId: string, starterId: string): Promis
 /** Default content for a template, used to fill gaps in older projects. */
 export async function loadDefaults(templateId: string) {
   return loadStarter(templateId, "default");
+}
+/** What a saved project is merged over when it opens: the starting content, without sample lists a template added
+ *  later (an older project shouldn't suddenly show the starter's sample products). */
+export async function loadMergeBase(templateId: string) {
+  const c: any = await loadDefaults(templateId);
+  for (const path of TEMPLATES[templateId]?.sampleOnly || []) { const ks = path.split("."); let o = c; for (const k of ks.slice(0, -1)) o = o?.[k]; if (o && Array.isArray(o[ks[ks.length - 1]])) o[ks[ks.length - 1]] = []; }
+  return c;
 }
 
 async function fetchBytes(url: string): Promise<Uint8Array> {

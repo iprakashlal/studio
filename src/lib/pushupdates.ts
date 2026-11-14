@@ -5,7 +5,7 @@
 import { GitHubRepo, explain, type Repo } from "./repo";
 import { NetlifyError } from "./netlify";
 import { PAGES_LABEL, type Pages } from "./pages";
-import { buildSite, loadDefaults, publishSite } from "./exporter";
+import { buildSite, loadMergeBase, publishSite } from "./exporter";
 import { hostRepo, publishHosted, siteAddress } from "./hosting";
 import { ghPublish } from "./ghpublish";
 import { adminFile } from "../schema/common";
@@ -67,7 +67,7 @@ export async function pushTarget(t: LiveTarget, o: { studio: Studio; pages: (h: 
     await o.studio.updateMeta(p.id, { worker: { ...w, build: STUDIO_BUILD.id, deployedAt: new Date().toISOString() } }, "Update the shop's Cloudflare Worker");
     return;
   }
-  const defaults = await loadDefaults(p.template);
+  const defaults = await loadMergeBase(p.template);
   const draft = merge(defaults, (await o.studio.loadContent(p.id)) || {});
   const getBlob = (path: string) => o.studio.assetBlob(p.id, path);
   const note = `Studio update ${STUDIO_BUILD.id}`;

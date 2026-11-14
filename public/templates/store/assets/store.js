@@ -633,8 +633,17 @@ function render() {
   $("#app").innerHTML = `<a class="skip" href="#main">Skip to content</a>${header()}<main id="main">${fn()}</main>${footer()}`;
   bind();
   reveal();
+  slides();
   if (window.SiteFX) try { window.SiteFX.init({ root: $("#app"), brand: C.theme.introTitle || C.brand.name, badge: C.poweredBy }); } catch (e) {}
   setIcon(); fitLines();
+}
+/* Hero background slides on the home page (assets/slides.js, loaded when switched on). */
+let slP, slGen = 0;
+function slides() {
+  const S = C.home && C.home.hero && C.home.hero.slides, g = ++slGen, host = PAGE === "home" ? $("#main .hero") : null;
+  if (!host || !S || !S.enabled || !(S.items || []).some((x) => x && x.image)) { if (window.SiteSlides) window.SiteSlides.stop(); return; }
+  (slP ||= new Promise((ok, no) => { if (window.SiteSlides) return ok(window.SiteSlides); const s = document.createElement("script"); s.src = "assets/slides.js"; s.onload = () => ok(window.SiteSlides); s.onerror = no; document.head.appendChild(s); }))
+    .then((w) => { if (g === slGen) w.mount(host, S, { imgUrl, title: "h1", text: ".lead", hide: ".art,.hx-art,.orn" }); }).catch(() => {});
 }
 /* Entrance animations from the theme. In the CMS preview they play on the first render only, not on every keystroke. */
 let revealed = 0;

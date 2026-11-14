@@ -10,7 +10,12 @@ export function useHelper(studioToken: string, nf: Netlify | null | undefined, w
   const [relay, setRelay] = useState<Relay | null | undefined>(undefined);
   const [addr, setAddr] = useState(""), [cfTok, setCfTok] = useState(""), [needTok, setNeedTok] = useState(false);
   const [busy, setBusy] = useState(false), [err, setErr] = useState("");
-  useEffect(() => { relayVault.load(studioToken).then(setRelay); }, [studioToken]);
+  useEffect(() => {
+    relayVault.load(studioToken).then(setRelay);
+    // Another helper box on the page connected it: pick it up.
+    const on = () => relayVault.load(studioToken).then(setRelay);
+    addEventListener("studio-helper-changed", on); return () => removeEventListener("studio-helper-changed", on);
+  }, [studioToken]);
   const ok = helperOk(relay);
   const connect = async (address = addr) => {
     setErr(""); setBusy(true);
@@ -18,7 +23,7 @@ export function useHelper(studioToken: string, nf: Netlify | null | undefined, w
       const saved = cfTok.trim() || (await cfAccountVault.load(studioToken))?.token || "";
       try { setRelay(await connectCfHelper(address, studioToken)); }
       catch (e) { if (!(e instanceof HelperClaimed)) throw e; if (!saved) { setNeedTok(true); throw e; } setRelay(await connectCfHelper(address, studioToken, saved)); }
-      setNeedTok(false); helperHandoff.done();
+      setNeedTok(false); helperHandoff.done(); dispatchEvent(new Event("studio-helper-changed"));
     } catch (e: any) { setErr(e?.message || "Couldn't connect the helper."); }
     setBusy(false);
   };

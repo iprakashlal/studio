@@ -95,8 +95,10 @@ export const membersSql = (scope: string, list: { email: string; role: "owner" |
   list.map((m) => `insert into members (scope, email, role) values (${q(scope)}, lower(${q(m.email.trim())}), ${q(m.role)}) on conflict (scope, email) do update set role = excluded.role;`).join("\n");
 
 /** Finds or creates the database, its tables and the Worker, and checks the Worker answers. Safe to run again. */
-export async function setupCfDb(relay: Relay, token: string, o: { account: CfAccount; resendKey: string; mailFrom: string; name: string; existing?: CfDbSetup | null; deployToken?: string }, step: (s: string) => void): Promise<CfDbSetup> {
+export async function setupCfDb(relay: Relay, token: string, o: { account: CfAccount; resendKey: string; mailFrom: string; name: string; existing?: CfDbSetup | null; deployToken?: string; requireMail?: boolean }, step: (s: string) => void): Promise<CfDbSetup> {
   const cf = new Cloudflare(relay, token), acc = o.account.id;
+  // A database Worker set up from another device or Studio keeps its secret (sessions and codes) and settings.
+  const keep = !!o.existing || !!(await cf.script(acc, CFDB_WORKER).catch(() => null));
   step("Finding the Studio's database");
   let db = (await cf.d1List(acc)).find((d) => d.name === CFDB_DATABASE);
   if (!db) { step("Creating the database (Cloudflare D1, free plan)"); db = await cf.d1Create(acc, CFDB_DATABASE); }
@@ -108,8 +110,8 @@ export async function setupCfDb(relay: Relay, token: string, o: { account: CfAcc
   const secret = [...crypto.getRandomValues(new Uint8Array(32))].map((b) => b.toString(16).padStart(2, "0")).join("");
   await cf.upload(acc, CFDB_WORKER, await r.text(), {
     vars: { MAIL_FROM: o.mailFrom, NAME: o.name, ...(o.deployToken ? { CF_ACCOUNT: acc } : {}) },
-    secrets: { ...(o.existing ? {} : { SECRET: secret }), ...(o.resendKey ? { RESEND_API_KEY: o.resendKey } : {}), ...(o.deployToken ? { CF_TOKEN: o.deployToken } : {}) },
-    d1: [{ name: "DB", id: db.uuid }], keep: !!o.existing,
+    secrets: { ...(keep ? {} : { SECRET: secret }), ...(o.resendKey ? { RESEND_API_KEY: o.resendKey } : {}), ...(o.deployToken ? { CF_TOKEN: o.deployToken } : {}) },
+    d1: [{ name: "DB", id: db.uuid }], keep,
   });
   step("Turning on its workers.dev address");
   const sub = await cf.subdomain(acc, o.account.name || "studio");
@@ -122,7 +124,7 @@ export async function setupCfDb(relay: Relay, token: string, o: { account: CfAcc
     await new Promise((res) => setTimeout(res, 2000));
   }
   if (last?.service !== "site-studio-db") throw new Error("The database Worker was uploaded but doesn't answer yet. Wait a minute and try again.");
-  if (!last.mail) throw new Error("The database is up, but email isn't set: add your Resend API key and sender, then run the setup again.");
+  if (!last.mail && o.requireMail !== false) throw new Error("The database is up, but email isn't set: add your Resend API key and sender, then run the setup again.");
   return { account: acc, api, databaseId: db.uuid, v: CFDB_VERSION };
 }
 /** Adds people to a Studio or site in the database (owner/partner/member). */

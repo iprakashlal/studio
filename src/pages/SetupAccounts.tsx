@@ -60,32 +60,36 @@ function AnyDevice({ session, acc, index }: { session: Session; acc: CfAccountHo
     (async () => {
       const v = await cfAccountVault.load(session.token);
       const a = v?.setup?.api || cfProjects[0]?.host?.cf?.api || studioApp?.api || null;
-      setApi(a); if (a) setOn((await cfDeployInfo(a)).deploy); else setOn(null);
+      setApi(a); setOn(a ? (await cfDeployInfo(a)).deploy : false);
     })();
   }, [session.token, acc.account?.id]);
   const register = async (cf: Cloudflare, setup: CfDbSetup) => registerWorkers(cf, setup, [
     ...cfProjects.map((p) => ({ worker: p.host!.siteId, scope: "site:" + p.host!.cf!.site })),
     ...(studioApp ? [{ worker: studioApp.siteId, scope: "studio:" + studioApp.studio }] : []),
+    // Client Studios on this Cloudflare (Studio Partners): their apps, for updating them from any device.
+    ...(index.partners || []).filter((p) => p.pages === "cloudflare" && p.backend === "cloudflare" && p.siteId).map((p) => ({ worker: p.siteId!, scope: "studio:" + p.studio })),
   ]);
   const turn = (enable: boolean) => async () => {
     setErr(""); setBusy(enable ? "Turning on" : "Turning off");
     try {
       const v = await cfAccountVault.load(session.token);
-      if (!v?.setup) throw new Error("Set up the Studio's database on Cloudflare from this device first (any site's hosting window → Database → Cloudflare).");
       const { cf, relay, account, token } = await acc.client((x) => setBusy(x));
       if (enable) {
-        await setupCfDb(relay, token, { account, resendKey: "", mailFrom: v.mailFrom || "", name: brand().name, existing: v.setup, deployToken: token }, (x) => setBusy(x));
-        setBusy("Letting your sites be published from any device"); await register(cf, v.setup);
+        // Finds the Studio's database on this account (or creates it), keeping its sign-ins and email settings.
+        const setup = await setupCfDb(relay, token, { account, resendKey: "", mailFrom: v?.mailFrom || "", name: brand().name, existing: v?.setup && v.setup.account === account.id ? v.setup : null, deployToken: token, requireMail: false }, (x) => setBusy(x));
+        await cfAccountVault.save({ ...(v || {}), token, account: account.id, setup }, session.token);
+        setBusy("Letting your sites be published from any device"); await register(cf, setup);
+        setApi(setup.api);
         toast("On. Any device signed in to your Cloudflare database as a site's owner can now publish and push updates to it.");
       } else {
-        await cf.deleteSecret(v.setup.account, CFDB_WORKER, "CF_TOKEN");
+        await cf.deleteSecret(account.id, CFDB_WORKER, "CF_TOKEN");
         toast("Off. Only devices with the Cloudflare token can publish now.");
       }
-      setOn((await cfDeployInfo(v.setup.api)).deploy);
+      setOn((await cfDeployInfo((await cfAccountVault.load(session.token))?.setup?.api || api!)).deploy);
     } catch (e: any) { setErr(e?.message || "Something went wrong."); }
     setBusy("");
   };
-  if (!api || on === null) return null;
+  if (on === null && api) return null;
   return (
     <div className="flex flex-col gap-1.5 rounded-lg border border-ink-700 p-3" aria-label="Publish from any device">
       <div className="flex flex-wrap items-center gap-2">
@@ -97,7 +101,7 @@ function AnyDevice({ session, acc, index }: { session: Session; acc: CfAccountHo
         ? "Your database Worker keeps the Cloudflare token as a secret on your account. Any device where you've signed in with your email code can publish and push updates to your Cloudflare sites (only the sites that email can edit), with no token on that device. Domains and new sites still need the token."
         : acc.account
           ? "Turn on to let any device where you've signed in with your email code publish and push updates to your Cloudflare sites. The token is stored once as a secret on your own database Worker, never in the Studio's data or on GitHub."
-          : "Off. Turn it on from a device that has the Cloudflare token (this Settings page there)."}</p>
+          : "Off. To turn it on, connect Cloudflare on this device (just above), then press Turn on: the Studio finds or sets up its database by itself."}</p>
       {on && acc.account && <button type="button" className="self-start text-[12.5px] text-brand-300 underline" disabled={!!busy} onClick={async () => { setBusy("Registering"); try { const v = await cfAccountVault.load(session.token); if (v?.setup) { await register((await acc.client()).cf, v.setup); toast("Sites registered."); } } catch (e: any) { setErr(e?.message || "Couldn't register."); } setBusy(""); }}>Include sites published since</button>}
       {err && <p role="alert" className="text-[12.5px] text-red-300">{err}</p>}
     </div>

@@ -56,7 +56,7 @@ html[data-cards=lined] .card{background:transparent;border:0;border-top:2px soli
 html[data-cards=accent] .card{border-top:3px solid var(--c1)}
 
 /* nav */
-.nav{position:sticky;top:0;z-index:50;transition:background .25s,box-shadow .25s,transform .3s}
+.nav{position:fixed;top:0;left:0;right:0;z-index:50;transition:background .25s,box-shadow .25s,transform .3s}
 .nav-in{display:flex;align-items:center;gap:24px;min-height:74px}
 .brand{display:inline-flex;align-items:center;gap:12px;text-decoration:none;font:700 18px/1 var(--fd);letter-spacing:-.01em}
 .logo{width:36px;height:36px;border-radius:var(--logo-r);object-fit:cover}

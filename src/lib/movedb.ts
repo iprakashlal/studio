@@ -87,3 +87,51 @@ export async function moveSbToCf(o: { sb: SbCfg; cf: CfSiteCfg; editors: string[
   }
   return res;
 }
+
+/**
+ * Copies a site from one Cloudflare database to another (for example from an old account's database into this
+ * Studio's): every file of the site (content, settings, draft, photos, warranty data), its editors and its enquiries.
+ * The old database is only read, never changed. Needs this browser signed in to both (as an owner of the site on the
+ * old one) and the new database's D1 access, for the editors and enquiries.
+ */
+export async function moveCfToCf(o: { from: CfSiteCfg; to: CfSiteCfg; d1: { cf: Cloudflare; account: string; databaseId: string }; addMembers: (list: { email: string; role: "owner" | "member" | "partner" }[]) => Promise<void>; step: (s: string) => void }): Promise<MoveResult> {
+  const src = new CfRepo(o.from.api, "site:" + o.from.site);
+  const res: MoveResult = { files: [], photos: 0, enquiries: 0, editors: [], missing: [] };
+  await src.check();
+  // 1. Editors first: the new scope needs its owners before anyone can write to it from the site.
+  o.step("Reading the site's editors");
+  const members = await cfCall<{ email: string; role: string }[]>(o.from.api, `/m?scope=${encodeURIComponent("site:" + o.from.site)}`).catch(() => []);
+  const list = (members || []).filter((m) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(m.email)).map((m) => ({ email: m.email.toLowerCase(), role: (["owner", "member", "partner"].includes(m.role) ? m.role : "member") as "owner" | "member" | "partner" }));
+  if (list.length) { o.step("Adding the site's editors"); await o.addMembers(list); res.editors = list.map((m) => m.email); }
+  const dst = new CfRepo(o.to.api, "site:" + o.to.site);
+  await dst.check();
+  // 2. Files: photos and other assets first, the content last (so it never points at a photo that isn't there).
+  o.step("Finding the site's files");
+  const all = await src.list("");
+  const order = [...all.filter((p) => p !== "content.json" && p !== "cms/site.json"), ...all.filter((p) => p === "cms/site.json"), ...all.filter((p) => p === "content.json")];
+  if (!all.includes("content.json")) throw new Error("The site has no content in its database yet.");
+  let n = 0;
+  for (const p of order) {
+    o.step(`Copying the site (${++n} of ${order.length})`);
+    const b = await src.getRaw(p);
+    if (!b) { res.missing.push(p); continue; }
+    await dst.putFile(p, bytesB64(await blobToBytes(b)), "Move from another database");
+    if (p.startsWith("assets/")) res.photos++; else res.files.push(p);
+  }
+  // 3. Enquiries, only while the new database has none for the site (so running it again doesn't double them).
+  o.step("Copying enquiries");
+  const rows = await cfCall<any[]>(o.from.api, `/e/list?scope=${encodeURIComponent("site:" + o.from.site)}`).catch(() => [] as any[]);
+  if (rows?.length) {
+    const cur = await o.d1.cf.d1Query(o.d1.account, o.d1.databaseId, "select count(*) as n from enquiries where site = ?", [o.to.site]);
+    if (!Number(cur?.[0]?.results?.[0]?.n || 0)) {
+      const asc = [...rows].reverse();
+      for (let i = 0; i < asc.length; i += 18) {
+        const part = asc.slice(i, i + 18);
+        await o.d1.cf.d1Query(o.d1.account, o.d1.databaseId, "insert into enquiries (site, data, page, status, created_at) values " + part.map(() => "(?, ?, ?, ?, ?)").join(", "),
+          part.flatMap((r: any) => [o.to.site, JSON.stringify(r.data || {}), String(r.page || ""), String(r.status || "new"), String(r.created_at || new Date().toISOString())]));
+      }
+      res.enquiries = rows.length;
+    }
+  }
+  return res;
+}

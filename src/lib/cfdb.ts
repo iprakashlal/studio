@@ -5,7 +5,7 @@ import { RepoError, type FileIn, type Repo } from "./repo";
 import type { RepoCfg } from "./crypto";
 import type { Relay } from "./relay";
 import { Cloudflare, type CfAccount } from "./cloudflare";
-import { CFDB_SCHEMA, CFDB_VERSION } from "./cfdbSchema";
+import { CFDB_SCHEMA, CFDB_VERSION, CFDB_WORKER_NAME } from "./cfdbSchema";
 import { STUDIO_BUILD } from "../build-info";
 import { vault } from "./vault";
 
@@ -19,7 +19,7 @@ export function cfTokenFor(v: { token?: string; more?: CfMoreToken[] } | null | 
   return other?.token || v?.token || "";
 }
 
-export const CFDB_WORKER = "picaffectz-db";
+export const CFDB_WORKER = CFDB_WORKER_NAME;
 export const CFDB_DATABASE = "picaffectz-db";
 export type CfDbCfg = { api: string };
 
@@ -149,8 +149,8 @@ export const resendTestOnly = (msg: string): string | null => /own email address
 
 // ---------------------------------------------------------------- publishing from any device
 /** Whether this database keeps a Cloudflare token for publishing (and for which account). */
-export async function cfDeployInfo(api: string): Promise<{ deploy: boolean; account?: string; gh?: boolean; ai?: boolean; reviews?: boolean; pamphlet?: boolean; accounts?: boolean; more?: number }> {
-  try { const j = await (await fetch(clean(api) + "/", { cache: "no-store" })).json(); return { deploy: !!j?.deploy, account: j?.account, gh: !!j?.gh, ai: !!j?.ai, reviews: !!j?.reviews, pamphlet: (+j?.pamphlet || 0) >= 2, accounts: (+j?.accounts || 0) >= 2, more: +j?.more || 0 }; } catch { return { deploy: false }; }
+export async function cfDeployInfo(api: string): Promise<{ cfx?: boolean; deploy: boolean; account?: string; gh?: boolean; ai?: boolean; reviews?: boolean; pamphlet?: boolean; accounts?: boolean; more?: number }> {
+  try { const j = await (await fetch(clean(api) + "/", { cache: "no-store" })).json(); return { deploy: !!j?.deploy, account: j?.account, gh: !!j?.gh, ai: !!j?.ai, reviews: !!j?.reviews, cfx: !!j?.cfx, pamphlet: (+j?.pamphlet || 0) >= 2, accounts: (+j?.accounts || 0) >= 2, more: +j?.more || 0 }; } catch { return { deploy: false }; }
 }
 /** GitHub calls through the database (its kept token) as a signed-in owner of `scope`: a fetch-like Response. */
 export function dbGitHub(api: string, scope: string) {
@@ -213,3 +213,12 @@ export async function cfGoogleReviews(api: string, link: string, key: string): P
   if (j?.error) throw new Error(j.error);
   return j;
 }
+
+// ---------------------------------------------------------------- other Cloudflare accounts, kept on the database
+/** The Cloudflare accounts this Studio's database keeps tokens for (names and ids only; tokens are never read back). */
+export const cfxList = (api: string, studio: string) => cfCall<{ main: string | null; accounts: { id: string; name: string }[] }>(api, `/cfx?scope=${encodeURIComponent("studio:" + studio)}`);
+/** Keeps another account's token as a Worker secret on the database (checked with Cloudflare first). */
+export const cfxPut = (api: string, studio: string, token: string) => cfCall<{ ok: true; accounts: { id: string; name: string }[] }>(api, `/cfx/put?scope=${encodeURIComponent("studio:" + studio)}`, { method: "POST", body: JSON.stringify({ token }) });
+export const cfxDelete = (api: string, studio: string, account: string) => cfCall(api, `/cfx/delete?scope=${encodeURIComponent("studio:" + studio)}`, { method: "POST", body: JSON.stringify({ account }) });
+/** Lets the Studio's owners publish a site's Worker on that account from any device. */
+export const cfxSite = (api: string, studio: string, account: string, worker: string, site?: string) => cfCall(api, `/cfx/site?scope=${encodeURIComponent("studio:" + studio)}`, { method: "POST", body: JSON.stringify({ account, worker, ...(site ? { site } : {}) }) });

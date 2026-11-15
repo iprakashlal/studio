@@ -24,7 +24,7 @@ function otherAccounts(env: any): { id: string; name: string }[] {
   return out;
 }
 
-import { CFDB_SCHEMA, CFDB_VERSION } from "../src/lib/cfdbSchema";
+import { CFDB_SCHEMA, CFDB_VERSION, CFDB_WORKER_NAME } from "../src/lib/cfdbSchema";
 export const SCHEMA = CFDB_SCHEMA;
 
 const cors = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, content-type, x-sha", "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS", "Access-Control-Max-Age": "86400", "Access-Control-Expose-Headers": "x-sha, x-updated" };
@@ -309,7 +309,7 @@ export default {
     if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
     const u = new URL(req.url), p = u.pathname.replace(/\/+$/, "") || "/";
     try {
-      if (p === "/") return json({ ok: true, service: "site-studio-db", v: V, mail: !!(env.RESEND_API_KEY && env.MAIL_FROM), ...(env.CF_TOKEN && env.CF_ACCOUNT ? { deploy: true, account: env.CF_ACCOUNT } : {}), ...(env.GH_TOKEN ? { gh: true } : {}), ...(env.AI ? { ai: true, pamphlet: 2 } : {}), reviews: true, accounts: 2, ...(otherAccounts(env).length ? { more: otherAccounts(env).length } : {}) });
+      if (p === "/") return json({ ok: true, service: "site-studio-db", v: V, mail: !!(env.RESEND_API_KEY && env.MAIL_FROM), ...(env.CF_TOKEN && env.CF_ACCOUNT ? { deploy: true, account: env.CF_ACCOUNT } : {}), ...(env.GH_TOKEN ? { gh: true } : {}), ...(env.AI ? { ai: true, pamphlet: 2 } : {}), reviews: true, accounts: 2, cfx: true, ...(otherAccounts(env).length ? { more: otherAccounts(env).length } : {}) });
 
       // ---- sign in with an emailed code (members only)
       if (p === "/auth/code" && req.method === "POST") {
@@ -407,6 +407,56 @@ export default {
         const { paths } = (await req.json()) as any; const list = (Array.isArray(paths) ? paths : []).filter(pathOk).slice(0, 500);
         await env.DB.batch(list.flatMap((x: string) => [env.DB.prepare("delete from chunks where scope = ? and path = ?").bind(scope, x), env.DB.prepare("delete from files where scope = ? and path = ?").bind(scope, x)]));
         return json({ ok: true, n: list.length });
+      }
+      // ---- Other Cloudflare accounts, managed from any device (Settings → Sites and hosting accounts). Tokens go in as
+      // Worker secrets (CFX_<account>) through the main token kept here and are never read back; only names and ids.
+      if (p.startsWith("/cfx")) {
+        if (!scope.startsWith("studio:")) return err(400, "Only for the Studio's own scope.");
+        if (role !== "owner" && role !== "partner") return err(403, "Only the Studio's owners can change its hosting accounts.");
+        const keepSecret = async (name: string, text: string | null) => {
+          if (!env.CF_TOKEN || !env.CF_ACCOUNT) return err(409, "Turn on Publish from any device first (Settings), so the database can keep tokens itself.");
+          const base = `https://api.cloudflare.com/client/v4/accounts/${env.CF_ACCOUNT}/workers/scripts/${CFDB_WORKER_NAME}/secrets`;
+          const r = text == null
+            ? await fetch(base + "/" + name, { method: "DELETE", headers: { Authorization: "Bearer " + env.CF_TOKEN } })
+            : await fetch(base, { method: "PUT", headers: { Authorization: "Bearer " + env.CF_TOKEN, "Content-Type": "application/json" }, body: JSON.stringify({ name, text, type: "secret_text" }) });
+          if (!r.ok && !(text == null && r.status === 404)) return err(502, "Cloudflare didn't keep it: " + (((await r.json().catch(() => null)) as any)?.errors?.[0]?.message || r.status));
+          return null;
+        };
+        if (p === "/cfx" && req.method === "GET") return json({ main: env.CF_TOKEN && env.CF_ACCOUNT ? env.CF_ACCOUNT : null, accounts: otherAccounts(env) });
+        if (p === "/cfx/put" && req.method === "POST") {
+          const b = (await req.json()) as any, token = String(b.token || "").trim();
+          if (!/^[\w-]{20,200}$/.test(token)) return err(400, "Paste the account's Cloudflare API token.");
+          const r = await fetch("https://api.cloudflare.com/client/v4/accounts?per_page=50", { headers: { Authorization: "Bearer " + token } });
+          const list = ((await r.json().catch(() => null)) as any)?.result || [];
+          if (!r.ok || !list.length) return err(400, "Cloudflare didn't accept that token, or it can't see any account. Create it while signed in to that account.");
+          const kept: { id: string; name: string }[] = [];
+          for (const a of list) {
+            if (!/^[\w-]{1,64}$/.test(String(a.id)) || a.id === env.CF_ACCOUNT) continue;
+            const bad = await keepSecret("CFX_" + String(a.id).replace(/-/g, "_"), JSON.stringify({ t: token, n: String(a.name || "").slice(0, 80) }));
+            if (bad) return bad;
+            kept.push({ id: a.id, name: String(a.name || "") });
+          }
+          if (!kept.length) return err(400, "That token is for the Studio's own Cloudflare account, which is already used.");
+          return json({ ok: true, accounts: kept });
+        }
+        if (p === "/cfx/delete" && req.method === "POST") {
+          const a = String(((await req.json()) as any).account || "");
+          if (!/^[\w-]{1,64}$/.test(a)) return err(400, "Which account?");
+          return (await keepSecret("CFX_" + a.replace(/-/g, "_"), null)) || json({ ok: true });
+        }
+        if (p === "/cfx/site" && req.method === "POST") {
+          // Lets the Studio's owners publish this site's Worker on that account from any device.
+          const b = (await req.json()) as any, a = String(b.account || ""), w = String(b.worker || "");
+          if (!/^[\w-]{1,64}$/.test(a) || !/^[a-z0-9][a-z0-9-]{0,62}$/.test(w)) return err(400, "Which site?");
+          const main = a === env.CF_ACCOUNT;
+          if (!main && !otherToken(env, a)) return err(409, "That Cloudflare account isn't kept here yet: add it first.");
+          await env.DB.prepare("insert into workers (worker, scope) values (?, ?) on conflict (worker) do update set scope = excluded.scope").bind(main ? w : a + "/" + w + "@" + scope, scope).run();
+          // Its content in this database too: the site's own owners can publish it (and the Studio publishes it as the site).
+          const site = String(b.site || "");
+          if (/^[a-z0-9][a-z0-9-]{0,62}$/.test(site)) await env.DB.prepare("insert into workers (worker, scope) values (?, ?) on conflict (worker) do update set scope = excluded.scope").bind(main ? w : a + "/" + w + "@site:" + site, "site:" + site).run();
+          return json({ ok: true });
+        }
+        return err(404, "Not found.");
       }
       // ---- publish from any device: the calls a site's (or Studio's) pages need, made with the token kept here.
       // Only Workers registered to this scope (the `workers` table, written by the Studio with the token), only by

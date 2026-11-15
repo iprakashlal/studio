@@ -1,3 +1,4 @@
+import { SitesHostingCard } from "./SitesHostingCard";
 import { useEffect, useMemo, useState } from "react";
 import { isHosted } from "../lib/backend";
 import type { Session } from "../lib/auth";
@@ -135,6 +136,7 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
             <NetlifyAccount session={session} />
             <SetupAccounts session={session} index={index} />
           </section>
+          <SitesHostingCard session={session} studio={studio} index={index} onIndex={setIndex} />
           {isHosted(session)
             ? <section className="card flex flex-col gap-3 p-5" aria-label="Account"><h3 className="text-[15px] font-extrabold">Account</h3><p className="text-sm text-ink-300">Signed in as <b className="text-ink-100">{session.username}</b> with an email code.</p><button type="button" className="btn self-start" onClick={onSignOut}>Sign out</button></section>
             : <AccountPanel ns={NS} session={session} onUpdated={onSession} onSignOut={onSignOut} onForget={onForget} />}

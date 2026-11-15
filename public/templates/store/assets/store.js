@@ -120,6 +120,12 @@ const imgUrl = (img) => (!img ? "" : img.path ? ASSETS[img.path] || hostPhoto(im
 const basePath = location.pathname.replace(/[^/]*$/, "");
 let C = merge(DEFAULT, {});
 const PAGE = document.body.dataset.page || "home";
+/* Static pages (privacy, terms…): content.staticPages, shown by assets/pages.js at page.html?p=<name>. */
+const spSlug = (p) => String(p.slug || p.title || "").toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60) || p.id || "";
+const spList = () => (C.staticPages || []).filter((p) => p && p.show !== false && String(p.title || "").trim() && spSlug(p));
+const spHref = (p) => "page.html?p=" + encodeURIComponent(spSlug(p));
+const spCur = () => { try { return new URLSearchParams(location.search).get("p") || ""; } catch (e) { return ""; } };
+const spHere = () => (window.SitePages && window.SitePages.find(C, spCur(), PREVIEW)) || null;
 const PREVIEW = window.name === "cms-preview" && window.parent !== window;
 
 function money(v) {
@@ -359,7 +365,7 @@ function header() {
   return `${B.showAnnouncement && B.announcement ? `<div class="announce">${ml(B.announcement)}</div>` : ""}
   <header class="hdr"><div class="wrap" style="position:relative">
     <a class="brand" href="index.html"><span class="mark">${B.logo ? `<img src="${esc(imgUrl(B.logo))}" alt="">` : esc(initials)}</span><b>${esc(B.name)}</b></a>
-    <nav class="nav" id="nav" aria-label="Main"><a href="index.html"${cur("home")}>${esc(N.home)}</a><a href="shop.html"${cur("shop")}>${esc(N.shop)}</a>${swOn() && C.warranty.inNav ? `<a href="warranty.html"${cur("warranty")}>${esc(C.warranty.navLabel || "Warranty")}</a>` : ""}${N.showPortfolio ? `<a href="portfolio.html"${cur("portfolio")}>${esc(N.portfolio)}</a>` : ""}${ACCOUNTS() ? `<a href="account.html"${cur("account")}>${esc(N.account)}</a>` : ""}</nav>
+    <nav class="nav" id="nav" aria-label="Main"><a href="index.html"${cur("home")}>${esc(N.home)}</a><a href="shop.html"${cur("shop")}>${esc(N.shop)}</a>${swOn() && C.warranty.inNav ? `<a href="warranty.html"${cur("warranty")}>${esc(C.warranty.navLabel || "Warranty")}</a>` : ""}${N.showPortfolio ? `<a href="portfolio.html"${cur("portfolio")}>${esc(N.portfolio)}</a>` : ""}${spList().filter((p) => p.inNav).map((p) => `<a href="${esc(spHref(p))}"${PAGE === "page" && spSlug(p) === spSlug({ slug: spCur() }) ? ' aria-current="page"' : ""}>${esc(p.navLabel || p.title)}</a>`).join("")}${ACCOUNTS() ? `<a href="account.html"${cur("account")}>${esc(N.account)}</a>` : ""}</nav>
     <a class="cartlink" href="cart.html"${cur("cart")}><span class="t">${esc(N.cart)}</span><span class="n" data-cartcount>${cartCount()}</span></a>
     <button class="menubtn" type="button" aria-controls="nav" aria-expanded="false" aria-label="Menu">☰</button>
   </div></header>`;
@@ -369,7 +375,7 @@ function footer() {
   return `<footer class="ftr"><div class="wrap"><div class="cols">
     <div class="about"><b style="font-family:var(--fd);font-size:22px">${esc(C.brand.name)}</b><p>${ml(C.footer.text || C.brand.tagline)}</p>${ms.length ? `<div class="pm">${ms.map((m) => `<span>${esc(m.label)}</span>`).join("")}</div>` : ""}</div>
     <div><h4>${esc(C.nav.shop)}</h4><ul><li><a href="shop.html">${esc(lab("allProducts", "All products"))}</a></li>${C.categories.map((c) => `<li><a href="shop.html?c=${encodeURIComponent(c.id)}">${esc(c.name)}</a></li>`).join("")}</ul></div>
-    <div><h4>${esc(lab("help", "Help"))}</h4><ul>${swOn() && C.warranty.inFooter ? `<li><a href="warranty.html">${esc(C.warranty.navLabel || "Warranty")}</a></li>` : ""}${C.policies.map((p) => `<li><a href="policies.html#${esc(p.id || slugify(p.title))}">${esc(p.title)}</a></li>`).join("")}${C.nav.showPortfolio ? `<li><a href="portfolio.html">${esc(C.nav.portfolio)}</a></li>` : ""}</ul></div>
+    <div><h4>${esc(lab("help", "Help"))}</h4><ul>${swOn() && C.warranty.inFooter ? `<li><a href="warranty.html">${esc(C.warranty.navLabel || "Warranty")}</a></li>` : ""}${C.policies.map((p) => `<li><a href="policies.html#${esc(p.id || slugify(p.title))}">${esc(p.title)}</a></li>`).join("")}${spList().filter((p) => p.inFooter !== false).map((p) => `<li><a href="${esc(spHref(p))}">${esc(p.navLabel || p.title)}</a></li>`).join("")}${C.nav.showPortfolio ? `<li><a href="portfolio.html">${esc(C.nav.portfolio)}</a></li>` : ""}</ul></div>
     <div><h4>${esc(lab("contact", "Contact"))}</h4><ul>${K.email ? `<li><a href="mailto:${esc(K.email)}">${esc(K.email)}</a></li>` : ""}${K.phone ? `<li><a href="tel:${esc(digits(K.phone))}">${esc(K.phone)}</a></li>` : ""}${K.whatsapp ? `<li><a href="https://wa.me/${digits(K.whatsapp)}" target="_blank" rel="noopener">WhatsApp</a></li>` : ""}${safeUrl(K.instagram) ? `<li><a href="${esc(safeUrl(K.instagram))}" target="_blank" rel="noopener">Instagram</a></li>` : ""}${K.address ? `<li class="soft" style="white-space:pre-line">${esc(K.address)}</li>` : ""}</ul></div>
   </div><div class="base"><span>© ${new Date().getFullYear()} ${esc(C.brand.name)}</span><span>Prices in ${esc(C.settings.currency)}</span></div></div></footer>`;
 }
@@ -508,6 +514,11 @@ const PAGES = {
     const W = C.warranty;
     return `<section class="page-h"><div class="wrap"><h1>${esc(W.title)}</h1>${W.intro ? `<p class="soft" style="margin-top:8px">${esc(W.intro)}</p>` : ""}</div></section><section class="sec" style="padding-top:8px"><div class="wrap"><div id="sw-page" style="max-width:720px"></div></div></section>`;
   },
+  page() {
+    const S = window.SitePages; if (!S) return "";
+    const p = spHere(), o = { home: "index.html", homeLabel: C.nav.home || "Home", preview: PREVIEW };
+    return p ? S.article(p, o) : S.missing(o);
+  },
   policies() {
     return `<section class="page-h"><div class="wrap"><h1>Policies</h1></div></section><div class="wrap pol">${C.policies.map((p) => `<section id="${esc(p.id || slugify(p.title))}"><h2>${esc(p.title)}</h2><p>${esc(p.text)}</p></section>`).join("")}</div>`;
   },
@@ -629,7 +640,7 @@ const starRow = (n) => { const r = Math.max(0, Math.min(5, Math.round(+n || 0)))
 function render() {
   applyTheme(C.theme);
   if (!PREVIEW && PAGE === "warranty" && !swOn()) { location.replace("index.html"); return; }
-  if (PAGE !== "product") setTitle(PAGE === "home" ? "" : { shop: C.shop.title, cart: C.nav.cart, checkout: C.checkout.title, portfolio: C.nav.portfolio, policies: "Policies", account: C.accountPage.title, warranty: C.warranty.title }[PAGE] || "");
+  if (PAGE !== "product") setTitle(PAGE === "home" ? "" : { shop: C.shop.title, cart: C.nav.cart, checkout: C.checkout.title, portfolio: C.nav.portfolio, policies: "Policies", account: C.accountPage.title, warranty: C.warranty.title, page: (spHere() || {}).title }[PAGE] || "");
   applyMeta();
   const fn = PAGES[PAGE] || PAGES.home;
   $("#app").innerHTML = `<a class="skip" href="#main">Skip to content</a>${header()}<main id="main">${fn()}</main>${footer()}`;
@@ -667,6 +678,7 @@ function bind() {
   if (PAGE === "checkout") bindCheckout();
   if (PAGE === "account") bindAccount();
   if (PAGE === "warranty") swMount();
+  if (PAGE === "page" && window.SitePages) window.SitePages.after(spHere());
   if (location.hash && PAGE === "policies") { const el = document.getElementById(location.hash.slice(1)); if (el) el.scrollIntoView(); }
 }
 function bindShop() {
@@ -902,7 +914,7 @@ if (PREVIEW) {
     const d = e.data || {};
     if (d.type === "cms:content" && d.content && typeof d.content === "object") { ASSETS = d.assets || {}; const y = scrollY; C = merge(DEFAULT, d.content); render(); scrollTo(0, y); }
   });
-  window.parent.postMessage({ type: "cms:ready", page: location.pathname.split("/").pop() || "index.html" }, location.origin);
+  window.parent.postMessage({ type: "cms:ready", page: (location.pathname.split("/").pop() || "index.html") + (PAGE === "page" && spCur() ? "?p=" + encodeURIComponent(spCur()) : "") }, location.origin);
 }
 // The live site never shows the template's sample design: it waits for content.json (a returning visitor
 // gets the copy saved on the previous page at once), and only falls back to the defaults if loading fails.

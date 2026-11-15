@@ -3,12 +3,21 @@ import type { TemplateDef } from "../schema/types";
 import { STUDIO_BUILD } from "../build-info";
 import { contentIndex, locateField, matchImage, matchText } from "./locate";
 import { GOTO_EVENT } from "./Editor";
+import { pageSlug } from "../schema/common";
 
 const EDIT_KEY = "site-studio:click-to-edit";
 const editPref = () => { try { return localStorage.getItem(EDIT_KEY) !== "off"; } catch { return true; } };
 
 /** The template page for this Studio build, so a Studio update never previews a cached older template. */
-const pageUrl = (base: string, file: string, r = 0) => `${base}${file}?v=${STUDIO_BUILD.id}${r ? `&r=${r}` : ""}`;
+const pageUrl = (base: string, file: string, r = 0) => `${base}${file}${file.includes("?") ? "&" : "?"}v=${STUDIO_BUILD.id}${r ? `&r=${r}` : ""}`;
+/** The template's pages plus the site's static pages (content.staticPages), e.g. page.html?p=privacy. */
+function previewPages(tpl: TemplateDef, content: any): { file: string; label: string }[] {
+  const extra = (Array.isArray(content?.staticPages) ? content.staticPages : [])
+    .map((p: any) => ({ slug: pageSlug(p?.slug || p?.title) || p?.id, title: String(p?.title || "").replace(/\s+/g, " ").trim() }))
+    .filter((p: any) => p.slug && p.title);
+  const seen = new Set<string>();
+  return [...tpl.pages, ...extra.filter((p: any) => !seen.has(p.slug) && seen.add(p.slug)).map((p: any) => ({ file: `${tpl.pageFile || "page.html"}?p=${encodeURIComponent(p.slug)}`, label: `Page: ${p.title}` }))];
+}
 
 // The template pages run in an iframe named "cms-preview". They announce themselves with
 // { type: "cms:ready", page } and render whatever { type: "cms:content" } we send back.
@@ -66,6 +75,7 @@ export function Preview({ tpl, base, content, version, assets, editable = true }
     return () => ro.disconnect();
   }, []);
 
+  const pages = previewPages(tpl, content);
   const dw = DEVICES.find((d) => d.id === device)!.w;
   const scale = Math.min(1, (size.w - 24) / dw);
   const go = (file: string) => {
@@ -77,9 +87,10 @@ export function Preview({ tpl, base, content, version, assets, editable = true }
     <div className="flex min-h-0 flex-1 flex-col bg-ink-950">
       <div className="flex flex-wrap items-center gap-2 border-b border-ink-700 px-3 py-2">
         <span className="text-xs font-bold uppercase tracking-wider text-ink-400">Live preview</span>
-        {tpl.pages.length > 1 && (
-          <select aria-label="Preview page" className="input w-auto py-1.5 text-[13px]" value={page} onChange={(e) => go(e.target.value)}>
-            {tpl.pages.map((p) => <option key={p.file} value={p.file}>{p.label}</option>)}
+        {pages.length > 1 && (
+          <select aria-label="Preview page" className="input w-auto max-w-[260px] py-1.5 text-[13px]" value={page} onChange={(e) => go(e.target.value)}>
+            {!pages.some((p) => p.file === page) && <option value={page}>{page}</option>}
+            {pages.map((p) => <option key={p.file} value={p.file}>{p.label}</option>)}
           </select>
         )}
         <div className="ml-auto flex gap-1" role="group" aria-label="Device size">

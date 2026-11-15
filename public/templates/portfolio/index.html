@@ -969,6 +969,7 @@ html[data-hero-art=none] .stage-wrap #stage:not([data-gfx]){display:none}
 <script src="assets/badge.js"></script><script src="assets/fx.js"></script>
 <script src="assets/motifs.js"></script>
 <script src="assets/layouts.js"></script>
+<script src="assets/pages.js"></script>
 <script>
 (()=>{
 "use strict";
@@ -1455,14 +1456,28 @@ function renderSite(c){
   {const one=x=>String(x||"").replace(/\s*\n\s*/g," ").trim();document.title=one(c.seo.title||c.brand.logoText);
    if(!PREVIEW){const set=(a,k,v)=>{let m=document.head.querySelector(`meta[${a}="${k}"]`);if(!v){if(m)m.remove();return}if(!m){m=document.createElement("meta");m.setAttribute(a,k);document.head.appendChild(m)}m.setAttribute("content",v)};
     const d=one(c.seo.description);set("name","description",d);set("property","og:title",document.title);set("property","og:description",d);set("name","theme-color",/^#[0-9a-f]{3,8}$/i.test(c.seo.themeColor||"")?c.seo.themeColor:"")}}
+  if(spPage(c))return;
   const K=KIT!=="classic"&&window.SiteLayouts&&SiteLayouts.kits[KIT];
   if(K){renderKit(c,K)}else{
   siteRoot.innerHTML=`<div id="siteInner">${siteHTML(c)}</div>`;
   initSite(c);}
-  heroSlides(c);
+  heroSlides(c);spLinks(c);
   if(window.SiteFX)try{window.SiteFX.init({root:$("#siteInner"),brand:c.theme.introTitle||c.brand.logoText,badge:c.poweredBy})}catch(e){}
   setIcon(c);fitLines();
 }
+/* static pages (assets/pages.js): ./?p=<name> shows a reading page (privacy, terms…) instead of the portfolio */
+function spPage(c){
+  const S=window.SitePages,slug=S&&S.here();if(!slug)return false;
+  const p=S.find(c,slug,PREVIEW),name=c.brand.logoText||"";
+  if(p){const one=x=>String(x||"").replace(/\s*\n\s*/g," ").trim();document.title=one((c.seo.titlePattern||"{page} · {site}").replace(/\{page\}/g,one(p.title)).replace(/\{site\}/g,one(name)))}
+  const links=S.list(c).filter(x=>x.inFooter!==false);
+  siteRoot.innerHTML=`<div id="siteInner"><header class="sp-top"><a href="./">${esc(name)}</a><a class="sp-back" href="./">← ${esc((c.labels&&c.labels.backHome)||"Back")}</a></header><main id="main">${p?S.article(p,{preview:PREVIEW}):S.missing({home:"./"})}</main>${links.length?`<nav class="sp-links" aria-label="Pages">${links.map(x=>`<a href="?p=${encodeURIComponent(S.slug(x))}">${esc(x.navLabel||x.title)}</a>`).join("")}</nav>`:""}<footer class="sp-links"><span>${esc(c.contact.footerLeft||"")}</span></footer></div>`;
+  S.after(p);setIcon(c);return true}
+/* links to the static pages under every layout's footer */
+function spLinks(c){const S=window.SitePages;if(!S)return;const links=S.list(c).filter(x=>x.inFooter!==false);if(!links.length)return;
+  const n=document.createElement("nav");n.className="sp-links";n.setAttribute("aria-label","Pages");S.css();
+  n.innerHTML=links.map(x=>`<a href="?p=${encodeURIComponent(S.slug(x))}">${esc(x.navLabel||x.title)}</a>`).join("");
+  (document.getElementById("siteInner")||siteRoot).appendChild(n)}
 /* hero background slides (assets/slides.js, loaded when switched on) */
 let slP,slGen=0;
 function heroSlides(c){const S=c.hero&&c.hero.slides,g=++slGen,host=document.querySelector("#hero,.kp-hero,.ks-hero,.kt-hero");
@@ -1654,7 +1669,7 @@ if(PREVIEW){
     const d=e.data||{};
     if(d.type==="cms:content"&&d.content&&typeof d.content==="object"){ASSETS=d.assets||{};const y=scrollY;saved=merge(DEFAULT,d.content);renderSite(saved);scrollTo(0,y)}
   });
-  window.parent.postMessage({type:"cms:ready",page:"index.html"},location.origin);
+  window.parent.postMessage({type:"cms:ready",page:"index.html"+(window.SitePages&&SitePages.here()?"?p="+encodeURIComponent(SitePages.here()):"")},location.origin);
 }
 if(PREVIEW)renderSite(saved);
 else(async()=>{let got=null;try{const ac=new AbortController(),tm=setTimeout(()=>ac.abort(),5000);if(HOST&&HOST.api){const r=await fetch(HOST.api+"/p/"+encodeURIComponent(HOST.site)+"/content.json",{cache:"no-store",signal:ac.signal});if(r.ok)got=await r.json()}else if(HOST){const r=await fetch(HOST.db+"/rest/v1/site_content?select=content&site=eq."+encodeURIComponent(HOST.site),{cache:"no-store",signal:ac.signal,headers:{apikey:HOST.key,...(/^sb_/.test(HOST.key)?{}:{Authorization:"Bearer "+HOST.key})}});if(r.ok){const j=await r.json();if(j&&j[0]&&j[0].content)got=j[0].content}}}catch(e){}

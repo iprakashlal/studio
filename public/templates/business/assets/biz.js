@@ -196,7 +196,12 @@ const imgUrl = (img) => (!img ? "" : img.path ? ASSETS[img.path] || hostPhoto(im
 let C = merge(DEFAULT, {});
 const PAGE = document.body.dataset.page || "home";
 const PREVIEW = window.name === "cms-preview" && window.parent !== window;
-const PAGES = { home: "index.html", services: "services.html", products: "products.html", product: "product.html", work: "work.html", about: "about.html", contact: "contact.html", warranty: "warranty.html" };
+const PAGES = { home: "index.html", services: "services.html", products: "products.html", product: "product.html", work: "work.html", about: "about.html", contact: "contact.html", warranty: "warranty.html", page: "page.html" };
+/* Static pages (privacy, terms…): content.staticPages, shown by assets/pages.js at page.html?p=<name>. */
+const spSlug = (p) => String(p.slug || p.title || "").toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60) || p.id || "";
+const spList = () => (C.staticPages || []).filter((p) => p && p.show !== false && String(p.title || "").trim() && spSlug(p));
+const spHref = (p) => PAGES.page + "?p=" + encodeURIComponent(spSlug(p));
+const spCur = () => { try { return new URLSearchParams(location.search).get("p") || ""; } catch (e) { return ""; } };
 /** Which sections each page shows when the site has several pages (home follows the section order). */
 const PAGE_SECTIONS = {
   home: ["hero", "clients", "services", "products", "stats", "work", "testimonials", "cta"],
@@ -252,7 +257,7 @@ function applyTheme(t) {
 function setTitle() {
   const one = (x) => String(x || "").replace(/\s*\n\s*/g, " ").trim();
   const pr = PAGE === "product" ? curProduct() : null;
-  const label = pr ? pr.name : PAGE === "products" ? (C.site.pageLabels || {}).products || C.products.title || "Products" : PAGE === "home" || !multi() ? "" : PAGE === "warranty" ? C.warranty.navLabel || "Warranty" : (C.site.pageLabels || {})[PAGE] || "";
+  const label = pr ? pr.name : PAGE === "products" ? (C.site.pageLabels || {}).products || C.products.title || "Products" : PAGE === "home" || !multi() ? "" : PAGE === "warranty" ? C.warranty.navLabel || "Warranty" : PAGE === "page" ? ((window.SitePages && window.SitePages.find(C, spCur(), PREVIEW)) || {}).title || "" : (C.site.pageLabels || {})[PAGE] || "";
   document.title = !label ? one(C.seo.title || C.brand.name) : one((C.seo.titlePattern || "{page} · {site}").replace(/\{page\}/g, label).replace(/\{site\}/g, one(C.brand.name)));
 }
 
@@ -446,6 +451,7 @@ function navHTML() {
     ? mpages().map((p) => ({ label: C.site.pageLabels[p] || p, url: PAGES[p], on: PAGE === p || (p === "products" && PAGE === "product") }))
     : C.sections.filter((s) => s.show !== false && s.inNav && RENDER[s.id]).map((s) => ({ label: s.label, url: AT + "#" + s.id }));
   if (swOn() && C.warranty.inNav) items.push({ label: C.warranty.navLabel || "Warranty", url: multi() ? PAGES.warranty : "#warranty", on: PAGE === "warranty" });
+  spList().filter((p) => p.inNav).forEach((p) => items.push({ label: p.navLabel || p.title, url: spHref(p), on: PAGE === "page" && spSlug(p) === spSlug({ slug: spCur() }) }));
   return `<header class="nav" id="top"><div class="wrap nav-in">
       <a class="brand" href="${multi() || PAGE !== "home" ? PAGES.home : "#top"}">${logo ? `<img class="logo" src="${esc(logo)}" alt="">` : `<span class="logo mark">${esc(initials(B.name))}</span>`}${B.showName !== false ? `<span class="bn">${esc(B.name)}</span>` : ""}</a>
       <nav class="links" aria-label="Main">${items.map((i) => `<a href="${esc(i.url)}"${i.on ? ' aria-current="page"' : ""}>${esc(i.label)}</a>`).join("")}</nav>
@@ -462,11 +468,17 @@ function footerHTML() {
   const F = C.footer, B = C.brand, K = C.contact;
   const cols = multi() ? mpages().map((p) => `<a href="${PAGES[p]}">${esc(C.site.pageLabels[p] || p)}</a>`) : C.sections.filter((s) => s.show !== false && s.inNav && RENDER[s.id]).map((s) => `<a href="${AT}#${s.id}">${esc(s.label)}</a>`);
   if (swOn() && C.warranty.inFooter) cols.push(`<a href="${multi() ? PAGES.warranty : "#warranty"}">${esc(C.warranty.navLabel || "Warranty")}</a>`);
+  spList().filter((p) => p.inFooter !== false).forEach((p) => cols.push(`<a href="${esc(spHref(p))}">${esc(p.navLabel || p.title)}</a>`));
   return `<footer class="foot" id="footer"><div class="wrap"><div class="foot-grid">
       <div><a class="brand" href="${multi() || PAGE !== "home" ? PAGES.home : "#top"}">${imgUrl(B.logo) ? `<img class="logo" src="${esc(imgUrl(B.logo))}" alt="">` : `<span class="logo mark">${esc(initials(B.name))}</span>`}<span class="bn">${esc(B.name)}</span></a><p>${rich(F.text)}</p></div>
       <nav aria-label="Footer">${cols.join("")}</nav>
       <div class="fc">${K.email ? `<a href="mailto:${esc(K.email)}">${esc(K.email)}</a>` : ""}${K.phone ? `<a href="tel:${esc(K.phone.replace(/[^\d+]/g, ""))}">${esc(K.phone)}</a>` : ""}${K.address ? `<span>${ml(K.address)}</span>` : ""}</div></div>
     <div class="foot-legal"><span>${esc(String(F.legal || "").replace(/\{year\}/g, new Date().getFullYear()))}</span><span>${(F.links || []).filter((l) => l.label).map((l) => safeUrl(l.url) ? `<a href="${esc(safeUrl(l.url))}">${esc(l.label)}</a>` : `<span>${esc(l.label)}</span>`).join("")}</span></div></div></footer>`;
+}
+function staticPage() {
+  const S = window.SitePages; if (!S) return "";
+  const p = S.find(C, spCur(), PREVIEW), o = { home: PAGES.home, homeLabel: C.site.pageLabels.home || "Home", preview: PREVIEW };
+  return p ? S.article(p, o) : S.missing(o);
 }
 function warrantyPage() {
   const W = C.warranty;
@@ -483,15 +495,16 @@ const swOpen = () => SW().then((w) => w.open(swOpts())).catch(() => {});
 const swMount = () => { const el = document.getElementById("sw-page"); if (el) SW().then((w) => w.mount(el, swOpts())).catch(() => {}); };
 function render() {
   // A several-page link opened while the site is one page goes to that section.
-  if (!PREVIEW && !multi() && !["home", "products", "product"].includes(PAGE)) { location.replace(PAGES.home + "#" + (PAGE === "work" ? "work" : PAGE)); return; }
+  if (!PREVIEW && !multi() && !["home", "products", "product", "page"].includes(PAGE)) { location.replace(PAGES.home + "#" + (PAGE === "work" ? "work" : PAGE)); return; }
   applyTheme(C.theme); setTitle();
   if (!PREVIEW && PAGE === "warranty" && !swOn()) { location.replace(PAGES.home); return; }
-  const special = { warranty: warrantyPage, products: productsPage, product: productPage }[PAGE];
+  const special = { warranty: warrantyPage, products: productsPage, product: productPage, page: staticPage }[PAGE];
   const ids = special ? [] : multi() ? (PAGE === "home" ? C.sections.map((s) => s.id).filter((id) => PAGE_SECTIONS.home.includes(id)) : PAGE_SECTIONS[PAGE]) : C.sections.map((s) => s.id);
   const body = special ? special() : ids.filter((id) => RENDER[id] && shown(id)).map((id) => RENDER[id]()).join("");
   $("#app").innerHTML = `<a class="skip" href="#main">Skip to content</a>${navHTML()}<main id="main">${multi() && !special && PAGE !== "home" ? pageHead() : ""}${body}</main>${footerHTML()}`;
   bind();
   if (PAGE === "warranty") swMount();
+  if (PAGE === "page" && window.SitePages) window.SitePages.after(window.SitePages.find(C, spCur(), PREVIEW));
   slides();
   if (window.SiteFX) try { window.SiteFX.init({ root: $("#app"), brand: C.theme.introTitle || C.brand.name, badge: C.poweredBy }); } catch (e) {}
 }
@@ -603,7 +616,7 @@ if (PREVIEW) {
     const d = e.data || {};
     if (d.type === "cms:content" && d.content && typeof d.content === "object") { ASSETS = d.assets || {}; const y = scrollY; C = merge(DEFAULT, d.content); render(); scrollTo(0, y); }
   });
-  window.parent.postMessage({ type: "cms:ready", page: location.pathname.split("/").pop() || "index.html" }, location.origin);
+  window.parent.postMessage({ type: "cms:ready", page: (location.pathname.split("/").pop() || "index.html") + (PAGE === "page" && spCur() ? "?p=" + encodeURIComponent(spCur()) : "") }, location.origin);
   render();
 } else {
   const CKEY = "site-content:" + location.pathname.replace(/[^/]*$/, "");

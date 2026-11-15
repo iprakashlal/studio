@@ -26,7 +26,7 @@ export function Editor({ tpl, draft, version, onChange, upload, img, extras = []
 }) {
   tpl.prepare?.(draft);
   const [cat, setCat] = useState(tpl.schema[0].id);
-  const shown = tpl.schema.filter((c) => !c.showIf || c.showIf(draft));
+  const shown = tpl.schema.filter((c) => !c.showIf || c.showIf(draft)).map((c) => (site && c.site ? { ...c, label: c.site.label || c.label, group: c.site.group || c.group } : c));
   const nav = applyMenu(shown, extras, menu);
   /** The menu entry showing a section (itself, or the one it was combined into). */
   const entryOf = (id: string) => nav.find((e) => e.from.includes(id));

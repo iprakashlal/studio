@@ -1,6 +1,6 @@
 import type { Category, Field, TemplateDef } from "./types";
 import { AXES, BODY_FONTS, DISPLAY_FONTS, KIT_AXIS, LINE_BREAKS_AXIS, PORTFOLIO_AXES, THEMES, onColor, portfolioThemeValues } from "../themes/catalog";
-import { adminCategory, heroSlidesCard, prepareSlides, seoCategory } from "./common";
+import { adminCategory, staticPagesCategory, heroSlidesCard, prepareSlides, seoCategory } from "./common";
 import VELOCITY_DEFAULTS from "./velocity-defaults.json";
 import { NAV_MODE_FIELD, NAV_MODE_NOTE, themeCards } from "../themes/fields";
 
@@ -202,6 +202,7 @@ const schema: Category[] = [
     ],
   },
   seoCategory(false),
+  staticPagesCategory("portfolio"),
   adminCategory(),
 ];
 
@@ -218,6 +219,7 @@ export const portfolioTemplate: TemplateDef = {
   kind: "Single page",
   description: "Geometric 3D portfolio: hero with 3D shapes, bento about, skills cube, stacked work deck, projects, learning and contact.",
   pages: [{ file: "index.html", label: "Home" }],
+  pageFile: "index.html",
   schema,
   colorKeys: [{ key: "c1", label: "Primary" }, { key: "c2", label: "Secondary" }, { key: "c3", label: "Tertiary" }, { key: "text", label: "Text" }, { key: "surface", label: "Surface" }, { key: "deep", label: "Deep" }, { key: "glow", label: "Glow" }],
   themePath: "theme",

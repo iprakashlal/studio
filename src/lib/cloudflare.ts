@@ -60,6 +60,10 @@ export class Cloudflare {
   }
   accounts() { return this.api<CfAccount[]>("GET", "/accounts?per_page=50"); }
   /** The account's workers.dev name, creating it when the account doesn't have one yet. */
+  /** The account's workers.dev name, or null when it has none (doesn't create one). */
+  async subdomainOf(account: string): Promise<string | null> {
+    try { return (await this.api<{ subdomain: string }>("GET", `/accounts/${account}/workers/subdomain`))?.subdomain || null; } catch { return null; }
+  }
   async subdomain(account: string, wish: string): Promise<string> {
     try { const r = await this.api<{ subdomain: string }>("GET", `/accounts/${account}/workers/subdomain`); if (r?.subdomain) return r.subdomain; } catch (e: any) { if (!(e instanceof CfError) || (e.status !== 404 && e.code !== 10007)) throw e; }
     const base = wish.toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "studio";

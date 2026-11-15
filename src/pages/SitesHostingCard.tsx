@@ -13,6 +13,9 @@ import { explain } from "../lib/repo";
 import { Cloudflare } from "../lib/cloudflare";
 import { getHelper } from "../lib/relay";
 import { useConfirm, useToast } from "../ui/kit";
+import { useCfAccount } from "./CfPicker";
+import { Netlify } from "../lib/netlify";
+import { netlifyToken } from "../lib/hosting";
 
 type Acc = { id: string; name: string };
 
@@ -103,16 +106,24 @@ export function SitesHostingCard({ session, studio, index, onIndex }: { session:
     setPick((m) => { const n = { ...m }; delete n[p.id]; return n; });
     toast(`${p.name} is live on ${nameOf(account)}.`);
   });
-  /** Updates the Studio's database to this build (keeps its sign-ins, data and kept tokens). Needs the main token here. */
-  const [canUpdate, setCanUpdate] = useState(false);
-  useEffect(() => { cfAccountVault.load(session.token).then((v) => setCanUpdate(!!v?.token && !!v.setup && !!db && v.setup.api === db.api)).catch(() => {}); }, [session.token, db?.api]);
+  /** Updates the Studio's database to this build (keeps its sign-ins, data and kept tokens): connect the Studio's own
+   *  Cloudflare account right here (a token already saved on this device connects by itself), then one click. */
+  const [nf, setNf] = useState<Netlify | null | undefined>(undefined);
+  useEffect(() => { netlifyToken.load(session.token).then((t) => setNf(t ? new Netlify(t.token) : null)).catch(() => setNf(null)); }, [session.token]);
+  const cfAcc = useCfAccount(session.token, nf, true);
+  const dbHost = db ? db.api.replace(/^https:\/\//, "").replace(/\/+$/, "") : "";
   const updateDb = () => run("update", async () => {
-    const v = await cfAccountVault.load(session.token); if (!v?.token || !v.setup) throw new Error("Open this on the device that has your Cloudflare token.");
-    const relay = await getHelper(session.token, null), cf = new Cloudflare(relay, v.token), acc = (await cf.accounts()).find((a) => a.id === v.setup!.account);
-    if (!acc) throw new Error("The Cloudflare token on this device can't see the Studio's account.");
-    const deploy = (await cfDeployInfo(v.setup.api)).deploy;
-    const setup = await setupCfDb(relay, v.token, { account: acc, resendKey: "", mailFrom: v.mailFrom || "", name: "Picaffectz Studio", existing: v.setup, requireMail: false, ...(deploy ? { deployToken: v.token } : {}) }, (x) => setBusy("update:" + x));
-    await cfAccountVault.save({ ...v, setup }, session.token); toast("Your Studio's database is up to date."); await load();
+    if (!db) return;
+    const say = (x: string) => setBusy("update:" + x);
+    const { relay, cf, account, token } = await cfAcc.client(say);
+    // Only the account that runs this Studio's database (its workers.dev name is in the database's address).
+    const sub = await cf.subdomainOf(account.id);
+    if (!sub || `picaffectz-db.${sub}.workers.dev` !== dbHost) throw new Error(`This token is for ${account.name}, but your Studio's database (${dbHost}) is on another Cloudflare account. Connect that account's token here.`);
+    const v = await cfAccountVault.load(session.token);
+    const deploy = (await cfDeployInfo(db.api)).deploy;
+    const setup = await setupCfDb(relay, token, { account, resendKey: "", mailFrom: v?.mailFrom || "", name: "Picaffectz Studio", existing: v?.setup && v.setup.api === db.api ? v.setup : null, requireMail: false, ...(deploy ? { deployToken: token } : {}) }, say);
+    await cfAccountVault.save({ ...(v || {}), token, account: account.id, setup }, session.token);
+    toast("Your Studio's database is up to date."); await load();
   });
   /** Lets every device publish this site (registers it on the database for its account). */
   const shareSite = (p: ProjectMeta) => run("share:" + p.id, async () => {
@@ -129,8 +140,9 @@ export function SitesHostingCard({ session, studio, index, onIndex }: { session:
         : !info ? <p className="text-sm text-ink-400">Loading…</p>
         : !info.signed ? <p className="text-sm text-amber-200">Sign in to your Studio's database on this device to manage its hosting accounts.</p>
         : !info.cfx || !info.imp ? <div className="flex flex-col gap-2 text-sm"><p className="text-amber-200">Your Studio's database is from an older build. Update it once (your data, sign-ins and kept tokens stay).</p>
-          {canUpdate ? <button type="button" className="btn btn-pri btn-sm self-start" disabled={!!busy} onClick={updateDb}>{busy.startsWith("update") ? (busy.split(":").slice(1).join(":") || "Updating") + "…" : "Update the database"}</button>
-            : <p className="text-ink-400">Open Settings on the device that has your Cloudflare token (the one you set the database up with) and press Update the database there.</p>}</div>
+          <p className="text-ink-400">Connect the Cloudflare account that runs it (<span className="font-mono">{dbHost}</span>), then press Update. A token already saved on this device connects by itself.</p>
+          {cfAcc.ui}
+          <button type="button" className="btn btn-pri btn-sm self-start" disabled={!!busy || !cfAcc.ready} onClick={updateDb}>{busy.startsWith("update") ? (busy.split(":").slice(1).join(":") || "Updating") + "…" : "Update the database"}</button></div>
         : <>
           <div className="flex flex-col gap-2 rounded-lg border border-ink-700 p-3 text-[13px]" aria-label="Cloudflare accounts on the database">
             <b className="text-sm">Cloudflare accounts</b>

@@ -13,7 +13,6 @@ import { explain } from "../lib/repo";
 import { Cloudflare } from "../lib/cloudflare";
 import { getHelper } from "../lib/relay";
 import { useConfirm, useToast } from "../ui/kit";
-import { moveSiteIntoStudioDb } from "../lib/movesite";
 
 type Acc = { id: string; name: string };
 
@@ -35,7 +34,7 @@ export function SitesHostingCard({ session, studio, index, onIndex }: { session:
     setDb({ api, studio: sid });
     const d = await cfDeployInfo(api), signed = !!(await cfSignedIn(api));
     const l = signed && d.cfx ? await cfxList(api, sid).catch(() => null) : null;
-    setInfo({ cfx: !!d.cfx, imp: !!d.cfxImport, main: l?.main ?? (d.deploy ? d.account || null : null), accounts: l?.accounts || [], signed, gh: !!d.gh });
+    setInfo({ cfx: !!d.cfx, imp: !!d.bridge, main: l?.main ?? (d.deploy ? d.account || null : null), accounts: l?.accounts || [], signed, gh: !!d.gh });
     if (v?.account && v.account === (l?.main ?? d.account)) {
       // The main account's name, from this device's token (only shown here).
       try { const acc = await new Cloudflare(await getHelper(session.token, null), v.token).accounts(); setMainName(acc.find((a) => a.id === v.account)?.name || ""); } catch { /* name stays generic */ }
@@ -52,6 +51,14 @@ export function SitesHostingCard({ session, studio, index, onIndex }: { session:
     return !!h.account && accounts.some((a) => a.id === h.account);
   };
 
+  /** Lets every device publish each site on a kept account (idempotent; done when an account is added or the list loads). */
+  const registerAll = async () => {
+    if (!db) return;
+    const l = await cfxList(db.api, db.studio).catch(() => null); if (!l) return;
+    const kept = new Set([...(l.main ? [l.main] : []), ...l.accounts.map((a) => a.id)]);
+    for (const p of sites) { const h = p.host; if (h?.kind === "cloudflare" && h.account && kept.has(h.account)) await cfxSite(db.api, db.studio, h.account, h.siteId, h.cf && h.cf.api.replace(/\/+$/, "") === db.api.replace(/\/+$/, "") ? h.cf.site : undefined).catch(() => null); }
+  };
+  useEffect(() => { if (info?.imp && info.signed) registerAll(); }, [info?.imp, info?.signed, sites.length]);
   /** Keeps an account's token on the database: through the database itself, else with this device's main token. */
   const keep = (token: string) => run("keep", async () => {
     if (!db) return;
@@ -65,6 +72,7 @@ export function SitesHostingCard({ session, studio, index, onIndex }: { session:
       for (const a of others) await main.putSecret(v.setup.account, CFDB_WORKER, "CFX_" + a.id.replace(/-/g, "_"), JSON.stringify({ t: token.trim(), n: a.name }));
       toast(`Kept on your Studio's database: ${others.map((a) => a.name).join(", ")}.`);
     }
+    await registerAll();
     setAddTok(""); setReplaceFor(null); await load();
   });
   const forget = (a: Acc) => run("forget:" + a.id, async () => {
@@ -105,13 +113,6 @@ export function SitesHostingCard({ session, studio, index, onIndex }: { session:
     const deploy = (await cfDeployInfo(v.setup.api)).deploy;
     const setup = await setupCfDb(relay, v.token, { account: acc, resendKey: "", mailFrom: v.mailFrom || "", name: "Picaffectz Studio", existing: v.setup, requireMail: false, ...(deploy ? { deployToken: v.token } : {}) }, (x) => setBusy("update:" + x));
     await cfAccountVault.save({ ...v, setup }, session.token); toast("Your Studio's database is up to date."); await load();
-  });
-  /** Moves a site's data from another account's database into the Studio's (done by the database: no sign-in). */
-  const moveData = (p: ProjectMeta) => run("site:" + p.id, async () => {
-    if (!db) return;
-    const r = await moveSiteIntoStudioDb({ studio, project: p, db, token: session.token, step: (d) => setBusy("site:" + p.id + ":" + d) });
-    onIndex(r.index);
-    toast(`${p.name}: ${r.files} file${r.files === 1 ? "" : "s"}, ${r.editors} editor${r.editors === 1 ? "" : "s"} and ${r.enquiries} enquir${r.enquiries === 1 ? "y" : "ies"} moved into your Studio's database. It now works on every device.${r.missing.length ? ` Not found: ${r.missing.join(", ")}.` : ""}`);
   });
   /** Lets every device publish this site (registers it on the database for its account). */
   const shareSite = (p: ProjectMeta) => run("share:" + p.id, async () => {
@@ -172,10 +173,11 @@ export function SitesHostingCard({ session, studio, index, onIndex }: { session:
                       {chosen && chosen === h!.account && accounts.some((a) => a.id === chosen) && <button type="button" className="text-brand-300 underline" disabled={!!busy} onClick={() => shareSite(p)}>Allow every device</button>}
                     </div>
                   )}
-                  {cf && <span className="text-ink-400">Data: {otherDb ? <>another database (<span className="font-mono">{h!.cf!.api.replace(/^https:\/\//, "")}</span>): each browser has to sign in to it separately, so other devices can't reach it.</> : h!.cf ? "your Studio's database" : "Supabase"}</span>}
-                  {cf && otherDb && (accounts.some((a) => a.id === h!.account) && info.imp
-                    ? <button type="button" className="btn btn-pri btn-sm self-start" disabled={!!busy} onClick={() => moveData(p)}>{b ? (busy.split(":").slice(2).join(":") || "Moving") + "…" : "Move its data into my Studio's database"}</button>
-                    : <span className="text-amber-200">{!info.imp ? "Update your Studio's database first (see above)." : "Add its Cloudflare account above first, then move its data here in one click."}</span>)}
+                  {cf && <span className="text-ink-400">Data: {otherDb
+                    ? (accounts.some((a) => a.id === h!.account)
+                      ? <>its own database on {nameOf(h!.account)} (<span className="font-mono">{h!.cf!.api.replace(/^https:\/\//, "")}</span>), reached from every device through your Studio. Nothing to sign in to separately.</>
+                      : <span className="text-amber-200">its own database on another Cloudflare account. Add that account above, so every device reaches it (its data stays where it is).</span>)
+                    : h!.cf ? "your Studio's database" : "Supabase"}</span>}
                   {h?.kind === "netlify" && <span className="text-ink-400">Netlify publishing uses the Netlify token on each device (Hosting accounts above). Data: {h.cf ? "your Studio's database" : "Supabase"}.</span>}
                   {!h && p.publish && <span className="text-ink-400">GitHub repository {p.publish.owner}/{p.publish.repo}{info.gh ? ", published through the GitHub token kept on the database." : "; publishing uses the GitHub token on each device (or keep it on the database with Publish from any device)."}</span>}
                 </li>

@@ -309,7 +309,7 @@ export default {
     if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
     const u = new URL(req.url), p = u.pathname.replace(/\/+$/, "") || "/";
     try {
-      if (p === "/") return json({ ok: true, service: "site-studio-db", v: V, mail: !!(env.RESEND_API_KEY && env.MAIL_FROM), ...(env.CF_TOKEN && env.CF_ACCOUNT ? { deploy: true, account: env.CF_ACCOUNT } : {}), ...(env.GH_TOKEN ? { gh: true } : {}), ...(env.AI ? { ai: true, pamphlet: 2 } : {}), reviews: true, accounts: 2, cfx: 2, ...(otherAccounts(env).length ? { more: otherAccounts(env).length } : {}) });
+      if (p === "/") return json({ ok: true, service: "site-studio-db", v: V, mail: !!(env.RESEND_API_KEY && env.MAIL_FROM), ...(env.CF_TOKEN && env.CF_ACCOUNT ? { deploy: true, account: env.CF_ACCOUNT } : {}), ...(env.GH_TOKEN ? { gh: true } : {}), ...(env.AI ? { ai: true, pamphlet: 2 } : {}), reviews: true, accounts: 2, cfx: 3, ...(otherAccounts(env).length ? { more: otherAccounts(env).length } : {}) });
 
       // ---- sign in with an emailed code (members only)
       if (p === "/auth/code" && req.method === "POST") {
@@ -455,6 +455,80 @@ export default {
           const site = String(b.site || "");
           if (/^[a-z0-9][a-z0-9-]{0,62}$/.test(site)) await env.DB.prepare("insert into workers (worker, scope) values (?, ?) on conflict (worker) do update set scope = excluded.scope").bind(main ? w : a + "/" + w + "@site:" + site, "site:" + site).run();
           return json({ ok: true });
+        }
+        if (p === "/cfx/db" && req.method === "POST") {
+          // A site's own database on another Cloudflare account, reached through this one: its files read and written
+          // with Cloudflare's D1 API and that account's kept token. The site's data stays in its own database; the
+          // Studio's owners reach it from any device without signing in to it separately.
+          const b = (await req.json()) as any, a = String(b.account || ""), site = String(b.site || ""), op = String(b.op || "");
+          if (!/^[\w-]{1,64}$/.test(a) || !/^[a-z0-9][a-z0-9-]{0,62}$/.test(site)) return err(400, "Which site?");
+          const tok = otherToken(env, a) || (a === env.CF_ACCOUNT ? env.CF_TOKEN || "" : "");
+          if (!tok) return err(409, "That Cloudflare account isn't kept here yet: add it in Settings → Sites and hosting accounts.");
+          const cfa = async (path: string, init: any = {}) => {
+            const r = await fetch("https://api.cloudflare.com/client/v4/accounts/" + a + path, { ...init, headers: { Authorization: "Bearer " + tok, "Content-Type": "application/json" } });
+            const j: any = await r.json().catch(() => null);
+            if (!r.ok || !j?.success) { const e: any = new Error(j?.errors?.[0]?.message || "Cloudflare answered " + r.status); e.cf = true; throw e; }
+            return j.result;
+          };
+          let dbId = String(b.db || "");
+          const q = async (sql: string, params: unknown[] = []) => ((await cfa(`/d1/database/${dbId}/query`, { method: "POST", body: JSON.stringify({ sql, params }) }))?.[0]?.results || []) as any[];
+          const bytesOf = (v: any): Uint8Array => Array.isArray(v) ? new Uint8Array(v) : typeof v === "string" ? Uint8Array.from(atob(v), (c) => c.charCodeAt(0)) : v && Array.isArray(v.data) ? new Uint8Array(v.data) : new Uint8Array(0);
+          const hex = (u: Uint8Array) => { let s = ""; for (let i = 0; i < u.length; i++) s += (u[i] < 16 ? "0" : "") + u[i].toString(16); return s; };
+          const b64 = (u: Uint8Array) => { let s = ""; for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode(...u.subarray(i, i + 0x8000)); return btoa(s); };
+          const S2 = "site:" + site, path = String(b.path || "");
+          try {
+            if (!/^[\w-]{1,64}$/.test(dbId)) {
+              const list = (await cfa(`/d1/database?name=${encodeURIComponent(CFDB_WORKER_NAME)}`)) || [];
+              dbId = String(list.find((d: any) => d.name === CFDB_WORKER_NAME)?.uuid || "");
+              if (!dbId) return err(404, "No Studio database on that Cloudflare account.");
+            }
+            if (op === "list") {
+              const pre = String(b.prefix || "");
+              return json({ db: dbId, paths: (await q("select path from files where scope = ? and substr(path, 1, ?) = ? order by path", [S2, pre.length, pre])).map((r) => r.path) });
+            }
+            if (op === "meta") return json({ db: dbId, meta: (await q("select sha, updated_at from files where scope = ? and path = ?", [S2, path]))[0] || null });
+            if (op === "get") {
+              if (!pathOk(path)) return err(400, "Bad file name.");
+              const f = (await q("select sha, size, type, updated_at from files where scope = ? and path = ?", [S2, path]))[0];
+              if (!f) return json({ db: dbId, file: null });
+              const parts = (await q("select data from chunks where scope = ? and path = ? order by n", [S2, path])).map((r) => bytesOf(r.data));
+              const all = new Uint8Array(parts.reduce((x, y) => x + y.length, 0)); let o = 0; for (const x of parts) { all.set(x, o); o += x.length; }
+              return json({ db: dbId, file: { b64: b64(all), sha: f.sha, type: f.type, updated_at: f.updated_at } });
+            }
+            if (op === "put") {
+              if (!pathOk(path)) return err(400, "Bad file name.");
+              const bytes = bytesOf(String(b.b64 || ""));
+              if (b.sha) { const cur = (await q("select sha from files where scope = ? and path = ?", [S2, path]))[0]; if (cur && cur.sha !== String(b.sha)) return err(409, "The file changed since it was loaded."); }
+              const s = "c" + (await sha1(bytes));
+              // Chunks first (unhex keeps the bytes exact through the API), then the file's row, then any old extra chunks.
+              let size = 700_000, n = Math.max(1, Math.ceil(bytes.length / size)), lit = false;
+              const putChunk = async (i: number) => {
+                const part = bytes.slice(i * size, (i + 1) * size);
+                if (lit) await q(`insert into chunks (scope, path, n, data) values (?, ?, ?, X'${hex(part)}') on conflict (scope, path, n) do update set data = excluded.data`, [S2, path, i]);
+                else await q("insert into chunks (scope, path, n, data) values (?, ?, ?, unhex(?)) on conflict (scope, path, n) do update set data = excluded.data", [S2, path, i, hex(part)]);
+              };
+              try { for (let i = 0; i < n; i++) await putChunk(i); }
+              catch (e: any) { if (!/unhex|no such function/i.test(String(e?.message))) throw e; lit = true; size = 40_000; n = Math.max(1, Math.ceil(bytes.length / size)); for (let i = 0; i < n; i++) await putChunk(i); }
+              await q("insert into files (scope, path, sha, size, parts, type, updated_at) values (?, ?, ?, ?, ?, ?, ?) on conflict (scope, path) do update set sha = excluded.sha, size = excluded.size, parts = excluded.parts, type = excluded.type, updated_at = excluded.updated_at", [S2, path, s, bytes.length, n, typeOf(path), new Date().toISOString()]);
+              await q("delete from chunks where scope = ? and path = ? and n >= ?", [S2, path, n]);
+              return json({ db: dbId, sha: s });
+            }
+            if (op === "enq") {
+              // The site's enquiries (business sites): list, change status, delete.
+              const sub = String(b.sub || "list");
+              if (sub === "list") return json({ db: dbId, rows: (await q("select id, site, data, page, status, created_at from enquiries where site = ? order by created_at desc limit 500", [site])).map((r: any) => { let d = {}; try { d = JSON.parse(r.data); } catch { /* kept as is */ } return { ...r, data: d }; }) });
+              const id = Number(b.id); if (!Number.isInteger(id)) return err(400, "Which enquiry?");
+              if (sub === "status") { const st = String(b.status || ""); if (!["new", "read", "replied", "archived"].includes(st)) return err(400, "Unknown status."); await q("update enquiries set status = ? where id = ? and site = ?", [st, id, site]); return json({ db: dbId, ok: true }); }
+              if (sub === "delete") { await q("delete from enquiries where id = ? and site = ?", [id, site]); return json({ db: dbId, ok: true }); }
+              return err(400, "Unknown operation.");
+            }
+            if (op === "delete") {
+              const list = (Array.isArray(b.paths) ? b.paths : []).filter(pathOk).slice(0, 200);
+              for (const x of list) { await q("delete from chunks where scope = ? and path = ?", [S2, x]); await q("delete from files where scope = ? and path = ?", [S2, x]); }
+              return json({ db: dbId, n: list.length });
+            }
+            return err(400, "Unknown operation.");
+          } catch (e: any) { return err(502, "Couldn't reach the site's database on its Cloudflare account: " + (e?.message || e)); }
         }
         if (p === "/cfx/import" && req.method === "POST") {
           // Copies a site from the Studio's database on another Cloudflare account into this one, with that account's

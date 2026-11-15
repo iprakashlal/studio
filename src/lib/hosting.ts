@@ -22,7 +22,7 @@ export function siteRepoFor(p: ProjectMeta, token: string): Repo | null {
 }
 
 /** A hosted site's own data: its rows in Supabase, or its files in the Studio's Cloudflare database. */
-export const hostRepo = (h: HostCfg): Repo => (h.cf ? new CfRepo(h.cf.api, "site:" + h.cf.site) : new SupabaseRepo(h.sb!));
+export const hostRepo = (h: HostCfg): Repo => (h.cf ? new CfRepo(h.cf.api, "site:" + h.cf.site, { account: h.account }) : new SupabaseRepo(h.sb!));
 /** What the pages are told about where their content lives. */
 export const hostDb = (h: HostCfg): SbCfg | CfSiteCfg => (h.cf ? h.cf : h.sb!);
 export const siteAddress = (h: HostCfg) => (h.domain ? `https://${h.subdomain ? "" : "www."}${h.domain}/` : h.url.replace(/\/?$/, "/"));

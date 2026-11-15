@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useCfAccount, useCloudflarePicker, type CfAccountHook } from "./CfPicker";
 import { cloudflarePages, netlifyPages, pagesViaDbs, PAGES_LABEL, type Pages, type PagesKind } from "../lib/pages";
 import { CfError, registrarHelp, type Cloudflare } from "../lib/cloudflare";
-import { CFDB_WORKER, CF_DB_TOKEN_PAGE, registerWorkers, cfAccountVault, cfAddMembers, resendTestOnly, cfRole, cfSendCode, cfSignedIn, cfVerifyCode } from "../lib/cfdb";
+import { CFDB_WORKER, CF_DB_TOKEN_PAGE, cfDeployInfo, cfxList, registerWorkers, cfAccountVault, cfAddMembers, resendTestOnly, cfRole, cfSendCode, cfSignedIn, cfVerifyCode } from "../lib/cfdb";
 import { SupabaseAuto } from "./SupabaseAuto";
 import type { Session } from "../lib/auth";
 import type { ProjectMeta, Studio, StudioIndex } from "../lib/studio";
@@ -17,6 +17,7 @@ import { moveCfToCf, moveSbToCf, sbEditors, type MoveResult } from "../lib/moved
 import { getHelper } from "../lib/relay";
 import { isHosted } from "../lib/backend";
 import { loadHostConfig } from "../lib/studiohost";
+import { moveSiteIntoStudioDb } from "../lib/movesite";
 import { Field, Modal, Spinner, Toggle, useConfirm, useToast } from "../ui/kit";
 
 const TOKEN_PAGE = "https://app.netlify.com/user/applications#personal-access-tokens";
@@ -164,6 +165,25 @@ export function HostDialog({ studio, project, tpl, draft, dirty, save, onIndex, 
       setStudioApi(v?.setup?.api || (hc?.kind === "cloudflare" ? hc.api : ""));
     })();
   }, [session.token, cfAcc.ready]);
+  // The Studio's database can copy the site itself (its account's token kept there): no sign-in to the old database.
+  const [serverMove, setServerMove] = useState<{ api: string; studio: string } | null>(null);
+  useEffect(() => {
+    (async () => {
+      setServerMove(null);
+      if (!host || host.kind !== "cloudflare" || !host.cf || !host.account) return;
+      const hc = await loadHostConfig().catch(() => null); if (hc?.kind !== "cloudflare" || hc.api.replace(/\/+$/, "") === host.cf.api.replace(/\/+$/, "")) return;
+      if (!(await cfDeployInfo(hc.api)).cfxImport || !(await cfSignedIn(hc.api))) return;
+      const l = await cfxList(hc.api, hc.studio).catch(() => null);
+      if (l && (l.main === host.account || l.accounts.some((a) => a.id === host.account))) setServerMove({ api: hc.api, studio: hc.studio });
+    })();
+  }, [host?.cf?.api, host?.account]);
+  const moveByServer = () => run("movein", async () => {
+    if (!serverMove) return;
+    if (dirty && !(await save(true))) return;
+    const r = await moveSiteIntoStudioDb({ studio, project, db: serverMove, token: session.token, step: (x) => setStep({ i: -1, detail: x }) });
+    onIndex(r.index); setStep(null);
+    setDone({ url: siteAddress(r.index.projects.find((x) => x.id === project.id)!.host!), admin: "", warnings: r.missing.map((x) => `Not copied (missing in the old database): ${x}`), moved: { files: [], photos: r.files, enquiries: r.enquiries, editors: [], missing: r.missing }, from: "another Cloudflare database to your Studio's database" });
+  });
   const otherDb = !!host && !moving && host.kind === "cloudflare" && !!host.cf && !!studioApi && host.cf.api.replace(/\/+$/, "") !== studioApi.replace(/\/+$/, "");
   /** A site on another Cloudflare account: keep that account's token on the Studio's database (a Worker secret on
    *  your account), so every device signed in to the Studio can publish it. Needs both tokens on this device. */
@@ -368,7 +388,8 @@ export function HostDialog({ studio, project, tpl, draft, dirty, save, onIndex, 
         <section className="flex flex-col gap-2 rounded-xl border border-brand-400/40 bg-brand-500/5 p-4 text-[13px]" aria-label="Move into the Studio's database">
           <b className="text-sm">This site's data is in another database</b>
           <span className="text-ink-300">Its content, photos and editors are in <span className="font-mono">{host!.cf!.api.replace(/^https:\/\//, "")}</span>, so every browser has to sign in to that database separately. Move them into your Studio's database: then any device signed in to the Studio reaches this site. The pages and domain stay on the site's own Cloudflare account, and the old database isn't changed.</span>
-          {!cfAcc.ready ? <span className="text-amber-200">Connect your Cloudflare token in section 1 first.</span>
+          {serverMove ? <button type="button" className="btn btn-pri btn-sm self-start" disabled={!!busy} onClick={moveByServer}>{busy === "movein" ? (step?.detail || "Moving") + "…" : "Move into my Studio's database and publish"}</button>
+            : !cfAcc.ready ? <span className="text-amber-200">Connect your Cloudflare token in section 1 first, or add the site's account in Settings → Sites and hosting accounts (then no sign-in is needed here).</span>
             : !siteAccKnown ? <span className="text-amber-200">Add the site's Cloudflare account under Other Cloudflare accounts (section 1) first.</span>
             : cfAccess !== "ok" ? <span className="text-amber-200">Sign in to the old database below (section 2) with an email code first.</span>
             : <button type="button" className="btn btn-pri btn-sm self-start" disabled={!!busy} onClick={moveIntoStudio}>{busy === "movein" ? (step?.detail || "Moving") + "…" : "Move into my Studio's database and publish"}</button>}

@@ -309,7 +309,7 @@ export default {
     if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
     const u = new URL(req.url), p = u.pathname.replace(/\/+$/, "") || "/";
     try {
-      if (p === "/") return json({ ok: true, service: "site-studio-db", v: V, mail: !!(env.RESEND_API_KEY && env.MAIL_FROM), ...(env.CF_TOKEN && env.CF_ACCOUNT ? { deploy: true, account: env.CF_ACCOUNT } : {}), ...(env.GH_TOKEN ? { gh: true } : {}), ...(env.AI ? { ai: true, pamphlet: 2 } : {}), reviews: true, accounts: 2, cfx: true, ...(otherAccounts(env).length ? { more: otherAccounts(env).length } : {}) });
+      if (p === "/") return json({ ok: true, service: "site-studio-db", v: V, mail: !!(env.RESEND_API_KEY && env.MAIL_FROM), ...(env.CF_TOKEN && env.CF_ACCOUNT ? { deploy: true, account: env.CF_ACCOUNT } : {}), ...(env.GH_TOKEN ? { gh: true } : {}), ...(env.AI ? { ai: true, pamphlet: 2 } : {}), reviews: true, accounts: 2, cfx: 2, ...(otherAccounts(env).length ? { more: otherAccounts(env).length } : {}) });
 
       // ---- sign in with an emailed code (members only)
       if (p === "/auth/code" && req.method === "POST") {
@@ -455,6 +455,56 @@ export default {
           const site = String(b.site || "");
           if (/^[a-z0-9][a-z0-9-]{0,62}$/.test(site)) await env.DB.prepare("insert into workers (worker, scope) values (?, ?) on conflict (worker) do update set scope = excluded.scope").bind(main ? w : a + "/" + w + "@site:" + site, "site:" + site).run();
           return json({ ok: true });
+        }
+        if (p === "/cfx/import" && req.method === "POST") {
+          // Copies a site from the Studio's database on another Cloudflare account into this one, with that account's
+          // kept token and Cloudflare's D1 API: no sign-in to the old database needed, from any device. Step by step
+          // (the Studio calls it once to start, then once per file), so each call stays small.
+          const b = (await req.json()) as any, a = String(b.account || ""), site = String(b.site || ""), step = String(b.step || "start");
+          if (!/^[\w-]{1,64}$/.test(a) || !/^[a-z0-9][a-z0-9-]{0,62}$/.test(site)) return err(400, "Which site?");
+          const tok = otherToken(env, a); if (!tok) return err(409, "That Cloudflare account isn't kept here yet: add it first (Settings → Sites and hosting accounts).");
+          const cfa = async (path: string, init: any = {}) => {
+            const r = await fetch("https://api.cloudflare.com/client/v4/accounts/" + a + path, { ...init, headers: { Authorization: "Bearer " + tok, "Content-Type": "application/json" } });
+            const j: any = await r.json().catch(() => null);
+            if (!r.ok || !j?.success) throw new Error(j?.errors?.[0]?.message || "Cloudflare answered " + r.status);
+            return j.result;
+          };
+          const q = async (dbId: string, sql: string, params: unknown[]) => ((await cfa(`/d1/database/${dbId}/query`, { method: "POST", body: JSON.stringify({ sql, params }) }))?.[0]?.results || []) as any[];
+          const bytesOf = (v: any): Uint8Array => Array.isArray(v) ? new Uint8Array(v) : typeof v === "string" ? Uint8Array.from(atob(v), (c) => c.charCodeAt(0)) : v && Array.isArray(v.data) ? new Uint8Array(v.data) : new Uint8Array(0);
+          const S2 = "site:" + site;
+          try {
+            if (step === "start") {
+              const list = (await cfa(`/d1/database?name=${encodeURIComponent(CFDB_WORKER_NAME)}`)) || [];
+              const dbId = String(list.find((d: any) => d.name === CFDB_WORKER_NAME)?.uuid || "");
+              if (!dbId) return err(404, "No Studio database on that Cloudflare account.");
+              const files = await q(dbId, "select path, sha, size, parts, type, updated_at from files where scope = ? order by path", [S2]);
+              if (!files.some((f) => f.path === "content.json")) return err(404, `The site ${site} has no content in that database.`);
+              // Editors (with their roles) and enquiries, in this first call.
+              const mem = await q(dbId, "select email, role from members where scope = ?", [S2]);
+              for (const m of mem) if (emailOk(String(m.email || ""))) await env.DB.prepare("insert into members (scope, email, role) values (?, ?, ?) on conflict (scope, email) do nothing").bind(S2, String(m.email).toLowerCase(), ["owner", "member", "partner"].includes(m.role) ? m.role : "member").run();
+              let enquiries = 0;
+              if (!(await env.DB.prepare("select 1 from enquiries where site = ? limit 1").bind(site).first())) {
+                const rows = await q(dbId, "select data, page, status, created_at from enquiries where site = ? order by created_at limit 1000", [site]);
+                for (const r of rows) await env.DB.prepare("insert into enquiries (site, data, page, status, created_at) values (?, ?, ?, ?, ?)").bind(site, String(r.data || "{}"), String(r.page || ""), String(r.status || "new"), String(r.created_at || new Date().toISOString())).run();
+                enquiries = rows.length;
+              }
+              return json({ db: dbId, files: files.map((f) => f.path), editors: mem.length, enquiries });
+            }
+            if (step === "file") {
+              const dbId = String(b.db || ""), path = String(b.path || "");
+              if (!/^[\w-]{1,64}$/.test(dbId) || !pathOk(path)) return err(400, "Which file?");
+              const f = (await q(dbId, "select sha, size, parts, type, updated_at from files where scope = ? and path = ?", [S2, path]))[0];
+              if (!f) return json({ ok: false, missing: path });
+              const chunks = await q(dbId, "select n, data from chunks where scope = ? and path = ? order by n", [S2, path]);
+              await env.DB.batch([
+                env.DB.prepare("delete from chunks where scope = ? and path = ?").bind(S2, path),
+                env.DB.prepare("insert into files (scope, path, sha, size, parts, type, updated_at) values (?, ?, ?, ?, ?, ?, ?) on conflict (scope, path) do update set sha = excluded.sha, size = excluded.size, parts = excluded.parts, type = excluded.type, updated_at = excluded.updated_at").bind(S2, path, String(f.sha), Number(f.size) || 0, chunks.length || 1, String(f.type || ""), String(f.updated_at || new Date().toISOString())),
+                ...chunks.map((c) => env.DB.prepare("insert into chunks (scope, path, n, data) values (?, ?, ?, ?)").bind(S2, path, Number(c.n) || 0, bytesOf(c.data))),
+              ]);
+              return json({ ok: true });
+            }
+          } catch (e: any) { return err(502, "Couldn't read the other account's database: " + (e?.message || e)); }
+          return err(400, "Unknown step.");
         }
         return err(404, "Not found.");
       }

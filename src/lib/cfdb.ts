@@ -149,8 +149,8 @@ export const resendTestOnly = (msg: string): string | null => /own email address
 
 // ---------------------------------------------------------------- publishing from any device
 /** Whether this database keeps a Cloudflare token for publishing (and for which account). */
-export async function cfDeployInfo(api: string): Promise<{ cfx?: boolean; deploy: boolean; account?: string; gh?: boolean; ai?: boolean; reviews?: boolean; pamphlet?: boolean; accounts?: boolean; more?: number }> {
-  try { const j = await (await fetch(clean(api) + "/", { cache: "no-store" })).json(); return { deploy: !!j?.deploy, account: j?.account, gh: !!j?.gh, ai: !!j?.ai, reviews: !!j?.reviews, cfx: !!j?.cfx, pamphlet: (+j?.pamphlet || 0) >= 2, accounts: (+j?.accounts || 0) >= 2, more: +j?.more || 0 }; } catch { return { deploy: false }; }
+export async function cfDeployInfo(api: string): Promise<{ cfx?: boolean; cfxImport?: boolean; deploy: boolean; account?: string; gh?: boolean; ai?: boolean; reviews?: boolean; pamphlet?: boolean; accounts?: boolean; more?: number }> {
+  try { const j = await (await fetch(clean(api) + "/", { cache: "no-store" })).json(); return { deploy: !!j?.deploy, account: j?.account, gh: !!j?.gh, ai: !!j?.ai, reviews: !!j?.reviews, cfx: !!j?.cfx, cfxImport: (+j?.cfx || 0) >= 2, pamphlet: (+j?.pamphlet || 0) >= 2, accounts: (+j?.accounts || 0) >= 2, more: +j?.more || 0 }; } catch { return { deploy: false }; }
 }
 /** GitHub calls through the database (its kept token) as a signed-in owner of `scope`: a fetch-like Response. */
 export function dbGitHub(api: string, scope: string) {
@@ -222,3 +222,14 @@ export const cfxPut = (api: string, studio: string, token: string) => cfCall<{ o
 export const cfxDelete = (api: string, studio: string, account: string) => cfCall(api, `/cfx/delete?scope=${encodeURIComponent("studio:" + studio)}`, { method: "POST", body: JSON.stringify({ account }) });
 /** Lets the Studio's owners publish a site's Worker on that account from any device. */
 export const cfxSite = (api: string, studio: string, account: string, worker: string, site?: string) => cfCall(api, `/cfx/site?scope=${encodeURIComponent("studio:" + studio)}`, { method: "POST", body: JSON.stringify({ account, worker, ...(site ? { site } : {}) }) });
+/** Copies a site from the Studio's database on another Cloudflare account into this one (done by the database with
+ *  that account's kept token: no sign-in to the old database, works from any device). */
+export async function cfxImportSite(api: string, studio: string, account: string, site: string, step: (s: string) => void): Promise<{ files: string[]; missing: string[]; editors: number; enquiries: number }> {
+  const call = (b: any) => cfCall<any>(api, `/cfx/import?scope=${encodeURIComponent("studio:" + studio)}`, { method: "POST", body: JSON.stringify({ account, site, ...b }) });
+  step("Reading the site in the other account's database");
+  const s = await call({ step: "start" }), list: string[] = s.files || [];
+  const order = [...list.filter((p) => p !== "content.json" && p !== "cms/site.json"), ...list.filter((p) => p === "cms/site.json"), ...list.filter((p) => p === "content.json")];
+  const missing: string[] = []; let n = 0;
+  for (const p of order) { step(`Copying the site (${++n} of ${order.length})`); const r = await call({ step: "file", db: s.db, path: p }); if (!r?.ok) missing.push(p); }
+  return { files: order, missing, editors: s.editors || 0, enquiries: s.enquiries || 0 };
+}

@@ -6,7 +6,7 @@ import { backendOf } from "../lib/backend";
 import { Field, Logo, Spinner } from "./kit";
 import { BrandMark } from "../lib/brand";
 
-export function StudioGate({ cfg, brand, onIn }: { cfg: StudioHostCfg; brand: string; onIn: (email: string, role: string) => void }) {
+export function StudioGate({ cfg, brand, onIn, links }: { cfg: StudioHostCfg; brand: string; onIn: (email: string, role: string) => void; links?: React.ReactNode }) {
   const [email, setEmail] = useState(""), [code, setCode] = useState(""), [sent, setSent] = useState(false);
   const [busy, setBusy] = useState(true), [err, setErr] = useState("");
   const be = backendOf(cfg);
@@ -21,7 +21,7 @@ export function StudioGate({ cfg, brand, onIn }: { cfg: StudioHostCfg; brand: st
   const send = async (e?: React.FormEvent) => { e?.preventDefault(); setErr(""); setBusy(true); try { await be.sendCode(email); setSent(true); } catch (x: any) { setErr(x?.message || "Couldn't send the code."); } setBusy(false); };
   const verify = async (e: React.FormEvent) => { e.preventDefault(); setErr(""); setBusy(true); try { await be.verifyCode(email, code); await admit(); } catch (x: any) { setErr(x?.message || "Couldn't sign in."); } setBusy(false); };
   return (
-    <div className="grid min-h-screen place-items-center px-4 py-10">
+    <div className="flex min-h-screen flex-col items-center justify-center px-4 py-10">
       <div className="card flex w-full max-w-sm flex-col gap-4 p-6">
         <div className="flex items-center gap-2.5 font-extrabold"><BrandMark fallback={<Logo />} />{brand}</div>
         {cfg.partner && <p className="text-[12.5px] text-ink-400">Set up by <b className="text-ink-200">{cfg.partner.name}</b></p>}
@@ -42,6 +42,7 @@ export function StudioGate({ cfg, brand, onIn }: { cfg: StudioHostCfg; brand: st
         {err && <p role="alert" className="rounded-lg border border-amber-400/40 bg-amber-400/5 px-3 py-2 text-[13px] text-amber-100">{err}</p>}
         {sharedSource(cfg) && <p className="text-center text-[12.5px] text-ink-400">This Studio keeps its projects in your Cloudflare database. <a className="underline" href="?data=github">Open the older GitHub data instead</a> (for example to bring projects across).</p>}
       </div>
+      {links && <div className="mt-4 w-full max-w-sm">{links}</div>}
     </div>
   );
 }

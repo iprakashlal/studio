@@ -5,6 +5,7 @@ import { Gate } from "../ui/gate";
 import { useToast } from "../ui/kit";
 import { Workspace } from "./Workspace";
 import { ThemesPage } from "./ThemesPage";
+import { StudioPageLinks, StudioPageView } from "./StudioPage";
 import { useBrand } from "../lib/brand";
 import { deviceSecret, loadHostConfig, type StudioHostCfg } from "../lib/studiohost";
 import { backendOf, isHosted } from "../lib/backend";
@@ -77,13 +78,17 @@ export function App() {
   // The theme gallery is public: anyone with the link can browse it without signing in.
   if (/^#\/themes(\?|$)/.test(hash)) return <ThemesPage signedIn={!!repo} />;
 
+  // The Studio's own pages (privacy, terms…) are public too: #/pages/<name>.
+  const pg = /^#\/pages\/([^?]+)/.exec(hash);
+  if (pg && host !== undefined) return <StudioPageView slug={decodeURIComponent(pg[1])} host={host} repo={repo} />;
+
   if (host === undefined) return <div className="grid min-h-screen place-items-center"><StepLoader title="Starting the Studio" at={0} steps={["Finding where this Studio keeps its files", "Signing in"]} /></div>;
-  if (host && !repo) return <StudioGate cfg={host} brand={brandName} onIn={(email) => { const s: Session = { cfg: { owner: host.kind, repo: host.studio, branch: "main" }, token: deviceSecret(host.studio), username: email }; sess.save(NS, s); setSession(s); }} />;
+  if (host && !repo) return <StudioGate links={<StudioPageLinks host={host} where="gate" />} cfg={host} brand={brandName} onIn={(email) => { const s: Session = { cfg: { owner: host.kind, repo: host.studio, branch: "main" }, token: deviceSecret(host.studio), username: email }; sess.save(NS, s); setSession(s); }} />;
   if (!repo) {
     return (
       <Gate ns={NS} brand={brandName} repoNoun="Studio's data repository" defaultRepo="studio-data"
         tokenHint="A fine-grained token with Contents: Read and write on the data repository, plus any site repositories you'll publish to."
-        onAuthed={setSession} onDemo={() => setDemo(true)} />
+        onAuthed={setSession} onDemo={() => setDemo(true)} footer={<StudioPageLinks host={host} where="gate" />} />
     );
   }
 

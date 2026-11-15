@@ -65,11 +65,42 @@ export async function cfRole(api: string, scope: string): Promise<string | null>
 
 // ---------------------------------------------------------------- files
 const b64Bytes = (b: string) => Uint8Array.from(atob(String(b).replace(/\s/g, "")), (c) => c.charCodeAt(0));
+// A site whose own database is on another Cloudflare account: when this browser isn't signed in to that database, its
+// files are reached through the Studio's database (/cfx/db, with that account's kept token), so every device signed in
+// to the Studio reaches it. The site's data stays in its own database.
+let linkCache: Promise<{ api: string; studio: string } | null> | null = null;
+const dbIds = new Map<string, string>();
+async function studioLink(siteApi: string): Promise<{ api: string; studio: string } | null> {
+  linkCache ||= import("./studiohost").then((m) => m.loadHostConfig()).then((c) => (c?.kind === "cloudflare" ? { api: c.api, studio: c.studio } : null)).catch(() => null);
+  const l = await linkCache;
+  return l && clean(l.api) !== clean(siteApi) && cfSession.load(l.api) ? l : null;
+}
 /** A Studio's (or site's) files in the database, behaving like its GitHub repository (stale writes are refused). */
 export class CfRepo implements Repo {
   readonly demo = false;
   readonly cfg: RepoCfg;
-  constructor(private api: string, readonly scope: string) { this.cfg = { owner: "cloudflare", repo: scope.replace(/^\w+:/, ""), branch: "main" }; }
+  constructor(private api: string, readonly scope: string, private opts: { account?: string } = {}) { this.cfg = { owner: "cloudflare", repo: scope.replace(/^\w+:/, ""), branch: "main" }; }
+  /** Through the Studio's database, when this browser has no session for the site's own database (or it expired). */
+  private async bridge(): Promise<((b: any) => Promise<any>) | null> {
+    if (!this.opts.account || !this.scope.startsWith("site:") || cfSession.load(this.api)) return null;
+    const l = await studioLink(this.api); if (!l) return null;
+    const account = this.opts.account, site = this.scope.slice(5);
+    return async (b: any) => {
+      const r = await cfCall<any>(l.api, `/cfx/db?scope=${encodeURIComponent("studio:" + l.studio)}`, { method: "POST", body: JSON.stringify({ account, site, db: dbIds.get(account), ...b }) });
+      if (r?.db) dbIds.set(account, r.db);
+      return r;
+    };
+  }
+  private async via<T>(direct: () => Promise<T>, viaBridge: (call: (b: any) => Promise<any>) => Promise<T>, what: string): Promise<T> {
+    const br = await this.bridge();
+    if (br) { try { return await viaBridge(br); } catch (e: any) { this.fail(e, what); } }
+    try { return await direct(); }
+    catch (e: any) {
+      // The site's own session expired: try the Studio's database before asking for a sign-in.
+      if (e?.status === 401 && this.opts.account) { cfSession.clear(this.api); const b2 = await this.bridge(); if (b2) { try { return await viaBridge(b2); } catch (e2: any) { this.fail(e2, what); } } }
+      throw e;
+    }
+  }
   private q(path?: string) { return `scope=${encodeURIComponent(this.scope)}${path !== undefined ? "&path=" + encodeURIComponent(path) : ""}`; }
   private fail(e: any, what: string): never {
     if (e?.status === 409) throw new RepoError("The file changed since it was loaded. Try again.", 409);
@@ -80,23 +111,32 @@ export class CfRepo implements Repo {
     }
     throw new RepoError(e?.status === 403 ? `This sign-in can't ${what} here.` : `Couldn't ${what}: ${e?.message || e}`, e?.status || 500);
   }
-  async check() { try { await cfCall(this.api, `/f/list?${this.q()}&prefix=studio.json`); } catch (e) { this.fail(e, "read files"); } }
+  async check() { try { await this.via(() => cfCall(this.api, `/f/list?${this.q()}&prefix=studio.json`), (c) => c({ op: "list", prefix: "studio.json" }), "read files"); } catch (e) { this.fail(e, "read files"); } }
   private async res(path: string): Promise<Response | null> {
-    try { return await cfCall<Response>(this.api, `/f/get?${this.q(path)}`, { raw: true }); } catch (e: any) { if (e?.status === 404) return null; this.fail(e, "read " + path); }
+    try {
+      return await this.via(() => cfCall<Response>(this.api, `/f/get?${this.q(path)}`, { raw: true }), async (c) => {
+        const r = await c({ op: "get", path }); if (!r?.file) return null;
+        return new Response(b64Bytes(r.file.b64) as BodyInit, { headers: { "Content-Type": r.file.type || "application/octet-stream", "x-sha": r.file.sha || "", "x-updated": r.file.updated_at || "" } });
+      }, "read " + path);
+    } catch (e: any) { if (e?.status === 404) return null; this.fail(e, "read " + path); }
   }
   async getText(path: string) { const r = await this.res(path); return r ? { text: await r.text(), sha: r.headers.get("x-sha") || "" } : null; }
   async getJSON<T = any>(path: string) { const f = await this.getText(path); return f ? { data: JSON.parse(f.text) as T, sha: f.sha } : null; }
   async getRaw(path: string) { const r = await this.res(path); return r ? r.blob() : null; }
   async putFile(path: string, base64: string, _m: string, sha?: string | null) {
+    const br = await this.bridge();
+    if (br) { try { return (await br({ op: "put", path, b64: base64.replace(/\s/g, ""), ...(sha ? { sha } : {}) })).sha as string; } catch (e) { this.fail(e, "save " + path); } }
     try { const j = await cfCall<{ sha: string }>(this.api, `/f/put?${this.q(path)}${sha ? "&sha=" + encodeURIComponent(sha) : ""}`, { method: "PUT", body: b64Bytes(base64) as BodyInit, headers: { "Content-Type": "application/octet-stream" } }); return j.sha; }
     catch (e) { this.fail(e, "save " + path); }
   }
   async pushFiles(files: FileIn[], m: string, remove: string[] = []) {
     for (const f of files) await this.putFile(f.path, f.base64, m);
-    if (remove.length) try { await cfCall(this.api, `/f/delete?${this.q()}`, { method: "POST", body: JSON.stringify({ paths: remove }) }); } catch (e) { this.fail(e, "delete files"); }
+    if (remove.length) try { await this.via(() => cfCall(this.api, `/f/delete?${this.q()}`, { method: "POST", body: JSON.stringify({ paths: remove }) }), (c) => c({ op: "delete", paths: remove }), "delete files"); } catch (e) { this.fail(e, "delete files"); }
   }
-  async list(prefix: string) { try { return await cfCall<string[]>(this.api, `/f/list?${this.q()}&prefix=${encodeURIComponent(prefix)}`); } catch (e) { this.fail(e, "list files"); } }
-  async lastChange(path: string) { try { return (await cfCall<{ updated_at: string } | null>(this.api, `/f/meta?${this.q(path)}`))?.updated_at || null; } catch { return null; } }
+  async list(prefix: string) { try { return await this.via(() => cfCall<string[]>(this.api, `/f/list?${this.q()}&prefix=${encodeURIComponent(prefix)}`), async (c) => (await c({ op: "list", prefix })).paths as string[], "list files"); } catch (e) { this.fail(e, "list files"); } }
+  async lastChange(path: string) { try { return await this.via(async () => (await cfCall<{ updated_at: string } | null>(this.api, `/f/meta?${this.q(path)}`))?.updated_at || null, async (c) => (await c({ op: "meta", path })).meta?.updated_at || null, "read " + path); } catch { return null; } }
+  /** Whether this site is reached through the Studio's database on this device (no sign-in to its own database). */
+  async bridged() { return !!(await this.bridge()); }
 }
 
 // ---------------------------------------------------------------- one-click setup
@@ -149,8 +189,8 @@ export const resendTestOnly = (msg: string): string | null => /own email address
 
 // ---------------------------------------------------------------- publishing from any device
 /** Whether this database keeps a Cloudflare token for publishing (and for which account). */
-export async function cfDeployInfo(api: string): Promise<{ cfx?: boolean; cfxImport?: boolean; deploy: boolean; account?: string; gh?: boolean; ai?: boolean; reviews?: boolean; pamphlet?: boolean; accounts?: boolean; more?: number }> {
-  try { const j = await (await fetch(clean(api) + "/", { cache: "no-store" })).json(); return { deploy: !!j?.deploy, account: j?.account, gh: !!j?.gh, ai: !!j?.ai, reviews: !!j?.reviews, cfx: !!j?.cfx, cfxImport: (+j?.cfx || 0) >= 2, pamphlet: (+j?.pamphlet || 0) >= 2, accounts: (+j?.accounts || 0) >= 2, more: +j?.more || 0 }; } catch { return { deploy: false }; }
+export async function cfDeployInfo(api: string): Promise<{ cfx?: boolean; cfxImport?: boolean; bridge?: boolean; deploy: boolean; account?: string; gh?: boolean; ai?: boolean; reviews?: boolean; pamphlet?: boolean; accounts?: boolean; more?: number }> {
+  try { const j = await (await fetch(clean(api) + "/", { cache: "no-store" })).json(); return { deploy: !!j?.deploy, account: j?.account, gh: !!j?.gh, ai: !!j?.ai, reviews: !!j?.reviews, cfx: !!j?.cfx, cfxImport: (+j?.cfx || 0) >= 2, bridge: (+j?.cfx || 0) >= 3, pamphlet: (+j?.pamphlet || 0) >= 2, accounts: (+j?.accounts || 0) >= 2, more: +j?.more || 0 }; } catch { return { deploy: false }; }
 }
 /** GitHub calls through the database (its kept token) as a signed-in owner of `scope`: a fetch-like Response. */
 export function dbGitHub(api: string, scope: string) {
@@ -232,4 +272,16 @@ export async function cfxImportSite(api: string, studio: string, account: string
   const missing: string[] = []; let n = 0;
   for (const p of order) { step(`Copying the site (${++n} of ${order.length})`); const r = await call({ step: "file", db: s.db, path: p }); if (!r?.ok) missing.push(p); }
   return { files: order, missing, editors: s.editors || 0, enquiries: s.enquiries || 0 };
+}
+/** A site's enquiries: from its own database when signed in to it here, else through the Studio's database. */
+export async function siteEnquiries(cf: { api: string; site: string }, account?: string) {
+  const scope = "scope=" + encodeURIComponent("site:" + cf.site);
+  const l = !cfSession.load(cf.api) && account ? await studioLink(cf.api) : null;
+  const br = l ? (b: any) => cfCall<any>(l.api, `/cfx/db?scope=${encodeURIComponent("studio:" + l.studio)}`, { method: "POST", body: JSON.stringify({ account, site: cf.site, db: dbIds.get(account!), op: "enq", ...b }) }).then((r) => { if (r?.db) dbIds.set(account!, r.db); return r; }) : null;
+  return {
+    bridged: !!br,
+    list: async (): Promise<any[]> => (br ? (await br({ sub: "list" })).rows : await cfCall<any[]>(cf.api, "/e/list?" + scope)),
+    status: async (id: number, status: string) => { br ? await br({ sub: "status", id, status }) : await cfCall(cf.api, "/e/status?" + scope, { method: "POST", body: JSON.stringify({ id, status }) }); },
+    remove: async (id: number) => { br ? await br({ sub: "delete", id }) : await cfCall(cf.api, "/e/delete?" + scope, { method: "POST", body: JSON.stringify({ id }) }); },
+  };
 }

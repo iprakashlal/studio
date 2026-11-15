@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useCfAccount, useCloudflarePicker, type CfAccountHook } from "./CfPicker";
 import { cloudflarePages, netlifyPages, pagesViaDbs, PAGES_LABEL, type Pages, type PagesKind } from "../lib/pages";
 import { CfError, registrarHelp, type Cloudflare } from "../lib/cloudflare";
-import { CFDB_WORKER, CF_DB_TOKEN_PAGE, cfDeployInfo, cfxList, registerWorkers, cfAccountVault, cfAddMembers, resendTestOnly, cfRole, cfSendCode, cfSignedIn, cfVerifyCode } from "../lib/cfdb";
+import { CFDB_WORKER, CF_DB_TOKEN_PAGE, CfRepo, registerWorkers, cfAccountVault, cfAddMembers, resendTestOnly, cfRole, cfSendCode, cfSignedIn, cfVerifyCode } from "../lib/cfdb";
 import { SupabaseAuto } from "./SupabaseAuto";
 import type { Session } from "../lib/auth";
 import type { ProjectMeta, Studio, StudioIndex } from "../lib/studio";
@@ -13,11 +13,10 @@ import { Netlify, checkDns, cleanDomain, dnsRecords, domainOk, type DnsRecord } 
 import { cleanUrl, isAdmin, sbUrlOk, sendCode, setupSql, signedInEmail, siteIdOk, verifyCode, type CfSiteCfg, type HostCfg, type SbCfg } from "../lib/supa";
 import { netlifyToken, publishHosted, siteAddress } from "../lib/hosting";
 import { verifyMailDomain } from "../lib/maildomain";
-import { moveCfToCf, moveSbToCf, sbEditors, type MoveResult } from "../lib/movedb";
+import { moveSbToCf, sbEditors, type MoveResult } from "../lib/movedb";
 import { getHelper } from "../lib/relay";
 import { isHosted } from "../lib/backend";
 import { loadHostConfig } from "../lib/studiohost";
-import { moveSiteIntoStudioDb } from "../lib/movesite";
 import { Field, Modal, Spinner, Toggle, useConfirm, useToast } from "../ui/kit";
 
 const TOKEN_PAGE = "https://app.netlify.com/user/applications#personal-access-tokens";
@@ -132,7 +131,14 @@ export function HostDialog({ studio, project, tpl, draft, dirty, save, onIndex, 
     pagesViaDbs(host).then((x) => { if (live) setViaDb(x); }).catch(() => { if (live) setViaDb(null); });
     return () => { live = false; };
   }, [host?.cf?.api, moving, cfAcc.ready, cfAccess, siteAccKnown]);
-  const cfCheck = async (c = cfSite) => { if (!c) return; const e = await cfSignedIn(c.api); setCfSigned(e); setCfAccess(e ? ((await cfRole(c.api, "site:" + c.site)) ? "ok" : "no") : ""); };
+  const [bridged, setBridged] = useState(false);
+  const cfCheck = async (c = cfSite) => {
+    if (!c) return; const e = await cfSignedIn(c.api); setCfSigned(e);
+    // Not signed in to the site's own database here: reached through the Studio's database (its account kept there).
+    const br = !e && host?.kind === "cloudflare" && !!host.account && c.api === host.cf?.api && (await new CfRepo(c.api, "site:" + c.site, { account: host.account }).bridged().catch(() => false));
+    setBridged(!!br);
+    setCfAccess(e ? ((await cfRole(c.api, "site:" + c.site)) ? "ok" : "no") : br ? "ok" : "");
+  };
   useEffect(() => { cfCheck(); }, [cfSite?.api, cfSite?.site]);
   const dbOk = dbKind === "cloudflare" ? !!cfSite && cfAccess === "ok" && (!dbMoving || access === "ok") : sbReady && access === "ok";
   useEffect(() => {
@@ -165,25 +171,6 @@ export function HostDialog({ studio, project, tpl, draft, dirty, save, onIndex, 
       setStudioApi(v?.setup?.api || (hc?.kind === "cloudflare" ? hc.api : ""));
     })();
   }, [session.token, cfAcc.ready]);
-  // The Studio's database can copy the site itself (its account's token kept there): no sign-in to the old database.
-  const [serverMove, setServerMove] = useState<{ api: string; studio: string } | null>(null);
-  useEffect(() => {
-    (async () => {
-      setServerMove(null);
-      if (!host || host.kind !== "cloudflare" || !host.cf || !host.account) return;
-      const hc = await loadHostConfig().catch(() => null); if (hc?.kind !== "cloudflare" || hc.api.replace(/\/+$/, "") === host.cf.api.replace(/\/+$/, "")) return;
-      if (!(await cfDeployInfo(hc.api)).cfxImport || !(await cfSignedIn(hc.api))) return;
-      const l = await cfxList(hc.api, hc.studio).catch(() => null);
-      if (l && (l.main === host.account || l.accounts.some((a) => a.id === host.account))) setServerMove({ api: hc.api, studio: hc.studio });
-    })();
-  }, [host?.cf?.api, host?.account]);
-  const moveByServer = () => run("movein", async () => {
-    if (!serverMove) return;
-    if (dirty && !(await save(true))) return;
-    const r = await moveSiteIntoStudioDb({ studio, project, db: serverMove, token: session.token, step: (x) => setStep({ i: -1, detail: x }) });
-    onIndex(r.index); setStep(null);
-    setDone({ url: siteAddress(r.index.projects.find((x) => x.id === project.id)!.host!), admin: "", warnings: r.missing.map((x) => `Not copied (missing in the old database): ${x}`), moved: { files: [], photos: r.files, enquiries: r.enquiries, editors: [], missing: r.missing }, from: "another Cloudflare database to your Studio's database" });
-  });
   const otherDb = !!host && !moving && host.kind === "cloudflare" && !!host.cf && !!studioApi && host.cf.api.replace(/\/+$/, "") !== studioApi.replace(/\/+$/, "");
   /** A site on another Cloudflare account: keep that account's token on the Studio's database (a Worker secret on
    *  your account), so every device signed in to the Studio can publish it. Needs both tokens on this device. */
@@ -196,32 +183,6 @@ export function HostDialog({ studio, project, tpl, draft, dirty, save, onIndex, 
       await cf.putSecret(v.setup.account, CFDB_WORKER, "CFX_" + h.account.replace(/-/g, "_"), JSON.stringify({ t: other.token, n: name }));
     } catch { /* older database: kept when it's updated, or from Settings → Publish from any device */ }
   };
-  /** One click: copy the site from its old database into the Studio's, then republish it pointing there. The pages
-   *  and domain stay on the site's own Cloudflare account; the old database is left as it is. */
-  const moveIntoStudio = () => run("movein", async () => {
-    if (!host?.cf || !studioApi) return;
-    const say = (x: string) => setStep({ i: -1, detail: x });
-    const pages = await getPages();
-    if (dirty && !(await save(true))) return;
-    const { setup, relay, token: t } = await cfp.ensure(say); // also updates the Studio's database to this build
-    if (setup.api.replace(/\/+$/, "") !== studioApi.replace(/\/+$/, "")) throw new Error("Your Cloudflare token here is for a different account than this Studio's database. Connect the Studio's own account in section 1 (and the site's account under Other Cloudflare accounts).");
-    const { cf } = await cfAcc.client(say);
-    const to = { api: setup.api, site: host.cf.site };
-    const me = await cfSignedIn(setup.api);
-    let moved: MoveResult;
-    try {
-      moved = await moveCfToCf({ from: host.cf, to, d1: { cf, account: setup.account, databaseId: setup.databaseId }, step: say,
-        addMembers: (list) => cfAddMembers(relay, t, setup, "site:" + to.site, [...list, ...(me ? [{ email: me, role: "owner" as const }] : [])]) });
-    } catch (e: any) { setStep(null); throw new Error("Couldn't copy the site: " + (e?.message || explain(e)) + " The old database wasn't changed; press the button again to retry."); }
-    const h: HostCfg = { ...host, cf: to }, next = project.version + 1;
-    const r = await publishHosted({ pages, host: h, tpl, draft, name: project.name, version: next, withContent: false, getBlob, note: "Moved into the Studio's database", step: (i, detail) => setStep({ i, detail }) });
-    const { index } = await studio.recordExport(project.id, { kind: "cloudflare", note: "Moved into the Studio's database", target: h.siteName }, draft, "published", undefined, r.siteSha, h);
-    await keepForAllDevices(h);
-    try { if (h.account && h.account !== setup.account) await registerWorkers(cf, setup, [...(isHosted(session) ? [{ worker: `${h.account}/${h.siteId}@studio:${session.cfg.repo}`, scope: "studio:" + session.cfg.repo }] : []), { worker: `${h.account}/${h.siteId}@site:${to.site}`, scope: "site:" + to.site }]);
-      else await registerWorkers(cf, setup, [{ worker: h.siteId, scope: "site:" + to.site }]); } catch { /* registered on a later publish */ }
-    setCfSite(to); onIndex(index); setStep(null);
-    setDone({ url: siteAddress(h), admin: r.admin, warnings: [...r.warnings, ...moved.missing.map((x) => `Not copied (missing in the old database): ${x}`)], moved, from: "another Cloudflare database to your Studio's database" });
-  });
   const run = async (k: string, fn: () => Promise<void>) => { setBusy(k); try { await fn(); } catch (e: any) { toast(e?.message || explain(e), "bad"); } setBusy(""); };
   const cfg = (): SbCfg => ({ url: cleanUrl(sb.url), key: sb.key.trim(), site: sb.site.trim() });
 
@@ -384,15 +345,10 @@ export function HostDialog({ studio, project, tpl, draft, dirty, save, onIndex, 
         )}
       </section>
 
-      {otherDb && (
-        <section className="flex flex-col gap-2 rounded-xl border border-brand-400/40 bg-brand-500/5 p-4 text-[13px]" aria-label="Move into the Studio's database">
-          <b className="text-sm">This site's data is in another database</b>
-          <span className="text-ink-300">Its content, photos and editors are in <span className="font-mono">{host!.cf!.api.replace(/^https:\/\//, "")}</span>, so every browser has to sign in to that database separately. Move them into your Studio's database: then any device signed in to the Studio reaches this site. The pages and domain stay on the site's own Cloudflare account, and the old database isn't changed.</span>
-          {serverMove ? <button type="button" className="btn btn-pri btn-sm self-start" disabled={!!busy} onClick={moveByServer}>{busy === "movein" ? (step?.detail || "Moving") + "…" : "Move into my Studio's database and publish"}</button>
-            : !cfAcc.ready ? <span className="text-amber-200">Connect your Cloudflare token in section 1 first, or add the site's account in Settings → Sites and hosting accounts (then no sign-in is needed here).</span>
-            : !siteAccKnown ? <span className="text-amber-200">Add the site's Cloudflare account under Other Cloudflare accounts (section 1) first.</span>
-            : cfAccess !== "ok" ? <span className="text-amber-200">Sign in to the old database below (section 2) with an email code first.</span>
-            : <button type="button" className="btn btn-pri btn-sm self-start" disabled={!!busy} onClick={moveIntoStudio}>{busy === "movein" ? (step?.detail || "Moving") + "…" : "Move into my Studio's database and publish"}</button>}
+      {otherDb && !bridged && !cfSigned && (
+        <section className="flex flex-col gap-2 rounded-xl border border-brand-400/40 bg-brand-500/5 p-4 text-[13px]" aria-label="Reach this site from every device">
+          <b className="text-sm">This site has its own database</b>
+          <span className="text-ink-300">Its content, photos and editors stay in <span className="font-mono">{host!.cf!.api.replace(/^https:\/\//, "")}</span> on its own Cloudflare account. To reach it from every device without signing in to it separately, add that account in <b>Settings → Sites and hosting accounts</b>. Or sign in to it below with an email code (this device only).</span>
         </section>
       )}
       <section className="flex flex-col gap-3 rounded-xl border border-ink-700 bg-ink-950 p-4" aria-label="Supabase">
@@ -439,7 +395,9 @@ export function HostDialog({ studio, project, tpl, draft, dirty, save, onIndex, 
                 {mailCfg || testOnly ? <>{cfp.ui}<button type="button" className="btn btn-sm self-start" disabled={!!busy || !cfp.ready} onClick={saveMail}>{busy === "cfsetup" ? (step?.detail || "Saving") + "…" : "Save email settings"}</button></> : null}
               </div>
             )}
-            {cfSite && (cfSigned ? (
+            {cfSite && bridged && !cfSigned ? (
+              <p className="flex items-center gap-2 text-sm text-emerald-300"><span className="h-2 w-2 rounded-full bg-emerald-400" />The site keeps its own database on its Cloudflare account; this device reaches it through your Studio's database (no separate sign-in).</p>
+            ) : cfSite && (cfSigned ? (
               <div className="flex flex-wrap items-center gap-2 text-sm">
                 <span className={`h-2 w-2 rounded-full ${cfAccess === "ok" ? "bg-emerald-400" : "bg-amber-400"}`} />
                 <span>Signed in as <b>{cfSigned}</b>{cfAccess === "ok" ? " · can edit this site" : " · not an editor of this site"}</span>

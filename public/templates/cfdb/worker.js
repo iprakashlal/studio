@@ -12,7 +12,7 @@ create index if not exists enquiries_site on enquiries (site, created_at);
 create table if not exists workers (worker text primary key, scope text not null);
 create table if not exists repos (repo text primary key, scope text not null);
 `;
-var CFDB_VERSION = 8;
+var CFDB_VERSION = 9;
 var CFDB_WORKER_NAME = "picaffectz-db";
 
 // worker/db-worker.ts
@@ -404,7 +404,7 @@ var db_worker_default = {
     if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
     const u = new URL(req.url), p = u.pathname.replace(/\/+$/, "") || "/";
     try {
-      if (p === "/") return json({ ok: true, service: "site-studio-db", v: V, mail: !!(env.RESEND_API_KEY && env.MAIL_FROM), ...env.CF_TOKEN && env.CF_ACCOUNT ? { deploy: true, account: env.CF_ACCOUNT } : {}, ...env.GH_TOKEN ? { gh: true } : {}, ...env.AI ? { ai: true, pamphlet: 2 } : {}, reviews: true, accounts: 2, cfx: 3, ...otherAccounts(env).length ? { more: otherAccounts(env).length } : {} });
+      if (p === "/") return json({ ok: true, service: "site-studio-db", v: V, mail: !!(env.RESEND_API_KEY && env.MAIL_FROM), ...env.CF_TOKEN && env.CF_ACCOUNT ? { deploy: true, account: env.CF_ACCOUNT } : {}, ...env.GH_TOKEN ? { gh: true } : {}, ...env.AI ? { ai: true, pamphlet: 2 } : {}, reviews: true, accounts: 2, cfx: 3, studioPages: 1, ...otherAccounts(env).length ? { more: otherAccounts(env).length } : {} });
       if (p === "/auth/code" && req.method === "POST") {
         const { email: raw } = await req.json();
         const email2 = String(raw || "").trim().toLowerCase();
@@ -444,6 +444,13 @@ var db_worker_default = {
         const f = await readFile(env, "site:" + site, path2);
         if (!f) return err(404, "Not found.");
         return new Response(f.bytes, { headers: { ...cors, "Content-Type": f.type || typeOf(path2), "Cache-Control": path2.startsWith("assets/") && !path2.startsWith("assets/data/") ? "public, max-age=31536000, immutable" : "no-store", "x-sha": f.sha, "x-updated": f.updated_at } });
+      }
+      if (p.startsWith("/sp/") && req.method === "GET") {
+        const id = p.split("/")[2] || "";
+        if (!/^[a-z0-9][a-z0-9-]{0,59}$/.test(id)) return err(404, "Not found.");
+        const f = await readFile(env, "studio:" + id, "public/pages.json");
+        if (!f) return err(404, "Not found.");
+        return new Response(f.bytes, { headers: { ...cors, "Content-Type": "application/json", "Cache-Control": "no-store" } });
       }
       if (p.startsWith("/enquire/") && req.method === "POST") {
         const site = p.split("/")[2];

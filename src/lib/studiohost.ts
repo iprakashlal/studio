@@ -43,6 +43,8 @@ $$;
 drop policy if exists "studio files: members" on public.studio_files;
 create policy "studio files: members" on public.studio_files for all to authenticated
   using (public.studio_role(studio) is not null) with check (public.studio_role(studio) is not null);
+drop policy if exists "studio files: public pages" on public.studio_files;
+create policy "studio files: public pages" on public.studio_files for select to anon, authenticated using (path = 'public/pages.json');
 drop policy if exists "studio members: read" on public.studio_members;
 create policy "studio members: read" on public.studio_members for select to authenticated using (public.studio_role(studio) is not null);
 drop policy if exists "studio members: manage" on public.studio_members;

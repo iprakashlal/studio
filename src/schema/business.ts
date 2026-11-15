@@ -2,7 +2,7 @@ import type { Category, Field, TemplateDef } from "./types";
 import { BODY_FONTS, DISPLAY_FONTS, FX_AXES, LINE_BREAKS_AXIS, type Axis } from "../themes/catalog";
 import { BIZ_AXES, BIZ_TAGS, BIZ_THEMES, businessThemeValues } from "../themes/business";
 import { NAV_MODE_FIELD } from "../themes/fields";
-import { adminCategory, heroSlidesCard, prepareSlides, seoCategory, warrantyCategory } from "./common";
+import { adminCategory, staticPagesCategory, heroSlidesCard, prepareSlides, seoCategory, warrantyCategory } from "./common";
 
 const g2 = (...fields: Field[]): Field => ({ t: "grid", cols: 2, fields });
 const g3 = (...fields: Field[]): Field => ({ t: "grid", cols: 3, fields });
@@ -188,6 +188,7 @@ const schema: Category[] = [
   },
   warrantyCategory("popup-or-page"),
   seoCategory(true),
+  staticPagesCategory("page"),
   adminCategory(),
 ];
 

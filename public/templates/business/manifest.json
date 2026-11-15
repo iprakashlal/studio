@@ -8,6 +8,7 @@
     "about.html",
     "contact.html",
     "warranty.html",
+    "page.html",
     "404.html",
     "admin.html",
     "assets/biz.css",
@@ -16,6 +17,7 @@
     "assets/slides.js",
     "assets/motifs.js",
     "assets/warranty.js",
+    "assets/pages.js",
     "README.md",
     "supabase/enquiries.sql"
   ],

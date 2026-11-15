@@ -39,11 +39,14 @@ export type Field =
   | { t: "googleReviews" };
 
 export type Card = { title: string; fields: Field[]; /** Shown in the Studio only, not in the site's admin page. */ studio?: boolean };
-export type Category = { id: string; label: string; group: string; desc: string; cards: Card[]; /** Show the category only when this returns true for the current content. */ showIf?: (content: any) => boolean };
+export type Category = { id: string; label: string; group: string; desc: string; cards: Card[]; /** Show the category only when this returns true for the current content. */ showIf?: (content: any) => boolean;
+  /** A different name and menu heading in the site's own admin page. */ site?: { label?: string; group?: string } };
 
 export type TemplatePage = { file: string; label: string };
 
 export type TemplateDef = {
+  /** The file that shows a static page: "page.html" (opened as page.html?p=<name>) or "index.html" for one-page templates. */
+  pageFile?: string;
   id: string;
   name: string;
   kind: string;

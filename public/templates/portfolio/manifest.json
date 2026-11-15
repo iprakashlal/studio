@@ -7,6 +7,7 @@
     "assets/layouts.js",
     "admin.html",
     "404.html",
+    "assets/pages.js",
     "README.md"
   ],
   "starters": [

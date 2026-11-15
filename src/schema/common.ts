@@ -55,6 +55,40 @@ export function seoCategory(shop: boolean): Category {
   };
 }
 
+// ---------------------------------------------------------------- static pages (all templates)
+/** "Privacy Policy" → "privacy-policy": the name in the page's address (page.html?p=…). Same rule as assets/pages.js. */
+export const pageSlug = (raw: unknown) => String(raw ?? "").toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60);
+export const staticPageDefault = (title = "New page") => ({ id: "pg-" + Math.random().toString(36).slice(2, 8), title, slug: "", subtitle: "", updated: "", body: "", show: true, inNav: false, inFooter: true, navLabel: "", showTitle: true, align: "left", size: "large", width: "narrow", toc: false, crumbs: true, noindex: false });
+/** Reading pages with a title and plain text: privacy policy, terms, shipping, refunds, about… In the Studio it sits
+ *  under Settings → Additional pages; the site's own admin page shows it as its own "Static pages" section. */
+export function staticPagesCategory(where: "page" | "portfolio"): Category {
+  const g2 = (...fields: Field[]): Field => ({ t: "grid", cols: 2, fields });
+  const addr = where === "portfolio" ? "yoursite/?p=" : "yoursite/page.html?p=";
+  return {
+    id: "static-pages", label: "Additional pages", group: "Settings", site: { label: "Static pages", group: "Static pages" },
+    desc: "Reading pages with a title and text, such as a privacy policy, terms, shipping or refunds. Each one gets its own address and a link in the footer or menu.",
+    cards: [{ title: "Pages", fields: [
+      { t: "list", path: "staticPages", max: 30, add: () => staticPageDefault(), title: (it) => `${it?.title || "Untitled page"}${it?.show === false ? " (hidden)" : ""}`,
+        item: [
+          { t: "text", path: "title", label: "Title", ml: true },
+          { t: "text", path: "slug", label: "Address name (optional)", ph: "made from the title", show: (v) => `Opens at ${addr}${pageSlug(v) || "<the title>"}. Letters, numbers and dashes. Empty uses the title.` },
+          { t: "textarea", path: "subtitle", label: "Subtitle under the title (optional)", rows: 2 },
+          { t: "text", path: "updated", label: "Last updated (optional)", ph: "15 November 2026", hint: "Shown under the title as “Last updated: …”. Leave empty to hide it." },
+          { t: "textarea", path: "body", label: "Text", rows: 16, hint: "Plain text. A blank line starts a new paragraph. ## Heading and ### Smaller heading make headings; - item makes a bullet, 1. item a numbered list, > a quote, --- a line. **bold**, *italic*, [words](https://link); links and emails become clickable on their own. You can paste text from a document." },
+          g2({ t: "toggle", path: "show", label: "Published (visitors can open it)" }, { t: "toggle", path: "inFooter", label: "Link in the footer" },
+            { t: "toggle", path: "inNav", label: "Link in the menu" }, { t: "text", path: "navLabel", label: "Link name (optional)", ph: "the title" }),
+          { t: "note", text: "Title options" },
+          g2({ t: "toggle", path: "showTitle", label: "Show the title on the page" }, { t: "select", path: "align", label: "Title alignment", options: [{ value: "left", label: "Left" }, { value: "center", label: "Centre" }] },
+            { t: "select", path: "size", label: "Title size", options: [{ value: "large", label: "Large" }, { value: "medium", label: "Medium" }, { value: "small", label: "Small" }] },
+            { t: "select", path: "width", label: "Text width", options: [{ value: "narrow", label: "Narrow (easiest to read)" }, { value: "wide", label: "Wide" }, { value: "full", label: "Full width" }] },
+            { t: "toggle", path: "toc", label: "List the headings at the top (“On this page”)" }, { t: "toggle", path: "crumbs", label: where === "portfolio" ? "Show “Back” at the top" : "Show “Home / page” at the top" },
+            { t: "toggle", path: "noindex", label: "Hide this page from search engines" }),
+        ] },
+      { t: "note", text: "Pages use the site's colours and fonts. Pick a page in the preview's page list to see it. A site published before this update needs one publish from the Studio to get the page file; after that, pages added here or in the site's admin page work as soon as you publish." },
+    ] }],
+  };
+}
+
 /** Warranty & service-status check (shop and business sites): settings here, records in the "Warranty records" panel. */
 export function warrantyCategory(where: "page" | "popup-or-page"): Category {
   const g = (...fields: Field[]): Field => ({ t: "grid", cols: 2, fields });

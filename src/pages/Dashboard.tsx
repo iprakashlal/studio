@@ -20,7 +20,8 @@ const STATUS: Record<ProjectMeta["status"], { label: string; cls: string }> = {
 /** Last live-site check per project, so going back and forth doesn't re-check every time. */
 const checked = new Map<string, number>();
 
-export function Dashboard({ studio, index, onIndex, token }: { studio: Studio; index: StudioIndex; onIndex: (i: StudioIndex) => void; token: string }) {
+export function Dashboard({ studio, index, onIndex, token, hid = () => false }: { studio: Studio; index: StudioIndex; onIndex: (i: StudioIndex) => void; token: string; /** Features a partner hid in this client Studio. */ hid?: (key: string) => boolean }) {
+  const canNew = !hid("new") && TEMPLATE_LIST.some((t) => !hid("tpl-" + t.id));
   const toast = useToast();
   const [live, setLive] = useState<Record<string, "checking" | "pulled" | "conflict">>({});
   const [pushing, setPushing] = useState(false);
@@ -95,7 +96,7 @@ export function Dashboard({ studio, index, onIndex, token }: { studio: Studio; i
         </div>
         <div className="flex flex-wrap gap-2">
           {index.projects.some((p) => p.publish || p.host) && <button className="btn" onClick={() => setPushing(true)} title="Put the latest templates, themes and admin page on every published site">↻ Push updates to live sites</button>}
-          <button className="btn btn-pri" onClick={() => setCreating(true)}>+ New project</button>
+          {canNew && <button className="btn btn-pri" onClick={() => setCreating(true)}>+ New project</button>}
         </div>
       </div>
       {pushing && <PushUpdatesDialog studio={studio} index={index} token={token} onClose={() => setPushing(false)} />}
@@ -128,7 +129,7 @@ export function Dashboard({ studio, index, onIndex, token }: { studio: Studio; i
       </div>
 
       {!index.projects.length ? (
-        <Empty title="Start your first site" body="Pick a template, add content, preview it live, then export a ZIP or publish straight to a GitHub repository." action={<button className="btn btn-pri" onClick={() => setCreating(true)}>+ New project</button>} />
+        <Empty title="Start your first site" body="Pick a template, add content, preview it live, then export a ZIP or publish straight to a GitHub repository." action={canNew ? <button className="btn btn-pri" onClick={() => setCreating(true)}>+ New project</button> : undefined} />
       ) : !list.length ? (
         <Empty title="No projects match" body="Try another category, template or search." />
       ) : (
@@ -159,11 +160,11 @@ export function Dashboard({ studio, index, onIndex, token }: { studio: Studio; i
                   </dl>
                   <div className="relative z-10 flex flex-wrap gap-2">
                     <a href={`#/p/${p.id}`} className="btn btn-pri btn-sm">Open</a>
-                    <button className="btn btn-sm" disabled={!!busy} onClick={() => run("dup" + p.id, () => studio.duplicate(p.id, `${p.name} (copy)`), "Project duplicated")}>{busy === "dup" + p.id ? "Copying…" : "Duplicate"}</button>
+                    {!hid("duplicate") && canNew && <button className="btn btn-sm" disabled={!!busy} onClick={() => run("dup" + p.id, () => studio.duplicate(p.id, `${p.name} (copy)`), "Project duplicated")}>{busy === "dup" + p.id ? "Copying…" : "Duplicate"}</button>}
                     {p.host ? <a className="btn btn-sm" href={siteAddress(p.host)} target="_blank" rel="noopener">Live site ↗</a> : p.publish && <a className="btn btn-sm" href={`https://${p.publish.owner}.github.io/${p.publish.repo === `${p.publish.owner}.github.io` ? "" : p.publish.repo + "/"}`} target="_blank" rel="noopener">Live site ↗</a>}
-                    <button className="btn btn-sm btn-danger ml-auto" disabled={!!busy} onClick={async () => {
+                    {!hid("delete") && <button className="btn btn-sm btn-danger ml-auto" disabled={!!busy} onClick={async () => {
                       if (await confirm(`Delete “${p.name}”?`, "This removes the project, its images and export snapshots from the Studio. Sites you already exported or published are not affected.", "Delete", true)) run("del" + p.id, () => studio.remove(p.id), "Project deleted");
-                    }}>Delete</button>
+                    }}>Delete</button>}
                   </div>
                 </div>
               </article>
@@ -172,15 +173,15 @@ export function Dashboard({ studio, index, onIndex, token }: { studio: Studio; i
         </div>
       )}
 
-      {creating && <NewProject studio={studio} index={index} onClose={() => setCreating(false)} onCreated={(i, id) => { onIndex(i); setCreating(false); location.hash = `#/p/${id}`; }} />}
+      {creating && <NewProject templates={TEMPLATE_LIST.filter((t) => !hid("tpl-" + t.id))} studio={studio} index={index} onClose={() => setCreating(false)} onCreated={(i, id) => { onIndex(i); setCreating(false); location.hash = `#/p/${id}`; }} />}
       {managing && <Categories studio={studio} index={index} onClose={() => setManaging(false)} onIndex={onIndex} />}
     </main>
   );
 }
 
-function NewProject({ studio, index, onClose, onCreated }: { studio: Studio; index: StudioIndex; onClose: () => void; onCreated: (i: StudioIndex, id: string) => void }) {
+function NewProject({ studio, index, onClose, onCreated, templates }: { studio: Studio; index: StudioIndex; onClose: () => void; onCreated: (i: StudioIndex, id: string) => void; templates: typeof TEMPLATE_LIST }) {
   const toast = useToast();
-  const [f, setF] = useState({ name: "", client: "", template: "portfolio", starter: "default", theme: "", category: index.categories[0]?.id || "" });
+  const [f, setF] = useState({ name: "", client: "", template: templates[0]?.id || "portfolio", starter: "default", theme: "", category: index.categories[0]?.id || "" });
   const [man, setMan] = useState<Record<string, Manifest>>({});
   const [busy, setBusy] = useState(false);
   const pick = (template: string) => setF((x) => ({ ...x, template, starter: "default", theme: (TEMPLATES[template].themes || []).some((t) => t.id === x.theme) || (!TEMPLATES[template].themes && !x.theme.startsWith("biz-")) ? x.theme : "" }));
@@ -211,7 +212,7 @@ function NewProject({ studio, index, onClose, onCreated }: { studio: Studio; ind
       <div className="flex flex-col gap-2">
         <span className="label">Template</span>
         <div className="grid gap-3 sm:grid-cols-3" role="radiogroup" aria-label="Template">
-          {TEMPLATE_LIST.map((t) => (
+          {templates.map((t) => (
             <button key={t.id} type="button" role="radio" aria-checked={f.template === t.id} onClick={() => pick(t.id)}
               className={`flex flex-col gap-1.5 rounded-xl border p-4 text-left ${f.template === t.id ? "border-brand-500 bg-brand-500/10" : "border-ink-600 bg-ink-950 hover:border-ink-400"}`}>
               <span className="font-extrabold leading-snug">{t.name}</span>

@@ -165,11 +165,11 @@ export function ProjectView({ studio, index, project, session, onIndex }: { stud
 
   const extras = useMemo(() => [
     ...(project.template === "business" ? [{
-      id: "enquiries", label: "Enquiries", group: "Content", desc: "Messages sent through the website's enquiry form.",
+      id: "enquiries", label: "Enquiries", group: "Forms & records", desc: "Messages sent through the website's enquiry form.",
       render: () => <EnquiriesPanel cfg={project.host?.cf ? null : enquiriesCfg(draft, project.host?.sb)} cf={project.host?.cf} account={project.host?.account} hosted={!!project.host} email={draft?.contact?.email} form={draft?.contact?.form} ghToken={ghPublish.token(session.token)} inStudio />,
     }] : []),
     ...(project.template === "store" || project.template === "business" ? [{
-      id: "warranty-records", label: "Warranty records", group: "Content", desc: "Products' numbers, warranty and service status, for the site's warranty & status check. Saved straight to the live site.",
+      id: "warranty-records", label: "Warranty records", group: "Forms & records", desc: "Products' numbers, warranty and service status, for the site's warranty & status check. Saved straight to the live site.",
       render: () => <WarrantyPanel repo={site} cfg={draft?.warranty} why={studio.repo.demo ? "Sign in with your repository to keep records." : "Publish the site first (to GitHub or Host to External Services): records are saved straight to the live site."} />,
     }] : []),
     {

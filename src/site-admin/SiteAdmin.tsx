@@ -310,10 +310,10 @@ function Workspace({ info, onInfo, repo, account, onSignOut, hosted, ghToken }: 
       { id: "shop-customers", label: "Customers", group: "Shop", desc: "Signed-up customers by account number and email, with their orders.", render: () => <CustomersPanel content={saved} /> },
     ] : []),
     ...(tpl.id === "business" ? [
-      { id: "enquiries", label: "Enquiries", group: "Content", desc: "Messages sent through your website's enquiry form.", render: () => <EnquiriesPanel cfg={hosted && "api" in hosted ? null : enquiriesCfg(saved, hosted)} cf={hosted && "api" in hosted ? hosted : undefined} hosted={!!hosted} email={saved?.contact?.email} form={saved?.contact?.form} ghToken={ghToken} /> },
+      { id: "enquiries", label: "Enquiries", group: "Forms & records", desc: "Messages sent through your website's enquiry form.", render: () => <EnquiriesPanel cfg={hosted && "api" in hosted ? null : enquiriesCfg(saved, hosted)} cf={hosted && "api" in hosted ? hosted : undefined} hosted={!!hosted} email={saved?.contact?.email} form={saved?.contact?.form} ghToken={ghToken} /> },
     ] : []),
     ...(tpl.id === "store" || tpl.id === "business" ? [
-      { id: "warranty-records", label: "Warranty records", group: "Content", desc: "Products' numbers, warranty and service status, for the site's warranty & status check.", render: () => <WarrantyPanel repo={repo} cfg={draft?.warranty} /> },
+      { id: "warranty-records", label: "Warranty records", group: "Forms & records", desc: "Products' numbers, warranty and service status, for the site's warranty & status check.", render: () => <WarrantyPanel repo={repo} cfg={draft?.warranty} /> },
     ] : []),
     { id: "backup", label: "Backup & reset", group: "Settings", desc: "Copy, restore or reset the site's content.", render: () => <BackupPanel draft={draft} onReplace={(c) => { setDraft(clone(c)); bump(); }} loadDefaults={async () => clone(saved)} hosted={!!hosted} /> },
     { id: "account", label: "Account", group: "Settings", desc: "Your login on this device.", render: () => account },

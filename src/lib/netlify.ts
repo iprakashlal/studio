@@ -156,6 +156,7 @@ export class Netlify {
     const apex = domain.replace(/^www\./, "");
     return this.req<NetlifySite>(`/sites/${encodeURIComponent(siteId)}`, { method: "PATCH", body: JSON.stringify({ custom_domain: `www.${apex}` }) });
   }
+  async deleteSite(siteId: string) { await this.req(`/sites/${siteId}`, { method: "DELETE" }); }
   async removeDomain(siteId: string) {
     return this.req<NetlifySite>(`/sites/${encodeURIComponent(siteId)}`, { method: "PATCH", body: JSON.stringify({ custom_domain: null, domain_aliases: [] }) });
   }

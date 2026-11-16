@@ -3,7 +3,7 @@
 import { copyFileSync, mkdirSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 
-const files = ["fx.js", "motifs.js", "layouts.js", "warranty.js", "slides.js", "pages.js", "maint.js"];
+const files = ["fx.js", "motifs.js", "layouts.js", "warranty.js", "slides.js", "pages.js", "maint.js", "addons.js"];
 const root = "public/templates";
 for (const t of readdirSync(root)) {
   if (!statSync(join(root, t)).isDirectory()) continue;

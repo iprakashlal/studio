@@ -32,13 +32,13 @@ export function menuVersion(m?: MenuCfg): string {
   return h.toString(36);
 }
 
-export type NavEntry = { id: string; label: string; group: string; desc: string; cards: { card: Card; cat: string }[]; extra: boolean; from: string[] };
+export type NavEntry = { id: string; label: string; group: string; sub?: string; desc: string; cards: { card: Card; cat: string }[]; extra: boolean; from: string[] };
 
 /** The editor's menu: the template's sections (and extra panels) after renaming, regrouping, ordering and
  *  combining. A combined section's cards move into the section it was combined into; extras can't combine. */
 export function applyMenu(cats: Category[], extras: { id: string; label: string; group: string; desc: string }[], m?: MenuCfg): NavEntry[] {
   const base: NavEntry[] = [
-    ...cats.map((c) => ({ id: c.id, label: c.label, group: c.group, desc: c.desc, cards: c.cards.map((card) => ({ card, cat: c.id })), extra: false, from: [c.id] })),
+    ...cats.map((c) => ({ id: c.id, label: c.label, group: c.group, sub: c.sub, desc: c.desc, cards: c.cards.map((card) => ({ card, cat: c.id })), extra: false, from: [c.id] })),
     ...extras.map((e) => ({ id: e.id, label: e.label, group: e.group, desc: e.desc, cards: [], extra: true, from: [e.id] })),
   ];
   if (!m?.items?.length) return base;
@@ -50,7 +50,7 @@ export function applyMenu(cats: Category[], extras: { id: string; label: string;
   const rest = base.filter((e) => !pos.has(e.id));
   ordered.push(...listed);
   for (const e of rest) { const i = base.indexOf(e), prev = base.slice(0, i).reverse().find((x) => ordered.includes(x)); ordered.splice(prev ? ordered.indexOf(prev) + 1 : 0, 0, e); }
-  for (const e of ordered) { const c = conf.get(e.id); if (c?.label) e.label = c.label; if (c?.group) e.group = c.group; }
+  for (const e of ordered) { const c = conf.get(e.id); if (c?.label) e.label = c.label; if (c?.group && c.group !== e.group) { e.group = c.group; e.sub = undefined; } }
   // Combine (one level; never into itself, an extra, or a section that is itself combined away).
   const byId = new Map(ordered.map((e) => [e.id, e]));
   const gone = new Set<string>();

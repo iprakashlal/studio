@@ -637,6 +637,14 @@ const swOpen = () => SW().then((w) => w.open(swOpts())).catch(() => {});
 const swMount = () => { const el = document.getElementById("sw-page"); if (el) SW().then((w) => w.mount(el, swOpts())).catch(() => {}); };
 /** Five stars, filled up to the rating. */
 const starRow = (n) => { const r = Math.max(0, Math.min(5, Math.round(+n || 0))); return "★".repeat(r) + `<span class="off">${"★".repeat(5 - r)}</span>`; };
+/* Features (assets/addons.js): chat button, badge, custom code and the custom API for form entries. */
+let adP;
+function addons() {
+  const A = C.addons || {}, any = (A.chat && A.chat.on) || (A.badge && A.badge.on) || (A.api && A.api.on) || (A.code || []).some((x) => x && x.on !== false && x.code);
+  if (!any && !window.SiteAddons) return;
+  (adP ||= new Promise((ok, no) => { if (window.SiteAddons) return ok(); const s = document.createElement("script"); s.src = "assets/addons.js"; s.onload = () => ok(); s.onerror = no; document.head.appendChild(s); }))
+    .then(() => window.SiteAddons.mount(C, { preview: PREVIEW, home: PAGE === "home", site: C.brand.name })).catch(() => {});
+}
 /* Maintenance mode (assets/maint.js): while content.maintenance.on, visitors see the maintenance page instead of the
    site. The editor's preview shows it only on its "Maintenance page" entry (?maintenance=1). */
 const MNT_Q = /[?&]maintenance=1(&|$)/.test(location.search);
@@ -694,6 +702,7 @@ function bind() {
   if (PAGE === "account") bindAccount();
   if (PAGE === "warranty") swMount();
   if (PAGE === "page" && window.SitePages) window.SitePages.after(spHere());
+  addons();
   if (location.hash && PAGE === "policies") { const el = document.getElementById(location.hash.slice(1)); if (el) el.scrollIntoView(); }
 }
 function bindShop() {

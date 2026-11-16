@@ -25,7 +25,7 @@ export function SitesHostingCard({ session, studio, index, onIndex }: { session:
   const toast = useToast(), confirm = useConfirm();
   const sites = useMemo(() => index.projects.filter((p) => p.host || p.publish), [index.projects]);
   const [db, setDb] = useState<{ api: string; studio: string } | null | undefined>(undefined);
-  const [info, setInfo] = useState<{ cfx: boolean; imp: boolean; pages: boolean; del: boolean; main: string | null; accounts: Acc[]; signed: boolean; gh: boolean } | null>(null);
+  const [info, setInfo] = useState<{ cfx: boolean; imp: boolean; pages: boolean; del: boolean; mail: boolean; main: string | null; accounts: Acc[]; signed: boolean; gh: boolean } | null>(null);
   const [mainName, setMainName] = useState("");
   const [busy, setBusy] = useState(""), [err, setErr] = useState("");
   const [tear, setTear] = useState<ProjectMeta | null>(null);
@@ -40,7 +40,7 @@ export function SitesHostingCard({ session, studio, index, onIndex }: { session:
     setDb({ api, studio: sid });
     const d = await cfDeployInfo(api), signed = !!(await cfSignedIn(api));
     const l = signed && d.cfx ? await cfxList(api, sid).catch(() => null) : null;
-    setInfo({ cfx: !!d.cfx, imp: !!d.bridge, pages: !!d.studioPages, del: !!d.del, main: l?.main ?? (d.deploy ? d.account || null : null), accounts: l?.accounts || [], signed, gh: !!d.gh });
+    setInfo({ cfx: !!d.cfx, imp: !!d.bridge, pages: !!d.studioPages, del: !!d.del, mail: !!d.enqMail, main: l?.main ?? (d.deploy ? d.account || null : null), accounts: l?.accounts || [], signed, gh: !!d.gh });
     if (v?.account && v.account === (l?.main ?? d.account)) {
       // The main account's name, from this device's token (only shown here).
       try { const acc = await new Cloudflare(await getHelper(session.token, null), v.token).accounts(); setMainName(acc.find((a) => a.id === v.account)?.name || ""); } catch { /* name stays generic */ }
@@ -142,7 +142,7 @@ export function SitesHostingCard({ session, studio, index, onIndex }: { session:
       {!db ? <p className="text-sm text-amber-200">This needs your Studio's database on Cloudflare. Set it up from Publish to Cloudflare on a project, or move the Studio there (Migration).</p>
         : !info ? <p className="text-sm text-ink-400">Loading…</p>
         : !info.signed ? <p className="text-sm text-amber-200">Sign in to your Studio's database on this device to manage its hosting accounts.</p>
-        : !info.cfx || !info.imp || !info.pages || !info.del ? <div className="flex flex-col gap-2 text-sm"><p className="text-amber-200">Your Studio's database is from an older build. Update it once (your data, sign-ins and kept tokens stay).</p>
+        : !info.cfx || !info.imp || !info.pages || !info.del || !info.mail ? <div className="flex flex-col gap-2 text-sm"><p className="text-amber-200">Your Studio's database is from an older build. Update it once (your data, sign-ins and kept tokens stay).</p>
           <p className="text-ink-400">Connect the Cloudflare account that runs it (<span className="font-mono">{dbHost}</span>), then press Update. A token already saved on this device connects by itself.</p>
           {cfAcc.ui}
           <button type="button" className="btn btn-pri btn-sm self-start" disabled={!!busy || !cfAcc.ready} onClick={updateDb}>{busy.startsWith("update") ? (busy.split(":").slice(1).join(":") || "Updating") + "…" : "Update the database"}</button></div>
@@ -201,7 +201,7 @@ export function SitesHostingCard({ session, studio, index, onIndex }: { session:
             })}
           </ul>
         </>}
-      {(!db || (info && !(info.signed && info.cfx && info.imp && info.pages && info.del))) && sites.length > 0 && (
+      {(!db || (info && !(info.signed && info.cfx && info.imp && info.pages && info.del && info.mail))) && sites.length > 0 && (
         <ul className="flex flex-col divide-y divide-ink-700 rounded-lg border border-ink-700" aria-label="Hosted sites">
           {sites.map((p) => (
             <li key={p.id} className="flex flex-wrap items-center gap-2 p-3 text-[13px]">

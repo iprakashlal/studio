@@ -493,6 +493,30 @@ const swOn = () => !!(C.warranty && C.warranty.enabled);
 const swOpts = () => ({ cfg: C.warranty, url: (HOST && HOST.assets ? HOST.assets : "") + "assets/data/warranty.json", preview: PREVIEW, esc });
 const swOpen = () => SW().then((w) => w.open(swOpts())).catch(() => {});
 const swMount = () => { const el = document.getElementById("sw-page"); if (el) SW().then((w) => w.mount(el, swOpts())).catch(() => {}); };
+/** The browser-tab icon: the uploaded logo, else the name's initials in the accent colour. The logo is used as it
+ *  is straight away, then swapped for a square copy (the whole logo, centred) so a wide logo isn't squashed. */
+let iconKey = "";
+function setIcon() {
+  const B = C.brand, t = C.theme, acc = t.c1, rad = Math.max(0, Math.min(50, t.logoRadius ?? 22)), src = imgUrl(B.logo), key = [src, B.name, rad, acc].join("|");
+  if (key === iconKey) return; iconKey = key;
+  let l = document.querySelector("link[rel=icon]"); if (!l) { l = document.createElement("link"); l.rel = "icon"; document.head.appendChild(l); }
+  document.querySelectorAll('link[rel="shortcut icon"], link[rel="apple-touch-icon"]').forEach((x) => x.remove());
+  if (src) {
+    l.removeAttribute("type"); l.href = src;
+    const im = new Image(); im.crossOrigin = "anonymous";
+    im.onload = () => { try {
+      if (iconKey !== key || !im.width || Math.abs(im.width - im.height) < 3) return;
+      const cv = document.createElement("canvas"); cv.width = cv.height = 128; const s = Math.min(128 / im.width, 128 / im.height);
+      cv.getContext("2d").drawImage(im, (128 - im.width * s) / 2, (128 - im.height * s) / 2, im.width * s, im.height * s);
+      const u = cv.toDataURL("image/png"); if (iconKey === key) { l.type = "image/png"; l.href = u; }
+    } catch (e) { /* the photo host doesn't allow copying: the logo itself stays as the icon */ } };
+    im.src = src;
+    return;
+  }
+  const ini = String(B.name || "").split(/\s+/).map((w) => w[0] || "").join("").slice(0, 2).toUpperCase() || "•";
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="${(rad * 0.64).toFixed(1)}" fill="${esc(acc)}"/><text x="32" y="34" dominant-baseline="middle" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-weight="800" font-size="${ini.length > 1 ? 26 : 34}" fill="${onColor(acc)}">${esc(ini)}</text></svg>`;
+  l.type = "image/svg+xml"; l.href = "data:image/svg+xml," + encodeURIComponent(svg);
+}
 /* Features (assets/addons.js): chat button, badge, custom code and the custom API for form entries. */
 let adP;
 function addons() {
@@ -519,7 +543,7 @@ function maintGate(again) {
 function render() {
   // A several-page link opened while the site is one page goes to that section.
   if (!PREVIEW && !multi() && !["home", "products", "product", "page"].includes(PAGE)) { location.replace(PAGES.home + "#" + (PAGE === "work" ? "work" : PAGE)); return; }
-  applyTheme(C.theme); setTitle();
+  applyTheme(C.theme); setTitle(); setIcon();
   if (maintGate(render)) return;
   if (!PREVIEW && PAGE === "warranty" && !swOn()) { location.replace(PAGES.home); return; }
   const special = { warranty: warrantyPage, products: productsPage, product: productPage, page: staticPage }[PAGE];

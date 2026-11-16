@@ -46,6 +46,7 @@ function CloudflareAccount({ session, nf, index }: { session: Session; nf: Netli
           <p className="w-full pl-4 text-[12.5px] text-ink-400">The permission: your API token, kept encrypted on this device only. It goes with each request through the helper and lets the Studio publish sites, run the database and connect domains.</p>
         </div>
       ) : acc.ui}
+      {acc.account && acc.othersUi}
       {index && <AnyDevice session={session} acc={acc} index={index} />}
     </div>
   );

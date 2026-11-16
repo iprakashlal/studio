@@ -1462,7 +1462,7 @@ function renderSite(c){
   if(K){renderKit(c,K)}else{
   siteRoot.innerHTML=`<div id="siteInner">${siteHTML(c)}</div>`;
   initSite(c);}
-  heroSlides(c);spLinks(c);addons(c);festival(c);
+  heroSlides(c);spLinks(c);menu(c);consent(c);addons(c);festival(c);
   if(window.SiteFX)try{window.SiteFX.init({root:$("#siteInner"),brand:c.theme.introTitle||c.brand.logoText,badge:c.poweredBy})}catch(e){}
   setIcon(c);fitLines();
 }
@@ -1473,6 +1473,27 @@ function addons(c){
   if(!any&&!window.SiteAddons)return;
   (adP||(adP=new Promise((ok,no)=>{if(window.SiteAddons)return ok();const s=document.createElement("script");s.src="assets/addons.js";s.onload=()=>ok();s.onerror=no;document.head.appendChild(s)})))
     .then(()=>SiteAddons.mount(c,{preview:PREVIEW,home:!(window.SitePages&&SitePages.here()),site:c.brand.logoText})).catch(()=>{})}
+/* Cookie consent (assets/consent.js): the banner that asks before analytics, marketing and other optional code runs. */
+let csP;
+function consent(c){
+  if(!(c.consent||{}).on&&!window.SiteConsent)return;
+  (csP||(csP=new Promise((ok,no)=>{if(window.SiteConsent)return ok();const s=document.createElement("script");s.src="assets/consent.js";s.onload=()=>ok();s.onerror=no;document.head.appendChild(s)})))
+    .then(()=>SiteConsent.mount(c,{preview:PREVIEW,pageUrl:id=>{const S=window.SitePages,p=S&&S.list(c).find(x=>x.id===id);return p?"./?p="+encodeURIComponent(S.slug(p)):""}})).catch(()=>{})}
+/* The owner's own menu with sub-menus (assets/menu.js), in place of the automatic links of whichever layout shows. */
+let mnP;
+const MENU_NAVS=[".nav ul","#vxMenu nav",".ks-top nav",".kt-nav",".kp-top nav",".ke-mast nav"];
+function menu(c){
+  const M=c.menu||{};if(!(M.custom&&(M.items||[]).some(i=>i&&i.show!==false&&String(i.label||"").trim())))return;
+  const done=()=>{const w=document.getElementById("sm-wait");if(w)w.remove()};
+  if(!window.SiteMenu&&!document.getElementById("sm-wait")){const w=document.createElement("style");w.id="sm-wait";w.textContent=MENU_NAVS.join(",")+"{visibility:hidden}";document.head.appendChild(w);setTimeout(done,2500)}
+  const go=it=>{const t=it.to||"";
+    if(t==="none")return{url:""};
+    if(t==="url"){const u=String(it.url||"").trim();return{url:/^(https?:|mailto:|tel:|#|\/|\.\/|\?)/i.test(u)?u:""}}
+    if(t==="page"){const S=window.SitePages,p=S&&S.list(c).find(x=>x.id===it.page);return{url:p?"./?p="+encodeURIComponent(S.slug(p)):""}}
+    if(t==="top")return{url:"#top"};
+    const s=c.sections.find(x=>x.id===t);return{url:s&&s.visible?"#"+t:""}};
+  (mnP||(mnP=new Promise((ok,no)=>{if(window.SiteMenu)return ok();const s=document.createElement("script");s.src="assets/menu.js";s.onload=()=>ok();s.onerror=no;document.head.appendChild(s)})))
+    .then(()=>{SiteMenu.mount(c,{navs:MENU_NAVS,resolve:go,onPick:()=>{const b=document.getElementById("vxMbtn");if(b&&b.getAttribute("aria-expanded")==="true")b.click()}});done()}).catch(done)}
 /* Festival overlay (assets/festival.js): greetings on India's festivals, when the Studio offered it to this site. */
 let fsP;
 function festival(c){
@@ -1496,7 +1517,7 @@ function spPage(c){
   if(p){const one=x=>String(x||"").replace(/\s*\n\s*/g," ").trim();document.title=one((c.seo.titlePattern||"{page} · {site}").replace(/\{page\}/g,one(p.title)).replace(/\{site\}/g,one(name)))}
   const links=S.list(c).filter(x=>x.inFooter!==false);
   siteRoot.innerHTML=`<div id="siteInner"><header class="sp-top"><a href="./">${esc(name)}</a><a class="sp-back" href="./">← ${esc((c.labels&&c.labels.backHome)||"Back")}</a></header><main id="main">${p?S.article(p,{preview:PREVIEW}):S.missing({home:"./"})}</main>${links.length?`<nav class="sp-links" aria-label="Pages">${links.map(x=>`<a href="?p=${encodeURIComponent(S.slug(x))}">${esc(x.navLabel||x.title)}</a>`).join("")}</nav>`:""}<footer class="sp-links"><span>${esc(c.contact.footerLeft||"")}</span></footer></div>`;
-  S.after(p);setIcon(c);addons(c);festival(c);return true}
+  S.after(p);setIcon(c);consent(c);addons(c);festival(c);return true}
 /* links to the static pages under every layout's footer */
 function spLinks(c){const S=window.SitePages;if(!S)return;const links=S.list(c).filter(x=>x.inFooter!==false);if(!links.length)return;
   const n=document.createElement("nav");n.className="sp-links";n.setAttribute("aria-label","Pages");S.css();

@@ -28,8 +28,8 @@ export type Field =
   | { t: "grid"; cols?: 2 | 3; fields: Field[] }
   /** `studio`: shown in the Studio only, not in the site's own admin page. */
   | { t: "note"; text: string; tone?: "info" | "warn"; studio?: boolean }
-  /** Shows `fields` only while the value at `path` (in the whole content) is / isn't the given value. */
-  | { t: "when"; path: string; is?: string; not?: string; fields: Field[] }
+  /** Shows `fields` only while the value at `path` (in the whole content, or in the list item with `local`) is / isn't the given value. */
+  | { t: "when"; path: string; is?: string; not?: string; fields: Field[]; /** Read `path` from the list item being edited instead of the whole content. */ local?: boolean }
   | { t: "presets"; target: string; presets: { name: string; values: Record<string, string> }[] }
   /** The theme gallery: picking one writes the template's themeValues into content.theme. */
   | { t: "themes" }

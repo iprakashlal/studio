@@ -533,6 +533,38 @@ function festival() {
   (fsP ||= new Promise((ok, no) => { if (window.SiteFestival) return ok(); const s = document.createElement("script"); s.src = "assets/festival.js"; s.onload = () => ok(); s.onerror = no; document.head.appendChild(s); }))
     .then(() => window.SiteFestival.mount(C, { preview: PREVIEW, site: C.brand.name })).catch(() => {});
 }
+/* Cookie consent (assets/consent.js): the banner that asks before analytics, marketing and other optional code runs. */
+let csP;
+function consent() {
+  if (!(C.consent || {}).on && !window.SiteConsent) return;
+  (csP ||= new Promise((ok, no) => { if (window.SiteConsent) return ok(); const s = document.createElement("script"); s.src = "assets/consent.js"; s.onload = () => ok(); s.onerror = no; document.head.appendChild(s); }))
+    .then(() => window.SiteConsent.mount(C, { preview: PREVIEW, pageUrl: (id) => { const p = spList().find((x) => x.id === id); return p ? spHref(p) : ""; } })).catch(() => {});
+}
+/* The owner's own menu with sub-menus (assets/menu.js), in place of the automatic links. */
+let mnP;
+const menuOn = () => !!(C.menu && C.menu.custom && (C.menu.items || []).some((i) => i && i.show !== false && String(i.label || "").trim()));
+function menuGo(it) {
+  const t = it.to || "";
+  if (t === "none") return { url: "" };
+  if (t === "url") { const u = String(it.url || "").trim(); return { url: safeUrl(u) || (/^(#|\/|\.\/|[\w-]+\.html)/.test(u) ? u : "") }; }
+  if (t === "page") { const p = spList().find((x) => x.id === it.page); return p ? { url: spHref(p), on: PAGE === "page" && spSlug(p) === spSlug({ slug: spCur() }) } : { url: "" }; }
+  if (t === "warranty") return swOn() ? { url: multi() ? PAGES.warranty : "#warranty", on: PAGE === "warranty" } : { url: "" };
+  const url = href(t === "home" ? "hero" : t);
+  return { url: t === "home" && !multi() ? AT + "#top" : url, on: multi() && (url === PAGES[PAGE] || (PAGE === "product" && url === PAGES.products)) };
+}
+function menu() {
+  if (!menuOn()) return;
+  const done = () => { const w = document.getElementById("sm-wait"); if (w) w.remove(); };
+  if (!window.SiteMenu && !document.getElementById("sm-wait")) { const w = document.createElement("style"); w.id = "sm-wait"; w.textContent = ".nav .links,#mnav{visibility:hidden}"; document.head.appendChild(w); setTimeout(done, 2500); }
+  (mnP ||= new Promise((ok, no) => { if (window.SiteMenu) return ok(); const s = document.createElement("script"); s.src = "assets/menu.js"; s.onload = () => ok(); s.onerror = no; document.head.appendChild(s); }))
+    .then(() => {
+      window.SiteMenu.mount(C, { navs: [".nav .links", "#mnav"], keep: "a.btn", resolve: menuGo, onPick: (a, e) => {
+        const b = $(".burger"), m = $("#mnav"); b && b.setAttribute("aria-expanded", "false"); m && m.classList.remove("open");
+        if (a.getAttribute("href") === "#warranty" && swOn() && !multi()) { e.preventDefault(); swOpen(); }
+      } });
+      done();
+    }).catch(done);
+}
 /* Maintenance mode (assets/maint.js): while content.maintenance.on, visitors see the maintenance page instead of the
    site. The editor's preview shows it too (with a button to see the site), and on its "Maintenance page" entry
    (?maintenance=1) while it is off. */
@@ -561,7 +593,7 @@ function render() {
   bind();
   if (PAGE === "warranty") swMount();
   if (PAGE === "page" && window.SitePages) window.SitePages.after(window.SitePages.find(C, spCur(), PREVIEW));
-  slides(); addons(); festival();
+  slides(); menu(); consent(); addons(); festival();
   if (window.SiteFX) try { window.SiteFX.init({ root: $("#app"), brand: C.theme.introTitle || C.brand.name, badge: C.poweredBy }); } catch (e) {}
 }
 

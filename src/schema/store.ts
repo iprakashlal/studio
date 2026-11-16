@@ -1,7 +1,7 @@
 import type { Category, Field, TemplateDef } from "./types";
 import { uid, vpaOk, paypalOk, httpsOk } from "../lib/util";
 import { BODY_FONTS, DISPLAY_FONTS, LINE_BREAKS_AXIS, STORE_AXES, THEMES, onColor, storeThemeValues } from "../themes/catalog";
-import { adminCategory, emailsCategory, featuresCategory, festivalCategory, staticPagesCategory, heroSlidesCard, prepareSlides, prepareMaintenance, seoCategory, warrantyCategory } from "./common";
+import { adminCategory, consentCategory, emailsCategory, featuresCategory, festivalCategory, menuCategory, menuItem, prepareMenu, staticPagesCategory, heroSlidesCard, prepareSlides, prepareMaintenance, seoCategory, warrantyCategory } from "./common";
 import { NAV_MODE_FIELD, themeCards } from "../themes/fields";
 
 const CURRENCIES = ["INR", "USD", "EUR", "GBP", "AED", "SGD", "AUD", "CAD"];
@@ -42,6 +42,8 @@ const schema: Category[] = [
         { t: "text", path: "labels.help", label: "Footer column: help & policies" }, { t: "text", path: "labels.contact", label: "Footer column: contact" })] },
     ],
   },
+  menuCategory({ where: "the shop's pages (Home, Shop, your story, custom pages and Account)", targets: [{ value: "home", label: "Home" }, { value: "shop", label: "Shop (all products)" }, { value: "cat", label: "A product category" }, { value: "portfolio", label: "Story / portfolio page" }, { value: "policies", label: "Policies" }, { value: "warranty", label: "Warranty & status check" }, { value: "account", label: "Account" }, { value: "cart", label: "Cart" }],
+    extra: [{ t: "when", local: true, path: "to", is: "cat", fields: [{ t: "ref", path: "cat", label: "Category", source: "categories", valueKey: "id", labelKey: "name", empty: "Choose a category" }] }] }, "Design"),
   {
     id: "home", label: "Home page", group: "Pages", desc: "The landing page: hero, featured products, categories, banner and reviews.",
     cards: [
@@ -191,6 +193,7 @@ const schema: Category[] = [
   warrantyCategory("page"),
   emailsCategory(false),
   featuresCategory(),
+  consentCategory(),
   festivalCategory(),
   seoCategory(true),
   adminCategory(),
@@ -201,6 +204,8 @@ export const STORE_LABELS = { allProducts: "All products", viewAll: "View all", 
 export function prepareStore(c: any) {
   if (c && typeof c === "object" && c.home?.hero) prepareSlides(c.home.hero, "#000000");
   prepareMaintenance(c);
+  prepareMenu(c, () => [menuItem(c.nav?.home || "Home", "home"), { ...menuItem(c.nav?.shop || "Shop", "shop"), children: (Array.isArray(c.categories) ? c.categories : []).slice(0, 12).map((k: any) => menuItem(k.name || "Category", "cat", { cat: k.id })) },
+    ...(c.nav?.showPortfolio !== false ? [menuItem(c.nav?.portfolio || "Our story", "portfolio")] : [])]);
   if (!c || typeof c !== "object") return;
   const t = c.theme && typeof c.theme === "object" ? c.theme : (c.theme = {});
   if (!t.introBg) t.introBg = t.deep || t.text || "#111111";

@@ -123,6 +123,143 @@ export function festivalCategory(): Category {
   };
 }
 
+// ---------------------------------------------------------------- cookie & tracking consent (all templates)
+/** The wording each banner starts with (the same text assets/consent.js falls back to). */
+export const CONSENT_WORDS = {
+  india: { title: "Your consent matters", text: "We use cookies and similar tools to run this website and, with your consent, to understand how it is used and to show you relevant offers. We use your personal data only for the purposes listed here, in line with India's Digital Personal Data Protection Act, 2023. You can withdraw your consent at any time from “Cookie settings”.", accept: "Accept all", decline: "Decline", manage: "Choose purposes", save: "Save my choices", extra: "To see, correct or erase your data, or to raise a grievance, contact us using the details on this site. You may also approach the Data Protection Board of India." },
+  intl: { title: "We value your privacy", text: "We use cookies and similar technologies. Necessary ones make the site work. With your permission we also use them to measure visits and to personalise content and ads. You can accept all, reject the non-essential ones or choose by category, and change your mind at any time in “Cookie settings”.", accept: "Accept all", decline: "Reject non-essential", manage: "Manage preferences", save: "Save preferences", extra: "" },
+};
+export const CONSENT_CATS = [
+  { id: "necessary", label: "Strictly necessary", text: "Needed for the site to work: your choices here, your cart and signing in. Always on." },
+  { id: "analytics", label: "Analytics", text: "Help us count visits and see which pages are used, so we can improve the site." },
+  { id: "marketing", label: "Marketing", text: "Used to show relevant ads and measure campaigns, on this site and others." },
+  { id: "preferences", label: "Preferences", text: "Remember settings such as language or region, and run extras like chat boxes and embedded videos." },
+];
+export const consentDefault = () => ({
+  on: false, wording: "auto", try: "", india: { ...CONSENT_WORDS.india }, intl: { ...CONSENT_WORDS.intl },
+  policyLabel: "Privacy policy", policyPage: "", policyUrl: "",
+  categories: CONSENT_CATS.map((c) => ({ ...c, on: true })),
+  mode: "optin", showDecline: true, showManage: true, equal: true, closeX: false, lock: false,
+  layout: "bar", position: "bottom", side: "left", look: "theme", months: "6", version: 1, reopen: true, reopenLabel: "Cookie settings", gpc: true, gcm: false,
+});
+/** Older content gets the consent banner's fields (off), with both wordings filled in. */
+export function prepareConsent(c: any) {
+  if (!c || typeof c !== "object") return;
+  const d = consentDefault(), k = c.consent && typeof c.consent === "object" ? c.consent : {};
+  const obj = (x: any) => (x && typeof x === "object" && !Array.isArray(x) ? x : {});
+  const have: any[] = Array.isArray(k.categories) ? k.categories.filter((x: any) => x && typeof x === "object") : [];
+  c.consent = { ...d, ...k, india: { ...d.india, ...obj(k.india) }, intl: { ...d.intl, ...obj(k.intl) }, months: String(k.months ?? d.months),
+    categories: d.categories.map((x) => ({ ...x, ...(have.find((h) => h.id === x.id) || {}), id: x.id, ...(x.id === "necessary" ? { on: true } : {}) })) };
+}
+/** Features → Cookie consent: the banner that asks visitors before analytics, marketing and other optional code
+ *  runs (assets/consent.js), with one wording for visitors in India and one for everyone else. */
+export function consentCategory(): Category {
+  const g2 = (...fields: Field[]): Field => ({ t: "grid", cols: 2, fields });
+  const words = (r: "india" | "intl"): Field[] => [
+    { t: "text", path: `consent.${r}.title`, label: "Heading" },
+    { t: "textarea", path: `consent.${r}.text`, label: "Message", rows: 5 },
+    g2({ t: "text", path: `consent.${r}.accept`, label: "Accept button" }, { t: "text", path: `consent.${r}.decline`, label: "Decline button" },
+      { t: "text", path: `consent.${r}.manage`, label: "Choose-by-category button" }, { t: "text", path: `consent.${r}.save`, label: "Save button (in the category list)" }),
+    { t: "textarea", path: `consent.${r}.extra`, label: "Extra line (optional)", rows: 3, hint: r === "india" ? "For example your Grievance Officer's name and email, as the DPDP Act expects." : "For example who the data controller is and how to reach them." },
+  ];
+  return {
+    id: "consent", label: "Cookie consent", group: "Features",
+    desc: "A banner that asks visitors before analytics, marketing and other optional code runs, with Accept and Decline buttons, a choice by category, and separate wording for visitors in India and for international visitors.",
+    cards: [
+      { title: "Consent banner", fields: [
+        { t: "toggle", path: "consent.on", label: "Ask visitors for consent" },
+        { t: "when", path: "consent.on", is: "true", fields: [
+          g2({ t: "select", path: "consent.wording", label: "Which wording visitors see", options: [{ value: "auto", label: "Automatic: India wording in India, international elsewhere" }, { value: "india", label: "India wording for everyone" }, { value: "intl", label: "International wording for everyone" }] },
+            { t: "select", path: "consent.try", label: "Try one in the preview", options: [{ value: "", label: "Follow the choice on the left" }, { value: "india", label: "India wording" }, { value: "intl", label: "International wording" }] }),
+          { t: "note", text: "Automatic goes by the visitor's device clock: Indian time gets the India wording (written for the Digital Personal Data Protection Act, 2023), everyone else the international one (written for GDPR-style rules in the EU, UK and similar). No location is looked up and nothing is sent anywhere. The preview always shows the banner; visitors see it until they choose." },
+          { t: "note", text: "The banner controls three things: Custom code with a category (Features → Chat, badges & code), scripts you mark yourself, and Google's Consent Mode. The wording is a starting point, not legal advice: check it against what your site actually collects.", tone: "warn" },
+        ] },
+      ] },
+      { title: "Wording for visitors in India", fields: words("india") },
+      { title: "Wording for international visitors", fields: words("intl") },
+      { title: "Privacy policy link", fields: [
+        g2({ t: "text", path: "consent.policyLabel", label: "Link text", ph: "Privacy policy" }, { t: "ref", path: "consent.policyPage", label: "Opens this custom page", source: "staticPages", valueKey: "id", labelKey: "title", empty: "None" }),
+        { t: "text", path: "consent.policyUrl", label: "Or a web address", ph: "https://…", hint: "Used instead of the custom page when filled in." },
+        { t: "note", text: "The link follows the message in the banner. Write the policy under Pages → Custom pages. Without a page or address, no link shows." },
+      ] },
+      { title: "Consent categories", fields: [
+        { t: "note", text: "What visitors can allow or refuse one by one. Strictly necessary is always shown and always on. Switch off a category your site doesn't use." },
+        { t: "list", path: "consent.categories", fixed: true, add: () => ({}), title: (it) => `${it?.label || it?.id}${it?.id === "necessary" ? " · always on" : it?.on === false ? " · not offered" : ""}`,
+          item: [
+            { t: "when", local: true, path: "id", not: "necessary", fields: [{ t: "toggle", path: "on", label: "Offer this category" }] },
+            { t: "text", path: "label", label: "Name" }, { t: "textarea", path: "text", label: "What it is for", rows: 2 },
+          ] },
+      ] },
+      { title: "Buttons & behaviour", fields: [
+        { t: "select", path: "consent.mode", label: "Before the visitor chooses", options: [{ value: "optin", label: "Nothing optional runs until they accept (opt-in; India, EU, UK)" }, { value: "optout", label: "Optional things run until they decline (opt-out)" }, { value: "notice", label: "Notice only: everything runs, the banner just informs" }] },
+        g2({ t: "toggle", path: "consent.showDecline", label: "Show the Decline button" }, { t: "toggle", path: "consent.equal", label: "Decline looks as strong as Accept" },
+          { t: "toggle", path: "consent.showManage", label: "Show the choose-by-category button" }, { t: "toggle", path: "consent.closeX", label: "Show a close (×) button; closing counts as declining" },
+          { t: "toggle", path: "consent.lock", label: "Dim the page until the visitor chooses" }, { t: "toggle", path: "consent.gpc", label: "Respect the browser's “do not sell or share” signal (Global Privacy Control)" }),
+        g2({ t: "select", path: "consent.months", label: "Ask again after", options: [{ value: "1", label: "1 month" }, { value: "3", label: "3 months" }, { value: "6", label: "6 months" }, { value: "12", label: "12 months" }, { value: "24", label: "24 months" }] },
+          { t: "number", path: "consent.version", label: "Notice version", min: 1, step: 1, hint: "Raise it by one after changing what you collect: everyone is asked again." }),
+        { t: "toggle", path: "consent.gcm", label: "Send the choice to Google tags (Consent Mode v2)" },
+        { t: "note", text: "Accept allows every category, Decline only the necessary one, and the category list lets visitors pick. The choice is kept in the visitor's own browser, not on a server. When a visitor withdraws consent for something already running, the page reloads without it. Cookies a service set earlier stay until they expire or the visitor clears them." },
+      ] },
+      { title: "Look", fields: [
+        g2({ t: "select", path: "consent.layout", label: "Shape", options: [{ value: "bar", label: "Bar across the page" }, { value: "box", label: "Box in a corner" }, { value: "center", label: "Window in the middle" }] },
+          { t: "select", path: "consent.look", label: "Colours", options: [{ value: "theme", label: "The site's theme" }, { value: "dark", label: "Dark" }, { value: "light", label: "Light" }] }),
+        { t: "when", path: "consent.layout", is: "bar", fields: [{ t: "select", path: "consent.position", label: "Bar position", options: [{ value: "bottom", label: "Bottom of the page" }, { value: "top", label: "Top of the page" }] }] },
+        g2({ t: "select", path: "consent.side", label: "Corner (box and the Cookie settings button)", options: [{ value: "left", label: "Bottom left" }, { value: "right", label: "Bottom right" }] },
+          { t: "toggle", path: "consent.reopen", label: "Keep a small “Cookie settings” button on the page" }),
+        { t: "when", path: "consent.reopen", is: "true", fields: [{ t: "text", path: "consent.reopenLabel", label: "Its text", ph: "Cookie settings" }] },
+        { t: "note", text: "Visitors must be able to change their mind as easily as they agreed. Keep the button, or add a link anywhere on the site that goes to #cookie-settings: it opens the category list." },
+      ] },
+    ],
+  };
+}
+
+// ---------------------------------------------------------------- the site's own menu, with sub-menus (all templates)
+export type MenuOpts = { /** Where a link can go, besides a custom page and a web address. */ targets: { value: string; label: string }[]; /** Extra per-link fields for a target, e.g. the shop category. */ extra?: Field[]; where: string; /** A caution shown under the switch. */ note?: string };
+export const menuItem = (label = "New link", to = "", more: Record<string, unknown> = {}) => ({ id: "mi-" + Math.random().toString(36).slice(2, 8), label, show: true, to, page: "", cat: "", url: "", newTab: false, children: [] as any[], ...more });
+/** Older content gets the menu's fields: the custom menu is off and starts as a copy of the automatic one. */
+export function prepareMenu(c: any, seed: () => any[]) {
+  if (!c || typeof c !== "object") return;
+  const m = c.menu && typeof c.menu === "object" ? c.menu : {};
+  const fix = (list: any, depth: number): any[] => (Array.isArray(list) ? list : []).filter((x) => x && typeof x === "object").map((x) => ({ ...menuItem(), ...x, children: depth < 3 ? fix(x.children, depth + 1) : [] }));
+  c.menu = { custom: m.custom === true, hover: m.hover !== false, arrows: m.arrows !== false, mobileOpen: m.mobileOpen === true, items: Array.isArray(m.items) ? fix(m.items, 1) : fix(seed(), 1) };
+}
+/** Pages → Menu: build the site's menu yourself, with sub-menus up to three levels (assets/menu.js). */
+export function menuCategory(o: MenuOpts, group = "Pages"): Category {
+  const g2 = (...fields: Field[]): Field => ({ t: "grid", cols: 2, fields });
+  const targets = [...o.targets, { value: "page", label: "A custom page" }, { value: "url", label: "A web address" }, { value: "none", label: "Nothing: it only opens its sub-menu" }];
+  const name = (v: string) => targets.find((t) => t.value === v)?.label || "";
+  const kids = (it: any) => (Array.isArray(it?.children) ? it.children.length : 0);
+  const title = (it: any) => `${it?.label || "Untitled"}${it?.to && it.to !== "none" ? " → " + name(it.to) : ""}${kids(it) ? ` · ${kids(it)} under it` : ""}${it?.show === false ? " · hidden" : ""}`;
+  const level = (depth: number): Field[] => [
+    g2({ t: "text", path: "label", label: "Name in the menu" }, { t: "select", path: "to", label: "Goes to", options: targets }),
+    ...(o.extra || []),
+    { t: "when", local: true, path: "to", is: "page", fields: [{ t: "ref", path: "page", label: "Custom page", source: "staticPages", valueKey: "id", labelKey: "title", empty: "Choose a page" }] },
+    { t: "when", local: true, path: "to", is: "url", fields: [{ t: "text", path: "url", label: "Web address", ph: "https://…", hint: "A full address, or a file of this site such as shop.html." }] },
+    g2({ t: "toggle", path: "show", label: "Show this link" }, { t: "toggle", path: "newTab", label: "Open in a new tab" }),
+    ...(depth < 3 ? [{ t: "list", path: "children", label: depth === 1 ? "Sub-menu (second level)" : "Sub-menu (third level)", max: 12, add: () => menuItem("New link", o.targets[0]?.value || "url"), title, item: level(depth + 1) } as Field] : []),
+  ];
+  return {
+    id: "menu", label: "Menu & sub-menus", group,
+    desc: "Build the menu yourself: name each link, choose where it goes, hide or show it, and nest links under it up to three levels deep.",
+    cards: [
+      { title: "Your own menu", fields: [
+        { t: "toggle", path: "menu.custom", label: "Use my own menu instead of the automatic one" },
+        { t: "note", text: `While this is off, the menu is made for you from ${o.where}. Switch it on to use the links below: they start as a copy of the automatic menu. If every link below is hidden, the automatic menu shows again.` },
+        ...(o.note ? [{ t: "note", text: o.note, tone: "warn" } as Field] : []),
+        { t: "when", path: "menu.custom", is: "true", fields: [
+          g2({ t: "toggle", path: "menu.hover", label: "Open sub-menus when the pointer is over them" }, { t: "toggle", path: "menu.arrows", label: "Show a small arrow beside links with a sub-menu" },
+            { t: "toggle", path: "menu.mobileOpen", label: "On phones, show sub-menus already open" }),
+          { t: "note", text: "Sub-menus always open with a click or tap on the arrow, and with the keyboard. On phones and in side menus they fold open under their link instead of dropping down." },
+        ] },
+      ] },
+      { title: "Menu links", fields: [
+        { t: "note", text: "Open a link to rename it, point it somewhere, hide it, or add links under it. Use the arrows to reorder." },
+        { t: "list", path: "menu.items", max: 14, add: () => menuItem("New link", o.targets[0]?.value || "url"), title, item: level(1) },
+      ] },
+    ],
+  };
+}
+
 export const addonsDefault = () => ({
   chat: { on: false, kind: "whatsapp", value: "", label: "Chat with us", message: "", side: "right", showLabel: true, color: "" },
   badge: { on: false, text: "", api: "", field: "", link: "", side: "left" },
@@ -173,11 +310,13 @@ export function featuresCategory(): Category {
       ] },
       { title: "Custom code", fields: [
         { t: "note", text: "Paste the code a service gives you: a chat box (Tawk.to, Crisp, Tidio), analytics, a booking or review widget, or your own script. It runs on the live site, not in this preview. Only paste code from services you trust: it can see and change everything on the site.", tone: "warn" },
-        { t: "list", path: "addons.code", max: 12, add: () => ({ id: "cc-" + Math.random().toString(36).slice(2, 8), name: "", on: true, where: "body", pages: "all", code: "" }), title: (it) => `${it?.name || "Custom code"}${it?.on === false ? " (off)" : ""}`,
+        { t: "list", path: "addons.code", max: 12, add: () => ({ id: "cc-" + Math.random().toString(36).slice(2, 8), name: "", on: true, where: "body", pages: "all", consent: "", code: "" }), title: (it) => `${it?.name || "Custom code"}${it?.on === false ? " (off)" : ""}`,
           item: [
             g2({ t: "text", path: "name", label: "Name (for you)", ph: "Tawk.to chat box" }, { t: "toggle", path: "on", label: "On" },
               { t: "select", path: "where", label: "Where it goes", options: [{ value: "body", label: "End of the page (most widgets)" }, { value: "head", label: "The page's head (analytics, verification tags)" }] },
               { t: "select", path: "pages", label: "Pages", options: [{ value: "all", label: "Every page" }, { value: "home", label: "The home page only" }] }),
+            { t: "select", path: "consent", label: "Needs the visitor's consent for", options: [{ value: "", label: "Nothing: it always runs (only for code the site can't work without)" }, { value: "analytics", label: "Analytics" }, { value: "marketing", label: "Marketing" }, { value: "preferences", label: "Preferences (chat boxes, videos, other extras)" }], },
+            { t: "note", text: "This only matters while the consent banner is on (Features → Cookie consent): the code then waits until the visitor allows that category." },
             { t: "textarea", path: "code", label: "Code", rows: 6, hint: "HTML with <script>, <link>, <meta> or <style> tags, exactly as the service gives it." },
           ] },
       ] },
@@ -324,7 +463,7 @@ export const maintenanceDefault = () => ({ on: false, title: "We'll be back soon
 export function prepareMaintenance(c: any) {
   if (!c || typeof c !== "object") return;
   const d = maintenanceDefault(), m = c.maintenance && typeof c.maintenance === "object" ? c.maintenance : {};
-  prepareAddons(c); prepareEmails(c); prepareFestival(c);
+  prepareAddons(c); prepareEmails(c); prepareFestival(c); prepareConsent(c);
   c.maintenance = { ...d, ...m, button: { ...d.button, ...(m.button && typeof m.button === "object" ? m.button : {}) } };
 }
 export function prepareSlides(hero: any, overlayColor?: string) {

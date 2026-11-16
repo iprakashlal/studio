@@ -22,7 +22,7 @@ export function backendOf(cfg: StudioHostCfg): Backend {
     const api = cfg.api;
     return {
       kind: "cloudflare", label: "Cloudflare",
-      sendCode: (e) => cfSendCode(api, e.trim()), verifyCode: (e, c) => cfVerifyCode(api, e.trim(), c.trim()),
+      sendCode: (e) => cfSendCode(api, e.trim(), undefined, cfg.studio), verifyCode: (e, c) => cfVerifyCode(api, e.trim(), c.trim()),
       signedIn: () => cfSignedIn(api), role: (s = cfg.studio) => cfRole(api, "studio:" + s),
       signOut: async () => cfSession.clear(api), repo: (s = cfg.studio) => new CfRepo(api, "studio:" + s),
     };

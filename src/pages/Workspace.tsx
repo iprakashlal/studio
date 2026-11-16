@@ -3,7 +3,7 @@ import { hides, limitsOf, setStudioHidden, useClientStudio } from "../lib/featur
 import { setThemeLimit } from "../themes/limit";
 import { DASH_DEFAULT, DASH_STATS } from "../lib/dashstats";
 import { TEMPLATES } from "../schema";
-import { StudioPageLinks, StudioPagesCard } from "./StudioPage";
+import { StudioEmailCard, StudioPageLinks, StudioPagesCard } from "./StudioPage";
 import { useEffect, useMemo, useState } from "react";
 import { isHosted } from "../lib/backend";
 import type { Session } from "../lib/auth";
@@ -150,6 +150,7 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
             {!hid("brand") && <BrandCard studio={studio} onIndex={setIndex} />}
             {!hid("badge") && <BadgeCard studio={studio} saved={index.badge} onIndex={setIndex} />}
             {!hid("pages") && <StudioPagesCard repo={repo} />}
+            <StudioEmailCard repo={repo} />
             {!hid("menus") && <MenusCard studio={studio} menus={index.menus || {}} onIndex={setIndex} />}
           </> : tab === "hostings" ? <>
             <section className="card flex flex-col gap-3 p-5" aria-label="Hosting accounts">

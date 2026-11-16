@@ -35,6 +35,8 @@ export function useCfAccount(studioToken: string, nf: Netlify | null | undefined
       if (!list.length) throw new Error("This token can't see any Cloudflare account. Create it while signed in to that account.");
       const next = [...more.filter((m) => m.token !== t), { token: t, accounts: list.map((a) => ({ id: a.id, name: a.name })) }];
       await saveMore(next); setAddTok(""); setAddOpen(false);
+      // Settings → Sites and hosting accounts keeps it on the Studio's database too, so every device sees it.
+      dispatchEvent(new CustomEvent("studio:cf-account-added", { detail: t }));
     } catch (e: any) { setAddErr(e?.message || "Couldn't reach Cloudflare."); }
     setAddBusy("");
   };

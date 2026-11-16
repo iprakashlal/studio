@@ -25,7 +25,7 @@ export function SitesHostingCard({ session, studio, index, onIndex }: { session:
   const toast = useToast(), confirm = useConfirm();
   const sites = useMemo(() => index.projects.filter((p) => p.host || p.publish), [index.projects]);
   const [db, setDb] = useState<{ api: string; studio: string } | null | undefined>(undefined);
-  const [info, setInfo] = useState<{ cfx: boolean; imp: boolean; pages: boolean; del: boolean; mail: boolean; main: string | null; accounts: Acc[]; signed: boolean; gh: boolean } | null>(null);
+  const [info, setInfo] = useState<{ cfx: boolean; imp: boolean; pages: boolean; del: boolean; mail: boolean; main: string | null; accounts: Acc[]; signed: boolean; gh: boolean; workers: string[] | null } | null>(null);
   const [mainName, setMainName] = useState("");
   const [busy, setBusy] = useState(""), [err, setErr] = useState("");
   const [tear, setTear] = useState<ProjectMeta | null>(null);
@@ -40,7 +40,7 @@ export function SitesHostingCard({ session, studio, index, onIndex }: { session:
     setDb({ api, studio: sid });
     const d = await cfDeployInfo(api), signed = !!(await cfSignedIn(api));
     const l = signed && d.cfx ? await cfxList(api, sid).catch(() => null) : null;
-    setInfo({ cfx: !!d.cfx, imp: !!d.bridge, pages: !!d.studioPages, del: !!d.del, mail: !!d.enqMail, main: l?.main ?? (d.deploy ? d.account || null : null), accounts: l?.accounts || [], signed, gh: !!d.gh });
+    setInfo({ cfx: !!d.cfx, imp: !!d.bridge, pages: !!d.studioPages, del: !!d.del, mail: !!d.enqMail, main: l?.main ?? (d.deploy ? d.account || null : null), accounts: l?.accounts || [], signed, gh: !!d.gh, workers: l?.workers || null });
     if (v?.account && v.account === (l?.main ?? d.account)) {
       // The main account's name, from this device's token (only shown here).
       try { const acc = await new Cloudflare(await getHelper(session.token, null), v.token).accounts(); setMainName(acc.find((a) => a.id === v.account)?.name || ""); } catch { /* name stays generic */ }
@@ -54,7 +54,9 @@ export function SitesHostingCard({ session, studio, index, onIndex }: { session:
   const everyDevice = (p: ProjectMeta) => {
     const h = p.host; if (!h) return !!p.publish && !!info?.gh;
     if (h.kind !== "cloudflare") return false;
-    return !!h.account && accounts.some((a) => a.id === h.account);
+    if (!h.account || !accounts.some((a) => a.id === h.account)) return false;
+    // The database's own list of sites it may publish (older databases don't send it: the kept account decides).
+    return !info?.workers || info.workers.includes(h.account === info.main ? h.siteId : h.account + "/" + h.siteId);
   };
 
   /** Lets every device publish each site on a kept account (idempotent; done when an account is added or the list loads). */
@@ -64,7 +66,18 @@ export function SitesHostingCard({ session, studio, index, onIndex }: { session:
     const kept = new Set([...(l.main ? [l.main] : []), ...l.accounts.map((a) => a.id)]);
     for (const p of sites) { const h = p.host; if (h?.kind === "cloudflare" && h.account && kept.has(h.account)) await cfxSite(db.api, db.studio, h.account, h.siteId, h.cf && h.cf.api.replace(/\/+$/, "") === db.api.replace(/\/+$/, "") ? h.cf.site : undefined).catch(() => null); }
   };
-  useEffect(() => { if (info?.imp && info.signed) registerAll(); }, [info?.imp, info?.signed, sites.length]);
+  // Every site on a kept account is allowed for every device by itself; the status below comes back from the database.
+  useEffect(() => {
+    if (!info?.imp || !info.signed || !db) return;
+    let on = true;
+    registerAll().then(async () => { const l = await cfxList(db.api, db.studio).catch(() => null); if (on && l?.workers) setInfo((i) => (i ? { ...i, workers: l.workers! } : i)); });
+    return () => { on = false; };
+  }, [info?.imp, info?.signed, sites.length, info?.accounts.length]);
+  // An account connected under Hosting accounts on this page is kept on the database too, so it shows here by itself.
+  useEffect(() => {
+    const on = (e: Event) => { const t = String((e as CustomEvent).detail || ""); if (t && db && info?.signed && info.main) keep(t); };
+    addEventListener("studio:cf-account-added", on); return () => removeEventListener("studio:cf-account-added", on);
+  }, [db?.api, info?.signed, info?.main]);
   /** Keeps an account's token on the database: through the database itself, else with this device's main token. */
   const keep = (token: string) => run("keep", async () => {
     if (!db) return;
@@ -128,12 +141,6 @@ export function SitesHostingCard({ session, studio, index, onIndex }: { session:
     await cfAccountVault.save({ ...(v || {}), token, account: account.id, setup }, session.token);
     toast("Your Studio's database is up to date."); await load();
   });
-  /** Lets every device publish this site (registers it on the database for its account). */
-  const shareSite = (p: ProjectMeta) => run("share:" + p.id, async () => {
-    const h = p.host!; if (!db || h.kind !== "cloudflare" || !h.account) return;
-    await cfxSite(db.api, db.studio, h.account, h.siteId, siteIn(h)); toast(`${p.name} can be published from any device signed in to the Studio.`); await load();
-  });
-
   if (db === undefined) return null;
   return (
     <section className="card flex flex-col gap-3 p-5" aria-label="Sites and hosting accounts">
@@ -148,58 +155,91 @@ export function SitesHostingCard({ session, studio, index, onIndex }: { session:
           <button type="button" className="btn btn-pri btn-sm self-start" disabled={!!busy || !cfAcc.ready} onClick={updateDb}>{busy.startsWith("update") ? (busy.split(":").slice(1).join(":") || "Updating") + "…" : "Update the database"}</button></div>
         : <>
           <div className="flex flex-col gap-2 rounded-lg border border-ink-700 p-3 text-[13px]" aria-label="Cloudflare accounts on the database">
-            <b className="text-sm">Cloudflare accounts</b>
-            {info.main ? <span className="flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-emerald-400" /><span className="flex-1">{nameOf(info.main)} <span className="text-ink-400">(main, the Studio's database)</span></span></span>
-              : <span className="text-amber-200">The main account's token isn't kept on the database: turn on Publish from any device above so every device can publish, and so accounts can be added from any device.</span>}
-            {info.accounts.map((a) => (
-              <div key={a.id} className="flex flex-col gap-1.5">
-                <span className="flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-emerald-400" /><span className="flex-1">{a.name}</span>
-                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => setReplaceFor(replaceFor === a.id ? null : a.id)}>Replace token</button>
-                  <button type="button" className="btn btn-ghost btn-sm" disabled={!!busy} onClick={() => forget(a)}>Remove</button></span>
-                {replaceFor === a.id && <TokenInput label={`New token for ${a.name}`} busy={busy === "keep"} onSave={keep} />}
-              </div>
-            ))}
-            <span className="text-ink-400">Add a site's other Cloudflare account (an old one, or a client's): sign in to it on dash.cloudflare.com, <a className="text-brand-300 underline" href={CF_DB_TOKEN_PAGE} target="_blank" rel="noopener noreferrer">create its token ↗</a> (permissions already ticked) and paste it.</span>
-            <TokenInput label="Another Cloudflare account's token" busy={busy === "keep"} value={addTok} onChange={setAddTok} onSave={keep} button="Add account" />
-          </div>
-          <ul className="flex flex-col divide-y divide-ink-700 rounded-lg border border-ink-700" aria-label="Hosted sites">
-            {sites.length === 0 && <li className="p-3 text-[13px] text-ink-400">No live sites yet.</li>}
-            {sites.map((p) => {
-              const h = p.host, cf = h?.kind === "cloudflare", chosen = pick[p.id] ?? h?.account ?? "", b = busy.startsWith("site:" + p.id);
-              const otherDb = cf && h!.cf && db && h!.cf.api.replace(/\/+$/, "") !== db.api.replace(/\/+$/, "");
-              return (
-                <li key={p.id} className="flex flex-col gap-2 p-3 text-[13px]">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <a className="font-semibold text-ink-100 underline-offset-2 hover:underline" href={`#/p/${p.id}`}>{p.name}</a>
-                    <span className="rounded-full border border-ink-600 px-2 py-0.5 text-[11px]">{h ? PAGES_LABEL[h.kind] : "GitHub Pages"}{h && p.publish ? " + GitHub Pages" : ""}</span>
-                    {h && <a className="truncate text-brand-300 underline" href={siteAddress(h)} target="_blank" rel="noopener noreferrer">{siteAddress(h).replace(/^https:\/\//, "")}</a>}
-                    <span className={`ml-auto text-[12px] ${everyDevice(p) ? "text-emerald-300" : "text-amber-200"}`}>{everyDevice(p) ? "Works on every device" : h?.kind === "netlify" ? "Netlify token on each device" : "Only devices with its token"}</span>
-                    <button type="button" className="btn btn-danger btn-sm" disabled={!!busy} title="Deletes this site's live copy from every service it uses. The project stays in the Studio." onClick={() => setTear(p)}>Delete &amp; remove</button>
-                  </div>
-                  {cf && (
-                    <div className="flex flex-wrap items-center gap-2">
-                      <label className="flex items-center gap-2"><span className="text-ink-400">Cloudflare account</span>
-                        <select className="input py-1" aria-label={`Cloudflare account for ${p.name}`} value={chosen} disabled={!!busy} onChange={(e) => setPick((m) => ({ ...m, [p.id]: e.target.value }))}>
-                          {!accounts.some((a) => a.id === chosen) && <option value={chosen}>{chosen ? "Its account (not kept here yet: add its token above)" : "Not recorded"}</option>}
-                          {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-                        </select>
-                      </label>
-                      {chosen && chosen !== h!.account && <button type="button" className="btn btn-pri btn-sm" disabled={!!busy} onClick={() => moveSite(p, chosen)}>{b ? (busy.split(":").slice(2).join(":") || "Publishing") + "…" : "Save and publish there"}</button>}
-                      {chosen && chosen === h!.account && accounts.some((a) => a.id === chosen) && <button type="button" className="btn btn-sm" disabled={!!busy} onClick={() => moveSite(p, chosen)}>{b ? (busy.split(":").slice(2).join(":") || "Publishing") + "…" : "Publish now"}</button>}
-                      {chosen && chosen === h!.account && accounts.some((a) => a.id === chosen) && <button type="button" className="text-brand-300 underline" disabled={!!busy} onClick={() => shareSite(p)}>Allow every device</button>}
+            <div className="flex flex-wrap items-baseline gap-x-2"><b className="text-sm">Cloudflare accounts</b><span className="text-ink-400">Every account your sites are hosted on. This is the only place they are listed; a site shows just its own.</span></div>
+            {!info.main && <span className="text-amber-200">The main account's token isn't kept on the database: turn on Publish from any device above so every device can publish, and so accounts can be added from any device.</span>}
+            <ul className="flex flex-col divide-y divide-ink-700/70">
+              {accounts.map((a) => {
+                const main = a.id === info.main, used = sites.filter((p) => p.host?.kind === "cloudflare" && p.host.account === a.id);
+                return (
+                  <li key={a.id} className="flex flex-col gap-1.5 py-2 first:pt-0 last:pb-0">
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                      <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-400" />
+                      <b className="font-semibold text-ink-100">{a.name}</b>
+                      {main && <span className="rounded-full border border-ink-600 px-2 py-0.5 text-[11px] text-ink-300">Main · the Studio's database</span>}
+                      <span className="text-ink-400">{used.length ? `Hosts ${used.map((p) => p.name).join(", ")}` : main ? "No site is hosted on it yet" : "No site uses it"}</span>
+                      {!main && <span className="ml-auto flex gap-1">
+                        <button type="button" className="btn btn-ghost btn-sm" onClick={() => setReplaceFor(replaceFor === a.id ? null : a.id)}>Replace token</button>
+                        <button type="button" className="btn btn-ghost btn-sm" disabled={!!busy} onClick={() => forget(a)}>Remove</button></span>}
                     </div>
-                  )}
-                  {cf && <span className="text-ink-400">Data: {otherDb
-                    ? (accounts.some((a) => a.id === h!.account)
-                      ? <>its own database on {nameOf(h!.account)} (<span className="font-mono">{h!.cf!.api.replace(/^https:\/\//, "")}</span>), reached from every device through your Studio. Nothing to sign in to separately.</>
-                      : <span className="text-amber-200">its own database on another Cloudflare account. Add that account above, so every device reaches it (its data stays where it is).</span>)
-                    : h!.cf ? "your Studio's database" : "Supabase"}</span>}
-                  {h?.kind === "netlify" && <span className="text-ink-400">Netlify publishing uses the Netlify token on each device (Hosting accounts above). Data: {h.cf ? "your Studio's database" : "Supabase"}.</span>}
-                  {!h && p.publish && <span className="text-ink-400">GitHub repository {p.publish.owner}/{p.publish.repo}{info.gh ? ", published through the GitHub token kept on the database." : "; publishing uses the GitHub token on each device (or keep it on the database with Publish from any device)."}</span>}
-                </li>
-              );
-            })}
-          </ul>
+                    {replaceFor === a.id && <TokenInput label={`New token for ${a.name}`} busy={busy === "keep"} onSave={keep} />}
+                  </li>
+                );
+              })}
+            </ul>
+            <details className="rounded-lg border border-ink-700/70 px-3 py-2" open={!!addTok}>
+              <summary className="cursor-pointer font-semibold text-brand-300">+ Add a Cloudflare account</summary>
+              <div className="mt-2 flex flex-col gap-2">
+                <span className="text-ink-400">For a site on another Cloudflare account (an old one, or a client's): sign in to it on dash.cloudflare.com, <a className="text-brand-300 underline" href={CF_DB_TOKEN_PAGE} target="_blank" rel="noopener noreferrer">create its token ↗</a> (permissions already ticked) and paste it. An account you connect under Hosting accounts above is added here by itself.</span>
+                <TokenInput label="Another Cloudflare account's token" busy={busy === "keep"} value={addTok} onChange={setAddTok} onSave={keep} button="Add account" />
+              </div>
+            </details>
+          </div>
+          {sites.length === 0 && <p className="rounded-lg border border-ink-700 p-3 text-[13px] text-ink-400">No live sites yet.</p>}
+          {([["cloudflare", "On Cloudflare"], ["netlify", "On Netlify"], ["github", "On GitHub Pages"]] as const).map(([kind, heading]) => {
+            const group = sites.filter((p) => (p.host ? p.host.kind === kind || (kind === "netlify" && p.host.kind !== "cloudflare") : kind === "github"));
+            if (!group.length) return null;
+            return (
+              <div key={kind} className="flex flex-col gap-1.5">
+                <h4 className="text-[12px] font-bold uppercase tracking-wide text-ink-400">{heading} · {group.length}</h4>
+                <ul className="flex flex-col divide-y divide-ink-700 rounded-lg border border-ink-700" aria-label={`Hosted sites: ${heading}`}>
+                  {group.map((p) => {
+                    const h = p.host, cf = h?.kind === "cloudflare", chosen = pick[p.id] ?? h?.account ?? "", b = busy.startsWith("site:" + p.id), every = everyDevice(p);
+                    const otherDb = cf && h!.cf && db && h!.cf.api.replace(/\/+$/, "") !== db.api.replace(/\/+$/, "");
+                    const keptAcc = cf && accounts.some((a) => a.id === h!.account);
+                    return (
+                      <li key={p.id} className="grid gap-x-4 gap-y-2 p-3 text-[13px] sm:grid-cols-[minmax(0,1fr)_auto]" data-site={p.id}>
+                        <div className="flex min-w-0 flex-col gap-1.5">
+                          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                            <a className="font-semibold text-ink-100 underline-offset-2 hover:underline" href={`#/p/${p.id}`}>{p.name}</a>
+                            {h && p.publish && <span className="rounded-full border border-ink-600 px-2 py-0.5 text-[11px]">+ GitHub copy</span>}
+                            {h ? <a className="truncate text-brand-300 underline" href={siteAddress(h)} target="_blank" rel="noopener noreferrer">{siteAddress(h).replace(/^https:\/\//, "")}</a> : p.publish && <span className="truncate font-mono text-[12px] text-ink-400">{p.publish.owner}/{p.publish.repo}</span>}
+                          </div>
+                          <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-ink-300">
+                            <dt className="text-ink-400">Publishing</dt>
+                            <dd className={every ? "text-emerald-300" : "text-amber-200"}>{every ? "Works on every device signed in to the Studio"
+                              : cf ? (keptAcc ? "Being allowed for every device…" : "Only devices with its Cloudflare token: add its account above")
+                              : h ? "Uses the Netlify token on each device (Hosting accounts above)"
+                              : "Uses the GitHub token on each device (or keep it on the database with Publish from any device)"}</dd>
+                            <dt className="text-ink-400">Admin page</dt>
+                            <dd>{h?.cf ? "Works on every device: its editors sign in with an email code" : h ? "Its editors sign in with an email code (Supabase)" : "Each device signs in once with a GitHub token for the site's repository"}</dd>
+                            {cf && <><dt className="text-ink-400">Data</dt><dd>{otherDb
+                              ? (keptAcc
+                                ? <>Its own database on {nameOf(h!.account)} (<span className="break-all font-mono text-[12px]">{h!.cf!.api.replace(/^https:\/\//, "")}</span>), reached from every device through your Studio</>
+                                : <span className="text-amber-200">Its own database on another Cloudflare account. Add that account above, so every device reaches it (its data stays where it is).</span>)
+                              : h!.cf ? "Your Studio's database" : "Supabase"}</dd></>}
+                            {h?.kind === "netlify" && <><dt className="text-ink-400">Data</dt><dd>{h.cf ? "Your Studio's database" : "Supabase"}</dd></>}
+                          </dl>
+                          {cf && (
+                            <div className="flex flex-wrap items-center gap-2">
+                              <label className="flex items-center gap-2"><span className="text-ink-400">Cloudflare account</span>
+                                <select className="input py-1" aria-label={`Cloudflare account for ${p.name}`} value={chosen} disabled={!!busy} onChange={(e) => setPick((m) => ({ ...m, [p.id]: e.target.value }))}>
+                                  {!accounts.some((a) => a.id === chosen) && <option value={chosen}>{chosen ? "Its account (not kept here yet: add its token above)" : "Not recorded"}</option>}
+                                  {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+                                </select>
+                              </label>
+                              {chosen && chosen !== h!.account && <button type="button" className="btn btn-pri btn-sm" disabled={!!busy} onClick={() => moveSite(p, chosen)}>{b ? (busy.split(":").slice(2).join(":") || "Publishing") + "…" : "Save and publish there"}</button>}
+                              {chosen && chosen === h!.account && accounts.some((a) => a.id === chosen) && <button type="button" className="btn btn-sm" disabled={!!busy} onClick={() => moveSite(p, chosen)}>{b ? (busy.split(":").slice(2).join(":") || "Publishing") + "…" : "Publish now"}</button>}
+                            </div>
+                          )}
+                        </div>
+                        <button type="button" className="btn btn-danger btn-sm self-start justify-self-start sm:justify-self-end" disabled={!!busy} title="Deletes this site's live copy from every service it uses. The project stays in the Studio." onClick={() => setTear(p)}>Delete &amp; remove</button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            );
+          })}
         </>}
       {(!db || (info && !(info.signed && info.cfx && info.imp && info.pages && info.del && info.mail))) && sites.length > 0 && (
         <ul className="flex flex-col divide-y divide-ink-700 rounded-lg border border-ink-700" aria-label="Hosted sites">

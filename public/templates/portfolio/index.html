@@ -1477,10 +1477,10 @@ function addons(c){
    preview shows it only on its "Maintenance page" entry (?maintenance=1). */
 const MNT_Q=/[?&]maintenance=1(&|$)/.test(location.search);let mntP,mntPass=false;
 function maintGate(c){
-  const on=PREVIEW?MNT_Q:!!(c.maintenance||{}).on;
+  const on=(PREVIEW&&MNT_Q)||!!(c.maintenance||{}).on;
   if(!on||mntPass){if(window.SiteMaint)SiteMaint.hide();return false}
   (mntP||(mntP=new Promise((ok,no)=>{if(window.SiteMaint)return ok();const s=document.createElement("script");s.src="assets/maint.js";s.onload=()=>ok();s.onerror=no;document.head.appendChild(s)})))
-    .then(()=>{if(SiteMaint.wanted(c,PREVIEW))SiteMaint.show(c,{name:c.brand.logoText,logo:c.brand.icon&&imgUrl(c.brand.icon),preview:PREVIEW});else{mntPass=true;renderSite(c)}})
+    .then(()=>{if(SiteMaint.wanted(c,PREVIEW))SiteMaint.show(c,{name:c.brand.logoText,logo:c.brand.icon&&imgUrl(c.brand.icon),preview:PREVIEW,again:()=>renderSite(c)});else{mntPass=true;renderSite(c)}})
     .catch(()=>{mntPass=true;renderSite(c)});
   return true}
 /* static pages (assets/pages.js): ./?p=<name> shows a reading page (privacy, terms…) instead of the portfolio */

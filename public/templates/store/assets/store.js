@@ -646,15 +646,16 @@ function addons() {
     .then(() => window.SiteAddons.mount(C, { preview: PREVIEW, home: PAGE === "home", site: C.brand.name })).catch(() => {});
 }
 /* Maintenance mode (assets/maint.js): while content.maintenance.on, visitors see the maintenance page instead of the
-   site. The editor's preview shows it only on its "Maintenance page" entry (?maintenance=1). */
+   site. The editor's preview shows it too (with a button to see the site), and on its "Maintenance page" entry
+   (?maintenance=1) while it is off. */
 const MNT_Q = /[?&]maintenance=1(&|$)/.test(location.search);
 let mntP, mntPass = false;
 function maintGate(again) {
-  const on = PREVIEW ? MNT_Q : !!(C.maintenance || {}).on;
+  const on = (PREVIEW && MNT_Q) || !!(C.maintenance || {}).on;
   if (!on || mntPass) { if (window.SiteMaint) window.SiteMaint.hide(); return false; }
   (mntP ||= new Promise((ok, no) => { if (window.SiteMaint) return ok(); const s = document.createElement("script"); s.src = "assets/maint.js"; s.onload = () => ok(); s.onerror = no; document.head.appendChild(s); }))
     .then(() => {
-      if (window.SiteMaint.wanted(C, PREVIEW)) window.SiteMaint.show(C, { name: C.brand.name, logo: imgUrl(C.brand.logo), preview: PREVIEW });
+      if (window.SiteMaint.wanted(C, PREVIEW)) window.SiteMaint.show(C, { name: C.brand.name, logo: imgUrl(C.brand.logo), preview: PREVIEW, again });
       else { mntPass = true; again(); }
     }).catch(() => { mntPass = true; again(); });
   return true;

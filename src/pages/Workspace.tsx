@@ -119,9 +119,15 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
     const showCustomize = ["brand", "badge", "pages", "menus"].some((k) => !hid(k)), showHostings = !hid("hosting");
     const want = route.split("/")[1] || "general";
     const tab = (want === "customize" && !showCustomize) || (want === "hostings" && !showHostings) ? "general" : want;
-    const tabs = <div className="flex flex-wrap gap-1 border-b border-ink-700" role="tablist" aria-label="Settings">
-      {[["general", "General"], ...(showCustomize ? [["customize", "Customize"]] : []), ...(showHostings ? [["hostings", "Hostings"]] : []), ...(isHosted(session) && !client ? [["update", "Update"]] : []), ...(client ? [] : [["migration", "Migration"], ["partners", "Studio Partners"]])].map(([k, l]) => <a key={k} href={`#/settings${k === "general" ? "" : "/" + k}`} role="tab" aria-selected={tab === k} className={`-mb-px border-b-2 px-3 py-2 text-sm font-semibold ${tab === k ? "border-brand-400 text-ink-100" : "border-transparent text-ink-400 hover:text-ink-100"}`}>{l}</a>)}
-    </div>;
+    const tabList = [["general", "General"], ...(showCustomize ? [["customize", "Customize"]] : []), ...(showHostings ? [["hostings", "Hostings"]] : []), ...(isHosted(session) && !client ? [["update", "Update"]] : []), ...(client ? [] : [["migration", "Migration"], ["partners", "Studio Partners"]])] as [string, string][];
+    const tabs = <>
+      {/* Phones: one dropdown, so the tabs never wrap onto a second row. */}
+      <label className="flex flex-col gap-1.5 sm:hidden"><span className="label">Settings section</span>
+        <select className="input" aria-label="Settings section" value={tabList.some(([k]) => k === tab) ? tab : "general"} onChange={(e) => { location.hash = "#/settings" + (e.target.value === "general" ? "" : "/" + e.target.value); }}>{tabList.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
+      </label>
+      <div className="hidden flex-wrap gap-1 border-b border-ink-700 sm:flex" role="tablist" aria-label="Settings">
+      {tabList.map(([k, l]) => <a key={k} href={`#/settings${k === "general" ? "" : "/" + k}`} role="tab" aria-selected={tab === k} className={`-mb-px border-b-2 px-3 py-2 text-sm font-semibold ${tab === k ? "border-brand-400 text-ink-100" : "border-transparent text-ink-400 hover:text-ink-100"}`}>{l}</a>)}
+    </div></>;
     if (client === undefined && tab !== "general") return <>{header}<p className="py-16 text-center text-sm text-ink-400">Loading…</p></>;
     if (tab === "partners" && !client) return <>{header}<main className="mx-auto flex max-w-3xl flex-col gap-4 px-4 py-8 sm:px-6"><h1 className="font-display text-3xl font-extrabold">Settings</h1>{tabs}<FoldAll /><FoldCards scope="partners"><PartnersTab studio={studio} index={index} session={session} onIndex={setIndex} /></FoldCards></main></>;
     if ((tab === "migration" && !client) || (tab === "update" && isHosted(session) && !client)) return <>{header}<main className="mx-auto flex max-w-3xl flex-col gap-4 px-4 py-8 sm:px-6"><h1 className="font-display text-3xl font-extrabold">Settings</h1>{tabs}<FoldAll /><FoldCards scope={tab}><MigrationTab key={tab} studio={studio} index={index} session={session} onIndex={setIndex} mode={tab === "update" ? "update" : "move"} /></FoldCards></main></>;

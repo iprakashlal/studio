@@ -10,7 +10,12 @@ import { STUDIO_BUILD } from "../build-info";
 import { vault } from "./vault";
 
 /** The Cloudflare account on this device (one token for hosting, the database and Workers) and the database's setup. */
-export const cfAccountVault = vault<{ token: string; account?: string; resendKey?: string; mailFrom?: string; setup?: CfDbSetup; more?: CfMoreToken[] }>("cfdb");
+export const cfAccountVault = vault<{ token: string; account?: string; resendKey?: string; mailFrom?: string; setup?: CfDbSetup; /** Databases set up on other Cloudflare accounts (a site's own database on its own account). */ setups?: CfDbSetup[]; more?: CfMoreToken[] }>("cfdb");
+/** The database setup this device knows for a database address (the Studio's, or a site's own on another account). */
+export const cfSetupFor = (v: { setup?: CfDbSetup; setups?: CfDbSetup[] } | null | undefined, api: string): CfDbSetup | null => {
+  const c = (u: string) => u.replace(/\/+$/, "");
+  return [v?.setup, ...(v?.setups || [])].find((s) => !!s && c(s.api) === c(api)) || null;
+};
 /** More Cloudflare tokens on this device, for sites hosted on other Cloudflare accounts (an old account, a client's). */
 export type CfMoreToken = { token: string; accounts: { id: string; name: string }[] };
 /** The token on this device that can manage `account`: another account's own token, else the main one. */

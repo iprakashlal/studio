@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useCfAccount, useCloudflarePicker, type CfAccountHook } from "./CfPicker";
 import { cloudflarePages, netlifyPages, pagesViaDbs, PAGES_LABEL, type Pages, type PagesKind } from "../lib/pages";
 import { CfError, registrarHelp, type Cloudflare } from "../lib/cloudflare";
-import { CFDB_WORKER, CF_DB_TOKEN_PAGE, CfRepo, registerWorkers, cfAccountVault, cfAddMembers, resendTestOnly, cfRole, cfSendCode, cfSignedIn, cfVerifyCode } from "../lib/cfdb";
+import { CFDB_WORKER, CF_DB_TOKEN_PAGE, CfRepo, registerWorkers, cfAccountVault, cfAddMembers, resendTestOnly, cfRole, cfSendCode, cfSignedIn, cfVerifyCode, cfSetupFor } from "../lib/cfdb";
 import { SupabaseAuto } from "./SupabaseAuto";
 import type { Session } from "../lib/auth";
 import type { ProjectMeta, Studio, StudioIndex } from "../lib/studio";
@@ -119,6 +119,10 @@ export function HostDialog({ studio, project, tpl, draft, dirty, save, onIndex, 
   const siteAcc = siteAccount || cfAcc.account?.id || "";
   const siteAccKnown = cfAcc.allAccounts.some((a) => a.id === siteAcc);
   const siteClient = (step?: (s: string) => void) => cfAcc.clientFor(siteAcc, step);
+  // A new site on another account than the Studio's database gets its own database there.
+  const [mainDbAcc, setMainDbAcc] = useState("");
+  useEffect(() => { cfAccountVault.load(session.token).then((v) => setMainDbAcc(v?.setup?.account || "")); }, [session.token]);
+  const ownDb = !!siteAcc && siteAccKnown && siteAcc !== (mainDbAcc || cfAcc.account?.id || siteAcc);
   const pagesOk = pagesKind === "netlify" ? !!nf : (cfAcc.ready && siteAccKnown) || !!viaDb;
   const getPages = async (): Promise<Pages> => {
     if (pagesKind === "netlify") { if (!nf) throw new Error("Connect Netlify first."); return netlifyPages(nf); }
@@ -200,7 +204,8 @@ export function HostDialog({ studio, project, tpl, draft, dirty, save, onIndex, 
   const setupCf = () => run("cfsetup", async () => {
     if (!siteIdOk(sb.site)) throw new Error("Pick a Site ID first: lowercase letters, numbers and dashes.");
     if (!email.includes("@")) throw new Error("Type your email first: it becomes the site's editor.");
-    const { setup, relay, token: t } = await cfp.ensure((x) => setStep({ i: -1, detail: x }));
+    // The site's database goes on the site's own Cloudflare account (the Studio's database when that is the same account).
+    const { setup, relay, token: t } = await cfp.ensure((x) => setStep({ i: -1, detail: x }), undefined, siteAcc);
     await cfAddMembers(relay, t, setup, "site:" + sb.site.trim(), [{ email: email.trim().toLowerCase(), role: "owner" }]);
     const c = { api: setup.api, site: sb.site.trim() }; setCfSite(c); setStep(null); await cfCheck(c);
     toast("The site's database is ready on Cloudflare");
@@ -213,9 +218,10 @@ export function HostDialog({ studio, project, tpl, draft, dirty, save, onIndex, 
   });
   const useOwn = () => run("send", async () => {
     const own = testOnly!; const v = await cfAccountVault.load(session.token);
-    if (!v?.setup) throw new Error("Set up the database on Cloudflare on this device first.");
-    const { relay, token: t } = await cfAcc.client((x) => setStep({ i: -1, detail: x }));
-    await cfAddMembers(relay, t, v.setup, "site:" + cfSite!.site, [{ email: own, role: "owner" }]);
+    const st = cfSetupFor(v, cfSite!.api);
+    if (!st) throw new Error("Set up the database on Cloudflare on this device first.");
+    const { relay, token: t } = await cfAcc.clientFor(st.account, (x) => setStep({ i: -1, detail: x }));
+    await cfAddMembers(relay, t, st, "site:" + cfSite!.site, [{ email: own, role: "owner" }]);
     setStep(null); setEmail(own); setEditors((cur) => (cur.split(/\s+/).includes(own) ? cur : (cur.trim() + "\n" + own).trim()));
     await cfSendCode(cfSite!.api, own); setTestOnly(null); setCodeSent(true); toast(`Code sent to ${own}.`);
   });
@@ -240,7 +246,8 @@ export function HostDialog({ studio, project, tpl, draft, dirty, save, onIndex, 
     setMailMsg(`✓ ${dom} is verified. Sign-in codes now come from codes@${dom} and reach any editor's email. The database uses its own send-only key, so you can delete the Full access key in Resend now.`);
   });
   const saveMail = () => run("cfsetup", async () => {
-    await cfp.ensure((x) => setStep({ i: -1, detail: x })); setStep(null); setMailCfg(false); setTestOnly(null);
+    const st = cfSite ? cfSetupFor(await cfAccountVault.load(session.token), cfSite.api) : null;
+    await cfp.ensure((x) => setStep({ i: -1, detail: x }), undefined, st?.account || siteAcc); setStep(null); setMailCfg(false); setTestOnly(null);
     toast("Email settings saved. Send the code again.");
   });
   const cfVerify = () => run("verify", async () => { await cfVerifyCode(cfSite!.api, email.trim(), code); setCode(""); setCodeSent(false); await cfCheck(); });
@@ -352,7 +359,7 @@ export function HostDialog({ studio, project, tpl, draft, dirty, save, onIndex, 
         <div className="flex flex-wrap rounded-lg border border-ink-600 self-start" role="radiogroup" aria-label="Site database">
           {([["cloudflare", "Cloudflare"], ["supabase", "Supabase"]] as const).map(([k, l]) => <button key={k} type="button" role="radio" aria-checked={dbKind === k} disabled={!!host && !canMoveDb} onClick={() => setDbKind(k)} className={`btn btn-sm border-0 ${dbKind === k ? "bg-ink-700" : "bg-transparent"}`}>{l}</button>)}
         </div>
-        <p className="text-[13px] text-ink-400">{dbKind === "cloudflare" ? "The Studio's database on your Cloudflare (one Worker and a D1 database for all your sites). Sign-in codes are emailed through Resend." : "One free Supabase project can hold several sites. A free project pauses after a week with no activity; restore it from the Supabase dashboard."}</p>
+        <p className="text-[13px] text-ink-400">{dbKind === "cloudflare" ? ((cfSite ? !!studioApi && cfSite.api.replace(/\/+$/, "") !== studioApi.replace(/\/+$/, "") : ownDb) ? `This site's own database on its Cloudflare account, ${cfAcc.allAccounts.find((a) => a.id === siteAcc)?.name || "the one chosen above"} (a Worker and a D1 database there; other sites on that account share it). Sign-in codes are emailed through Resend.` : "The Studio's database on your Cloudflare (one Worker and a D1 database for all your sites). Sign-in codes are emailed through Resend.") : "One free Supabase project can hold several sites. A free project pauses after a week with no activity; restore it from the Supabase dashboard."}</p>
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Site ID" htmlFor="sb-site" hint="Names this site's rows and photo folder." warn={sb.site && !siteIdOk(sb.site) ? "Lowercase letters, numbers and dashes" : undefined}><input id="sb-site" className="input" disabled={!!host} value={sb.site} onChange={(e) => setSb({ ...sb, site: e.target.value.toLowerCase() })} /></Field>
           <Field label="Your email" htmlFor="sb-email" hint="Becomes the site's first editor. Used for the sign-in code."><input id="sb-email" className="input" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} /></Field>

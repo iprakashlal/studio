@@ -144,7 +144,20 @@ export function useCloudflarePicker(studioToken: string, nf: Netlify | null | un
   const ready = acc.ready && /^re_/.test(resendKey.trim()) && fromOk;
 
   /** Creates or updates the database; returns it with what's needed to add members. */
-  const ensure = async (step: (s: string) => void, over?: { mailFrom?: string; resendKey?: string }) => {
+  /** `forAccount`: a site's own account. When it isn't the account this device uses for the Studio's database, the
+   *  database is made there (that site's own database) and kept beside the Studio's, which stays as it is. */
+  const ensure = async (step: (s: string) => void, over?: { mailFrom?: string; resendKey?: string }, forAccount?: string) => {
+    const v0 = persist ? await cfAccountVault.load(studioToken) : null;
+    const mainAcc = v0?.setup?.account || acc.account?.id || "";
+    if (forAccount && forAccount !== mainAcc) {
+      const { relay, account, token } = await acc.clientFor(forAccount, step);
+      const from = (over?.mailFrom || mailFrom).trim(), key = (over?.resendKey || resendKey).trim();
+      if (over?.mailFrom) setMailFrom(from);
+      if (over?.resendKey) setResendKey(key);
+      const setup = await setupCfDb(relay, token, { account, resendKey: key, mailFrom: from, name: defaultName, existing: (v0?.setups || []).find((s) => s.account === account.id) || null }, step);
+      if (persist) { const v = await cfAccountVault.load(studioToken); await cfAccountVault.save({ ...(v || { token: "" }), resendKey: key, mailFrom: from, setups: [...(v?.setups || []).filter((s) => s.account !== account.id), setup] }, studioToken); }
+      return { setup, relay, token };
+    }
     const { relay, account, token } = await acc.client(step);
     const from = (over?.mailFrom || mailFrom).trim(), key = (over?.resendKey || resendKey).trim();
     if (over?.mailFrom) setMailFrom(from);

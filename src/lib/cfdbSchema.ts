@@ -9,6 +9,6 @@ create index if not exists enquiries_site on enquiries (site, created_at);
 create table if not exists workers (worker text primary key, scope text not null);
 create table if not exists repos (repo text primary key, scope text not null);
 `;
-export const CFDB_VERSION = 11;
+export const CFDB_VERSION = 12;
 /** The database Worker's name on Cloudflare. */
 export const CFDB_WORKER_NAME = "picaffectz-db";

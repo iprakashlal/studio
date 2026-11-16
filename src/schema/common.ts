@@ -140,7 +140,7 @@ export const consentDefault = () => ({
   policyLabel: "Privacy policy", policyPage: "", policyUrl: "",
   categories: CONSENT_CATS.map((c) => ({ ...c, on: true })),
   mode: "optin", showDecline: true, showManage: true, equal: true, closeX: false, lock: false,
-  layout: "bar", position: "bottom", side: "left", look: "theme", months: "6", version: 1, reopen: true, reopenLabel: "Cookie settings", gpc: true, gcm: false,
+  layout: "bar", position: "bottom", side: "left", look: "theme", months: "6", version: 1, reopen: true, footerLink: true, reopenLabel: "Cookie settings", gpc: true, gcm: false,
 });
 /** Older content gets the consent banner's fields (off), with both wordings filled in. */
 export function prepareConsent(c: any) {
@@ -205,9 +205,9 @@ export function consentCategory(): Category {
           { t: "select", path: "consent.look", label: "Colours", options: [{ value: "theme", label: "The site's theme" }, { value: "dark", label: "Dark" }, { value: "light", label: "Light" }] }),
         { t: "when", path: "consent.layout", is: "bar", fields: [{ t: "select", path: "consent.position", label: "Bar position", options: [{ value: "bottom", label: "Bottom of the page" }, { value: "top", label: "Top of the page" }] }] },
         g2({ t: "select", path: "consent.side", label: "Corner (box and the Cookie settings button)", options: [{ value: "left", label: "Bottom left" }, { value: "right", label: "Bottom right" }] },
-          { t: "toggle", path: "consent.reopen", label: "Keep a small “Cookie settings” button on the page" }),
-        { t: "when", path: "consent.reopen", is: "true", fields: [{ t: "text", path: "consent.reopenLabel", label: "Its text", ph: "Cookie settings" }] },
-        { t: "note", text: "Visitors must be able to change their mind as easily as they agreed. Keep the button, or add a link anywhere on the site that goes to #cookie-settings: it opens the category list." },
+          { t: "toggle", path: "consent.reopen", label: "Keep a small “Cookie settings” button on the page" },
+          { t: "toggle", path: "consent.footerLink", label: "Add a “Cookie settings” link to the footer, with the other links" }, { t: "text", path: "consent.reopenLabel", label: "Text of the button and the footer link", ph: "Cookie settings" }),
+        { t: "note", text: "Visitors must be able to change their mind as easily as they agreed. The footer link and the button both open the category list; so does any link you add that goes to #cookie-settings." },
       ] },
     ],
   };

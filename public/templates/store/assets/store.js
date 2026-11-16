@@ -380,7 +380,7 @@ function footer() {
   return `<footer class="ftr"><div class="wrap"><div class="cols">
     <div class="about"><b style="font-family:var(--fd);font-size:22px">${esc(C.brand.name)}</b><p>${ml(C.footer.text || C.brand.tagline)}</p>${ms.length ? `<div class="pm">${ms.map((m) => `<span>${esc(m.label)}</span>`).join("")}</div>` : ""}</div>
     <div><h4>${esc(C.nav.shop)}</h4><ul><li><a href="shop.html">${esc(lab("allProducts", "All products"))}</a></li>${C.categories.map((c) => `<li><a href="shop.html?c=${encodeURIComponent(c.id)}">${esc(c.name)}</a></li>`).join("")}</ul></div>
-    <div><h4>${esc(lab("help", "Help"))}</h4><ul>${swOn() && C.warranty.inFooter ? `<li><a href="warranty.html">${esc(C.warranty.navLabel || "Warranty")}</a></li>` : ""}${C.policies.map((p) => `<li><a href="policies.html#${esc(p.id || slugify(p.title))}">${esc(p.title)}</a></li>`).join("")}${spList().filter((p) => p.inFooter !== false).map((p) => `<li><a href="${esc(spHref(p))}">${esc(p.navLabel || p.title)}</a></li>`).join("")}${C.nav.showPortfolio ? `<li><a href="portfolio.html">${esc(C.nav.portfolio)}</a></li>` : ""}</ul></div>
+    <div><h4>${esc(lab("help", "Help"))}</h4><ul>${swOn() && C.warranty.inFooter ? `<li><a href="warranty.html">${esc(C.warranty.navLabel || "Warranty")}</a></li>` : ""}${C.policies.map((p) => `<li><a href="policies.html#${esc(p.id || slugify(p.title))}">${esc(p.title)}</a></li>`).join("")}${spList().filter((p) => p.inFooter !== false).map((p) => `<li><a href="${esc(spHref(p))}">${esc(p.navLabel || p.title)}</a></li>`).join("")}${ckOn() ? `<li><a href="#cookie-settings">${esc(C.consent.reopenLabel || "Cookie settings")}</a></li>` : ""}${C.nav.showPortfolio ? `<li><a href="portfolio.html">${esc(C.nav.portfolio)}</a></li>` : ""}</ul></div>
     <div><h4>${esc(lab("contact", "Contact"))}</h4><ul>${K.email ? `<li><a href="mailto:${esc(K.email)}">${esc(K.email)}</a></li>` : ""}${K.phone ? `<li><a href="tel:${esc(digits(K.phone))}">${esc(K.phone)}</a></li>` : ""}${K.whatsapp ? `<li><a href="https://wa.me/${digits(K.whatsapp)}" target="_blank" rel="noopener">WhatsApp</a></li>` : ""}${safeUrl(K.instagram) ? `<li><a href="${esc(safeUrl(K.instagram))}" target="_blank" rel="noopener">Instagram</a></li>` : ""}${K.address ? `<li class="soft" style="white-space:pre-line">${esc(K.address)}</li>` : ""}</ul></div>
   </div><div class="base"><span>© ${new Date().getFullYear()} ${esc(C.brand.name)}</span><span>Prices in ${esc(C.settings.currency)}</span></div></div></footer>`;
 }
@@ -658,6 +658,8 @@ function festival() {
   (fsP ||= new Promise((ok, no) => { if (window.SiteFestival) return ok(); const s = document.createElement("script"); s.src = "assets/festival.js"; s.onload = () => ok(); s.onerror = no; document.head.appendChild(s); }))
     .then(() => window.SiteFestival.mount(C, { preview: PREVIEW, site: C.brand.name })).catch(() => {});
 }
+/** The footer's link that reopens the consent choices (while the banner is on). */
+const ckOn = () => !!(C.consent && C.consent.on && C.consent.footerLink !== false);
 /* Cookie consent (assets/consent.js): the banner that asks before analytics, marketing and other optional code runs. */
 let csP;
 function consent() {

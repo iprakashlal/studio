@@ -78,7 +78,7 @@
     /* cursor */
     "html.fx-nocur,html.fx-nocur *{cursor:none!important}",
     "html.fx-nocur :is(input,textarea,[contenteditable=true]){cursor:text!important}",
-    ".fx-dot,.fx-ring{position:fixed;left:0;top:0;pointer-events:none;z-index:99990;opacity:0;transition:opacity .3s;will-change:transform}",
+    ".fx-dot,.fx-ring{position:fixed;left:0;top:0;pointer-events:none;z-index:2147483647;opacity:0;transition:opacity .3s;will-change:transform}",
     "html.fx-seen .fx-dot,html.fx-seen .fx-ring{opacity:1}",
     "html.fx-typing .fx-dot,html.fx-typing .fx-ring{opacity:0}",
     ".fx-dot i,.fx-ring i{position:absolute;left:0;top:0;border-radius:50%;transform:translate(-50%,-50%);transition:transform .45s var(--fxe),background .3s,border-color .3s}",

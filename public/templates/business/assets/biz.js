@@ -469,6 +469,7 @@ function footerHTML() {
   const cols = multi() ? mpages().map((p) => `<a href="${PAGES[p]}">${esc(C.site.pageLabels[p] || p)}</a>`) : C.sections.filter((s) => s.show !== false && s.inNav && RENDER[s.id]).map((s) => `<a href="${AT}#${s.id}">${esc(s.label)}</a>`);
   if (swOn() && C.warranty.inFooter) cols.push(`<a href="${multi() ? PAGES.warranty : "#warranty"}">${esc(C.warranty.navLabel || "Warranty")}</a>`);
   spList().filter((p) => p.inFooter !== false).forEach((p) => cols.push(`<a href="${esc(spHref(p))}">${esc(p.navLabel || p.title)}</a>`));
+  if (ckOn()) cols.push(`<a href="#cookie-settings">${esc(C.consent.reopenLabel || "Cookie settings")}</a>`);
   return `<footer class="foot" id="footer"><div class="wrap"><div class="foot-grid">
       <div><a class="brand" href="${multi() || PAGE !== "home" ? PAGES.home : "#top"}">${imgUrl(B.logo) ? `<img class="logo" src="${esc(imgUrl(B.logo))}" alt="">` : `<span class="logo mark">${esc(initials(B.name))}</span>`}<span class="bn">${esc(B.name)}</span></a><p>${rich(F.text)}</p></div>
       <nav aria-label="Footer">${cols.join("")}</nav>
@@ -533,6 +534,8 @@ function festival() {
   (fsP ||= new Promise((ok, no) => { if (window.SiteFestival) return ok(); const s = document.createElement("script"); s.src = "assets/festival.js"; s.onload = () => ok(); s.onerror = no; document.head.appendChild(s); }))
     .then(() => window.SiteFestival.mount(C, { preview: PREVIEW, site: C.brand.name })).catch(() => {});
 }
+/** The footer's link that reopens the consent choices (while the banner is on). */
+const ckOn = () => !!(C.consent && C.consent.on && C.consent.footerLink !== false);
 /* Cookie consent (assets/consent.js): the banner that asks before analytics, marketing and other optional code runs. */
 let csP;
 function consent() {

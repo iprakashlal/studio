@@ -1516,12 +1516,13 @@ function spPage(c){
   const p=S.find(c,slug,PREVIEW),name=c.brand.logoText||"";
   if(p){const one=x=>String(x||"").replace(/\s*\n\s*/g," ").trim();document.title=one((c.seo.titlePattern||"{page} · {site}").replace(/\{page\}/g,one(p.title)).replace(/\{site\}/g,one(name)))}
   const links=S.list(c).filter(x=>x.inFooter!==false);
-  siteRoot.innerHTML=`<div id="siteInner"><header class="sp-top"><a href="./">${esc(name)}</a><a class="sp-back" href="./">← ${esc((c.labels&&c.labels.backHome)||"Back")}</a></header><main id="main">${p?S.article(p,{preview:PREVIEW}):S.missing({home:"./"})}</main>${links.length?`<nav class="sp-links" aria-label="Pages">${links.map(x=>`<a href="?p=${encodeURIComponent(S.slug(x))}">${esc(x.navLabel||x.title)}</a>`).join("")}</nav>`:""}<footer class="sp-links"><span>${esc(c.contact.footerLeft||"")}</span></footer></div>`;
+  siteRoot.innerHTML=`<div id="siteInner"><header class="sp-top"><a href="./">${esc(name)}</a><a class="sp-back" href="./">← ${esc((c.labels&&c.labels.backHome)||"Back")}</a></header><main id="main">${p?S.article(p,{preview:PREVIEW}):S.missing({home:"./"})}</main>${links.length||ckLink(c)?`<nav class="sp-links" aria-label="Pages">${links.map(x=>`<a href="?p=${encodeURIComponent(S.slug(x))}">${esc(x.navLabel||x.title)}</a>`).join("")}${ckLink(c)}</nav>`:""}<footer class="sp-links"><span>${esc(c.contact.footerLeft||"")}</span></footer></div>`;
   S.after(p);setIcon(c);consent(c);addons(c);festival(c);return true}
 /* links to the static pages under every layout's footer */
-function spLinks(c){const S=window.SitePages;if(!S)return;const links=S.list(c).filter(x=>x.inFooter!==false);if(!links.length)return;
+const ckLink=c=>c.consent&&c.consent.on&&c.consent.footerLink!==false?`<a href="#cookie-settings">${esc(c.consent.reopenLabel||"Cookie settings")}</a>`:"";
+function spLinks(c){const S=window.SitePages;if(!S)return;const links=S.list(c).filter(x=>x.inFooter!==false),ck=ckLink(c);if(!links.length&&!ck)return;
   const n=document.createElement("nav");n.className="sp-links";n.setAttribute("aria-label","Pages");S.css();
-  n.innerHTML=links.map(x=>`<a href="?p=${encodeURIComponent(S.slug(x))}">${esc(x.navLabel||x.title)}</a>`).join("");
+  n.innerHTML=links.map(x=>`<a href="?p=${encodeURIComponent(S.slug(x))}">${esc(x.navLabel||x.title)}</a>`).join("")+ck;
   (document.getElementById("siteInner")||siteRoot).appendChild(n)}
 /* hero background slides (assets/slides.js, loaded when switched on) */
 let slP,slGen=0;

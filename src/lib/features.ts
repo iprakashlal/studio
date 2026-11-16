@@ -1,6 +1,6 @@
 // What a client Studio shows. A Studio Partner sets this from the client's card (Settings → Studio Partners); it is
 // kept in the client Studio's studio.json as clientFeatures.hide. A client Studio (one set up by a partner: its
-// studio.config.json names the partner) never shows Migration or Studio Partners.
+// studio.config.json names the partner) never shows Migration, Update or Studio Partners: its partner updates and moves it from their own Studio.
 import { useEffect, useState } from "react";
 import { loadHostConfig } from "./studiohost";
 
@@ -17,7 +17,6 @@ export const CLIENT_FEATURES: { key: string; label: string; hint?: string }[] = 
   { key: "pages", label: "The Studio's additional pages", hint: "Settings" },
   { key: "menus", label: "Admin menus", hint: "Settings" },
   { key: "hosting", label: "Hosting accounts and sites' hosting", hint: "Settings" },
-  { key: "update", label: "Update tab", hint: "Settings" },
 ];
 export type ClientFeatures = { hide: string[] };
 export const cleanFeatures = (x: any): ClientFeatures => ({ hide: [...new Set((Array.isArray(x?.hide) ? x.hide : []).filter((k: any) => CLIENT_FEATURES.some((f) => f.key === k)))] as string[] });

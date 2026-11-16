@@ -10,7 +10,8 @@ import { useHelper } from "./HelperBox";
 
 export type CfAccountHook = ReturnType<typeof useCfAccount>;
 
-export function useCfAccount(studioToken: string, nf: Netlify | null | undefined, persist = true) {
+/** `manage`: also shows the list of other Cloudflare accounts with Add and Remove (Studio Settings only; elsewhere only the connected account's name shows). */
+export function useCfAccount(studioToken: string, nf: Netlify | null | undefined, persist = true, manage = false) {
   const helper = useHelper(studioToken, nf, "Cloudflare");
   const [tok, setTok] = useState(""), [accounts, setAccounts] = useState<CfAccount[] | null>(null), [account, setAccount] = useState("");
   const [busy, setBusy] = useState(""), [err, setErr] = useState("");
@@ -55,7 +56,7 @@ export function useCfAccount(studioToken: string, nf: Netlify | null | undefined
     const other = id ? more.find((m) => m.accounts.some((a) => a.id === id)) : null;
     if (!other || (accounts || []).some((a) => a.id === id)) {
       if (!id || id === acc?.id) return client(step);
-      const a = (accounts || []).find((x) => x.id === id); if (!a) throw new Error("No Cloudflare token on this device can manage that account. Add it under Other Cloudflare accounts.");
+      const a = (accounts || []).find((x) => x.id === id); if (!a) throw new Error("No Cloudflare token on this device can manage that account. Add it in Settings → Sites and hosting accounts.");
       const relay = await helper.get(step); return { cf: new Cloudflare(relay, tok.trim()), relay, account: a, token: tok.trim() };
     }
     const relay = await helper.get(step), a = other.accounts.find((x) => x.id === id)!;
@@ -79,7 +80,7 @@ export function useCfAccount(studioToken: string, nf: Netlify | null | undefined
       {accounts && accounts.length > 1 && <label className="flex flex-col gap-1"><span className="label">Cloudflare account</span><select className="input" aria-label="Cloudflare account" value={account} onChange={(e) => pickAccount(e.target.value)}>{accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select></label>}
       {acc && <p className="text-emerald-300">Connected to {acc.name}.</p>}
       {err && <p role="alert" className="text-red-300">{err}</p>}
-      {persist && acc && (
+      {persist && acc && manage && (
         <div className="flex flex-col gap-1.5 rounded-lg border border-ink-700 p-2.5" aria-label="Other Cloudflare accounts">
           <span className="font-semibold text-ink-200">Other Cloudflare accounts</span>
           <span className="text-ink-400">For sites hosted on another Cloudflare account (an old one, or a client's). Each site picks its account in Publish to Cloudflare.</span>

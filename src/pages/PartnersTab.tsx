@@ -1,7 +1,7 @@
 // Settings → Studio Partners: set up Studios for clients (on your accounts or theirs), share sites with them and
 // keep those sites in step both ways. Each client Studio shows as a card with its shared sites and their status.
 import { isHosted } from "../lib/backend";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Session } from "../lib/auth";
 import { netlifyToken } from "../lib/hosting";
 import { Netlify } from "../lib/netlify";
@@ -16,6 +16,8 @@ import { appBase, appFiles } from "../lib/migrate";
 import { loadHostConfig } from "../lib/studiohost";
 import { deployClientApp, getClientFeatures, hostOf, partnerSignedIn, prepareClientSupabase, pullSite, remoteRepo, seedClientStudio, sendSite, setClientFeatures, siteSync, type PartnerRec, type SharedSite, type SiteSync } from "../lib/partners";
 import { CLIENT_FEATURES } from "../lib/features";
+import { partnerPlan, teardownPartner } from "../lib/teardown";
+import { TeardownDialog } from "./TeardownDialog";
 import { transferFiles } from "../lib/migrate";
 import type { Studio, StudioIndex } from "../lib/studio";
 import { timeAgo, uid } from "../lib/util";
@@ -180,7 +182,10 @@ function PartnerCard({ p, studio, index, nf, setNf, session, myEmail, studioToke
   const [states, setStates] = useState<Record<string, SiteSync | "checking">>({});
   const [busy, setBusy] = useState(""), [pick, setPick] = useState(""), [latest, setLatest] = useState<string | null>(null);
   // What their Studio shows (kept in their studio.json), and moving their Studio to other accounts.
-  const [hide, setHide] = useState<string[] | null>(null), [moving, setMoving] = useState(false);
+  const tearOk = useRef(false); // the card goes when the result is closed, so the result can be read first
+  const [hide, setHide] = useState<string[] | null>(null), [moving, setMoving] = useState(false), [tear, setTear] = useState(false);
+  const [myDb, setMyDb] = useState<{ api: string; studio: string } | null>(null);
+  useEffect(() => { loadHostConfig().then((c) => setMyDb(c?.kind === "cloudflare" ? { api: c.api, studio: c.studio } : null)).catch(() => {}); }, []);
   useEffect(() => { if (signed) getClientFeatures(remoteRepo(p)).then(setHide).catch(() => setHide([])); }, [signed, p.studio, p.api, p.sbUrl]);
   const toggleFeature = (key: string) => run("feat", async () => { const next = (hide || []).includes(key) ? (hide || []).filter((k) => k !== key) : [...(hide || []), key]; await setClientFeatures(remoteRepo(p), next); setHide(next); });
   const check = async () => {
@@ -251,18 +256,23 @@ function PartnerCard({ p, studio, index, nf, setNf, session, myEmail, studioToke
       {signed && hide && (
         <details className="rounded-xl border border-ink-700 px-3 py-2.5 text-[13px]" aria-label={`Features in ${p.name}'s Studio`}>
           <summary className="cursor-pointer select-none font-semibold text-ink-200">Features in their Studio <span className="font-normal text-ink-400">· {hide.length ? `${hide.length} hidden` : "all shown"}</span></summary>
-          <p className="mt-2 text-ink-400">Untick what {p.name} shouldn't see. It applies the next time they open their Studio. Migration and Studio Partners are never shown in a client's Studio.</p>
+          <p className="mt-2 text-ink-400">Untick what {p.name} shouldn't see. It applies the next time they open their Studio. Migration, Update and Studio Partners are never shown in a client's Studio: you update and move it from this card.</p>
           <div className="mt-2 grid gap-x-4 gap-y-1.5 sm:grid-cols-2">
             {CLIENT_FEATURES.map((f) => <label key={f.key} className="flex items-center gap-2"><input type="checkbox" className="accent-brand-500" checked={!hide.includes(f.key)} disabled={busy === "feat"} onChange={() => toggleFeature(f.key)} /><span>{f.label}{f.hint ? <span className="text-ink-500"> · {f.hint}</span> : null}</span></label>)}
           </div>
         </details>
       )}
+      {tear && <TeardownDialog title={`Remove & delete ${p.name}'s Studio`} name={p.name} plan={partnerPlan(p)}
+        keeps="Your own Studio, your projects and your other clients are not touched."
+        run={(step) => teardownPartner(p, { studioToken, db: myDb, step })}
+        onDone={(r) => { tearOk.current = !r.failed.length; }} onClose={() => { setTear(false); if (tearOk.current) onRemove(); }} />}
       {moving && <AddPartner from={p} nf={nf} setNf={setNf} session={session} index={index} partner={partner} myEmail={myEmail} onCancel={() => setMoving(false)} onDone={async (rec) => { await onChange(() => rec, `Move client Studio ${rec.name}`); }} />}
       <div className="flex flex-wrap items-center gap-2 border-t border-ink-700 pt-3 text-[13px] text-ink-400">
         {!moving && <button type="button" className="btn btn-sm" disabled={!!busy} title="Copies their Studio (projects, photos, settings) to another account, yours or the client's own, and updates this card." onClick={() => setMoving(true)}>Move their Studio…</button>}
         {p.accounts === "mine" && p.siteId ? <button type="button" className="btn btn-sm" disabled={!!busy} onClick={updateApp}>{busy === "app" ? "Updating…" : `Update their Studio${latest ? ` to ${latest}` : ""}`}</button> : <span>The client updates their Studio from its Settings → Migration.</span>}
         {busy && !["app", "share", "in", "refresh"].includes(busy) && !p.shared.some((s) => s.project === busy) && <span>{busy}…</span>}
-        <button type="button" className="btn btn-ghost btn-sm ml-auto text-rose-300" onClick={() => confirm(`Remove ${p.name} from Studio Partners?`, "Their Studio keeps working; this only removes the card here.", "Remove", true).then((y) => { if (y) onRemove(); })}>Remove card</button>
+        <button type="button" className="btn btn-ghost btn-sm ml-auto" onClick={() => confirm(`Remove ${p.name} from Studio Partners?`, "Their Studio keeps working; this only removes the card here.", "Remove", true).then((y) => { if (y) onRemove(); })}>Remove card</button>
+        <button type="button" className="btn btn-danger btn-sm" disabled={!!busy || !signed} title={signed ? "Deletes their Studio everywhere: its app, its projects and its sign-ins." : "Sign in to their Studio above first, so its data can be deleted."} onClick={() => setTear(true)}>Remove &amp; delete</button>
       </div>
     </section>
   );

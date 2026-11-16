@@ -326,16 +326,19 @@ export function HostDialog({ studio, project, tpl, draft, dirty, save, onIndex, 
         </> : <>
           {viaDb && (!cfAcc.ready || !siteAccKnown) ? <p className="flex items-center gap-2 text-[13px] text-emerald-300"><span className="h-2 w-2 rounded-full bg-emerald-400" />Publishing through your Cloudflare database: no Cloudflare token needed on this device. (Connecting a domain or a new site still needs the token, below.)</p> : null}
           {cfAcc.ui}
-          {cfAcc.ready && (cfAcc.allAccounts.length > 1 || (siteAccount && !siteAccKnown)) && (
+          {host?.kind === "cloudflare" && siteAcc && (
+            <p className="text-[13px] text-ink-300" aria-label="This site's Cloudflare account">This site's Cloudflare account: <b className="text-ink-100">{cfAcc.allAccounts.find((a) => a.id === siteAcc)?.name || "its own account (no token for it on this device)"}</b>. <span className="text-ink-400">Change it in Settings → Sites and hosting accounts.</span></p>
+          )}
+          {host?.kind !== "cloudflare" && cfAcc.ready && (cfAcc.allAccounts.length > 1 || (siteAccount && !siteAccKnown)) && (
             <label className="flex flex-col gap-1 text-[13px]"><span className="label">Cloudflare account for this site</span>
               <select className="input" aria-label="Cloudflare account for this site" value={siteAcc} onChange={(e) => setSiteAccount(e.target.value)}>
                 {!siteAccKnown && siteAcc && <option value={siteAcc}>The site's account (no token for it on this device yet)</option>}
                 {cfAcc.allAccounts.map((a) => <option key={a.id} value={a.id}>{a.name}{a.main ? "" : " (other token)"}</option>)}
               </select>
-              <span className="text-ink-400">{host?.kind === "cloudflare" ? "Where this site's pages and domain are. Publishing, Push updates and its domain use this account's token." : "The site's pages and domain go on this account. Its content stays in the database chosen below."}</span>
+              <span className="text-ink-400">The site's pages and domain go on this account. Its content stays in the database chosen below.</span>
             </label>
           )}
-          {cfAcc.ready && siteAccount && !siteAccKnown && !viaDb && <p className="text-[13px] text-amber-200">This site is on a Cloudflare account this device has no token for. Add that account under <b>Other Cloudflare accounts</b> above.</p>}
+          {cfAcc.ready && siteAccount && !siteAccKnown && !viaDb && <p className="text-[13px] text-amber-200">This site is on a Cloudflare account this device has no token for. Add that account in <b>Settings → Sites and hosting accounts</b>.</p>}
           <p className="text-[13px] text-ink-400">Cloudflare serves the pages from its network for free, with no traffic limit (a Worker with the site's files on your account). Edits made in the site's own CMS go to the database and don't need a publish.</p>
         </>}
         {(!host || moving) && pagesOk && (

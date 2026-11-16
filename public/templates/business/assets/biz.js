@@ -493,10 +493,25 @@ const swOn = () => !!(C.warranty && C.warranty.enabled);
 const swOpts = () => ({ cfg: C.warranty, url: (HOST && HOST.assets ? HOST.assets : "") + "assets/data/warranty.json", preview: PREVIEW, esc });
 const swOpen = () => SW().then((w) => w.open(swOpts())).catch(() => {});
 const swMount = () => { const el = document.getElementById("sw-page"); if (el) SW().then((w) => w.mount(el, swOpts())).catch(() => {}); };
+/* Maintenance mode (assets/maint.js): while content.maintenance.on, visitors see the maintenance page instead of the
+   site. The editor's preview shows it only on its "Maintenance page" entry (?maintenance=1). */
+const MNT_Q = /[?&]maintenance=1(&|$)/.test(location.search);
+let mntP, mntPass = false;
+function maintGate(again) {
+  const on = PREVIEW ? MNT_Q : !!(C.maintenance || {}).on;
+  if (!on || mntPass) { if (window.SiteMaint) window.SiteMaint.hide(); return false; }
+  (mntP ||= new Promise((ok, no) => { if (window.SiteMaint) return ok(); const s = document.createElement("script"); s.src = "assets/maint.js"; s.onload = () => ok(); s.onerror = no; document.head.appendChild(s); }))
+    .then(() => {
+      if (window.SiteMaint.wanted(C, PREVIEW)) window.SiteMaint.show(C, { name: C.brand.name, logo: imgUrl(C.brand.logo), preview: PREVIEW });
+      else { mntPass = true; again(); }
+    }).catch(() => { mntPass = true; again(); });
+  return true;
+}
 function render() {
   // A several-page link opened while the site is one page goes to that section.
   if (!PREVIEW && !multi() && !["home", "products", "product", "page"].includes(PAGE)) { location.replace(PAGES.home + "#" + (PAGE === "work" ? "work" : PAGE)); return; }
   applyTheme(C.theme); setTitle();
+  if (maintGate(render)) return;
   if (!PREVIEW && PAGE === "warranty" && !swOn()) { location.replace(PAGES.home); return; }
   const special = { warranty: warrantyPage, products: productsPage, product: productPage, page: staticPage }[PAGE];
   const ids = special ? [] : multi() ? (PAGE === "home" ? C.sections.map((s) => s.id).filter((id) => PAGE_SECTIONS.home.includes(id)) : PAGE_SECTIONS[PAGE]) : C.sections.map((s) => s.id);
@@ -533,9 +548,17 @@ function bind() {
 let slP, slGen = 0;
 function slides() {
   const S = C.hero.slides, g = ++slGen, host = $("#hero");
-  if (!host || !S || !S.enabled || !(S.items || []).some((x) => x && x.image)) { if (window.SiteSlides) window.SiteSlides.stop(); return; }
+  const H = document.documentElement;
+  if (!host || !S || !S.enabled || !(S.items || []).some((x) => x && x.image)) { if (window.SiteSlides) window.SiteSlides.stop(); H.classList.remove("hs-top", "hs-top-light"); return; }
   (slP ||= new Promise((ok, no) => { if (window.SiteSlides) return ok(window.SiteSlides); const s = document.createElement("script"); s.src = "assets/slides.js"; s.onload = () => ok(window.SiteSlides); s.onerror = no; document.head.appendChild(s); }))
-    .then((w) => { if (g === slGen) w.mount(host, S, { imgUrl, title: ".h1", text: ".hero-lede", hide: ".hero-media,.hero-bg" }); }).catch(() => {});
+    .then((w) => {
+      if (g !== slGen) return;
+      w.mount(host, S, { imgUrl, title: ".h1", text: ".hero-lede", hide: ".hero-media,.hero-bg" });
+      // The photos run up behind the header, so the header and the hero read as one piece (not a strip above the photos).
+      const nav = $(".nav"), top = !!nav && !host.previousElementSibling && H.dataset.nav !== "dark" && H.dataset.layout !== "panel" && host.classList.contains("hs-host");
+      H.classList.toggle("hs-top", top); H.classList.toggle("hs-top-light", top && host.classList.contains("hs-light"));
+      if (top) { const fit = () => H.style.setProperty("--nav-h", nav.offsetHeight + "px"); fit(); if (!slides.bound) { slides.bound = true; addEventListener("resize", fit); } }
+    }).catch(() => {});
 }
 /** Product filters and photos, and "Enquire": fills the enquiry form with the product. */
 function bindProducts() {
@@ -616,7 +639,7 @@ if (PREVIEW) {
     const d = e.data || {};
     if (d.type === "cms:content" && d.content && typeof d.content === "object") { ASSETS = d.assets || {}; const y = scrollY; C = merge(DEFAULT, d.content); render(); scrollTo(0, y); }
   });
-  window.parent.postMessage({ type: "cms:ready", page: (location.pathname.split("/").pop() || "index.html") + (PAGE === "page" && spCur() ? "?p=" + encodeURIComponent(spCur()) : "") }, location.origin);
+  window.parent.postMessage({ type: "cms:ready", page: (location.pathname.split("/").pop() || "index.html") + (PAGE === "page" && spCur() ? "?p=" + encodeURIComponent(spCur()) : MNT_Q ? "?maintenance=1" : "") }, location.origin);
   render();
 } else {
   const CKEY = "site-content:" + location.pathname.replace(/[^/]*$/, "");

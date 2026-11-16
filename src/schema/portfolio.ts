@@ -1,6 +1,6 @@
 import type { Category, Field, TemplateDef } from "./types";
 import { AXES, BODY_FONTS, DISPLAY_FONTS, KIT_AXIS, LINE_BREAKS_AXIS, PORTFOLIO_AXES, THEMES, onColor, portfolioThemeValues } from "../themes/catalog";
-import { adminCategory, staticPagesCategory, heroSlidesCard, prepareSlides, seoCategory } from "./common";
+import { adminCategory, staticPagesCategory, heroSlidesCard, prepareSlides, prepareMaintenance, seoCategory } from "./common";
 import VELOCITY_DEFAULTS from "./velocity-defaults.json";
 import { NAV_MODE_FIELD, NAV_MODE_NOTE, themeCards } from "../themes/fields";
 
@@ -228,6 +228,7 @@ export const portfolioTemplate: TemplateDef = {
     if (!c || typeof c !== "object") return;
     if (c.hero && typeof c.hero === "object" && !c.hero.graphic) c.hero.graphic = "elements";
     if (c.hero && typeof c.hero === "object") prepareSlides(c.hero, "#000000");
+    prepareMaintenance(c);
     // Hero → Photo was replaced by the logo icon / disc image (Brand & theme): an existing photo moves to the disc.
     if (c.hero && c.hero.photo) {
       if (!c.hero.discImage) c.hero.discImage = c.hero.photo;

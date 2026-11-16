@@ -336,6 +336,13 @@ html[data-cards=lined] .card.prod{padding:0}
 .hero.hs-solo .hero-in{grid-template-columns:1fr}
 .hero.hs-host .btn.sec{background:color-mix(in srgb,#fff 12%,transparent);border-color:color-mix(in srgb,currentColor 45%,transparent);color:inherit}
 .hero.hs-host .badges li{color:inherit}
+/* The slides run up behind the header: one smooth top instead of a strip of page background above the photos */
+html.hs-top .hero.hs-host{margin-top:calc(-1*var(--nav-h,78px));padding-top:calc(clamp(48px,7vw,96px) + var(--nav-h,78px))}
+html.hs-top[data-nav=line] .nav:not(.scrolled){border-bottom-color:transparent}
+html.hs-top-light:not([data-nav=float]) .nav:not(.scrolled){color:#fff}
+html.hs-top-light:not([data-nav=float]) .nav:not(.scrolled) .links a{color:rgba(255,255,255,.82)}
+html.hs-top-light:not([data-nav=float]) .nav:not(.scrolled) .links a:hover,html.hs-top-light:not([data-nav=float]) .nav:not(.scrolled) .links a[aria-current]{color:#fff}
+html.hs-top-light:not([data-nav=float]) .nav:not(.scrolled) .burger{border-color:rgba(255,255,255,.45)}html.hs-top-light:not([data-nav=float]) .nav:not(.scrolled) .burger span{background:#fff}
 .prod[hidden]{display:none!important}
 .prod-media{text-decoration:none}
 .hero.hs-light .badges li,.hero.hs-light .badges .bi{color:rgba(255,255,255,.88)!important}

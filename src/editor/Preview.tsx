@@ -16,7 +16,7 @@ function previewPages(tpl: TemplateDef, content: any): { file: string; label: st
     .map((p: any) => ({ slug: pageSlug(p?.slug || p?.title) || p?.id, title: String(p?.title || "").replace(/\s+/g, " ").trim() }))
     .filter((p: any) => p.slug && p.title);
   const seen = new Set<string>();
-  return [...tpl.pages, ...extra.filter((p: any) => !seen.has(p.slug) && seen.add(p.slug)).map((p: any) => ({ file: `${tpl.pageFile || "page.html"}?p=${encodeURIComponent(p.slug)}`, label: `Page: ${p.title}` }))];
+  return [...tpl.pages, { file: "index.html?maintenance=1", label: "Maintenance page" }, ...extra.filter((p: any) => !seen.has(p.slug) && seen.add(p.slug)).map((p: any) => ({ file: `${tpl.pageFile || "page.html"}?p=${encodeURIComponent(p.slug)}`, label: `Page: ${p.title}` }))];
 }
 
 // The template pages run in an iframe named "cms-preview". They announce themselves with

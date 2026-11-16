@@ -18,6 +18,7 @@
     "assets/motifs.js",
     "assets/warranty.js",
     "assets/pages.js",
+    "assets/maint.js",
     "README.md",
     "supabase/enquiries.sql"
   ],

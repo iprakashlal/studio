@@ -25,20 +25,39 @@
     });
     s = s.replace(/\bhttps?:\/\/[^\s<]+[^\s<.,;:!?)\]'"]/g, function (u) { return keep('<a href="' + u + '" target="_blank" rel="noopener">' + u + "</a>"); });
     s = s.replace(/\b[\w.+-]+@[\w-]+(\.[\w-]+)+\b/g, function (m) { return keep('<a href="mailto:' + m + '">' + m + "</a>"); });
+    // text styles: {accent:words} {big:words} {small:words} {muted:words}, ==highlight==, ~~struck~~, __underlined__
+    for (var i = 0; i < 3; i++) s = s.replace(/\{(accent|big|small|muted):([^{}\n]+)\}/g, '<span class="sp-$1">$2</span>');
+    s = s.replace(/==(?=\S)([^=\n]*?\S)==/g, "<mark>$1</mark>").replace(/~~(?=\S)([^~\n]*?\S)~~/g, "<s>$1</s>").replace(/(^|[^\w])__(?=\S)([^_\n]*?\S)__(?!\w)/g, "$1<u>$2</u>");
     s = s.replace(/\*\*(?=\S)([\s\S]*?\S)\*\*/g, "<strong>$1</strong>").replace(/(^|[^*\w])\*(?=\S)([^*\n]*?\S)\*(?!\w)/g, "$1<em>$2</em>").replace(/(^|[^\w])_(?=\S)([^_\n]*?\S)_(?!\w)/g, "$1<em>$2</em>");
     return s.replace(/\u0000(\d+)\u0000/g, function (_, i) { return links[+i]; });
   }
   /** The body's HTML, and its section headings (for the contents list). */
   function parse(text) {
-    var lines = String(text || "").replace(/\r\n?/g, "\n").split("\n"), out = [], heads = [], used = {}, para = [], list = null, quote = [];
+    var lines = String(text || "").replace(/\r\n?/g, "\n").split("\n"), out = [], heads = [], used = {}, para = [], list = null, quote = [], table = [], pc = "";
     var idFor = function (t) { var b = slugify(t.replace(/<[^>]+>/g, "")) || "section", id = b, n = 2; while (used[id]) id = b + "-" + n++; used[id] = 1; return id; };
-    var flushP = function () { if (para.length) { out.push("<p>" + para.map(function (l) { return inline(esc(l)); }).join("<br>") + "</p>"); para = []; } };
+    var flushP = function () { if (para.length) { out.push("<p" + pc + ">" + para.map(function (l) { return inline(esc(l)); }).join("<br>") + "</p>"); para = []; pc = ""; } };
     var flushL = function () { if (list) { out.push("<" + list.tag + ">" + list.items.map(function (i) { return "<li>" + inline(esc(i)) + "</li>"; }).join("") + "</" + list.tag + ">"); list = null; } };
     var flushQ = function () { if (quote.length) { out.push("<blockquote>" + quote.map(function (l) { return inline(esc(l)); }).join("<br>") + "</blockquote>"); quote = []; } };
-    var flush = function () { flushP(); flushL(); flushQ(); };
+    // A table: lines that start with |, cells split by |. A second line of dashes (|---|:--:|--:|) makes the first
+    // line the heading row and sets each column's alignment.
+    var cells = function (l) { return l.replace(/^\|/, "").replace(/\|\s*$/, "").split(/(?<!\\)\|/).map(function (c) { return c.replace(/\\\|/g, "|").trim(); }); };
+    var flushT = function () {
+      if (!table.length) return;
+      var rows = table.map(cells), al = [], head = null;
+      if (rows.length > 1 && rows[1].every(function (c) { return /^:?-{2,}:?$/.test(c); })) { al = rows[1].map(function (c) { return /^:.*:$/.test(c) ? "center" : /:$/.test(c) ? "right" : ""; }); head = rows[0]; rows = rows.slice(2); }
+      var n = Math.max.apply(null, rows.concat(head ? [head] : []).map(function (x) { return x.length; }));
+      var row = function (x, tag) { var h = "<tr>"; for (var i = 0; i < n; i++) h += "<" + tag + (al[i] ? ' style="text-align:' + al[i] + '"' : "") + ">" + inline(esc(x[i] || "")) + "</" + tag + ">"; return h + "</tr>"; };
+      out.push('<div class="sp-table"><table>' + (head ? "<thead>" + row(head, "th") + "</thead>" : "") + "<tbody>" + rows.map(function (x) { return row(x, "td"); }).join("") + "</tbody></table></div>");
+      table = [];
+    };
+    var flush = function () { flushP(); flushL(); flushQ(); flushT(); };
     lines.forEach(function (raw) {
       var l = raw.replace(/\s+$/, ""), t = l.trim(), m;
       if (!t) { flush(); return; }
+      if (/^\|.*\|/.test(t) || (table.length && /^\|/.test(t))) { flushP(); flushL(); flushQ(); table.push(t); return; }
+      flushT();
+      if ((m = /^!>\s?(.+)$/.exec(t))) { flush(); out.push('<p class="sp-note">' + inline(esc(m[1])) + "</p>"); return; }
+      if ((m = /^->\s?(.+?)(\s*<-)?$/.exec(t))) { flush(); out.push('<p class="sp-center">' + inline(esc(m[1])) + "</p>"); return; }
       if ((m = /^(#{1,3})\s+(.+)$/.exec(t))) {
         flush();
         var lv = m[1].length === 3 ? 3 : 2, h = inline(esc(m[2].replace(/\s*#+$/, ""))), id = idFor(m[2]);
@@ -74,6 +93,11 @@
     ".sp-body ul,.sp-body ol{margin:0 0 1.1em;padding-left:1.4em}.sp-body ul{list-style:disc}.sp-body ol{list-style:decimal}.sp-body li{display:list-item;margin:.3em 0;padding:0}.sp-body li::before{content:none}.sp-body li::marker{color:var(--sp-ac)}",
     ".sp-body a{color:var(--sp-ac);text-decoration:underline;text-underline-offset:3px}.sp-body strong{font-weight:700;color:inherit}.sp-body em{font-style:italic;color:inherit}",
     ".sp-body blockquote{margin:0 0 1.1em;padding:12px 18px;border-left:3px solid var(--sp-ac);background:color-mix(in srgb,var(--sp-ac) 7%,transparent);border-radius:0 10px 10px 0}",
+    ".sp-table{overflow-x:auto;margin:0 0 1.2em;border:1px solid var(--sp-line);border-radius:min(var(--r,12px),12px)}.sp-table table{width:100%;border-collapse:collapse;font-size:.94em;line-height:1.5}",
+    ".sp-table th,.sp-table td{padding:10px 14px;text-align:left;vertical-align:top;border-bottom:1px solid var(--sp-line);color:inherit}.sp-table th{font-weight:700;background:color-mix(in srgb,var(--sp-ac) 9%,transparent);white-space:nowrap}.sp-table tbody tr:last-child td{border-bottom:0}",
+    ".sp-body mark{background:color-mix(in srgb,var(--sp-ac) 24%,transparent);color:inherit;padding:.05em .25em;border-radius:4px}.sp-body u{text-decoration:underline;text-underline-offset:3px}.sp-body s{opacity:.7}",
+    ".sp-accent{color:var(--sp-ac)}.sp-big{font-size:1.3em;line-height:1.35}.sp-small{font-size:.86em}.sp-muted{color:var(--sp-soft)}.sp-body .sp-center{text-align:center}",
+    ".sp-body .sp-note{padding:12px 16px;border:1px solid color-mix(in srgb,var(--sp-ac) 40%,transparent);background:color-mix(in srgb,var(--sp-ac) 8%,transparent);border-radius:10px}",
     ".sp-body hr{border:0;border-top:1px solid var(--sp-line);margin:2em 0}",
     ".sp-flag{display:inline-block;font-size:12px;font-weight:700;padding:3px 10px;border-radius:99px;background:#fff3cd;color:#6b4b00;margin-bottom:12px}",
     ".sp-links{display:flex;flex-wrap:wrap;gap:6px 18px;justify-content:center;padding:18px 20px 28px;font-size:14px;position:relative;z-index:2}.sp-links a{color:var(--soft,inherit);text-decoration:none}.sp-links a:hover{color:var(--text,inherit);text-decoration:underline}",

@@ -637,8 +637,23 @@ const swOpen = () => SW().then((w) => w.open(swOpts())).catch(() => {});
 const swMount = () => { const el = document.getElementById("sw-page"); if (el) SW().then((w) => w.mount(el, swOpts())).catch(() => {}); };
 /** Five stars, filled up to the rating. */
 const starRow = (n) => { const r = Math.max(0, Math.min(5, Math.round(+n || 0))); return "★".repeat(r) + `<span class="off">${"★".repeat(5 - r)}</span>`; };
+/* Maintenance mode (assets/maint.js): while content.maintenance.on, visitors see the maintenance page instead of the
+   site. The editor's preview shows it only on its "Maintenance page" entry (?maintenance=1). */
+const MNT_Q = /[?&]maintenance=1(&|$)/.test(location.search);
+let mntP, mntPass = false;
+function maintGate(again) {
+  const on = PREVIEW ? MNT_Q : !!(C.maintenance || {}).on;
+  if (!on || mntPass) { if (window.SiteMaint) window.SiteMaint.hide(); return false; }
+  (mntP ||= new Promise((ok, no) => { if (window.SiteMaint) return ok(); const s = document.createElement("script"); s.src = "assets/maint.js"; s.onload = () => ok(); s.onerror = no; document.head.appendChild(s); }))
+    .then(() => {
+      if (window.SiteMaint.wanted(C, PREVIEW)) window.SiteMaint.show(C, { name: C.brand.name, logo: imgUrl(C.brand.logo), preview: PREVIEW });
+      else { mntPass = true; again(); }
+    }).catch(() => { mntPass = true; again(); });
+  return true;
+}
 function render() {
   applyTheme(C.theme);
+  if (maintGate(render)) return;
   if (!PREVIEW && PAGE === "warranty" && !swOn()) { location.replace("index.html"); return; }
   if (PAGE !== "product") setTitle(PAGE === "home" ? "" : { shop: C.shop.title, cart: C.nav.cart, checkout: C.checkout.title, portfolio: C.nav.portfolio, policies: "Policies", account: C.accountPage.title, warranty: C.warranty.title, page: (spHere() || {}).title }[PAGE] || "");
   applyMeta();
@@ -914,7 +929,7 @@ if (PREVIEW) {
     const d = e.data || {};
     if (d.type === "cms:content" && d.content && typeof d.content === "object") { ASSETS = d.assets || {}; const y = scrollY; C = merge(DEFAULT, d.content); render(); scrollTo(0, y); }
   });
-  window.parent.postMessage({ type: "cms:ready", page: (location.pathname.split("/").pop() || "index.html") + (PAGE === "page" && spCur() ? "?p=" + encodeURIComponent(spCur()) : "") }, location.origin);
+  window.parent.postMessage({ type: "cms:ready", page: (location.pathname.split("/").pop() || "index.html") + (PAGE === "page" && spCur() ? "?p=" + encodeURIComponent(spCur()) : MNT_Q ? "?maintenance=1" : "") }, location.origin);
 }
 // The live site never shows the template's sample design: it waits for content.json (a returning visitor
 // gets the copy saved on the previous page at once), and only falls back to the defaults if loading fails.

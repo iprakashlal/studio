@@ -1,7 +1,7 @@
 import type { Category, Field, TemplateDef } from "./types";
 import { uid, vpaOk, paypalOk, httpsOk } from "../lib/util";
 import { BODY_FONTS, DISPLAY_FONTS, LINE_BREAKS_AXIS, STORE_AXES, THEMES, onColor, storeThemeValues } from "../themes/catalog";
-import { adminCategory, staticPagesCategory, heroSlidesCard, prepareSlides, seoCategory, warrantyCategory } from "./common";
+import { adminCategory, staticPagesCategory, heroSlidesCard, prepareSlides, prepareMaintenance, seoCategory, warrantyCategory } from "./common";
 import { NAV_MODE_FIELD, themeCards } from "../themes/fields";
 
 const CURRENCIES = ["INR", "USD", "EUR", "GBP", "AED", "SGD", "AUD", "CAD"];
@@ -196,6 +196,7 @@ const schema: Category[] = [
 export const STORE_LABELS = { allProducts: "All products", viewAll: "View all", help: "Help", contact: "Contact" };
 export function prepareStore(c: any) {
   if (c && typeof c === "object" && c.home?.hero) prepareSlides(c.home.hero, "#000000");
+  prepareMaintenance(c);
   if (!c || typeof c !== "object") return;
   const t = c.theme && typeof c.theme === "object" ? c.theme : (c.theme = {});
   if (!t.introBg) t.introBg = t.deep || t.text || "#111111";

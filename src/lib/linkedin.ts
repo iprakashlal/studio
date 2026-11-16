@@ -287,7 +287,7 @@ export function fromPdfItems(items: PdfItem[]): LinkedInData {
 }
 
 /** Reads a PDF's text runs with pdf.js, loaded on demand from `base` (pdf.min.js + pdf.worker.min.js). */
-export async function readPdf(data: ArrayBuffer, base: string): Promise<PdfItem[]> {
+export async function readPdf(data: ArrayBuffer, base: string, maxPages = 20, fonts = false): Promise<PdfItem[]> {
   const load = new Function("u", "return import(u)") as (u: string) => Promise<any>;
   let pdfjs: any;
   try {
@@ -303,16 +303,19 @@ export async function readPdf(data: ArrayBuffer, base: string): Promise<PdfItem[
     throw new Error(/password/i.test(e?.name + e?.message) ? "This PDF is password-protected. Save your profile as a PDF again and upload that." : "This file isn't a readable PDF. On your profile, use More → Save to PDF, then upload that file.");
   }
   const items: PdfItem[] = [];
-  for (let p = 1; p <= Math.min(doc.numPages, 20); p++) {
+  for (let p = 1; p <= Math.min(doc.numPages, maxPages); p++) {
     const page = await doc.getPage(p);
     const vp = page.getViewport({ scale: 1 });
     const tc = await page.getTextContent();
+    // The fonts' real names ("…-Bold"): text runs only carry an internal id, so bold text needs the loaded font.
+    const real: Record<string, string> = {};
+    if (fonts) { try { await page.getOperatorList(); for (const k of Object.keys(tc.styles || {})) { try { real[k] = String(page.commonObjs.get(k)?.name || ""); } catch { /* not loaded */ } } } catch { /* keep going without names */ } }
     for (const it of tc.items as any[]) {
       if (!("str" in it) || !it.str.trim()) continue;
       const [a, b, , dd, e, f] = it.transform;
       const size = Math.round(Math.hypot(a, b) * 10) / 10 || Math.abs(dd);
       const font = tc.styles?.[it.fontName]?.fontFamily || "";
-      items.push({ page: p, x: e, y: vp.height - f, size, text: it.str, bold: /bold/i.test(it.fontName + font), w: it.width });
+      items.push({ page: p, x: e, y: vp.height - f, size, text: it.str, bold: /bold|black|heavy|semibold|demi/i.test(it.fontName + font + (real[it.fontName] || "")), w: it.width });
     }
   }
   await doc.destroy();

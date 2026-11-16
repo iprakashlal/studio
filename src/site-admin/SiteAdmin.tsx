@@ -333,7 +333,8 @@ function Workspace({ info, onInfo, repo, account, onSignOut, hosted, ghToken }: 
             <button type="button" aria-pressed={pane === "edit"} className={`btn btn-sm border-0 ${pane === "edit" ? "bg-ink-700" : "bg-transparent"}`} onClick={() => setPane("edit")}>Edit</button>
             <button type="button" aria-pressed={pane === "preview"} className={`btn btn-sm border-0 ${pane === "preview" ? "bg-ink-700" : "bg-transparent"}`} onClick={() => setPane("preview")}>Preview</button>
           </div>
-          <a className="btn btn-sm" href="./" target="_blank" rel="noopener">View site ↗</a>
+          <a className="btn btn-sm" href={draft.maintenance?.on ? "./?peek" : "./"} target="_blank" rel="noopener">View site ↗</a>
+          <button type="button" role="switch" aria-checked={!!draft.maintenance?.on} className={`btn btn-sm ${draft.maintenance?.on ? "border-amber-400/60 text-amber-200" : ""}`} title="Shows a maintenance page to visitors instead of the site. Takes effect when you publish. Its text is under Publish & admin." onClick={() => { draft.maintenance = { ...(draft.maintenance || {}), on: !draft.maintenance?.on }; bump(); }}>Maintenance: {draft.maintenance?.on ? "On" : "Off"}</button>
           {dirty || !draftSha
             ? <button type="button" className="btn btn-sm" disabled={!dirty} onClick={async () => { if (await confirm("Discard unsaved changes?", draftSha ? "The editor goes back to your last saved draft." : "Your edits since the last save will be lost.", "Discard", true)) { setDraft(clone(base)); setV(0); setSavedV(0); } }}>Discard</button>
             : <button type="button" className="btn btn-sm" disabled={saving} onClick={dropDraft}>Delete draft</button>}
@@ -347,6 +348,11 @@ function Workspace({ info, onInfo, repo, account, onSignOut, hosted, ghToken }: 
           <a className="font-mono font-semibold underline" href={moved}>{moved}</a>
           <span>It works in about a minute. Bookmark it: this address stops working.</span>
           <button type="button" className="btn btn-sm ml-auto" onClick={() => { try { navigator.clipboard.writeText(moved); toast("Copied"); } catch { toast(moved); } }}>Copy</button>
+        </div>
+      )}
+      {draft.maintenance?.on && (
+        <div className="border-b border-amber-400/40 bg-amber-400/10 px-4 py-2 text-[13px] text-amber-100" role="status">
+          <b>Maintenance mode is on{dirty || draftSha ? " in this draft" : ""}.</b> {dirty || draftSha ? "After you publish, visitors" : "Visitors"} see the maintenance page instead of the site. Switch it off and publish to bring the site back; “View site” opens the real site for you.
         </div>
       )}
       {!moved && draftSha && !dirty && (

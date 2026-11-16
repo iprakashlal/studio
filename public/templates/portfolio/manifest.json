@@ -8,6 +8,7 @@
     "admin.html",
     "404.html",
     "assets/pages.js",
+    "assets/maint.js",
     "README.md"
   ],
   "starters": [

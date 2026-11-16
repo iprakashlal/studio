@@ -13,9 +13,20 @@ export function adminSlug(raw: unknown): string {
 export const adminFile = (content: any) => adminSlug(content?.cms?.adminPage) + ".html";
 
 export function adminCategory(): Category {
+  const g2 = (...fields: Field[]): Field => ({ t: "grid", cols: 2, fields });
   return {
-    id: "cms", label: "Admin page", group: "Settings", desc: "The address of this site's own editor (the CMS).",
-    cards: [{ title: "Admin page address", fields: [
+    id: "cms", label: "Admin page", group: "Settings", site: { label: "Publish & admin" }, desc: "Maintenance mode, and the address of this site's own editor (the CMS).",
+    cards: [{ title: "Maintenance mode", fields: [
+      { t: "toggle", path: "maintenance.on", label: "Show the maintenance page instead of the site" },
+      { t: "note", text: "While this is on and published, every page of the site shows the maintenance page below. This admin page keeps working. To look at the site yourself, open it once with ?peek at the end of the address (for example yoursite/?peek); ?peek=off ends it. Turn the switch off and publish to bring the site back.", tone: "warn" },
+      { t: "text", path: "maintenance.title", label: "Heading", ph: "We'll be back soon", ml: true },
+      { t: "textarea", path: "maintenance.text", label: "Message", rows: 5, rich: true, hint: "Plain text; the buttons add bold, lists and links. Leave empty for the standard message." },
+      g2({ t: "text", path: "maintenance.back", label: "Back by (optional)", ph: "Back on Monday, 10 am" }, { t: "select", path: "maintenance.look", label: "Look", options: [{ value: "page", label: "The site's page colours" }, { value: "dark", label: "Dark" }, { value: "accent", label: "The accent colour" }] },
+        { t: "text", path: "maintenance.button.label", label: "Button text (optional)", ph: "Message us on WhatsApp" }, { t: "text", path: "maintenance.button.url", label: "Button link", ph: "https://wa.me/91…" }),
+      { t: "textarea", path: "maintenance.contact", label: "Contact line (optional)", rows: 2, hint: "For example an email address and a phone number; they become clickable." },
+      { t: "toggle", path: "maintenance.showLogo", label: "Show the logo or name at the top" },
+      { t: "note", text: "Pick “Maintenance page” in the preview's page list to see it before switching it on." },
+    ] }, { title: "Admin page address", fields: [
       { t: "text", path: "cms.adminPage", label: "Admin page name", ph: "admin", show: (v) => `Opens at yoursite/${adminSlug(v)} after you publish. Letters, numbers and dashes; spaces become dashes.` },
       { t: "note", text: "A less obvious name keeps casual visitors away from the sign-in screen. It isn't a password: the editor still needs your GitHub token. After you publish a new name, the old address stops working, so bookmark the new one." },
       { t: "note", text: "Names the site already uses (index, shop, cart, checkout, portfolio, account…) aren't allowed and fall back to admin.", tone: "warn" },
@@ -69,7 +80,7 @@ export function staticPageFields(addr: string, links: Field[], back: string): Fi
     { t: "text", path: "slug", label: "Address name (optional)", ph: "made from the title", show: (v) => `Opens at ${addr}${pageSlug(v) || "<the title>"}. Letters, numbers and dashes. Empty uses the title.` },
     { t: "textarea", path: "subtitle", label: "Subtitle under the title (optional)", rows: 2 },
     { t: "text", path: "updated", label: "Last updated (optional)", ph: "15 November 2026", hint: "Shown under the title as “Last updated: …”. Leave empty to hide it." },
-    { t: "textarea", path: "body", label: "Text", rows: 16, hint: "Plain text. A blank line starts a new paragraph. ## Heading and ### Smaller heading make headings; - item makes a bullet, 1. item a numbered list, > a quote, --- a line. **bold**, *italic*, [words](https://link); links and emails become clickable on their own. You can paste text from a document." },
+    { t: "textarea", path: "body", label: "Text", rows: 16, pdf: true, rich: true, hint: "Plain text: a blank line starts a new paragraph. Select words and use the buttons for headings, lists, tables and text styles, or type the marks yourself: ## Heading, - bullet, 1. numbered, > quote, **bold**, | cell | cell | for a table row. Links and emails become clickable on their own. You can paste text from a document or fill it from a PDF." },
     g2({ t: "toggle", path: "show", label: "Published (visitors can open it)" }, ...links),
     { t: "note", text: "Title options" },
     g2({ t: "toggle", path: "showTitle", label: "Show the title on the page" }, { t: "select", path: "align", label: "Title alignment", options: [{ value: "left", label: "Left" }, { value: "center", label: "Centre" }] },
@@ -134,6 +145,13 @@ export function warrantyCategory(where: "page" | "popup-or-page"): Category {
 /** The settings a new hero slideshow starts with (content: hero.slides, or home.hero.slides in the shop). */
 export const heroSlidesDefault = (overlayColor = "#000000") => ({ enabled: false, items: [] as any[], effect: "fade", interval: 6, speed: 1.2, overlay: 45, overlayColor, overlayStyle: "left", textColor: "light", height: "tall", dots: true, arrows: false, pause: true, hideArt: true, artOpacity: 100 });
 /** Fills in the slideshow settings an older site doesn't have yet. */
+export const maintenanceDefault = () => ({ on: false, title: "We'll be back soon", text: "We're making a few improvements. Please check back in a little while.", back: "", button: { label: "", url: "" }, contact: "", look: "page", showLogo: true });
+/** Older content gets the maintenance page's fields (off). */
+export function prepareMaintenance(c: any) {
+  if (!c || typeof c !== "object") return;
+  const d = maintenanceDefault(), m = c.maintenance && typeof c.maintenance === "object" ? c.maintenance : {};
+  c.maintenance = { ...d, ...m, button: { ...d.button, ...(m.button && typeof m.button === "object" ? m.button : {}) } };
+}
 export function prepareSlides(hero: any, overlayColor?: string) {
   if (!hero || typeof hero !== "object") return;
   const d = heroSlidesDefault(overlayColor);

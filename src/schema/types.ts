@@ -7,7 +7,9 @@ export type Check = "vpa" | "paypal" | "https" | "razorpay" | "stripe" | "email"
 export type Field =
   /** ml: a heading-style line that may hold several lines; Enter starts a new one and the site breaks the line there. */
   | { t: "text"; path: string; label: string; hint?: string; ph?: string; check?: Check; ml?: boolean; /** Live line under the box, e.g. the resulting address. */ show?: (value: string) => string }
-  | { t: "textarea"; path: string; label: string; hint?: string; rows?: number }
+  /** pdf: a "Fill from a PDF" button that reads the PDF's text into the box (and the item's empty title).
+   *  rich: buttons for the reading-page marks (headings, lists, tables, text styles; see src/fx/pages.js). */
+  | { t: "textarea"; path: string; label: string; hint?: string; rows?: number; pdf?: boolean; rich?: boolean }
   | { t: "number"; path: string; label: string; hint?: string; min?: number; step?: number }
   | { t: "select"; path: string; label: string; options: Opt[] }
   /** A select whose options come from a list elsewhere in the content (e.g. product → category). */

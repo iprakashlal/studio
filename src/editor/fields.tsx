@@ -1,6 +1,7 @@
 import { createContext, useContext, useLayoutEffect, useRef, useState } from "react";
 import { ThemeDrawer, ThemeGallery, ThemeSwatch } from "../themes/ThemeGallery";
 import { LinkedInImport } from "./LinkedInImport";
+import { pdfToText } from "../lib/pdftext";
 import { Motifs, THEMES, type Theme } from "../themes/catalog";
 import { themeCode } from "../themes/codes";
 import type { Field as F, TemplateDef } from "../schema/types";
@@ -79,7 +80,13 @@ export function FieldView({ f, obj, base }: { f: F; obj: any; base: string }) {
     case "textarea":
       return (
         <Field label={f.label} htmlFor={id} hint={f.hint}>
-          <textarea id={id} className="input min-h-[84px] resize-y leading-relaxed" rows={f.rows || 3} value={val ?? ""} onChange={(e) => set(e.target.value)} />
+          {f.pdf && <PdfFill id={id} has={!!String(val ?? "").trim()} onText={(r, mode) => {
+            set(mode === "add" && String(val ?? "").trim() ? String(val).replace(/\s+$/, "") + "\n\n" + r.text : r.text);
+            const t = getP(obj, "title");
+            if (r.title && (!String(t ?? "").trim() || /^(new page|untitled page)$/i.test(String(t)))) { setP(obj, "title", r.title); bump(); }
+          }} />}
+          {f.rich && <RichBar id={id} value={String(val ?? "")} set={set} />}
+          <textarea id={id} className={`input min-h-[84px] resize-y leading-relaxed${f.rich ? " font-mono text-[13px]" : ""}`} rows={f.rows || 3} value={val ?? ""} onChange={(e) => set(e.target.value)} />
         </Field>
       );
     case "number":
@@ -475,4 +482,108 @@ export function applyTheme(root: any, tpl: TemplateDef, th: Theme) {
 export function themeTweaked(root: any, tpl: TemplateDef, th: Theme): boolean {
   const def = tpl.themeValues(th);
   return Object.entries(def).some(([k, v]) => JSON.stringify(root.theme?.[k] ?? null) !== JSON.stringify(v ?? null));
+}
+
+/** "Fill from a PDF": reads the PDF's text into a long text box (replace, or add at the end when there's text). */
+function PdfFill({ id, has, onText }: { id: string; has: boolean; onText: (r: { title: string; text: string }, mode: "replace" | "add") => void }) {
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  const mode = useRef<"replace" | "add">("replace");
+  const pick = async (file?: File) => {
+    if (!file) return;
+    setBusy(true);
+    try {
+      const r = await pdfToText(file);
+      onText(r, mode.current);
+      toast(`Text from ${file.name} added. Check the headings and lists, then save.`);
+    } catch (e: any) { toast(e?.message || "Couldn't read that PDF.", "bad"); }
+    setBusy(false);
+  };
+  const open = (m: "replace" | "add") => { mode.current = m; document.getElementById(id + "-pdf")?.click(); };
+  return (
+    <div className="mb-1.5 flex flex-wrap items-center gap-2">
+      <input id={id + "-pdf"} type="file" accept="application/pdf,.pdf" className="sr-only" aria-label="PDF to read" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; pick(f); }} />
+      <button type="button" className="btn btn-sm" disabled={busy} onClick={() => open("replace")}>{busy ? "Reading the PDF…" : has ? "Replace with a PDF" : "Fill from a PDF"}</button>
+      {has && !busy && <button type="button" className="btn btn-sm" onClick={() => open("add")}>Add a PDF at the end</button>}
+      <span className="hint">Copies the PDF's text here, with its headings and lists. Scanned PDFs have no text to copy.</span>
+    </div>
+  );
+}
+
+/** Buttons over a reading-page text box: they add the marks src/fx/pages.js understands around the selected words
+ *  (bold, highlight, colour…), at the start of the selected lines (headings, lists, quote…), or insert a table. */
+function RichBar({ id, value, set }: { id: string; value: string; set: (v: string) => void }) {
+  const [tbl, setTbl] = useState(false), [cols, setCols] = useState(3), [rows, setRows] = useState(3);
+  const ta = () => document.getElementById(id) as HTMLTextAreaElement | null;
+  const put = (next: string, a: number, b: number) => { set(next); requestAnimationFrame(() => { const t = ta(); if (t) { t.focus(); t.setSelectionRange(a, b); } }); };
+  const range = () => { const t = ta(); return t ? [t.selectionStart ?? value.length, t.selectionEnd ?? value.length] : [value.length, value.length]; };
+  /** before + selected words + after; with nothing selected, a sample word is added and selected. */
+  const wrap = (before: string, after: string, sample: string) => {
+    const [a, b] = range(); const sel = value.slice(a, b);
+    if (sel && sel.startsWith(before) && sel.endsWith(after) && sel.length >= before.length + after.length) { const inner = sel.slice(before.length, sel.length - after.length); return put(value.slice(0, a) + inner + value.slice(b), a, a + inner.length); }
+    const lead = sel.match(/^\s*/)![0], trail = sel.match(/\s*$/)![0], core = sel.trim() || sample;
+    put(value.slice(0, a) + lead + before + core + after + trail + value.slice(b), a + lead.length + before.length, a + lead.length + before.length + core.length);
+  };
+  /** A mark at the start of each selected line (pressed again, it is taken off). `num`: 1. 2. 3. */
+  const prefix = (mark: string, sample: string, num = false) => {
+    const [a, b] = range();
+    const s = value.lastIndexOf("\n", a - 1) + 1; let e = value.indexOf("\n", Math.max(b - (b > a && value[b - 1] === "\n" ? 1 : 0), a)); if (e < 0) e = value.length;
+    const lines = (value.slice(s, e) || sample).split("\n");
+    const has = (l: string) => (num ? /^\d{1,3}[.)]\s+/.test(l) : l.startsWith(mark));
+    const off = lines.filter((l) => l.trim()).every(has);
+    const strip = (l: string) => l.replace(/^(#{1,3}\s+|[-*•]\s+|\d{1,3}[.)]\s+|!>\s?|->\s?|>\s?)/, "").replace(/\s*<-$/, "");
+    let n = 0;
+    const out = lines.map((l) => (!l.trim() ? l : off ? strip(l) : (num ? ++n + ". " : mark) + strip(l))).join("\n");
+    put(value.slice(0, s) + out + value.slice(e), s, s + out.length);
+  };
+  /** A block on its own lines, with a blank line before and after. */
+  const block = (text: string, selFrom = 0, selLen = 0) => {
+    const [, b] = range(); const at = value.indexOf("\n", b) < 0 ? value.length : value.indexOf("\n", b);
+    const pre = value.slice(0, at).replace(/\s+$/, ""), post = value.slice(at).replace(/^\s+/, "");
+    const head = pre ? pre + "\n\n" : "";
+    put(head + text + (post ? "\n\n" + post : "\n"), head.length + selFrom, head.length + selFrom + selLen);
+  };
+  const table = () => {
+    const c = Math.min(8, Math.max(1, cols)), r = Math.min(30, Math.max(1, rows));
+    const line = (f: (i: number) => string) => "| " + Array.from({ length: c }, (_, i) => f(i)).join(" | ") + " |";
+    block([line((i) => "Heading " + (i + 1)), "|" + Array.from({ length: c }, () => "---").join("|") + "|", ...Array.from({ length: r }, () => line(() => "Text"))].join("\n"), 2, 9);
+    setTbl(false);
+  };
+  const link = () => { const [a, b] = range(); const sel = value.slice(a, b).trim() || "link words"; const out = `[${sel}](https://)`; put(value.slice(0, a) + out + value.slice(b), a + sel.length + 3, a + out.length - 1); };
+  const B = ({ label, title, on, cls = "" }: { label: string; title: string; on: () => void; cls?: string }) => <button type="button" title={title} aria-label={title} className={`rounded-md border border-ink-700 bg-ink-900 px-2 py-1 text-[12.5px] leading-none text-ink-100 hover:border-ink-500 ${cls}`} onMouseDown={(e) => e.preventDefault()} onClick={on}>{label}</button>;
+  const Sep = () => <span className="mx-0.5 h-4 w-px bg-ink-700" aria-hidden />;
+  return (
+    <div className="mb-1.5 flex flex-col gap-1.5" role="toolbar" aria-label="Text styles">
+      <div className="flex flex-wrap items-center gap-1">
+        <B label="B" title="Bold" cls="font-extrabold" on={() => wrap("**", "**", "bold words")} />
+        <B label="I" title="Italic" cls="italic" on={() => wrap("*", "*", "italic words")} />
+        <B label="U" title="Underline" cls="underline" on={() => wrap("__", "__", "underlined words")} />
+        <B label="S" title="Strike through" cls="line-through" on={() => wrap("~~", "~~", "struck words")} />
+        <B label="Highlight" title="Highlight" on={() => wrap("==", "==", "highlighted words")} />
+        <select aria-label="Text style" title="Colour and size for the selected words" className="rounded-md border border-ink-700 bg-ink-900 px-1.5 py-1 text-[12.5px] text-ink-100" value="" onChange={(e) => { const k = e.target.value; if (k) wrap(`{${k}:`, "}", "words"); }}>
+          <option value="">Style…</option><option value="accent">Accent colour</option><option value="big">Bigger</option><option value="small">Smaller</option><option value="muted">Muted (grey)</option>
+        </select>
+        <Sep />
+        <B label="H1" title="Heading" cls="font-bold" on={() => prefix("## ", "Heading")} />
+        <B label="H2" title="Smaller heading" cls="font-bold" on={() => prefix("### ", "Smaller heading")} />
+        <B label="• List" title="Bullet list" on={() => prefix("- ", "List item")} />
+        <B label="1. List" title="Numbered list" on={() => prefix("", "List item", true)} />
+        <B label="❝ Quote" title="Quote" on={() => prefix("> ", "Quoted words")} />
+        <B label="Note box" title="Note box (a framed paragraph)" on={() => prefix("!> ", "A note to stand out")} />
+        <B label="Centre" title="Centre this paragraph" on={() => prefix("-> ", "Centred words")} />
+        <Sep />
+        <B label="Link" title="Link" on={link} />
+        <B label="Table" title="Insert a table" on={() => setTbl((x) => !x)} />
+        <B label="— Line" title="Dividing line" on={() => block("---")} />
+      </div>
+      {tbl && (
+        <div className="flex flex-wrap items-end gap-2 rounded-lg border border-ink-700 bg-ink-900/60 p-2 text-[12.5px]">
+          <label className="flex flex-col gap-1">Columns<input type="number" min={1} max={8} className="input w-20 py-1" value={cols} onChange={(e) => setCols(+e.target.value || 1)} /></label>
+          <label className="flex flex-col gap-1">Rows<input type="number" min={1} max={30} className="input w-20 py-1" value={rows} onChange={(e) => setRows(+e.target.value || 1)} /></label>
+          <button type="button" className="btn btn-sm btn-pri" onClick={table}>Insert table</button>
+          <span className="hint basis-full">Each line is a row and | separates the cells. Add a row by copying a line; add a column by adding a cell to every line. In the line of dashes, :---: centres a column and ---: lines it up on the right.</span>
+        </div>
+      )}
+    </div>
+  );
 }

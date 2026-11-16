@@ -1456,6 +1456,7 @@ function renderSite(c){
   {const one=x=>String(x||"").replace(/\s*\n\s*/g," ").trim();document.title=one(c.seo.title||c.brand.logoText);
    if(!PREVIEW){const set=(a,k,v)=>{let m=document.head.querySelector(`meta[${a}="${k}"]`);if(!v){if(m)m.remove();return}if(!m){m=document.createElement("meta");m.setAttribute(a,k);document.head.appendChild(m)}m.setAttribute("content",v)};
     const d=one(c.seo.description);set("name","description",d);set("property","og:title",document.title);set("property","og:description",d);set("name","theme-color",/^#[0-9a-f]{3,8}$/i.test(c.seo.themeColor||"")?c.seo.themeColor:"")}}
+  if(maintGate(c))return;
   if(spPage(c))return;
   const K=KIT!=="classic"&&window.SiteLayouts&&SiteLayouts.kits[KIT];
   if(K){renderKit(c,K)}else{
@@ -1465,6 +1466,16 @@ function renderSite(c){
   if(window.SiteFX)try{window.SiteFX.init({root:$("#siteInner"),brand:c.theme.introTitle||c.brand.logoText,badge:c.poweredBy})}catch(e){}
   setIcon(c);fitLines();
 }
+/* Maintenance mode (assets/maint.js): while content.maintenance.on visitors see the maintenance page; the editor's
+   preview shows it only on its "Maintenance page" entry (?maintenance=1). */
+const MNT_Q=/[?&]maintenance=1(&|$)/.test(location.search);let mntP,mntPass=false;
+function maintGate(c){
+  const on=PREVIEW?MNT_Q:!!(c.maintenance||{}).on;
+  if(!on||mntPass){if(window.SiteMaint)SiteMaint.hide();return false}
+  (mntP||(mntP=new Promise((ok,no)=>{if(window.SiteMaint)return ok();const s=document.createElement("script");s.src="assets/maint.js";s.onload=()=>ok();s.onerror=no;document.head.appendChild(s)})))
+    .then(()=>{if(SiteMaint.wanted(c,PREVIEW))SiteMaint.show(c,{name:c.brand.logoText,logo:c.brand.icon&&imgUrl(c.brand.icon),preview:PREVIEW});else{mntPass=true;renderSite(c)}})
+    .catch(()=>{mntPass=true;renderSite(c)});
+  return true}
 /* static pages (assets/pages.js): ./?p=<name> shows a reading page (privacy, terms…) instead of the portfolio */
 function spPage(c){
   const S=window.SitePages,slug=S&&S.here();if(!slug)return false;
@@ -1669,7 +1680,7 @@ if(PREVIEW){
     const d=e.data||{};
     if(d.type==="cms:content"&&d.content&&typeof d.content==="object"){ASSETS=d.assets||{};const y=scrollY;saved=merge(DEFAULT,d.content);renderSite(saved);scrollTo(0,y)}
   });
-  window.parent.postMessage({type:"cms:ready",page:"index.html"+(window.SitePages&&SitePages.here()?"?p="+encodeURIComponent(SitePages.here()):"")},location.origin);
+  window.parent.postMessage({type:"cms:ready",page:"index.html"+(window.SitePages&&SitePages.here()?"?p="+encodeURIComponent(SitePages.here()):MNT_Q?"?maintenance=1":"")},location.origin);
 }
 if(PREVIEW)renderSite(saved);
 else(async()=>{let got=null;try{const ac=new AbortController(),tm=setTimeout(()=>ac.abort(),5000);if(HOST&&HOST.api){const r=await fetch(HOST.api+"/p/"+encodeURIComponent(HOST.site)+"/content.json",{cache:"no-store",signal:ac.signal});if(r.ok)got=await r.json()}else if(HOST){const r=await fetch(HOST.db+"/rest/v1/site_content?select=content&site=eq."+encodeURIComponent(HOST.site),{cache:"no-store",signal:ac.signal,headers:{apikey:HOST.key,...(/^sb_/.test(HOST.key)?{}:{Authorization:"Bearer "+HOST.key})}});if(r.ok){const j=await r.json();if(j&&j[0]&&j[0].content)got=j[0].content}}}catch(e){}

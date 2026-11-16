@@ -141,7 +141,7 @@ export function prepareAddons(c: any) {
 export function featuresCategory(): Category {
   const g2 = (...fields: Field[]): Field => ({ t: "grid", cols: 2, fields });
   return {
-    id: "features", label: "Chat, badges & custom code", group: "Features",
+    id: "features", label: "Chat, badges & code", group: "Features",
     desc: "Extras on top of every page: a chat button, a badge, your own API and any widget's code (chat boxes, analytics, booking tools).",
     cards: [
       { title: "Chat button", fields: [

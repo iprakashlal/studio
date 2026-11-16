@@ -1462,7 +1462,7 @@ function renderSite(c){
   if(K){renderKit(c,K)}else{
   siteRoot.innerHTML=`<div id="siteInner">${siteHTML(c)}</div>`;
   initSite(c);}
-  heroSlides(c);spLinks(c);addons(c);
+  heroSlides(c);spLinks(c);addons(c);festival(c);
   if(window.SiteFX)try{window.SiteFX.init({root:$("#siteInner"),brand:c.theme.introTitle||c.brand.logoText,badge:c.poweredBy})}catch(e){}
   setIcon(c);fitLines();
 }
@@ -1473,6 +1473,12 @@ function addons(c){
   if(!any&&!window.SiteAddons)return;
   (adP||(adP=new Promise((ok,no)=>{if(window.SiteAddons)return ok();const s=document.createElement("script");s.src="assets/addons.js";s.onload=()=>ok();s.onerror=no;document.head.appendChild(s)})))
     .then(()=>SiteAddons.mount(c,{preview:PREVIEW,home:!(window.SitePages&&SitePages.here()),site:c.brand.logoText})).catch(()=>{})}
+/* Festival overlay (assets/festival.js): greetings on India's festivals, when the Studio offered it to this site. */
+let fsP;
+function festival(c){
+  const F=c.festival||{};if(!(F.allowed&&F.on!==false)&&!window.SiteFestival)return;
+  (fsP||(fsP=new Promise((ok,no)=>{if(window.SiteFestival)return ok();const s=document.createElement("script");s.src="assets/festival.js";s.onload=()=>ok();s.onerror=no;document.head.appendChild(s)})))
+    .then(()=>SiteFestival.mount(c,{preview:PREVIEW,site:c.brand.logoText})).catch(()=>{})}
 /* Maintenance mode (assets/maint.js): while content.maintenance.on visitors see the maintenance page; the editor's
    preview shows it only on its "Maintenance page" entry (?maintenance=1). */
 const MNT_Q=/[?&]maintenance=1(&|$)/.test(location.search);let mntP,mntPass=false;
@@ -1490,7 +1496,7 @@ function spPage(c){
   if(p){const one=x=>String(x||"").replace(/\s*\n\s*/g," ").trim();document.title=one((c.seo.titlePattern||"{page} · {site}").replace(/\{page\}/g,one(p.title)).replace(/\{site\}/g,one(name)))}
   const links=S.list(c).filter(x=>x.inFooter!==false);
   siteRoot.innerHTML=`<div id="siteInner"><header class="sp-top"><a href="./">${esc(name)}</a><a class="sp-back" href="./">← ${esc((c.labels&&c.labels.backHome)||"Back")}</a></header><main id="main">${p?S.article(p,{preview:PREVIEW}):S.missing({home:"./"})}</main>${links.length?`<nav class="sp-links" aria-label="Pages">${links.map(x=>`<a href="?p=${encodeURIComponent(S.slug(x))}">${esc(x.navLabel||x.title)}</a>`).join("")}</nav>`:""}<footer class="sp-links"><span>${esc(c.contact.footerLeft||"")}</span></footer></div>`;
-  S.after(p);setIcon(c);addons(c);return true}
+  S.after(p);setIcon(c);addons(c);festival(c);return true}
 /* links to the static pages under every layout's footer */
 function spLinks(c){const S=window.SitePages;if(!S)return;const links=S.list(c).filter(x=>x.inFooter!==false);if(!links.length)return;
   const n=document.createElement("nav");n.className="sp-links";n.setAttribute("aria-label","Pages");S.css();

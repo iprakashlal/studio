@@ -650,6 +650,14 @@ function addons() {
   (adP ||= new Promise((ok, no) => { if (window.SiteAddons) return ok(); const s = document.createElement("script"); s.src = "assets/addons.js"; s.onload = () => ok(); s.onerror = no; document.head.appendChild(s); }))
     .then(() => window.SiteAddons.mount(C, { preview: PREVIEW, home: PAGE === "home", site: C.brand.name })).catch(() => {});
 }
+/* Festival overlay (assets/festival.js): greetings on India's festivals, when the Studio offered it to this site. */
+let fsP;
+function festival() {
+  const F = C.festival || {};
+  if (!(F.allowed && F.on !== false) && !window.SiteFestival) return;
+  (fsP ||= new Promise((ok, no) => { if (window.SiteFestival) return ok(); const s = document.createElement("script"); s.src = "assets/festival.js"; s.onload = () => ok(); s.onerror = no; document.head.appendChild(s); }))
+    .then(() => window.SiteFestival.mount(C, { preview: PREVIEW, site: C.brand.name })).catch(() => {});
+}
 /* Maintenance mode (assets/maint.js): while content.maintenance.on, visitors see the maintenance page instead of the
    site. The editor's preview shows it too (with a button to see the site), and on its "Maintenance page" entry
    (?maintenance=1) while it is off. */
@@ -708,7 +716,7 @@ function bind() {
   if (PAGE === "account") bindAccount();
   if (PAGE === "warranty") swMount();
   if (PAGE === "page" && window.SitePages) window.SitePages.after(spHere());
-  addons();
+  addons(); festival();
   if (location.hash && PAGE === "policies") { const el = document.getElementById(location.hash.slice(1)); if (el) el.scrollIntoView(); }
 }
 function bindShop() {

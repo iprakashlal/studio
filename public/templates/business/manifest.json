@@ -20,6 +20,7 @@
     "assets/pages.js",
     "assets/maint.js",
     "assets/addons.js",
+    "assets/festival.js",
     "README.md",
     "supabase/enquiries.sql"
   ],

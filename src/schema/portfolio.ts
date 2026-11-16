@@ -1,6 +1,6 @@
 import type { Category, Field, TemplateDef } from "./types";
 import { AXES, BODY_FONTS, DISPLAY_FONTS, KIT_AXIS, LINE_BREAKS_AXIS, PORTFOLIO_AXES, THEMES, onColor, portfolioThemeValues } from "../themes/catalog";
-import { adminCategory, staticPagesCategory, heroSlidesCard, prepareSlides, prepareMaintenance, seoCategory } from "./common";
+import { adminCategory, featuresCategory, staticPagesCategory, heroSlidesCard, prepareSlides, prepareMaintenance, seoCategory } from "./common";
 import VELOCITY_DEFAULTS from "./velocity-defaults.json";
 import { NAV_MODE_FIELD, NAV_MODE_NOTE, themeCards } from "../themes/fields";
 
@@ -97,7 +97,7 @@ const schema: Category[] = [
     ],
   },
   {
-    id: "layout", label: "Menu & order", group: "Design", desc: "Show, hide and reorder sections. The order here is the order on the page and in the menu.",
+    id: "layout", label: "Menu & order", group: "Pages", desc: "Show, hide and reorder sections. The order here is the order on the page and in the menu.",
     cards: [
       { title: "Menu when scrolling", fields: [NAV_MODE_FIELD, { t: "note", text: NAV_MODE_NOTE + " The same setting is under Theme & layout → Layout & elements." }] },
       { title: "Header", fields: [g2({ t: "text", path: "brand.logoText", label: "Logo text" }, { t: "text", path: "brand.contactLabel", label: "Header button label" })] },
@@ -115,11 +115,11 @@ const schema: Category[] = [
     ],
   },
   {
-    id: "linkedin", label: "Import from LinkedIn", group: "Content", desc: "Fill your portfolio from your LinkedIn profile: name, headline, about, experience, education, skills and links.",
+    id: "linkedin", label: "Import from LinkedIn", group: "Pages", desc: "Fill your portfolio from your LinkedIn profile: name, headline, about, experience, education, skills and links.",
     cards: [{ title: "LinkedIn profile", fields: [{ t: "linkedin" }] }],
   },
   {
-    id: "hero", label: "Hero", group: "Content", desc: "The first screen: name, role, buttons, highlights and the hero graphic. Your picture is set in Brand & theme → Logo icon.",
+    id: "hero", label: "Hero", group: "Pages", sub: "Sections", desc: "The first screen: name, role, buttons, highlights and the hero graphic. Your picture is set in Brand & theme → Logo icon.",
     cards: [
       { title: "Text", fields: [{ t: "text", path: "hero.eyebrow", label: "Badge above name", ml: true }, g2({ t: "text", path: "hero.firstName", label: "First line of name" }, { t: "text", path: "hero.lastName", label: "Second line of name" }),
         { t: "textarea", path: "hero.role", label: "Intro line", hint: "Wrap words in *asterisks* to highlight them." }] },
@@ -142,7 +142,7 @@ const schema: Category[] = [
     ],
   },
   {
-    id: "about", label: "About", group: "Content", desc: "The bento grid: story, number tiles, motto and quick facts.",
+    id: "about", label: "About", group: "Pages", sub: "Sections", desc: "The bento grid: story, number tiles, motto and quick facts.",
     cards: [
       { title: "Heading", fields: [g2({ t: "text", path: "about.eyebrow", label: "Small label", ml: true }, { t: "text", path: "about.title", label: "Title", ml: true }), { t: "textarea", path: "about.lede", label: "Intro" }] },
       { title: "Story tile", fields: [{ t: "text", path: "about.storyLabel", label: "Tile label" }, { t: "textarea", path: "about.storyHeading", label: "Headline", hint: "Use *asterisks* to highlight." }, { t: "textarea", path: "about.story", label: "Story", hint: "Leave a blank line between paragraphs.", rows: 7 }] },
@@ -153,7 +153,7 @@ const schema: Category[] = [
     ],
   },
   {
-    id: "skills", label: "Skills cube", group: "Content", desc: "The rotating cube always has six faces. Edit each face and its matching list entry.",
+    id: "skills", label: "Skills cube", group: "Pages", sub: "Sections", desc: "The rotating cube always has six faces. Edit each face and its matching list entry.",
     cards: [
       { title: "Heading", fields: [g2({ t: "text", path: "skills.eyebrow", label: "Small label", ml: true }, { t: "text", path: "skills.title", label: "Title", ml: true }), { t: "text", path: "skills.lede", label: "Intro", ml: true }] },
       { title: "Cube faces", fields: [{ t: "list", path: "skills.items", fixed: true, add: () => ({}), title: (it, i) => `Face ${i + 1} · ${it.title}`,
@@ -161,7 +161,7 @@ const schema: Category[] = [
     ],
   },
   {
-    id: "work", label: "Work deck", group: "Content", desc: "Each role is a card in the stacked deck. The top of the list appears first.",
+    id: "work", label: "Work deck", group: "Pages", sub: "Sections", desc: "Each role is a card in the stacked deck. The top of the list appears first.",
     cards: [
       { title: "Heading", fields: [g2({ t: "text", path: "work.eyebrow", label: "Small label", ml: true }, { t: "text", path: "work.title", label: "Title", ml: true }), { t: "text", path: "work.lede", label: "Intro", ml: true }] },
       { title: "Roles", fields: [{ t: "list", path: "work.items", title: (it) => `${it.title} · ${it.org}`,
@@ -173,7 +173,7 @@ const schema: Category[] = [
     ],
   },
   {
-    id: "projects", label: "Projects", group: "Content", desc: "Project cards with images and links. The section appears once it has a project and is switched on under Menu & order.",
+    id: "projects", label: "Projects", group: "Pages", sub: "Sections", desc: "Project cards with images and links. The section appears once it has a project and is switched on under Menu & order.",
     cards: [
       { title: "Heading", fields: [g2({ t: "text", path: "projects.eyebrow", label: "Small label", ml: true }, { t: "text", path: "projects.title", label: "Title", ml: true }), { t: "text", path: "projects.lede", label: "Intro", ml: true }] },
       { title: "Projects", fields: [{ t: "list", path: "projects.items", title: (it) => it.title,
@@ -184,7 +184,7 @@ const schema: Category[] = [
     ],
   },
   {
-    id: "learning", label: "Learning", group: "Content", desc: "Education, certifications and languages.",
+    id: "learning", label: "Learning", group: "Pages", sub: "Sections", desc: "Education, certifications and languages.",
     cards: [
       { title: "Heading", fields: [g2({ t: "text", path: "learning.eyebrow", label: "Small label", ml: true }, { t: "text", path: "learning.title", label: "Title", ml: true })] },
       { title: "Entries", fields: [{ t: "list", path: "learning.items", title: (it) => it.title, add: () => ({ period: "Year", title: "New entry", sub: "Institution", shape: "circle", color: "c1" }),
@@ -193,7 +193,7 @@ const schema: Category[] = [
     ],
   },
   {
-    id: "contact", label: "Contact & footer", group: "Content", desc: "The closing panel, links and the footer.",
+    id: "contact", label: "Contact & footer", group: "Pages", desc: "The closing panel, links and the footer.",
     cards: [
       { title: "Panel", fields: [{ t: "text", path: "contact.eyebrow", label: "Small label", ml: true }, { t: "text", path: "contact.title", label: "Title", hint: "Use *asterisks* to highlight. Press Enter to break the line.", ml: true }, { t: "textarea", path: "contact.body", label: "Message" },
         g2({ t: "text", path: "contact.email", label: "Email shown", check: "email" }, { t: "text", path: "contact.copyLabel", label: "Copy button label" })] },
@@ -201,8 +201,9 @@ const schema: Category[] = [
       { title: "Footer", fields: [g2({ t: "text", path: "contact.footerLeft", label: "Left" }, { t: "text", path: "contact.footerRight", label: "Right" })] },
     ],
   },
-  seoCategory(false),
   staticPagesCategory("portfolio"),
+  featuresCategory(),
+  seoCategory(false),
   adminCategory(),
 ];
 

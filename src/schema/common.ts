@@ -12,6 +12,72 @@ export function adminSlug(raw: unknown): string {
 /** The admin page's file name for this content, e.g. "admin.html". */
 export const adminFile = (content: any) => adminSlug(content?.cms?.adminPage) + ".html";
 
+export const addonsDefault = () => ({
+  chat: { on: false, kind: "whatsapp", value: "", label: "Chat with us", message: "", side: "right", showLabel: true, color: "" },
+  badge: { on: false, text: "", api: "", field: "", link: "", side: "left" },
+  code: [] as any[],
+  api: { on: false, url: "" },
+});
+/** Older content gets the Features fields (all off). */
+export function prepareAddons(c: any) {
+  if (!c || typeof c !== "object") return;
+  const d = addonsDefault(), a = c.addons && typeof c.addons === "object" ? c.addons : {};
+  const obj = (x: any) => (x && typeof x === "object" && !Array.isArray(x) ? x : {});
+  c.addons = { chat: { ...d.chat, ...obj(a.chat) }, badge: { ...d.badge, ...obj(a.badge) }, code: Array.isArray(a.code) ? a.code : [], api: { ...d.api, ...obj(a.api) } };
+}
+/** Features: add-ons that sit on top of every page (assets/addons.js): a chat button, a live badge, custom code
+ *  (any chat box, analytics or widget snippet) and a custom API that receives the site's form entries. */
+export function featuresCategory(): Category {
+  const g2 = (...fields: Field[]): Field => ({ t: "grid", cols: 2, fields });
+  return {
+    id: "features", label: "Chat, badges & custom code", group: "Features",
+    desc: "Extras on top of every page: a chat button, a badge, your own API and any widget's code (chat boxes, analytics, booking tools).",
+    cards: [
+      { title: "Chat button", fields: [
+        { t: "toggle", path: "addons.chat.on", label: "Show a floating chat button" },
+        { t: "when", path: "addons.chat.on", is: "true", fields: [
+          g2({ t: "select", path: "addons.chat.kind", label: "Opens", options: [{ value: "whatsapp", label: "WhatsApp chat" }, { value: "phone", label: "A phone call" }, { value: "email", label: "An email" }, { value: "link", label: "A link (Messenger, Telegram, a booking page…)" }] },
+            { t: "text", path: "addons.chat.value", label: "Number, email or link", ph: "+91 98765 43210" },
+            { t: "text", path: "addons.chat.label", label: "Button text", ph: "Chat with us" }, { t: "toggle", path: "addons.chat.showLabel", label: "Show the text beside the icon" },
+            { t: "select", path: "addons.chat.side", label: "Corner", options: [{ value: "right", label: "Bottom right" }, { value: "left", label: "Bottom left" }] },
+            { t: "color", path: "addons.chat.color", label: "Colour (empty: WhatsApp green or the accent colour)" }),
+          { t: "when", path: "addons.chat.kind", is: "whatsapp", fields: [{ t: "text", path: "addons.chat.message", label: "Message already typed for the visitor (optional)", ph: "Hi, I'd like to know more about…" }] },
+        ] },
+      ] },
+      { title: "Badge", fields: [
+        { t: "toggle", path: "addons.badge.on", label: "Show a small badge in a corner" },
+        { t: "when", path: "addons.badge.on", is: "true", fields: [
+          g2({ t: "text", path: "addons.badge.text", label: "Badge text", ph: "★ {value} on Google", hint: "{value} is replaced with the number or word read from your API below." }, { t: "text", path: "addons.badge.link", label: "Opens (optional)", check: "https" },
+            { t: "text", path: "addons.badge.api", label: "API address for {value} (optional)", ph: "https://api.example.com/rating", check: "https" }, { t: "text", path: "addons.badge.field", label: "Field in the API's answer", ph: "rating or data.score" },
+            { t: "select", path: "addons.badge.side", label: "Corner", options: [{ value: "left", label: "Bottom left" }, { value: "right", label: "Bottom right" }] }),
+          { t: "note", text: "Without an API address the badge shows its text as it is. With one, the site asks that address when a page opens (it must answer in JSON and allow requests from websites) and hides the badge if it doesn't answer." },
+        ] },
+      ] },
+      { title: "Custom API for form entries", fields: [
+        { t: "toggle", path: "addons.api.on", label: "Also send each form entry to my API" },
+        { t: "when", path: "addons.api.on", is: "true", fields: [
+          { t: "text", path: "addons.api.url", label: "API address (a webhook)", ph: "https://hooks.example.com/enquiry", check: "https" },
+          { t: "note", text: "When a visitor sends the enquiry form (or any form with a message or email box), the site also posts the entry to this address as JSON: { site, page, form, fields, at }. Works with Zapier, Make, n8n, Google Apps Script or your own server. Passwords and card details are never sent. The address is public, so don't put a secret in it, and mention it in your privacy policy." },
+        ] },
+      ] },
+      { title: "Custom code", fields: [
+        { t: "note", text: "Paste the code a service gives you: a chat box (Tawk.to, Crisp, Tidio), analytics, a booking or review widget, or your own script. It runs on the live site, not in this preview. Only paste code from services you trust: it can see and change everything on the site.", tone: "warn" },
+        { t: "list", path: "addons.code", max: 12, add: () => ({ id: "cc-" + Math.random().toString(36).slice(2, 8), name: "", on: true, where: "body", pages: "all", code: "" }), title: (it) => `${it?.name || "Custom code"}${it?.on === false ? " (off)" : ""}`,
+          item: [
+            g2({ t: "text", path: "name", label: "Name (for you)", ph: "Tawk.to chat box" }, { t: "toggle", path: "on", label: "On" },
+              { t: "select", path: "where", label: "Where it goes", options: [{ value: "body", label: "End of the page (most widgets)" }, { value: "head", label: "The page's head (analytics, verification tags)" }] },
+              { t: "select", path: "pages", label: "Pages", options: [{ value: "all", label: "Every page" }, { value: "home", label: "The home page only" }] }),
+            { t: "textarea", path: "code", label: "Code", rows: 6, hint: "HTML with <script>, <link>, <meta> or <style> tags, exactly as the service gives it." },
+          ] },
+      ] },
+      { title: "“Powered by” badge", studio: true, fields: [
+        { t: "toggle", path: "poweredBy.show", label: "Show the badge on this site" },
+        { t: "note", text: "A small link in the bottom-right corner of every page, always on screen. Its text, link, size, colours and icon are set once for all sites in Settings → “Powered by” badge. Only the Studio can show or hide it: the site's own admin page doesn't have this setting." },
+      ] },
+    ],
+  };
+}
+
 export function adminCategory(): Category {
   const g2 = (...fields: Field[]): Field => ({ t: "grid", cols: 2, fields });
   return {
@@ -31,11 +97,7 @@ export function adminCategory(): Category {
       { t: "note", text: "A less obvious name keeps casual visitors away from the sign-in screen. It isn't a password: the editor still needs your GitHub token. After you publish a new name, the old address stops working, so bookmark the new one." },
       { t: "note", text: "Names the site already uses (index, shop, cart, checkout, portfolio, account…) aren't allowed and fall back to admin.", tone: "warn" },
     ] },
-    { title: "Themes in the admin page", studio: true, fields: [{ t: "adminThemes" }] },
-    { title: "“Powered by” badge", studio: true, fields: [
-      { t: "toggle", path: "poweredBy.show", label: "Show the badge on this site" },
-      { t: "note", text: "A small link in the bottom-right corner of every page, always on screen. Its text, link, size, colours and icon are set once for all sites in Settings → “Powered by” badge. Only the Studio can show or hide it: the site's own admin page doesn't have this setting." },
-    ] }],
+    { title: "Themes in the admin page", studio: true, fields: [{ t: "adminThemes" }] },],
   };
 }
 
@@ -93,7 +155,7 @@ export function staticPageFields(addr: string, links: Field[], back: string): Fi
 export function staticPagesCategory(where: "page" | "portfolio"): Category {
   const portfolio = where === "portfolio";
   return {
-    id: "static-pages", label: "Additional pages", group: "Settings", site: { label: "Static pages", group: "Static pages" },
+    id: "static-pages", label: "Custom pages", group: "Pages",
     desc: "Reading pages with a title and text, such as a privacy policy, terms, shipping or refunds. Each one gets its own address and a link in the footer or menu.",
     cards: [{ title: "Pages", fields: [
       { t: "list", path: "staticPages", max: 30, add: () => staticPageDefault(), title: (it) => `${it?.title || "Untitled page"}${it?.show === false ? " (hidden)" : ""}`,
@@ -110,7 +172,7 @@ export function staticPagesCategory(where: "page" | "portfolio"): Category {
 export function warrantyCategory(where: "page" | "popup-or-page"): Category {
   const g = (...fields: Field[]): Field => ({ t: "grid", cols: 2, fields });
   return {
-    id: "warranty", label: "Warranty & status", group: "Content",
+    id: "warranty", label: "Warranty & status", group: "Forms & records",
     desc: where === "page" ? "A page where customers check their product's warranty and service status by its number." : "Customers check their product's warranty and service status by its number: a popup on a one-page site, its own page with several pages.",
     cards: [
       { title: "Warranty & status check", fields: [
@@ -150,6 +212,7 @@ export const maintenanceDefault = () => ({ on: false, title: "We'll be back soon
 export function prepareMaintenance(c: any) {
   if (!c || typeof c !== "object") return;
   const d = maintenanceDefault(), m = c.maintenance && typeof c.maintenance === "object" ? c.maintenance : {};
+  prepareAddons(c);
   c.maintenance = { ...d, ...m, button: { ...d.button, ...(m.button && typeof m.button === "object" ? m.button : {}) } };
 }
 export function prepareSlides(hero: any, overlayColor?: string) {

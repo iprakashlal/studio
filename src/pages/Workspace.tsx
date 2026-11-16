@@ -1,4 +1,6 @@
 import { SitesHostingCard } from "./SitesHostingCard";
+import { hides, useClientStudio } from "../lib/features";
+import { HelpersCard } from "./HelpersCard";
 import { StudioPageLinks, StudioPagesCard } from "./StudioPage";
 import { useEffect, useMemo, useState } from "react";
 import { isHosted } from "../lib/backend";
@@ -44,6 +46,9 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
     return st;
   }, [repo, session.token]);
   const [index, setIndex] = useState<StudioIndex | null>(null);
+  // A client Studio (set up by a Studio Partner) hides what the partner chose, and never offers Migration or Studio Partners.
+  const client = useClientStudio();
+  const hid = useMemo(() => hides(client, index), [client, index]);
   const [err, setErr] = useState("");
   const [bootAt, setBootAt] = useState(0);
   const hash = useHash();
@@ -93,7 +98,7 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
         {!repo.demo && !isHosted(session) && olderData() && <a href="?data=shared" className="chip border-amber-400/50 text-amber-200" title="This tab shows the GitHub data from before the Studio moved. Press to go back to the shared projects.">Older GitHub data · switch back</a>}
         <nav className="ml-auto flex items-center gap-1" aria-label="Studio">
           <a href="#/" className={`btn btn-ghost btn-sm ${!route || route === "/" ? "text-ink-100" : "text-ink-400"}`}>Projects</a>
-          <a href="#/themes" className="btn btn-ghost btn-sm text-ink-400">Themes</a>
+          {!hid("themes") && <a href="#/themes" className="btn btn-ghost btn-sm text-ink-400">Themes</a>}
           {!repo.demo && <a href="#/settings" className={`btn btn-ghost btn-sm ${route.startsWith("settings") ? "text-ink-100" : "text-ink-400"}`}>Settings</a>}
           <span className="hidden px-2 text-sm text-ink-400 sm:inline">{session.username}</span>
           <button type="button" className="btn btn-sm" onClick={onSignOut}>{repo.demo ? "Exit demo" : "Sign out"}</button>
@@ -113,10 +118,11 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
   if (route.startsWith("settings") && !repo.demo) {
     const tab = route.split("/")[1] || "general";
     const tabs = <div className="flex flex-wrap gap-1 border-b border-ink-700" role="tablist" aria-label="Settings">
-      {[["general", "General"], ...(isHosted(session) ? [["update", "Update"]] : []), ["migration", "Migration"], ["partners", "Studio Partners"]].map(([k, l]) => <a key={k} href={`#/settings${k === "general" ? "" : "/" + k}`} role="tab" aria-selected={tab === k} className={`-mb-px border-b-2 px-3 py-2 text-sm font-semibold ${tab === k ? "border-brand-400 text-ink-100" : "border-transparent text-ink-400 hover:text-ink-100"}`}>{l}</a>)}
+      {[["general", "General"], ...(isHosted(session) && !hid("update") ? [["update", "Update"]] : []), ...(client ? [] : [["migration", "Migration"], ["partners", "Studio Partners"]])].map(([k, l]) => <a key={k} href={`#/settings${k === "general" ? "" : "/" + k}`} role="tab" aria-selected={tab === k} className={`-mb-px border-b-2 px-3 py-2 text-sm font-semibold ${tab === k ? "border-brand-400 text-ink-100" : "border-transparent text-ink-400 hover:text-ink-100"}`}>{l}</a>)}
     </div>;
-    if (tab === "partners") return <>{header}<main className="mx-auto flex max-w-3xl flex-col gap-4 px-4 py-8 sm:px-6"><h1 className="font-display text-3xl font-extrabold">Settings</h1>{tabs}<FoldAll /><FoldCards scope="partners"><PartnersTab studio={studio} index={index} session={session} onIndex={setIndex} /></FoldCards></main></>;
-    if (tab === "migration" || (tab === "update" && isHosted(session))) return <>{header}<main className="mx-auto flex max-w-3xl flex-col gap-4 px-4 py-8 sm:px-6"><h1 className="font-display text-3xl font-extrabold">Settings</h1>{tabs}<FoldAll /><FoldCards scope={tab}><MigrationTab key={tab} studio={studio} index={index} session={session} onIndex={setIndex} mode={tab === "update" ? "update" : "move"} /></FoldCards></main></>;
+    if (client === undefined && tab !== "general") return <>{header}<p className="py-16 text-center text-sm text-ink-400">Loading…</p></>;
+    if (tab === "partners" && !client) return <>{header}<main className="mx-auto flex max-w-3xl flex-col gap-4 px-4 py-8 sm:px-6"><h1 className="font-display text-3xl font-extrabold">Settings</h1>{tabs}<FoldAll /><FoldCards scope="partners"><PartnersTab studio={studio} index={index} session={session} onIndex={setIndex} /></FoldCards></main></>;
+    if ((tab === "migration" && !client) || (tab === "update" && isHosted(session) && !hid("update"))) return <>{header}<main className="mx-auto flex max-w-3xl flex-col gap-4 px-4 py-8 sm:px-6"><h1 className="font-display text-3xl font-extrabold">Settings</h1>{tabs}<FoldAll /><FoldCards scope={tab}><MigrationTab key={tab} studio={studio} index={index} session={session} onIndex={setIndex} mode={tab === "update" ? "update" : "move"} /></FoldCards></main></>;
     return (
       <>{header}
         <main className="mx-auto flex max-w-3xl flex-col gap-4 px-4 py-8 sm:px-6">
@@ -125,11 +131,11 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
           <FoldAll />
           <FoldCards scope="general">
           <p className="text-sm text-ink-300">Your Studio keeps everything as files in <b className="text-ink-100">{isHosted(session) ? `${session.cfg.owner === "cloudflare" ? "Cloudflare" : "Supabase"} (Studio “${session.cfg.repo}”)` : `${session.cfg.owner}/${session.cfg.repo}`}</b>: <code className="font-mono text-xs">studio.json</code> for the project list and <code className="font-mono text-xs">projects/</code> for each site's content, images and export snapshots.</p>
-          <BrandCard studio={studio} onIndex={setIndex} />
-          <BadgeCard studio={studio} saved={index.badge} onIndex={setIndex} />
-          <StudioPagesCard repo={repo} />
-          <MenusCard studio={studio} menus={index.menus || {}} onIndex={setIndex} />
-          <section className="card flex flex-col gap-3 p-5" aria-label="Hosting accounts">
+          {!hid("brand") && <BrandCard studio={studio} onIndex={setIndex} />}
+          {!hid("badge") && <BadgeCard studio={studio} saved={index.badge} onIndex={setIndex} />}
+          {!hid("pages") && <StudioPagesCard repo={repo} />}
+          {!hid("menus") && <MenusCard studio={studio} menus={index.menus || {}} onIndex={setIndex} />}
+          {!hid("hosting") && <><section className="card flex flex-col gap-3 p-5" aria-label="Hosting accounts">
             <h3 className="text-[15px] font-extrabold">Hosting accounts</h3>
             <p className="text-sm text-ink-300">GitHub publishing creates each site's repository and turns on GitHub Pages; Cloudflare (free, no traffic limit) or Netlify hosts sites outside GitHub. Tokens stay on this device, encrypted. Each site's database details are kept with its project.</p>
             <h3 className="mt-2 text-sm font-bold">GitHub (publishing)</h3>
@@ -139,6 +145,7 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
             <SetupAccounts session={session} index={index} />
           </section>
           <SitesHostingCard session={session} studio={studio} index={index} onIndex={setIndex} />
+          <HelpersCard session={session} /></>}
           {isHosted(session)
             ? <section className="card flex flex-col gap-3 p-5" aria-label="Account"><h3 className="text-[15px] font-extrabold">Account</h3><p className="text-sm text-ink-300">Signed in as <b className="text-ink-100">{session.username}</b> with an email code.</p><button type="button" className="btn self-start" onClick={onSignOut}>Sign out</button></section>
             : <AccountPanel ns={NS} session={session} onUpdated={onSession} onSignOut={onSignOut} onForget={onForget} />}
@@ -148,7 +155,7 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
     );
   }
 
-  return <>{header}<Dashboard studio={studio} index={index} onIndex={setIndex} token={session.token} /><footer className="py-6"><StudioPageLinks host={null} repo={repo} where="footer" /></footer></>;
+  return <>{header}<Dashboard studio={studio} index={index} onIndex={setIndex} token={session.token} hid={hid} /><footer className="py-6"><StudioPageLinks host={null} repo={repo} where="footer" /></footer></>;
 }
 
 /** Settings → the Studio's own name and logo (saved in studio.json, so every device shows them). */

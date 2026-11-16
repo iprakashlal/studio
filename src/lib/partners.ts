@@ -56,6 +56,17 @@ export async function deployClientApp(pages: Pages, p: Pick<PartnerRec, "siteId"
   return deployStudioApp(pages, { siteId: p.siteId, siteName, source, config: hostOf(p, partner) }, step);
 }
 
+/** What the client's Studio hides (lib/features.ts), written into its studio.json. */
+export async function setClientFeatures(remote: Repo, hide: string[]) {
+  const cur = await remote.getJSON<any>("studio.json");
+  if (!cur) throw new Error("The client's Studio has no project list yet.");
+  await remote.putFile("studio.json", jsonB64({ ...cur.data, clientFeatures: { hide } }), "Set what this Studio shows", cur.sha);
+}
+export async function getClientFeatures(remote: Repo): Promise<string[]> {
+  const cur = await remote.getJSON<any>("studio.json").catch(() => null);
+  return Array.isArray(cur?.data?.clientFeatures?.hide) ? cur.data.clientFeatures.hide : [];
+}
+
 const projectFiles = async (r: Repo, id: string) => (await r.list(`projects/${id}/`)).filter((p) => !p.includes("/exports/"));
 /** Copies a project's content and any photos the other side lacks. Returns the content's sha (same on both sides). */
 async function copyProject(from: Repo, to: Repo, id: string, step?: (s: string) => void): Promise<string> {

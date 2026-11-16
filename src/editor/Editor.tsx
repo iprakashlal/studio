@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode, Fragment } from "react";
 import type { TemplateDef } from "../schema/types";
 import { Ctx, FieldView, openListItem, type EditorCtx } from "./fields";
 import { locateField } from "./locate";
@@ -78,6 +78,12 @@ export function Editor({ tpl, draft, version, onChange, upload, img, extras = []
     if (!g) groups.push((g = { group: it.group, items: [] }));
     g.items.push(it);
   }
+  // The usual order of the headings (a custom admin menu keeps its own order).
+  if (!menu?.items?.length) {
+    const ORDER = ["Design", "Pages", "Catalogue", "Selling", "Shop", "Forms & records", "Features", "Settings", "Project"];
+    const at = (g: string) => { const i = ORDER.indexOf(g); return i < 0 ? ORDER.length : i; };
+    groups.sort((a, b) => at(a.group) - at(b.group));
+  }
   const ctx = useMemo<EditorCtx>(() => ({ tpl, root: draft, bump: onChange, upload, img, site }), [tpl, draft, onChange, upload, img, version, site]);
   const entry = entryOf(cat) || nav[0];
   const curId = entry?.id;
@@ -92,12 +98,26 @@ export function Editor({ tpl, draft, version, onChange, upload, img, extras = []
               <button type="button" onClick={() => foldGroup(g.group)} aria-expanded={!shut} className="hidden items-center px-2.5 pb-1 pt-3 text-left text-[10.5px] font-bold uppercase tracking-widest text-ink-500 hover:text-ink-300 md:flex">
                 <span className="flex-1">{g.group}</span><span aria-hidden className={`inline-block text-[9px] transition-transform ${shut ? "-rotate-90" : ""}`}>▾</span>
               </button>
-              {g.items.filter((it) => !shut || curId === it.id).map((it) => (
-                <button key={it.id} type="button" onClick={() => setCat(it.id)} aria-current={curId === it.id ? "page" : undefined}
-                  className={`flex-none whitespace-nowrap rounded-lg px-2.5 py-2 text-left text-[13.5px] font-semibold transition md:w-full ${curId === it.id ? "bg-brand-500/15 text-ink-100" : "text-ink-400 hover:bg-ink-800 hover:text-ink-100"}`}>
-                  {it.label}
-                </button>
-              ))}
+              {g.items.filter((it) => !shut || curId === it.id).map((it, i, list) => {
+                // A sub-heading ("Sections") folds its entries away too; the open one stays visible.
+                const key = it.sub ? g.group + "/" + it.sub : "", subShut = !!key && folded.includes(key);
+                const head = it.sub && !shut && (i === 0 || list[i - 1].sub !== it.sub);
+                return (
+                  <Fragment key={it.id}>
+                    {head && (
+                      <button type="button" onClick={() => foldGroup(key)} aria-expanded={!subShut} className="hidden items-center rounded-lg px-2.5 py-1.5 text-left text-[12.5px] font-bold text-ink-300 hover:bg-ink-800 hover:text-ink-100 md:flex">
+                        <span className="flex-1">{it.sub}</span><span className="mr-1.5 text-[11px] font-semibold text-ink-500">{list.filter((x) => x.sub === it.sub).length}</span><span aria-hidden className={`inline-block text-[9px] transition-transform ${subShut ? "-rotate-90" : ""}`}>▾</span>
+                      </button>
+                    )}
+                    {(!subShut || curId === it.id) && (
+                      <button type="button" onClick={() => setCat(it.id)} aria-current={curId === it.id ? "page" : undefined}
+                        className={`flex-none whitespace-nowrap rounded-lg px-2.5 py-2 text-left text-[13.5px] font-semibold transition md:w-full ${it.sub && !shut ? "md:ml-2.5 md:w-[calc(100%-10px)] md:border-l md:border-ink-700 md:rounded-l-none md:pl-3" : ""} ${curId === it.id ? "bg-brand-500/15 text-ink-100" : "text-ink-400 hover:bg-ink-800 hover:text-ink-100"}`}>
+                        {it.label}
+                      </button>
+                    )}
+                  </Fragment>
+                );
+              })}
             </div>
           ); })}
         </nav>

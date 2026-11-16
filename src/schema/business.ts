@@ -2,7 +2,7 @@ import type { Category, Field, TemplateDef } from "./types";
 import { BODY_FONTS, DISPLAY_FONTS, FX_AXES, LINE_BREAKS_AXIS, type Axis } from "../themes/catalog";
 import { BIZ_AXES, BIZ_TAGS, BIZ_THEMES, businessThemeValues } from "../themes/business";
 import { NAV_MODE_FIELD } from "../themes/fields";
-import { adminCategory, staticPagesCategory, heroSlidesCard, prepareSlides, prepareMaintenance, seoCategory, warrantyCategory } from "./common";
+import { adminCategory, featuresCategory, staticPagesCategory, heroSlidesCard, prepareSlides, prepareMaintenance, seoCategory, warrantyCategory } from "./common";
 
 const g2 = (...fields: Field[]): Field => ({ t: "grid", cols: 2, fields });
 const g3 = (...fields: Field[]): Field => ({ t: "grid", cols: 3, fields });
@@ -43,7 +43,7 @@ const schema: Category[] = [
     ],
   },
   {
-    id: "pages", label: "Sections & pages", group: "Design", desc: "One page or several, which sections show, their order and the menu.",
+    id: "pages", label: "Sections & order", group: "Pages", desc: "One page or several, which sections show, their order and the menu.",
     cards: [
       { title: "Pages", fields: [{ t: "toggle", path: "site.multiPage", label: "Use several pages (Home, Services, Products, Work, About, Contact)" },
         { t: "note", text: "Off: one page with every section, and the menu scrolls to them. On: Home shows the highlights (hero, clients, a few services, numbers, a few case studies, testimonials) and the menu opens Services, Work, About and Contact pages." },
@@ -56,7 +56,7 @@ const schema: Category[] = [
     ],
   },
   {
-    id: "hero", label: "Hero", group: "Content", desc: "The first screen: headline, intro, buttons, trust badges and image.",
+    id: "hero", label: "Hero", group: "Pages", sub: "Sections", desc: "The first screen: headline, intro, buttons, trust badges and image.",
     cards: [
       { title: "Text", fields: [{ t: "text", path: "hero.eyebrow", label: "Small label above" }, { t: "text", path: "hero.title", label: "Headline", ml: true, hint: "Enter starts a new line. Wrap words in *asterisks* to highlight them." }, { t: "textarea", path: "hero.lede", label: "Intro", rows: 3 }] },
       { title: "Buttons", fields: [g2({ t: "text", path: "hero.ctaPrimary", label: "Main button" }, { t: "select", path: "hero.ctaPrimaryTarget", label: "Goes to", options: TARGETS }, { t: "text", path: "hero.ctaSecondary", label: "Second button" }, { t: "select", path: "hero.ctaSecondaryTarget", label: "Goes to", options: TARGETS })] },
@@ -80,7 +80,7 @@ const schema: Category[] = [
     ],
   },
   {
-    id: "products", label: "Products", group: "Content", desc: "A catalogue: product cards with View more and Enquire, a page listing them all, and a page for each product.",
+    id: "products", label: "Products", group: "Pages", sub: "Sections", desc: "A catalogue: product cards with View more and Enquire, a page listing them all, and a page for each product.",
     cards: [
       head("products"),
       { title: "How the catalogue shows", fields: [
@@ -102,27 +102,27 @@ const schema: Category[] = [
     ],
   },
   {
-    id: "clients", label: "Clients", group: "Content", desc: "A strip of client names or logos.",
+    id: "clients", label: "Clients", group: "Pages", sub: "Sections", desc: "A strip of client names or logos.",
     cards: [{ title: "Clients", fields: [{ t: "text", path: "clients.title", label: "Line above the logos" },
       { t: "list", path: "clients.logos", max: 16, title: (it) => it.name || "Client", add: () => ({ name: "New client", logo: null }), item: [{ t: "text", path: "name", label: "Name" }, { t: "image", path: "logo", label: "Logo (optional)", hint: "Transparent PNG or SVG works best. Without a logo, the name shows in your headings font." }] }] }],
   },
   {
-    id: "services", label: "Services", group: "Content", desc: "What you offer.",
+    id: "services", label: "Services", group: "Pages", sub: "Sections", desc: "What you offer.",
     cards: [head("services"), { title: "Services", fields: [{ t: "list", path: "services.items", max: 12, title: (it) => it.title || "Service", add: () => ({ icon: "spark", title: "New service", body: "", points: [] }),
       item: [g2({ t: "text", path: "title", label: "Name" }, { t: "select", path: "icon", label: "Icon", options: ICONS.map(([value, label]) => ({ value, label })) }), { t: "textarea", path: "body", label: "Description", rows: 2 }, { t: "strings", path: "points", label: "Key points", addLabel: "Add point" }] }] }],
   },
   {
-    id: "stats", label: "Numbers", group: "Content", desc: "A row of key figures.",
+    id: "stats", label: "Numbers", group: "Pages", sub: "Sections", desc: "A row of key figures.",
     cards: [{ title: "Numbers", fields: [{ t: "list", path: "stats.items", max: 6, title: (it) => `${it.value} · ${it.label}`, add: () => ({ value: "10+", label: "New figure" }), item: [g2({ t: "text", path: "value", label: "Figure" }, { t: "text", path: "label", label: "Label" })] }] }],
   },
   {
-    id: "work", label: "Case studies", group: "Content", desc: "Projects and results.",
+    id: "work", label: "Case studies", group: "Pages", sub: "Sections", desc: "Projects and results.",
     cards: [head("work"), { title: "Case studies", fields: [{ t: "list", path: "work.items", max: 24, title: (it) => it.title || "Case study", add: () => ({ title: "New case study", client: "", sector: "", summary: "", result: "", image: null, url: "" }),
       item: [{ t: "text", path: "title", label: "Title" }, g2({ t: "text", path: "client", label: "Client" }, { t: "text", path: "sector", label: "Sector" }), { t: "textarea", path: "summary", label: "Summary", rows: 2 }, { t: "text", path: "result", label: "Result (one line)", ph: "Processing time down 46%" },
         { t: "image", path: "image", label: "Image (optional)" }, { t: "text", path: "url", label: "Link to the full case study (optional)", check: "https" }] }] }],
   },
   {
-    id: "about", label: "About", group: "Content", desc: "Your story, mission, vision and values.",
+    id: "about", label: "About", group: "Pages", sub: "Sections", desc: "Your story, mission, vision and values.",
     cards: [
       { title: "Story", fields: [g2({ t: "text", path: "about.eyebrow", label: "Small label above" }, { t: "text", path: "about.title", label: "Heading", ml: true }), { t: "textarea", path: "about.body", label: "Story", rows: 6, hint: "Leave an empty line between paragraphs." }, { t: "image", path: "about.image", label: "Image (optional)" }] },
       { title: "Mission & vision", fields: [{ t: "textarea", path: "about.mission", label: "Mission", rows: 2 }, { t: "textarea", path: "about.vision", label: "Vision", rows: 2 }] },
@@ -130,43 +130,54 @@ const schema: Category[] = [
     ],
   },
   {
-    id: "process", label: "Process", group: "Content", desc: "How you work, step by step.",
+    id: "process", label: "Process", group: "Pages", sub: "Sections", desc: "How you work, step by step.",
     cards: [{ title: "Heading", fields: [g2({ t: "text", path: "process.eyebrow", label: "Small label above" }, { t: "text", path: "process.title", label: "Heading", ml: true })] },
       { title: "Steps", fields: [{ t: "list", path: "process.steps", max: 8, title: (it, i) => `${i + 1}. ${it.title}`, add: () => ({ title: "New step", body: "" }), item: [{ t: "text", path: "title", label: "Step" }, { t: "textarea", path: "body", label: "Description", rows: 2 }] }] }],
   },
   {
-    id: "team", label: "Team", group: "Content", desc: "The people behind the business.",
+    id: "team", label: "Team", group: "Pages", sub: "Sections", desc: "The people behind the business.",
     cards: [head("team"), { title: "People", fields: [{ t: "list", path: "team.members", max: 24, title: (it) => `${it.name} · ${it.role}`, add: () => ({ name: "New person", role: "", photo: null, linkedin: "" }),
       item: [g2({ t: "text", path: "name", label: "Name" }, { t: "text", path: "role", label: "Role" }), { t: "image", path: "photo", label: "Photo (optional)" }, { t: "text", path: "linkedin", label: "LinkedIn (optional)", check: "https" }] }] }],
   },
   {
-    id: "testimonials", label: "Testimonials", group: "Content", desc: "What clients say.",
+    id: "testimonials", label: "Testimonials", group: "Pages", sub: "Sections", desc: "What clients say.",
     cards: [{ title: "Heading", fields: [g2({ t: "text", path: "testimonials.eyebrow", label: "Small label above" }, { t: "text", path: "testimonials.title", label: "Heading", ml: true })] },
       { title: "Reviews from Google", studio: true, fields: [{ t: "googleReviews" }] },
       { title: "Testimonials", fields: [{ t: "list", path: "testimonials.items", max: 12, title: (it) => it.name || "Testimonial", add: () => ({ quote: "", name: "", role: "", company: "" }),
         item: [{ t: "textarea", path: "quote", label: "Quote", rows: 3 }, g3({ t: "text", path: "name", label: "Name" }, { t: "text", path: "role", label: "Role" }, { t: "text", path: "company", label: "Company" }), { t: "select", path: "rating", label: "Stars", options: [{ value: "", label: "None" }, { value: "5", label: "★★★★★" }, { value: "4", label: "★★★★" }, { value: "3", label: "★★★" }, { value: "2", label: "★★" }, { value: "1", label: "★" }] }] }] }],
   },
   {
-    id: "pricing", label: "Pricing", group: "Content", desc: "Packages, engagements or plans.",
+    id: "pricing", label: "Pricing", group: "Pages", sub: "Sections", desc: "Packages, engagements or plans.",
     cards: [head("pricing"), { title: "Plans", fields: [{ t: "list", path: "pricing.plans", max: 6, title: (it) => `${it.name}${it.featured ? " ★" : ""}`, add: () => ({ name: "New plan", price: "", period: "", blurb: "", features: [], cta: "Get in touch", featured: false }),
       item: [g3({ t: "text", path: "name", label: "Name" }, { t: "text", path: "price", label: "Price" }, { t: "text", path: "period", label: "Per", ph: "per month" }), { t: "text", path: "blurb", label: "One-line description" }, { t: "strings", path: "features", label: "What's included", addLabel: "Add item" },
         g2({ t: "text", path: "cta", label: "Button label" }, { t: "toggle", path: "featured", label: "Highlight this plan" })] }, { t: "text", path: "pricing.note", label: "Note under the plans" }] }],
   },
   {
-    id: "faq", label: "FAQ", group: "Content", desc: "Questions clients often ask.",
+    id: "faq", label: "FAQ", group: "Pages", sub: "Sections", desc: "Questions clients often ask.",
     cards: [{ title: "Heading", fields: [g2({ t: "text", path: "faq.eyebrow", label: "Small label above" }, { t: "text", path: "faq.title", label: "Heading", ml: true })] },
       { title: "Questions", fields: [{ t: "list", path: "faq.items", max: 20, title: (it) => it.q || "Question", add: () => ({ q: "New question", a: "" }), item: [{ t: "text", path: "q", label: "Question" }, { t: "textarea", path: "a", label: "Answer", rows: 3 }] }] }],
   },
   {
-    id: "cta", label: "Call to action", group: "Content", desc: "The dark band that asks visitors to get in touch.",
+    id: "cta", label: "Call to action", group: "Pages", sub: "Sections", desc: "The dark band that asks visitors to get in touch.",
     cards: [{ title: "Call to action", fields: [{ t: "text", path: "cta.title", label: "Heading", ml: true }, { t: "textarea", path: "cta.body", label: "Text", rows: 2 }, g2({ t: "text", path: "cta.button", label: "Button" }, { t: "select", path: "cta.target", label: "Goes to", options: TARGETS })] }],
   },
   {
-    id: "contact", label: "Contact & form", group: "Content", desc: "Contact details and the enquiry form.",
+    id: "contact", label: "Contact details", group: "Pages", desc: "Contact details and the contact section's heading. The enquiry form is under Forms & records.",
     cards: [
       head("contact"),
       { title: "Details", fields: [g2({ t: "text", path: "contact.email", label: "Email", check: "email" }, { t: "text", path: "contact.phone", label: "Phone", check: "phone" }), { t: "textarea", path: "contact.address", label: "Office address", rows: 2 },
         g2({ t: "text", path: "contact.hours", label: "Opening hours" }, { t: "text", path: "contact.mapUrl", label: "Map link (optional)", check: "https" }, { t: "text", path: "contact.whatsapp", label: "WhatsApp number (optional)", check: "phone" }, { t: "text", path: "contact.linkedin", label: "LinkedIn page (optional)", check: "https" })] },
+    ],
+  },
+  {
+    id: "footer", label: "Footer", group: "Pages", desc: "The bottom of every page.",
+    cards: [{ title: "Footer", fields: [{ t: "textarea", path: "footer.text", label: "Short description", rows: 2 }, { t: "text", path: "footer.legal", label: "Legal line", hint: "{year} becomes the current year." },
+      { t: "list", path: "footer.links", max: 6, title: (it) => it.label || "Link", add: () => ({ label: "New link", url: "" }), item: [g2({ t: "text", path: "label", label: "Label" }, { t: "text", path: "url", label: "Link", check: "https" })] }] }],
+  },
+  staticPagesCategory("page"),
+  {
+    id: "forms", label: "Enquiry form", group: "Forms & records", desc: "The enquiry form's questions, its messages and where enquiries go.",
+    cards: [
       { title: "Enquiry form", fields: [{ t: "toggle", path: "contact.form.enabled", label: "Show the enquiry form" },
         { t: "when", path: "contact.form.enabled", is: "true", fields: [
           { t: "text", path: "contact.form.title", label: "Form heading" },
@@ -181,14 +192,9 @@ const schema: Category[] = [
         ] }] },
     ],
   },
-  {
-    id: "footer", label: "Footer", group: "Content", desc: "The bottom of every page.",
-    cards: [{ title: "Footer", fields: [{ t: "textarea", path: "footer.text", label: "Short description", rows: 2 }, { t: "text", path: "footer.legal", label: "Legal line", hint: "{year} becomes the current year." },
-      { t: "list", path: "footer.links", max: 6, title: (it) => it.label || "Link", add: () => ({ label: "New link", url: "" }), item: [g2({ t: "text", path: "label", label: "Label" }, { t: "text", path: "url", label: "Link", check: "https" })] }] }],
-  },
   warrantyCategory("popup-or-page"),
+  featuresCategory(),
   seoCategory(true),
-  staticPagesCategory("page"),
   adminCategory(),
 ];
 

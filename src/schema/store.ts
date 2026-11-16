@@ -1,7 +1,7 @@
 import type { Category, Field, TemplateDef } from "./types";
 import { uid, vpaOk, paypalOk, httpsOk } from "../lib/util";
 import { BODY_FONTS, DISPLAY_FONTS, LINE_BREAKS_AXIS, STORE_AXES, THEMES, onColor, storeThemeValues } from "../themes/catalog";
-import { adminCategory, staticPagesCategory, heroSlidesCard, prepareSlides, prepareMaintenance, seoCategory, warrantyCategory } from "./common";
+import { adminCategory, featuresCategory, staticPagesCategory, heroSlidesCard, prepareSlides, prepareMaintenance, seoCategory, warrantyCategory } from "./common";
 import { NAV_MODE_FIELD, themeCards } from "../themes/fields";
 
 const CURRENCIES = ["INR", "USD", "EUR", "GBP", "AED", "SGD", "AUD", "CAD"];
@@ -186,9 +186,10 @@ const schema: Category[] = [
       { title: "Footer", fields: [{ t: "textarea", path: "footer.text", label: "Footer text" }] },
     ],
   },
-  warrantyCategory("page"),
-  seoCategory(true),
   staticPagesCategory("page"),
+  warrantyCategory("page"),
+  featuresCategory(),
+  seoCategory(true),
   adminCategory(),
 ];
 

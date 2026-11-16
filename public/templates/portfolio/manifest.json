@@ -9,6 +9,7 @@
     "404.html",
     "assets/pages.js",
     "assets/maint.js",
+    "assets/addons.js",
     "README.md"
   ],
   "starters": [

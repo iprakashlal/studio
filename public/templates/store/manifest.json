@@ -19,6 +19,7 @@
     "assets/warranty.js",
     "assets/pages.js",
     "assets/maint.js",
+    "assets/addons.js",
     "README.md",
     "supabase/schema.sql",
     "supabase/functions/shop/index.ts",

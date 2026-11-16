@@ -61,6 +61,8 @@ export class Cloudflare {
   accounts() { return this.api<CfAccount[]>("GET", "/accounts?per_page=50"); }
   /** The account's workers.dev name, creating it when the account doesn't have one yet. */
   /** The account's workers.dev name, or null when it has none (doesn't create one). */
+  /** Deletes a Worker (and its routes and bindings). */
+  async deleteScript(account: string, name: string) { return this.api("DELETE", `/accounts/${account}/workers/scripts/${encodeURIComponent(name)}?force=true`); }
   async subdomainOf(account: string): Promise<string | null> {
     try { return (await this.api<{ subdomain: string }>("GET", `/accounts/${account}/workers/subdomain`))?.subdomain || null; } catch { return null; }
   }

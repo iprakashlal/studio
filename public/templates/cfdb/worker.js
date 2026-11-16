@@ -15,6 +15,137 @@ create table if not exists repos (repo text primary key, scope text not null);
 var CFDB_VERSION = 13;
 var CFDB_WORKER_NAME = "picaffectz-db";
 
+// src/lib/lookdigest.ts
+var hex2 = (n) => Math.max(0, Math.min(255, Math.round(n))).toString(16).padStart(2, "0");
+var NAMED = { white: "#ffffff", black: "#000000" };
+function hsl(h, s, l) {
+  s /= 100;
+  l /= 100;
+  const k = (n) => (n + h / 30) % 12, a = s * Math.min(l, 1 - l), f = (n) => l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
+  return "#" + hex2(f(0) * 255) + hex2(f(8) * 255) + hex2(f(4) * 255);
+}
+function cssColor(v) {
+  v = v.trim().toLowerCase();
+  let m;
+  if (NAMED[v]) return NAMED[v];
+  if (m = /^#([0-9a-f]{3,8})$/.exec(v)) {
+    const h = m[1];
+    if (h.length === 3 || h.length === 4) return "#" + h.slice(0, 3).split("").map((c) => c + c).join("");
+    if (h.length === 6 || h.length === 8) return "#" + h.slice(0, 6);
+    return "";
+  }
+  if (m = /^rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)(?:[\s,/]+([\d.]+%?))?\s*\)$/.exec(v)) {
+    const a = m[4] == null ? 1 : m[4].endsWith("%") ? parseFloat(m[4]) / 100 : parseFloat(m[4]);
+    return a < 0.6 ? "" : "#" + hex2(+m[1]) + hex2(+m[2]) + hex2(+m[3]);
+  }
+  if (m = /^hsla?\(\s*([\d.]+)(?:deg)?[\s,]+([\d.]+)%[\s,]+([\d.]+)%(?:[\s,/]+([\d.]+%?))?\s*\)$/.exec(v)) {
+    const a = m[4] == null ? 1 : m[4].endsWith("%") ? parseFloat(m[4]) / 100 : parseFloat(m[4]);
+    return a < 0.6 ? "" : hsl(+m[1], +m[2], +m[3]);
+  }
+  return "";
+}
+var GENERIC = /^(inherit|initial|unset|serif|sans-serif|monospace|system-ui|ui-sans-serif|ui-serif|ui-monospace|cursive|fantasy|-apple-system|blinkmacsystemfont|segoe ui|arial|helvetica|helvetica neue|roboto|var\(.*\)|emoji|math)$/i;
+var ICON = /icon|awesome|glyph|symbol|material|swiper|slick|dashicons|elementor|eicons/i;
+function family(v) {
+  for (const part of v.split(",")) {
+    const n = part.trim().replace(/^["']|["']$/g, "").replace(/!important/i, "").trim();
+    if (n && !GENERIC.test(n) && !ICON.test(n) && n.length < 40) return n;
+  }
+  return "";
+}
+var count = (m, k, n = 1) => m.set(k, (m.get(k) || 0) + n);
+var top = (m, n) => [...m.entries()].sort((a, b) => b[1] - a[1]).slice(0, n);
+function digestPage(html, css) {
+  html = String(html || "").slice(0, 3e6);
+  css = String(css || "").slice(0, 3e6);
+  const inline = [...html.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/gi)].map((m) => m[1]).join("\n");
+  const attrs = [...html.matchAll(/\sstyle\s*=\s*"([^"]{0,600})"/gi)].map((m) => m[1]).join(";\n");
+  const all = (css + "\n" + inline).replace(/\/\*[\s\S]*?\*\//g, ""), sheet = all + "\n" + attrs;
+  const vars = /* @__PURE__ */ new Map();
+  for (const m of all.matchAll(/(--[\w-]+)\s*:\s*([^;}{]+)[;}]/g)) {
+    const c = cssColor(m[2]);
+    if (c && !vars.has(m[1])) vars.set(m[1], c);
+  }
+  const resolve = (v) => {
+    const m = /var\(\s*(--[\w-]+)/.exec(v);
+    return m ? vars.get(m[1]) || "" : cssColor(v.replace(/!important/i, "").trim().split(/\s+(?![^(]*\))/)[0] || "");
+  };
+  const colors = /* @__PURE__ */ new Map();
+  for (const m of sheet.matchAll(/#[0-9a-f]{3,8}\b|rgba?\([^)]{5,40}\)|hsla?\([^)]{5,40}\)/gi)) {
+    const c = cssColor(m[0]);
+    if (c) count(colors, c);
+  }
+  const fonts = /* @__PURE__ */ new Map(), radii = /* @__PURE__ */ new Map();
+  let bg = "", text = "", headFont = "", bodyFont = "", centered = 0, upper = 0;
+  for (const m of all.matchAll(/([^{}]{1,300})\{([^{}]{1,4000})\}/g)) {
+    const sel = m[1].trim().toLowerCase(), body = m[2];
+    const isRoot = /(^|[\s,])(body|html|:root)(\s*[,{]|$)/.test(sel + "{"), isHead = /(^|[\s,>])h[12]\b|\.hero|\.title|\.heading|\.display/.test(sel);
+    const ff = /font-family\s*:\s*([^;}]+)/i.exec(body);
+    if (ff) {
+      const f = family(ff[1].includes("var(") ? "" : ff[1]);
+      if (f) {
+        count(fonts, f);
+        if (isHead && !headFont) headFont = f;
+        if (isRoot && !bodyFont) bodyFont = f;
+      }
+    }
+    if (isRoot) {
+      const b = /background(?:-color)?\s*:\s*([^;}]+)/i.exec(body), c = /(?:^|[;\s])color\s*:\s*([^;}]+)/i.exec(body);
+      if (b && !bg) bg = resolve(b[1]);
+      if (c && !text) text = resolve(c[1]);
+    }
+    for (const r of body.matchAll(/border-radius\s*:\s*([\d.]+)(px|rem|em)\b/gi)) {
+      const px = Math.round(parseFloat(r[1]) * (r[2] === "px" ? 1 : 16));
+      if (px >= 0 && px <= 60) count(radii, px);
+    }
+    if (isHead && /text-align\s*:\s*center/i.test(body)) centered++;
+    if (isHead && /text-transform\s*:\s*uppercase/i.test(body)) upper++;
+  }
+  for (const m of html.matchAll(/fonts\.googleapis\.com\/css2?\?([^"'>\s]+)/gi)) for (const f of m[1].matchAll(/family=([^&:@"']+)/g)) {
+    const n = decodeURIComponent(f[1].replace(/\+/g, " ")).trim();
+    if (n && !ICON.test(n)) count(fonts, n, 5);
+  }
+  if (!headFont || !bodyFont) for (const m of all.matchAll(/--[\w-]*(font|ff|family)[\w-]*\s*:\s*([^;}]+)[;}]/gi)) {
+    const f = family(m[2]);
+    if (!f) continue;
+    count(fonts, f, 2);
+    if (/head|display|title/i.test(m[0]) && !headFont) headFont = f;
+    else if (/body|base|text|sans|primary/i.test(m[0]) && !bodyFont) bodyFont = f;
+  }
+  if (!bg) bg = vars.get("--bg") || vars.get("--background") || vars.get("--color-bg") || vars.get("--color-background") || vars.get("--body-bg") || "";
+  if (!text) text = vars.get("--text") || vars.get("--color-text") || vars.get("--foreground") || vars.get("--body-color") || "";
+  const src = html + "\n" + all, libs = [];
+  const has = (k, re) => {
+    if (re.test(src)) libs.push(k);
+  };
+  has("smooth", /\blenis\b|locomotive-scroll|smooth-scrollbar|ScrollSmoother|data-scroll-container/i);
+  has("reveal", /\bgsap\b|ScrollTrigger|\baos\b|data-aos|split-?type|splitting|\bwow\.js|scrollreveal|data-sal\b|framer-motion/i);
+  has("cursor", /custom-cursor|cursor-(dot|follower|ring|inner|outer)|\.cursor[\s{.,]|mouse-follower|cursor\s*:\s*none/i);
+  has("tilt", /vanilla-tilt|data-tilt|tilt\.js|atropos/i);
+  has("loader", /preloader|page-loader|loading-screen|\bpace\.js|barba|swup/i);
+  has("marquee", /marquee|ticker/i);
+  has("parallax", /parallax|rellax|data-speed/i);
+  has("slider", /swiper|slick|splide|flickity|owl-carousel|embla/i);
+  has("3d", /three(\.module)?(\.min)?\.js|\bTHREE\.|spline|babylon/i);
+  const bodyAt = html.search(/<body/i), first = html.slice(Math.max(0, bodyAt), Math.max(0, bodyAt) + 9e3);
+  const heroImage = /<(img|video|picture|canvas|model-viewer)\b/i.test(first.replace(/<header[\s\S]*?<\/header>|<nav[\s\S]*?<\/nav>/gi, ""));
+  return { colors: top(colors, 40), ...bg ? { bg } : {}, ...text ? { text } : {}, fonts: top(fonts, 12), ...headFont ? { headFont } : {}, ...bodyFont ? { bodyFont } : {}, radii: top(radii, 8).map(([r]) => r), libs, centered: centered > 0, heroImage, uppercase: upper > 0 };
+}
+function sheetLinks(html, base) {
+  const out = [];
+  for (const m of String(html).matchAll(/<link\b[^>]*>/gi)) {
+    if (!/rel\s*=\s*["']?[^"'>]*stylesheet/i.test(m[0])) continue;
+    const h = /href\s*=\s*["']([^"']+)["']/i.exec(m[0]);
+    if (!h) continue;
+    try {
+      const u = new URL(h[1].replace(/&amp;/g, "&"), base);
+      if (u.protocol === "https:" && !/fonts\.googleapis\.com/.test(u.host) && !out.includes(u.href)) out.push(u.href);
+    } catch {
+    }
+  }
+  return out;
+}
+
 // worker/db-worker.ts
 var V = CFDB_VERSION;
 var CHUNK = 9e5;
@@ -400,6 +531,41 @@ async function readPamphlet(env, q) {
   if (!products.length) return { error: 'No products were found in that pamphlet. Add a note naming the product (for example "one product: MZ 1250 welder") and try again.' };
   return { products, read: words(all).length, ...guessed ? { guessed: true } : {} };
 }
+function publicUrl(url) {
+  if (!/^https:\/\/[^\s/]+\.[^\s]+$/i.test(url)) return null;
+  let u;
+  try {
+    u = new URL(url);
+  } catch {
+    return null;
+  }
+  const host = u.hostname.toLowerCase();
+  return /^(localhost|[\d.]+|\[.*\])$/.test(host) || /\.(local|internal|localhost)$/.test(host) ? null : u;
+}
+async function lookAt(url) {
+  const u = publicUrl(url.trim());
+  if (!u) return { error: "Enter the page's public address (https://\u2026)." };
+  const get = async (x, accept) => {
+    const r = await fetch(x, { headers: { "User-Agent": "Mozilla/5.0 (site-studio reference reader)", Accept: accept }, redirect: "follow" });
+    if (!r.ok) throw new Error(String(r.status));
+    return (await r.text()).slice(0, 15e5);
+  };
+  let html = "";
+  try {
+    html = await get(u.href, "text/html");
+  } catch (e) {
+    return { error: /^\d+$/.test(String(e?.message)) ? `That page answered ${e.message}.` : "Couldn't open that address." };
+  }
+  let css = "";
+  for (const link of sheetLinks(html, u.href).slice(0, 5)) {
+    if (!publicUrl(link) || css.length > 25e5) continue;
+    try {
+      css += "\n" + await get(link, "text/css");
+    } catch {
+    }
+  }
+  return { digest: digestPage(html, css) };
+}
 async function writeSite(env, q) {
   const brand = String(q.brand || "").trim().slice(0, 80), notes = String(q.notes || "").slice(0, 1500), kind = String(q.kind || "business");
   if (!brand) return { error: "Enter your brand name." };
@@ -464,7 +630,7 @@ var db_worker_default = {
     if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
     const u = new URL(req.url), p = u.pathname.replace(/\/+$/, "") || "/";
     try {
-      if (p === "/") return json({ ok: true, service: "site-studio-db", v: V, mail: !!(env.RESEND_API_KEY && env.MAIL_FROM), ...env.CF_TOKEN && env.CF_ACCOUNT ? { deploy: true, account: env.CF_ACCOUNT } : {}, ...env.GH_TOKEN ? { gh: true } : {}, ...env.AI ? { ai: true, pamphlet: 2 } : {}, reviews: true, accounts: 2, cfx: 4, studioPages: 1, del: 1, enqMail: 3, ...otherAccounts(env).length ? { more: otherAccounts(env).length } : {} });
+      if (p === "/") return json({ ok: true, service: "site-studio-db", v: V, mail: !!(env.RESEND_API_KEY && env.MAIL_FROM), ...env.CF_TOKEN && env.CF_ACCOUNT ? { deploy: true, account: env.CF_ACCOUNT } : {}, ...env.GH_TOKEN ? { gh: true } : {}, ...env.AI ? { ai: true, pamphlet: 2 } : {}, reviews: true, look: 1, accounts: 2, cfx: 4, studioPages: 1, del: 1, enqMail: 3, ...otherAccounts(env).length ? { more: otherAccounts(env).length } : {} });
       if (p === "/auth/code" && req.method === "POST") {
         const { email: raw, site: forSite, studio: forStudio } = await req.json();
         const email2 = String(raw || "").trim().toLowerCase();
@@ -572,6 +738,12 @@ var db_worker_default = {
         if (!await env.DB.prepare("select 1 from members where email = ? and role in ('owner', 'partner') limit 1").bind(email2).first()) return err(403, "Only owners can use this.");
         if (!env.AI) return err(501, "Reading pamphlets needs the database updated once (from a device with the Cloudflare token).");
         return json(await readPamphlet(env, await req.json()));
+      }
+      if (p === "/ai/look" && req.method === "POST") {
+        const email2 = await who(env, req);
+        if (!email2) return err(401, "Sign in first.");
+        if (!await env.DB.prepare("select 1 from members where email = ? limit 1").bind(email2).first()) return err(403, "Only members can use this.");
+        return json(await lookAt(String((await req.json()).url || "")));
       }
       if (p === "/ai/write" && req.method === "POST") {
         const email2 = await who(env, req);
@@ -682,7 +854,7 @@ var db_worker_default = {
           let dbId = String(b.db || "");
           const q = async (sql, params = []) => (await cfa(`/d1/database/${dbId}/query`, { method: "POST", body: JSON.stringify({ sql, params }) }))?.[0]?.results || [];
           const bytesOf = (v) => Array.isArray(v) ? new Uint8Array(v) : typeof v === "string" ? Uint8Array.from(atob(v), (c) => c.charCodeAt(0)) : v && Array.isArray(v.data) ? new Uint8Array(v.data) : new Uint8Array(0);
-          const hex2 = (u2) => {
+          const hex3 = (u2) => {
             let s = "";
             for (let i = 0; i < u2.length; i++) s += (u2[i] < 16 ? "0" : "") + u2[i].toString(16);
             return s;
@@ -728,8 +900,8 @@ var db_worker_default = {
               let size = 7e5, n = Math.max(1, Math.ceil(bytes.length / size)), lit = false;
               const putChunk = async (i) => {
                 const part = bytes.slice(i * size, (i + 1) * size);
-                if (lit) await q(`insert into chunks (scope, path, n, data) values (?, ?, ?, X'${hex2(part)}') on conflict (scope, path, n) do update set data = excluded.data`, [S2, path2, i]);
-                else await q("insert into chunks (scope, path, n, data) values (?, ?, ?, unhex(?)) on conflict (scope, path, n) do update set data = excluded.data", [S2, path2, i, hex2(part)]);
+                if (lit) await q(`insert into chunks (scope, path, n, data) values (?, ?, ?, X'${hex3(part)}') on conflict (scope, path, n) do update set data = excluded.data`, [S2, path2, i]);
+                else await q("insert into chunks (scope, path, n, data) values (?, ?, ?, unhex(?)) on conflict (scope, path, n) do update set data = excluded.data", [S2, path2, i, hex3(part)]);
               };
               try {
                 for (let i = 0; i < n; i++) await putChunk(i);

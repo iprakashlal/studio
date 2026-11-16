@@ -230,6 +230,15 @@ export async function registerWorkers(cf: Cloudflare, s: CfDbSetup, list: { work
   for (const x of list) await cf.d1Query(s.account, s.databaseId, "insert into workers (worker, scope) values (?, ?) on conflict (worker) do update set scope = excluded.scope", [x.worker, x.scope]);
 }
 
+// ---------------------------------------------------------------- a reference page's look, for "theme from a reference"
+/** The design facts of a public page (colours, fonts, corners, interaction libraries), read by the database. */
+export async function cfLook(api: string, url: string): Promise<import("./lookdigest").Digest> {
+  const j = await cfCall<any>(api, "/ai/look", { method: "POST", body: JSON.stringify({ url }) });
+  if (j?.error) throw new Error(j.error);
+  if (!j?.digest) throw new Error("Reading a link needs the database updated once (Settings → Hostings → Update the database). An image, PDF or HTML file works without it.");
+  return j.digest;
+}
+
 // ---------------------------------------------------------------- writing site text from a reference site
 export type Brief = Partial<Record<"brand_tagline" | "hero_eyebrow" | "hero_title" | "hero_text" | "hero_cta" | "about_title" | "about_text" | "mission" | "vision" | "services_title" | "services_intro" | "banner_title" | "banner_text" | "cta_title" | "cta_text" | "seo_title" | "seo_description" | "footer_text", string>> & { values?: { title: string; text: string }[]; services?: { title: string; text: string }[]; process?: { title: string; text: string }[]; faq?: { q: string; a: string }[] };
 /** Reads the reference (link or pasted text) and writes new text for `brand` with Workers AI on the database. */

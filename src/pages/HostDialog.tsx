@@ -79,10 +79,10 @@ export function HostDialog({ studio, project, tpl, draft, dirty, save, onIndex, 
   const [sb, setSb] = useState<SbCfg>(host?.sb || { url: "", key: "", site: host?.cf?.site || slugify(project.name) || "my-site" });
   const [siteName, setSiteName] = useState(host?.siteName || slugify(project.name) || "");
   // The editor email is remembered for each project (a site on another account has its own sign-in); a new
-  // project starts from the last one used.
+  // project starts from the last one used, and a live site from the email signed in to its database.
   const EMAIL_KEY = "site-studio:host-email", EMAIL_OWN = EMAIL_KEY + ":" + project.id;
   const [emailOwn] = useState(() => { try { return !!localStorage.getItem(EMAIL_OWN); } catch { return false; } });
-  const [email, setEmailState] = useState(() => { try { return localStorage.getItem(EMAIL_OWN) || (host ? "" : localStorage.getItem(EMAIL_KEY)) || ""; } catch { return ""; } });
+  const [email, setEmailState] = useState(() => { try { return localStorage.getItem(EMAIL_OWN) || localStorage.getItem(EMAIL_KEY) || ""; } catch { return ""; } });
   const setEmail = (v: string) => { setEmailState(v); try { localStorage.setItem(EMAIL_OWN, v); if (!host) localStorage.setItem(EMAIL_KEY, v); } catch { /* private mode */ } };
   const [code, setCode] = useState("");
   const [codeSent, setCodeSent] = useState(false);
@@ -139,7 +139,7 @@ export function HostDialog({ studio, project, tpl, draft, dirty, save, onIndex, 
   const cfCheck = async (c = cfSite) => {
     if (!c) return; const e = await cfSignedIn(c.api); setCfSigned(e);
     // A site that's already live: the email signed in to its database, unless one was typed for this project.
-    if (e && !emailOwn) setEmailState((cur) => cur || e);
+    if (e && !emailOwn) setEmailState(e);
     // Not signed in to the site's own database here: reached through the Studio's database (its account kept there).
     const br = !e && host?.kind === "cloudflare" && !!host.account && c.api === host.cf?.api && (await new CfRepo(c.api, "site:" + c.site, { account: host.account }).bridged().catch(() => false));
     setBridged(!!br);

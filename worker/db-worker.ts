@@ -309,7 +309,7 @@ export default {
     if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
     const u = new URL(req.url), p = u.pathname.replace(/\/+$/, "") || "/";
     try {
-      if (p === "/") return json({ ok: true, service: "site-studio-db", v: V, mail: !!(env.RESEND_API_KEY && env.MAIL_FROM), ...(env.CF_TOKEN && env.CF_ACCOUNT ? { deploy: true, account: env.CF_ACCOUNT } : {}), ...(env.GH_TOKEN ? { gh: true } : {}), ...(env.AI ? { ai: true, pamphlet: 2 } : {}), reviews: true, accounts: 2, cfx: 3, studioPages: 1, ...(otherAccounts(env).length ? { more: otherAccounts(env).length } : {}) });
+      if (p === "/") return json({ ok: true, service: "site-studio-db", v: V, mail: !!(env.RESEND_API_KEY && env.MAIL_FROM), ...(env.CF_TOKEN && env.CF_ACCOUNT ? { deploy: true, account: env.CF_ACCOUNT } : {}), ...(env.GH_TOKEN ? { gh: true } : {}), ...(env.AI ? { ai: true, pamphlet: 2 } : {}), reviews: true, accounts: 2, cfx: 3, studioPages: 1, del: 1, ...(otherAccounts(env).length ? { more: otherAccounts(env).length } : {}) });
 
       // ---- sign in with an emailed code (members only)
       if (p === "/auth/code" && req.method === "POST") {
@@ -604,8 +604,8 @@ export default {
         let worker = "", useJwt = false, m: RegExpMatchArray | null;
         if (method === "GET" && path === ACC + "/subdomain") { /* the account's workers.dev name */ }
         else if (method === "POST" && path === ACC + "/assets/upload?base64=true") useJwt = true;
-        else if ((m = path.match(/^\/accounts\/([\w-]+)\/workers\/scripts\/([a-z0-9][a-z0-9-]{0,62})(\/settings|\/assets-upload-session|\/subdomain)?$/)) && m[1] === A
-          && ((method === "GET" && m[3] === "/settings") || (method === "POST" && (m[3] === "/assets-upload-session" || m[3] === "/subdomain")) || (method === "PUT" && !m[3]))) worker = m[2];
+        else if ((m = path.match(/^\/accounts\/([\w-]+)\/workers\/scripts\/([a-z0-9][a-z0-9-]{0,62})(\/settings|\/assets-upload-session|\/subdomain|\?force=true)?$/)) && m[1] === A
+          && ((method === "GET" && m[3] === "/settings") || (method === "POST" && (m[3] === "/assets-upload-session" || m[3] === "/subdomain")) || (method === "PUT" && !m[3]) || (method === "DELETE" && m[3] === "?force=true"))) worker = m[2];
         else return err(403, "Not something publishing needs.");
         if (worker && !(await env.DB.prepare("select 1 from workers where worker = ? and scope = ?").bind(main ? worker : A + "/" + worker + "@" + scope, scope).first())) return err(403, `The Worker ${worker} isn't registered to ${scope}. Publish once from a device with the Cloudflare token.`);
         const body = q.body64 ? Uint8Array.from(atob(String(q.body64)), (c) => c.charCodeAt(0)) : q.body != null ? String(q.body) : undefined;

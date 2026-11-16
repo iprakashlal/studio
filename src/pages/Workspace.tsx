@@ -1,6 +1,5 @@
 import { SitesHostingCard } from "./SitesHostingCard";
 import { hides, useClientStudio } from "../lib/features";
-import { HelpersCard } from "./HelpersCard";
 import { StudioPageLinks, StudioPagesCard } from "./StudioPage";
 import { useEffect, useMemo, useState } from "react";
 import { isHosted } from "../lib/backend";
@@ -118,11 +117,11 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
   if (route.startsWith("settings") && !repo.demo) {
     const tab = route.split("/")[1] || "general";
     const tabs = <div className="flex flex-wrap gap-1 border-b border-ink-700" role="tablist" aria-label="Settings">
-      {[["general", "General"], ...(isHosted(session) && !hid("update") ? [["update", "Update"]] : []), ...(client ? [] : [["migration", "Migration"], ["partners", "Studio Partners"]])].map(([k, l]) => <a key={k} href={`#/settings${k === "general" ? "" : "/" + k}`} role="tab" aria-selected={tab === k} className={`-mb-px border-b-2 px-3 py-2 text-sm font-semibold ${tab === k ? "border-brand-400 text-ink-100" : "border-transparent text-ink-400 hover:text-ink-100"}`}>{l}</a>)}
+      {[["general", "General"], ...(isHosted(session) && !client ? [["update", "Update"]] : []), ...(client ? [] : [["migration", "Migration"], ["partners", "Studio Partners"]])].map(([k, l]) => <a key={k} href={`#/settings${k === "general" ? "" : "/" + k}`} role="tab" aria-selected={tab === k} className={`-mb-px border-b-2 px-3 py-2 text-sm font-semibold ${tab === k ? "border-brand-400 text-ink-100" : "border-transparent text-ink-400 hover:text-ink-100"}`}>{l}</a>)}
     </div>;
     if (client === undefined && tab !== "general") return <>{header}<p className="py-16 text-center text-sm text-ink-400">Loading…</p></>;
     if (tab === "partners" && !client) return <>{header}<main className="mx-auto flex max-w-3xl flex-col gap-4 px-4 py-8 sm:px-6"><h1 className="font-display text-3xl font-extrabold">Settings</h1>{tabs}<FoldAll /><FoldCards scope="partners"><PartnersTab studio={studio} index={index} session={session} onIndex={setIndex} /></FoldCards></main></>;
-    if ((tab === "migration" && !client) || (tab === "update" && isHosted(session) && !hid("update"))) return <>{header}<main className="mx-auto flex max-w-3xl flex-col gap-4 px-4 py-8 sm:px-6"><h1 className="font-display text-3xl font-extrabold">Settings</h1>{tabs}<FoldAll /><FoldCards scope={tab}><MigrationTab key={tab} studio={studio} index={index} session={session} onIndex={setIndex} mode={tab === "update" ? "update" : "move"} /></FoldCards></main></>;
+    if ((tab === "migration" && !client) || (tab === "update" && isHosted(session) && !client)) return <>{header}<main className="mx-auto flex max-w-3xl flex-col gap-4 px-4 py-8 sm:px-6"><h1 className="font-display text-3xl font-extrabold">Settings</h1>{tabs}<FoldAll /><FoldCards scope={tab}><MigrationTab key={tab} studio={studio} index={index} session={session} onIndex={setIndex} mode={tab === "update" ? "update" : "move"} /></FoldCards></main></>;
     return (
       <>{header}
         <main className="mx-auto flex max-w-3xl flex-col gap-4 px-4 py-8 sm:px-6">
@@ -144,8 +143,7 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
             <NetlifyAccount session={session} />
             <SetupAccounts session={session} index={index} />
           </section>
-          <SitesHostingCard session={session} studio={studio} index={index} onIndex={setIndex} />
-          <HelpersCard session={session} /></>}
+          <SitesHostingCard session={session} studio={studio} index={index} onIndex={setIndex} /></>}
           {isHosted(session)
             ? <section className="card flex flex-col gap-3 p-5" aria-label="Account"><h3 className="text-[15px] font-extrabold">Account</h3><p className="text-sm text-ink-300">Signed in as <b className="text-ink-100">{session.username}</b> with an email code.</p><button type="button" className="btn self-start" onClick={onSignOut}>Sign out</button></section>
             : <AccountPanel ns={NS} session={session} onUpdated={onSession} onSignOut={onSignOut} onForget={onForget} />}

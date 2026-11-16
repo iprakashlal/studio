@@ -36,7 +36,7 @@ export function SetupAccounts({ session, index }: { session: Session; index?: St
 }
 
 function CloudflareAccount({ session, nf, index }: { session: Session; nf: Netlify | null; index?: StudioIndex }) {
-  const acc = useCfAccount(session.token, nf, true);
+  const acc = useCfAccount(session.token, nf, true, true);
   return (
     <div className="flex flex-col gap-2">
       {acc.account ? (

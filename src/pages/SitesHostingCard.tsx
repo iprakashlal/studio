@@ -13,6 +13,8 @@ import { explain } from "../lib/repo";
 import { Cloudflare } from "../lib/cloudflare";
 import { getHelper } from "../lib/relay";
 import { useConfirm, useToast } from "../ui/kit";
+import { projectPlan, teardownProject } from "../lib/teardown";
+import { TeardownDialog } from "./TeardownDialog";
 import { useCfAccount } from "./CfPicker";
 import { Netlify } from "../lib/netlify";
 import { netlifyToken } from "../lib/hosting";
@@ -23,9 +25,10 @@ export function SitesHostingCard({ session, studio, index, onIndex }: { session:
   const toast = useToast(), confirm = useConfirm();
   const sites = useMemo(() => index.projects.filter((p) => p.host || p.publish), [index.projects]);
   const [db, setDb] = useState<{ api: string; studio: string } | null | undefined>(undefined);
-  const [info, setInfo] = useState<{ cfx: boolean; imp: boolean; pages: boolean; main: string | null; accounts: Acc[]; signed: boolean; gh: boolean } | null>(null);
+  const [info, setInfo] = useState<{ cfx: boolean; imp: boolean; pages: boolean; del: boolean; main: string | null; accounts: Acc[]; signed: boolean; gh: boolean } | null>(null);
   const [mainName, setMainName] = useState("");
   const [busy, setBusy] = useState(""), [err, setErr] = useState("");
+  const [tear, setTear] = useState<ProjectMeta | null>(null);
   const [addTok, setAddTok] = useState(""), [replaceFor, setReplaceFor] = useState<string | null>(null);
   const [pick, setPick] = useState<Record<string, string>>({});
 
@@ -37,7 +40,7 @@ export function SitesHostingCard({ session, studio, index, onIndex }: { session:
     setDb({ api, studio: sid });
     const d = await cfDeployInfo(api), signed = !!(await cfSignedIn(api));
     const l = signed && d.cfx ? await cfxList(api, sid).catch(() => null) : null;
-    setInfo({ cfx: !!d.cfx, imp: !!d.bridge, pages: !!d.studioPages, main: l?.main ?? (d.deploy ? d.account || null : null), accounts: l?.accounts || [], signed, gh: !!d.gh });
+    setInfo({ cfx: !!d.cfx, imp: !!d.bridge, pages: !!d.studioPages, del: !!d.del, main: l?.main ?? (d.deploy ? d.account || null : null), accounts: l?.accounts || [], signed, gh: !!d.gh });
     if (v?.account && v.account === (l?.main ?? d.account)) {
       // The main account's name, from this device's token (only shown here).
       try { const acc = await new Cloudflare(await getHelper(session.token, null), v.token).accounts(); setMainName(acc.find((a) => a.id === v.account)?.name || ""); } catch { /* name stays generic */ }
@@ -110,7 +113,7 @@ export function SitesHostingCard({ session, studio, index, onIndex }: { session:
    *  Cloudflare account right here (a token already saved on this device connects by itself), then one click. */
   const [nf, setNf] = useState<Netlify | null | undefined>(undefined);
   useEffect(() => { netlifyToken.load(session.token).then((t) => setNf(t ? new Netlify(t.token) : null)).catch(() => setNf(null)); }, [session.token]);
-  const cfAcc = useCfAccount(session.token, nf, true);
+  const cfAcc = useCfAccount(session.token, nf, true, true);
   const dbHost = db ? db.api.replace(/^https:\/\//, "").replace(/\/+$/, "") : "";
   const updateDb = () => run("update", async () => {
     if (!db) return;
@@ -139,7 +142,7 @@ export function SitesHostingCard({ session, studio, index, onIndex }: { session:
       {!db ? <p className="text-sm text-amber-200">This needs your Studio's database on Cloudflare. Set it up from Publish to Cloudflare on a project, or move the Studio there (Migration).</p>
         : !info ? <p className="text-sm text-ink-400">Loading…</p>
         : !info.signed ? <p className="text-sm text-amber-200">Sign in to your Studio's database on this device to manage its hosting accounts.</p>
-        : !info.cfx || !info.imp || !info.pages ? <div className="flex flex-col gap-2 text-sm"><p className="text-amber-200">Your Studio's database is from an older build. Update it once (your data, sign-ins and kept tokens stay).</p>
+        : !info.cfx || !info.imp || !info.pages || !info.del ? <div className="flex flex-col gap-2 text-sm"><p className="text-amber-200">Your Studio's database is from an older build. Update it once (your data, sign-ins and kept tokens stay).</p>
           <p className="text-ink-400">Connect the Cloudflare account that runs it (<span className="font-mono">{dbHost}</span>), then press Update. A token already saved on this device connects by itself.</p>
           {cfAcc.ui}
           <button type="button" className="btn btn-pri btn-sm self-start" disabled={!!busy || !cfAcc.ready} onClick={updateDb}>{busy.startsWith("update") ? (busy.split(":").slice(1).join(":") || "Updating") + "…" : "Update the database"}</button></div>
@@ -171,6 +174,7 @@ export function SitesHostingCard({ session, studio, index, onIndex }: { session:
                     <span className="rounded-full border border-ink-600 px-2 py-0.5 text-[11px]">{h ? PAGES_LABEL[h.kind] : "GitHub Pages"}{h && p.publish ? " + GitHub Pages" : ""}</span>
                     {h && <a className="truncate text-brand-300 underline" href={siteAddress(h)} target="_blank" rel="noopener noreferrer">{siteAddress(h).replace(/^https:\/\//, "")}</a>}
                     <span className={`ml-auto text-[12px] ${everyDevice(p) ? "text-emerald-300" : "text-amber-200"}`}>{everyDevice(p) ? "Works on every device" : h?.kind === "netlify" ? "Netlify token on each device" : "Only devices with its token"}</span>
+                    <button type="button" className="btn btn-danger btn-sm" disabled={!!busy} title="Deletes this site's live copy from every service it uses. The project stays in the Studio." onClick={() => setTear(p)}>Delete &amp; remove</button>
                   </div>
                   {cf && (
                     <div className="flex flex-wrap items-center gap-2">
@@ -197,6 +201,33 @@ export function SitesHostingCard({ session, studio, index, onIndex }: { session:
             })}
           </ul>
         </>}
+      {!(db && info && info.signed && info.cfx && info.imp && info.pages && info.del) && sites.length > 0 && (
+        <ul className="flex flex-col divide-y divide-ink-700 rounded-lg border border-ink-700" aria-label="Hosted sites">
+          {sites.map((p) => (
+            <li key={p.id} className="flex flex-wrap items-center gap-2 p-3 text-[13px]">
+              <a className="font-semibold text-ink-100 underline-offset-2 hover:underline" href={`#/p/${p.id}`}>{p.name}</a>
+              <span className="rounded-full border border-ink-600 px-2 py-0.5 text-[11px]">{p.host ? PAGES_LABEL[p.host.kind] : "GitHub Pages"}{p.host && p.publish ? " + GitHub Pages" : ""}</span>
+              {p.host ? <a className="truncate text-brand-300 underline" href={siteAddress(p.host)} target="_blank" rel="noopener noreferrer">{siteAddress(p.host).replace(/^https:\/\//, "")}</a> : p.publish && <span className="text-ink-400">{p.publish.owner}/{p.publish.repo}</span>}
+              <button type="button" className="btn btn-danger btn-sm ml-auto" disabled={!!busy} title="Deletes this site's live copy from every service it uses. The project stays in the Studio." onClick={() => setTear(p)}>Delete &amp; remove</button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {tear && <TeardownDialog title={`Delete & remove ${tear.name}`} name={tear.name} plan={projectPlan(tear)}
+        keeps="The project itself stays in the Studio as a draft, with its content and photos, so you can publish it again later. Other sites and the databases they share are not touched."
+        run={(step) => teardownProject(tear, { studioToken: session.token, db, step })}
+        onDone={async (r) => {
+          // Forget what was removed; anything that couldn't be removed stays on the project so it can be tried again.
+          const left = (label: string) => r.failed.some((f) => f.startsWith(label));
+          onIndex(await studio.updateIndex((i) => {
+            const m = i.projects.find((x) => x.id === tear.id); if (!m) return;
+            if (m.host && !left("The site") && !left("Content") && !left("Enquiries")) delete m.host;
+            if (m.worker && !left("The shop")) delete m.worker;
+            if (m.inbox && !left("The enquiry inbox")) delete m.inbox;
+            if (m.publish && !left("The GitHub repository")) delete m.publish;
+            if (!m.host && !m.publish) { m.status = "draft"; delete m.siteSha; delete m.syncedAt; }
+          }, `Delete & remove ${tear.name}'s live site`));
+        }} onClose={() => setTear(null)} />}
       {err && <p role="alert" className="text-[13px] text-red-300">{err}</p>}
     </section>
   );

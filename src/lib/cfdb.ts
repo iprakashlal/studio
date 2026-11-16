@@ -279,6 +279,18 @@ export async function cfxImportSite(api: string, studio: string, account: string
   for (const p of order) { step(`Copying the site (${++n} of ${order.length})`); const r = await call({ step: "file", db: s.db, path: p }); if (!r?.ok) missing.push(p); }
   return { files: order, missing, editors: s.editors || 0, enquiries: s.enquiries || 0 };
 }
+/** A site's sign-in emails (the people who can open its admin page with an emailed code): from its own database
+ *  when signed in to it here, else through the Studio's database. */
+export async function siteMembers(cf: { api: string; site: string }, account?: string) {
+  const scope = "scope=" + encodeURIComponent("site:" + cf.site);
+  const l = !cfSession.load(cf.api) && account ? await studioLink(cf.api) : null;
+  const br = l ? (b: any) => cfCall<any>(l.api, `/cfx/db?scope=${encodeURIComponent("studio:" + l.studio)}`, { method: "POST", body: JSON.stringify({ account, site: cf.site, db: dbIds.get(account!), op: "mem", ...b }) }).then((r) => { if (r?.db) dbIds.set(account!, r.db); return r; }) : null;
+  return {
+    list: async (): Promise<{ email: string; role: string }[]> => (br ? (await br({ sub: "list" })).rows || [] : await cfCall<any[]>(cf.api, "/m?" + scope)),
+    add: async (email: string) => { br ? await br({ sub: "add", email }) : await cfCall(cf.api, "/m/add?" + scope, { method: "POST", body: JSON.stringify({ email, role: "owner" }) }); },
+    remove: async (email: string) => { br ? await br({ sub: "remove", email }) : await cfCall(cf.api, "/m/remove?" + scope, { method: "POST", body: JSON.stringify({ email }) }); },
+  };
+}
 /** A site's enquiries: from its own database when signed in to it here, else through the Studio's database. */
 export async function siteEnquiries(cf: { api: string; site: string }, account?: string) {
   const scope = "scope=" + encodeURIComponent("site:" + cf.site);

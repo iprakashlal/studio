@@ -464,7 +464,7 @@ var db_worker_default = {
     if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
     const u = new URL(req.url), p = u.pathname.replace(/\/+$/, "") || "/";
     try {
-      if (p === "/") return json({ ok: true, service: "site-studio-db", v: V, mail: !!(env.RESEND_API_KEY && env.MAIL_FROM), ...env.CF_TOKEN && env.CF_ACCOUNT ? { deploy: true, account: env.CF_ACCOUNT } : {}, ...env.GH_TOKEN ? { gh: true } : {}, ...env.AI ? { ai: true, pamphlet: 2 } : {}, reviews: true, accounts: 2, cfx: 3, studioPages: 1, del: 1, enqMail: 3, ...otherAccounts(env).length ? { more: otherAccounts(env).length } : {} });
+      if (p === "/") return json({ ok: true, service: "site-studio-db", v: V, mail: !!(env.RESEND_API_KEY && env.MAIL_FROM), ...env.CF_TOKEN && env.CF_ACCOUNT ? { deploy: true, account: env.CF_ACCOUNT } : {}, ...env.GH_TOKEN ? { gh: true } : {}, ...env.AI ? { ai: true, pamphlet: 2 } : {}, reviews: true, accounts: 2, cfx: 4, studioPages: 1, del: 1, enqMail: 3, ...otherAccounts(env).length ? { more: otherAccounts(env).length } : {} });
       if (p === "/auth/code" && req.method === "POST") {
         const { email: raw, site: forSite, studio: forStudio } = await req.json();
         const email2 = String(raw || "").trim().toLowerCase();
@@ -764,6 +764,21 @@ var db_worker_default = {
               }
               if (sub === "delete") {
                 await q("delete from enquiries where id = ? and site = ?", [id, site]);
+                return json({ db: dbId, ok: true });
+              }
+              return err(400, "Unknown operation.");
+            }
+            if (op === "mem") {
+              const sub = String(b.sub || "list");
+              if (sub === "list") return json({ db: dbId, rows: await q("select email, role from members where scope = ? order by email", [S2]) });
+              const e = String(b.email || "").trim().toLowerCase();
+              if (!emailOk(e)) return err(400, "Enter a valid email.");
+              if (sub === "add") {
+                await q("insert into members (scope, email, role) values (?, ?, 'owner') on conflict (scope, email) do nothing", [S2, e]);
+                return json({ db: dbId, ok: true });
+              }
+              if (sub === "remove") {
+                await q("delete from members where scope = ? and email = ?", [S2, e]);
                 return json({ db: dbId, ok: true });
               }
               return err(400, "Unknown operation.");

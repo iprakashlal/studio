@@ -9,7 +9,7 @@
   "use strict";
   var esc = function (s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); };
   var CSS = [
-    ".sa-chat,.sa-badge{position:fixed;bottom:calc(18px + env(safe-area-inset-bottom,0px) + var(--sa-lift,0px));z-index:2147482000;font:600 14.5px/1 var(--fb,system-ui,sans-serif);text-decoration:none;display:inline-flex;align-items:center;gap:9px;box-shadow:0 8px 26px rgba(0,0,0,.22);transition:transform .18s}",
+    ".sa-chat,.sa-badge{position:fixed;bottom:calc(18px + env(safe-area-inset-bottom,0px) + var(--sa-lift,0px) + var(--sf-bottom,0px));z-index:2147482000;font:600 14.5px/1 var(--fb,system-ui,sans-serif);text-decoration:none;display:inline-flex;align-items:center;gap:9px;box-shadow:0 8px 26px rgba(0,0,0,.22);transition:transform .18s}",
     ".sa-chat[data-side=right],.sa-badge[data-side=right]{right:18px}.sa-chat[data-side=left],.sa-badge[data-side=left]{left:18px}",
     ".sa-chat{height:54px;min-width:54px;padding:0 15px;border-radius:99px;background:var(--sa-bg,#25D366);color:#fff;justify-content:center}.sa-chat:hover,.sa-badge[href]:hover{transform:translateY(-2px)}.sa-chat svg{width:26px;height:26px;flex:none}",
     ".sa-chat.sa-icon{padding:0;width:54px}",

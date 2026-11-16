@@ -11,6 +11,8 @@ export type Field =
    *  rich: buttons for the reading-page marks (headings, lists, tables, text styles; see src/fx/pages.js). */
   | { t: "textarea"; path: string; label: string; hint?: string; rows?: number; pdf?: boolean; rich?: boolean }
   | { t: "number"; path: string; label: string; hint?: string; min?: number; step?: number }
+  /** A calendar day, kept as YYYY-MM-DD ("" when empty). */
+  | { t: "date"; path: string; label: string; hint?: string }
   | { t: "select"; path: string; label: string; options: Opt[] }
   /** A select whose options come from a list elsewhere in the content (e.g. product → category). */
   | { t: "ref"; path: string; label: string; source: string; valueKey: string; labelKey: string; empty?: string }

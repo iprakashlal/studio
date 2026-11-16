@@ -78,6 +78,12 @@ export function FieldView({ f, obj, base }: { f: F; obj: any; base: string }) {
           <input id={id} className="input" value={val ?? ""} placeholder={f.ph} spellCheck={!f.check} onChange={(e) => set(e.target.value)} />
         </Field>
       );
+    case "date":
+      return (
+        <Field label={f.label} htmlFor={id} hint={f.hint}>
+          <input id={id} className="input" type="date" value={/^\d{4}-\d{2}-\d{2}$/.test(String(val ?? "")) ? val : ""} onChange={(e) => set(e.target.value)} />
+        </Field>
+      );
     case "textarea":
       return (
         <Field label={f.label} htmlFor={id} hint={f.hint}>

@@ -44,3 +44,8 @@ export const hides = (client: boolean | undefined, index: { clientFeatures?: Cli
   const set = new Set(client ? cleanFeatures(index?.clientFeatures).hide : []);
   return (key: string) => set.has(key);
 };
+
+// Editor sections a client Studio doesn't show (its partner switched the feature off), e.g. "festival".
+let hiddenSections = new Set<string>();
+export const setStudioHidden = (ids: string[]) => { hiddenSections = new Set(ids); };
+export const studioHidden = () => hiddenSections;

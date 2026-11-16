@@ -1,3 +1,4 @@
+import { FESTIVALS, FESTIVAL_DECOS, festivalWhen } from "../lib/festivals";
 // Settings both templates share: where the site's own CMS lives.
 import type { Category, Field } from "./types";
 
@@ -60,6 +61,63 @@ export function emailsCategory(form: boolean): Category {
       ] },
       { title: "If the wording doesn't change", studio: true, fields: [
         { t: "note", text: "Templates need the database updated once after 16 November 2026: Settings → Hostings → Update the database (for a site with its own database, save its Email settings in Publish to Cloudflare). Sites without the Cloudflare database don't send these emails." },
+      ] },
+    ],
+  };
+}
+
+/** Older content gets the festival overlay's fields: off until the Studio offers it, then on by itself; one row
+ *  for every festival in the list (new festivals are added, the site's own choices kept). */
+export function prepareFestival(c: any) {
+  if (!c || typeof c !== "object") return;
+  const f = c.festival && typeof c.festival === "object" ? c.festival : {};
+  const have: any[] = Array.isArray(f.items) ? f.items.filter((x: any) => x && typeof x === "object") : [];
+  c.festival = { allowed: f.allowed === true, on: f.on !== false, style: f.style || "both", position: f.position || "top", lead: String(f.lead ?? 2), signoff: f.signoff !== false, preview: f.preview || "",
+    items: FESTIVALS.map((d) => { const x = have.find((h) => h.id === d.id) || {}; return { id: d.id, name: d.name, on: x.on !== false, from: x.from || "", to: x.to || "", message: x.message || "" }; }),
+    custom: Array.isArray(f.custom) ? f.custom : [] };
+}
+/** Features → Festival overlay: greetings and decorations on India's festivals (assets/festival.js). The Studio
+ *  decides for each site whether its owner gets this (festival.allowed); once offered it runs by itself on the
+ *  official days, and the owner picks festivals, dates and wording, or switches it off. */
+export function festivalCategory(): Category {
+  const g2 = (...fields: Field[]): Field => ({ t: "grid", cols: 2, fields });
+  const byId = (id: string) => FESTIVALS.find((d) => d.id === id);
+  return {
+    id: "festival", label: "Festival overlay", group: "Features",
+    desc: "A greeting ribbon and a short shower of decorations on India's festivals. It shows by itself on the official days; choose the festivals, change the dates or wording, or switch it off.",
+    cards: [
+      { title: "Offer this to the site", studio: true, fields: [
+        { t: "toggle", path: "festival.allowed", label: "This site gets the festival overlay" },
+        { t: "note", text: "Your decision as the Studio, for this site only. While it is off, nothing shows on the site and its admin page has no Festival overlay section. Once it is on, the site's owner can pick festivals and dates or switch it off in their admin page. Publish to apply." },
+      ] },
+      { title: "Festival overlay", fields: [
+        { t: "toggle", path: "festival.on", label: "Show festival greetings on the site" },
+        { t: "when", path: "festival.on", is: "true", fields: [
+          g2({ t: "select", path: "festival.style", label: "What shows", options: [{ value: "both", label: "Greeting ribbon and falling decorations" }, { value: "ribbon", label: "Greeting ribbon only" }, { value: "deco", label: "Falling decorations only" }] },
+            { t: "select", path: "festival.position", label: "Ribbon position", options: [{ value: "top", label: "Top of the page" }, { value: "bottom", label: "Bottom of the page" }] },
+            { t: "select", path: "festival.lead", label: "Start showing", options: [{ value: "0", label: "On the day" }, { value: "1", label: "1 day before" }, { value: "2", label: "2 days before" }, { value: "3", label: "3 days before" }, { value: "5", label: "5 days before" }, { value: "7", label: "A week before" }] },
+            { t: "toggle", path: "festival.signoff", label: "Add “from <your site's name>” to the greeting" }),
+          { t: "select", path: "festival.preview", label: "Try one in the preview", options: [{ value: "", label: "None (the preview follows today's date)" }, ...FESTIVALS.map((d) => ({ value: d.id, label: d.name }))] },
+          { t: "note", text: "“Try one in the preview” only changes this preview, so you can see a festival before its day; visitors always get today's festival. Visitors see the ribbon until they close it and the decorations once per visit, for about 15 seconds. Nothing shows for visitors who have asked their device for less motion. When two festivals fall together, the one ending first shows." },
+        ] },
+      ] },
+      { title: "Festivals", fields: [
+        { t: "note", text: "Every festival is on with its official days. Open one to switch it off, give it your own days, or write your own greeting. Festivals that follow the moon (Eid) can shift by a day: set the day yourself once it is announced." },
+        { t: "list", path: "festival.items", fixed: true, add: () => ({}), title: (it) => { const d = byId(it?.id); return `${it?.name || d?.name || "Festival"} · ${it?.on === false ? "off" : it?.from ? `your days: ${it.from}${it.to && it.to !== it.from ? " to " + it.to : ""}` : d ? festivalWhen(d) : ""}`; },
+          item: [
+            { t: "toggle", path: "on", label: "Celebrate this festival on the site" },
+            g2({ t: "date", path: "from", label: "Show from (optional)", hint: "Empty: the official day, with the lead days above." }, { t: "date", path: "to", label: "Show until (optional)", hint: "Empty: the same day as “from”." }),
+            { t: "text", path: "message", label: "Greeting (optional)", ph: "the usual greeting, e.g. Happy Diwali", hint: "{site} adds your site's name." },
+          ] },
+      ] },
+      { title: "Your own occasions", fields: [
+        { t: "note", text: "Add days of your own: a regional festival, your anniversary, a sale. These come before the festivals above when they fall on the same day." },
+        { t: "list", path: "festival.custom", max: 20, add: () => ({ name: "", deco: "confetti", from: "", to: "", message: "", on: true }), title: (it) => `${it?.name || "New occasion"}${it?.from ? ` · ${it.from}${it.to && it.to !== it.from ? " to " + it.to : ""}` : " · no date yet"}${it?.on === false ? " · off" : ""}`,
+          item: [
+            g2({ t: "text", path: "name", label: "Name", ph: "Pongal, Durga Puja, our 10th anniversary" }, { t: "select", path: "deco", label: "Decorations", options: FESTIVAL_DECOS }),
+            g2({ t: "date", path: "from", label: "Show from" }, { t: "date", path: "to", label: "Show until (optional)" }),
+            { t: "text", path: "message", label: "Greeting", ph: "Happy Pongal" }, { t: "toggle", path: "on", label: "On" },
+          ] },
       ] },
     ],
   };
@@ -266,7 +324,7 @@ export const maintenanceDefault = () => ({ on: false, title: "We'll be back soon
 export function prepareMaintenance(c: any) {
   if (!c || typeof c !== "object") return;
   const d = maintenanceDefault(), m = c.maintenance && typeof c.maintenance === "object" ? c.maintenance : {};
-  prepareAddons(c); prepareEmails(c);
+  prepareAddons(c); prepareEmails(c); prepareFestival(c);
   c.maintenance = { ...d, ...m, button: { ...d.button, ...(m.button && typeof m.button === "object" ? m.button : {}) } };
 }
 export function prepareSlides(hero: any, overlayColor?: string) {

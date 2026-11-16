@@ -1,5 +1,5 @@
 import { SitesHostingCard } from "./SitesHostingCard";
-import { hides, limitsOf, useClientStudio } from "../lib/features";
+import { hides, limitsOf, setStudioHidden, useClientStudio } from "../lib/features";
 import { setThemeLimit } from "../themes/limit";
 import { DASH_DEFAULT, DASH_STATS } from "../lib/dashstats";
 import { TEMPLATES } from "../schema";
@@ -54,6 +54,7 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
   // A client Studio's limits: how many themes it offers and how many sites of each type it may have.
   const limits = useMemo(() => limitsOf(client, index), [client, index]);
   useEffect(() => { if (client !== undefined && index) setThemeLimit(limits.themes); }, [client, index, limits.themes]);
+  useEffect(() => { setStudioHidden(hid("festival") ? ["festival"] : []); }, [hid]);
   const [err, setErr] = useState("");
   const [bootAt, setBootAt] = useState(0);
   const hash = useHash();

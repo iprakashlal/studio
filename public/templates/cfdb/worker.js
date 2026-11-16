@@ -12,7 +12,7 @@ create index if not exists enquiries_site on enquiries (site, created_at);
 create table if not exists workers (worker text primary key, scope text not null);
 create table if not exists repos (repo text primary key, scope text not null);
 `;
-var CFDB_VERSION = 11;
+var CFDB_VERSION = 12;
 var CFDB_WORKER_NAME = "picaffectz-db";
 
 // worker/db-worker.ts
@@ -103,31 +103,55 @@ async function sendMail(env, to, subject, html, replyTo) {
   if (!r.ok) throw new Error("Resend didn't accept the email (" + r.status + "): " + (await r.text()).slice(0, 200));
 }
 var EMAIL_RE = /^[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+$/;
+var hesc = (x) => String(x).replace(/[&<>"]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[ch]);
+var oneLine = (x) => String(x).replace(/[\r\n]+/g, " ").trim();
+var fill = (t, vars) => String(t).replace(/\{(\w+)\}/g, (m, k) => k in vars ? vars[k] : m);
+var paras = (t, style = "margin:0 0 12px") => String(t).trim().split(/\n\s*\n/).filter((p) => p.trim()).map((p) => `<p style="${style}">${hesc(p.trim()).replace(/\n/g, "<br>")}</p>`).join("");
+var WRAP = (inner) => `<div style="font:15px/1.55 system-ui,Segoe UI,Arial,sans-serif;color:#111;max-width:560px">${inner}</div>`;
+async function siteContent(env, site) {
+  const f = await readFile(env, "site:" + site, "content.json");
+  if (!f) return null;
+  try {
+    return JSON.parse(new TextDecoder().decode(f.bytes));
+  } catch {
+    return null;
+  }
+}
+var siteName = (c, site) => oneLine(String(c?.brand?.name || c?.brand?.logoText || site));
 async function notifyEnquiry(env, site, data, page) {
   if (!env.RESEND_API_KEY || !env.MAIL_FROM) return;
-  const f = await readFile(env, "site:" + site, "content.json");
-  if (!f) return;
-  let c;
-  try {
-    c = JSON.parse(new TextDecoder().decode(f.bytes));
-  } catch {
-    return;
-  }
-  const F = c?.contact?.form;
-  if (!F || F.notify !== true) return;
-  const to = [...new Set(String(F.notifyTo || c?.contact?.email || "").split(/[,;\s]+/).map((x) => x.trim().toLowerCase()).filter((x) => EMAIL_RE.test(x)))].slice(0, 3);
-  if (!to.length) return;
+  const c = await siteContent(env, site);
+  if (!c) return;
+  const F = c?.contact?.form || {}, E = c?.emails && typeof c.emails === "object" ? c.emails : {};
+  const wantOwner = F.notify === true, wantReply = E.reply?.on === true && EMAIL_RE.test(data.email || "");
+  if (!wantOwner && !wantReply) return;
   const since = new Date(Date.now() - 36e5).toISOString();
   const n = await env.DB.prepare("select count(*) n from enquiries where site = ? and created_at > ?").bind(site, since).first();
   if ((n?.n || 0) > 40) return;
-  const esc = (x) => x.replace(/[&<>"]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[ch]);
-  const one = (x) => x.replace(/[\r\n]+/g, " ").trim();
-  const name = one(String(c?.brand?.name || c?.brand?.logoText || site));
-  const subject = one(String(F.notifySubject || "New enquiry from {name}").replace(/\{name\}/g, data.name || "your website").replace(/\{site\}/g, name)).slice(0, 150) || "New enquiry";
+  const name = siteName(c, site);
+  const owners = [...new Set(String(F.notifyTo || c?.contact?.email || "").split(/[,;\s]+/).map((x) => x.trim().toLowerCase()).filter((x) => EMAIL_RE.test(x)))].slice(0, 3);
+  const vars = { name: oneLine(data.name || ""), site: name, page: page || "", email: oneLine(data.email || "") };
   const label = (k) => k.replace(/[-_]+/g, " ").replace(/^./, (ch) => ch.toUpperCase());
-  const rows = Object.entries(data).filter(([k]) => k !== "consent").map(([k, v]) => `<tr><td style="padding:6px 14px 6px 0;color:#667;vertical-align:top;white-space:nowrap">${esc(label(k))}</td><td style="padding:6px 0;white-space:pre-wrap">${esc(v)}</td></tr>`).join("");
-  const html = `<div style="font:15px/1.5 system-ui,Segoe UI,Arial,sans-serif;color:#111"><p style="margin:0 0 12px"><b>New enquiry</b> from the ${esc(name)} website${page ? ` (page ${esc(page)})` : ""}.</p><table style="border-collapse:collapse">${rows}</table><p style="margin:16px 0 0;color:#667;font-size:13px">It is also saved under Enquiries in the site's admin page.${EMAIL_RE.test(data.email || "") ? " Reply to this email to answer the visitor." : ""}</p></div>`;
-  await sendMail(env, to, subject, html, EMAIL_RE.test(data.email || "") ? data.email : void 0);
+  const rows = Object.entries(data).filter(([k]) => k !== "consent").map(([k, v]) => `<tr><td style="padding:6px 14px 6px 0;color:#667;vertical-align:top;white-space:nowrap">${hesc(label(k))}</td><td style="padding:6px 0;white-space:pre-wrap">${hesc(v)}</td></tr>`).join("");
+  const table = `<table style="border-collapse:collapse;margin:0 0 14px">${rows}</table>`;
+  const jobs = [];
+  if (wantOwner && owners.length) {
+    const subject = oneLine(fill(String(F.notifySubject || "New enquiry from {name}"), { ...vars, name: vars.name || "your website" })).slice(0, 150) || "New enquiry";
+    const intro = fill(String(E.enquiry?.intro || "New enquiry from the {site} website."), vars);
+    const foot = fill(String(E.enquiry?.footer || "It is also saved under Enquiries in the site's admin page."), vars) + (EMAIL_RE.test(data.email || "") ? " Reply to this email to answer the visitor." : "");
+    jobs.push(sendMail(env, owners, subject, WRAP(paras(intro) + table + paras(foot, "margin:0 0 8px;color:#667;font-size:13px")), EMAIL_RE.test(data.email || "") ? data.email : void 0));
+  }
+  if (wantReply) {
+    const mine = await env.DB.prepare("select count(*) n from enquiries where site = ? and created_at > ? and instr(lower(data), ?) > 0").bind(site, since, JSON.stringify(String(data.email).toLowerCase())).first();
+    if ((mine?.n || 0) <= 3) {
+      const v2 = { ...vars, name: vars.name || "there" };
+      const subject = oneLine(fill(String(E.reply.subject || "Thank you for contacting {site}"), v2)).slice(0, 150) || "Thank you";
+      const body = fill(String(E.reply.message || "Hi {name},\n\nThank you for your message. We have received it and will get back to you soon.\n\n{site}"), v2);
+      const copy = E.reply.copy === true ? `<p style="margin:14px 0 6px;color:#667;font-size:13px">${hesc(String(E.reply.copyLabel || "What you sent us"))}</p>${table}` : "";
+      jobs.push(sendMail(env, String(data.email).trim(), subject, WRAP(paras(body) + copy), owners[0] || (EMAIL_RE.test(c?.contact?.email || "") ? c.contact.email : void 0)));
+    }
+  }
+  await Promise.allSettled(jobs);
 }
 var ENT = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ", rsquo: "\u2019", lsquo: "\u2018", rdquo: "\u201D", ldquo: "\u201C", ndash: "\u2013", mdash: "\u2014", hellip: "\u2026" };
 var unent = (t) => t.replace(/&(#x?[0-9a-f]+|\w+);/gi, (m, e) => e[0] === "#" ? String.fromCodePoint(parseInt(e[1] === "x" || e[1] === "X" ? e.slice(2) : e.slice(1), e[1] === "x" || e[1] === "X" ? 16 : 10) || 32) : ENT[e.toLowerCase()] ?? m);
@@ -431,9 +455,9 @@ var db_worker_default = {
     if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
     const u = new URL(req.url), p = u.pathname.replace(/\/+$/, "") || "/";
     try {
-      if (p === "/") return json({ ok: true, service: "site-studio-db", v: V, mail: !!(env.RESEND_API_KEY && env.MAIL_FROM), ...env.CF_TOKEN && env.CF_ACCOUNT ? { deploy: true, account: env.CF_ACCOUNT } : {}, ...env.GH_TOKEN ? { gh: true } : {}, ...env.AI ? { ai: true, pamphlet: 2 } : {}, reviews: true, accounts: 2, cfx: 3, studioPages: 1, del: 1, enqMail: 1, ...otherAccounts(env).length ? { more: otherAccounts(env).length } : {} });
+      if (p === "/") return json({ ok: true, service: "site-studio-db", v: V, mail: !!(env.RESEND_API_KEY && env.MAIL_FROM), ...env.CF_TOKEN && env.CF_ACCOUNT ? { deploy: true, account: env.CF_ACCOUNT } : {}, ...env.GH_TOKEN ? { gh: true } : {}, ...env.AI ? { ai: true, pamphlet: 2 } : {}, reviews: true, accounts: 2, cfx: 3, studioPages: 1, del: 1, enqMail: 2, ...otherAccounts(env).length ? { more: otherAccounts(env).length } : {} });
       if (p === "/auth/code" && req.method === "POST") {
-        const { email: raw } = await req.json();
+        const { email: raw, site: forSite } = await req.json();
         const email2 = String(raw || "").trim().toLowerCase();
         if (!emailOk(email2)) return err(400, "Enter a valid email.");
         const known = await env.DB.prepare("select 1 from members where email = ? limit 1").bind(email2).first();
@@ -442,7 +466,20 @@ var db_worker_default = {
         if (prev && Date.now() - prev.sent < 45e3) return err(429, "A code was just sent. Wait a minute before asking for another.");
         const code = String(1e5 + crypto.getRandomValues(new Uint32Array(1))[0] % 9e5);
         await env.DB.prepare("insert into codes (email, hash, expires, tries, sent) values (?, ?, ?, 0, ?) on conflict (email) do update set hash = excluded.hash, expires = excluded.expires, tries = 0, sent = excluded.sent").bind(email2, b64u(await hmac(env.SECRET, "c:" + email2 + ":" + code)), Date.now() + 10 * 6e4, Date.now()).run();
-        await sendMail(env, email2, "Your sign-in code", `<h2>Your sign-in code</h2><p>Enter this code to sign in${env.NAME ? " to " + env.NAME : ""}:</p><p style="font-size:28px;font-weight:700;letter-spacing:6px">${code}</p><p>It works for 10 minutes. If you didn't ask for it, ignore this email.</p>`);
+        let subject = "Your sign-in code", intro = `Enter this code to sign in${env.NAME ? " to " + env.NAME : ""}:`, footer = "It works for 10 minutes. If you didn't ask for it, ignore this email.", heading = "Your sign-in code";
+        if (typeof forSite === "string" && /^[a-z0-9][a-z0-9-]{0,59}$/.test(forSite) && await env.DB.prepare("select 1 from members where email = ? and scope = ? limit 1").bind(email2, "site:" + forSite).first()) {
+          const c = await siteContent(env, forSite).catch(() => null), T = c?.emails?.signin;
+          if (T && typeof T === "object") {
+            const vars = { site: siteName(c, forSite), email: email2 };
+            if (T.subject) {
+              subject = oneLine(fill(String(T.subject), vars)).slice(0, 150) || subject;
+              heading = subject;
+            }
+            if (T.intro) intro = fill(String(T.intro), vars);
+            if (T.footer) footer = fill(String(T.footer), vars);
+          }
+        }
+        await sendMail(env, email2, subject, WRAP(`<h2 style="margin:0 0 12px;font-size:20px">${hesc(heading)}</h2>${paras(intro)}<p style="font-size:28px;font-weight:700;letter-spacing:6px;margin:0 0 14px">${code}</p>${paras(footer, "margin:0 0 8px;color:#667;font-size:13px")}`));
         return json({ ok: true });
       }
       if (p === "/auth/verify" && req.method === "POST") {

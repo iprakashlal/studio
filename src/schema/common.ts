@@ -12,6 +12,59 @@ export function adminSlug(raw: unknown): string {
 /** The admin page's file name for this content, e.g. "admin.html". */
 export const adminFile = (content: any) => adminSlug(content?.cms?.adminPage) + ".html";
 
+export const emailsDefault = () => ({
+  signin: { subject: "", intro: "", footer: "" },
+  enquiry: { intro: "", footer: "" },
+  reply: { on: false, subject: "", message: "", copy: false },
+});
+/** Older content gets the email templates' fields (empty: the standard wording). */
+export function prepareEmails(c: any) {
+  if (!c || typeof c !== "object") return;
+  const d = emailsDefault(), e = c.emails && typeof c.emails === "object" ? c.emails : {};
+  const obj = (x: any) => (x && typeof x === "object" && !Array.isArray(x) ? x : {});
+  c.emails = { signin: { ...d.signin, ...obj(e.signin) }, enquiry: { ...d.enquiry, ...obj(e.enquiry) }, reply: { ...d.reply, ...obj(e.reply) } };
+}
+/** Email templates: the wording of the emails this site sends from its Cloudflare database. `form`: the template
+ *  has an enquiry form (so also the enquiry email and the thank-you to the visitor). */
+export function emailsCategory(form: boolean): Category {
+  const g2 = (...fields: Field[]): Field => ({ t: "grid", cols: 2, fields });
+  return {
+    id: "emails", label: "Email templates", group: "Forms & records",
+    desc: "The wording of the emails this site sends. Leave a box empty to keep the standard wording shown in grey.",
+    cards: [
+      { title: "How templates work", fields: [
+        { t: "note", text: "Write plain text: a blank line starts a new paragraph. These words in curly brackets are filled in when the email is sent: {site} the site's name, {name} the visitor's name, {email} the visitor's email, {page} the page the form was on. The emails are sent by the site's Cloudflare database through your Resend email settings, and a change here starts once you publish." },
+      ] },
+      ...(form ? [
+        { title: "Enquiry email to you", fields: [
+          { t: "note", text: "Sent to you for each enquiry when “Also email me each enquiry” is on (Enquiry form). The visitor's answers are listed between the opening and closing lines." },
+          { t: "text", path: "contact.form.notifySubject", label: "Subject", ph: "New enquiry from {name}" },
+          { t: "textarea", path: "emails.enquiry.intro", label: "Opening line", rows: 2, hint: "Standard: New enquiry from the {site} website." },
+          { t: "textarea", path: "emails.enquiry.footer", label: "Closing line", rows: 2, hint: "Standard: It is also saved under Enquiries in the site's admin page." },
+        ] as Field[] },
+        { title: "Thank-you email to the visitor", fields: [
+          { t: "toggle", path: "emails.reply.on", label: "Send the visitor a thank-you email when they send the form" },
+          { t: "when", path: "emails.reply.on", is: "true", fields: [
+            { t: "text", path: "emails.reply.subject", label: "Subject", ph: "Thank you for contacting {site}" },
+            { t: "textarea", path: "emails.reply.message", label: "Message", rows: 7, hint: "Standard: Hi {name}, / Thank you for your message. We have received it and will get back to you soon. / {site}" },
+            { t: "toggle", path: "emails.reply.copy", label: "Add a copy of what they sent" },
+            { t: "note", text: "It goes to the email address the visitor typed, and their reply comes to your enquiry address. One address gets at most 3 of these an hour." },
+          ] },
+        ] as Field[] },
+      ] : []),
+      { title: "Sign-in code email", fields: [
+        { t: "note", text: "Sent to you and your editors when signing in to this admin page. The 6-digit code always sits between the opening and closing lines." },
+        { t: "text", path: "emails.signin.subject", label: "Subject and heading", ph: "Your sign-in code" },
+        g2({ t: "textarea", path: "emails.signin.intro", label: "Opening line", rows: 3, hint: "Standard: Enter this code to sign in:" },
+          { t: "textarea", path: "emails.signin.footer", label: "Closing line", rows: 3, hint: "Standard: It works for 10 minutes. If you didn't ask for it, ignore this email." }),
+      ] },
+      { title: "If the wording doesn't change", studio: true, fields: [
+        { t: "note", text: "Templates need the database updated once after 16 November 2026: Settings → Hostings → Update the database (for a site with its own database, save its Email settings in Publish to Cloudflare). Sites without the Cloudflare database don't send these emails." },
+      ] },
+    ],
+  };
+}
+
 export const addonsDefault = () => ({
   chat: { on: false, kind: "whatsapp", value: "", label: "Chat with us", message: "", side: "right", showLabel: true, color: "" },
   badge: { on: false, text: "", api: "", field: "", link: "", side: "left" },
@@ -212,7 +265,7 @@ export const maintenanceDefault = () => ({ on: false, title: "We'll be back soon
 export function prepareMaintenance(c: any) {
   if (!c || typeof c !== "object") return;
   const d = maintenanceDefault(), m = c.maintenance && typeof c.maintenance === "object" ? c.maintenance : {};
-  prepareAddons(c);
+  prepareAddons(c); prepareEmails(c);
   c.maintenance = { ...d, ...m, button: { ...d.button, ...(m.button && typeof m.button === "object" ? m.button : {}) } };
 }
 export function prepareSlides(hero: any, overlayColor?: string) {

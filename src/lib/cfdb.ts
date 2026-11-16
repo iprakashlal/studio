@@ -53,7 +53,8 @@ export async function cfCall<T = any>(api: string, path: string, init: RequestIn
   if (!r.ok) { const j = await r.json().catch(() => null); throw new CfDbError(j?.error || `The database answered ${r.status}.`, r.status); }
   return !raw && (r.headers.get("content-type") || "").includes("json") ? r.json() : (r as any);
 }
-export const cfSendCode = (api: string, email: string) => cfCall(api, "/auth/code", { method: "POST", auth: false, body: JSON.stringify({ email }) });
+/** `site`: the site whose admin page is asking, so the email uses that site's own sign-in template. */
+export const cfSendCode = (api: string, email: string, site?: string) => cfCall(api, "/auth/code", { method: "POST", auth: false, body: JSON.stringify(site ? { email, site } : { email }) });
 export async function cfVerifyCode(api: string, email: string, code: string) {
   const j = await cfCall<{ token: string; email: string }>(api, "/auth/verify", { method: "POST", auth: false, body: JSON.stringify({ email, code }) });
   cfSession.save(api, { email: j.email, token: j.token });
@@ -195,7 +196,7 @@ export const resendTestOnly = (msg: string): string | null => /own email address
 // ---------------------------------------------------------------- publishing from any device
 /** Whether this database keeps a Cloudflare token for publishing (and for which account). */
 export async function cfDeployInfo(api: string): Promise<{ cfx?: boolean; cfxImport?: boolean; bridge?: boolean; studioPages?: boolean; del?: boolean; enqMail?: boolean; deploy: boolean; account?: string; gh?: boolean; ai?: boolean; reviews?: boolean; pamphlet?: boolean; accounts?: boolean; more?: number }> {
-  try { const j = await (await fetch(clean(api) + "/", { cache: "no-store" })).json(); return { deploy: !!j?.deploy, account: j?.account, gh: !!j?.gh, ai: !!j?.ai, reviews: !!j?.reviews, cfx: !!j?.cfx, cfxImport: (+j?.cfx || 0) >= 2, bridge: (+j?.cfx || 0) >= 3, studioPages: !!j?.studioPages, del: !!j?.del, enqMail: !!j?.enqMail, pamphlet: (+j?.pamphlet || 0) >= 2, accounts: (+j?.accounts || 0) >= 2, more: +j?.more || 0 }; } catch { return { deploy: false }; }
+  try { const j = await (await fetch(clean(api) + "/", { cache: "no-store" })).json(); return { deploy: !!j?.deploy, account: j?.account, gh: !!j?.gh, ai: !!j?.ai, reviews: !!j?.reviews, cfx: !!j?.cfx, cfxImport: (+j?.cfx || 0) >= 2, bridge: (+j?.cfx || 0) >= 3, studioPages: !!j?.studioPages, del: !!j?.del, enqMail: (+j?.enqMail || 0) >= 2, pamphlet: (+j?.pamphlet || 0) >= 2, accounts: (+j?.accounts || 0) >= 2, more: +j?.more || 0 }; } catch { return { deploy: false }; }
 }
 /** GitHub calls through the database (its kept token) as a signed-in owner of `scope`: a fetch-like Response. */
 export function dbGitHub(api: string, scope: string) {

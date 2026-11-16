@@ -17,7 +17,7 @@ export function CfGate({ cf, brand, onIn }: { cf: CfSiteCfg; brand: string; onIn
   const [own, setOwn] = useState<string | null>(null);
   const send = async (e?: React.FormEvent, to = email.trim()) => {
     e?.preventDefault(); setErr(""); setOwn(null); setBusy(true);
-    try { await cfSendCode(cf.api, to); setEmail(to); setSent(true); }
+    try { await cfSendCode(cf.api, to, cf.site); setEmail(to); setSent(true); }
     catch (x: any) {
       const o = resendTestOnly(x?.message || "");
       if (o && o !== to.toLowerCase()) { setOwn(o); setErr(`This site's sign-in email is still in test mode, so codes can only go to ${o}. Sign in with that address, or ask the site's owner to send codes from the site's domain (Studio → hosting window → Email settings).`); }

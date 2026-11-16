@@ -1,5 +1,5 @@
 // Admin menus: the Studio can rename, reorder, regroup and combine the sections of each template's editor
-// (Settings → Admin menus). Sites' admin pages get the setting in cms/site.json; the Studio's own editor uses
+// (Settings → Customize → Admin menus). Sites' admin pages get the setting in cms/site.json; the Studio's own editor uses
 // it too when "Use in the Studio" is on.
 import type { Card, Category } from "../schema/types";
 

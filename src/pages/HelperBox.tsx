@@ -62,13 +62,13 @@ export function useHelper(studioToken: string, nf: Netlify | null | undefined, w
         <input aria-label="Cloudflare API token for the helper" className="input font-mono text-xs" type="password" autoComplete="off" placeholder="Cloudflare API token" value={cfTok} onChange={(e) => setCfTok(e.target.value)} />
       </div>}
       {err && <p role="alert" className="text-red-300">{err}</p>}
-      {!nf && <p className="text-ink-500">Prefer Netlify? Connect it in Settings → Hosting accounts and the Studio puts the helper there by itself.</p>}
+      {!nf && <p className="text-ink-500">Prefer Netlify? Connect it in Settings → Hostings → Hosting accounts and the Studio puts the helper there by itself.</p>}
     </div>
   );
   return { relay: ok ? relay! : null, ready: ok || (!!nf && relay?.kind !== "cloudflare"), ui, get };
 }
 
-/** Settings → Hosting accounts: where the helper is, with a way to set it up on Cloudflare or forget it. */
+/** Settings → Hostings → Hosting accounts: where the helper is, with a way to set it up on Cloudflare or forget it. */
 export function HelperStatus({ studioToken, nf }: { studioToken: string; nf: Netlify | null }) {
   const h = useHelper(studioToken, nf);
   const [shown, setShown] = useState<Relay | null | undefined>(undefined);

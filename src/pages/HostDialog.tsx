@@ -113,7 +113,7 @@ export function HostDialog({ studio, project, tpl, draft, dirty, save, onIndex, 
   const cfAcc = useCfAccount(session.token, nf, true, false, { id: siteAccount, set: setSiteAccount });
   const cfp = useCloudflarePicker(session.token, nf, true, undefined, cfAcc);
   // Without the token on this device, an existing Cloudflare site publishes through the Studio's database (when it
-  // keeps the token: Settings → Hosting accounts → Publish from any device) as a signed-in owner.
+  // keeps the token: Settings → Hostings → Hosting accounts → Publish from any device) as a signed-in owner.
   const [viaDb, setViaDb] = useState<Pages | null>(null);
   // Which Cloudflare account this site's pages are on (sites can live on different accounts: an old one, a client's).
   const siteAcc = siteAccount || cfAcc.account?.id || "";
@@ -351,7 +351,7 @@ export function HostDialog({ studio, project, tpl, draft, dirty, save, onIndex, 
       {otherDb && !bridged && !cfSigned && (
         <section className="flex flex-col gap-2 rounded-xl border border-brand-400/40 bg-brand-500/5 p-4 text-[13px]" aria-label="Reach this site from every device">
           <b className="text-sm">This site has its own database</b>
-          <span className="text-ink-300">Its content, photos and editors stay in <span className="font-mono">{host!.cf!.api.replace(/^https:\/\//, "")}</span> on its own Cloudflare account. To reach it from every device without signing in to it separately, add that account in <b>Settings → Sites and hosting accounts</b>. Or sign in to it below with an email code (this device only).</span>
+          <span className="text-ink-300">Its content, photos and editors stay in <span className="font-mono">{host!.cf!.api.replace(/^https:\/\//, "")}</span> on its own Cloudflare account. To reach it from every device without signing in to it separately, add that account in <b>Settings → Hostings → Sites and hosting accounts</b>. Or sign in to it below with an email code (this device only).</span>
         </section>
       )}
       <section className="flex flex-col gap-3 rounded-xl border border-ink-700 bg-ink-950 p-4" aria-label="Supabase">

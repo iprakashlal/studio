@@ -41,7 +41,7 @@ export interface Repo {
 }
 
 /** Said when a GitHub copy can't be reached because this Studio has no GitHub token yet. */
-export const NO_GH_TOKEN = "This Studio has no GitHub token yet (it signs in by email). Add one in Settings → Hosting accounts → GitHub publishing to check or publish this GitHub copy, or ignore it if you no longer use it.";
+export const NO_GH_TOKEN = "This Studio has no GitHub token yet (it signs in by email). Add one in Settings → Hostings → Hosting accounts → GitHub publishing to check or publish this GitHub copy, or ignore it if you no longer use it.";
 export function explain(e: unknown): string {
   const err = e as RepoError;
   if (err && err.message === NO_GH_TOKEN) return NO_GH_TOKEN;

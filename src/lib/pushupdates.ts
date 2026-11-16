@@ -74,7 +74,7 @@ export async function pushTarget(t: LiveTarget, o: { studio: Studio; pages: (h: 
 
   if (t.kind === "hosted") {
     const pages = await o.pages(p.host!);
-    if (!pages) throw new Error(`Connect ${t.label} in Settings → Hosting accounts first.`);
+    if (!pages) throw new Error(`Connect ${t.label} in Settings → Hostings → Hosting accounts first.`);
     const steps = ["Checking photos", "Checking content", "Uploading pages", "Done"];
     for (let attempt = 0; ; attempt++) {
       try {

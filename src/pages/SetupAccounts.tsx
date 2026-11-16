@@ -1,4 +1,4 @@
-// Settings → Hosting accounts: the Studio's helper (on Cloudflare or Netlify), the Cloudflare account used for
+// Settings → Hostings → Hosting accounts: the Studio's helper (on Cloudflare or Netlify), the Cloudflare account used for
 // hosting pages, the database and Workers, and the shop's Cloudflare token, as kept on this device.
 import { useEffect, useState } from "react";
 import type { Session } from "../lib/auth";

@@ -29,7 +29,7 @@ export class Netlify {
     } catch {
       throw new NetlifyError("Couldn't reach Netlify from this browser. Check the connection and try again; a browser extension that blocks requests can also cause this.", 0);
     }
-    if (r.status === 401) throw new NetlifyError("Netlify rejected the token. Create a new personal access token and add it in Settings → Hosting accounts.", 401);
+    if (r.status === 401) throw new NetlifyError("Netlify rejected the token. Create a new personal access token and add it in Settings → Hostings → Hosting accounts.", 401);
     if (r.status === 429) throw new NetlifyError("Netlify's limit is 3 deploys a minute and 100 a day. Wait a minute and publish again.", 429);
     if (!r.ok) {
       let msg = "";

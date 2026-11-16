@@ -234,7 +234,7 @@ function MoveStudio({ studio, index, session, nf, setNf, onIndex, hosted = false
           <h3 className="text-[15px] font-extrabold text-emerald-200">✓ Your Studio is on {PAGES_LABEL[result.pages || "netlify"]} + {result.backend === "cloudflare" ? "Cloudflare" : "Supabase"}</h3>
           <p className="text-sm text-ink-300">Open it, sign in with <b className="text-ink-100">{result.owner}</b> and the code you'll get by email. Add your own domain whenever you like ({result.pages === "cloudflare" ? "Cloudflare → the Worker → Settings → Domains & Routes" : "Netlify → Domain management"}).</p>
           <a className="btn btn-pri self-start" href={result.url} target="_blank" rel="noopener noreferrer">Open your new Studio ↗</a>
-          <p className="hint">Your hosting tokens (GitHub publishing, Netlify, Cloudflare…) stay on each device, so add them once in the new Studio's Settings → Hosting accounts.</p>
+          <p className="hint">Your hosting tokens (GitHub publishing, Netlify, Cloudflare…) stay on each device, so add them once in the new Studio's Settings → Hostings → Hosting accounts.</p>
         </section>
       )}
     </div>

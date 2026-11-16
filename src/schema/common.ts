@@ -72,7 +72,7 @@ export function featuresCategory(): Category {
       ] },
       { title: "“Powered by” badge", studio: true, fields: [
         { t: "toggle", path: "poweredBy.show", label: "Show the badge on this site" },
-        { t: "note", text: "A small link in the bottom-right corner of every page, always on screen. Its text, link, size, colours and icon are set once for all sites in Settings → “Powered by” badge. Only the Studio can show or hide it: the site's own admin page doesn't have this setting." },
+        { t: "note", text: "A small link in the bottom-right corner of every page, always on screen. Its text, link, size, colours and icon are set once for all sites in Settings → Customize → “Powered by” badge. Only the Studio can show or hide it: the site's own admin page doesn't have this setting." },
       ] },
     ],
   };
@@ -133,7 +133,7 @@ export function seoCategory(shop: boolean): Category {
 export const pageSlug = (raw: unknown) => String(raw ?? "").toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60);
 export const staticPageDefault = (title = "New page") => ({ id: "pg-" + Math.random().toString(36).slice(2, 8), title, slug: "", subtitle: "", updated: "", body: "", show: true, inNav: false, inFooter: true, navLabel: "", showTitle: true, align: "left", size: "large", width: "narrow", toc: false, crumbs: true, noindex: false });
 /** Reading pages with a title and plain text: privacy policy, terms, shipping, refunds, about… In the Studio it sits
- *  under Settings → Additional pages; the site's own admin page shows it as its own "Static pages" section. */
+ *  under Settings → Customize → Additional pages; the site's own admin page shows it as its own "Static pages" section. */
 /** One page's fields. `addr`: the address before the page's name; `links`: the link switches; `back`: the "back" line's label. */
 export function staticPageFields(addr: string, links: Field[], back: string): Field[] {
   const g2 = (...fields: Field[]): Field => ({ t: "grid", cols: 2, fields });

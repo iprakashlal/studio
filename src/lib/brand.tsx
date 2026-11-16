@@ -1,4 +1,4 @@
-// The Studio's own name and logo (Settings → Studio name & logo). Saved in the data repository's
+// The Studio's own name and logo (Settings → Customize → Studio name & logo). Saved in the data repository's
 // studio.json so every signed-in device gets them, and remembered in this browser so the sign-in
 // screen and the public theme gallery show them too.
 

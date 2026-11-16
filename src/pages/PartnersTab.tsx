@@ -204,7 +204,7 @@ function PartnerCard({ p, studio, index, nf, setNf, session, myEmail, studioToke
   const updateApp = () => run("app", async () => {
     if (!p.siteId) return;
     const pages = (await loadPages(p.pages || "netlify", studioToken, p.pagesAccount)) || (p.pages === "cloudflare" && p.backend === "cloudflare" && p.api ? await pagesViaDb(p.api, "studio:" + p.studio) : null);
-    if (!pages) throw new Error(p.pages === "cloudflare" ? "Connect Cloudflare in Settings → Hosting accounts, or turn on Publish from any device there and sign in to the client's Studio database on this device." : `Connect ${PAGES_LABEL[p.pages || "netlify"]} in Settings → Hosting accounts first.`);
+    if (!pages) throw new Error(p.pages === "cloudflare" ? "Connect Cloudflare in Settings → Hostings → Hosting accounts, or turn on Publish from any device there and sign in to the client's Studio database on this device." : `Connect ${PAGES_LABEL[p.pages || "netlify"]} in Settings → Hostings → Hosting accounts first.`);
     await deployClientApp(pages, p, "", await source(), partner, setBusy); toast(`${p.name}'s Studio is updated`);
   });
   const notShared = index.projects.filter((m) => !p.shared.some((s) => s.project === m.id) && !m.partner);

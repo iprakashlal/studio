@@ -1,4 +1,4 @@
-// Settings → Admin menus: rename, reorder, regroup and combine the sections of each template's editor.
+// Settings → Customize → Admin menus: rename, reorder, regroup and combine the sections of each template's editor.
 // Applies to sites' admin pages (from their next publish or Push updates) and, if switched on, the Studio too.
 import { useMemo, useState } from "react";
 import { TEMPLATE_LIST, TEMPLATES } from "../schema";

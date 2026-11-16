@@ -51,7 +51,7 @@ export function PushUpdatesDialog({ studio, index, token, onClose }: { studio: S
     setRunning(true);
     let ok = 0, bad = 0;
     for (const t of chosen) {
-      if (t.kind === "hosted" && have[t.key] === false) { set(t.key, { s: "skipped", msg: `${t.label} isn't connected on this device (Settings → Hosting accounts).` }); continue; }
+      if (t.kind === "hosted" && have[t.key] === false) { set(t.key, { s: "skipped", msg: `${t.label} isn't connected on this device (Settings → Hostings → Hosting accounts).` }); continue; }
       set(t.key, { s: "pushing" });
       try {
         await pushTarget(t, { studio, pages: pagesFor, token, step: (d) => set(t.key, { s: "pushing", detail: d }) });
@@ -87,7 +87,7 @@ export function PushUpdatesDialog({ studio, index, token, onClose }: { studio: S
           </ul>
         </div>
       )}
-      {missing.length > 0 && !running && !finished && <p className="rounded-lg border border-amber-400/40 bg-amber-400/5 px-3 py-2.5 text-[13px] text-amber-100">{missing.join(" and ")} isn't connected on this device, so {missingT.length === 1 ? "that site" : "those sites"} will be skipped.{missingT.some((t) => t.project.host?.cf) ? " For Cloudflare sites: sign in to the site's database on this device (its hosting window), and turn on “Publish from any device” once in Settings → Hosting accounts on a device that has the Cloudflare token." : " Connect it in Settings → Hosting accounts."}</p>}
+      {missing.length > 0 && !running && !finished && <p className="rounded-lg border border-amber-400/40 bg-amber-400/5 px-3 py-2.5 text-[13px] text-amber-100">{missing.join(" and ")} isn't connected on this device, so {missingT.length === 1 ? "that site" : "those sites"} will be skipped.{missingT.some((t) => t.project.host?.cf) ? " For Cloudflare sites: sign in to the site's database on this device (its hosting window), and turn on “Publish from any device” once in Settings → Hostings → Hosting accounts on a device that has the Cloudflare token." : " Connect it in Settings → Hostings → Hosting accounts."}</p>}
       {chosen.some((t) => t.kind === "hosted" && t.project.host!.kind === "netlify") && <p className="hint">Netlify allows 3 deploys a minute; with more sites the Studio waits and carries on by itself.</p>}
       {finished && <p className="hint">GitHub Pages sites show the update about a minute after it's pushed; Netlify and Cloudflare sites at once.</p>}
     </Modal>

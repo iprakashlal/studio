@@ -1,5 +1,5 @@
 // The Studio's own reading pages (privacy, terms…) at #/pages/<name>, open to anyone with the link, and the links to
-// them on the sign-in screen and under the Studio. Set up in Settings → Additional pages.
+// them on the sign-in screen and under the Studio. Set up in Settings → Customize → Additional pages.
 import { useEffect, useMemo, useState, type CSSProperties, type MouseEvent } from "react";
 import "../fx/pages.js";
 import type { Repo } from "../lib/repo";
@@ -54,7 +54,7 @@ export function StudioPageView({ slug, host, repo }: { slug: string; host: Studi
   );
 }
 
-/** Settings → Additional pages: the Studio's own privacy policy, terms and other reading pages. */
+/** Settings → Customize → Additional pages: the Studio's own privacy policy, terms and other reading pages. */
 export function StudioPagesCard({ repo }: { repo: Repo }) {
   const toast = useToast();
   const [draft, setDraft] = useState<{ pages: StudioPage[] } | null>(null);
@@ -90,7 +90,7 @@ export function StudioPagesCard({ repo }: { repo: Repo }) {
     <section className="card flex flex-col gap-4 p-5" aria-label="Additional pages">
       <h3 className="text-[15px] font-extrabold">Additional pages</h3>
       <p className="text-sm text-ink-300">The Studio's own reading pages, such as its privacy policy and terms. Each one opens at <span className="font-mono text-[12.5px]">{addr}&lt;name&gt;</span> and can be linked on the sign-in screen and under the Studio. Saved in the Studio's files (<code className="font-mono text-xs">{PAGES_FILE}</code>), so every device shows the same.</p>
-      {reach === "update" && <p className="rounded-lg border border-amber-400/40 bg-amber-400/5 px-3 py-2 text-[13px] text-amber-100">People who aren't signed in can read these after one update of your Studio's database: Settings → Sites and hosting accounts → Update the database.</p>}
+      {reach === "update" && <p className="rounded-lg border border-amber-400/40 bg-amber-400/5 px-3 py-2 text-[13px] text-amber-100">People who aren't signed in can read these after one update of your Studio's database: Settings → Hostings → Sites and hosting accounts → Update the database.</p>}
       {reach === "private" && <p className="rounded-lg border border-amber-400/40 bg-amber-400/5 px-3 py-2 text-[13px] text-amber-100">This Studio keeps its files in a private GitHub repository, so only people signed in to the Studio can read these pages. A Studio on Cloudflare (Settings → Migration) shows them to everyone.</p>}
       {!draft ? <p className="text-sm text-ink-400">Loading…</p> : (
         <Ctx.Provider value={ctx}>

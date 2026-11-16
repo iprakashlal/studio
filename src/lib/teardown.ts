@@ -35,7 +35,7 @@ async function tools(ctx: TearCtx) {
     const token = cfTokenFor(v, account);
     if (token && helperOk(relay)) return new Cloudflare(relay!, token);
     if (ctx.db && info?.del) return dbCloudflare(ctx.db.api, "studio:" + ctx.db.studio);
-    throw new Error(ctx.db && info && !info.del ? "update your Studio's database first (Settings → Sites and hosting accounts → Update the database), or use a device that has the Cloudflare token" : "no Cloudflare token for that account on this device");
+    throw new Error(ctx.db && info && !info.del ? "update your Studio's database first (Settings → Hostings → Sites and hosting accounts → Update the database), or use a device that has the Cloudflare token" : "no Cloudflare token for that account on this device");
   };
   /** Deletes a Worker: with this device's token, else through a database that keeps the account's token and has
    *  the Worker registered (the site's own scope first, then the Studio's). */
@@ -50,7 +50,7 @@ async function tools(ctx: TearCtx) {
     for (const w of ways) { try { await w.deleteScript(account || "", name); return; } catch (e: any) { last = e; if (gone(e)) throw e; } }
     throw last;
   };
-  const nf = (): Netlify => { if (!nfTok) throw new Error("no Netlify token on this device (Settings → Hosting accounts)"); return new Netlify(nfTok.token); };
+  const nf = (): Netlify => { if (!nfTok) throw new Error("no Netlify token on this device (Settings → Hostings → Hosting accounts)"); return new Netlify(nfTok.token); };
   /** Deletes a GitHub repository: with this device's token, else through the database's kept token. */
   const repo = async (full: string) => {
     const token = ghPublish.token(ctx.studioToken);

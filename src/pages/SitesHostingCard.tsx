@@ -1,4 +1,4 @@
-// Settings → Sites and hosting accounts: one place for every live site's hosting. The Cloudflare accounts are kept on
+// Settings → Hostings → Sites and hosting accounts: one place for every live site's hosting. The Cloudflare accounts are kept on
 // the Studio's database (tokens as Worker secrets on your own Cloudflare, never read back), and each site's choice is
 // saved with the project, so every device signed in to the Studio sees and uses the same setup.
 import { useEffect, useMemo, useState } from "react";

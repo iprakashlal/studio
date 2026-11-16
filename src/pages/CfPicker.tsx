@@ -61,7 +61,7 @@ export function useCfAccount(studioToken: string, nf: Netlify | null | undefined
     const other = id ? more.find((m) => m.accounts.some((a) => a.id === id)) : null;
     if (!other || (accounts || []).some((a) => a.id === id)) {
       if (!id || id === acc?.id) return client(step);
-      const a = (accounts || []).find((x) => x.id === id); if (!a) throw new Error("No Cloudflare token on this device can manage that account. Add it in Settings → Sites and hosting accounts.");
+      const a = (accounts || []).find((x) => x.id === id); if (!a) throw new Error("No Cloudflare token on this device can manage that account. Add it in Settings → Hostings → Sites and hosting accounts.");
       const relay = await helper.get(step); return { cf: new Cloudflare(relay, tok.trim()), relay, account: a, token: tok.trim() };
     }
     const relay = await helper.get(step), a = other.accounts.find((x) => x.id === id)!;
@@ -107,7 +107,7 @@ export function useCfAccount(studioToken: string, nf: Netlify | null | undefined
               {!known && <option value={cur}>The site's account (no token for it on this device yet)</option>}
               {allAccounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
             </select></label>}
-          <p className={known ? "text-emerald-300" : "text-amber-200"}>{known ? `Connected to ${allAccounts.find((a) => a.id === cur)!.name}.` : "This site is on a Cloudflare account this device has no token for. Add it in Settings → Sites and hosting accounts."} <span className="text-ink-400">This site's own account, saved with this project only.</span></p>
+          <p className={known ? "text-emerald-300" : "text-amber-200"}>{known ? `Connected to ${allAccounts.find((a) => a.id === cur)!.name}.` : "This site is on a Cloudflare account this device has no token for. Add it in Settings → Hostings → Sites and hosting accounts."} <span className="text-ink-400">This site's own account, saved with this project only.</span></p>
         </>;
       })() : <>
         {accounts && accounts.length > 1 && <label className="flex flex-col gap-1"><span className="label">Cloudflare account</span><select className="input" aria-label="Cloudflare account" value={account} onChange={(e) => pickAccount(e.target.value)}>{accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select></label>}

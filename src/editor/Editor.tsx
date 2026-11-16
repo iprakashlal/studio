@@ -21,7 +21,7 @@ export function Editor({ tpl, draft, version, onChange, upload, img, extras = []
   onCategory?: (id: string) => void;
   /** In the site's own admin page: hides Studio-only settings and limits themes to those the Studio allows. */
   site?: boolean;
-  /** Renamed, reordered, regrouped or combined sections (Settings → Admin menus). */
+  /** Renamed, reordered, regrouped or combined sections (Settings → Customize → Admin menus). */
   menu?: MenuCfg;
 }) {
   tpl.prepare?.(draft);

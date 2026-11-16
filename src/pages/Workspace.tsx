@@ -115,9 +115,12 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
   }
 
   if (route.startsWith("settings") && !repo.demo) {
-    const tab = route.split("/")[1] || "general";
+    // Customize: the Studio's name, badge, pages and admin menus. Hostings: accounts and where each site is hosted.
+    const showCustomize = ["brand", "badge", "pages", "menus"].some((k) => !hid(k)), showHostings = !hid("hosting");
+    const want = route.split("/")[1] || "general";
+    const tab = (want === "customize" && !showCustomize) || (want === "hostings" && !showHostings) ? "general" : want;
     const tabs = <div className="flex flex-wrap gap-1 border-b border-ink-700" role="tablist" aria-label="Settings">
-      {[["general", "General"], ...(isHosted(session) && !client ? [["update", "Update"]] : []), ...(client ? [] : [["migration", "Migration"], ["partners", "Studio Partners"]])].map(([k, l]) => <a key={k} href={`#/settings${k === "general" ? "" : "/" + k}`} role="tab" aria-selected={tab === k} className={`-mb-px border-b-2 px-3 py-2 text-sm font-semibold ${tab === k ? "border-brand-400 text-ink-100" : "border-transparent text-ink-400 hover:text-ink-100"}`}>{l}</a>)}
+      {[["general", "General"], ...(showCustomize ? [["customize", "Customize"]] : []), ...(showHostings ? [["hostings", "Hostings"]] : []), ...(isHosted(session) && !client ? [["update", "Update"]] : []), ...(client ? [] : [["migration", "Migration"], ["partners", "Studio Partners"]])].map(([k, l]) => <a key={k} href={`#/settings${k === "general" ? "" : "/" + k}`} role="tab" aria-selected={tab === k} className={`-mb-px border-b-2 px-3 py-2 text-sm font-semibold ${tab === k ? "border-brand-400 text-ink-100" : "border-transparent text-ink-400 hover:text-ink-100"}`}>{l}</a>)}
     </div>;
     if (client === undefined && tab !== "general") return <>{header}<p className="py-16 text-center text-sm text-ink-400">Loading…</p></>;
     if (tab === "partners" && !client) return <>{header}<main className="mx-auto flex max-w-3xl flex-col gap-4 px-4 py-8 sm:px-6"><h1 className="font-display text-3xl font-extrabold">Settings</h1>{tabs}<FoldAll /><FoldCards scope="partners"><PartnersTab studio={studio} index={index} session={session} onIndex={setIndex} /></FoldCards></main></>;
@@ -128,13 +131,15 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
           <h1 className="font-display text-3xl font-extrabold">Settings</h1>
           {tabs}
           <FoldAll />
-          <FoldCards scope="general">
-          <p className="text-sm text-ink-300">Your Studio keeps everything as files in <b className="text-ink-100">{isHosted(session) ? `${session.cfg.owner === "cloudflare" ? "Cloudflare" : "Supabase"} (Studio “${session.cfg.repo}”)` : `${session.cfg.owner}/${session.cfg.repo}`}</b>: <code className="font-mono text-xs">studio.json</code> for the project list and <code className="font-mono text-xs">projects/</code> for each site's content, images and export snapshots.</p>
-          {!hid("brand") && <BrandCard studio={studio} onIndex={setIndex} />}
-          {!hid("badge") && <BadgeCard studio={studio} saved={index.badge} onIndex={setIndex} />}
-          {!hid("pages") && <StudioPagesCard repo={repo} />}
-          {!hid("menus") && <MenusCard studio={studio} menus={index.menus || {}} onIndex={setIndex} />}
-          {!hid("hosting") && <><section className="card flex flex-col gap-3 p-5" aria-label="Hosting accounts">
+          <FoldCards scope={tab === "customize" || tab === "hostings" ? tab : "general"}>
+          {tab === "customize" ? <>
+            <p className="text-sm text-ink-300">How your Studio and its sites' admin pages look: the Studio's name and logo, the “Powered by” badge, the Studio's own pages and the admin menus.</p>
+            {!hid("brand") && <BrandCard studio={studio} onIndex={setIndex} />}
+            {!hid("badge") && <BadgeCard studio={studio} saved={index.badge} onIndex={setIndex} />}
+            {!hid("pages") && <StudioPagesCard repo={repo} />}
+            {!hid("menus") && <MenusCard studio={studio} menus={index.menus || {}} onIndex={setIndex} />}
+          </> : tab === "hostings" ? <>
+            <section className="card flex flex-col gap-3 p-5" aria-label="Hosting accounts">
             <h3 className="text-[15px] font-extrabold">Hosting accounts</h3>
             <p className="text-sm text-ink-300">GitHub publishing creates each site's repository and turns on GitHub Pages; Cloudflare (free, no traffic limit) or Netlify hosts sites outside GitHub. Tokens stay on this device, encrypted. Each site's database details are kept with its project.</p>
             <h3 className="mt-2 text-sm font-bold">GitHub (publishing)</h3>
@@ -143,10 +148,13 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
             <NetlifyAccount session={session} />
             <SetupAccounts session={session} index={index} />
           </section>
-          <SitesHostingCard session={session} studio={studio} index={index} onIndex={setIndex} /></>}
+          <SitesHostingCard session={session} studio={studio} index={index} onIndex={setIndex} />
+          </> : <>
+          <p className="text-sm text-ink-300">Your Studio keeps everything as files in <b className="text-ink-100">{isHosted(session) ? `${session.cfg.owner === "cloudflare" ? "Cloudflare" : "Supabase"} (Studio “${session.cfg.repo}”)` : `${session.cfg.owner}/${session.cfg.repo}`}</b>: <code className="font-mono text-xs">studio.json</code> for the project list and <code className="font-mono text-xs">projects/</code> for each site's content, images and export snapshots.</p>
           {isHosted(session)
             ? <section className="card flex flex-col gap-3 p-5" aria-label="Account"><h3 className="text-[15px] font-extrabold">Account</h3><p className="text-sm text-ink-300">Signed in as <b className="text-ink-100">{session.username}</b> with an email code.</p><button type="button" className="btn self-start" onClick={onSignOut}>Sign out</button></section>
             : <AccountPanel ns={NS} session={session} onUpdated={onSession} onSignOut={onSignOut} onForget={onForget} />}
+          </>}
           </FoldCards>
         </main>
       </>

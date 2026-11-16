@@ -1,4 +1,4 @@
-// The Studio's own reading pages (privacy policy, terms…): Settings → Additional pages. Kept in the Studio's files
+// The Studio's own reading pages (privacy policy, terms…): Settings → Customize → Additional pages. Kept in the Studio's files
 // as public/pages.json. Visitors who aren't signed in read them through the Studio's database: GET <api>/sp/<studio>
 // on Cloudflare, or the "public pages" rule on Supabase. A Studio on GitHub only shows them once signed in.
 import { useEffect, useState } from "react";

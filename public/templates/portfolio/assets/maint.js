@@ -20,7 +20,9 @@
     ".sm-back{display:inline-block;margin:10px 0 0;padding:7px 16px;border-radius:99px;border:1px solid color-mix(in srgb,currentColor 28%,transparent);font-size:14px;font-weight:600}",
     ".sm-btn{display:inline-block;margin:26px 0 0;padding:13px 26px;border-radius:min(var(--r,12px),14px);background:var(--m-ac);color:#fff;font-weight:700;text-decoration:none;font-size:15.5px}",
     ".sm-contact{margin:22px 0 0;font-size:14.5px;color:var(--m-soft)}.sm-contact a{color:inherit;text-decoration:underline;text-underline-offset:3px}",
-    ".sm-flag{position:fixed;top:10px;left:50%;transform:translateX(-50%);font:700 12px/1 system-ui,sans-serif;padding:6px 12px;border-radius:99px;background:#fff3cd;color:#6b4b00;z-index:1}"
+    ".sm-flag{position:fixed;top:10px;left:50%;transform:translateX(-50%);font:700 12px/1.3 system-ui,sans-serif;padding:6px 12px;border-radius:99px;background:#fff3cd;color:#6b4b00;z-index:1;display:flex;align-items:center;gap:10px;max-width:calc(100% - 20px)}",
+    ".sm-flag button{font:700 12px/1 system-ui,sans-serif;padding:5px 10px;border-radius:99px;border:1px solid #6b4b00;background:transparent;color:#6b4b00;cursor:pointer;white-space:nowrap}",
+    "#site-peek-bar{position:fixed;left:0;right:0;bottom:0;z-index:2147483000;padding:9px 14px;background:#fff3cd;color:#6b4b00;font:500 13px/1.4 system-ui,sans-serif;text-align:center;box-shadow:0 -2px 12px rgba(0,0,0,.18)}#site-peek-bar a{color:inherit;font-weight:700;text-decoration:underline}"
   ].join("\n");
   function css() { if (document.getElementById("site-maint-css")) return; var s = document.createElement("style"); s.id = "site-maint-css"; s.textContent = CSS; document.head.appendChild(s); }
   function conf(C) { var m = (C && C.maintenance) || {}, o = {}; for (var k in DEF) o[k] = m[k] == null ? DEF[k] : m[k]; o.button = { label: (m.button && m.button.label) || "", url: (m.button && m.button.url) || "" }; return o; }
@@ -32,11 +34,22 @@
       return sessionStorage.getItem(PEEK) === "1";
     } catch (e) { return false; }
   }
-  /** Should this page show the maintenance screen? In the editor's preview only its own "Maintenance page" entry does. */
+  var previewSite = false; // the editor pressed "Show the site" in the preview
+  /** Should this page show the maintenance screen? While it is switched on: always, for visitors and in the editor's
+   *  preview alike (the preview offers a button to see the site instead). The preview's "Maintenance page" entry
+   *  shows it while it is off too. */
   function wanted(C, preview) {
-    var q = /[?&]maintenance=1(&|$)/.test(location.search);
-    if (preview) return q;
-    return !!((C && C.maintenance) || {}).on && !peeking();
+    var q = /[?&]maintenance=1(&|$)/.test(location.search), on = !!((C && C.maintenance) || {}).on;
+    if (preview) return q || (on && !previewSite);
+    if (on && peeking()) { setTimeout(peekBar, 0); return false; }
+    return on;
+  }
+  /** The owner is peeking at the site while visitors see the maintenance page: say so, with the way back. */
+  function peekBar() {
+    if (document.getElementById("site-peek-bar")) return; css();
+    var b = document.createElement("div"); b.id = "site-peek-bar";
+    b.innerHTML = "<b>Maintenance mode is on.</b> Visitors see the maintenance page; only you see the site in this tab. <a href=\"?peek=off\">Show me the maintenance page</a>";
+    document.body.appendChild(b);
   }
   function rich(t) {
     if (window.SitePages) return window.SitePages.body(t);
@@ -50,7 +63,7 @@
     if (!el) { el = document.createElement("div"); el.id = "site-maint"; el.setAttribute("role", "main"); document.body.appendChild(el); prevOverflow = document.documentElement.style.overflow; document.documentElement.style.overflow = "hidden"; prevTitle = document.title; }
     el.setAttribute("data-look", m.look === "dark" || m.look === "accent" ? m.look : "page");
     var btn = m.button.label && m.button.url && /^(https?:|mailto:|tel:|\/|\.\/|#|[\w-]+\.html)/i.test(m.button.url);
-    el.innerHTML = (o.preview ? '<span class="sm-flag">' + (m.on ? "Maintenance mode is ON: visitors see this page" : "Preview: maintenance mode is off, visitors see the site") + "</span>" : "") +
+    el.innerHTML = (o.preview ? '<span class="sm-flag"><span>' + (m.on ? "Maintenance mode is ON: visitors see this page" : "Preview: maintenance mode is off, visitors see the site") + "</span>" + (m.on && o.again && !/[?&]maintenance=1(&|$)/.test(location.search) ? '<button type="button" data-sm-site>Show the site here</button>' : "") + "</span>" : "") +
       '<div class="sm-in">' +
       (m.showLogo !== false ? (o.logo ? '<img class="sm-logo" src="' + esc(o.logo) + '" alt="' + esc(o.name || "") + '">' : o.name ? '<p class="sm-name">' + esc(o.name) + "</p>" : "") : "") +
       '<div class="sm-bar" aria-hidden="true"><i></i><i></i><i></i></div>' +
@@ -59,6 +72,8 @@
       (m.back ? '<p class="sm-back">' + esc(m.back) + "</p>" : "") +
       (btn ? '<div><a class="sm-btn" href="' + esc(m.button.url) + '"' + (/^https?:/i.test(m.button.url) ? ' target="_blank" rel="noopener"' : "") + ">" + esc(m.button.label) + "</a></div>" : "") +
       (m.contact ? '<p class="sm-contact">' + linkify(m.contact).replace(/\n/g, "<br>") + "</p>" : "") + "</div>";
+    var sb = el.querySelector("[data-sm-site]");
+    if (sb) sb.onclick = function () { previewSite = true; hide(); o.again(); };
     document.title = String(m.title || "").replace(/\s+/g, " ") + (o.name ? " · " + o.name : "");
     if (!o.preview && !document.head.querySelector('meta[name="robots"][data-sm]')) { var r = document.createElement("meta"); r.name = "robots"; r.content = "noindex"; r.setAttribute("data-sm", ""); document.head.appendChild(r); }
     // the message's marks (bold, lists, links) need the reading-page script; load it once and draw again

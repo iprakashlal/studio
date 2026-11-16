@@ -1,8 +1,8 @@
 /* Festival overlay for every template: a greeting ribbon and a short shower of decorations on India's festivals.
-   Content: content.festival = { allowed, on, style: "both" | "ribbon" | "deco", position: "top" | "bottom", lead (days
+   Content: content.festival = { v, on, style: "both" | "ribbon" | "deco", position: "top" | "bottom", lead (days
    shown before the festival), items: [{ id, on, from, to, message }] (one per festival below; from/to in YYYY-MM-DD
    replace the official days), custom: [{ name, deco, from, to, message }] }.
-   It only shows when the site's Studio allowed it (allowed) and the site has it switched on (on). Dates use the
+   It shows while it is switched on (on; content saved before v 2 also needs the old Studio offer, allowed). Dates use the
    visitor's own calendar day. The same list lives in src/lib/festivals.ts for the editor.
    window.SiteFestival: mount(C, { preview, site }), today(C, date) */
 (function () {
@@ -18,10 +18,12 @@
   var ymd = function (d) { return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()); };
   var okDate = function (s) { return /^\d{4}-\d{2}-\d{2}$/.test(String(s || "")); };
   var shift = function (s, days) { var p = s.split("-"), d = new Date(+p[0], +p[1] - 1, +p[2] + days); return ymd(d); };
+  /** Switched on? One switch (on); content saved while the Studio still had to offer it first (no v) also needs that offer. */
+  function active(F) { return !!F && F.on !== false && (F.v >= 2 || F.allowed === true); }
   /** The festival (or the site's own occasion) to show on this day, or null. Custom occasions come first, then the
    *  festival whose day is nearest. */
   function today(C, date) {
-    var F = (C && C.festival) || {}; if (!F.allowed || F.on === false) return null;
+    var F = (C && C.festival) || {}; if (!active(F)) return null;
     var now = ymd(date || new Date()), y = +now.slice(0, 4), lead = Math.max(0, Math.min(14, +F.lead >= 0 && F.lead !== "" && F.lead != null ? +F.lead : 2));
     var hits = [];
     (F.custom || []).forEach(function (x) {
@@ -86,7 +88,7 @@
     o = o || {};
     var F = (C && C.festival) || {}, hit = today(C, o.date);
     // The editor's preview can ask to see one festival whatever the day (festival.preview = its id).
-    if (o.preview && F.allowed && F.on !== false && F.preview) { var pf = LIST.filter(function (f) { return f.id === F.preview; })[0]; if (pf) { var st = (F.items || []).filter(function (x) { return x && x.id === pf.id; })[0] || {}; hit = { id: pf.id, name: pf.name, deco: pf.deco, greet: st.message || pf.greet, to: "preview" }; } }
+    if (o.preview && active(F) && F.preview) { var pf = LIST.filter(function (f) { return f.id === F.preview; })[0]; if (pf) { var st = (F.items || []).filter(function (x) { return x && x.id === pf.id; })[0] || {}; hit = { id: pf.id, name: pf.name, deco: pf.deco, greet: st.message || pf.greet, to: "preview" }; } }
     var style = F.style === "ribbon" || F.style === "deco" ? F.style : "both", pos = F.position === "bottom" ? "bottom" : "top";
     var key = hit ? [hit.id, hit.name, hit.greet, hit.to, style, pos, o.site].join("|") : "";
     if (key === shownKey && (!hit || document.getElementById("sf-ribbon") || style === "deco")) return;

@@ -654,7 +654,7 @@ function addons() {
 let fsP;
 function festival() {
   const F = C.festival || {};
-  if (!(F.allowed && F.on !== false) && !window.SiteFestival) return;
+  if (!(F.on !== false && (F.v >= 2 || F.allowed)) && !window.SiteFestival) return;
   (fsP ||= new Promise((ok, no) => { if (window.SiteFestival) return ok(); const s = document.createElement("script"); s.src = "assets/festival.js"; s.onload = () => ok(); s.onerror = no; document.head.appendChild(s); }))
     .then(() => window.SiteFestival.mount(C, { preview: PREVIEW, site: C.brand.name })).catch(() => {});
 }

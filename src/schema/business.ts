@@ -187,11 +187,11 @@ const schema: Category[] = [
           g2({ t: "text", path: "contact.form.submit", label: "Button label" }, { t: "text", path: "contact.form.consent", label: "Consent checkbox (empty hides it)" }),
           { t: "textarea", path: "contact.form.success", label: "Message after sending", rows: 2 },
           { t: "note", text: "Enquiries are saved in the site's database and listed under Enquiries in the admin page. (A site that has no database yet opens the visitor's email app instead, addressed to your contact email: give it one with Publish to Cloudflare in the Studio.)" },
-          { t: "toggle", path: "contact.form.notify", label: "Also email me each enquiry" },
+          { t: "toggle", path: "contact.form.notify", label: "Email me each enquiry" },
           { t: "when", path: "contact.form.notify", is: "true", fields: [
-            g2({ t: "text", path: "contact.form.notifyTo", label: "Send to", ph: "the contact email above", hint: "Up to 3 addresses, separated by commas. Empty uses the contact email under Contact details." },
+            g2({ t: "text", path: "contact.form.notifyTo", label: "Send to", ph: "the contact email above", hint: "Up to 3 addresses, separated by commas. Empty uses the contact email under Contact details, or else the site's editors." },
               { t: "text", path: "contact.form.notifySubject", label: "Subject", ph: "New enquiry from {name}", hint: "{name} is the visitor's name, {site} the site's name." }),
-            { t: "note", text: "The email lists everything the visitor filled in, and replying to it answers the visitor. It is sent by the site's database through the same Resend email settings that send your sign-in codes, and starts once you publish. If no email arrives, update the database once (Studio → Settings → Hostings → Update the database; for a site with its own database, save its Email settings in Publish to Cloudflare)." },
+            { t: "note", text: "The email lists everything the visitor filled in, and replying to it answers the visitor. It is sent by the site's database through the same Resend email settings that send your sign-in codes. If one doesn't arrive, open Enquiries: every enquiry says whether it was emailed and, when it wasn't, why." },
           ] },
           { t: "when", path: "contact.form.saveTo", is: "file", fields: [
             { t: "note", text: "This site still uses the older enquiry inbox: each enquiry is a JSON file in a private GitHub repository, with no email. Switch below to save to the database instead.", tone: "warn" },
@@ -223,7 +223,7 @@ function prepareBusiness(c: any) {
   c.hero ||= {}; prepareSlides(c.hero, c.theme?.deep || "#0E1B2C"); prepareMaintenance(c);
   prepareMenu(c, () => (Array.isArray(c.sections) ? c.sections : []).filter((x: any) => x && x.show !== false && x.inNav).map((x: any) => menuItem(x.label || x.id, x.id)));
   // Enquiries always go to the site's database now: the old "always open the email app" choice is gone.
-  if (c.contact?.form && typeof c.contact.form === "object") { const F = c.contact.form; if (F.saveTo !== "file") F.saveTo = "auto"; F.notify = F.notify === true; F.notifyTo ??= ""; F.notifySubject ??= ""; }
+  if (c.contact?.form && typeof c.contact.form === "object") { const F = c.contact.form; if (F.saveTo !== "file") F.saveTo = "auto"; if (F.notifyAsk !== 1) { F.notify = true; F.notifyAsk = 1; } else F.notify = F.notify === true; F.notifyTo ??= ""; F.notifySubject ??= ""; }
   c.hero.panel = { show: true, source: "auto", aLabel: "", aValue: "", bars: true, rows: [], cLabel: "", cValue: "", dot: true, ...(c.hero.panel && typeof c.hero.panel === "object" ? c.hero.panel : {}) };
   if (!Array.isArray(c.hero.panel.rows)) c.hero.panel.rows = [];
   c.sections = Array.isArray(c.sections) ? c.sections : [];

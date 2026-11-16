@@ -55,6 +55,35 @@ async function moveHostedAdmin(cf: CfSiteCfg, info: SiteInfo, oldAdmin: string, 
   return new URL(newAdmin, base).href;
 }
 
+/** The browser tab of the admin page: "<Company> | Control Panel" and the site's own logo as its icon (else its
+ *  initials on the theme colour), read from the site's published content. */
+function useAdminTab(info: SiteInfo | null) {
+  useEffect(() => {
+    if (!info) return;
+    let on = true;
+    const h = info.host, cfBase = h?.kind === "cloudflare" ? h.api.replace(/\/+$/, "") + "/p/" + encodeURIComponent(h.site) + "/" : "";
+    const title = (name: string) => { document.title = `${name.replace(/\s+/g, " ").trim() || "Site"} | Control Panel`; };
+    const icon = (href: string, type?: string) => {
+      let l = document.querySelector<HTMLLinkElement>("link[rel=icon]"); if (!l) { l = document.createElement("link"); l.rel = "icon"; document.head.appendChild(l); }
+      if (type) l.type = type; else l.removeAttribute("type"); l.href = href;
+    };
+    title(info.name || "");
+    (cfBase ? fetch(cfBase + "content.json", { cache: "no-store" }).then((r) => (r.ok ? r.json() : Promise.reject())).catch(() => fetch("content.json", { cache: "no-store" }).then((r) => r.json())) : fetch("content.json", { cache: "no-store" }).then((r) => r.json()))
+      .then((c: any) => {
+        if (!on || !c || typeof c !== "object") return;
+        const B = c.brand || {}, name = String(B.name || B.logoText || c.profile?.name || info.name || "");
+        title(name);
+        const img = B.icon || B.logo, path = String(img?.path || ""), url = String(img?.url || "");
+        const src = path ? (cfBase && /^assets\/uploads\//.test(path) ? cfBase + path.split("/").map(encodeURIComponent).join("/") : path) : /^(https?:|data:image\/)/i.test(url) ? url : "";
+        if (src) return icon(src);
+        const col = /^#[0-9a-f]{3,8}$/i.test(String(c.theme?.c1 || c.theme?.accent || "")) ? String(c.theme.c1 || c.theme.accent) : "#3b5bdb";
+        const ini = name.split(/\s+/).map((w) => w[0] || "").join("").slice(0, 2).toUpperCase() || "•";
+        icon("data:image/svg+xml," + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="${col}"/><text x="32" y="34" dominant-baseline="middle" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-weight="800" font-size="${ini.length > 1 ? 26 : 34}" fill="#fff">${ini.replace(/[<&>]/g, "")}</text></svg>`), "image/svg+xml");
+      }).catch(() => {});
+    return () => { on = false; };
+  }, [info]);
+}
+
 function currentAdmin(info: SiteInfo): string {
   if (info.admin) return info.admin;
   const here = decodeURIComponent(location.pathname.split("/").pop() || "");
@@ -75,6 +104,7 @@ export function SiteAdmin() {
       .catch(() => setInfoErr("cms/site.json is missing, so the CMS can't tell which template this site uses. Re-export the site from Site Studio."));
   }, []);
 
+  useAdminTab(info);
   useEffect(() => {
     if (!sbIn || !info?.host) return;
     const h = info.host;

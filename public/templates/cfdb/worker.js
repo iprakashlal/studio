@@ -12,7 +12,7 @@ create index if not exists enquiries_site on enquiries (site, created_at);
 create table if not exists workers (worker text primary key, scope text not null);
 create table if not exists repos (repo text primary key, scope text not null);
 `;
-var CFDB_VERSION = 12;
+var CFDB_VERSION = 13;
 var CFDB_WORKER_NAME = "picaffectz-db";
 
 // worker/db-worker.ts
@@ -119,27 +119,35 @@ async function siteContent(env, site) {
 }
 var siteName = (c, site) => oneLine(String(c?.brand?.name || c?.brand?.logoText || site));
 async function notifyEnquiry(env, site, data, page) {
-  if (!env.RESEND_API_KEY || !env.MAIL_FROM) return;
   const c = await siteContent(env, site);
-  if (!c) return;
+  if (!c) return "";
   const F = c?.contact?.form || {}, E = c?.emails && typeof c.emails === "object" ? c.emails : {};
-  const wantOwner = F.notify === true, wantReply = E.reply?.on === true && EMAIL_RE.test(data.email || "");
-  if (!wantOwner && !wantReply) return;
+  const wantOwner = F.notify === true || F.notifyAsk !== 1, wantReply = E.reply?.on === true && EMAIL_RE.test(data.email || "");
+  if (!wantOwner && !wantReply) return "";
+  if (!env.RESEND_API_KEY || !env.MAIL_FROM) return wantOwner ? "Not emailed: email (Resend) isn't set up on this site's database." : "";
   const since = new Date(Date.now() - 36e5).toISOString();
   const n = await env.DB.prepare("select count(*) n from enquiries where site = ? and created_at > ?").bind(site, since).first();
-  if ((n?.n || 0) > 40) return;
+  if ((n?.n || 0) > 40) return wantOwner ? "Not emailed: more than 40 enquiries in an hour, so emails are paused." : "";
   const name = siteName(c, site);
-  const owners = [...new Set(String(F.notifyTo || c?.contact?.email || "").split(/[,;\s]+/).map((x) => x.trim().toLowerCase()).filter((x) => EMAIL_RE.test(x)))].slice(0, 3);
+  const addrs = (x) => [...new Set(String(x || "").split(/[,;\s]+/).map((y) => y.trim().toLowerCase()).filter((y) => EMAIL_RE.test(y)))].slice(0, 3);
+  let owners = addrs(F.notifyTo);
+  if (!owners.length) owners = addrs(c?.contact?.email);
+  if (!owners.length && wantOwner) owners = addrs(((await env.DB.prepare("select email from members where scope = ? order by role = 'owner' desc limit 3").bind("site:" + site).all()).results || []).map((r) => r.email).join(","));
+  let said = wantOwner && !owners.length ? "Not emailed: no address to send to. Fill in \u201CSend to\u201D under Enquiry form." : "";
   const vars = { name: oneLine(data.name || ""), site: name, page: page || "", email: oneLine(data.email || "") };
   const label = (k) => k.replace(/[-_]+/g, " ").replace(/^./, (ch) => ch.toUpperCase());
-  const rows = Object.entries(data).filter(([k]) => k !== "consent").map(([k, v]) => `<tr><td style="padding:6px 14px 6px 0;color:#667;vertical-align:top;white-space:nowrap">${hesc(label(k))}</td><td style="padding:6px 0;white-space:pre-wrap">${hesc(v)}</td></tr>`).join("");
+  const rows = Object.entries(data).filter(([k]) => k !== "consent" && !k.startsWith("_")).map(([k, v]) => `<tr><td style="padding:6px 14px 6px 0;color:#667;vertical-align:top;white-space:nowrap">${hesc(label(k))}</td><td style="padding:6px 0;white-space:pre-wrap">${hesc(v)}</td></tr>`).join("");
   const table = `<table style="border-collapse:collapse;margin:0 0 14px">${rows}</table>`;
   const jobs = [];
   if (wantOwner && owners.length) {
     const subject = oneLine(fill(String(F.notifySubject || "New enquiry from {name}"), { ...vars, name: vars.name || "your website" })).slice(0, 150) || "New enquiry";
     const intro = fill(String(E.enquiry?.intro || "New enquiry from the {site} website."), vars);
     const foot = fill(String(E.enquiry?.footer || "It is also saved under Enquiries in the site's admin page."), vars) + (EMAIL_RE.test(data.email || "") ? " Reply to this email to answer the visitor." : "");
-    jobs.push(sendMail(env, owners, subject, WRAP(paras(intro) + table + paras(foot, "margin:0 0 8px;color:#667;font-size:13px")), EMAIL_RE.test(data.email || "") ? data.email : void 0));
+    jobs.push(sendMail(env, owners, subject, WRAP(paras(intro) + table + paras(foot, "margin:0 0 8px;color:#667;font-size:13px")), EMAIL_RE.test(data.email || "") ? data.email : void 0).then(() => {
+      said = "Emailed to " + owners.join(", ") + ".";
+    }, (e) => {
+      said = "Not emailed: " + String(e?.message || e).slice(0, 300);
+    }));
   }
   if (wantReply) {
     const mine = await env.DB.prepare("select count(*) n from enquiries where site = ? and created_at > ? and instr(lower(data), ?) > 0").bind(site, since, JSON.stringify(String(data.email).toLowerCase())).first();
@@ -152,6 +160,7 @@ async function notifyEnquiry(env, site, data, page) {
     }
   }
   await Promise.allSettled(jobs);
+  return said;
 }
 var ENT = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ", rsquo: "\u2019", lsquo: "\u2018", rdquo: "\u201D", ldquo: "\u201C", ndash: "\u2013", mdash: "\u2014", hellip: "\u2026" };
 var unent = (t) => t.replace(/&(#x?[0-9a-f]+|\w+);/gi, (m, e) => e[0] === "#" ? String.fromCodePoint(parseInt(e[1] === "x" || e[1] === "X" ? e.slice(2) : e.slice(1), e[1] === "x" || e[1] === "X" ? 16 : 10) || 32) : ENT[e.toLowerCase()] ?? m);
@@ -455,9 +464,9 @@ var db_worker_default = {
     if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
     const u = new URL(req.url), p = u.pathname.replace(/\/+$/, "") || "/";
     try {
-      if (p === "/") return json({ ok: true, service: "site-studio-db", v: V, mail: !!(env.RESEND_API_KEY && env.MAIL_FROM), ...env.CF_TOKEN && env.CF_ACCOUNT ? { deploy: true, account: env.CF_ACCOUNT } : {}, ...env.GH_TOKEN ? { gh: true } : {}, ...env.AI ? { ai: true, pamphlet: 2 } : {}, reviews: true, accounts: 2, cfx: 3, studioPages: 1, del: 1, enqMail: 2, ...otherAccounts(env).length ? { more: otherAccounts(env).length } : {} });
+      if (p === "/") return json({ ok: true, service: "site-studio-db", v: V, mail: !!(env.RESEND_API_KEY && env.MAIL_FROM), ...env.CF_TOKEN && env.CF_ACCOUNT ? { deploy: true, account: env.CF_ACCOUNT } : {}, ...env.GH_TOKEN ? { gh: true } : {}, ...env.AI ? { ai: true, pamphlet: 2 } : {}, reviews: true, accounts: 2, cfx: 3, studioPages: 1, del: 1, enqMail: 3, ...otherAccounts(env).length ? { more: otherAccounts(env).length } : {} });
       if (p === "/auth/code" && req.method === "POST") {
-        const { email: raw, site: forSite } = await req.json();
+        const { email: raw, site: forSite, studio: forStudio } = await req.json();
         const email2 = String(raw || "").trim().toLowerCase();
         if (!emailOk(email2)) return err(400, "Enter a valid email.");
         const known = await env.DB.prepare("select 1 from members where email = ? limit 1").bind(email2).first();
@@ -471,6 +480,23 @@ var db_worker_default = {
           const c = await siteContent(env, forSite).catch(() => null), T = c?.emails?.signin;
           if (T && typeof T === "object") {
             const vars = { site: siteName(c, forSite), email: email2 };
+            if (T.subject) {
+              subject = oneLine(fill(String(T.subject), vars)).slice(0, 150) || subject;
+              heading = subject;
+            }
+            if (T.intro) intro = fill(String(T.intro), vars);
+            if (T.footer) footer = fill(String(T.footer), vars);
+          }
+        } else if (typeof forStudio === "string" && /^[a-z0-9][a-z0-9-]{0,59}$/.test(forStudio) && await env.DB.prepare("select 1 from members where email = ? and scope = ? limit 1").bind(email2, "studio:" + forStudio).first()) {
+          let E = null;
+          try {
+            const f = await readFile(env, "studio:" + forStudio, "public/emails.json");
+            if (f) E = JSON.parse(new TextDecoder().decode(f.bytes));
+          } catch {
+          }
+          const T = E?.signin;
+          if (T && typeof T === "object") {
+            const nm = oneLine(String(E.name || env.NAME || "the Studio")).slice(0, 80), vars = { studio: nm, site: nm, email: email2 };
             if (T.subject) {
               subject = oneLine(fill(String(T.subject), vars)).slice(0, 150) || subject;
               heading = subject;
@@ -524,10 +550,11 @@ var db_worker_default = {
         const q = JSON.parse(raw || "{}");
         if (q.website) return json({ ok: true });
         const data = {};
-        for (const [k, v] of Object.entries(q.data || {}).slice(0, 25)) if (/^[\w-]{1,40}$/.test(k) && v != null && String(v).trim()) data[k] = String(v).slice(0, 5e3);
+        for (const [k, v] of Object.entries(q.data || {}).slice(0, 25)) if (/^[a-z0-9][\w-]{0,39}$/i.test(k) && v != null && String(v).trim()) data[k] = String(v).slice(0, 5e3);
         if (!Object.keys(data).length) return err(400, "The form was empty.");
-        await env.DB.prepare("insert into enquiries (site, data, page, created_at) values (?, ?, ?, ?)").bind(site, JSON.stringify(data), String(q.page || "").slice(0, 200), (/* @__PURE__ */ new Date()).toISOString()).run();
-        const mail = notifyEnquiry(env, site, data, String(q.page || "").slice(0, 200)).catch(() => {
+        const made = await env.DB.prepare("insert into enquiries (site, data, page, created_at) values (?, ?, ?, ?) returning id").bind(site, JSON.stringify(data), String(q.page || "").slice(0, 200), (/* @__PURE__ */ new Date()).toISOString()).first();
+        const rowId = made?.id;
+        const mail = notifyEnquiry(env, site, data, String(q.page || "").slice(0, 200)).catch((e) => "Not emailed: " + String(e?.message || e).slice(0, 300)).then((said) => said && rowId ? env.DB.prepare("update enquiries set data = ? where id = ? and site = ?").bind(JSON.stringify({ ...data, _mail: said }), rowId, site).run() : null).catch(() => {
         });
         if (ctx?.waitUntil) ctx.waitUntil(mail);
         else await mail;
@@ -600,7 +627,12 @@ var db_worker_default = {
           if (!r.ok && !(text == null && r.status === 404)) return err(502, "Cloudflare didn't keep it: " + ((await r.json().catch(() => null))?.errors?.[0]?.message || r.status));
           return null;
         };
-        if (p === "/cfx" && req.method === "GET") return json({ main: env.CF_TOKEN && env.CF_ACCOUNT ? env.CF_ACCOUNT : null, accounts: otherAccounts(env) });
+        if (p === "/cfx" && req.method === "GET") return json({
+          main: env.CF_TOKEN && env.CF_ACCOUNT ? env.CF_ACCOUNT : null,
+          accounts: otherAccounts(env),
+          // Sites every device can publish: "<worker>" on the main account, "<account>/<worker>" on another.
+          workers: ((await env.DB.prepare("select worker from workers where scope = ? limit 500").bind(scope).all()).results || []).map((r) => String(r.worker).split("@")[0])
+        });
         if (p === "/cfx/put" && req.method === "POST") {
           const b = await req.json(), token = String(b.token || "").trim();
           if (!/^[\w-]{20,200}$/.test(token)) return err(400, "Paste the account's Cloudflare API token.");

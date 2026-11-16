@@ -4,7 +4,7 @@ import { Fragment, useEffect, useMemo, useState } from "react";
 import { enquiriesSql, isAdmin, sbClient, sendCode, setupSql, signedInEmail, verifyCode, type SbCfg } from "../lib/supa";
 import { Field, Spinner, useConfirm, useToast } from "../ui/kit";
 import { inboxCall, type InboxEnquiry } from "../lib/inbox";
-import { cfSignedIn, siteEnquiries } from "../lib/cfdb";
+import { cfSignedIn, siteEnquiries, resendTestOnly } from "../lib/cfdb";
 import type { CfSiteCfg } from "../lib/supa";
 
 type Enquiry = { id: number; site: string; data: Record<string, string>; page: string; status: string; created_at: string };
@@ -18,6 +18,14 @@ export function enquiriesCfg(content: any, hosted?: SbCfg | null): SbCfg | null 
   if (hosted) return hosted;
   const F = content?.contact?.form || {};
   return /^https:\/\//.test(F.sbUrl || "") && F.sbKey && F.site ? { url: String(F.sbUrl).replace(/\/+$/, ""), key: F.sbKey, site: F.site } : null;
+}
+
+/** What the database noted about an enquiry's email, with the fix for Resend's two usual refusals. */
+function mailSaid(m: string): string {
+  const own = resendTestOnly(m);
+  if (own) return `Not emailed: your Resend account is still in test mode, which only delivers to ${own}. Verify your domain at resend.com/domains and use a sender address on it (Publish to Cloudflare → Email settings), or set “Send to” to ${own}.`;
+  if (/domain is not verified|not verified/i.test(m)) return "Not emailed: the sender address's domain isn't verified in Resend yet. Finish the DNS records at resend.com/domains, or use the sender address Resend gave you.";
+  return m;
 }
 
 export function EnquiriesPanel({ cfg, cf, account, hosted, email: contactEmail, form, ghToken, inStudio }: { cfg: SbCfg | null; cf?: CfSiteCfg; account?: string; hosted?: boolean; email?: string; form?: any; ghToken?: string; inStudio?: boolean }) {
@@ -158,6 +166,7 @@ function EnquiryList<R extends Row>({ rows, setStatus, remove, load, name, who }
       </div>
       <p className="text-[13px] text-ink-400">{who}</p>
       {!list.length && <p className="card p-5 text-sm text-ink-400">{rows.length ? "Nothing here with this filter." : "No enquiries yet. When someone sends the form on your site, it appears here."}</p>}
+      {/^Not emailed/.test(String(rows[0]?.data?._mail || "")) && <p role="status" className="rounded-lg border border-amber-400/40 bg-amber-400/5 px-3 py-2 text-[13px] text-amber-100"><b>The latest enquiry wasn't emailed to you.</b> {mailSaid(rows[0].data._mail)} It is saved here all the same.</p>}
       <ul className="flex flex-col gap-2" aria-label="Enquiries">
         {list.map((r) => {
           const d = r.data || {}, isOpen = open === r.id;
@@ -175,8 +184,9 @@ function EnquiryList<R extends Row>({ rows, setStatus, remove, load, name, who }
                 <div className="flex flex-col gap-3 border-t border-ink-700 px-4 py-3">
                   <dl className="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-[auto_1fr]">
                     {Object.keys(LABELS).filter((k) => d[k]).map((k) => (<Fragment key={k}><dt className="text-ink-400">{LABELS[k]}</dt><dd className="whitespace-pre-wrap text-ink-100">{k === "email" ? <a className="text-brand-300 underline" href={`mailto:${d.email}`}>{d.email}</a> : k === "phone" ? <a className="text-brand-300 underline" href={`tel:${d.phone}`}>{d.phone}</a> : k === "consent" ? "Yes" : d[k]}</dd></Fragment>))}
-                    {Object.keys(d).filter((k) => !LABELS[k] && d[k]).map((k) => (<Fragment key={k}><dt className="text-ink-400">{k}</dt><dd className="whitespace-pre-wrap">{d[k]}</dd></Fragment>))}
+                    {Object.keys(d).filter((k) => !LABELS[k] && d[k] && !k.startsWith("_")).map((k) => (<Fragment key={k}><dt className="text-ink-400">{k}</dt><dd className="whitespace-pre-wrap">{d[k]}</dd></Fragment>))}
                     {r.page && <><dt className="text-ink-400">Sent from</dt><dd className="font-mono text-xs text-ink-400">{r.page}</dd></>}
+                    {d._mail && <><dt className="text-ink-400">Email to you</dt><dd className={/^Not emailed/.test(d._mail) ? "text-amber-200" : "text-ink-300"}>{mailSaid(d._mail)}</dd></>}
                   </dl>
                   <div className="flex flex-wrap items-center gap-2">
                     {d.email && <a className="btn btn-sm btn-pri" href={`mailto:${d.email}?subject=${encodeURIComponent("Re: your enquiry")}`} onClick={() => setStatus(r, "replied")}>Reply by email</a>}

@@ -54,7 +54,7 @@ export async function cfCall<T = any>(api: string, path: string, init: RequestIn
   return !raw && (r.headers.get("content-type") || "").includes("json") ? r.json() : (r as any);
 }
 /** `site`: the site whose admin page is asking, so the email uses that site's own sign-in template. */
-export const cfSendCode = (api: string, email: string, site?: string) => cfCall(api, "/auth/code", { method: "POST", auth: false, body: JSON.stringify(site ? { email, site } : { email }) });
+export const cfSendCode = (api: string, email: string, site?: string, studio?: string) => cfCall(api, "/auth/code", { method: "POST", auth: false, body: JSON.stringify({ email, ...(site ? { site } : {}), ...(studio ? { studio } : {}) }) });
 export async function cfVerifyCode(api: string, email: string, code: string) {
   const j = await cfCall<{ token: string; email: string }>(api, "/auth/verify", { method: "POST", auth: false, body: JSON.stringify({ email, code }) });
   cfSession.save(api, { email: j.email, token: j.token });
@@ -196,7 +196,7 @@ export const resendTestOnly = (msg: string): string | null => /own email address
 // ---------------------------------------------------------------- publishing from any device
 /** Whether this database keeps a Cloudflare token for publishing (and for which account). */
 export async function cfDeployInfo(api: string): Promise<{ cfx?: boolean; cfxImport?: boolean; bridge?: boolean; studioPages?: boolean; del?: boolean; enqMail?: boolean; deploy: boolean; account?: string; gh?: boolean; ai?: boolean; reviews?: boolean; pamphlet?: boolean; accounts?: boolean; more?: number }> {
-  try { const j = await (await fetch(clean(api) + "/", { cache: "no-store" })).json(); return { deploy: !!j?.deploy, account: j?.account, gh: !!j?.gh, ai: !!j?.ai, reviews: !!j?.reviews, cfx: !!j?.cfx, cfxImport: (+j?.cfx || 0) >= 2, bridge: (+j?.cfx || 0) >= 3, studioPages: !!j?.studioPages, del: !!j?.del, enqMail: (+j?.enqMail || 0) >= 2, pamphlet: (+j?.pamphlet || 0) >= 2, accounts: (+j?.accounts || 0) >= 2, more: +j?.more || 0 }; } catch { return { deploy: false }; }
+  try { const j = await (await fetch(clean(api) + "/", { cache: "no-store" })).json(); return { deploy: !!j?.deploy, account: j?.account, gh: !!j?.gh, ai: !!j?.ai, reviews: !!j?.reviews, cfx: !!j?.cfx, cfxImport: (+j?.cfx || 0) >= 2, bridge: (+j?.cfx || 0) >= 3, studioPages: !!j?.studioPages, del: !!j?.del, enqMail: (+j?.enqMail || 0) >= 3, pamphlet: (+j?.pamphlet || 0) >= 2, accounts: (+j?.accounts || 0) >= 2, more: +j?.more || 0 }; } catch { return { deploy: false }; }
 }
 /** GitHub calls through the database (its kept token) as a signed-in owner of `scope`: a fetch-like Response. */
 export function dbGitHub(api: string, scope: string) {
@@ -262,7 +262,7 @@ export async function cfGoogleReviews(api: string, link: string, key: string): P
 
 // ---------------------------------------------------------------- other Cloudflare accounts, kept on the database
 /** The Cloudflare accounts this Studio's database keeps tokens for (names and ids only; tokens are never read back). */
-export const cfxList = (api: string, studio: string) => cfCall<{ main: string | null; accounts: { id: string; name: string }[] }>(api, `/cfx?scope=${encodeURIComponent("studio:" + studio)}`);
+export const cfxList = (api: string, studio: string) => cfCall<{ main: string | null; accounts: { id: string; name: string }[]; /** Sites every device can publish: "<worker>" on the main account, "<account>/<worker>" on another. */ workers?: string[] }>(api, `/cfx?scope=${encodeURIComponent("studio:" + studio)}`);
 /** Keeps another account's token as a Worker secret on the database (checked with Cloudflare first). */
 export const cfxPut = (api: string, studio: string, token: string) => cfCall<{ ok: true; accounts: { id: string; name: string }[] }>(api, `/cfx/put?scope=${encodeURIComponent("studio:" + studio)}`, { method: "POST", body: JSON.stringify({ token }) });
 export const cfxDelete = (api: string, studio: string, account: string) => cfCall(api, `/cfx/delete?scope=${encodeURIComponent("studio:" + studio)}`, { method: "POST", body: JSON.stringify({ account }) });

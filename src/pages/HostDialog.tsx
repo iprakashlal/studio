@@ -76,11 +76,14 @@ export function HostDialog({ studio, project, tpl, draft, dirty, save, onIndex, 
   const host = project.host;
   const [token, setToken] = useState<string | null>(null);
   const nf = useMemo(() => (token ? new Netlify(token) : null), [token]);
-  const [sb, setSb] = useState<SbCfg>(host?.sb || { url: "", key: "", site: slugify(project.name) || "my-site" });
+  const [sb, setSb] = useState<SbCfg>(host?.sb || { url: "", key: "", site: host?.cf?.site || slugify(project.name) || "my-site" });
   const [siteName, setSiteName] = useState(host?.siteName || slugify(project.name) || "");
-  const EMAIL_KEY = "site-studio:host-email";
-  const [email, setEmailState] = useState(() => { try { return localStorage.getItem(EMAIL_KEY) || ""; } catch { return ""; } });
-  const setEmail = (v: string) => { setEmailState(v); try { localStorage.setItem(EMAIL_KEY, v); } catch { /* private mode */ } };
+  // The editor email is remembered for each project (a site on another account has its own sign-in); a new
+  // project starts from the last one used.
+  const EMAIL_KEY = "site-studio:host-email", EMAIL_OWN = EMAIL_KEY + ":" + project.id;
+  const [emailOwn] = useState(() => { try { return !!localStorage.getItem(EMAIL_OWN); } catch { return false; } });
+  const [email, setEmailState] = useState(() => { try { return localStorage.getItem(EMAIL_OWN) || (host ? "" : localStorage.getItem(EMAIL_KEY)) || ""; } catch { return ""; } });
+  const setEmail = (v: string) => { setEmailState(v); try { localStorage.setItem(EMAIL_OWN, v); if (!host) localStorage.setItem(EMAIL_KEY, v); } catch { /* private mode */ } };
   const [code, setCode] = useState("");
   const [codeSent, setCodeSent] = useState(false);
   const [signed, setSigned] = useState<string | null>(null);
@@ -105,13 +108,14 @@ export function HostDialog({ studio, project, tpl, draft, dirty, save, onIndex, 
   const canMoveDb = !!host?.sb && !host.cf;
   const dbMoving = canMoveDb && dbKind === "cloudflare";
   const [editors, setEditors] = useState(""), [editorsFound, setEditorsFound] = useState<boolean | null>(null);
-  const cfAcc = useCfAccount(session.token, nf, true);
+  // This site's own Cloudflare account (kept with the project); the account box below shows and changes it.
+  const [siteAccount, setSiteAccount] = useState(host?.kind === "cloudflare" && host.account ? host.account : "");
+  const cfAcc = useCfAccount(session.token, nf, true, false, { id: siteAccount, set: setSiteAccount });
   const cfp = useCloudflarePicker(session.token, nf, true, undefined, cfAcc);
   // Without the token on this device, an existing Cloudflare site publishes through the Studio's database (when it
   // keeps the token: Settings → Hosting accounts → Publish from any device) as a signed-in owner.
   const [viaDb, setViaDb] = useState<Pages | null>(null);
   // Which Cloudflare account this site's pages are on (sites can live on different accounts: an old one, a client's).
-  const [siteAccount, setSiteAccount] = useState(host?.kind === "cloudflare" && host.account ? host.account : "");
   const siteAcc = siteAccount || cfAcc.account?.id || "";
   const siteAccKnown = cfAcc.allAccounts.some((a) => a.id === siteAcc);
   const siteClient = (step?: (s: string) => void) => cfAcc.clientFor(siteAcc, step);
@@ -134,6 +138,8 @@ export function HostDialog({ studio, project, tpl, draft, dirty, save, onIndex, 
   const [bridged, setBridged] = useState(false);
   const cfCheck = async (c = cfSite) => {
     if (!c) return; const e = await cfSignedIn(c.api); setCfSigned(e);
+    // A site that's already live: the email signed in to its database, unless one was typed for this project.
+    if (e && !emailOwn) setEmailState((cur) => cur || e);
     // Not signed in to the site's own database here: reached through the Studio's database (its account kept there).
     const br = !e && host?.kind === "cloudflare" && !!host.account && c.api === host.cf?.api && (await new CfRepo(c.api, "site:" + c.site, { account: host.account }).bridged().catch(() => false));
     setBridged(!!br);
@@ -326,19 +332,6 @@ export function HostDialog({ studio, project, tpl, draft, dirty, save, onIndex, 
         </> : <>
           {viaDb && (!cfAcc.ready || !siteAccKnown) ? <p className="flex items-center gap-2 text-[13px] text-emerald-300"><span className="h-2 w-2 rounded-full bg-emerald-400" />Publishing through your Cloudflare database: no Cloudflare token needed on this device. (Connecting a domain or a new site still needs the token, below.)</p> : null}
           {cfAcc.ui}
-          {host?.kind === "cloudflare" && siteAcc && (
-            <p className="text-[13px] text-ink-300" aria-label="This site's Cloudflare account">This site's Cloudflare account: <b className="text-ink-100">{cfAcc.allAccounts.find((a) => a.id === siteAcc)?.name || "its own account (no token for it on this device)"}</b>. <span className="text-ink-400">Change it in Settings → Sites and hosting accounts.</span></p>
-          )}
-          {host?.kind !== "cloudflare" && cfAcc.ready && (cfAcc.allAccounts.length > 1 || (siteAccount && !siteAccKnown)) && (
-            <label className="flex flex-col gap-1 text-[13px]"><span className="label">Cloudflare account for this site</span>
-              <select className="input" aria-label="Cloudflare account for this site" value={siteAcc} onChange={(e) => setSiteAccount(e.target.value)}>
-                {!siteAccKnown && siteAcc && <option value={siteAcc}>The site's account (no token for it on this device yet)</option>}
-                {cfAcc.allAccounts.map((a) => <option key={a.id} value={a.id}>{a.name}{a.main ? "" : " (other token)"}</option>)}
-              </select>
-              <span className="text-ink-400">The site's pages and domain go on this account. Its content stays in the database chosen below.</span>
-            </label>
-          )}
-          {cfAcc.ready && siteAccount && !siteAccKnown && !viaDb && <p className="text-[13px] text-amber-200">This site is on a Cloudflare account this device has no token for. Add that account in <b>Settings → Sites and hosting accounts</b>.</p>}
           <p className="text-[13px] text-ink-400">Cloudflare serves the pages from its network for free, with no traffic limit (a Worker with the site's files on your account). Edits made in the site's own CMS go to the database and don't need a publish.</p>
         </>}
         {(!host || moving) && pagesOk && (

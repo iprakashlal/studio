@@ -11,7 +11,9 @@ import { useHelper } from "./HelperBox";
 export type CfAccountHook = ReturnType<typeof useCfAccount>;
 
 /** `manage`: also shows the list of other Cloudflare accounts with Add and Remove (Studio Settings only; elsewhere only the connected account's name shows). */
-export function useCfAccount(studioToken: string, nf: Netlify | null | undefined, persist = true, manage = false) {
+/** `site`: this dialog is about one site. The account box then shows and changes that site's own account (kept with
+ *  the project), not the account this device uses by default. */
+export function useCfAccount(studioToken: string, nf: Netlify | null | undefined, persist = true, manage = false, site?: { id: string; set: (id: string) => void }) {
   const helper = useHelper(studioToken, nf, "Cloudflare");
   const [tok, setTok] = useState(""), [accounts, setAccounts] = useState<CfAccount[] | null>(null), [account, setAccount] = useState("");
   const [busy, setBusy] = useState(""), [err, setErr] = useState("");
@@ -20,6 +22,9 @@ export function useCfAccount(studioToken: string, nf: Netlify | null | undefined
   useEffect(() => {
     if (!persist) { setTok(""); setAccounts(null); setMore([]); return; }
     cfAccountVault.load(studioToken).then((v) => { if (!v) return; setTok(v.token || ""); if (v.account) setAccount(v.account); setMore(v.more || []); });
+    // Accounts added or removed in Settings in another tab show up here without reopening.
+    const on = (e: StorageEvent) => { if (e.key === "site-studio:cfdb") cfAccountVault.load(studioToken).then((v) => setMore(v?.more || [])); };
+    addEventListener("storage", on); return () => removeEventListener("storage", on);
   }, [studioToken, persist]);
   const saveMore = async (list: CfMoreToken[]) => { setMore(list); const v = await cfAccountVault.load(studioToken); await cfAccountVault.save({ ...(v || { token: "" }), more: list }, studioToken); };
   /** Adds another account's token (kept encrypted on this device, like the main one). */
@@ -93,8 +98,21 @@ export function useCfAccount(studioToken: string, nf: Netlify | null | undefined
         <input aria-label="Cloudflare API token" className="input min-w-0 flex-1 font-mono text-xs" type="password" autoComplete="off" value={tok} onChange={(e) => { setTok(e.target.value); setAccounts(null); }} placeholder="Cloudflare API token" />
         <button type="button" className="btn btn-sm" disabled={!tok.trim() || !!busy || !helper.ready} onClick={connect}>{busy && !accounts ? busy + "…" : "Connect"}</button>
       </div>
-      {accounts && accounts.length > 1 && <label className="flex flex-col gap-1"><span className="label">Cloudflare account</span><select className="input" aria-label="Cloudflare account" value={account} onChange={(e) => pickAccount(e.target.value)}>{accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select></label>}
-      {acc && <p className="text-emerald-300">Connected to {acc.name}.</p>}
+      {site && acc ? (() => {
+        // One site: its own account, from every account this device has a token for.
+        const cur = site.id || acc.id, known = allAccounts.some((a) => a.id === cur);
+        return <>
+          {(allAccounts.length > 1 || !known) && <label className="flex flex-col gap-1"><span className="label">Cloudflare account for this site</span>
+            <select className="input" aria-label="Cloudflare account for this site" value={cur} onChange={(e) => site.set(e.target.value)}>
+              {!known && <option value={cur}>The site's account (no token for it on this device yet)</option>}
+              {allAccounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+            </select></label>}
+          <p className={known ? "text-emerald-300" : "text-amber-200"}>{known ? `Connected to ${allAccounts.find((a) => a.id === cur)!.name}.` : "This site is on a Cloudflare account this device has no token for. Add it in Settings → Sites and hosting accounts."} <span className="text-ink-400">This site's own account, saved with this project only.</span></p>
+        </>;
+      })() : <>
+        {accounts && accounts.length > 1 && <label className="flex flex-col gap-1"><span className="label">Cloudflare account</span><select className="input" aria-label="Cloudflare account" value={account} onChange={(e) => pickAccount(e.target.value)}>{accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select></label>}
+        {acc && <p className="text-emerald-300">Connected to {acc.name}.</p>}
+      </>}
       {err && <p role="alert" className="text-red-300">{err}</p>}
       {manage && others}
     </div>

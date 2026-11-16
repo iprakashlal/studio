@@ -69,18 +69,8 @@ export function useCfAccount(studioToken: string, nf: Netlify | null | undefined
     return { cf: new Cloudflare(relay, tok.trim()), relay, account: acc, token: tok.trim() };
   };
 
-  const ui = (
-    <div className="flex flex-col gap-2.5 text-[13px]">
-      {helper.ui}
-      <p><a className="btn btn-sm btn-pri" href={CF_DB_TOKEN_PAGE} target="_blank" rel="noopener noreferrer">Create a Cloudflare token ↗</a> <span className="text-ink-400">The permissions are already ticked (Workers, D1, account settings, and your domains and their DNS, so the Studio can connect a domain). Press <b>Continue to summary → Create Token</b>, copy it and paste it here. {persist ? "It's kept encrypted on this device only." : "Used now only, not kept."}</span></p>
-      <div className="flex gap-2">
-        <input aria-label="Cloudflare API token" className="input min-w-0 flex-1 font-mono text-xs" type="password" autoComplete="off" value={tok} onChange={(e) => { setTok(e.target.value); setAccounts(null); }} placeholder="Cloudflare API token" />
-        <button type="button" className="btn btn-sm" disabled={!tok.trim() || !!busy || !helper.ready} onClick={connect}>{busy && !accounts ? busy + "…" : "Connect"}</button>
-      </div>
-      {accounts && accounts.length > 1 && <label className="flex flex-col gap-1"><span className="label">Cloudflare account</span><select className="input" aria-label="Cloudflare account" value={account} onChange={(e) => pickAccount(e.target.value)}>{accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select></label>}
-      {acc && <p className="text-emerald-300">Connected to {acc.name}.</p>}
-      {err && <p role="alert" className="text-red-300">{err}</p>}
-      {persist && acc && manage && (
+  /** The other accounts this device has tokens for, with Add and Remove (shown in Studio Settings only). */
+  const others = persist && acc ? (
         <div className="flex flex-col gap-1.5 rounded-lg border border-ink-700 p-2.5" aria-label="Other Cloudflare accounts">
           <span className="font-semibold text-ink-200">Other Cloudflare accounts</span>
           <span className="text-ink-400">For sites hosted on another Cloudflare account (an old one, or a client's). Each site picks its account in Publish to Cloudflare.</span>
@@ -94,7 +84,19 @@ export function useCfAccount(studioToken: string, nf: Netlify | null | undefined
           </>}
           {addErr && <p role="alert" className="text-red-300">{addErr}</p>}
         </div>
-      )}
+      ) : null;
+  const ui = (
+    <div className="flex flex-col gap-2.5 text-[13px]">
+      {helper.ui}
+      <p><a className="btn btn-sm btn-pri" href={CF_DB_TOKEN_PAGE} target="_blank" rel="noopener noreferrer">Create a Cloudflare token ↗</a> <span className="text-ink-400">The permissions are already ticked (Workers, D1, account settings, and your domains and their DNS, so the Studio can connect a domain). Press <b>Continue to summary → Create Token</b>, copy it and paste it here. {persist ? "It's kept encrypted on this device only." : "Used now only, not kept."}</span></p>
+      <div className="flex gap-2">
+        <input aria-label="Cloudflare API token" className="input min-w-0 flex-1 font-mono text-xs" type="password" autoComplete="off" value={tok} onChange={(e) => { setTok(e.target.value); setAccounts(null); }} placeholder="Cloudflare API token" />
+        <button type="button" className="btn btn-sm" disabled={!tok.trim() || !!busy || !helper.ready} onClick={connect}>{busy && !accounts ? busy + "…" : "Connect"}</button>
+      </div>
+      {accounts && accounts.length > 1 && <label className="flex flex-col gap-1"><span className="label">Cloudflare account</span><select className="input" aria-label="Cloudflare account" value={account} onChange={(e) => pickAccount(e.target.value)}>{accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select></label>}
+      {acc && <p className="text-emerald-300">Connected to {acc.name}.</p>}
+      {err && <p role="alert" className="text-red-300">{err}</p>}
+      {manage && others}
     </div>
   );
   /** Swaps in a new token (e.g. one with more permissions), keeping the same account when it can see it. */
@@ -106,7 +108,7 @@ export function useCfAccount(studioToken: string, nf: Netlify | null | undefined
     if (persist) { const v = await cfAccountVault.load(studioToken); await cfAccountVault.save({ ...(v || {}), token: t.trim(), account: pick }, studioToken); }
     return new Cloudflare(await helper.get(), t.trim());
   };
-  return { ui, ready: !!acc && helper.ready, account: acc, token: tok.trim(), client, clientFor, allAccounts, busy, helper, replaceToken };
+  return { ui, othersUi: others, ready: !!acc && helper.ready, account: acc, token: tok.trim(), client, clientFor, allAccounts, busy, helper, replaceToken };
 }
 
 /** The Studio's database on Cloudflare. Pass `shared` to use a Cloudflare account picked elsewhere on the page

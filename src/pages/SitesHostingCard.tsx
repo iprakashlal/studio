@@ -201,7 +201,7 @@ export function SitesHostingCard({ session, studio, index, onIndex }: { session:
             })}
           </ul>
         </>}
-      {!(db && info && info.signed && info.cfx && info.imp && info.pages && info.del) && sites.length > 0 && (
+      {(!db || (info && !(info.signed && info.cfx && info.imp && info.pages && info.del))) && sites.length > 0 && (
         <ul className="flex flex-col divide-y divide-ink-700 rounded-lg border border-ink-700" aria-label="Hosted sites">
           {sites.map((p) => (
             <li key={p.id} className="flex flex-wrap items-center gap-2 p-3 text-[13px]">

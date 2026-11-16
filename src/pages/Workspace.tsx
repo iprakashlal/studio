@@ -1,5 +1,8 @@
 import { SitesHostingCard } from "./SitesHostingCard";
-import { hides, useClientStudio } from "../lib/features";
+import { hides, limitsOf, useClientStudio } from "../lib/features";
+import { setThemeLimit } from "../themes/limit";
+import { DASH_DEFAULT, DASH_STATS } from "../lib/dashstats";
+import { TEMPLATES } from "../schema";
 import { StudioPageLinks, StudioPagesCard } from "./StudioPage";
 import { useEffect, useMemo, useState } from "react";
 import { isHosted } from "../lib/backend";
@@ -48,6 +51,9 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
   // A client Studio (set up by a Studio Partner) hides what the partner chose, and never offers Migration or Studio Partners.
   const client = useClientStudio();
   const hid = useMemo(() => hides(client, index), [client, index]);
+  // A client Studio's limits: how many themes it offers and how many sites of each type it may have.
+  const limits = useMemo(() => limitsOf(client, index), [client, index]);
+  useEffect(() => { if (client !== undefined && index) setThemeLimit(limits.themes); }, [client, index, limits.themes]);
   const [err, setErr] = useState("");
   const [bootAt, setBootAt] = useState(0);
   const hash = useHash();
@@ -96,7 +102,7 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
         {repo.demo && <span className="chip border-amber-400/50 text-amber-200">Demo · nothing is saved</span>}
         {!repo.demo && !isHosted(session) && olderData() && <a href="?data=shared" className="chip border-amber-400/50 text-amber-200" title="This tab shows the GitHub data from before the Studio moved. Press to go back to the shared projects.">Older GitHub data · switch back</a>}
         <nav className="ml-auto flex items-center gap-1" aria-label="Studio">
-          <a href="#/" className={`btn btn-ghost btn-sm ${!route || route === "/" ? "text-ink-100" : "text-ink-400"}`}>Projects</a>
+          <a href="#/" className={`btn btn-ghost btn-sm ${!route || route === "/" || route.startsWith("type/") ? "text-ink-100" : "text-ink-400"}`}>Projects</a>
           {!hid("themes") && <a href="#/themes" className="btn btn-ghost btn-sm text-ink-400">Themes</a>}
           {!repo.demo && <a href="#/settings" className={`btn btn-ghost btn-sm ${route.startsWith("settings") ? "text-ink-100" : "text-ink-400"}`}>Settings</a>}
           <span className="hidden px-2 text-sm text-ink-400 sm:inline">{session.username}</span>
@@ -157,6 +163,7 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
           <SitesHostingCard session={session} studio={studio} index={index} onIndex={setIndex} />
           </> : <>
           <p className="text-sm text-ink-300">Your Studio keeps everything as files in <b className="text-ink-100">{isHosted(session) ? `${session.cfg.owner === "cloudflare" ? "Cloudflare" : "Supabase"} (Studio “${session.cfg.repo}”)` : `${session.cfg.owner}/${session.cfg.repo}`}</b>: <code className="font-mono text-xs">studio.json</code> for the project list and <code className="font-mono text-xs">projects/</code> for each site's content, images and export snapshots.</p>
+          <DashNumbersCard studio={studio} index={index} onIndex={setIndex} />
           {isHosted(session)
             ? <section className="card flex flex-col gap-3 p-5" aria-label="Account"><h3 className="text-[15px] font-extrabold">Account</h3><p className="text-sm text-ink-300">Signed in as <b className="text-ink-100">{session.username}</b> with an email code.</p><button type="button" className="btn self-start" onClick={onSignOut}>Sign out</button></section>
             : <AccountPanel ns={NS} session={session} onUpdated={onSession} onSignOut={onSignOut} onForget={onForget} />}
@@ -167,7 +174,32 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
     );
   }
 
-  return <>{header}<Dashboard studio={studio} index={index} onIndex={setIndex} token={session.token} hid={hid} /><footer className="py-6"><StudioPageLinks host={null} repo={repo} where="footer" /></footer></>;
+  const only = /^type\/([a-z]+)$/.exec(route)?.[1];
+  return <>{header}<Dashboard key={only || "all"} studio={studio} index={index} onIndex={setIndex} token={session.token} hid={hid} max={limits.max} only={only && TEMPLATES[only] ? only : undefined} /><footer className="py-6"><StudioPageLinks host={null} repo={repo} where="footer" /></footer></>;
+}
+
+/** Settings → General → which numbers the dashboard shows at the top. */
+function DashNumbersCard({ studio, index, onIndex }: { studio: Studio; index: StudioIndex; onIndex: (i: StudioIndex) => void }) {
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  const chosen = index.dash?.stats?.length ? index.dash.stats : DASH_DEFAULT;
+  const toggle = async (key: string) => {
+    const next = chosen.includes(key) ? chosen.filter((k) => k !== key) : [...chosen, key];
+    if (!next.length) return toast("Keep at least one number, or they all hide.", "bad");
+    setBusy(true);
+    try { onIndex(await studio.updateIndex((i) => { i.dash = { stats: DASH_STATS.map((d) => d.key).filter((k) => next.includes(k)) }; }, "Choose the dashboard's numbers")); }
+    catch (e) { toast(explain(e), "bad"); }
+    setBusy(false);
+  };
+  return (
+    <section className="card flex flex-col gap-3 p-5" aria-label="Dashboard numbers">
+      <h3 className="text-[15px] font-extrabold">Dashboard numbers</h3>
+      <p className="text-sm text-ink-300">Tick the numbers to show at the top of the Projects page. Each shows today's count from your projects.</p>
+      <div className="grid gap-x-4 gap-y-2 sm:grid-cols-2">
+        {DASH_STATS.map((d) => <label key={d.key} className="flex items-center gap-2 text-sm"><input type="checkbox" className="accent-brand-500" checked={chosen.includes(d.key)} disabled={busy} onChange={() => toggle(d.key)} /><span className="flex-1">{d.label}</span><span className="font-display text-base font-extrabold tabular-nums text-ink-200">{d.count(index.projects)}</span></label>)}
+      </div>
+    </section>
+  );
 }
 
 /** Settings → the Studio's own name and logo (saved in studio.json, so every device shows them). */

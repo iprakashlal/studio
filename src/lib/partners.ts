@@ -57,14 +57,14 @@ export async function deployClientApp(pages: Pages, p: Pick<PartnerRec, "siteId"
 }
 
 /** What the client's Studio hides (lib/features.ts), written into its studio.json. */
-export async function setClientFeatures(remote: Repo, hide: string[]) {
+export async function setClientFeatures(remote: Repo, f: { hide: string[]; themes?: number; max?: Record<string, number> }) {
   const cur = await remote.getJSON<any>("studio.json");
   if (!cur) throw new Error("The client's Studio has no project list yet.");
-  await remote.putFile("studio.json", jsonB64({ ...cur.data, clientFeatures: { hide } }), "Set what this Studio shows", cur.sha);
+  await remote.putFile("studio.json", jsonB64({ ...cur.data, clientFeatures: f }), "Set what this Studio shows", cur.sha);
 }
-export async function getClientFeatures(remote: Repo): Promise<string[]> {
-  const cur = await remote.getJSON<any>("studio.json").catch(() => null);
-  return Array.isArray(cur?.data?.clientFeatures?.hide) ? cur.data.clientFeatures.hide : [];
+export async function getClientFeatures(remote: Repo): Promise<{ hide: string[]; themes?: number; max?: Record<string, number> }> {
+  const cur = await remote.getJSON<any>("studio.json").catch(() => null), f = cur?.data?.clientFeatures;
+  return { hide: Array.isArray(f?.hide) ? f.hide : [], themes: +f?.themes > 0 ? +f.themes : undefined, max: f?.max && typeof f.max === "object" ? f.max : undefined };
 }
 
 const projectFiles = async (r: Repo, id: string) => (await r.list(`projects/${id}/`)).filter((p) => !p.includes("/exports/"));

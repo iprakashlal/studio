@@ -33,6 +33,8 @@ export type Field =
   | { t: "themes" }
   /** Studio only: which themes the site's own admin page offers (content.cms.themes). */
   | { t: "adminThemes" }
+  /** Studio only: which sections this site's own admin page shows (content.cms.hide lists the hidden ones). */
+  | { t: "adminSections" }
   /** Import name, experience, education and skills from a LinkedIn profile PDF or data export. */
   | { t: "linkedin" }
   /** Studio only: "Fill in from a pamphlet" (business products), opened by the project view. */

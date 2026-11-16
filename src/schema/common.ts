@@ -150,6 +150,7 @@ export function adminCategory(): Category {
       { t: "note", text: "A less obvious name keeps casual visitors away from the sign-in screen. It isn't a password: the editor still needs your GitHub token. After you publish a new name, the old address stops working, so bookmark the new one." },
       { t: "note", text: "Names the site already uses (index, shop, cart, checkout, portfolio, account…) aren't allowed and fall back to admin.", tone: "warn" },
     ] },
+    { title: "Features in this site's admin page", studio: true, fields: [{ t: "adminSections" }] },
     { title: "Themes in the admin page", studio: true, fields: [{ t: "adminThemes" }] },],
   };
 }

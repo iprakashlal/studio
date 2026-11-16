@@ -47,8 +47,8 @@
     return hits[0];
   }
   var CSS = [
-    "#sf-ribbon{position:fixed;left:0;right:0;z-index:2147481000;display:flex;align-items:center;justify-content:center;gap:10px;padding:9px 44px 9px 14px;font:600 14.5px/1.35 var(--fb,system-ui,sans-serif);text-align:center;color:#fff;background:linear-gradient(90deg,var(--c1,var(--accent,#c2410c)),color-mix(in srgb,var(--c1,var(--accent,#c2410c)) 62%,#000));box-shadow:0 4px 18px rgba(0,0,0,.2)}",
-    "#sf-ribbon[data-pos=top]{top:0;animation:sf-in-t .5s ease both}#sf-ribbon[data-pos=bottom]{bottom:0;animation:sf-in-b .5s ease both}",
+    "#sf-ribbon{position:relative;left:0;right:0;z-index:2147481000;display:flex;align-items:center;justify-content:center;gap:10px;padding:9px 44px 9px 14px;font:600 14.5px/1.35 var(--fb,system-ui,sans-serif);text-align:center;color:#fff;background:linear-gradient(90deg,var(--c1,var(--accent,#c2410c)),color-mix(in srgb,var(--c1,var(--accent,#c2410c)) 62%,#000));box-shadow:0 4px 18px rgba(0,0,0,.2)}",
+    "#sf-ribbon[data-pos=top]{animation:sf-in-t .5s ease both}#sf-ribbon[data-pos=bottom]{position:fixed;bottom:0;animation:sf-in-b .5s ease both}",
     "#sf-ribbon button{position:absolute;right:8px;top:50%;transform:translateY(-50%);width:30px;height:30px;border:0;border-radius:50%;background:rgba(255,255,255,.18);color:#fff;font:700 16px/1 system-ui,sans-serif;cursor:pointer}#sf-ribbon button:hover{background:rgba(255,255,255,.3)}",
     "#sf-ribbon .sf-e{font-size:18px;line-height:1}",
     "@keyframes sf-in-t{from{transform:translateY(-100%)}to{transform:none}}@keyframes sf-in-b{from{transform:translateY(100%)}to{transform:none}}",
@@ -58,7 +58,29 @@
     "@media (prefers-reduced-motion:reduce){#sf-deco{display:none}#sf-ribbon{animation:none!important}}@media print{#sf-ribbon,#sf-deco{display:none}}"
   ].join("\n");
   function css() { if (document.getElementById("site-festival-css")) return; var s = document.createElement("style"); s.id = "site-festival-css"; s.textContent = CSS; document.head.appendChild(s); }
-  function clear() { ["sf-ribbon", "sf-deco"].forEach(function (id) { var e = document.getElementById(id); if (e) e.remove(); }); }
+  /* The top ribbon sits in the page, above the header, and scrolls away with it. A header that is pinned to the
+     window (position: fixed) is moved down by the ribbon's height while the ribbon is in view, so neither covers
+     the other. The bottom ribbon lifts the chat button and badges (assets/addons.js) above itself. */
+  var pinned = [], onScroll = null;
+  function unpin() {
+    pinned.forEach(function (p) { p.el.style.top = p.was; }); pinned = [];
+    if (onScroll) { removeEventListener("scroll", onScroll); removeEventListener("resize", onScroll); onScroll = null; }
+    document.documentElement.style.removeProperty("--sf-bottom");
+  }
+  function place(r, pos) {
+    unpin();
+    if (pos === "bottom") { document.documentElement.style.setProperty("--sf-bottom", r.offsetHeight + "px"); return; }
+    var all = document.querySelectorAll("header, nav, .nav, #nav, [data-nav]");
+    for (var i = 0; i < all.length; i++) {
+      var el = all[i]; if (el === r || r.contains(el)) continue;
+      var cs = getComputedStyle(el), top = parseFloat(cs.top);
+      if (cs.position === "fixed" && top >= 0 && top < 60 && el.getBoundingClientRect().top < 80) pinned.push({ el: el, was: el.style.top, top: top });
+    }
+    if (!pinned.length) return;
+    onScroll = function () { var h = r.isConnected ? Math.max(0, r.offsetHeight - scrollY) : 0; pinned.forEach(function (p) { p.el.style.top = (p.top + h) + "px"; }); };
+    addEventListener("scroll", onScroll, { passive: true }); addEventListener("resize", onScroll); onScroll();
+  }
+  function clear() { unpin(); ["sf-ribbon", "sf-deco"].forEach(function (id) { var e = document.getElementById(id); if (e) e.remove(); }); }
   var shownKey = "";
   function mount(C, o) {
     o = o || {};
@@ -76,8 +98,9 @@
       var r = document.createElement("div"); r.id = "sf-ribbon"; r.setAttribute("data-pos", pos); r.setAttribute("role", "status");
       var text = String(hit.greet).replace(/\{site\}/g, o.site || "");
       r.innerHTML = '<span class="sf-e" aria-hidden="true">' + glyph + "</span><span>" + esc(text) + (o.site && !/\{site\}/.test(hit.greet) && F.signoff !== false ? " <span style=\"opacity:.85;font-weight:500\">from " + esc(o.site) + "</span>" : "") + '</span><span class="sf-e" aria-hidden="true">' + glyph + '</span><button type="button" aria-label="Close">×</button>';
-      r.querySelector("button").onclick = function () { r.remove(); try { sessionStorage.setItem(seen, "1"); } catch (e) {} };
-      document.body.appendChild(r);
+      r.querySelector("button").onclick = function () { r.remove(); unpin(); try { sessionStorage.setItem(seen, "1"); } catch (e) {} };
+      if (pos === "top") document.body.insertBefore(r, document.body.firstChild); else document.body.appendChild(r);
+      place(r, pos); setTimeout(function () { if (r.isConnected) place(r, pos); }, 700);
     }
     var decoSeen = false; try { decoSeen = !o.preview && sessionStorage.getItem(seen + ":d") === "1"; } catch (e) {}
     if (style !== "ribbon" && !decoSeen && !(window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches)) {

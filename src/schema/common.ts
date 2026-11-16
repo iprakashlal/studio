@@ -66,19 +66,21 @@ export function emailsCategory(form: boolean): Category {
   };
 }
 
-/** Older content gets the festival overlay's fields: off until the Studio offers it, then on by itself; one row
- *  for every festival in the list (new festivals are added, the site's own choices kept). */
+/** Older content gets the festival overlay's fields; one row for every festival in the list (new festivals are
+ *  added, the site's own choices kept). */
 export function prepareFestival(c: any) {
   if (!c || typeof c !== "object") return;
   const f = c.festival && typeof c.festival === "object" ? c.festival : {};
   const have: any[] = Array.isArray(f.items) ? f.items.filter((x: any) => x && typeof x === "object") : [];
-  c.festival = { allowed: f.allowed === true, on: f.on !== false, style: f.style || "both", position: f.position || "top", lead: String(f.lead ?? 2), signoff: f.signoff !== false, preview: f.preview || "",
+  // One switch now (festival.on). Content from when the Studio had to offer it first keeps what it showed: a site
+  // that wasn't offered it stays off until its owner switches it on.
+  const on = f.v >= 2 ? f.on !== false : c.festival && typeof c.festival === "object" ? f.allowed === true && f.on !== false : true;
+  c.festival = { v: 2, on, style: f.style || "both", position: f.position || "top", lead: String(f.lead ?? 2), signoff: f.signoff !== false, preview: f.preview || "",
     items: FESTIVALS.map((d) => { const x = have.find((h) => h.id === d.id) || {}; return { id: d.id, name: d.name, on: x.on !== false, from: x.from || "", to: x.to || "", message: x.message || "" }; }),
     custom: Array.isArray(f.custom) ? f.custom : [] };
 }
-/** Features → Festival overlay: greetings and decorations on India's festivals (assets/festival.js). The Studio
- *  decides for each site whether its owner gets this (festival.allowed); once offered it runs by itself on the
- *  official days, and the owner picks festivals, dates and wording, or switches it off. */
+/** Features → Festival overlay: greetings and decorations on India's festivals (assets/festival.js). It runs by
+ *  itself on the official days while switched on; the owner picks festivals, dates and wording, or switches it off. */
 export function festivalCategory(): Category {
   const g2 = (...fields: Field[]): Field => ({ t: "grid", cols: 2, fields });
   const byId = (id: string) => FESTIVALS.find((d) => d.id === id);
@@ -86,10 +88,6 @@ export function festivalCategory(): Category {
     id: "festival", label: "Festival overlay", group: "Features",
     desc: "A greeting ribbon and a short shower of decorations on India's festivals. It shows by itself on the official days; choose the festivals, change the dates or wording, or switch it off.",
     cards: [
-      { title: "Offer this to the site", studio: true, fields: [
-        { t: "toggle", path: "festival.allowed", label: "This site gets the festival overlay" },
-        { t: "note", text: "Your decision as the Studio, for this site only. While it is off, nothing shows on the site and its admin page has no Festival overlay section. Once it is on, the site's owner can pick festivals and dates or switch it off in their admin page. Publish to apply." },
-      ] },
       { title: "Festival overlay", fields: [
         { t: "toggle", path: "festival.on", label: "Show festival greetings on the site" },
         { t: "when", path: "festival.on", is: "true", fields: [

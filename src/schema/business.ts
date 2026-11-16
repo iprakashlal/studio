@@ -2,7 +2,7 @@ import type { Category, Field, TemplateDef } from "./types";
 import { BODY_FONTS, DISPLAY_FONTS, FX_AXES, LINE_BREAKS_AXIS, type Axis } from "../themes/catalog";
 import { BIZ_AXES, BIZ_TAGS, BIZ_THEMES, businessThemeValues } from "../themes/business";
 import { NAV_MODE_FIELD } from "../themes/fields";
-import { adminCategory, emailsCategory, featuresCategory, festivalCategory, staticPagesCategory, heroSlidesCard, prepareSlides, prepareMaintenance, seoCategory, warrantyCategory } from "./common";
+import { adminCategory, consentCategory, emailsCategory, featuresCategory, festivalCategory, menuCategory, menuItem, prepareMenu, staticPagesCategory, heroSlidesCard, prepareSlides, prepareMaintenance, seoCategory, warrantyCategory } from "./common";
 
 const g2 = (...fields: Field[]): Field => ({ t: "grid", cols: 2, fields });
 const g3 = (...fields: Field[]): Field => ({ t: "grid", cols: 3, fields });
@@ -55,6 +55,7 @@ const schema: Category[] = [
       { title: "Menu button", fields: [g2({ t: "text", path: "nav.cta", label: "Button label (empty hides it)" }, { t: "select", path: "nav.ctaTarget", label: "Goes to", options: TARGETS })] },
     ],
   },
+  menuCategory({ where: "the sections marked “In the menu” (or the site's pages when it has several)", targets: [{ value: "home", label: "Home (top of the site)" }, ...TARGETS.map((t) => ({ value: t.value, label: `Section: ${t.label}` })), { value: "warranty", label: "Warranty & status check" }] }),
   {
     id: "hero", label: "Hero", group: "Pages", sub: "Sections", desc: "The first screen: headline, intro, buttons, trust badges and image.",
     cards: [
@@ -204,6 +205,7 @@ const schema: Category[] = [
   warrantyCategory("popup-or-page"),
   emailsCategory(true),
   featuresCategory(),
+  consentCategory(),
   festivalCategory(),
   seoCategory(true),
   adminCategory(),
@@ -219,6 +221,7 @@ function prepareBusiness(c: any) {
   c.products = { eyebrow: "Catalogue", title: "Products", lede: "", homeCount: 6, enquire: "Enquire", more: "View more", all: "View all products", showPrice: true, filter: true, related: true, ...(c.products && typeof c.products === "object" ? c.products : {}) };
   if (!Array.isArray(c.products.items)) c.products.items = [];
   c.hero ||= {}; prepareSlides(c.hero, c.theme?.deep || "#0E1B2C"); prepareMaintenance(c);
+  prepareMenu(c, () => (Array.isArray(c.sections) ? c.sections : []).filter((x: any) => x && x.show !== false && x.inNav).map((x: any) => menuItem(x.label || x.id, x.id)));
   // Enquiries always go to the site's database now: the old "always open the email app" choice is gone.
   if (c.contact?.form && typeof c.contact.form === "object") { const F = c.contact.form; if (F.saveTo !== "file") F.saveTo = "auto"; F.notify = F.notify === true; F.notifyTo ??= ""; F.notifySubject ??= ""; }
   c.hero.panel = { show: true, source: "auto", aLabel: "", aValue: "", bars: true, rows: [], cLabel: "", cValue: "", dot: true, ...(c.hero.panel && typeof c.hero.panel === "object" ? c.hero.panel : {}) };

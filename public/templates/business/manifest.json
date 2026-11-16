@@ -21,6 +21,8 @@
     "assets/maint.js",
     "assets/addons.js",
     "assets/festival.js",
+    "assets/consent.js",
+    "assets/menu.js",
     "README.md",
     "supabase/enquiries.sql"
   ],

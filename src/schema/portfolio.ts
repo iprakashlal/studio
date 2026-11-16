@@ -1,6 +1,6 @@
 import type { Category, Field, TemplateDef } from "./types";
 import { AXES, BODY_FONTS, DISPLAY_FONTS, KIT_AXIS, LINE_BREAKS_AXIS, PORTFOLIO_AXES, THEMES, onColor, portfolioThemeValues } from "../themes/catalog";
-import { adminCategory, emailsCategory, featuresCategory, festivalCategory, staticPagesCategory, heroSlidesCard, prepareSlides, prepareMaintenance, seoCategory } from "./common";
+import { adminCategory, consentCategory, emailsCategory, featuresCategory, festivalCategory, menuCategory, menuItem, prepareMenu, staticPagesCategory, heroSlidesCard, prepareSlides, prepareMaintenance, seoCategory } from "./common";
 import VELOCITY_DEFAULTS from "./velocity-defaults.json";
 import { NAV_MODE_FIELD, NAV_MODE_NOTE, themeCards } from "../themes/fields";
 
@@ -114,6 +114,7 @@ const schema: Category[] = [
       ] },
     ],
   },
+  menuCategory({ where: "the sections under Menu & order", note: "Four page layouts have no ordinary menu to replace (Horizontal reel, Terminal, Drag canvas and Cinema scenes): they keep their own navigation. Every other layout, and the classic page, uses your menu.", targets: [{ value: "top", label: "Top of the page" }, ...Object.entries(SECTION_NAMES).map(([value, label]) => ({ value, label: `Section: ${label}` }))] }),
   {
     id: "linkedin", label: "Import from LinkedIn", group: "Pages", desc: "Fill your portfolio from your LinkedIn profile: name, headline, about, experience, education, skills and links.",
     cards: [{ title: "LinkedIn profile", fields: [{ t: "linkedin" }] }],
@@ -204,6 +205,7 @@ const schema: Category[] = [
   staticPagesCategory("portfolio"),
   emailsCategory(false),
   featuresCategory(),
+  consentCategory(),
   festivalCategory(),
   seoCategory(false),
   adminCategory(),
@@ -232,6 +234,7 @@ export const portfolioTemplate: TemplateDef = {
     if (c.hero && typeof c.hero === "object" && !c.hero.graphic) c.hero.graphic = "elements";
     if (c.hero && typeof c.hero === "object") prepareSlides(c.hero, "#000000");
     prepareMaintenance(c);
+    prepareMenu(c, () => (Array.isArray(c.sections) ? c.sections : []).filter((x: any) => x && x.visible && x.id !== "contact").map((x: any) => menuItem(x.navLabel || x.id, x.id)));
     // Hero → Photo was replaced by the logo icon / disc image (Brand & theme): an existing photo moves to the disc.
     if (c.hero && c.hero.photo) {
       if (!c.hero.discImage) c.hero.discImage = c.hero.photo;

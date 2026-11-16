@@ -1,7 +1,9 @@
 /* Features on top of every page, for every template. Content: content.addons = {
      chat:  { on, kind: "whatsapp" | "phone" | "email" | "link", value, label, message, side, showLabel, color },
      badge: { on, text, api, field, link, side },      // text may hold {value}, read from the API's JSON answer
-     code:  [{ id, name, on, where: "body" | "head", pages: "all" | "home", code }],   // any service's snippet
+     code:  [{ id, name, on, where: "body" | "head", pages: "all" | "home", consent, code }],   // any service's snippet;
+                                                       // consent: "" (always) | "analytics" | "marketing" | "preferences":
+                                                       // with the consent banner on (assets/consent.js) it waits for that permission
      api:   { on, url } }                              // form entries are also posted here as JSON
    window.SiteAddons.mount(C, { preview, home, site }): safe to call again after every render. Custom code and the
    custom API only run on the live site (never in the editor's preview). */
@@ -70,11 +72,19 @@
     if (b) b.classList.toggle("sa-stack", !!c && c.getAttribute("data-side") === b.getAttribute("data-side"));
   }
   // ---- custom code: each snippet once per page load, scripts recreated so they run
-  var ran = {};
-  function code(list, o) {
+  var ran = {}, last = null;
+  /** With the consent banner on, a snippet with a category runs only once the visitor allowed that category. */
+  function allowed(x, C) {
+    var cat = x.consent, K = (C && C.consent) || {};
+    if (!K.on || !cat || cat === "necessary" || cat === "always") return true;
+    return window.SiteConsent ? window.SiteConsent.has(cat) : false;
+  }
+  addEventListener("site:consent", function () { if (last) code(last.list, last.o, last.C); });
+  function code(list, o, C) {
     if (o.preview) return;
+    last = { list: list, o: o, C: C };
     (list || []).forEach(function (x, i) {
-      if (!x || x.on === false || !String(x.code || "").trim() || (x.pages === "home" && !o.home)) return;
+      if (!x || x.on === false || !String(x.code || "").trim() || (x.pages === "home" && !o.home) || !allowed(x, C)) return;
       var key = x.id || "i" + i; if (ran[key]) return; ran[key] = 1;
       var t = document.createElement("template"); t.innerHTML = String(x.code);
       var to = x.where === "head" ? document.head : document.body;
@@ -108,7 +118,7 @@
   }
   function mount(C, o) {
     o = o || {}; var A = (C && C.addons) || {}; css();
-    chat(A.chat); badge(A.badge, o); stack(); setTimeout(stack, 900); code(A.code, o); forms(A.api, o);
+    chat(A.chat); badge(A.badge, o); stack(); setTimeout(stack, 900); code(A.code, o, C); forms(A.api, o);
   }
   window.SiteAddons = { mount: mount };
 })();

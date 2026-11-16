@@ -52,7 +52,7 @@ export function FieldView({ f, obj, base }: { f: F; obj: any; base: string }) {
 
   switch (f.t) {
     case "when": {
-      const v = String(getP(root, f.path) ?? "");
+      const v = String(getP(f.local ? obj : root, f.path) ?? "");
       if (f.is !== undefined ? v !== f.is : v === f.not) return null;
       return <>{f.fields.map((x, i) => <FieldView key={i} f={x} obj={obj} base={base} />)}</>;
     }

@@ -80,10 +80,35 @@ async function writeFile(env: Env, scope: string, path: string, bytes: Uint8Arra
   return s;
 }
 
-async function sendMail(env: Env, to: string, subject: string, html: string) {
+async function sendMail(env: Env, to: string | string[], subject: string, html: string, replyTo?: string) {
   if (!env.RESEND_API_KEY || !env.MAIL_FROM) throw new Error("Email isn't set up on this database (Resend).");
-  const r = await fetch("https://api.resend.com/emails", { method: "POST", headers: { Authorization: "Bearer " + env.RESEND_API_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ from: env.MAIL_FROM, to: [to], subject, html }) });
+  const r = await fetch("https://api.resend.com/emails", { method: "POST", headers: { Authorization: "Bearer " + env.RESEND_API_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ from: env.MAIL_FROM, to: Array.isArray(to) ? to : [to], subject, html, ...(replyTo ? { reply_to: replyTo } : {}) }) });
   if (!r.ok) throw new Error("Resend didn't accept the email (" + r.status + "): " + (await r.text()).slice(0, 200));
+}
+
+// ---------------------------------------------------------------- enquiry emails
+const EMAIL_RE = /^[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+$/;
+/** Emails a new enquiry to the site's owner when the site's published content asks for it (contact.form.notify).
+ *  The addresses come only from that content, never from the visitor's request, and a busy hour stops the emails
+ *  (the enquiries are still saved), so the form can't be used to send mail to strangers or to flood an inbox. */
+async function notifyEnquiry(env: Env, site: string, data: Record<string, string>, page: string) {
+  if (!env.RESEND_API_KEY || !env.MAIL_FROM) return;
+  const f = await readFile(env, "site:" + site, "content.json"); if (!f) return;
+  let c: any; try { c = JSON.parse(new TextDecoder().decode(f.bytes)); } catch { return; }
+  const F = c?.contact?.form; if (!F || F.notify !== true) return;
+  const to = [...new Set(String(F.notifyTo || c?.contact?.email || "").split(/[,;\s]+/).map((x) => x.trim().toLowerCase()).filter((x) => EMAIL_RE.test(x)))].slice(0, 3);
+  if (!to.length) return;
+  const since = new Date(Date.now() - 3600_000).toISOString();
+  const n = await env.DB.prepare("select count(*) n from enquiries where site = ? and created_at > ?").bind(site, since).first<{ n: number }>();
+  if ((n?.n || 0) > 40) return;
+  const esc = (x: string) => x.replace(/[&<>"]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[ch]!));
+  const one = (x: string) => x.replace(/[\r\n]+/g, " ").trim();
+  const name = one(String(c?.brand?.name || c?.brand?.logoText || site));
+  const subject = one(String(F.notifySubject || "New enquiry from {name}").replace(/\{name\}/g, data.name || "your website").replace(/\{site\}/g, name)).slice(0, 150) || "New enquiry";
+  const label = (k: string) => k.replace(/[-_]+/g, " ").replace(/^./, (ch) => ch.toUpperCase());
+  const rows = Object.entries(data).filter(([k]) => k !== "consent").map(([k, v]) => `<tr><td style="padding:6px 14px 6px 0;color:#667;vertical-align:top;white-space:nowrap">${esc(label(k))}</td><td style="padding:6px 0;white-space:pre-wrap">${esc(v)}</td></tr>`).join("");
+  const html = `<div style="font:15px/1.5 system-ui,Segoe UI,Arial,sans-serif;color:#111"><p style="margin:0 0 12px"><b>New enquiry</b> from the ${esc(name)} website${page ? ` (page ${esc(page)})` : ""}.</p><table style="border-collapse:collapse">${rows}</table><p style="margin:16px 0 0;color:#667;font-size:13px">It is also saved under Enquiries in the site's admin page.${EMAIL_RE.test(data.email || "") ? " Reply to this email to answer the visitor." : ""}</p></div>`;
+  await sendMail(env, to, subject, html, EMAIL_RE.test(data.email || "") ? data.email : undefined);
 }
 
 // ---------------------------------------------------------------- writing site text (/ai/write)
@@ -305,11 +330,11 @@ async function writeSite(env: Env, q: any) {
 }
 
 export default {
-  async fetch(req: Request, env: Env): Promise<Response> {
+  async fetch(req: Request, env: Env, ctx?: { waitUntil(p: Promise<unknown>): void }): Promise<Response> {
     if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
     const u = new URL(req.url), p = u.pathname.replace(/\/+$/, "") || "/";
     try {
-      if (p === "/") return json({ ok: true, service: "site-studio-db", v: V, mail: !!(env.RESEND_API_KEY && env.MAIL_FROM), ...(env.CF_TOKEN && env.CF_ACCOUNT ? { deploy: true, account: env.CF_ACCOUNT } : {}), ...(env.GH_TOKEN ? { gh: true } : {}), ...(env.AI ? { ai: true, pamphlet: 2 } : {}), reviews: true, accounts: 2, cfx: 3, studioPages: 1, del: 1, ...(otherAccounts(env).length ? { more: otherAccounts(env).length } : {}) });
+      if (p === "/") return json({ ok: true, service: "site-studio-db", v: V, mail: !!(env.RESEND_API_KEY && env.MAIL_FROM), ...(env.CF_TOKEN && env.CF_ACCOUNT ? { deploy: true, account: env.CF_ACCOUNT } : {}), ...(env.GH_TOKEN ? { gh: true } : {}), ...(env.AI ? { ai: true, pamphlet: 2 } : {}), reviews: true, accounts: 2, cfx: 3, studioPages: 1, del: 1, enqMail: 1, ...(otherAccounts(env).length ? { more: otherAccounts(env).length } : {}) });
 
       // ---- sign in with an emailed code (members only)
       if (p === "/auth/code" && req.method === "POST") {
@@ -363,6 +388,9 @@ export default {
         for (const [k, v] of Object.entries(q.data || {}).slice(0, 25)) if (/^[\w-]{1,40}$/.test(k) && v != null && String(v).trim()) data[k] = String(v).slice(0, 5000);
         if (!Object.keys(data).length) return err(400, "The form was empty.");
         await env.DB.prepare("insert into enquiries (site, data, page, created_at) values (?, ?, ?, ?)").bind(site, JSON.stringify(data), String(q.page || "").slice(0, 200), new Date().toISOString()).run();
+        // The enquiry is saved either way; the email is a copy, so a mail failure never fails the form.
+        const mail = notifyEnquiry(env, site, data, String(q.page || "").slice(0, 200)).catch(() => {});
+        if (ctx?.waitUntil) ctx.waitUntil(mail); else await mail;
         return json({ ok: true });
       }
 

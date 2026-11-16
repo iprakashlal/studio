@@ -125,7 +125,7 @@ const DEFAULT = {
       enabled: true, title: "Tell us about your project", askPhone: true, askCompany: true, askService: true, askBudget: true,
       budgets: ["Under ₹5L", "₹5L – ₹25L", "₹25L – ₹1Cr", "Above ₹1Cr"], submit: "Send enquiry",
       success: "Thank you. We've received your enquiry and will reply within one working day.", consent: "I agree to be contacted about this enquiry.",
-      saveTo: "auto", fileUrl: "", sbUrl: "", sbKey: "", site: "",
+      saveTo: "auto", fileUrl: "", sbUrl: "", sbKey: "", site: "", notify: false, notifyTo: "", notifySubject: "",
     },
   },
   warranty: { enabled: false, title: "Warranty & service status", intro: "Enter the number on your invoice or product to see its warranty and service status.", navLabel: "Warranty", inNav: true, inFooter: true,
@@ -594,7 +594,6 @@ function prefill(id, scroll) {
 /** Where enquiries go: the hosted site's Supabase, the form's own Supabase settings, or email. */
 function backend() {
   const F = C.contact.form;
-  if (F.saveTo === "email") return null;
   if (F.saveTo === "file") return /^https:\/\//.test(F.fileUrl || "") ? { file: F.fileUrl } : null;
   if (HOST && HOST.api && HOST.site) return { cf: HOST.api, site: HOST.site };
   if (HOST && HOST.db && HOST.key && HOST.site) return { url: HOST.db, key: HOST.key, site: HOST.site };

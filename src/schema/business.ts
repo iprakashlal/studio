@@ -185,10 +185,19 @@ const schema: Category[] = [
           { t: "when", path: "contact.form.askBudget", is: "true", fields: [{ t: "strings", path: "contact.form.budgets", label: "Budget choices", addLabel: "Add choice" }] },
           g2({ t: "text", path: "contact.form.submit", label: "Button label" }, { t: "text", path: "contact.form.consent", label: "Consent checkbox (empty hides it)" }),
           { t: "textarea", path: "contact.form.success", label: "Message after sending", rows: 2 },
-          { t: "select", path: "contact.form.saveTo", label: "Where enquiries go", options: [{ value: "auto", label: "Save to Supabase when the site has it, otherwise email" }, { value: "file", label: "Save to a JSON file in a private GitHub repository (no email)" }, { value: "email", label: "Always open the visitor's email app" }] },
-          { t: "when", path: "contact.form.saveTo", is: "file", fields: [{ t: "note", text: "Each enquiry is saved as a JSON file in a private GitHub repository and shows under Enquiries. No email is sent. Set it up in the Studio with the Enquiry inbox button at the top of the project (it fills in the address below), then publish." }, { t: "text", path: "contact.form.fileUrl", label: "Inbox address", check: "https", hint: "Filled in by Enquiry inbox in the Studio." }] },
-          { t: "when", path: "contact.form.saveTo", not: "file", fields: [{ t: "note", text: "Sites hosted on external services (Cloudflare or Netlify, with the Cloudflare database or Supabase) save enquiries automatically and list them under Enquiries in the admin page. On GitHub Pages, add a Supabase project below (run supabase/enquiries.sql from the site's files once). Without Supabase, the form opens the visitor's email app with everything filled in, addressed to your email above." }] },
-          { t: "when", path: "contact.form.saveTo", is: "auto", fields: [g3({ t: "text", path: "contact.form.sbUrl", label: "Supabase Project URL (GitHub sites)", check: "https" }, { t: "text", path: "contact.form.sbKey", label: "Public (anon) key" }, { t: "text", path: "contact.form.site", label: "Site ID", ph: "my-company" })] },
+          { t: "note", text: "Enquiries are saved in the site's database and listed under Enquiries in the admin page. (A site that has no database yet opens the visitor's email app instead, addressed to your contact email: give it one with Publish to Cloudflare in the Studio.)" },
+          { t: "toggle", path: "contact.form.notify", label: "Also email me each enquiry" },
+          { t: "when", path: "contact.form.notify", is: "true", fields: [
+            g2({ t: "text", path: "contact.form.notifyTo", label: "Send to", ph: "the contact email above", hint: "Up to 3 addresses, separated by commas. Empty uses the contact email under Contact details." },
+              { t: "text", path: "contact.form.notifySubject", label: "Subject", ph: "New enquiry from {name}", hint: "{name} is the visitor's name, {site} the site's name." }),
+            { t: "note", text: "The email lists everything the visitor filled in, and replying to it answers the visitor. It is sent by the site's database through the same Resend email settings that send your sign-in codes, and starts once you publish. If no email arrives, update the database once (Studio → Settings → Hostings → Update the database; for a site with its own database, save its Email settings in Publish to Cloudflare)." },
+          ] },
+          { t: "when", path: "contact.form.saveTo", is: "file", fields: [
+            { t: "note", text: "This site still uses the older enquiry inbox: each enquiry is a JSON file in a private GitHub repository, with no email. Switch below to save to the database instead.", tone: "warn" },
+            { t: "select", path: "contact.form.saveTo", label: "Enquiry inbox", options: [{ value: "file", label: "Keep the private repository inbox" }, { value: "auto", label: "Use the site's database" }] },
+            { t: "text", path: "contact.form.fileUrl", label: "Inbox address", check: "https", hint: "Filled in by Enquiry inbox in the Studio." },
+          ] },
+          { t: "when", path: "contact.form.sbUrl", not: "", fields: [g3({ t: "text", path: "contact.form.sbUrl", label: "Supabase Project URL (GitHub sites)", check: "https" }, { t: "text", path: "contact.form.sbKey", label: "Public (anon) key" }, { t: "text", path: "contact.form.site", label: "Site ID", ph: "my-company" })] },
         ] }] },
     ],
   },
@@ -208,6 +217,8 @@ function prepareBusiness(c: any) {
   c.products = { eyebrow: "Catalogue", title: "Products", lede: "", homeCount: 6, enquire: "Enquire", more: "View more", all: "View all products", showPrice: true, filter: true, related: true, ...(c.products && typeof c.products === "object" ? c.products : {}) };
   if (!Array.isArray(c.products.items)) c.products.items = [];
   c.hero ||= {}; prepareSlides(c.hero, c.theme?.deep || "#0E1B2C"); prepareMaintenance(c);
+  // Enquiries always go to the site's database now: the old "always open the email app" choice is gone.
+  if (c.contact?.form && typeof c.contact.form === "object") { const F = c.contact.form; if (F.saveTo !== "file") F.saveTo = "auto"; F.notify = F.notify === true; F.notifyTo ??= ""; F.notifySubject ??= ""; }
   c.hero.panel = { show: true, source: "auto", aLabel: "", aValue: "", bars: true, rows: [], cLabel: "", cValue: "", dot: true, ...(c.hero.panel && typeof c.hero.panel === "object" ? c.hero.panel : {}) };
   if (!Array.isArray(c.hero.panel.rows)) c.hero.panel.rows = [];
   c.sections = Array.isArray(c.sections) ? c.sections : [];

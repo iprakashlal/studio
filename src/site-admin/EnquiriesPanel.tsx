@@ -21,7 +21,7 @@ export function enquiriesCfg(content: any, hosted?: SbCfg | null): SbCfg | null 
 }
 
 export function EnquiriesPanel({ cfg, cf, account, hosted, email: contactEmail, form, ghToken, inStudio }: { cfg: SbCfg | null; cf?: CfSiteCfg; account?: string; hosted?: boolean; email?: string; form?: any; ghToken?: string; inStudio?: boolean }) {
-  if (cf && form?.saveTo !== "file" && form?.saveTo !== "email") return <CfInbox key={cf.api + cf.site} cf={cf} account={account} />;
+  if (cf && form?.saveTo !== "file") return <CfInbox key={cf.api + cf.site} cf={cf} account={account} />;
   if (form?.saveTo === "file") {
     if (!/^https:\/\//.test(form.fileUrl || "")) return (
       <section className="card flex max-w-2xl flex-col gap-3 p-5 text-sm text-ink-300">

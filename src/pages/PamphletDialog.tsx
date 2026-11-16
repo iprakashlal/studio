@@ -24,7 +24,8 @@ export function PamphletDialog({ session, project, draft, upload, onApply, onClo
   const [styles, setStyles] = useState<Set<ShotStyle>>(new Set(SHOT_STYLES.map((x) => x.id)));
   const [picOf, setPicOf] = useState<number[]>([]);
   const [preview, setPreview] = useState<{ i: number; urls: string[] } | null>(null);
-  const accent: string = draft?.theme?.c1 || "#5B7CFF";
+  const accent: string = draft?.theme?.c1 || draft?.theme?.accent || "#5B7CFF";
+  const shop = project.template === "store"; // the shop keeps its products as a list with numbers for prices
   const [busy, setBusy] = useState(""), [err, setErr] = useState("");
   const [found, setFound] = useState<PamphletProduct[] | null>(null), [guessed, setGuessed] = useState(false);
   const [pick, setPick] = useState<Set<number>>(new Set());
@@ -63,7 +64,19 @@ export function PamphletDialog({ session, project, draft, upload, onApply, onClo
   const apply = async () => {
     setErr(""); setBusy("Adding to your catalogue");
     try {
-      const c = clone(draft); c.products ||= {}; const items: any[] = (c.products.items ||= []);
+      const c = clone(draft);
+      if (!shop) c.products ||= {};
+      const items: any[] = shop ? (Array.isArray(c.products) ? c.products : (c.products = [])) : (c.products.items ||= []);
+      // Shop: a product's category is one of the shop's categories (made when it's new), its price a number.
+      const slugOf = (x: string) => x.toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 50);
+      const catId = (name: string) => {
+        const n = name.trim(); if (!n) return "";
+        const cats: any[] = Array.isArray(c.categories) ? c.categories : (c.categories = []);
+        const hit = cats.find((x) => same(String(x?.name || ""), n) || x?.id === slugOf(n)); if (hit) return hit.id;
+        const id = slugOf(n) || "cat-" + (cats.length + 1); cats.push({ id, name: n, description: "", image: null }); return id;
+      };
+      const money = (x: string) => { const m = String(x || "").replace(/,/g, "").match(/\d+(\.\d+)?/); return m ? Math.round(+m[0]) : 0; };
+      const shopText = (p: PamphletProduct) => [p.details, p.specs.length ? p.specs.map((x: any) => (typeof x === "string" ? x : [x.label ?? x.name, x.value].filter(Boolean).join(": "))).join("\n") : ""].filter((x) => String(x || "").trim()).join("\n\n");
       const pages = new Map<number, { path: string } | null>();
       const photosFor = async (i: number, p: PamphletProduct): Promise<{ path: string }[]> => {
         const d = doc.current; if (!d || photos === "none") return [];
@@ -84,6 +97,20 @@ export function PamphletDialog({ session, project, draft, upload, onApply, onClo
         if (!pick.has(i)) continue;
         const imgs = await photosFor(i, p), img = imgs[0];
         const old = items.find((x) => same(String(x?.name || ""), p.name));
+        if (shop) {
+          if (old) {
+            if (!String(old.short || "").trim() && p.summary) old.short = p.summary;
+            if (!String(old.description || "").trim()) old.description = shopText(p);
+            if (!Number(old.price) && money(p.price)) old.price = money(p.price);
+            if (!old.category && p.category) old.category = catId(p.category);
+            if (!(old.features || []).length && p.features.length) old.features = p.features;
+            if (img && !(old.images || []).length) old.images = imgs;
+          } else {
+            let slug = slugOf(p.name) || "product", k = 2; while (items.some((x) => x?.slug === slug)) slug = `${slugOf(p.name) || "product"}-${k++}`;
+            items.push({ id: "p" + Date.now().toString(36) + n, slug, name: p.name, category: catId(p.category), price: money(p.price), compareAt: 0, images: imgs, short: p.summary, description: shopText(p), features: p.features, optionName: "", options: [], stock: "in", featured: false, badge: "" });
+          }
+          n++; continue;
+        }
         if (old) {
           // Same product already listed: fill in only what it doesn't have yet.
           for (const k of ["category", "summary", "price", "details"] as const) if (!String(old[k] || "").trim() && p[k]) old[k] = p[k];

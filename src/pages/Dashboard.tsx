@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { ThemeGallery } from "../themes/ThemeGallery";
 import { anyThemeById as themeById } from "../themes/codes";
+import { dashStats } from "../lib/dashstats";
 import { TEMPLATES, TEMPLATE_LIST } from "../schema";
 import { CATEGORY_COLORS, type CategoryRec, type ProjectMeta, type Studio, type StudioIndex } from "../lib/studio";
 import { explain } from "../lib/repo";
@@ -20,8 +21,13 @@ const STATUS: Record<ProjectMeta["status"], { label: string; cls: string }> = {
 /** Last live-site check per project, so going back and forth doesn't re-check every time. */
 const checked = new Map<string, number>();
 
-export function Dashboard({ studio, index, onIndex, token, hid = () => false }: { studio: Studio; index: StudioIndex; onIndex: (i: StudioIndex) => void; token: string; /** Features a partner hid in this client Studio. */ hid?: (key: string) => boolean }) {
-  const canNew = !hid("new") && TEMPLATE_LIST.some((t) => !hid("tpl-" + t.id));
+export function Dashboard({ studio, index, onIndex, token, hid = () => false, max = {}, only }: { studio: Studio; index: StudioIndex; onIndex: (i: StudioIndex) => void; token: string; /** Features a partner hid in this client Studio. */ hid?: (key: string) => boolean; /** The most sites of each template this client Studio may have. */ max?: Record<string, number>; /** One template's own page (#/type/<id>): every card of that type. */ only?: string }) {
+  // A template is on offer when it isn't hidden and the Studio hasn't reached its limit for that type.
+  const countOf = (t: string) => index.projects.filter((p) => p.template === t).length;
+  const room = (t: string) => max[t] === undefined || countOf(t) < max[t];
+  const offered = TEMPLATE_LIST.filter((t) => !hid("tpl-" + t.id) && room(t.id));
+  const full = TEMPLATE_LIST.filter((t) => !hid("tpl-" + t.id) && !room(t.id));
+  const canNew = !hid("new") && offered.length > 0;
   const toast = useToast();
   const [live, setLive] = useState<Record<string, "checking" | "pulled" | "conflict">>({});
   const [pushing, setPushing] = useState(false);
@@ -60,6 +66,8 @@ export function Dashboard({ studio, index, onIndex, token, hid = () => false }: 
   const [cat, setCat] = useState("");
   const [tpl, setTpl] = useState("");
   const [status, setStatus] = useState("");
+  const [client, setClient] = useState("");
+  const clients = useMemo(() => [...new Map(index.projects.map((p) => p.client.trim()).filter(Boolean).map((c) => [c.toLowerCase(), c] as const)).values()].sort((a, b) => a.localeCompare(b)), [index]);
   const [sort, setSort] = useState("updated");
   const [creating, setCreating] = useState(false);
   const [managing, setManaging] = useState(false);
@@ -68,18 +76,13 @@ export function Dashboard({ studio, index, onIndex, token, hid = () => false }: 
   const cats = index.categories;
   const catById = (id: string) => cats.find((c) => c.id === id);
   const list = useMemo(() => {
-    let l = index.projects.filter((p) => (!cat || p.category === cat) && (!tpl || p.template === tpl) && (!status || p.status === status)
+    let l = index.projects.filter((p) => (!cat || p.category === cat) && (only ? p.template === only : !tpl || p.template === tpl) && (!status || p.status === status) && (!client || p.client.trim().toLowerCase() === client.toLowerCase())
       && (!q || `${p.name} ${p.client} ${p.summary || ""}`.toLowerCase().includes(q.toLowerCase())));
     l = [...l].sort((a, b) => sort === "name" ? a.name.localeCompare(b.name) : sort === "created" ? b.createdAt.localeCompare(a.createdAt) : b.updatedAt.localeCompare(a.updatedAt));
     return l;
-  }, [index, q, cat, tpl, status, sort]);
+  }, [index, q, cat, tpl, status, sort, client, only]);
 
-  const stats = [
-    { n: index.projects.length, l: "Projects" },
-    { n: index.projects.filter((p) => p.status !== "draft").length, l: "Exported or published" },
-    { n: index.projects.filter((p) => p.status === "published").length, l: "Published" },
-    { n: index.projects.reduce((s, p) => s + p.exports.length, 0), l: "Exports in total" },
-  ];
+  const stats = dashStats(index.dash?.stats).map((d) => ({ n: d.count(index.projects), l: d.label }));
 
   const run = async (key: string, fn: () => Promise<StudioIndex>, ok: string) => {
     setBusy(key);
@@ -87,54 +90,7 @@ export function Dashboard({ studio, index, onIndex, token, hid = () => false }: 
     setBusy("");
   };
 
-  return (
-    <main className="mx-auto flex max-w-[1400px] flex-col gap-6 px-4 py-8 sm:px-6">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="flex items-center gap-3 font-display text-3xl font-extrabold sm:text-4xl"><BrandMark size={36} fallback={<Logo size={16} />} />Projects</h1>
-          <p className="mt-1 text-sm text-ink-400">Create, preview, export and re-edit websites. Every site ships with its own CMS.</p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {index.projects.some((p) => p.publish || p.host) && <button className="btn" onClick={() => setPushing(true)} title="Put the latest templates, themes and admin page on every published site">↻ Push updates to live sites</button>}
-          {canNew && <button className="btn btn-pri" onClick={() => setCreating(true)}>+ New project</button>}
-        </div>
-      </div>
-      {pushing && <PushUpdatesDialog studio={studio} index={index} token={token} onClose={() => setPushing(false)} />}
-
-      <div className="grid grid-cols-2 overflow-hidden rounded-2xl border border-ink-700 md:grid-cols-4">
-        {stats.map((s, i) => (
-          <div key={s.l} className={`bg-ink-900 px-5 py-4 ${i % 2 ? "" : "border-r border-ink-700"} ${i < 2 ? "border-b border-ink-700 md:border-b-0" : ""} md:border-r md:last:border-r-0`}>
-            <div className="font-display text-3xl font-extrabold tabular-nums">{s.n}</div>
-            <div className="text-xs text-ink-400">{s.l}</div>
-          </div>
-        ))}
-      </div>
-
-      <div className="flex flex-col gap-3">
-        <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Category">
-          <button className={`chip ${!cat ? "border-ink-100 bg-ink-100 text-ink-950" : ""}`} onClick={() => setCat("")}>All <span className="opacity-60">{index.projects.length}</span></button>
-          {cats.map((c) => (
-            <button key={c.id} className={`chip ${cat === c.id ? "border-ink-100 bg-ink-100 text-ink-950" : ""}`} onClick={() => setCat(c.id)}>
-              <span className="h-2 w-2 rounded-full" style={{ background: c.color }} />{c.name} <span className="opacity-60">{index.projects.filter((p) => p.category === c.id).length}</span>
-            </button>
-          ))}
-          <button className="btn btn-ghost btn-sm" onClick={() => setManaging(true)}>Manage categories</button>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <input className="input max-w-xs py-2" type="search" placeholder="Search projects or clients" aria-label="Search projects" value={q} onChange={(e) => setQ(e.target.value)} />
-          <select className="input w-auto py-2" aria-label="Template" value={tpl} onChange={(e) => setTpl(e.target.value)}><option value="">All templates</option>{TEMPLATE_LIST.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</select>
-          <select className="input w-auto py-2" aria-label="Status" value={status} onChange={(e) => setStatus(e.target.value)}><option value="">Any status</option><option value="draft">Draft</option><option value="exported">Exported</option><option value="published">Published</option></select>
-          <select className="input w-auto py-2" aria-label="Sort" value={sort} onChange={(e) => setSort(e.target.value)}><option value="updated">Recently edited</option><option value="created">Newest</option><option value="name">Name</option></select>
-        </div>
-      </div>
-
-      {!index.projects.length ? (
-        <Empty title="Start your first site" body="Pick a template, add content, preview it live, then export a ZIP or publish straight to a GitHub repository." action={canNew ? <button className="btn btn-pri" onClick={() => setCreating(true)}>+ New project</button> : undefined} />
-      ) : !list.length ? (
-        <Empty title="No projects match" body="Try another category, template or search." />
-      ) : (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {list.map((p) => {
+  const card = (p: ProjectMeta) => {
             const c = catById(p.category), t = TEMPLATES[p.template], st = STATUS[p.status], last = p.exports[0];
             return (
               <article key={p.id} className="card group relative flex flex-col overflow-hidden transition hover:border-ink-500">
@@ -153,14 +109,17 @@ export function Dashboard({ studio, index, onIndex, token, hid = () => false }: 
                   <a href={`#/p/${p.id}`} className="after:absolute after:inset-0">
                     <h2 className="font-display text-xl font-extrabold leading-tight">{p.name}</h2>
                   </a>
-                  <p className="text-sm text-ink-400">{[p.client, p.summary].filter(Boolean).join(" · ") || "No client set"}</p>
+                  <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-ink-400">
+                    {p.client.trim() ? <button type="button" className="relative z-10 inline-flex items-center gap-1.5 rounded-full border border-ink-600 px-2.5 py-0.5 text-[12.5px] font-semibold text-ink-100 hover:border-ink-400" title={`Show only ${p.client.trim()}'s sites`} onClick={() => setClient(p.client.trim())}><span className="text-ink-400">Client</span>{p.client.trim()}</button> : <span>No client set</span>}
+                    {p.summary && <span>{p.summary}</span>}
+                  </p>
                   <dl className="mt-auto grid grid-cols-2 gap-2 border-t border-ink-700 pt-3 text-xs">
                     <div><dt className="text-ink-500">Edited</dt><dd className="font-semibold text-ink-200">{timeAgo(p.updatedAt)}</dd></div>
                     <div><dt className="text-ink-500">Last export</dt><dd className="font-semibold text-ink-200">{last ? `v${last.version} · ${timeAgo(last.at)}` : "Not yet"}</dd></div>
                   </dl>
                   <div className="relative z-10 flex flex-wrap gap-2">
                     <a href={`#/p/${p.id}`} className="btn btn-pri btn-sm">Open</a>
-                    {!hid("duplicate") && canNew && <button className="btn btn-sm" disabled={!!busy} onClick={() => run("dup" + p.id, () => studio.duplicate(p.id, `${p.name} (copy)`), "Project duplicated")}>{busy === "dup" + p.id ? "Copying…" : "Duplicate"}</button>}
+                    {!hid("duplicate") && !hid("new") && !hid("tpl-" + p.template) && room(p.template) && <button className="btn btn-sm" disabled={!!busy} onClick={() => run("dup" + p.id, () => studio.duplicate(p.id, `${p.name} (copy)`), "Project duplicated")}>{busy === "dup" + p.id ? "Copying…" : "Duplicate"}</button>}
                     {p.host ? <a className="btn btn-sm" href={siteAddress(p.host)} target="_blank" rel="noopener">Live site ↗</a> : p.publish && <a className="btn btn-sm" href={`https://${p.publish.owner}.github.io/${p.publish.repo === `${p.publish.owner}.github.io` ? "" : p.publish.repo + "/"}`} target="_blank" rel="noopener">Live site ↗</a>}
                     {!hid("delete") && <button className="btn btn-sm btn-danger ml-auto" disabled={!!busy} onClick={async () => {
                       if (await confirm(`Delete “${p.name}”?`, "This removes the project, its images and export snapshots from the Studio. Sites you already exported or published are not affected.", "Delete", true)) run("del" + p.id, () => studio.remove(p.id), "Project deleted");
@@ -169,11 +128,81 @@ export function Dashboard({ studio, index, onIndex, token, hid = () => false }: 
                 </div>
               </article>
             );
-          })}
+  };
+
+  return (
+    <main className="mx-auto flex max-w-[1400px] flex-col gap-6 px-4 py-8 sm:px-6">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="flex items-center gap-3 font-display text-3xl font-extrabold sm:text-4xl"><BrandMark size={36} fallback={<Logo size={16} />} />Projects</h1>
+          <p className="mt-1 text-sm text-ink-400">Create, preview, export and re-edit websites. Every site ships with its own CMS.</p>
         </div>
+        <div className="flex flex-wrap gap-2">
+          {index.projects.some((p) => p.publish || p.host) && <button className="btn" onClick={() => setPushing(true)} title="Put the latest templates, themes and admin page on every published site">↻ Push updates to live sites</button>}
+          {canNew && <button className="btn btn-pri" onClick={() => setCreating(true)}>+ New project</button>}
+        </div>
+      </div>
+      {full.length > 0 && !hid("new") && <p className="rounded-lg border border-amber-400/40 bg-amber-400/5 px-3 py-2 text-[13px] text-amber-100" role="status">This Studio has reached its limit for {full.map((t) => `${t.name.toLowerCase()} sites (${max[t.id]})`).join(" and ")}. Ask your Studio Partner for more.</p>}
+      {pushing && <PushUpdatesDialog studio={studio} index={index} token={token} onClose={() => setPushing(false)} />}
+
+      {only && <a href="#/" className="btn btn-ghost btn-sm self-start text-ink-400">← All projects</a>}
+      {!only && stats.length > 0 && <div className="grid grid-cols-2 overflow-hidden rounded-2xl border border-ink-700 bg-ink-900 sm:grid-cols-3 lg:grid-cols-4" aria-label="Studio numbers">
+        {stats.map((s) => (
+          <div key={s.l} className="-mb-px -mr-px border-b border-r border-ink-700 px-5 py-4">
+            <div className="font-display text-3xl font-extrabold tabular-nums">{s.n}</div>
+            <div className="text-xs text-ink-400">{s.l}</div>
+          </div>
+        ))}
+      </div>}
+
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Category">
+          <button className={`chip ${!cat ? "border-ink-100 bg-ink-100 text-ink-950" : ""}`} onClick={() => setCat("")}>All <span className="opacity-60">{index.projects.length}</span></button>
+          {cats.map((c) => (
+            <button key={c.id} className={`chip ${cat === c.id ? "border-ink-100 bg-ink-100 text-ink-950" : ""}`} onClick={() => setCat(c.id)}>
+              <span className="h-2 w-2 rounded-full" style={{ background: c.color }} />{c.name} <span className="opacity-60">{index.projects.filter((p) => p.category === c.id).length}</span>
+            </button>
+          ))}
+          <button className="btn btn-ghost btn-sm" onClick={() => setManaging(true)}>Manage categories</button>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <input className="input max-w-xs py-2" type="search" placeholder="Search by project or client name" aria-label="Search projects" value={q} onChange={(e) => setQ(e.target.value)} />
+          {clients.length > 0 && <select className="input w-auto max-w-[220px] py-2" aria-label="Client" value={client} onChange={(e) => setClient(e.target.value)}><option value="">All clients</option>{clients.map((c) => <option key={c} value={c}>{c}</option>)}</select>}
+          {!only && <select className="input w-auto py-2" aria-label="Template" value={tpl} onChange={(e) => setTpl(e.target.value)}><option value="">All templates</option>{TEMPLATE_LIST.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</select>}
+          <select className="input w-auto py-2" aria-label="Status" value={status} onChange={(e) => setStatus(e.target.value)}><option value="">Any status</option><option value="draft">Draft</option><option value="exported">Exported</option><option value="published">Published</option></select>
+          <select className="input w-auto py-2" aria-label="Sort" value={sort} onChange={(e) => setSort(e.target.value)}><option value="updated">Recently edited</option><option value="created">Newest</option><option value="name">Name</option></select>
+        </div>
+      </div>
+
+      {!index.projects.length ? (
+        <Empty title="Start your first site" body="Pick a template, add content, preview it live, then export a ZIP or publish straight to a GitHub repository." action={canNew ? <button className="btn btn-pri" onClick={() => setCreating(true)}>+ New project</button> : undefined} />
+      ) : !list.length ? (
+        <Empty title="No projects match" body="Try another category, template or search." />
+      ) : (
+        only || tpl ? (
+          <section className="flex flex-col gap-3" aria-label={TEMPLATES[only || tpl]?.name || "Projects"}>
+            {only && <h2 className="font-display text-2xl font-extrabold">{TEMPLATES[only]?.name || only} <span className="text-base font-semibold text-ink-400">· {list.length}</span></h2>}
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{list.map(card)}</div>
+          </section>
+        ) : (
+          // One block for each type, the three most recent first; "View all" opens that type's own page.
+          <div className="flex flex-col gap-8">
+            {TEMPLATE_LIST.map((t) => ({ t, items: list.filter((p) => p.template === t.id) })).filter((g) => g.items.length).map(({ t, items }) => (
+              <section key={t.id} className="flex flex-col gap-3" aria-label={t.name}>
+                <div className="flex flex-wrap items-baseline gap-3">
+                  <h2 className="font-display text-xl font-extrabold">{t.name}</h2>
+                  <span className="text-sm text-ink-400">{items.length} {items.length === 1 ? "site" : "sites"}</span>
+                  {items.length > 3 && <a href={`#/type/${t.id}`} className="btn btn-ghost btn-sm ml-auto text-brand-200">View all {items.length} →</a>}
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{items.slice(0, 3).map(card)}</div>
+                {items.length > 3 && <a href={`#/type/${t.id}`} className="btn btn-sm self-center">View more {t.name.toLowerCase()} sites ({items.length - 3} more)</a>}
+              </section>
+            ))}
+          </div>
+        )
       )}
 
-      {creating && <NewProject templates={TEMPLATE_LIST.filter((t) => !hid("tpl-" + t.id))} studio={studio} index={index} onClose={() => setCreating(false)} onCreated={(i, id) => { onIndex(i); setCreating(false); location.hash = `#/p/${id}`; }} />}
+      {creating && <NewProject templates={offered} studio={studio} index={index} onClose={() => setCreating(false)} onCreated={(i, id) => { onIndex(i); setCreating(false); location.hash = `#/p/${id}`; }} />}
       {managing && <Categories studio={studio} index={index} onClose={() => setManaging(false)} onIndex={onIndex} />}
     </main>
   );

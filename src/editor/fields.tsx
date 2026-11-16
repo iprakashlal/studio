@@ -3,6 +3,7 @@ import { ThemeDrawer, ThemeGallery, ThemeSwatch } from "../themes/ThemeGallery";
 import { LinkedInImport } from "./LinkedInImport";
 import { pdfToText } from "../lib/pdftext";
 import { Motifs, THEMES, type Theme } from "../themes/catalog";
+import { limitThemes } from "../themes/limit";
 import { themeCode } from "../themes/codes";
 import type { Field as F, TemplateDef } from "../schema/types";
 import { getP, setP, clone, vpaOk, paypalOk, httpsOk, hostIs, emailOk, phoneOk } from "../lib/util";
@@ -183,6 +184,8 @@ export function FieldView({ f, obj, base }: { f: F; obj: any; base: string }) {
       return <ThemesField />;
     case "adminThemes":
       return <AdminThemesField />;
+    case "adminSections":
+      return <AdminSectionsField />;
     case "googleReviews":
       return (
         <div className="flex flex-wrap items-center gap-3 rounded-lg border border-brand-500/40 bg-brand-500/5 p-3">
@@ -395,7 +398,7 @@ export function adminThemeChoice(root: any, all: Theme[]): { mode: "current" | "
 
 function ThemesField() {
   const { tpl, root, bump, site } = useCtx();
-  const all = tpl.themes || THEMES;
+  const all = limitThemes(tpl.themes || THEMES, root?.theme?.preset);
   const pick = (th: Theme) => {
     // With a shortlist, the theme being left stays on it: the current theme only counts while it's current.
     const cfg = root.cms?.themes, prev = root.theme?.preset;
@@ -427,7 +430,7 @@ function ThemesField() {
 function AdminThemesField() {
   const { tpl, root, bump } = useCtx();
   const toast = useToast();
-  const all = tpl.themes || THEMES;
+  const all = limitThemes(tpl.themes || THEMES, root?.theme?.preset);
   root.cms = root.cms || {};
   const cfg = root.cms.themes || {};
   const mode: "current" | "some" | "all" = cfg.mode === "all" || cfg.mode === "some" ? cfg.mode : "current";
@@ -584,6 +587,34 @@ function RichBar({ id, value, set }: { id: string; value: string; set: (v: strin
           <span className="hint basis-full">Each line is a row and | separates the cells. Add a row by copying a line; add a column by adding a cell to every line. In the line of dashes, :---: centres a column and ---: lines it up on the right.</span>
         </div>
       )}
+    </div>
+  );
+}
+
+/** Studio only: tick the sections this site's own admin page shows. Unticked ones are listed in content.cms.hide and
+ *  left out of that admin page's menu (the Studio always shows everything). */
+export const ADMIN_EXTRAS: [string, string, string][] = [["enquiries", "Enquiries", "Forms & records"], ["warranty-records", "Warranty records", "Forms & records"], ["orders", "Orders", "Shop"], ["customers", "Customers", "Shop"]];
+function AdminSectionsField() {
+  const { tpl, root, bump } = useCtx();
+  root.cms = root.cms || {};
+  const hide: string[] = Array.isArray(root.cms.hide) ? root.cms.hide : [];
+  const rows: [string, string, string][] = [...tpl.schema.filter((c) => !c.showIf || c.showIf(root)).map((c) => [c.id, c.site?.label || c.label, c.site?.group || c.group] as [string, string, string]),
+    ...ADMIN_EXTRAS.filter(([id]) => (id === "orders" || id === "customers" ? tpl.id === "store" : id === "enquiries" ? tpl.id === "business" : tpl.id !== "portfolio"))];
+  const groups = [...new Set(rows.map((r) => r[2]))];
+  const set = (next: string[]) => { root.cms.hide = next; bump(); };
+  const toggle = (id: string) => set(hide.includes(id) ? hide.filter((x) => x !== id) : [...hide, id]);
+  return (
+    <div className="flex flex-col gap-3" aria-label="Features in this site's admin page">
+      <p className="text-[13px] text-ink-300">Untick what this site's owner shouldn't see in their admin page. It applies to this site only, the next time you publish. The Studio keeps showing everything, and anything already set up keeps working on the site.</p>
+      {groups.map((g) => (
+        <fieldset key={g} className="rounded-lg border border-ink-700 p-3">
+          <legend className="px-1.5 text-[11px] font-bold uppercase tracking-wider text-ink-400">{g}</legend>
+          <div className="grid gap-x-4 gap-y-1.5 sm:grid-cols-2">
+            {rows.filter((r) => r[2] === g).map(([id, label]) => <label key={id} className="flex items-center gap-2 text-[13px]"><input type="checkbox" className="accent-brand-500" checked={!hide.includes(id)} onChange={() => toggle(id)} />{label}</label>)}
+          </div>
+        </fieldset>
+      ))}
+      <div className="flex flex-wrap items-center gap-2 text-[13px]"><button type="button" className="btn btn-sm" disabled={!hide.length} onClick={() => set([])}>Show everything</button><span className="text-ink-400">{hide.length ? `${hide.length} hidden` : "Everything is shown"}</span></div>
     </div>
   );
 }

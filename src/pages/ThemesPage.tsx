@@ -3,6 +3,7 @@ import { STUDIO_BUILD } from "../build-info";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { THEMES, THEME_TAGS, portfolioThemeValues, storeThemeValues, type Theme } from "../themes/catalog";
 import { BIZ_TAGS, BIZ_THEMES, businessThemeValues } from "../themes/business";
+import { limitThemes } from "../themes/limit";
 import { ThemeSwatch } from "../themes/ThemeGallery";
 import { themeCode } from "../themes/codes";
 import { TEMPLATES } from "../schema";
@@ -16,7 +17,7 @@ import { Logo, useToast } from "../ui/kit";
 type Kind = "portfolio" | "store" | "business";
 const KINDS: { id: Kind; label: string }[] = [{ id: "portfolio", label: "Personal portfolio" }, { id: "store", label: "Shop" }, { id: "business", label: "Business portfolio" }];
 /** Business sites have their own themes; personal portfolios and shops share the rest. */
-const poolOf = (k: Kind): Theme[] => (k === "business" ? BIZ_THEMES : THEMES);
+const poolOf = (k: Kind): Theme[] => limitThemes(k === "business" ? BIZ_THEMES : THEMES);
 const ALL: Theme[] = [...THEMES, ...BIZ_THEMES];
 const LS = "site-studio:theme-shortlist";
 

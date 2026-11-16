@@ -186,8 +186,12 @@ function PartnerCard({ p, studio, index, nf, setNf, session, myEmail, studioToke
   const [hide, setHide] = useState<string[] | null>(null), [moving, setMoving] = useState(false), [tear, setTear] = useState(false);
   const [myDb, setMyDb] = useState<{ api: string; studio: string } | null>(null);
   useEffect(() => { loadHostConfig().then((c) => setMyDb(c?.kind === "cloudflare" ? { api: c.api, studio: c.studio } : null)).catch(() => {}); }, []);
-  useEffect(() => { if (signed) getClientFeatures(remoteRepo(p)).then(setHide).catch(() => setHide([])); }, [signed, p.studio, p.api, p.sbUrl]);
-  const toggleFeature = (key: string) => run("feat", async () => { const next = (hide || []).includes(key) ? (hide || []).filter((k) => k !== key) : [...(hide || []), key]; await setClientFeatures(remoteRepo(p), next); setHide(next); });
+  // Limits: how many themes they can choose from and how many sites of each type they can have ("" = no limit).
+  const [lim, setLim] = useState<{ themes: string; portfolio: string; store: string; business: string }>({ themes: "", portfolio: "", store: "", business: "" }), [limSaved, setLimSaved] = useState("");
+  useEffect(() => { if (signed) getClientFeatures(remoteRepo(p)).then((f) => { setHide(f.hide); const l = { themes: f.themes ? String(f.themes) : "", portfolio: f.max?.portfolio != null ? String(f.max.portfolio) : "", store: f.max?.store != null ? String(f.max.store) : "", business: f.max?.business != null ? String(f.max.business) : "" }; setLim(l); setLimSaved(JSON.stringify(l)); }).catch(() => setHide([])); }, [signed, p.studio, p.api, p.sbUrl]);
+  const featuresNow = (h: string[], l = lim) => { const max: Record<string, number> = {}; for (const k of ["portfolio", "store", "business"] as const) if (l[k].trim() !== "" && +l[k] >= 0) max[k] = Math.floor(+l[k]); return { hide: h, ...(+l.themes > 0 ? { themes: Math.floor(+l.themes) } : {}), ...(Object.keys(max).length ? { max } : {}) }; };
+  const toggleFeature = (key: string) => run("feat", async () => { const next = (hide || []).includes(key) ? (hide || []).filter((k) => k !== key) : [...(hide || []), key]; await setClientFeatures(remoteRepo(p), featuresNow(next, JSON.parse(limSaved || JSON.stringify(lim)))); setHide(next); });
+  const saveLimits = () => run("lim", async () => { await setClientFeatures(remoteRepo(p), featuresNow(hide || [])); setLimSaved(JSON.stringify(lim)); toast("Limits saved. They apply the next time they open their Studio."); });
   const check = async () => {
     const ok = await partnerSignedIn(p); setSigned(ok); if (!ok) return;
     setStates(Object.fromEntries(p.shared.map((s) => [s.project, "checking"])));
@@ -259,6 +263,15 @@ function PartnerCard({ p, studio, index, nf, setNf, session, myEmail, studioToke
           <p className="mt-2 text-ink-400">Untick what {p.name} shouldn't see. It applies the next time they open their Studio. Migration, Update and Studio Partners are never shown in a client's Studio: you update and move it from this card.</p>
           <div className="mt-2 grid gap-x-4 gap-y-1.5 sm:grid-cols-2">
             {CLIENT_FEATURES.map((f) => <label key={f.key} className="flex items-center gap-2"><input type="checkbox" className="accent-brand-500" checked={!hide.includes(f.key)} disabled={busy === "feat"} onChange={() => toggleFeature(f.key)} /><span>{f.label}{f.hint ? <span className="text-ink-500"> · {f.hint}</span> : null}</span></label>)}
+          </div>
+          <div className="mt-3 border-t border-ink-700 pt-3" aria-label="Limits">
+            <b className="text-ink-200">Limits</b> <span className="text-ink-400">(leave a box empty for no limit)</span>
+            <div className="mt-2 grid gap-2 sm:grid-cols-4">
+              {([["themes", "Themes to choose from"], ["portfolio", "Portfolio sites"], ["store", "Online shops"], ["business", "Business sites"]] as const).map(([k, l]) => (
+                <label key={k} className="flex flex-col gap-1"><span className="text-ink-400">{l}</span><input className="input py-1.5" type="number" min={0} max={999} inputMode="numeric" aria-label={l} value={lim[k]} placeholder={k === "themes" ? "all" : "no limit"} onChange={(e) => setLim({ ...lim, [k]: e.target.value })} /></label>
+              ))}
+            </div>
+            <div className="mt-2 flex flex-wrap items-center gap-2"><button type="button" className="btn btn-sm" disabled={busy === "lim" || JSON.stringify(lim) === limSaved} onClick={saveLimits}>{busy === "lim" ? "Saving…" : "Save limits"}</button><span className="text-ink-400">Themes: the first ones in each template's list. Sites: once they reach the number, that type isn't offered under New project.</span></div>
           </div>
         </details>
       )}

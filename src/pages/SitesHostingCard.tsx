@@ -4,7 +4,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Session } from "../lib/auth";
 import type { ProjectMeta, Studio, StudioIndex } from "../lib/studio";
-import { CFDB_WORKER, CF_DB_TOKEN_PAGE, setupCfDb, cfAccountVault, cfDeployInfo, cfSignedIn, cfxDelete, cfxList, cfxPut, cfxSite } from "../lib/cfdb";
+import { CFDB_WORKER, CF_DB_TOKEN_PAGE, setupCfDb, cfAccountVault, cfDeployInfo, cfSignedIn, cfxDelete, cfxList, cfxPut, cfxSite, siteMembers } from "../lib/cfdb";
 import { loadHostConfig } from "../lib/studiohost";
 import { pagesForHost, PAGES_LABEL } from "../lib/pages";
 import { liveTargets, pushTarget } from "../lib/pushupdates";
@@ -56,7 +56,9 @@ export function SitesHostingCard({ session, studio, index, onIndex }: { session:
     if (h.kind !== "cloudflare") return false;
     if (!h.account || !accounts.some((a) => a.id === h.account)) return false;
     // The database's own list of sites it may publish (older databases don't send it: the kept account decides).
-    return !info?.workers || info.workers.includes(h.account === info.main ? h.siteId : h.account + "/" + h.siteId);
+    // (A main-account site with its content here is listed under the site itself, so the kept account decides.)
+    if (!info?.workers || (h.account === info.main && h.cf && db && h.cf.api.replace(/\/+$/, "") === db.api.replace(/\/+$/, ""))) return true;
+    return info.workers.includes(h.account === info.main ? h.siteId : h.account + "/" + h.siteId);
   };
 
   /** Lets every device publish each site on a kept account (idempotent; done when an account is added or the list loads). */
@@ -212,6 +214,8 @@ export function SitesHostingCard({ session, studio, index, onIndex }: { session:
                               : "Uses the GitHub token on each device (or keep it on the database with Publish from any device)"}</dd>
                             <dt className="text-ink-400">Admin page</dt>
                             <dd>{h?.cf ? "Works on every device: its editors sign in with an email code" : h ? "Its editors sign in with an email code (Supabase)" : "Each device signs in once with a GitHub token for the site's repository"}</dd>
+                            {h?.cf && <><dt className="text-ink-400">Login emails</dt><dd><LoginEmails key={String(keptAcc)} cf={h.cf} account={h.kind === "cloudflare" ? h.account : undefined} name={p.name} /></dd></>}
+                            {!h?.cf && <><dt className="text-ink-400">Login emails</dt><dd className="text-ink-400">{h ? "Kept in Supabase: manage them in the site's admin page" : "None: this site has no email sign-in. Publish it to Cloudflare from its project to add login emails."}</dd></>}
                             {cf && <><dt className="text-ink-400">Data</dt><dd>{otherDb
                               ? (keptAcc
                                 ? <>Its own database on {nameOf(h!.account)} (<span className="break-all font-mono text-[12px]">{h!.cf!.api.replace(/^https:\/\//, "")}</span>), reached from every device through your Studio</>
@@ -270,6 +274,54 @@ export function SitesHostingCard({ session, studio, index, onIndex }: { session:
         }} onClose={() => setTear(null)} />}
       {err && <p role="alert" className="text-[13px] text-red-300">{err}</p>}
     </section>
+  );
+}
+
+/** One site's sign-in emails: the people who open its admin page with an emailed code. A dropdown of the list, and
+ *  a button that shows or hides the form to add (or remove) one. */
+function LoginEmails({ cf, account, name }: { cf: { api: string; site: string }; account?: string; name: string }) {
+  const toast = useToast(), confirm = useConfirm();
+  const [list, setList] = useState<{ email: string; role: string }[] | null>(null), [err, setErr] = useState("");
+  const [sel, setSel] = useState(""), [open, setOpen] = useState(false), [add, setAdd] = useState(""), [busy, setBusy] = useState(false);
+  const load = async () => {
+    setErr("");
+    try { const l = await (await siteMembers(cf, account)).list(); setList(l); setSel((x) => (l.some((m) => m.email === x) ? x : l[0]?.email || "")); }
+    catch (e: any) { setErr(e?.status === 401 ? "Sign in to this site's database on this device to see them." : /Unknown operation|Which site/i.test(e?.message || "") ? "Update the database once (above) to manage these here." : e?.message || "Couldn't load them."); }
+  };
+  useEffect(() => { load(); }, [cf.api, cf.site, account]);
+  const run = async (f: () => Promise<void>) => { setBusy(true); try { await f(); await load(); } catch (e: any) { toast(e?.message || "That didn't work.", "bad"); } setBusy(false); };
+  const doAdd = () => run(async () => {
+    const mails = [...new Set(add.split(/[,;\s]+/).map((x) => x.trim().toLowerCase()).filter(Boolean))];
+    const bad = mails.find((m) => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(m)); if (bad) throw new Error(`${bad} isn't an email address.`);
+    if (!mails.length) return;
+    const m = await siteMembers(cf, account); for (const e of mails.slice(0, 10)) await m.add(e);
+    setAdd(""); setSel(mails[0]); toast(`${mails.length === 1 ? mails[0] + " can" : mails.length + " people can"} now sign in to ${name}'s admin page.`);
+  });
+  const doRemove = async () => {
+    if (!sel || !(await confirm(`Remove ${sel}?`, `They can no longer sign in to ${name}'s admin page.${list && list.length === 1 ? " This is the only login email: nobody could sign in until you add another." : ""}`, "Remove", true))) return;
+    run(async () => { await (await siteMembers(cf, account)).remove(sel); toast(`${sel} removed.`); });
+  };
+  if (err) return <span className="text-amber-200">{err} <button type="button" className="text-brand-300 underline" onClick={load}>Try again</button></span>;
+  if (!list) return <span className="text-ink-400">Loading…</span>;
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex flex-wrap items-center gap-2">
+        {list.length ? <select className="input max-w-full py-1" aria-label={`Login emails for ${name}`} value={sel} onChange={(e) => setSel(e.target.value)}>{list.map((m) => <option key={m.email} value={m.email}>{m.email}</option>)}</select>
+          : <span className="text-amber-200">None yet: nobody can sign in to its admin page.</span>}
+        <span className="text-ink-400">{list.length} email{list.length === 1 ? "" : "s"}</span>
+        <button type="button" className="btn btn-ghost btn-sm" aria-expanded={open} onClick={() => setOpen(!open)}>{open ? "Hide" : "Add or remove"}</button>
+      </div>
+      {open && (
+        <div className="flex flex-col gap-2 rounded-lg border border-ink-700/70 p-2.5">
+          <div className="flex flex-wrap gap-2">
+            <input className="input min-w-0 flex-1 py-1" type="email" aria-label={`Add a login email for ${name}`} placeholder="name@example.com (several: separate with commas)" value={add} onChange={(e) => setAdd(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && add.trim() && !busy) doAdd(); }} />
+            <button type="button" className="btn btn-sm btn-pri" disabled={busy || !add.trim()} onClick={doAdd}>{busy ? "Saving…" : "Add"}</button>
+            {sel && <button type="button" className="btn btn-sm" disabled={busy} onClick={doRemove}>Remove {sel}</button>}
+          </div>
+          <span className="text-ink-400">Each of these signs in to the site's admin page with a 6-digit code sent to that address. Nothing to publish: it works straight away.</span>
+        </div>
+      )}
+    </div>
   );
 }
 

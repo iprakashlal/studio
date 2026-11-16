@@ -25,6 +25,7 @@ function otherAccounts(env: any): { id: string; name: string }[] {
 }
 
 import { CFDB_SCHEMA, CFDB_VERSION, CFDB_WORKER_NAME } from "../src/lib/cfdbSchema";
+import { digestPage, sheetLinks } from "../src/lib/lookdigest";
 export const SCHEMA = CFDB_SCHEMA;
 
 const cors = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, content-type, x-sha", "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS", "Access-Control-Max-Age": "86400", "Access-Control-Expose-Headers": "x-sha, x-updated" };
@@ -330,6 +331,22 @@ async function readPamphlet(env: Env, q: any) {
   return { products, read: words(all).length, ...(guessed ? { guessed: true } : {}) };
 }
 
+/** A public https address (not this machine, a bare IP or an internal name). */
+function publicUrl(url: string): URL | null {
+  if (!/^https:\/\/[^\s/]+\.[^\s]+$/i.test(url)) return null;
+  let u: URL; try { u = new URL(url); } catch { return null; }
+  const host = u.hostname.toLowerCase();
+  return /^(localhost|[\d.]+|\[.*\])$/.test(host) || /\.(local|internal|localhost)$/.test(host) ? null : u;
+}
+/** Reads a page and its stylesheets and returns only the design facts (see src/lib/lookdigest.ts). */
+async function lookAt(url: string): Promise<any> {
+  const u = publicUrl(url.trim()); if (!u) return { error: "Enter the page's public address (https://…)." };
+  const get = async (x: string, accept: string) => { const r = await fetch(x, { headers: { "User-Agent": "Mozilla/5.0 (site-studio reference reader)", Accept: accept }, redirect: "follow" }); if (!r.ok) throw new Error(String(r.status)); return (await r.text()).slice(0, 1_500_000); };
+  let html = ""; try { html = await get(u.href, "text/html"); } catch (e: any) { return { error: /^\d+$/.test(String(e?.message)) ? `That page answered ${e.message}.` : "Couldn't open that address." }; }
+  let css = "";
+  for (const link of sheetLinks(html, u.href).slice(0, 5)) { if (!publicUrl(link) || css.length > 2_500_000) continue; try { css += "\n" + (await get(link, "text/css")); } catch { /* that sheet is skipped */ } }
+  return { digest: digestPage(html, css) };
+}
 async function writeSite(env: Env, q: any) {
   const brand = String(q.brand || "").trim().slice(0, 80), notes = String(q.notes || "").slice(0, 1500), kind = String(q.kind || "business");
   if (!brand) return { error: "Enter your brand name." };
@@ -372,7 +389,7 @@ export default {
     if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
     const u = new URL(req.url), p = u.pathname.replace(/\/+$/, "") || "/";
     try {
-      if (p === "/") return json({ ok: true, service: "site-studio-db", v: V, mail: !!(env.RESEND_API_KEY && env.MAIL_FROM), ...(env.CF_TOKEN && env.CF_ACCOUNT ? { deploy: true, account: env.CF_ACCOUNT } : {}), ...(env.GH_TOKEN ? { gh: true } : {}), ...(env.AI ? { ai: true, pamphlet: 2 } : {}), reviews: true, accounts: 2, cfx: 4, studioPages: 1, del: 1, enqMail: 3, ...(otherAccounts(env).length ? { more: otherAccounts(env).length } : {}) });
+      if (p === "/") return json({ ok: true, service: "site-studio-db", v: V, mail: !!(env.RESEND_API_KEY && env.MAIL_FROM), ...(env.CF_TOKEN && env.CF_ACCOUNT ? { deploy: true, account: env.CF_ACCOUNT } : {}), ...(env.GH_TOKEN ? { gh: true } : {}), ...(env.AI ? { ai: true, pamphlet: 2 } : {}), reviews: true, look: 1, accounts: 2, cfx: 4, studioPages: 1, del: 1, enqMail: 3, ...(otherAccounts(env).length ? { more: otherAccounts(env).length } : {}) });
 
       // ---- sign in with an emailed code (members only)
       if (p === "/auth/code" && req.method === "POST") {
@@ -468,6 +485,12 @@ export default {
         if (!(await env.DB.prepare("select 1 from members where email = ? and role in ('owner', 'partner') limit 1").bind(email).first())) return err(403, "Only owners can use this.");
         if (!env.AI) return err(501, "Reading pamphlets needs the database updated once (from a device with the Cloudflare token).");
         return json(await readPamphlet(env, (await req.json()) as any));
+      }
+      // ---- how a reference page looks (colours, fonts, corners, interaction libraries), for "theme from a reference"
+      if (p === "/ai/look" && req.method === "POST") {
+        const email = await who(env, req); if (!email) return err(401, "Sign in first.");
+        if (!(await env.DB.prepare("select 1 from members where email = ? limit 1").bind(email).first())) return err(403, "Only members can use this.");
+        return json(await lookAt(String(((await req.json()) as any).url || "")));
       }
       if (p === "/ai/write" && req.method === "POST") {
         const email = await who(env, req); if (!email) return err(401, "Sign in first.");

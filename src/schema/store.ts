@@ -51,7 +51,8 @@ const schema: Category[] = [
     id: "home", label: "Home page", group: "Pages", desc: "The landing page: hero, featured products, categories, banner and reviews.",
     cards: [
       { title: "Hero", fields: [{ t: "text", path: "home.hero.eyebrow", label: "Small label", ml: true }, { t: "text", path: "home.hero.title", label: "Headline", ml: true }, { t: "textarea", path: "home.hero.text", label: "Text", hint: "Line breaks you type show on the site." },
-        { t: "text", path: "home.hero.cta", label: "Button label" }, { t: "image", path: "home.hero.image", label: "Hero image", hint: "Wide images look best. Without one, a pattern in your colours is used." }] },
+        { t: "text", path: "home.hero.cta", label: "Button label" }, { t: "image", path: "home.hero.image", label: "Hero image", hint: "Wide images look best. Without one, a pattern in your colours is used." },
+        { t: "videoFile", path: "home.hero.video", label: "Or a hero video", hint: "MP4 or WebM, up to 20 MB. It plays silently on a loop in the image's place; the image is shown first, while it loads. A short clip works best." }] },
       heroSlidesCard("home.hero", "the hero image or collage"),
       { title: "Featured products", fields: [g2({ t: "text", path: "home.featuredTitle", label: "Title", ml: true }, { t: "text", path: "home.featuredText", label: "Line under the title", ml: true }),
         { t: "note", text: "Mark products as featured under Products. Up to 8 are shown." }] },

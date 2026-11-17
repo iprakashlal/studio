@@ -63,7 +63,8 @@ const schema: Category[] = [
       { title: "Text", fields: [{ t: "text", path: "hero.eyebrow", label: "Small label above" }, { t: "text", path: "hero.title", label: "Headline", ml: true, hint: "Enter starts a new line. Wrap words in *asterisks* to highlight them." }, { t: "textarea", path: "hero.lede", label: "Intro", rows: 3 }] },
       { title: "Buttons", fields: [g2({ t: "text", path: "hero.ctaPrimary", label: "Main button" }, { t: "select", path: "hero.ctaPrimaryTarget", label: "Goes to", options: TARGETS }, { t: "text", path: "hero.ctaSecondary", label: "Second button" }, { t: "select", path: "hero.ctaSecondaryTarget", label: "Goes to", options: TARGETS })] },
       { title: "Trust badges", fields: [{ t: "strings", path: "hero.badges", label: "Short proof points under the buttons", addLabel: "Add badge" }] },
-      { title: "Image", fields: [{ t: "image", path: "hero.image", label: "Hero image (optional)", hint: "A team photo, your office or your product. Without one, the hero shows cards built from your numbers and services (edit them below)." }] },
+      { title: "Image", fields: [{ t: "image", path: "hero.image", label: "Hero image (optional)", hint: "A team photo, your office or your product. Without one, the hero shows cards built from your numbers and services (edit them below)." },
+        { t: "videoFile", path: "hero.video", label: "Or a hero video", hint: "MP4 or WebM, up to 20 MB. It plays silently on a loop in the image's place; the image above is shown first, while it loads. A short clip works best." }] },
       { title: "Cards beside the headline", fields: [
         { t: "when", path: "hero.image", not: "", fields: [{ t: "note", text: "These cards show when there's no hero image. Remove the image above to use them." }] },
         { t: "toggle", path: "hero.panel.show", label: "Show the cards" },

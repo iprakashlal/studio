@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
+import { THEMES } from "../themes/catalog";
+import { limitThemes } from "../themes/limit";
 import { ThemeGallery } from "../themes/ThemeGallery";
 import { anyThemeById as themeById } from "../themes/codes";
 import { dashStats } from "../lib/dashstats";
@@ -213,6 +215,9 @@ function NewProject({ studio, index, onClose, onCreated, templates }: { studio: 
   const [f, setF] = useState({ name: "", client: "", template: templates[0]?.id || "portfolio", starter: "default", theme: "", category: index.categories[0]?.id || "" });
   const [man, setMan] = useState<Record<string, Manifest>>({});
   const [busy, setBusy] = useState(false);
+  // The themes this Studio may use for the chosen type (a client Studio's partner can narrow them): a new site starts on one of them.
+  const pool = TEMPLATES[f.template].themes || THEMES, offered = limitThemes(pool, undefined, f.template);
+  useEffect(() => { if (offered.length && offered.length < pool.length && !offered.some((t) => t.id === f.theme)) setF((x) => ({ ...x, theme: offered[0].id })); }, [f.template, f.theme, offered.length]);
   const pick = (template: string) => setF((x) => ({ ...x, template, starter: "default", theme: (TEMPLATES[template].themes || []).some((t) => t.id === x.theme) || (!TEMPLATES[template].themes && !x.theme.startsWith("biz-")) ? x.theme : "" }));
   useEffect(() => {
     if (!man[f.template]) loadManifest(f.template).then((m) => setMan((o) => ({ ...o, [f.template]: m }))).catch(() => {});
@@ -264,7 +269,7 @@ function NewProject({ studio, index, onClose, onCreated, templates }: { studio: 
           <button type="button" className={`rounded-full border px-2.5 py-1 text-xs font-semibold normal-case tracking-normal ${!f.theme ? "border-brand-500 bg-brand-500/15 text-ink-100" : "border-ink-600 text-ink-400"}`} aria-pressed={!f.theme} onClick={() => setF({ ...f, theme: "" })}>Template's own look</button>
         </span>
         <div className="max-h-[340px] overflow-y-auto pr-1 scroll-thin">
-          <ThemeGallery compact current={f.theme} themes={TEMPLATES[f.template].themes} tags={TEMPLATES[f.template].themeTags} onPick={(t) => setF({ ...f, theme: t.id })} />
+          <ThemeGallery compact current={f.theme} themes={offered} tags={TEMPLATES[f.template].themeTags} onPick={(t) => setF({ ...f, theme: t.id })} />
         </div>
         <p className="text-xs text-ink-500">You can change the theme any time in Design → Theme &amp; layout.</p>
       </div>

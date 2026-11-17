@@ -761,6 +761,8 @@ if (PREVIEW) {
   const CKEY = "site-content:" + location.pathname.replace(/[^/]*$/, "");
   let shownTxt = "";
   try { const c = sessionStorage.getItem(CKEY); if (c) { C = merge(DEFAULT, JSON.parse(c)); render(); shownTxt = c; } } catch (e) {}
+  // A first visit: the page's outline shows while the content is fetched (the first render replaces it).
+  if (!shownTxt && window.SiteSkeleton) window.SiteSkeleton.show($("#app"));
   const giveUp = setTimeout(() => { if (!shownTxt) { render(); shownTxt = "default"; } }, 6000);
   const fromFile = () => fetch("content.json", { cache: "no-store" }).then((r) => (r.ok ? r.text() : null));
   // Hosted on the Studio's Cloudflare database: content is a public file there.

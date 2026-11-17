@@ -53,6 +53,11 @@
 .fold-cards section.card > [data-fold-head]:focus-visible { outline: 2px solid rgb(91 124 255 / .7); outline-offset: 4px; border-radius: 4px; }
 .fold-cards section.card[data-fold="closed"] > :not([data-fold-head]) { display: none !important; }
 
+/* Skeleton loading (ui/kit.tsx Skel): a placeholder in the page's own ink colour with a slow sheen. */
+.skel { background: linear-gradient(100deg, rgb(var(--ink-700, 34 44 59) / .7) 30%, rgb(var(--ink-600, 46 58 76) / .9) 50%, rgb(var(--ink-700, 34 44 59) / .7) 70%); background-size: 220% 100%; animation: skel 1.6s ease-in-out infinite; }
+@keyframes skel { from { background-position: 120% 0; } to { background-position: -100% 0; } }
+@media (prefers-reduced-motion: reduce) { .skel { animation: none; } }
+
 /* Light mode (Settings → Studio look). The ink and brand colours swap through CSS variables (src/lib/tint.ts);
    the status colours below are written for a dark page, so on a light one they take their deeper shades. */
 :root[data-ui="light"] { color-scheme: light; }

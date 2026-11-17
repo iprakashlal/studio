@@ -13,7 +13,7 @@ import { siteAddress } from "../lib/hosting";
 import { explain } from "../lib/repo";
 import { Cloudflare } from "../lib/cloudflare";
 import { getHelper } from "../lib/relay";
-import { useConfirm, useToast } from "../ui/kit";
+import { useConfirm, useToast, Skel, SkelRows } from "../ui/kit";
 import { projectPlan, teardownProject } from "../lib/teardown";
 import { TeardownDialog } from "./TeardownDialog";
 import { useCfAccount } from "./CfPicker";
@@ -150,7 +150,7 @@ export function SitesHostingCard({ session, studio, index, onIndex }: { session:
       <h3 className="text-[15px] font-extrabold">Sites and hosting accounts</h3>
       <p className="text-sm text-ink-300">Every live site and where it's hosted, in one place. Cloudflare accounts are kept on your Studio's database (tokens as secrets on your own Cloudflare, never shown again), and each site's choice is saved with the project, so any device signed in to the Studio uses the same setup.</p>
       {!db ? <p className="text-sm text-amber-200">This needs your Studio's database on Cloudflare. Set it up from Publish to Cloudflare on a project, or move the Studio there (Migration).</p>
-        : !info ? <p className="text-sm text-ink-400">Loading…</p>
+        : !info ? <SkelRows n={3} label="Loading your sites and hosting accounts" />
         : !info.signed ? <p className="text-sm text-amber-200">Sign in to your Studio's database on this device to manage its hosting accounts.</p>
         : !info.cur || !info.cfx || !info.imp || !info.pages || !info.del || !info.mail ? <div className="flex flex-col gap-2 text-sm"><p className="text-amber-200">Your Studio's database is from an older build. Update it once (your data, sign-ins and kept tokens stay).</p>
           <p className="text-ink-400">Connect the Cloudflare account that runs it (<span className="font-mono">{dbHost}</span>), then press Update. A token already saved on this device connects by itself.</p>
@@ -303,7 +303,7 @@ function LoginEmails({ cf, account, name }: { cf: { api: string; site: string };
     run(async () => { await (await siteMembers(cf, account)).remove(sel); toast(`${sel} removed.`); });
   };
   if (err) return <span className="text-amber-200">{err} <button type="button" className="text-brand-300 underline" onClick={load}>Try again</button></span>;
-  if (!list) return <span className="text-ink-400">Loading…</span>;
+  if (!list) return <Skel className="inline-block h-4 w-40 align-middle" />;
   return (
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center gap-2">

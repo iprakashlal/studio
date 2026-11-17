@@ -448,7 +448,7 @@ export function adminThemeChoice(root: any, all: Theme[]): { mode: "current" | "
 
 function ThemesField() {
   const { tpl, root, bump, site } = useCtx();
-  const all = limitThemes(tpl.themes || THEMES, root?.theme?.preset);
+  const all = limitThemes(tpl.themes || THEMES, root?.theme?.preset, tpl.id);
   const pick = (th: Theme) => {
     // With a shortlist, the theme being left stays on it: the current theme only counts while it's current.
     const cfg = root.cms?.themes, prev = root.theme?.preset;
@@ -483,7 +483,7 @@ function ThemesField() {
 function AdminThemesField() {
   const { tpl, root, bump } = useCtx();
   const toast = useToast();
-  const all = limitThemes(tpl.themes || THEMES, root?.theme?.preset);
+  const all = limitThemes(tpl.themes || THEMES, root?.theme?.preset, tpl.id);
   root.cms = root.cms || {};
   const cfg = root.cms.themes || {};
   const mode: "current" | "some" | "all" = cfg.mode === "all" || cfg.mode === "some" ? cfg.mode : "current";

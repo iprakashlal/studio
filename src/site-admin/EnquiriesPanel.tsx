@@ -2,7 +2,7 @@
 // own admin page and in the Studio. Only emails listed in site_admins for the site can read them.
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { enquiriesSql, isAdmin, sbClient, sendCode, setupSql, signedInEmail, verifyCode, type SbCfg } from "../lib/supa";
-import { Field, Spinner, useConfirm, useToast } from "../ui/kit";
+import { Field, Spinner, useConfirm, useToast, SkelRows } from "../ui/kit";
 import { inboxCall, type InboxEnquiry } from "../lib/inbox";
 import { cfSignedIn, siteEnquiries, resendTestOnly } from "../lib/cfdb";
 import type { CfSiteCfg } from "../lib/supa";
@@ -226,7 +226,7 @@ function FileInbox({ url, token }: { url: string; token: string }) {
     catch (e: any) { toast(e?.message || "Couldn't delete it.", "bad"); }
   };
   if (err) return <section className="card flex max-w-xl flex-col gap-3 p-5"><p className="text-sm text-red-300">{err}</p><button className="btn self-start" onClick={load}>Try again</button></section>;
-  if (!rows) return <Spinner label="Loading enquiries…" />;
+  if (!rows) return <SkelRows n={5} label="Loading enquiries" />;
   return <EnquiryList rows={rows} setStatus={setStatus} remove={remove} load={load} name="site" who={<>{rows.length} enquir{rows.length === 1 ? "y" : "ies"}, saved as JSON files in a private GitHub repository{more ? " (showing the newest 300)" : ""}.</>} />;
 }
 
@@ -251,6 +251,6 @@ function CfInbox({ cf, account }: { cf: CfSiteCfg; account?: string }) {
     catch (e: any) { toast(e?.message || "Couldn't delete it.", "bad"); }
   };
   if (err) return <section className="card flex max-w-xl flex-col gap-3 p-5"><p className="text-sm text-red-300">{err}</p><button className="btn self-start" onClick={load}>Try again</button></section>;
-  if (!rows) return <Spinner label="Loading enquiries…" />;
+  if (!rows) return <SkelRows n={5} label="Loading enquiries" />;
   return <EnquiryList rows={rows} setStatus={setStatus} remove={remove} load={load} name={cf.site} who={<>Signed in as {who} · {rows.length} enquir{rows.length === 1 ? "y" : "ies"} for <b className="text-ink-200">{cf.site}</b></>} />;
 }

@@ -1,6 +1,6 @@
 import { SitesHostingCard } from "./SitesHostingCard";
 import { hides, limitsOf, setStudioHidden, useClientStudio } from "../lib/features";
-import { setThemeLimit } from "../themes/limit";
+import { setThemeAllow, setThemeLimit } from "../themes/limit";
 import { DASH_DEFAULT, DASH_STATS } from "../lib/dashstats";
 import { TEMPLATES } from "../schema";
 import { StudioEmailCard, StudioPageLinks, StudioPagesCard } from "./StudioPage";
@@ -15,7 +15,7 @@ import { NetlifyAccount } from "./HostDialog";
 import { GitHubPublishAccount } from "./GitHubAccount";
 import { SetupAccounts } from "./SetupAccounts";
 import { ghPublish } from "../lib/ghpublish";
-import { Field, Logo, StepLoader, Toggle, useToast } from "../ui/kit";
+import { Field, Logo, Skel, SkelDashboard, SkelRows, useToast } from "../ui/kit";
 import { accentFromImage, tintPalette } from "../lib/tint";
 import { setCurrentMenus } from "../lib/menus";
 import { MenusCard } from "./MenusCard";
@@ -54,7 +54,7 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
   const hid = useMemo(() => hides(client, index), [client, index]);
   // A client Studio's limits: how many themes it offers and how many sites of each type it may have.
   const limits = useMemo(() => limitsOf(client, index), [client, index]);
-  useEffect(() => { if (client !== undefined && index) setThemeLimit(limits.themes); }, [client, index, limits.themes]);
+  useEffect(() => { if (client !== undefined && index) { setThemeLimit(limits.themes); setThemeAllow(limits.themeList); } }, [client, index, limits.themes, JSON.stringify(limits.themeList)]);
   useEffect(() => { setStudioHidden(hid("festival") ? ["festival"] : []); }, [hid]);
   const [err, setErr] = useState("");
   const [bootAt, setBootAt] = useState(0);
@@ -106,6 +106,7 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
         <nav className="ml-auto flex items-center gap-1" aria-label="Studio">
           <a href="#/" className={`btn btn-ghost btn-sm ${!route || route === "/" || route.startsWith("type/") ? "text-ink-100" : "text-ink-400"}`}>Projects</a>
           {!hid("themes") && <a href="#/themes" className="btn btn-ghost btn-sm text-ink-400">Themes</a>}
+          {!repo.demo && client === false && <a href="#/partners" className={`btn btn-ghost btn-sm ${route.startsWith("partners") ? "text-ink-100" : "text-ink-400"}`}>Partners</a>}
           {!repo.demo && <a href="#/settings" className={`btn btn-ghost btn-sm ${route.startsWith("settings") ? "text-ink-100" : "text-ink-400"}`}>Settings</a>}
           <span className="hidden px-2 text-sm text-ink-400 sm:inline">{session.username}</span>
           <button type="button" className="btn btn-sm" onClick={onSignOut}>{repo.demo ? "Exit demo" : "Sign out"}</button>
@@ -115,19 +116,24 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
   );
 
   if (err) return <>{header}<main className="mx-auto max-w-xl px-4 py-16"><div className="card flex flex-col gap-4 p-6"><h1 className="text-xl font-extrabold">Couldn't load your projects</h1><p className="text-sm text-ink-300">{err}</p><button className="btn btn-pri self-start" onClick={load}>Try again</button></div></main></>;
-  if (!index) return <>{header}<main className="grid place-items-center py-24"><StepLoader title="Loading the Studio" at={bootAt} steps={[repo.demo ? "Starting the demo" : "Unlocking your publishing token on this device", repo.demo ? "Loading the sample projects" : `Reading your projects from ${session.cfg.owner}/${session.cfg.repo}`, "Preparing the dashboard"]} /></main></>;
+  if (!index) return <>{header}<SkelDashboard note={[repo.demo ? "Starting the demo" : "Unlocking your publishing token on this device", repo.demo ? "Loading the sample projects" : "Reading your projects", "Preparing the dashboard"][Math.min(2, bootAt)]} /></>;
 
   if (projectId) {
     if (!project) return <>{header}<main className="mx-auto max-w-xl px-4 py-16"><div className="card flex flex-col gap-4 p-6"><h1 className="text-xl font-extrabold">Project not found</h1><p className="text-sm text-ink-300">It may have been deleted on another device.</p><a className="btn btn-pri self-start" href="#/">Back to projects</a></div></main></>;
     return <>{updBanner}<ProjectView key={project.id} studio={studio} index={index} project={project} session={session} onIndex={setIndex} /></>;
   }
 
+  // Studio Partners: its own page (it used to be a tab of Settings; the old address still lands here).
+  if ((route.startsWith("partners") || route === "settings/partners") && !repo.demo) {
+    if (client === undefined) return <>{header}<main className="mx-auto flex max-w-3xl flex-col gap-4 px-4 py-8 sm:px-6"><Skel className="h-9 w-56" /><SkelRows n={3} label="Loading Studio Partners" /></main></>;
+    if (!client) return <>{header}<main className="mx-auto flex max-w-3xl flex-col gap-4 px-4 py-8 sm:px-6"><h1 className="font-display text-3xl font-extrabold">Studio Partners</h1><p className="text-sm text-ink-300">Client Studios you set up and look after: what each one shows, its limits, sharing sites with it, and updating or moving it.</p><FoldAll /><FoldCards scope="partners"><PartnersTab studio={studio} index={index} session={session} onIndex={setIndex} /></FoldCards></main></>;
+  }
   if (route.startsWith("settings") && !repo.demo) {
     // Customize: the Studio's name, badge, pages and admin menus. Hostings: accounts and where each site is hosted.
     const showCustomize = ["brand", "badge", "pages", "menus"].some((k) => !hid(k)), showHostings = !hid("hosting");
     const want = route.split("/")[1] || "general";
     const tab = (want === "customize" && !showCustomize) || (want === "hostings" && !showHostings) ? "general" : want;
-    const tabList = [["general", "General"], ...(showCustomize ? [["customize", "Customize"]] : []), ...(showHostings ? [["hostings", "Hostings"]] : []), ...(isHosted(session) && !client ? [["update", "Update"]] : []), ...(client ? [] : [["migration", "Migration"], ["partners", "Studio Partners"]])] as [string, string][];
+    const tabList = [["general", "General"], ...(showCustomize ? [["customize", "Customize"]] : []), ...(showHostings ? [["hostings", "Hostings"]] : []), ...(isHosted(session) && !client ? [["update", "Update"]] : []), ...(client ? [] : [["migration", "Migration"]])] as [string, string][];
     const tabs = <>
       {/* Phones: one dropdown, so the tabs never wrap onto a second row. */}
       <label className="flex flex-col gap-1.5 sm:hidden"><span className="label">Settings section</span>
@@ -136,8 +142,7 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
       <div className="hidden flex-wrap gap-1 border-b border-ink-700 sm:flex" role="tablist" aria-label="Settings">
       {tabList.map(([k, l]) => <a key={k} href={`#/settings${k === "general" ? "" : "/" + k}`} role="tab" aria-selected={tab === k} className={`-mb-px border-b-2 px-3 py-2 text-sm font-semibold ${tab === k ? "border-brand-400 text-ink-100" : "border-transparent text-ink-400 hover:text-ink-100"}`}>{l}</a>)}
     </div></>;
-    if (client === undefined && tab !== "general") return <>{header}<p className="py-16 text-center text-sm text-ink-400">Loading…</p></>;
-    if (tab === "partners" && !client) return <>{header}<main className="mx-auto flex max-w-3xl flex-col gap-4 px-4 py-8 sm:px-6"><h1 className="font-display text-3xl font-extrabold">Settings</h1>{tabs}<FoldAll /><FoldCards scope="partners"><PartnersTab studio={studio} index={index} session={session} onIndex={setIndex} /></FoldCards></main></>;
+    if (client === undefined && tab !== "general") return <>{header}<main className="mx-auto flex max-w-3xl flex-col gap-4 px-4 py-8 sm:px-6"><h1 className="font-display text-3xl font-extrabold">Settings</h1>{tabs}<SkelRows n={3} label="Loading settings" /></main></>;
     if ((tab === "migration" && !client) || (tab === "update" && isHosted(session) && !client)) return <>{header}<main className="mx-auto flex max-w-3xl flex-col gap-4 px-4 py-8 sm:px-6"><h1 className="font-display text-3xl font-extrabold">Settings</h1>{tabs}<FoldAll /><FoldCards scope={tab}><MigrationTab key={tab} studio={studio} index={index} session={session} onIndex={setIndex} mode={tab === "update" ? "update" : "move"} /></FoldCards></main></>;
     return (
       <>{header}
@@ -206,6 +211,13 @@ function DashNumbersCard({ studio, index, onIndex }: { studio: Studio; index: St
 }
 
 /** Settings → the Studio's own name and logo (saved in studio.json, so every device shows them). */
+// Ready-made colour schemes for the Studio. Each is one accent colour; the buttons, links and backgrounds follow it.
+const SCHEMES: { id: string; name: string; hex: string }[] = [
+  { id: "emerald", name: "Emerald", hex: "#10B981" }, { id: "teal", name: "Teal", hex: "#0D9488" }, { id: "sky", name: "Sky", hex: "#0EA5E9" }, { id: "indigo", name: "Indigo", hex: "#6366F1" },
+  { id: "violet", name: "Violet", hex: "#8B5CF6" }, { id: "orchid", name: "Orchid", hex: "#D946EF" }, { id: "rose", name: "Rose", hex: "#F43F5E" }, { id: "crimson", name: "Crimson", hex: "#DC2626" },
+  { id: "sunset", name: "Sunset", hex: "#F97316" }, { id: "amber", name: "Amber", hex: "#F59E0B" }, { id: "gold", name: "Gold", hex: "#CA8A04" }, { id: "lime", name: "Lime", hex: "#65A30D" },
+  { id: "forest", name: "Forest", hex: "#166534" }, { id: "coffee", name: "Coffee", hex: "#92400E" },
+];
 function BrandCard({ studio, onIndex }: { studio: Studio; onIndex: (i: StudioIndex) => void }) {
   const toast = useToast();
   const b = useBrand();
@@ -213,13 +225,19 @@ function BrandCard({ studio, onIndex }: { studio: Studio; onIndex: (i: StudioInd
   const [logo, setLogo] = useState<string | null>(null); // null: unchanged, "": remove
   const [busy, setBusy] = useState(false);
   const shown = logo === null ? b.logo : logo;
-  // Colours from the logo: the logo's main colour is read here and saved with the name, so every device gets it.
-  const [tintOn, setTintOn] = useState(!!b.tint);
+  // The Studio's colours: the standard ones, the logo's main colour (read here), a ready-made scheme or any colour.
+  // Whichever is chosen is saved as one colour with the name, so every device gets it.
+  const [pick, setPick] = useState<string>(() => !b.tint ? "standard" : SCHEMES.find((x) => x.hex.toLowerCase() === b.tint!.toLowerCase())?.id || "logo");
+  const [custom, setCustom] = useState(b.tint || "#4A67F0");
   const [accent, setAccent] = useState<string | null | undefined>(undefined); // undefined: reading
   useEffect(() => { let on = true; setAccent(undefined); (shown ? accentFromImage(shown) : Promise.resolve(null)).then((a) => { if (on) setAccent(a); }); return () => { on = false; }; }, [shown]);
-  const tint = tintOn && shown && accent ? accent : "";
+  // A saved colour that is neither a scheme nor this logo's colour was picked by hand.
+  useEffect(() => { if (pick === "logo" && logo === null && b.tint && accent !== undefined && (accent || "").toLowerCase() !== b.tint.toLowerCase()) setPick("custom"); }, [accent]); // eslint-disable-line react-hooks/exhaustive-deps
+  const chosen = pick === "standard" ? "" : pick === "logo" ? (shown && accent) || "" : pick === "custom" ? custom : SCHEMES.find((x) => x.id === pick)?.hex || "";
+  const tint = chosen, waiting = pick === "logo" && !!shown && accent === undefined;
   const [mode, setMode] = useState<"dark" | "light">(b.mode === "light" ? "light" : "dark");
-  const pal = accent ? tintPalette(accent, mode) : null;
+  const pal = chosen ? tintPalette(chosen, mode) : null;
+  const same = tint.toLowerCase() === (b.tint || "").toLowerCase() && mode === (b.mode || "dark");
   const save = async () => {
     setBusy(true);
     try {
@@ -227,7 +245,7 @@ function BrandCard({ studio, onIndex }: { studio: Studio; onIndex: (i: StudioInd
       onIndex(i);
       setBrand({ name: name.trim() || DEFAULT_NAME, logo: shown, v: i.brand?.v, tint, mode });
       setLogo(null);
-      toast(tint ? `Saved. The Studio now wears the logo's colours${mode === "light" ? " in light mode" : ""} on every device you sign in on.` : "Saved. Every device you sign in on shows the new name and logo.");
+      toast(tint ? `Saved. The Studio now wears ${pick === "logo" ? "the logo's colours" : "the new colours"}${mode === "light" ? " in light mode" : ""} on every device you sign in on.` : "Saved. Every device you sign in on shows the new name and logo.");
     } catch (e) { toast(explain(e), "bad"); }
     setBusy(false);
   };
@@ -245,21 +263,30 @@ function BrandCard({ studio, onIndex }: { studio: Studio; onIndex: (i: StudioInd
         <div className="flex self-start rounded-lg border border-ink-600" role="radiogroup" aria-label="Studio look">
           {([["dark", "Dark"], ["light", "Light"]] as const).map(([k, l]) => <button key={k} type="button" role="radio" aria-checked={mode === k} onClick={() => setMode(k)} className={`btn btn-sm border-0 ${mode === k ? "bg-ink-700" : "bg-transparent"}`}>{l}</button>)}
         </div>
-        <span className="hint">Works with or without the logo's colours below.</span>
+        <span className="hint">Works with any of the colours below.</span>
       </div>
-      <div className="flex flex-col gap-2 rounded-xl border border-ink-700 p-3" aria-label="Colours from the logo">
-        <Toggle id="b-tint" label="Colour the Studio from the logo" checked={tintOn && !!shown} onChange={(v) => setTintOn(v)} />
-        {!shown ? <p className="hint">Upload a logo first. Its main colour becomes the Studio's accent, and the background leans toward it.</p>
-          : accent === undefined ? <p className="hint">Reading the logo's colours…</p>
-          : !accent || !pal ? <p className="text-[13px] text-amber-200">This logo is black, white or grey, so there's no colour to take from it. The Studio keeps its standard colours.</p>
-          : <div className="flex flex-wrap items-center gap-2 text-[13px] text-ink-300">
-              <span>From this logo:</span>
+      <div className="flex flex-col gap-3 rounded-xl border border-ink-700 p-3" role="radiogroup" aria-label="Studio colours">
+        <span className="label">Studio colours</span>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" role="radio" aria-checked={pick === "standard"} onClick={() => setPick("standard")} className={`btn btn-sm ${pick === "standard" ? "border-brand-400 bg-ink-700" : ""}`}>Standard</button>
+          <button type="button" role="radio" aria-checked={pick === "logo"} disabled={!shown} title={shown ? "" : "Upload a logo first"} onClick={() => setPick("logo")} className={`btn btn-sm ${pick === "logo" ? "border-brand-400 bg-ink-700" : ""}`}>From the logo</button>
+          <label className={`btn btn-sm relative cursor-pointer ${pick === "custom" ? "border-brand-400 bg-ink-700" : ""}`}><span aria-hidden className="h-4 w-4 rounded border border-white/20" style={{ background: custom }} />Your own colour<input type="color" className="sr-only" aria-label="Your own colour" value={custom} onChange={(e) => { setCustom(e.target.value); setPick("custom"); }} onClick={() => setPick("custom")} /></label>
+        </div>
+        <div className="flex flex-wrap gap-2" aria-label="Colour schemes">
+          {SCHEMES.map((x) => <button key={x.id} type="button" role="radio" aria-checked={pick === x.id} aria-label={x.name} title={x.name} onClick={() => setPick(x.id)} className={`flex items-center gap-1.5 rounded-lg border px-2 py-1 text-[13px] ${pick === x.id ? "border-brand-400 bg-ink-700 text-ink-100" : "border-ink-600 text-ink-300 hover:bg-ink-800"}`}><i aria-hidden className="h-4 w-4 rounded-full border border-white/20" style={{ background: tintPalette(x.hex, mode)["brand-500"] }} />{x.name}</button>)}
+        </div>
+        {pick === "logo" && !shown ? <p className="hint">Upload a logo first. Its main colour becomes the Studio's accent, and the background leans toward it.</p>
+          : waiting ? <p className="hint">Reading the logo's colours…</p>
+          : pick === "logo" && !accent ? <p className="text-[13px] text-amber-200">This logo is black, white or grey, so there's no colour to take from it. Choose a scheme or your own colour instead.</p>
+          : pick === "standard" || !pal ? <p className="hint">{same ? "The Studio's standard colours are in use." : "Save to go back to the Studio's standard colours."}</p>
+          : <div className="flex flex-wrap items-center gap-2 text-[13px] text-ink-300" aria-label="Colour preview">
+              <span>{pick === "logo" ? "From this logo:" : "Preview:"}</span>
               {["brand-600", "brand-500", "brand-400", "brand-300", "ink-800", "ink-950"].map((k) => <span key={k} title={pal[k]} className="h-6 w-6 rounded-md border border-white/15" style={{ background: pal[k] }} />)}
               <span className="rounded-lg px-3 py-1.5 text-[13px] font-bold text-white" style={{ background: pal["brand-500"] }}>Button</span>
-              <span className="hint">{tintOn ? (tint === (b.tint || "") && mode === (b.mode || "dark") ? "In use." : "Save to use it on every device.") : "Switch on to use these."}</span>
+              <span className="hint">{same ? "In use." : "Save to use it on every device."}</span>
             </div>}
       </div>
-      <button type="button" className="btn btn-pri self-start" disabled={busy || (tintOn && !!shown && accent === undefined) || (name.trim() === b.name && logo === null && tint === (b.tint || "") && mode === (b.mode || "dark"))} onClick={save}>{busy ? "Saving…" : "Save name & logo"}</button>
+      <button type="button" className="btn btn-pri self-start" disabled={busy || waiting || (name.trim() === b.name && logo === null && same)} onClick={save}>{busy ? "Saving…" : "Save name & look"}</button>
     </section>
   );
 }

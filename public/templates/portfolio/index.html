@@ -1463,7 +1463,7 @@ function renderSite(c){
   if(K){renderKit(c,K)}else{
   siteRoot.innerHTML=`<div id="siteInner">${siteHTML(c)}</div>`;
   initSite(c);}
-  heroSlides(c);video(c);spLinks(c);menu(c);lang(c);consent(c);addons(c);festival(c);
+  heroSlides(c);video(c);social(c);spLinks(c);menu(c);lang(c);consent(c);addons(c);festival(c);
   if(window.SiteFX)try{window.SiteFX.init({root:$("#siteInner"),brand:c.theme.introTitle||c.brand.logoText,badge:c.poweredBy})}catch(e){}
   setIcon(c);fitLines();
 }
@@ -1506,6 +1506,13 @@ function menu(c){
     .then(()=>{SiteMenu.mount(c,{navs:MENU_NAVS,resolve:go,onPick:()=>{const b=document.getElementById("vxMbtn");if(b&&b.getAttribute("aria-expanded")==="true")b.click()}});done()}).catch(done)}
 /* Festival overlay (assets/festival.js): greetings on India's festivals, when the Studio offered it to this site. */
 let fsP;
+/* social links in the footer (assets/social.js); a footer with no room of its own gets the row just above it.
+   Not in the three layouts that have no page end to put it at: Horizontal reel, Drag canvas, Cinema scenes. */
+let ssP;
+function social(c){
+  const S=c.social||{};if(!S.on&&!window.SiteSocial)return;
+  (ssP||(ssP=new Promise((ok,no)=>{if(window.SiteSocial)return ok();const s=document.createElement("script");s.src="assets/social.js";s.onload=()=>ok();s.onerror=no;document.head.appendChild(s)})))
+    .then(()=>SiteSocial.mount(/^(kinetic-noir|gallery|velvet-cinema)$/.test(KIT)?{}:c,{footer:"footer",imgUrl})).catch(()=>{})}
 /* the video section (assets/video.js): one video placed among the page's sections (not in the four layouts that
    have no ordinary page: Horizontal reel, Terminal, Drag canvas, Cinema scenes) */
 let svP;

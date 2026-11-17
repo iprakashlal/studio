@@ -16,7 +16,7 @@ create index if not exists approvals_project on approvals (scope, project, creat
 create table if not exists approval_notes (id integer primary key autoincrement, token text not null, who text not null, body text not null, page text not null default '', kind text not null default 'comment', created_at text not null);
 create index if not exists approval_notes_token on approval_notes (token, id);
 `;
-var CFDB_VERSION = 16;
+var CFDB_VERSION = 17;
 var CFDB_WORKER_NAME = "picaffectz-db";
 
 // src/lib/lookdigest.ts
@@ -148,6 +148,86 @@ function sheetLinks(html, base) {
     }
   }
   return out;
+}
+
+// src/lib/social.ts
+var SOCIAL_KINDS = {
+  instagram: ["Instagram", /(^|\.)(instagram\.com|instagr\.am)$/],
+  facebook: ["Facebook", /(^|\.)(facebook\.com|fb\.com|fb\.me)$/],
+  x: ["X (Twitter)", /(^|\.)(x\.com|twitter\.com)$/],
+  linkedin: ["LinkedIn", /(^|\.)linkedin\.com$/],
+  youtube: ["YouTube", /(^|\.)(youtube\.com|youtu\.be)$/],
+  whatsapp: ["WhatsApp", /(^|\.)(wa\.me|whatsapp\.com)$/],
+  telegram: ["Telegram", /(^|\.)(t\.me|telegram\.me)$/],
+  threads: ["Threads", /(^|\.)threads\.(net|com)$/],
+  pinterest: ["Pinterest", /(^|\.)(pinterest\.[a-z.]+|pin\.it)$/],
+  snapchat: ["Snapchat", /(^|\.)snapchat\.com$/],
+  tiktok: ["TikTok", /(^|\.)tiktok\.com$/],
+  github: ["GitHub", /(^|\.)github\.com$/],
+  behance: ["Behance", /(^|\.)behance\.net$/],
+  dribbble: ["Dribbble", /(^|\.)dribbble\.com$/],
+  medium: ["Medium", /(^|\.)medium\.com$/],
+  maps: ["Google Maps", /(^|\.)(maps\.app\.goo\.gl|goo\.gl|g\.page|maps\.google\.[a-z.]+)$/],
+  indiamart: ["IndiaMART", /(^|\.)indiamart\.com$/],
+  justdial: ["Justdial", /(^|\.)(justdial\.com|jsdl\.in)$/],
+  email: ["Email", null],
+  phone: ["Phone", null],
+  website: ["Website", null],
+  other: ["Other link", null]
+};
+function socialKind(url) {
+  let u;
+  try {
+    u = new URL(/^[a-z][a-z0-9+.-]*:/i.test(url) ? url : "https://" + url);
+  } catch {
+    return "";
+  }
+  if (u.protocol === "mailto:") return "email";
+  if (u.protocol === "tel:") return "phone";
+  if (u.protocol !== "https:" && u.protocol !== "http:") return "";
+  const host = u.hostname.toLowerCase();
+  if (host === "google.com" || host === "www.google.com") return /^\/maps/.test(u.pathname) ? "maps" : "website";
+  for (const [k, [, re]] of Object.entries(SOCIAL_KINDS)) if (re && re.test(host)) return k;
+  return /\.[a-z]{2,}$/.test(host) ? "website" : "";
+}
+var tidy = (u) => u.replace(/[)\].,;:!?'"›»]+$/, "").replace(/^http:\/\//i, "https://");
+function socialFromText(text) {
+  const t = String(text || "").replace(/­/g, ""), out = /* @__PURE__ */ new Map();
+  const add = (kind, url) => {
+    if (kind && !out.has(kind)) out.set(kind, { kind, url, label: "" });
+  };
+  for (const m of t.matchAll(/(?:https?:\/\/)?(?:[a-z0-9-]+\.)+[a-z]{2,}(?:\/[^\s<>()"']*)?/gi)) {
+    const raw = tidy(m[0]), kind = socialKind(raw);
+    if (!kind || kind === "website" || kind === "email" || kind === "phone") continue;
+    let u;
+    try {
+      u = new URL(/^https?:/i.test(raw) ? raw : "https://" + raw);
+    } catch {
+      continue;
+    }
+    if (u.pathname.replace(/\/+$/, "") === "" && !u.search && kind !== "maps") continue;
+    add(kind, u.href.replace(/^http:/, "https:"));
+  }
+  const HANDLE = [
+    [/instagram|insta\b|\big\b/i, "instagram", (h) => `https://www.instagram.com/${h}`],
+    [/facebook|\bfb\b/i, "facebook", (h) => `https://www.facebook.com/${h}`],
+    [/twitter|\bx\b/i, "x", (h) => `https://x.com/${h}`],
+    [/telegram/i, "telegram", (h) => `https://t.me/${h}`],
+    [/youtube/i, "youtube", (h) => `https://www.youtube.com/@${h}`],
+    [/threads/i, "threads", (h) => `https://www.threads.net/@${h}`],
+    [/github/i, "github", (h) => `https://github.com/${h}`],
+    [/snapchat/i, "snapchat", (h) => `https://www.snapchat.com/add/${h}`]
+  ];
+  for (const m of t.matchAll(/([A-Za-z]{1,10})\s*(?:[:\-–|]|\bat\b|\bon\b)?\s*@([A-Za-z0-9._]{2,40})(?![\w.]*@|\.[a-z]{2,}\b)/g)) for (const [re, kind, make] of HANDLE) if (re.test(m[1])) {
+    add(kind, make(m[2].replace(/\.$/, "")));
+    break;
+  }
+  const wa = /whats\s*app[^\d+\n]{0,20}(\+?\d[\d\s-]{8,16}\d)/i.exec(t);
+  if (wa) {
+    const d = wa[1].replace(/\D/g, "");
+    if (d.length >= 10) add("whatsapp", `https://wa.me/${d.length === 10 ? "91" + d : d}`);
+  }
+  return [...out.values()];
 }
 
 // worker/db-worker.ts
@@ -533,7 +613,7 @@ async function readPamphlet(env, q) {
     guessed = products.length > 0;
   }
   if (!products.length) return { error: 'No products were found in that pamphlet. Add a note naming the product (for example "one product: MZ 1250 welder") and try again.' };
-  return { products, read: words(all).length, ...guessed ? { guessed: true } : {} };
+  return { products, read: words(all).length, social: socialFromText(all), ...guessed ? { guessed: true } : {} };
 }
 async function translateTexts(env, q) {
   const to = oneLine(String(q.to || "")).slice(0, 40), from = oneLine(String(q.from || "English")).slice(0, 40);

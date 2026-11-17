@@ -717,6 +717,14 @@ function festival() {
   (fsP ||= new Promise((ok, no) => { if (window.SiteFestival) return ok(); const s = document.createElement("script"); s.src = "assets/festival.js"; s.onload = () => ok(); s.onerror = no; document.head.appendChild(s); }))
     .then(() => window.SiteFestival.mount(C, { preview: PREVIEW, site: C.brand.name })).catch(() => {});
 }
+/* Social links in the footer (assets/social.js). */
+let ssP;
+function social() {
+  const S = C.social || {};
+  if (!S.on && !window.SiteSocial) return;
+  (ssP ||= new Promise((ok, no) => { if (window.SiteSocial) return ok(); const s = document.createElement("script"); s.src = "assets/social.js"; s.onload = () => ok(); s.onerror = no; document.head.appendChild(s); }))
+    .then(() => window.SiteSocial.mount(C, { footer: "footer.ftr", before: ".base", imgUrl })).catch(() => {});
+}
 /* The video section (assets/video.js): one video on the home page, placed among its sections. */
 let svP;
 function video() {
@@ -840,7 +848,7 @@ function bind() {
   if (PAGE === "account") bindAccount();
   if (PAGE === "warranty") swMount();
   if (PAGE === "page" && window.SitePages) window.SitePages.after(spHere());
-  video(); menu(); lang(); consent(); addons(); festival();
+  video(); social(); menu(); lang(); consent(); addons(); festival();
   if (location.hash && PAGE === "policies") { const el = document.getElementById(location.hash.slice(1)); if (el) el.scrollIntoView(); }
 }
 function bindShop() {

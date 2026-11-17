@@ -7,6 +7,7 @@
 //   • the data export (Settings → Data privacy → Get a copy of your data): a ZIP of CSV files.
 // Both are parsed into LinkedInData, which applyLinkedIn() maps onto portfolio content.
 
+import { mergeSocial, socialKind } from "./social";
 
 export type LiRole = { title: string; company: string; location?: string; start?: string; end?: string; current?: boolean; description?: string };
 export type LiSchool = { school: string; degree?: string; start?: string; end?: string };
@@ -581,6 +582,8 @@ export function applyLinkedIn(c: any, d: LinkedInData, parts: ApplyParts, profil
       const em = (c.contact.links || []).find((l: any) => /^mailto:/i.test(l.url));
       if (em) em.url = `mailto:${d.email}`;
     }
+    // The footer's social links: the profile itself, and any of the listed websites that are profiles elsewhere.
+    mergeSocial(c, [...(link ? [{ kind: "linkedin", url: link, label: "" }] : []), ...(d.websites || []).map((w) => ({ kind: socialKind(w), url: w, label: "" })).filter((x) => x.kind && x.kind !== "email" && x.kind !== "phone")]);
     for (const w of d.websites || []) {
       const links: any[] = c.contact.links;
       if (links.length < 8 && !links.some((l) => l.url.replace(/\/$/, "") === w.replace(/\/$/, ""))) links.push({ label: w.replace(/^https?:\/\/(www\.)?/, "").replace(/\/$/, ""), url: w });

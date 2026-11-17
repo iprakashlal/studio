@@ -2,6 +2,7 @@
 // The text is read in the browser; pages that are pictures, and the step that turns text into products, run on
 // Workers AI on the Studio's Cloudflare database. Only what the pamphlet says is filled in; nothing is saved
 // until the owner presses Save.
+import { mergeSocial, socialFromText, type SocialItem } from "../lib/social";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Session } from "../lib/auth";
 import type { ProjectMeta } from "../lib/studio";
@@ -31,6 +32,7 @@ export function PamphletDialog({ session, project, draft, upload, onApply, onClo
   const [pick, setPick] = useState<Set<number>>(new Set());
   const doc = useRef<Pamphlet | null>(null);
   const [drag, setDrag] = useState(false);
+  const social = useRef<SocialItem[]>([]); // links the database read from the pamphlet's page pictures
   const existing: any[] = draft?.products?.items || [];
   // Thumbnails of the pictures found (revoked when they change or the dialog closes).
   const picUrls = useMemo(() => (found && doc.current ? doc.current.pics.map((x) => URL.createObjectURL(x.blob)) : []), [found]);
@@ -56,6 +58,7 @@ export function PamphletDialog({ session, project, draft, upload, onApply, onClo
       setBusy(pics ? `Reading ${pics} page picture${pics > 1 ? "s" : ""} and finding the products` : "Finding the products");
       const inp = pamphletInput(doc.current);
       const list = await cfProducts(db.api!, { ...inp, hint: [inp.hint, hint.trim()].filter(Boolean).join("\n") });
+      social.current = list.social || [];
       setFound(list); setGuessed(!!list.guessed); setPick(new Set(list.map((_, i) => i))); setPicOf(guessPics(list, doc.current.pics));
       if (!doc.current.pics.length && photos === "styled") setPhotos(doc.current.kind === "pdf" ? "page" : "none");
     } catch (e: any) { setErr(e?.message || "Couldn't read the pamphlet."); }
@@ -122,6 +125,8 @@ export function PamphletDialog({ session, project, draft, upload, onApply, onClo
       }
       // Make sure the section is on, so the products show.
       const sec = (c.sections || []).find((s: any) => s.id === "products"); if (sec) sec.show = true;
+      // Social links printed in the pamphlet go to the footer's row (a network that already has a link keeps it).
+      mergeSocial(c, [...socialFromText((doc.current?.pages || []).map((x) => x.text).join("\n")), ...social.current]);
       onApply(c, n); onClose();
     } catch (e: any) { setErr(e?.message || "Couldn't add the products."); }
     setBusy("");

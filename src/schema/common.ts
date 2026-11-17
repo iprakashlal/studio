@@ -1,6 +1,6 @@
 import { FESTIVALS, FESTIVAL_DECOS, festivalWhen } from "../lib/festivals";
 // Settings both templates share: where the site's own CMS lives.
-import { SOCIAL_KINDS, socialDefault, socialKind, mergeSocial, type SocialItem } from "../lib/social";
+import { SOCIAL_KINDS, SOCIAL_GRAPHICS, socialDefault, socialKind, mergeSocial, type SocialItem } from "../lib/social";
 import type { Category, Field } from "./types";
 
 /** Page names a site already uses, so the admin page can't take them. */
@@ -86,7 +86,7 @@ export function prepareFestival(c: any) {
 export function prepareSocial(c: any) {
   if (!c || typeof c !== "object") return;
   const d = socialDefault(), first = !c.social || typeof c.social !== "object", v = first ? {} : c.social;
-  c.social = { ...d, ...v, items: (Array.isArray(v.items) ? v.items : []).filter((x: any) => x && typeof x === "object").map((x: any) => ({ kind: SOCIAL_KINDS[x.kind] ? x.kind : "other", url: String(x.url || ""), label: String(x.label || ""), icon: x.icon || null })) };
+  c.social = { ...d, ...v, items: (Array.isArray(v.items) ? v.items : []).filter((x: any) => x && typeof x === "object").map((x: any) => ({ kind: SOCIAL_KINDS[x.kind] ? x.kind : "other", url: String(x.url || ""), label: String(x.label || ""), graphic: SOCIAL_GRAPHICS.some(([g]) => g === x.graphic) ? x.graphic : "auto", icon: x.icon || null })) };
   if (!first) return;
   const K = c.contact || {}, found: SocialItem[] = [];
   const add = (url: any) => { const u = String(url || "").trim(), kind = u ? socialKind(u) : ""; if (kind && kind !== "website" && kind !== "email" && kind !== "phone") found.push({ kind, url: u, label: "" }); };
@@ -105,17 +105,24 @@ export function socialCategory(group = "Pages", sub?: string, extra = ""): Categ
     cards: [
       { title: "Social links in the footer", fields: [
         { t: "toggle", path: "social.on", label: "Show social links in the footer" },
-        g2({ t: "select", path: "social.style", label: "Shown as", options: [{ value: "badges", label: "Round badges" }, { value: "labels", label: "Labels (text)" }, { value: "both", label: "Badge and label" }] },
+        g2({ t: "select", path: "social.style", label: "Shown as", options: [{ value: "badges", label: "Badges" }, { value: "labels", label: "Labels (text)" }, { value: "both", label: "Badge and label" }] },
           { t: "select", path: "social.align", label: "Position", options: [{ value: "center", label: "Centre" }, { value: "left", label: "Left" }, { value: "right", label: "Right" }] }),
         { t: "text", path: "social.title", label: "Small heading before the links", ph: "Follow us" },
         ...(extra ? [{ t: "note", text: extra } as Field] : []),
-        { t: "note", text: "A badge is a neutral round mark with the network's initials (IG, FB, YT…). The networks' own logos are their trademarks, so the site doesn't draw them: to show a logo, upload it as that link's own icon." },
+        { t: "when", path: "social.style", not: "labels", fields: [
+          g2({ t: "select", path: "social.graphics", label: "Badge graphic", options: [{ value: "icons", label: "Drawings (camera, play button, speech bubble…)" }, { value: "initials", label: "Initials (IG, FB, YT…)" }] },
+            { t: "select", path: "social.shape", label: "Badge shape", options: [{ value: "circle", label: "Circle" }, { value: "rounded", label: "Rounded square" }, { value: "square", label: "Square" }] }),
+          g2({ t: "select", path: "social.fill", label: "Badge look", options: [{ value: "outline", label: "Outline" }, { value: "solid", label: "Solid, in the theme's accent colour" }, { value: "soft", label: "Soft tint of the accent colour" }, { value: "plain", label: "Graphic only, no badge" }] },
+            { t: "select", path: "social.size", label: "Size", options: [{ value: "s", label: "Small" }, { value: "m", label: "Medium" }, { value: "l", label: "Large" }] }),
+          { t: "note", text: "The badges take their colours from the site's theme, so they fit whichever theme you choose. Each link below can pick its own graphic. The drawings are generic pictures, not the networks' logos (those are their trademarks, so the site doesn't draw them): to show a logo, upload it as that link's own icon." },
+        ] },
       ] },
       { title: "The links", fields: [
         { t: "note", text: "Paste the profile's full address, or just the handle or number (@yourname, a WhatsApp number). Links found in a profile, CV or pamphlet you upload are filled in here for you; change or remove any of them." },
-        { t: "list", path: "social.items", label: "Links", max: 16, add: () => ({ kind: "instagram", url: "", label: "", icon: null }), title: (it: any, i: number) => `${SOCIAL_KINDS[it?.kind]?.[0] || "Link"}${it?.label ? " · " + it.label : ""}${it?.url ? "" : " · no link yet"}` || `Link ${i + 1}`,
+        { t: "list", path: "social.items", label: "Links", max: 16, add: () => ({ kind: "instagram", url: "", label: "", graphic: "auto", icon: null }), title: (it: any, i: number) => `${SOCIAL_KINDS[it?.kind]?.[0] || "Link"}${it?.label ? " · " + it.label : ""}${it?.url ? "" : " · no link yet"}` || `Link ${i + 1}`,
           item: [g2({ t: "select", path: "kind", label: "Network", options: Object.entries(SOCIAL_KINDS).map(([value, [label]]) => ({ value, label })) }, { t: "text", path: "url", label: "Profile link, handle or number", ph: "https://…  or  @yourname" }),
-            g2({ t: "text", path: "label", label: "Label (optional)", ph: "Shown as text, and read out for badges" }, { t: "image", path: "icon", label: "Your own icon (optional)", hint: "A small square picture, shown in place of the badge." })] },
+            g2({ t: "text", path: "label", label: "Label (optional)", ph: "Shown as text, and read out for badges" }, { t: "select", path: "graphic", label: "Badge graphic", options: SOCIAL_GRAPHICS.map(([value, label]) => ({ value, label })) }),
+            { t: "image", path: "icon", label: "Your own icon (optional)", hint: "A small square picture, shown in place of the graphic: for example the network's official logo." }] },
       ] },
     ],
   };

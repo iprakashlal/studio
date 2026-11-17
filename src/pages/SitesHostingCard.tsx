@@ -1,6 +1,7 @@
 // Settings → Hostings → Sites and hosting accounts: one place for every live site's hosting. The Cloudflare accounts are kept on
 // the Studio's database (tokens as Worker secrets on your own Cloudflare, never read back), and each site's choice is
 // saved with the project, so every device signed in to the Studio sees and uses the same setup.
+import { CFDB_VERSION } from "../lib/cfdbSchema";
 import { useEffect, useMemo, useState } from "react";
 import type { Session } from "../lib/auth";
 import type { ProjectMeta, Studio, StudioIndex } from "../lib/studio";
@@ -25,7 +26,7 @@ export function SitesHostingCard({ session, studio, index, onIndex }: { session:
   const toast = useToast(), confirm = useConfirm();
   const sites = useMemo(() => index.projects.filter((p) => p.host || p.publish), [index.projects]);
   const [db, setDb] = useState<{ api: string; studio: string } | null | undefined>(undefined);
-  const [info, setInfo] = useState<{ cfx: boolean; imp: boolean; pages: boolean; del: boolean; mail: boolean; main: string | null; accounts: Acc[]; signed: boolean; gh: boolean; workers: string[] | null } | null>(null);
+  const [info, setInfo] = useState<{ /** The database runs this build's version. */ cur: boolean; cfx: boolean; imp: boolean; pages: boolean; del: boolean; mail: boolean; main: string | null; accounts: Acc[]; signed: boolean; gh: boolean; workers: string[] | null } | null>(null);
   const [mainName, setMainName] = useState("");
   const [busy, setBusy] = useState(""), [err, setErr] = useState("");
   const [tear, setTear] = useState<ProjectMeta | null>(null);
@@ -40,7 +41,7 @@ export function SitesHostingCard({ session, studio, index, onIndex }: { session:
     setDb({ api, studio: sid });
     const d = await cfDeployInfo(api), signed = !!(await cfSignedIn(api));
     const l = signed && d.cfx ? await cfxList(api, sid).catch(() => null) : null;
-    setInfo({ cfx: !!d.cfx, imp: !!d.bridge, pages: !!d.studioPages, del: !!d.del, mail: !!d.enqMail, main: l?.main ?? (d.deploy ? d.account || null : null), accounts: l?.accounts || [], signed, gh: !!d.gh, workers: l?.workers || null });
+    setInfo({ cur: (d.v || 0) >= CFDB_VERSION, cfx: !!d.cfx, imp: !!d.bridge, pages: !!d.studioPages, del: !!d.del, mail: !!d.enqMail, main: l?.main ?? (d.deploy ? d.account || null : null), accounts: l?.accounts || [], signed, gh: !!d.gh, workers: l?.workers || null });
     if (v?.account && v.account === (l?.main ?? d.account)) {
       // The main account's name, from this device's token (only shown here).
       try { const acc = await new Cloudflare(await getHelper(session.token, null), v.token).accounts(); setMainName(acc.find((a) => a.id === v.account)?.name || ""); } catch { /* name stays generic */ }
@@ -151,7 +152,7 @@ export function SitesHostingCard({ session, studio, index, onIndex }: { session:
       {!db ? <p className="text-sm text-amber-200">This needs your Studio's database on Cloudflare. Set it up from Publish to Cloudflare on a project, or move the Studio there (Migration).</p>
         : !info ? <p className="text-sm text-ink-400">Loading…</p>
         : !info.signed ? <p className="text-sm text-amber-200">Sign in to your Studio's database on this device to manage its hosting accounts.</p>
-        : !info.cfx || !info.imp || !info.pages || !info.del || !info.mail ? <div className="flex flex-col gap-2 text-sm"><p className="text-amber-200">Your Studio's database is from an older build. Update it once (your data, sign-ins and kept tokens stay).</p>
+        : !info.cur || !info.cfx || !info.imp || !info.pages || !info.del || !info.mail ? <div className="flex flex-col gap-2 text-sm"><p className="text-amber-200">Your Studio's database is from an older build. Update it once (your data, sign-ins and kept tokens stay).</p>
           <p className="text-ink-400">Connect the Cloudflare account that runs it (<span className="font-mono">{dbHost}</span>), then press Update. A token already saved on this device connects by itself.</p>
           {cfAcc.ui}
           <button type="button" className="btn btn-pri btn-sm self-start" disabled={!!busy || !cfAcc.ready} onClick={updateDb}>{busy.startsWith("update") ? (busy.split(":").slice(1).join(":") || "Updating") + "…" : "Update the database"}</button></div>

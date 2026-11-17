@@ -531,6 +531,47 @@ async function readPamphlet(env, q) {
   if (!products.length) return { error: 'No products were found in that pamphlet. Add a note naming the product (for example "one product: MZ 1250 welder") and try again.' };
   return { products, read: words(all).length, ...guessed ? { guessed: true } : {} };
 }
+async function translateTexts(env, q) {
+  const to = oneLine(String(q.to || "")).slice(0, 40), from = oneLine(String(q.from || "English")).slice(0, 40);
+  const texts = (Array.isArray(q.texts) ? q.texts : []).slice(0, 30).map((x) => String(x ?? "").slice(0, 1500));
+  if (!/^[\p{L} ()-]{2,40}$/u.test(to) || !texts.length) return { error: "Choose a language and some text." };
+  const sys = `You translate the text of a small business website from ${from} into ${to}, written in ${to}'s own script. Rules: translate naturally, the way a good ${to} website for Indian customers reads, not word for word; keep brand and product names, people's names, numbers, prices, units, emails, web addresses and emoji exactly as they are; keep every line break and every marker exactly where it is (**bold**, ==highlight==, __underline__, {accent:\u2026}, list dashes, #, | table bars, HTML tags, {placeholders} in curly brackets); short labels stay short; never add notes or explanations. You receive a JSON object {"texts": [...]} and answer with only a JSON object {"t": [...]} holding the same number of strings in the same order.`;
+  const ask = async (list) => {
+    const r = await env.AI.run("@cf/meta/llama-3.3-70b-instruct-fp8-fast", { messages: [{ role: "system", content: sys }, { role: "user", content: JSON.stringify({ texts: list }) }], max_tokens: 6e3, temperature: 0.2, response_format: { type: "json_object" } });
+    const raw = typeof r?.response === "string" ? r.response : JSON.stringify(r?.response ?? r);
+    let j;
+    try {
+      j = JSON.parse(raw);
+    } catch {
+      const m = /\{[\s\S]*\}/.exec(raw);
+      j = m ? JSON.parse(m[0]) : null;
+    }
+    const out = Array.isArray(j?.t) ? j.t : null;
+    if (!out || out.length !== list.length) throw new Error("count");
+    return out.map((x) => typeof x === "string" && x.trim() ? x.slice(0, 4e3) : null);
+  };
+  try {
+    return { t: await ask(texts) };
+  } catch {
+    const out = [];
+    const half = Math.ceil(texts.length / 2);
+    for (const part of [texts.slice(0, half), texts.slice(half)]) {
+      if (!part.length) continue;
+      try {
+        out.push(...await ask(part));
+      } catch {
+        for (const one of part) {
+          try {
+            out.push((await ask([one]))[0]);
+          } catch {
+            out.push(null);
+          }
+        }
+      }
+    }
+    return { t: out };
+  }
+}
 function publicUrl(url) {
   if (!/^https:\/\/[^\s/]+\.[^\s]+$/i.test(url)) return null;
   let u;
@@ -630,7 +671,7 @@ var db_worker_default = {
     if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
     const u = new URL(req.url), p = u.pathname.replace(/\/+$/, "") || "/";
     try {
-      if (p === "/") return json({ ok: true, service: "site-studio-db", v: V, mail: !!(env.RESEND_API_KEY && env.MAIL_FROM), ...env.CF_TOKEN && env.CF_ACCOUNT ? { deploy: true, account: env.CF_ACCOUNT } : {}, ...env.GH_TOKEN ? { gh: true } : {}, ...env.AI ? { ai: true, pamphlet: 2 } : {}, reviews: true, look: 1, accounts: 2, cfx: 4, studioPages: 1, del: 1, enqMail: 3, ...otherAccounts(env).length ? { more: otherAccounts(env).length } : {} });
+      if (p === "/") return json({ ok: true, service: "site-studio-db", v: V, mail: !!(env.RESEND_API_KEY && env.MAIL_FROM), ...env.CF_TOKEN && env.CF_ACCOUNT ? { deploy: true, account: env.CF_ACCOUNT } : {}, ...env.GH_TOKEN ? { gh: true } : {}, ...env.AI ? { ai: true, pamphlet: 2 } : {}, reviews: true, look: 1, translate: 1, accounts: 2, cfx: 4, studioPages: 1, del: 1, enqMail: 3, ...otherAccounts(env).length ? { more: otherAccounts(env).length } : {} });
       if (p === "/auth/code" && req.method === "POST") {
         const { email: raw, site: forSite, studio: forStudio } = await req.json();
         const email2 = String(raw || "").trim().toLowerCase();
@@ -738,6 +779,13 @@ var db_worker_default = {
         if (!await env.DB.prepare("select 1 from members where email = ? and role in ('owner', 'partner') limit 1").bind(email2).first()) return err(403, "Only owners can use this.");
         if (!env.AI) return err(501, "Reading pamphlets needs the database updated once (from a device with the Cloudflare token).");
         return json(await readPamphlet(env, await req.json()));
+      }
+      if (p === "/ai/translate" && req.method === "POST") {
+        const email2 = await who(env, req);
+        if (!email2) return err(401, "Sign in first.");
+        if (!await env.DB.prepare("select 1 from members where email = ? limit 1").bind(email2).first()) return err(403, "Only members can use this.");
+        if (!env.AI) return json({ error: "Translating needs Workers AI on this database. Update the database once (Settings \u2192 Hostings)." });
+        return json(await translateTexts(env, await req.json()));
       }
       if (p === "/ai/look" && req.method === "POST") {
         const email2 = await who(env, req);

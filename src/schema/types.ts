@@ -42,7 +42,9 @@ export type Field =
   /** Studio only: "Fill in from a pamphlet" (business products), opened by the project view. */
   | { t: "pamphlet" }
   /** Studio only: "Add reviews from Google" (business and shop testimonials). */
-  | { t: "googleReviews" };
+  | { t: "googleReviews" }
+  /** Languages: the table of the site's texts and their translations (content.i18n.t). */
+  | { t: "translations" };
 
 export type Card = { title: string; fields: Field[]; /** Shown in the Studio only, not in the site's admin page. */ studio?: boolean };
 export type Category = { id: string; label: string; group: string; /** A folding sub-heading inside the group (e.g. "Sections"). */ sub?: string; desc: string; cards: Card[]; /** Show the category only when this returns true for the current content. */ showIf?: (content: any) => boolean;

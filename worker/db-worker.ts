@@ -331,6 +331,29 @@ async function readPamphlet(env: Env, q: any) {
   return { products, read: words(all).length, ...(guessed ? { guessed: true } : {}) };
 }
 
+/** Translates up to 30 short texts in one go. Returns { t: (string | null)[] } in the same order (null: try again). */
+async function translateTexts(env: Env, q: any): Promise<any> {
+  const to = oneLine(String(q.to || "")).slice(0, 40), from = oneLine(String(q.from || "English")).slice(0, 40);
+  const texts: string[] = (Array.isArray(q.texts) ? q.texts : []).slice(0, 30).map((x: any) => String(x ?? "").slice(0, 1500));
+  if (!/^[\p{L} ()-]{2,40}$/u.test(to) || !texts.length) return { error: "Choose a language and some text." };
+  const sys = `You translate the text of a small business website from ${from} into ${to}, written in ${to}'s own script. Rules: translate naturally, the way a good ${to} website for Indian customers reads, not word for word; keep brand and product names, people's names, numbers, prices, units, emails, web addresses and emoji exactly as they are; keep every line break and every marker exactly where it is (**bold**, ==highlight==, __underline__, {accent:…}, list dashes, #, | table bars, HTML tags, {placeholders} in curly brackets); short labels stay short; never add notes or explanations. You receive a JSON object {"texts": [...]} and answer with only a JSON object {"t": [...]} holding the same number of strings in the same order.`;
+  const ask = async (list: string[]): Promise<(string | null)[]> => {
+    const r: any = await env.AI.run("@cf/meta/llama-3.3-70b-instruct-fp8-fast", { messages: [{ role: "system", content: sys }, { role: "user", content: JSON.stringify({ texts: list }) }], max_tokens: 6000, temperature: 0.2, response_format: { type: "json_object" } });
+    const raw = typeof r?.response === "string" ? r.response : JSON.stringify(r?.response ?? r);
+    let j: any; try { j = JSON.parse(raw); } catch { const m = /\{[\s\S]*\}/.exec(raw); j = m ? JSON.parse(m[0]) : null; }
+    const out = Array.isArray(j?.t) ? j.t : null;
+    if (!out || out.length !== list.length) throw new Error("count");
+    return out.map((x: any) => (typeof x === "string" && x.trim() ? x.slice(0, 4000) : null));
+  };
+  try { return { t: await ask(texts) }; }
+  catch {
+    // The model lost count: do it in two halves, then one by one for whatever still fails.
+    const out: (string | null)[] = [];
+    const half = Math.ceil(texts.length / 2);
+    for (const part of [texts.slice(0, half), texts.slice(half)]) { if (!part.length) continue; try { out.push(...(await ask(part))); } catch { for (const one of part) { try { out.push((await ask([one]))[0]); } catch { out.push(null); } } } }
+    return { t: out };
+  }
+}
 /** A public https address (not this machine, a bare IP or an internal name). */
 function publicUrl(url: string): URL | null {
   if (!/^https:\/\/[^\s/]+\.[^\s]+$/i.test(url)) return null;
@@ -389,7 +412,7 @@ export default {
     if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
     const u = new URL(req.url), p = u.pathname.replace(/\/+$/, "") || "/";
     try {
-      if (p === "/") return json({ ok: true, service: "site-studio-db", v: V, mail: !!(env.RESEND_API_KEY && env.MAIL_FROM), ...(env.CF_TOKEN && env.CF_ACCOUNT ? { deploy: true, account: env.CF_ACCOUNT } : {}), ...(env.GH_TOKEN ? { gh: true } : {}), ...(env.AI ? { ai: true, pamphlet: 2 } : {}), reviews: true, look: 1, accounts: 2, cfx: 4, studioPages: 1, del: 1, enqMail: 3, ...(otherAccounts(env).length ? { more: otherAccounts(env).length } : {}) });
+      if (p === "/") return json({ ok: true, service: "site-studio-db", v: V, mail: !!(env.RESEND_API_KEY && env.MAIL_FROM), ...(env.CF_TOKEN && env.CF_ACCOUNT ? { deploy: true, account: env.CF_ACCOUNT } : {}), ...(env.GH_TOKEN ? { gh: true } : {}), ...(env.AI ? { ai: true, pamphlet: 2 } : {}), reviews: true, look: 1, translate: 1, accounts: 2, cfx: 4, studioPages: 1, del: 1, enqMail: 3, ...(otherAccounts(env).length ? { more: otherAccounts(env).length } : {}) });
 
       // ---- sign in with an emailed code (members only)
       if (p === "/auth/code" && req.method === "POST") {
@@ -485,6 +508,13 @@ export default {
         if (!(await env.DB.prepare("select 1 from members where email = ? and role in ('owner', 'partner') limit 1").bind(email).first())) return err(403, "Only owners can use this.");
         if (!env.AI) return err(501, "Reading pamphlets needs the database updated once (from a device with the Cloudflare token).");
         return json(await readPamphlet(env, (await req.json()) as any));
+      }
+      // ---- translate a site's text into another language (Workers AI), for Languages in the editor
+      if (p === "/ai/translate" && req.method === "POST") {
+        const email = await who(env, req); if (!email) return err(401, "Sign in first.");
+        if (!(await env.DB.prepare("select 1 from members where email = ? limit 1").bind(email).first())) return err(403, "Only members can use this.");
+        if (!env.AI) return json({ error: "Translating needs Workers AI on this database. Update the database once (Settings → Hostings)." });
+        return json(await translateTexts(env, (await req.json()) as any));
       }
       // ---- how a reference page looks (colours, fonts, corners, interaction libraries), for "theme from a reference"
       if (p === "/ai/look" && req.method === "POST") {

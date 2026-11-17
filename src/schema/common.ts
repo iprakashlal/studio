@@ -211,6 +211,86 @@ export function consentCategory(): Category {
   };
 }
 
+// ---------------------------------------------------------------- regional languages (all templates)
+/** code → [name in its own script, English name] (the same list assets/lang.js offers). */
+export const LANG_NAMES: Record<string, [string, string]> = { hi: ["हिन्दी", "Hindi"], mr: ["मराठी", "Marathi"], gu: ["ગુજરાતી", "Gujarati"], pa: ["ਪੰਜਾਬੀ", "Punjabi"], bn: ["বাংলা", "Bengali"], as: ["অসমীয়া", "Assamese"], or: ["ଓଡ଼ିଆ", "Odia"],
+  ta: ["தமிழ்", "Tamil"], te: ["తెలుగు", "Telugu"], kn: ["ಕನ್ನಡ", "Kannada"], ml: ["മലയാളം", "Malayalam"], en: ["English", "English"] };
+const NOT_TEXT = /(^|\.)(url|link|href|email|phone|whatsapp|tel|slug|id|code|gstin|pincode|pincodes|domain|handle|username|key|token|vpa|upi|map|embed|video|file|path|src|sku|hsn|currency|page|cat|ph|notifyTo|fileUrl|sbUrl|sbKey|site|workerUrl|policyUrl|reopenLabel|preview|font\w*|preset)$/i;
+const NOT_TEXT_END = /(Url|Link|Href|Email|Phone|Id|Slug|Code|Color|Colour|Font|Icon|Key|Token|Handle)$/;
+const NOT_TREE = /^(theme|cms|i18n|backend|payments|emails|addons|festival\.custom|shipping\.zones|gst)(\.|$)/;
+/** Where a template's own text sits, as path patterns ("services.items.*.title"), read from its editor schema. */
+export function textPaths(schema: Category[]): string[] {
+  const out = new Set<string>();
+  const walk = (fields: Field[], pre: string) => {
+    for (const f of fields) {
+      if (f.t === "grid" || f.t === "when") { walk(f.fields, pre); continue; }
+      if (f.t === "list") { walk(f.item, pre + f.path + ".*."); continue; }
+      if (f.t === "strings") { const p = pre + f.path; if (!f.number && !NOT_TEXT.test(p) && !NOT_TEXT_END.test(p) && !NOT_TREE.test(p)) out.add(p + ".*"); continue; }
+      if (f.t !== "text" && f.t !== "textarea") continue;
+      const p = pre + f.path; if ((f.t === "text" && f.check) || NOT_TEXT.test(p) || NOT_TEXT_END.test(p) || NOT_TREE.test(p)) continue;
+      out.add(p);
+    }
+  };
+  for (const c of schema) for (const card of c.cards) walk(card.fields, "");
+  return [...out];
+}
+/** Every text of the site, in page order, without repeats (what Languages translates). */
+export function siteTexts(c: any): string[] {
+  const out: string[] = [], seen = new Set<string>();
+  const take = (v: unknown) => { if (typeof v !== "string") return; const t = v.replace(/\s+/g, " ").trim(); if (t.length < 2 || !/\p{L}/u.test(t) || /^(https?:\/\/|mailto:|tel:)\S+$|^[\w.+-]+@[\w-]+\.[\w.-]+$|^#[0-9a-f]{3,8}$/i.test(t) || seen.has(t)) return; seen.add(t); out.push(v); };
+  for (const p of (c?.i18n?.paths as string[]) || []) {
+    const walk = (o: any, parts: string[]) => {
+      if (o == null) return; const [k, ...rest] = parts;
+      if (k === "*") { if (Array.isArray(o)) o.forEach((x) => (rest.length ? walk(x, rest) : take(x))); return; }
+      if (typeof o !== "object") return;
+      if (!rest.length) take(o[k]); else walk(o[k], rest);
+    };
+    walk(c, p.split("."));
+  }
+  return out;
+}
+export const i18nDefault = () => ({ on: false, base: { code: "en", name: "English" }, langs: Object.entries(LANG_NAMES).filter(([k]) => k !== "en").map(([code, [name]]) => ({ code, name, on: false })),
+  t: {} as Record<string, Record<string, string>>, paths: [] as string[], ui: [] as string[], auto: true, place: "menu", preview: "" });
+/** Older content gets the language fields (off); the list of text places is refreshed from the template's schema. */
+export function prepareI18n(c: any, schema: () => Category[]) {
+  if (!c || typeof c !== "object") return;
+  const d = i18nDefault(), n = c.i18n && typeof c.i18n === "object" ? c.i18n : {};
+  const have: any[] = Array.isArray(n.langs) ? n.langs.filter((x: any) => x && typeof x === "object" && LANG_NAMES[x.code]) : [];
+  const base = n.base && LANG_NAMES[n.base.code] ? { code: n.base.code, name: String(n.base.name || LANG_NAMES[n.base.code][0]) } : d.base;
+  c.i18n = { ...d, ...n, base, t: n.t && typeof n.t === "object" ? n.t : {}, ui: Array.isArray(n.ui) ? n.ui : [], paths: textPaths(schema()),
+    langs: Object.entries(LANG_NAMES).filter(([k]) => k !== base.code).map(([code, [name]]) => { const h = have.find((x) => x.code === code); return { code, name: String(h?.name || name), on: h?.on === true }; }) };
+}
+/** Settings → Languages: other languages for the site, a switcher for visitors, and the translations. */
+export function i18nCategory(group = "Settings"): Category {
+  const g2 = (...fields: Field[]): Field => ({ t: "grid", cols: 2, fields });
+  return {
+    id: "languages", label: "Languages", group,
+    desc: "Offer the site in Hindi, Marathi, Tamil and other languages. Visitors switch with one tap; every translation is made in one click and stays editable.",
+    cards: [
+      { title: "Languages on this site", fields: [
+        { t: "toggle", path: "i18n.on", label: "Offer the site in more than one language" },
+        { t: "when", path: "i18n.on", is: "true", fields: [
+          g2({ t: "select", path: "i18n.base.code", label: "The site is written in", options: Object.entries(LANG_NAMES).map(([value, [n, e]]) => ({ value, label: n === e ? e : `${e} (${n})` })) },
+            { t: "text", path: "i18n.base.name", label: "Its name in the switcher", ph: "English" }),
+          { t: "note", text: "Switch on each language you want, then translate it below. A language shows in the switcher as soon as it is on." },
+          { t: "list", path: "i18n.langs", fixed: true, add: () => ({}), title: (it) => `${LANG_NAMES[it?.code]?.[1] || it?.code} · ${it?.name || ""}${it?.on ? " · on" : ""}`,
+            item: [g2({ t: "toggle", path: "on", label: "Offer this language" }, { t: "text", path: "name", label: "Name in the switcher" })] },
+          g2({ t: "select", path: "i18n.place", label: "Language switcher", options: [{ value: "menu", label: "In the menu" }, { value: "right", label: "Floating, bottom right" }, { value: "left", label: "Floating, bottom left" }] },
+            { t: "toggle", path: "i18n.auto", label: "First visit: use the visitor's own language when the site has it" }),
+          { t: "note", text: "The visitor's choice is remembered in their browser. A link ending in ?lang=hi (the language's two-letter code) opens that language directly, for sharing or ads." },
+        ] },
+      ] },
+      { title: "Translations", fields: [
+        { t: "when", path: "i18n.on", is: "true", fields: [
+          { t: "note", text: "One click translates everything that has no translation yet, including the page's own buttons and labels. New text you add later shows as “Not translated” here. Translations follow the text itself, so reordering sections or products never loses them; changing a text means translating that one again." },
+          { t: "translations" },
+        ] },
+        { t: "when", path: "i18n.on", not: "true", fields: [{ t: "note", text: "Switch languages on above to translate the site." }] },
+      ] },
+    ],
+  };
+}
+
 // ---------------------------------------------------------------- the site's own menu, with sub-menus (all templates)
 export type MenuOpts = { /** Where a link can go, besides a custom page and a web address. */ targets: { value: string; label: string }[]; /** Extra per-link fields for a target, e.g. the shop category. */ extra?: Field[]; where: string; /** A caution shown under the switch. */ note?: string };
 export const menuItem = (label = "New link", to = "", more: Record<string, unknown> = {}) => ({ id: "mi-" + Math.random().toString(36).slice(2, 8), label, show: true, to, page: "", cat: "", url: "", newTab: false, children: [] as any[], ...more });

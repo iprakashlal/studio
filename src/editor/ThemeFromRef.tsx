@@ -5,18 +5,10 @@ import type { TemplateDef } from "../schema/types";
 import { AXES, FX_AXES, FX_KEYS } from "../themes/catalog";
 import { ThemeSwatch } from "../themes/ThemeGallery";
 import { lookFromDigest, lookFromHtml, lookFromImage, lookFromPdf, themeFromLook, type Look, type Made } from "../lib/themefrom";
-import { cfLook, cfSignedIn } from "../lib/cfdb";
-import { loadHostConfig } from "../lib/studiohost";
+import { cfLook, signedInApi as lookApi } from "../lib/cfdb";
 import { pdfBase } from "../lib/pdftext";
 import { Modal } from "../ui/kit";
 
-/** A database this device is signed in to, to read a link through (the Studio's, or this site's own). */
-async function lookApi(): Promise<string | null> {
-  const hc = await loadHostConfig().catch(() => null);
-  if (hc?.kind === "cloudflare" && (await cfSignedIn(hc.api).catch(() => null))) return hc.api;
-  try { const j = await (await fetch("cms/site.json", { cache: "no-store" })).json(); if (j?.host?.kind === "cloudflare" && (await cfSignedIn(j.host.api).catch(() => null))) return j.host.api; } catch { /* not a site's admin page */ }
-  return null;
-}
 const label = (axis: { options: [string, string][] }, v: string) => axis.options.find(([o]) => o === v)?.[1] || v;
 
 export function ThemeFromRef({ tpl, onApply }: { tpl: TemplateDef; onApply: (m: Made) => void }) {

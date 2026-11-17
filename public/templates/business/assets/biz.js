@@ -536,6 +536,17 @@ function festival() {
 }
 /** The footer's link that reopens the consent choices (while the banner is on). */
 const ckOn = () => !!(C.consent && C.consent.on && C.consent.footerLink !== false);
+/* Regional languages (assets/lang.js): the chosen language is put into the content before the page is drawn, then
+   the page's fixed wording is translated and the language switcher added. */
+let lgP, lgFail = false;
+const langOn = () => { const n = C.i18n || {}; return !!n.on && (n.langs || []).some((l) => l && l.on !== false); };
+function langGate() {
+  if (window.SiteLang) { if (PREVIEW) window.SiteLang.force((C.i18n || {}).preview || ""); window.SiteLang.apply(C); return false; }
+  if (!langOn() || lgFail) return false;
+  (lgP ||= new Promise((ok, no) => { const s = document.createElement("script"); s.src = "assets/lang.js"; s.onload = () => ok(); s.onerror = no; document.head.appendChild(s); })).then(render, () => { lgFail = true; render(); });
+  return true;
+}
+function lang() { if (window.SiteLang) window.SiteLang.mount(C, { navs: [".nav .links", "#mnav"], keep: "a.btn", again: render }); }
 /* Cookie consent (assets/consent.js): the banner that asks before analytics, marketing and other optional code runs. */
 let csP;
 function consent() {
@@ -586,6 +597,7 @@ function maintGate(again) {
 function render() {
   // A several-page link opened while the site is one page goes to that section.
   if (!PREVIEW && !multi() && !["home", "products", "product", "page"].includes(PAGE)) { location.replace(PAGES.home + "#" + (PAGE === "work" ? "work" : PAGE)); return; }
+  if (langGate()) return;
   applyTheme(C.theme); setTitle(); setIcon();
   if (maintGate(render)) return;
   if (!PREVIEW && PAGE === "warranty" && !swOn()) { location.replace(PAGES.home); return; }
@@ -596,7 +608,7 @@ function render() {
   bind();
   if (PAGE === "warranty") swMount();
   if (PAGE === "page" && window.SitePages) window.SitePages.after(window.SitePages.find(C, spCur(), PREVIEW));
-  slides(); menu(); consent(); addons(); festival();
+  slides(); menu(); lang(); consent(); addons(); festival();
   if (window.SiteFX) try { window.SiteFX.init({ root: $("#app"), brand: C.theme.introTitle || C.brand.name, badge: C.poweredBy }); } catch (e) {}
 }
 

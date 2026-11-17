@@ -1,6 +1,6 @@
 import type { Category, Field, TemplateDef } from "./types";
 import { AXES, BODY_FONTS, DISPLAY_FONTS, KIT_AXIS, LINE_BREAKS_AXIS, PORTFOLIO_AXES, THEMES, onColor, portfolioThemeValues } from "../themes/catalog";
-import { adminCategory, consentCategory, emailsCategory, featuresCategory, festivalCategory, menuCategory, menuItem, prepareMenu, staticPagesCategory, heroSlidesCard, prepareSlides, prepareMaintenance, seoCategory } from "./common";
+import { adminCategory, consentCategory, emailsCategory, i18nCategory, prepareI18n, featuresCategory, festivalCategory, menuCategory, menuItem, prepareMenu, staticPagesCategory, heroSlidesCard, prepareSlides, prepareMaintenance, seoCategory } from "./common";
 import VELOCITY_DEFAULTS from "./velocity-defaults.json";
 import { NAV_MODE_FIELD, NAV_MODE_NOTE, themeCards } from "../themes/fields";
 
@@ -207,6 +207,7 @@ const schema: Category[] = [
   featuresCategory(),
   consentCategory(),
   festivalCategory(),
+  i18nCategory(),
   seoCategory(false),
   adminCategory(),
 ];
@@ -234,6 +235,7 @@ export const portfolioTemplate: TemplateDef = {
     if (c.hero && typeof c.hero === "object" && !c.hero.graphic) c.hero.graphic = "elements";
     if (c.hero && typeof c.hero === "object") prepareSlides(c.hero, "#000000");
     prepareMaintenance(c);
+    prepareI18n(c, () => schema);
     prepareMenu(c, () => (Array.isArray(c.sections) ? c.sections : []).filter((x: any) => x && x.visible && x.id !== "contact").map((x: any) => menuItem(x.navLabel || x.id, x.id)));
     // Hero → Photo was replaced by the logo icon / disc image (Brand & theme): an existing photo moves to the disc.
     if (c.hero && c.hero.photo) {

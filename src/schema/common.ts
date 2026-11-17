@@ -315,7 +315,7 @@ export function i18nCategory(group = "Settings"): Category {
         { t: "when", path: "i18n.on", is: "true", fields: [
           g2({ t: "select", path: "i18n.base.code", label: "The site is written in", options: Object.entries(LANG_NAMES).map(([value, [n, e]]) => ({ value, label: n === e ? e : `${e} (${n})` })) },
             { t: "text", path: "i18n.base.name", label: "Its name in the switcher", ph: "English" }),
-          { t: "note", text: "Switch on each language you want, then translate it below. A language shows in the switcher as soon as it is on." },
+          { t: "note", text: "Switch on each language you want. It is translated straight away (you'll see the progress under Translations below) and shows in the switcher as soon as it is on." },
           { t: "list", path: "i18n.langs", fixed: true, add: () => ({}), title: (it) => `${LANG_NAMES[it?.code]?.[1] || it?.code} · ${it?.name || ""}${it?.on ? " · on" : ""}`,
             item: [g2({ t: "toggle", path: "on", label: "Offer this language" }, { t: "text", path: "name", label: "Name in the switcher" })] },
           g2({ t: "select", path: "i18n.place", label: "Language switcher", options: [{ value: "menu", label: "In the menu" }, { value: "right", label: "Floating, bottom right" }, { value: "left", label: "Floating, bottom left" }] },

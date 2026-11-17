@@ -1,6 +1,6 @@
 // Languages → Translations: every piece of the site's text beside its translation, one language at a time. "Translate
 // what's missing" fills the gaps with Workers AI on the database; every translation stays editable by hand.
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { siteTexts, LANG_NAMES } from "../schema/common";
 import { cfTranslate, signedInApi } from "../lib/cfdb";
 
@@ -21,10 +21,25 @@ export function Translations({ root, bump }: { root: any; bump: () => void }) {
   const [only, setOnly] = useState<"all" | "missing">("all"), [find, setFind] = useState(""), [shown, setShown] = useState(40);
   const [sure, setSure] = useState(false);
   const [busy, setBusy] = useState(""), [msg, setMsg] = useState<{ bad?: boolean; text: string } | null>(null);
-  useEffect(() => { if (!langs.some((l) => l.code === lang)) setLangState(langs[0]?.code || ""); }, [langs.map((l) => l.code).join(",")]);
+  // A language that was just switched on becomes the one being worked on.
+  const codes = langs.map((l) => l.code).join(","), before = useRef(codes);
+  useEffect(() => {
+    const was = before.current ? before.current.split(",") : [], fresh = langs.find((l) => !was.includes(l.code)); before.current = codes;
+    if (fresh) setLangState(fresh.code); else if (!langs.some((l) => l.code === lang)) setLangState(langs[0]?.code || "");
+  }, [codes]);
   // The preview shows the language being worked on, and goes back to the site's own when this section closes.
   useEffect(() => { if (root.i18n && lang && root.i18n.preview !== lang) { root.i18n.preview = lang; bump(); } }, [lang, root]);
   useEffect(() => () => { if (root.i18n?.preview) { root.i18n.preview = ""; bump(); } }, [root]);
+  // A language with nothing translated yet is translated straight away (once), so switching one on is all it takes.
+  // (These hooks sit above the "no language yet" return, so the number of hooks never changes.)
+  const auto = useRef(new Set<string>()), go = useRef<null | ((again: boolean) => void)>(null);
+  useEffect(() => {
+    if (!lang || auto.current.has(lang)) return;
+    auto.current.add(lang);
+    if (Object.keys(root.i18n?.t?.[lang] || {}).length) return;
+    const t = setTimeout(() => { go.current?.(false); }, 600); // after the preview has drawn, so its buttons and labels are read too
+    return () => { clearTimeout(t); auto.current.delete(lang); };
+  }, [lang]);
   const all = (() => { const seen = new Set<string>(), out: string[] = []; for (const s of [...siteTexts(root), ...((n.ui as string[]) || [])]) { const k = norm(s); if (k && !seen.has(k)) { seen.add(k); out.push(s); } } return out; })();
   if (!langs.length) return <p className="rounded-lg border border-ink-700 bg-ink-850 px-3 py-2.5 text-[13px] text-ink-300">Switch on at least one language above to translate the site.</p>;
   const dict: Record<string, string> = ((root.i18n.t ||= {})[lang] ||= {});
@@ -59,6 +74,8 @@ export function Translations({ root, bump }: { root: any; bump: () => void }) {
     } catch (e: any) { setMsg({ bad: true, text: /Unknown scope|Not found/i.test(e?.message || "") ? "Translating needs the database updated once (Settings → Hostings → Update the database). You can still type each translation below." : e?.message || "Translating didn't work. Try again." }); }
     setBusy("");
   };
+
+  go.current = translate;
 
   return (
     <div className="flex flex-col gap-3" aria-label="Translations">

@@ -16,7 +16,7 @@ create index if not exists approvals_project on approvals (scope, project, creat
 create table if not exists approval_notes (id integer primary key autoincrement, token text not null, who text not null, body text not null, page text not null default '', kind text not null default 'comment', created_at text not null);
 create index if not exists approval_notes_token on approval_notes (token, id);
 `;
-var CFDB_VERSION = 14;
+var CFDB_VERSION = 15;
 var CFDB_WORKER_NAME = "picaffectz-db";
 
 // src/lib/lookdigest.ts
@@ -539,42 +539,39 @@ async function translateTexts(env, q) {
   const to = oneLine(String(q.to || "")).slice(0, 40), from = oneLine(String(q.from || "English")).slice(0, 40);
   const texts = (Array.isArray(q.texts) ? q.texts : []).slice(0, 30).map((x) => String(x ?? "").slice(0, 1500));
   if (!/^[\p{L} ()-]{2,40}$/u.test(to) || !texts.length) return { error: "Choose a language and some text." };
-  const sys = `You translate the text of a small business website from ${from} into ${to}, written in ${to}'s own script. Rules: translate naturally, the way a good ${to} website for Indian customers reads, not word for word; keep brand and product names, people's names, numbers, prices, units, emails, web addresses and emoji exactly as they are; keep every line break and every marker exactly where it is (**bold**, ==highlight==, __underline__, {accent:\u2026}, list dashes, #, | table bars, HTML tags, {placeholders} in curly brackets); short labels stay short; never add notes or explanations. You receive a JSON object {"texts": [...]} and answer with only a JSON object {"t": [...]} holding the same number of strings in the same order.`;
-  const ask = async (list) => {
-    const r = await env.AI.run("@cf/meta/llama-3.3-70b-instruct-fp8-fast", { messages: [{ role: "system", content: sys }, { role: "user", content: JSON.stringify({ texts: list }) }], max_tokens: 6e3, temperature: 0.2, response_format: { type: "json_object" } });
-    const raw = typeof r?.response === "string" ? r.response : JSON.stringify(r?.response ?? r);
-    let j;
+  const sys = `You translate the text of a small business website from ${from} into ${to}, written in ${to}'s own script. Rules: translate naturally, the way a good ${to} website for Indian customers reads, not word for word; keep brand and product names, people's names, numbers, prices, units, emails, web addresses and emoji exactly as they are; keep every line break and every marker exactly where it is (**bold**, ==highlight==, __underline__, {accent:\u2026}, list dashes, #, | table bars, HTML tags, {placeholders} in curly brackets); short labels stay short; never add notes or explanations. You receive a JSON object {"texts": {"1": "\u2026", "2": "\u2026"}} and answer with only a JSON object {"t": {"1": "\u2026", "2": "\u2026"}} with the same numbers, each holding the translation of the text with that number.`;
+  const ask = async (idx) => {
+    const got = /* @__PURE__ */ new Map();
     try {
-      j = JSON.parse(raw);
-    } catch {
-      const m = /\{[\s\S]*\}/.exec(raw);
-      j = m ? JSON.parse(m[0]) : null;
-    }
-    const out = Array.isArray(j?.t) ? j.t : null;
-    if (!out || out.length !== list.length) throw new Error("count");
-    return out.map((x) => typeof x === "string" && x.trim() ? x.slice(0, 4e3) : null);
-  };
-  try {
-    return { t: await ask(texts) };
-  } catch {
-    const out = [];
-    const half = Math.ceil(texts.length / 2);
-    for (const part of [texts.slice(0, half), texts.slice(half)]) {
-      if (!part.length) continue;
+      const r = await env.AI.run("@cf/meta/llama-3.3-70b-instruct-fp8-fast", { messages: [{ role: "system", content: sys }, { role: "user", content: JSON.stringify({ texts: Object.fromEntries(idx.map((i) => [String(i + 1), texts[i]])) }) }], max_tokens: 6e3, temperature: 0.2, response_format: { type: "json_object" } });
+      const raw = typeof r?.response === "string" ? r.response : JSON.stringify(r?.response ?? r);
+      let j;
       try {
-        out.push(...await ask(part));
+        j = JSON.parse(raw);
       } catch {
-        for (const one of part) {
-          try {
-            out.push((await ask([one]))[0]);
-          } catch {
-            out.push(null);
-          }
-        }
+        const m = /\{[\s\S]*\}/.exec(raw);
+        j = m ? JSON.parse(m[0]) : null;
       }
+      const t = j?.t;
+      if (Array.isArray(t)) {
+        if (t.length === idx.length) t.forEach((x, k) => {
+          if (typeof x === "string" && x.trim()) got.set(idx[k], x.slice(0, 4e3));
+        });
+      } else if (t && typeof t === "object") for (const i of idx) {
+        const x = t[String(i + 1)];
+        if (typeof x === "string" && x.trim()) got.set(i, x.slice(0, 4e3));
+      }
+    } catch {
     }
-    return { t: out };
-  }
+    return got;
+  };
+  const all = texts.map((_, i) => i), half = Math.ceil(all.length / 2);
+  const first = await Promise.all((all.length > 6 ? [all.slice(0, half), all.slice(half)] : [all]).map(ask));
+  const done = /* @__PURE__ */ new Map();
+  for (const m of first) for (const [k, v] of m) done.set(k, v);
+  const missing = all.filter((i) => !done.has(i));
+  if (missing.length) for (const [k, v] of await ask(missing)) done.set(k, v);
+  return { t: all.map((i) => done.get(i) ?? null) };
 }
 function publicUrl(url) {
   if (!/^https:\/\/[^\s/]+\.[^\s]+$/i.test(url)) return null;
@@ -675,7 +672,7 @@ var db_worker_default = {
     if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
     const u = new URL(req.url), p = u.pathname.replace(/\/+$/, "") || "/";
     try {
-      if (p === "/") return json({ ok: true, service: "site-studio-db", v: V, mail: !!(env.RESEND_API_KEY && env.MAIL_FROM), ...env.CF_TOKEN && env.CF_ACCOUNT ? { deploy: true, account: env.CF_ACCOUNT } : {}, ...env.GH_TOKEN ? { gh: true } : {}, ...env.AI ? { ai: true, pamphlet: 2 } : {}, reviews: true, look: 1, translate: 1, approvals: 1, accounts: 2, cfx: 4, studioPages: 1, del: 1, enqMail: 3, ...otherAccounts(env).length ? { more: otherAccounts(env).length } : {} });
+      if (p === "/") return json({ ok: true, service: "site-studio-db", v: V, mail: !!(env.RESEND_API_KEY && env.MAIL_FROM), ...env.CF_TOKEN && env.CF_ACCOUNT ? { deploy: true, account: env.CF_ACCOUNT } : {}, ...env.GH_TOKEN ? { gh: true } : {}, ...env.AI ? { ai: true, pamphlet: 2 } : {}, reviews: true, look: 1, translate: 2, approvals: 1, accounts: 2, cfx: 4, studioPages: 1, del: 1, enqMail: 3, ...otherAccounts(env).length ? { more: otherAccounts(env).length } : {} });
       if (p === "/auth/code" && req.method === "POST") {
         const { email: raw, site: forSite, studio: forStudio } = await req.json();
         const email2 = String(raw || "").trim().toLowerCase();

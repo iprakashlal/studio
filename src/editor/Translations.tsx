@@ -91,24 +91,29 @@ export function Translations({ root, bump }: { root: any; bump: () => void }) {
       const d: Record<string, string> = ((root.i18n.t ||= {})[lang] ||= {});
       const todo = [...new Set([...siteTexts(root), ...((root.i18n.ui as string[]) || [])])].filter((s) => norm(s) && /\p{L}/u.test(s) && (again || !(d[s] ?? d[norm(s)] ?? "").trim()));
       if (!todo.length) { setMsg({ text: `Everything is already translated into ${name}.` }); setBusy(""); return; }
-      let done = 0; const from = root.i18n.base?.name || "English", again2: string[] = [];
+      let done = 0; const from = root.i18n.base?.name || "English";
       // A "translation" that came back still in the site's own script (a sentence left as it was) doesn't count.
       const latinTo = !lang || lang === "en", same = (s: string, v: string) => !latinTo && s.trim().split(/\s+/).length >= 4 && (v.match(/[A-Za-z]/g) || []).length > 0.6 * (v.match(/\p{L}/gu) || []).length && (s.match(/[A-Za-z]/g) || []).length > 0.6 * (s.match(/\p{L}/gu) || []).length;
       setPct(0);
-      for (let i = 0; i < todo.length; i += 20) {
-        setBusy(`Translating into ${name}: ${Math.min(i + 20, todo.length)} of ${todo.length}`);
-        const part = todo.slice(i, i + 20), out = await cfTranslate(api, { to: name, from, texts: part });
-        part.forEach((s, k) => { const v = out[k]; if (v && v.trim() && !same(s, v)) { d[s] = v; done++; } else again2.push(s); });
-        setPct(((i + part.length) / todo.length) * (again2.length ? 92 : 100)); bump();
-      }
+      // Several small batches at once: short answers come back sooner and a slip costs only a few lines.
+      const run = async (list: string[], size: number, at: number, upTo: number, label: string, check: boolean): Promise<string[]> => {
+        const parts: string[][] = []; for (let i = 0; i < list.length; i += size) parts.push(list.slice(i, i + size));
+        const missed: string[] = []; let next = 0, finished = 0;
+        const worker = async () => {
+          for (;;) {
+            const part = parts[next++]; if (!part) return;
+            const out = await cfTranslate(api, { to: name, from, texts: part }).catch((e) => { if (/updated once|Sign in|Only members|Workers AI/i.test(e?.message || "")) throw e; return [] as (string | null)[]; });
+            part.forEach((s, k) => { const v = out[k]; if (v && v.trim() && !(check && same(s, v))) { d[s] = v; done++; } else missed.push(s); });
+            finished += part.length; setBusy(`${label}: ${finished} of ${list.length}`); setPct(at + (upTo - at) * (finished / list.length)); bump();
+          }
+        };
+        await Promise.all(Array.from({ length: Math.min(5, parts.length) }, worker));
+        return missed;
+      };
+      const again2 = await run(todo, 10, 0, 90, `Translating into ${name}`, true);
       // Whatever didn't come through gets a second go, a few at a time.
-      let failed = 0;
-      for (let i = 0; i < again2.length; i += 4) {
-        setBusy(`Translating into ${name}: finishing ${Math.min(i + 4, again2.length)} of ${again2.length}`);
-        const part = again2.slice(i, i + 4), out = await cfTranslate(api, { to: name, from, texts: part }).catch(() => [] as (string | null)[]);
-        part.forEach((s, k) => { const v = out[k]; if (v && v.trim()) { d[s] = v; done++; } else failed++; });
-        setPct(92 + 8 * ((i + part.length) / again2.length)); bump();
-      }
+      const failed = again2.length ? (await run(again2, 3, 90, 100, `Translating into ${name}: finishing`, false)).length : 0;
+      setPct(100);
       setMsg({ text: `${done} text${done === 1 ? "" : "s"} translated into ${name}.${failed ? ` ${failed} couldn't be translated: press the button again, or type them in.` : ""} Read them through: a machine translation is a first draft.` });
     } catch (e: any) { setMsg({ bad: true, text: /Unknown scope|Not found/i.test(e?.message || "") ? "Translating needs the database updated once (Settings → Hostings → Update the database). You can still type each translation below." : e?.message || "Translating didn't work. Try again." }); }
     setBusy(""); setPct(null);

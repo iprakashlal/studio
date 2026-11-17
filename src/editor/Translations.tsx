@@ -1,8 +1,8 @@
 // Languages → Translations: every piece of the site's text beside its translation, one language at a time. "Translate
 // what's missing" fills the gaps with Workers AI on the database; every translation stays editable by hand.
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { siteTexts, LANG_NAMES } from "../schema/common";
-import { cfTranslate, signedInApi } from "../lib/cfdb";
+import { jobState, onJob, pending, translateInBackground, untouched } from "../lib/translatejob";
 import { ProgressBar } from "../ui/kit";
 
 const norm = (s: string) => String(s).replace(/\s+/g, " ").trim();
@@ -31,9 +31,7 @@ export function Translations({ root, bump }: { root: any; bump: () => void }) {
   const [lang, setLangState] = useState<string>(() => (langs.some((l) => l.code === n.preview) ? n.preview : langs[0]?.code || ""));
   const [only, setOnly] = useState<"all" | "missing" | "kept">("all"), [find, setFind] = useState(""), [shown, setShown] = useState(40);
   const [sure, setSure] = useState(false);
-  const [busy, setBusy] = useState(""), [msg, setMsg] = useState<{ bad?: boolean; text: string } | null>(null);
-  const [pct, setPct] = useState<number | null>(null);
-  const running = useRef(false);
+  const [reading, setReading] = useState(false);
   // A language that was just switched on becomes the one being worked on.
   const codes = langs.map((l) => l.code).join(","), before = useRef(codes);
   useEffect(() => {
@@ -50,7 +48,7 @@ export function Translations({ root, bump }: { root: any; bump: () => void }) {
     if (!lang || auto.current.has(lang)) return;
     auto.current.add(lang);
     if (Object.keys(root.i18n?.t?.[lang] || {}).length) return;
-    const t = setTimeout(function start() { if (running.current) { timer = setTimeout(start, 800); return; } go.current?.(false); }, 600); let timer: any = 0; // after the preview has drawn, so its buttons and labels are read too
+    const t = setTimeout(() => { go.current?.(false); }, 600); const timer: any = 0; // after the preview has drawn, so its buttons and labels are read too
     return () => { clearTimeout(t); clearTimeout(timer); auto.current.delete(lang); };
   }, [lang]);
   const all = (() => { const seen = new Set<string>(), out: string[] = []; for (const s of [...siteTexts(root), ...((n.ui as string[]) || [])]) { const k = norm(s); if (k && !seen.has(k)) { seen.add(k); out.push(s); } } return out; })();
@@ -59,7 +57,7 @@ export function Translations({ root, bump }: { root: any; bump: () => void }) {
   const put = (s: string, v: string) => { if (v.trim()) dict[s] = v; else { delete dict[s]; delete dict[norm(s)]; } bump(); };
   const missing = all.filter((s) => !get(s).trim());
   const setLang = (c: string) => { setLangState(c); root.i18n.preview = c; bump(); };
-  const kept = all.filter((s) => get(s).trim() && norm(get(s)) === norm(s) && s.trim().split(/\s+/).length >= 2);
+  const kept = all.filter((s) => get(s).trim() && untouched(s, get(s), lang));
   const list = all.filter((s) => (only === "all" || (only === "kept" ? kept.includes(s) : !get(s).trim())) && (!find.trim() || (s + " " + get(s)).toLowerCase().includes(find.trim().toLowerCase())));
   const name = LANG_NAMES[lang]?.[1] || lang;
   // A language reaches visitors once everything is translated (ready). It then stays, so text added later shows as
@@ -77,12 +75,12 @@ export function Translations({ root, bump }: { root: any; bump: () => void }) {
     if (changed) bump();
   });
 
+  // The job itself runs in the background (src/lib/translatejob.ts): it carries on when this section is closed.
+  const job = useSyncExternalStore(onJob, jobState);
+  const mine = job.running && job.lang === lang, queued = job.queue.includes(lang), busy = reading || mine || queued;
   const translate = async (again: boolean) => {
-    if (running.current) return; running.current = true;
-    try { await translateNow(again); } finally { running.current = false; }
-  };
-  const translateNow = async (again: boolean) => {
-    setMsg(null); setBusy("Reading the page's wording"); setPct(null);
+    if (reading || mine || queued) return;
+    setReading(true);
     try {
       // The page's own buttons and labels are read from the preview, shown in the site's own language for a moment.
       const was = root.i18n.preview; root.i18n.preview = ""; bump(); await new Promise((r) => setTimeout(r, 900));
@@ -92,44 +90,10 @@ export function Translations({ root, bump }: { root: any; bump: () => void }) {
       root.i18n.ui = [...new Set([...keep, ...extra])].slice(0, 600);
       for (const t of Object.values(root.i18n.t || {}) as Record<string, string>[]) for (const k of Object.keys(t || {})) if (!known.has(norm(k)) && pieces.has(norm(k))) delete t[k];
       root.i18n.preview = was || lang; bump();
-      const api = await signedInApi();
-      if (!api) throw new Error("Translating is done by your Cloudflare database, and this device isn't signed in to one. You can still type each translation below.");
-      const d: Record<string, string> = ((root.i18n.t ||= {})[lang] ||= {});
-      const todo = [...new Set([...siteTexts(root), ...((root.i18n.ui as string[]) || [])])].filter((s) => norm(s) && /\p{L}/u.test(s) && (again || !(d[s] ?? d[norm(s)] ?? "").trim()));
-      if (!todo.length) { setMsg({ text: `Everything is already translated into ${name}.` }); setBusy(""); return; }
-      let done = 0; const from = root.i18n.base?.name || "English";
-      // A "translation" that came back still in the site's own script (a sentence left as it was) doesn't count.
-      const latinTo = !lang || lang === "en", same = (s: string, v: string) => !latinTo && s.trim().split(/\s+/).length >= 4 && (v.match(/[A-Za-z]/g) || []).length > 0.6 * (v.match(/\p{L}/gu) || []).length && (s.match(/[A-Za-z]/g) || []).length > 0.6 * (s.match(/\p{L}/gu) || []).length;
-      setPct(0);
-      // Several small batches at once: short answers come back sooner and a slip costs only a few lines.
-      const run = async (list: string[], size: number, at: number, upTo: number, label: string, check: boolean): Promise<string[]> => {
-        const parts: string[][] = []; for (let i = 0; i < list.length; i += size) parts.push(list.slice(i, i + size));
-        const missed: string[] = []; let next = 0, finished = 0;
-        setBusy(`${label}: 0 of ${list.length}`); setPct(at);
-        const worker = async () => {
-          for (;;) {
-            const part = parts[next++]; if (!part) return;
-            const out = await cfTranslate(api, { to: name, from, texts: part }).catch((e) => { if (/updated once|Sign in|Only members|Workers AI/i.test(e?.message || "")) throw e; return [] as (string | null)[]; });
-            part.forEach((s, k) => { const v = out[k]; if (v && v.trim() && !(check && same(s, v))) { d[s] = v; done++; } else missed.push(s); });
-            finished += part.length; setBusy(`${label}: ${finished} of ${list.length}`); setPct(at + (upTo - at) * (finished / list.length)); bump();
-          }
-        };
-        await Promise.all(Array.from({ length: Math.min(5, parts.length) }, worker));
-        return missed;
-      };
-      const again2 = await run(todo, 10, 0, 85, `Translating into ${name}`, true);
-      // Whatever didn't come through gets a second go a few at a time, then one by one, so one awkward text can't
-      // hold its neighbours back.
-      const again3 = again2.length ? await run(again2, 3, 85, 94, `Translating into ${name}: second pass`, false) : [];
-      const last = again3.length ? await run(again3, 1, 94, 100, `Translating into ${name}: last few`, false) : [];
-      // What the translator still left alone (names, codes, a text it can't handle) is kept as written, so the
-      // language is complete in one go. They are listed under "Kept as written" to check or type in.
-      for (const x of last) d[x] = x;
-      setPct(100); bump();
-      setMsg({ text: `${done} text${done === 1 ? "" : "s"} translated into ${name}.${last.length ? ` ${last.length} ${last.length === 1 ? "was" : "were"} kept as written because the translator left ${last.length === 1 ? "it" : "them"} alone: see “Kept as written” below to check or type ${last.length === 1 ? "it" : "them"} in.` : ""} Read them through: a machine translation is a first draft.` });
-    } catch (e: any) { setMsg({ bad: true, text: /Unknown scope|Not found/i.test(e?.message || "") ? "Translating needs the database updated once (Settings → Hostings → Update the database). You can still type each translation below." : e?.message || "Translating didn't work. Try again." }); }
-    setBusy(""); setPct(null);
+    } finally { setReading(false); }
+    translateInBackground({ root, lang, name, from: root.i18n.base?.name || "English", again, bump, texts: () => [...siteTexts(root), ...((root.i18n.ui as string[]) || [])] });
   };
+  const result = job.last[lang], toDo = pending(root, lang, all, false).length;
 
   go.current = translate;
 
@@ -138,13 +102,15 @@ export function Translations({ root, bump }: { root: any; bump: () => void }) {
     <div className="flex flex-col gap-3" aria-label="Translations">
       <div className="flex flex-wrap items-end gap-2">
         <label className="flex flex-col gap-1"><span className="label">Language</span>
-          <select className="input py-1.5" aria-label="Language to translate" disabled={!!busy} title={busy ? "Wait for this translation to finish" : undefined} value={lang} onChange={(e) => setLang(e.target.value)}>{langs.map((l) => <option key={l.code} value={l.code}>{l.name} ({LANG_NAMES[l.code]?.[1] || l.code})</option>)}</select></label>
-        <button type="button" className="btn btn-pri" disabled={!!busy} onClick={() => translate(false)}>{busy ? "Working…" : `Translate what's missing (${missing.length})`}</button>
-        {all.length > missing.length && <button type="button" className="btn" disabled={!!busy} onClick={() => { if (sure) { setSure(false); translate(true); } else setSure(true); }} onBlur={() => setSure(false)}>{sure ? "Replace my edits in this language? Press again" : "Translate all again"}</button>}
+          <select className="input py-1.5" aria-label="Language to translate" value={lang} onChange={(e) => setLang(e.target.value)}>{langs.map((l) => <option key={l.code} value={l.code}>{l.name} ({LANG_NAMES[l.code]?.[1] || l.code})</option>)}</select></label>
+        <button type="button" className="btn btn-pri" disabled={busy || !toDo} onClick={() => translate(false)}>{mine || reading ? "Working…" : queued ? "Waiting its turn…" : `Translate what's missing (${toDo})`}</button>
+        {all.length > missing.length && <button type="button" className="btn" disabled={busy} onClick={() => { if (sure) { setSure(false); translate(true); } else setSure(true); }} onBlur={() => setSure(false)}>{sure ? "Replace my edits in this language? Press again" : "Translate all again"}</button>}
       </div>
-      {busy && <ProgressBar value={pct} label={`Translating into ${name}`} detail={busy + "…"} />}
-      {msg && <p role={msg.bad ? "alert" : "status"} className={`rounded-lg border px-3 py-2 text-[13px] ${msg.bad ? "border-red-400/40 bg-red-400/5 text-red-200" : "border-emerald-400/30 bg-emerald-400/5 text-emerald-100"}`}>{msg.text}</p>}
-      {!busy && <div aria-label="Language status" className={`rounded-lg border px-3 py-2 text-[13px] ${ready ? "border-emerald-400/30 bg-emerald-400/5 text-emerald-100" : "border-amber-400/40 bg-amber-400/5 text-amber-100"}`}>
+      {reading && <ProgressBar value={null} label={`Translating into ${name}`} detail="Reading the page's wording…" />}
+      {job.running && <ProgressBar value={job.total ? (job.done / job.total) * 100 : null} label={`Translating into ${job.name}`} detail={`${job.phase}${job.total ? `: ${job.done} of ${job.total}` : ""}…${job.queue.length ? ` Then: ${job.queue.map((c) => LANG_NAMES[c]?.[1] || c).join(", ")}.` : ""}`} />}
+      {job.running && <p className="text-[13px] text-ink-400">This carries on in the background: you can keep editing other sections, and come back here to see how far it is.</p>}
+      {!mine && result && <p role={result.ok ? "status" : "alert"} className={`rounded-lg border px-3 py-2 text-[13px] ${result.ok ? "border-emerald-400/30 bg-emerald-400/5 text-emerald-100" : "border-red-400/40 bg-red-400/5 text-red-200"}`}>{result.text}</p>}
+      {!mine && <div aria-label="Language status" className={`rounded-lg border px-3 py-2 text-[13px] ${ready ? "border-emerald-400/30 bg-emerald-400/5 text-emerald-100" : "border-amber-400/40 bg-amber-400/5 text-amber-100"}`}>
         {ready ? <>{name} is fully translated and shows in the site's language switcher{missing.length ? `. ${missing.length} newer text${missing.length === 1 ? " is" : "s are"} not translated yet and show in the site's own language.` : "."}</>
           : <>{name} is not shown to visitors yet: {left(lang)} text{left(lang) === 1 ? "" : "s"} still to translate. It appears in the site's switcher by itself once everything is translated.</>}
         {!ready && <span className="mt-1.5 block"><ProgressBar value={texts.length ? ((texts.length - left(lang)) / texts.length) * 100 : 0} label={`${name} translated`} /></span>}
@@ -153,7 +119,7 @@ export function Translations({ root, bump }: { root: any; bump: () => void }) {
       <div className="flex flex-wrap items-center gap-2">
         <input className="input min-w-0 flex-1 py-1.5" type="search" aria-label="Find a text" placeholder="Find a text…" value={find} onChange={(e) => { setFind(e.target.value); setShown(40); }} />
         <div className="flex overflow-hidden rounded-lg border border-ink-600 text-[13px]" role="group" aria-label="Which texts">
-          {(["all", "missing", ...(kept.length ? ["kept" as const] : [])] as const).map((k) => <button key={k} type="button" aria-pressed={only === k} className={`px-3 py-1.5 ${only === k ? "bg-ink-700 text-ink-100" : "text-ink-300"}`} onClick={() => { setOnly(k); setShown(40); }}>{k === "all" ? `All (${all.length})` : k === "kept" ? `Kept as written (${kept.length})` : `Not translated (${missing.length})`}</button>)}
+          {(["all", "missing", ...(kept.length ? ["kept" as const] : [])] as const).map((k) => <button key={k} type="button" aria-pressed={only === k} className={`px-3 py-1.5 ${only === k ? "bg-ink-700 text-ink-100" : "text-ink-300"}`} onClick={() => { setOnly(k); setShown(40); }}>{k === "all" ? `All (${all.length})` : k === "kept" ? `Still in ${root.i18n?.base?.name || "English"} (${kept.length})` : `Not translated (${missing.length})`}</button>)}
         </div>
       </div>
       <ul className="flex flex-col divide-y divide-ink-700 rounded-lg border border-ink-700">

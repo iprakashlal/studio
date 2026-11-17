@@ -340,6 +340,7 @@ async function translateTexts(env: Env, q: any): Promise<any> {
   if (!/^[\p{L} ()-]{2,40}$/u.test(to) || !texts.length) return { error: "Choose a language and some text." };
   const sys = `You translate the text of a small business website from ${from} into ${to}, written in ${to}'s own script. Rules: translate naturally, the way a good ${to} website for Indian customers reads, not word for word; keep brand and product names, people's names, numbers, prices, units, emails, web addresses and emoji exactly as they are; keep every line break and every marker exactly where it is (**bold**, ==highlight==, __underline__, {accent:…}, list dashes, #, | table bars, HTML tags, {placeholders} in curly brackets); short labels stay short; never add notes or explanations. You receive a JSON object {"texts": {"1": "…", "2": "…"}} and answer with only a JSON object {"t": {"1": "…", "2": "…"}} with the same numbers, each holding the translation of the text with that number.`;
   // Texts go and come back numbered ({"1": "…"}), so a line the model drops or merges costs only that line, not the batch.
+  let failed = "";
   const ask = async (idx: number[]): Promise<Map<number, string>> => {
     const got = new Map<number, string>();
     try {
@@ -351,7 +352,7 @@ async function translateTexts(env: Env, q: any): Promise<any> {
       const t = j?.t;
       if (Array.isArray(t)) { if (t.length === idx.length) t.forEach((x: any, k: number) => { if (typeof x === "string" && x.trim()) got.set(idx[k], x.slice(0, 4000)); }); }
       else if (t && typeof t === "object") for (const i of idx) { const x = t[String(i + 1)]; if (typeof x === "string" && x.trim()) got.set(i, x.slice(0, 4000)); }
-    } catch { /* the model or its answer failed: these lines are asked again below */ }
+    } catch (e: any) { failed = String(e?.message || e); /* the model or its answer failed: these lines are asked again below */ }
     return got;
   };
   const all = texts.map((_, i) => i), half = Math.ceil(all.length / 2);
@@ -360,6 +361,8 @@ async function translateTexts(env: Env, q: any): Promise<any> {
   const done = new Map<number, string>(); for (const m of first) for (const [k, v] of m) done.set(k, v);
   const missing = all.filter((i) => !done.has(i));
   if (missing.length) for (const [k, v] of await ask(missing)) done.set(k, v);
+  // Nothing at all came back and the model itself failed: say why, so the editor doesn't treat the texts as untranslatable.
+  if (!done.size && failed) return { error: /neuron|quota|limit|429|capacity/i.test(failed) ? "Today's free AI allowance on this Cloudflare account is used up. Press Translate again after it resets (midnight UTC), or type translations in." : "The translator didn't answer (" + failed.slice(0, 120) + ")." };
   return { t: all.map((i) => done.get(i) ?? null) };
 }
 /** A public https address (not this machine, a bare IP or an internal name). */
@@ -420,7 +423,7 @@ export default {
     if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
     const u = new URL(req.url), p = u.pathname.replace(/\/+$/, "") || "/";
     try {
-      if (p === "/") return json({ ok: true, service: "site-studio-db", v: V, mail: !!(env.RESEND_API_KEY && env.MAIL_FROM), ...(env.CF_TOKEN && env.CF_ACCOUNT ? { deploy: true, account: env.CF_ACCOUNT } : {}), ...(env.GH_TOKEN ? { gh: true } : {}), ...(env.AI ? { ai: true, pamphlet: 2 } : {}), reviews: true, look: 1, translate: 3, approvals: 1, accounts: 2, cfx: 4, studioPages: 1, del: 1, enqMail: 3, ...(otherAccounts(env).length ? { more: otherAccounts(env).length } : {}) });
+      if (p === "/") return json({ ok: true, service: "site-studio-db", v: V, mail: !!(env.RESEND_API_KEY && env.MAIL_FROM), ...(env.CF_TOKEN && env.CF_ACCOUNT ? { deploy: true, account: env.CF_ACCOUNT } : {}), ...(env.GH_TOKEN ? { gh: true } : {}), ...(env.AI ? { ai: true, pamphlet: 2 } : {}), reviews: true, look: 1, translate: 4, approvals: 1, accounts: 2, cfx: 4, studioPages: 1, del: 1, enqMail: 3, ...(otherAccounts(env).length ? { more: otherAccounts(env).length } : {}) });
 
       // ---- sign in with an emailed code (members only)
       if (p === "/auth/code" && req.method === "POST") {

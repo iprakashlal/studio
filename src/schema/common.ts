@@ -91,6 +91,7 @@ export function logoFields(path: string, def: number, title = "the hero title"):
         { t: "select", path: "brand.logoFit", label: "Logo shape in the menu", options: [{ value: "square", label: "Square icon (cropped to a square)" }, { value: "wide", label: "Wide logo (keeps its own shape, never cropped)" }] },
         { t: "range", path: "brand.logoSize", label: "Logo height in the menu", min: 20, max: 96, step: 2, unit: "px" }] },
       { t: "note", text: `Choose Wide for a logo that is longer than it is tall (a wordmark, or an icon with the name beside it): it keeps its proportions and its corners. The height applies to both shapes; ${def}px is the usual size.` },
+      { t: "videoFile", path: "brand.logoVideo", label: "Animated logo (optional)", hint: "A short MP4 or WebM of the logo, up to 20 MB. It plays silently on a loop in the logo's place, in the menu and on the hero, with the same shape and height. The logo picture is kept as its cover and for the browser tab." },
       { t: "toggle", path: "brand.logoOnHero", label: `Show the logo above ${title}` },
       { t: "when", path: "brand.logoOnHero", is: "true", fields: [{ t: "range", path: "brand.heroLogoSize", label: "Its height there", min: 32, max: 240, step: 4, unit: "px" }] },
   ];
@@ -103,6 +104,7 @@ export function prepareLogo(c: any) {
   if (!(+B.logoSize >= 16)) B.logoSize = def;
   if (typeof B.logoOnHero !== "boolean") B.logoOnHero = false;
   if (!(+B.heroLogoSize >= 32)) B.heroLogoSize = 72;
+  if (B.logoVideo === undefined) B.logoVideo = null;
   if (B.logoText === undefined && typeof B.showName !== "boolean") B.showName = true;
 }
 /** Older content gets the footer's social links (off), seeded once from the links the site already has elsewhere. */
@@ -675,8 +677,9 @@ export function heroSlidesCard(base: string, artLabel = "the hero's own picture"
     fields: [
       { t: "toggle", path: P + "enabled", label: "Show photos sliding behind the hero" },
       { t: "when", path: P + "enabled", is: "true", fields: [
-        { t: "list", path: P + "items", max: 10, title: (it, i) => `Slide ${i + 1}${it?.title ? ": " + String(it.title).split("\n")[0] : ""}${it?.image ? "" : " (no photo)"}`, add: () => ({ image: null, position: "center", title: "", text: "" }),
+        { t: "list", path: P + "items", max: 10, title: (it, i) => `Slide ${i + 1}${it?.title ? ": " + String(it.title).split("\n")[0] : ""}${it?.video ? " · video" : it?.image ? "" : " (no photo)"}`, add: () => ({ image: null, video: null, position: "center", title: "", text: "" }),
           item: [{ t: "image", path: "image", label: "Photo", hint: "Wide photos (at least 1920 px across) look best." },
+            { t: "videoFile", path: "video", label: "Or a video for this slide", hint: "MP4 or WebM, up to 20 MB. It plays silently on a loop while this slide shows; the photo above is shown first, while it loads. A short, wide clip works best." },
             { t: "select", path: "position", label: "Keep in view when cropped", options: [{ value: "center", label: "Centre" }, { value: "top", label: "Top" }, { value: "bottom", label: "Bottom" }, { value: "left", label: "Left" }, { value: "right", label: "Right" }] },
             { t: "text", path: "title", label: words.title, ml: true, hint: `Empty keeps ${words.titleKeep}.` },
             { t: "textarea", path: "text", label: words.text, rows: 2, hint: `Empty keeps ${words.textKeep}.` }] },

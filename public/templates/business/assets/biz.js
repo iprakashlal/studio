@@ -452,8 +452,8 @@ function logoCss(def) {
   return B.logoFit === "wide" ? `height:${h}px;width:auto;max-width:min(${h * 6}px,52vw);object-fit:contain;border-radius:0` : `width:${h}px;height:${h}px${h !== def ? `;font-size:${Math.round(h * 0.36)}px` : ""}`;
 }
 function heroLogo() {
-  const B = C.brand, src = PAGE === "home" && B.logoOnHero ? imgUrl(B.logo) : "";
-  if (window.SiteLogo) window.SiteLogo.hero(src, { at: "#hero h1", size: B.heroLogoSize, radius: C.theme.logoRadius, wide: B.logoFit === "wide", edit: "brand.logo" });
+  const B = C.brand, on = PAGE === "home" && B.logoOnHero, src = on ? imgUrl(B.logo) : "";
+  if (window.SiteLogo) window.SiteLogo.hero(src, { video: on ? imgUrl(B.logoVideo) : "", at: "#hero h1", size: B.heroLogoSize, radius: C.theme.logoRadius, wide: B.logoFit === "wide", edit: "brand.logo" });
 }
 function navHTML() {
   const B = C.brand, logo = imgUrl(B.logo);
@@ -463,7 +463,7 @@ function navHTML() {
   if (swOn() && C.warranty.inNav) items.push({ label: C.warranty.navLabel || "Warranty", url: multi() ? PAGES.warranty : "#warranty", on: PAGE === "warranty" });
   spList().filter((p) => p.inNav).forEach((p) => items.push({ label: p.navLabel || p.title, url: spHref(p), on: PAGE === "page" && spSlug(p) === spSlug({ slug: spCur() }) }));
   return `<header class="nav" id="top"><div class="wrap nav-in">
-      <a class="brand" href="${multi() || PAGE !== "home" ? PAGES.home : "#top"}">${logo ? `<img class="logo" src="${esc(logo)}" alt="" style="${logoCss(36)}">` : `<span class="logo mark" style="${logoCss(36).replace(/height:(\d+)px;width:auto.*/, "width:$1px;height:$1px")}">${esc(initials(B.name))}</span>`}${B.showName !== false ? `<span class="bn">${esc(B.name)}</span>` : ""}</a>
+      <a class="brand" href="${multi() || PAGE !== "home" ? PAGES.home : "#top"}">${imgUrl(B.logoVideo) ? `<video class="logo" src="${esc(imgUrl(B.logoVideo))}"${logo ? ` poster="${esc(logo)}"` : ""} autoplay muted loop playsinline aria-hidden="true" style="${logoCss(36)}"></video>` : logo ? `<img class="logo" src="${esc(logo)}" alt="" style="${logoCss(36)}">` : `<span class="logo mark" style="${logoCss(36).replace(/height:(\d+)px;width:auto.*/, "width:$1px;height:$1px")}">${esc(initials(B.name))}</span>`}${B.showName !== false ? `<span class="bn">${esc(B.name)}</span>` : ""}</a>
       <nav class="links" aria-label="Main">${items.map((i) => `<a href="${esc(i.url)}"${i.on ? ' aria-current="page"' : ""}>${esc(i.label)}</a>`).join("")}</nav>
       ${C.nav.cta ? `<a class="btn pri nav-cta" href="${esc(href(C.nav.ctaTarget || "contact"))}">${esc(C.nav.cta)}</a>` : ""}
       <button class="burger" type="button" aria-expanded="false" aria-controls="mnav" aria-label="Menu"><span></span><span></span></button></div>
@@ -663,7 +663,7 @@ let slP, slGen = 0;
 function slides() {
   const S = C.hero.slides, g = ++slGen, host = $("#hero");
   const H = document.documentElement;
-  if (!host || !S || !S.enabled || !(S.items || []).some((x) => x && x.image)) { if (window.SiteSlides) window.SiteSlides.stop(); H.classList.remove("hs-top", "hs-top-light"); return; }
+  if (!host || !S || !S.enabled || !(S.items || []).some((x) => x && (x.image || x.video))) { if (window.SiteSlides) window.SiteSlides.stop(); H.classList.remove("hs-top", "hs-top-light"); return; }
   (slP ||= new Promise((ok, no) => { if (window.SiteSlides) return ok(window.SiteSlides); const s = document.createElement("script"); s.src = "assets/slides.js"; s.onload = () => ok(window.SiteSlides); s.onerror = no; document.head.appendChild(s); }))
     .then((w) => {
       if (g !== slGen) return;

@@ -1,7 +1,7 @@
 import type { Category, Field, TemplateDef } from "./types";
 import { uid, vpaOk, paypalOk, httpsOk } from "../lib/util";
 import { BODY_FONTS, DISPLAY_FONTS, LINE_BREAKS_AXIS, STORE_AXES, THEMES, onColor, storeThemeValues } from "../themes/catalog";
-import { adminCategory, videoCategory, socialCategory, consentCategory, emailsCategory, i18nCategory, prepareI18n, featuresCategory, festivalCategory, menuCategory, menuItem, prepareMenu, staticPagesCategory, heroSlidesCard, prepareSlides, prepareMaintenance, seoCategory, warrantyCategory } from "./common";
+import { adminCategory, videoCategory, socialCategory, logoFields, consentCategory, emailsCategory, i18nCategory, prepareI18n, featuresCategory, festivalCategory, menuCategory, menuItem, prepareMenu, staticPagesCategory, heroSlidesCard, prepareSlides, prepareMaintenance, seoCategory, warrantyCategory } from "./common";
 import { NAV_MODE_FIELD, themeCards } from "../themes/fields";
 
 const CURRENCIES = ["INR", "USD", "EUR", "GBP", "AED", "SGD", "AUD", "CAD"];
@@ -21,7 +21,9 @@ const schema: Category[] = [
     cards: [
       { title: "Brand", fields: [g2({ t: "text", path: "brand.name", label: "Store name" }, { t: "text", path: "brand.tagline", label: "Tagline", ml: true }), { t: "image", path: "brand.logo", label: "Logo (square works best)" },
         { t: "range", path: "theme.logoRadius", label: "Logo shape: 0 = square, 50 = circle", min: 0, max: 50, step: 1, unit: "%" },
-        { t: "note", text: "The logo shape is used next to the store name and for the icon in the browser tab. Without a logo image, the icon shows your initials." }] },
+        { t: "note", text: "The logo shape is used next to the store name and for the icon in the browser tab. Without a logo image, the icon shows your initials." },
+        ...logoFields("brand.logo", 38, "the home page's title"),
+        { t: "toggle", path: "brand.showName", label: "Show the store name next to the logo" }] },
       { title: "Announcement bar", fields: [{ t: "toggle", path: "brand.showAnnouncement", label: "Show the bar above the menu" }, { t: "text", path: "brand.announcement", label: "Message", ml: true }] },
       { title: "Colours", fields: [g3(
         { t: "color", path: "theme.bg", label: "Background" }, { t: "color", path: "theme.surface", label: "Cards" }, { t: "color", path: "theme.text", label: "Text" },

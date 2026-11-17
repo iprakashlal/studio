@@ -445,6 +445,16 @@ const RENDER = { products: productsHTML, hero: heroHTML, clients: clientsHTML, s
    ============================================================ */
 /** The pages in the menu when the site has several (Products only when there are products to show). */
 const mpages = () => ["services", ...(prodShown() ? ["products"] : []), "work", "about", "contact"];
+/* The logo's size and shape in the menu (Brand → Logo): a square icon of the chosen height, or a wide logo that keeps
+   its own proportions (never cropped, no rounded corners). */
+function logoCss(def) {
+  const B = C.brand, h = Math.max(20, Math.min(96, +B.logoSize || def));
+  return B.logoFit === "wide" ? `height:${h}px;width:auto;max-width:min(${h * 6}px,52vw);object-fit:contain;border-radius:0` : `width:${h}px;height:${h}px${h !== def ? `;font-size:${Math.round(h * 0.36)}px` : ""}`;
+}
+function heroLogo() {
+  const B = C.brand, src = PAGE === "home" && B.logoOnHero ? imgUrl(B.logo) : "";
+  if (window.SiteLogo) window.SiteLogo.hero(src, { at: "#hero h1", size: B.heroLogoSize, radius: C.theme.logoRadius, wide: B.logoFit === "wide", edit: "brand.logo" });
+}
 function navHTML() {
   const B = C.brand, logo = imgUrl(B.logo);
   const items = multi()
@@ -453,7 +463,7 @@ function navHTML() {
   if (swOn() && C.warranty.inNav) items.push({ label: C.warranty.navLabel || "Warranty", url: multi() ? PAGES.warranty : "#warranty", on: PAGE === "warranty" });
   spList().filter((p) => p.inNav).forEach((p) => items.push({ label: p.navLabel || p.title, url: spHref(p), on: PAGE === "page" && spSlug(p) === spSlug({ slug: spCur() }) }));
   return `<header class="nav" id="top"><div class="wrap nav-in">
-      <a class="brand" href="${multi() || PAGE !== "home" ? PAGES.home : "#top"}">${logo ? `<img class="logo" src="${esc(logo)}" alt="">` : `<span class="logo mark">${esc(initials(B.name))}</span>`}${B.showName !== false ? `<span class="bn">${esc(B.name)}</span>` : ""}</a>
+      <a class="brand" href="${multi() || PAGE !== "home" ? PAGES.home : "#top"}">${logo ? `<img class="logo" src="${esc(logo)}" alt="" style="${logoCss(36)}">` : `<span class="logo mark" style="${logoCss(36).replace(/height:(\d+)px;width:auto.*/, "width:$1px;height:$1px")}">${esc(initials(B.name))}</span>`}${B.showName !== false ? `<span class="bn">${esc(B.name)}</span>` : ""}</a>
       <nav class="links" aria-label="Main">${items.map((i) => `<a href="${esc(i.url)}"${i.on ? ' aria-current="page"' : ""}>${esc(i.label)}</a>`).join("")}</nav>
       ${C.nav.cta ? `<a class="btn pri nav-cta" href="${esc(href(C.nav.ctaTarget || "contact"))}">${esc(C.nav.cta)}</a>` : ""}
       <button class="burger" type="button" aria-expanded="false" aria-controls="mnav" aria-label="Menu"><span></span><span></span></button></div>
@@ -471,7 +481,7 @@ function footerHTML() {
   spList().filter((p) => p.inFooter !== false).forEach((p) => cols.push(`<a href="${esc(spHref(p))}">${esc(p.navLabel || p.title)}</a>`));
   if (ckOn()) cols.push(`<a href="#cookie-settings">${esc(C.consent.reopenLabel || "Cookie settings")}</a>`);
   return `<footer class="foot" id="footer"><div class="wrap"><div class="foot-grid">
-      <div><a class="brand" href="${multi() || PAGE !== "home" ? PAGES.home : "#top"}">${imgUrl(B.logo) ? `<img class="logo" src="${esc(imgUrl(B.logo))}" alt="">` : `<span class="logo mark">${esc(initials(B.name))}</span>`}<span class="bn">${esc(B.name)}</span></a><p>${rich(F.text)}</p></div>
+      <div><a class="brand" href="${multi() || PAGE !== "home" ? PAGES.home : "#top"}">${imgUrl(B.logo) ? `<img class="logo" src="${esc(imgUrl(B.logo))}" alt=""${B.logoFit === "wide" ? ` style="height:36px;width:auto;max-width:200px;object-fit:contain;border-radius:0"` : ""}>` : `<span class="logo mark">${esc(initials(B.name))}</span>`}<span class="bn">${esc(B.name)}</span></a><p>${rich(F.text)}</p></div>
       <nav aria-label="Footer">${cols.join("")}</nav>
       <div class="fc">${K.email ? `<a href="mailto:${esc(K.email)}">${esc(K.email)}</a>` : ""}${K.phone ? `<a href="tel:${esc(K.phone.replace(/[^\d+]/g, ""))}">${esc(K.phone)}</a>` : ""}${K.address ? `<span>${ml(K.address)}</span>` : ""}</div></div>
     <div class="foot-legal"><span>${esc(String(F.legal || "").replace(/\{year\}/g, new Date().getFullYear()))}</span><span>${(F.links || []).filter((l) => l.label).map((l) => safeUrl(l.url) ? `<a href="${esc(safeUrl(l.url))}">${esc(l.label)}</a>` : `<span>${esc(l.label)}</span>`).join("")}</span></div></div></footer>`;
@@ -624,7 +634,7 @@ function render() {
   bind();
   if (PAGE === "warranty") swMount();
   if (PAGE === "page" && window.SitePages) window.SitePages.after(window.SitePages.find(C, spCur(), PREVIEW));
-  slides(); video(); social(); menu(); lang(); consent(); addons(); festival();
+  slides(); heroLogo(); video(); social(); menu(); lang(); consent(); addons(); festival();
   if (window.SiteFX) try { window.SiteFX.init({ root: $("#app"), brand: C.theme.introTitle || C.brand.name, badge: C.poweredBy }); } catch (e) {}
 }
 

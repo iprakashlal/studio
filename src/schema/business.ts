@@ -2,7 +2,7 @@ import type { Category, Field, TemplateDef } from "./types";
 import { BODY_FONTS, DISPLAY_FONTS, FX_AXES, LINE_BREAKS_AXIS, type Axis } from "../themes/catalog";
 import { BIZ_AXES, BIZ_TAGS, BIZ_THEMES, businessThemeValues } from "../themes/business";
 import { NAV_MODE_FIELD } from "../themes/fields";
-import { adminCategory, videoCategory, socialCategory, consentCategory, emailsCategory, i18nCategory, prepareI18n, featuresCategory, festivalCategory, menuCategory, menuItem, prepareMenu, staticPagesCategory, heroSlidesCard, prepareSlides, prepareMaintenance, seoCategory, warrantyCategory } from "./common";
+import { adminCategory, videoCategory, socialCategory, logoFields, consentCategory, emailsCategory, i18nCategory, prepareI18n, featuresCategory, festivalCategory, menuCategory, menuItem, prepareMenu, staticPagesCategory, heroSlidesCard, prepareSlides, prepareMaintenance, seoCategory, warrantyCategory } from "./common";
 
 const g2 = (...fields: Field[]): Field => ({ t: "grid", cols: 2, fields });
 const g3 = (...fields: Field[]): Field => ({ t: "grid", cols: 3, fields });
@@ -32,6 +32,7 @@ const schema: Category[] = [
       { title: "Brand", fields: [g2({ t: "text", path: "brand.name", label: "Company name" }, { t: "text", path: "brand.tagline", label: "Tagline", ml: true }),
         { t: "image", path: "brand.logo", label: "Logo icon", hint: "A square logo works best. Without one, your initials show in your primary colour. It's also the browser tab icon." },
         { t: "range", path: "theme.logoRadius", label: "Logo shape: 0 = square, 50 = circle", min: 0, max: 50, step: 1, unit: "%" },
+        ...logoFields("brand.logo", 36),
         { t: "toggle", path: "brand.showName", label: "Show the company name next to the logo" }] },
       { title: "Colours", fields: [g3(
         { t: "color", path: "theme.bg", label: "Background" }, { t: "color", path: "theme.surface", label: "Cards" }, { t: "color", path: "theme.text", label: "Text" },

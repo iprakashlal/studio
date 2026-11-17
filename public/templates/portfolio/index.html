@@ -1031,7 +1031,12 @@ function itemImg(item,k,alt,w,cls){return item&&item.image?`<img src="${esc(imgU
 const moOn=()=>MOTIF!=="geometric"&&!!window.SiteMotifs&&SiteMotifs.has(MOTIF);
 function moAccent(color){const s=String(color).toLowerCase();return s.includes("c3")||s===String(CT.c3||"").toLowerCase()?"var(--c2)":"var(--c3)"}
 function logoIc(c,cls){const B=c.brand||{};if(!B.icon||B.iconInMenu===false)return "";const rad=Math.max(0,Math.min(50,c.theme.logoRadius??22));
-  return `<img class="logo-ic${cls?" "+cls:""}" src="${esc(imgUrl(B.icon))}" alt="" style="border-radius:${rad}%">`}
+  /* size and shape (Brand → Logo icon): only set when changed, so each layout keeps its own size otherwise */
+  const h=Math.max(16,Math.min(96,+B.logoSize||30)),wide=B.logoFit==="wide";
+  const css=wide?`height:${h}px;width:auto;max-width:min(${h*6}px,52vw);object-fit:contain;border-radius:0;background:none`:`border-radius:${rad}%${h!==30?`;width:${h}px;height:${h}px`:""}`;
+  return `<img class="logo-ic${cls?" "+cls:""}" src="${esc(imgUrl(B.icon))}" alt="" style="${css}">`}
+/* the logo above the name in the hero (Brand → Logo icon → above the name) */
+function heroLogo(c){const B=c.brand||{};if(window.SiteLogo)SiteLogo.hero(B.logoOnHero&&B.icon?imgUrl(B.icon):"",{size:B.heroLogoSize,radius:c.theme.logoRadius??22,wide:B.logoFit==="wide",edit:"brand.icon"})}
 /* The hero's picture (Brand & theme → Logo icon → on the hero): the disc image, else the logo icon. Older
    projects' Hero photo still counts until the project is saved again (it then moves to the disc image). */
 function heroPic(c){const B=c.brand||{},H=c.hero||{};if(H.photo)return H.photo;if(B.iconOnHero===false)return null;return H.discImage||B.icon||null}
@@ -1463,7 +1468,7 @@ function renderSite(c){
   if(K){renderKit(c,K)}else{
   siteRoot.innerHTML=`<div id="siteInner">${siteHTML(c)}</div>`;
   initSite(c);}
-  heroSlides(c);video(c);social(c);spLinks(c);menu(c);lang(c);consent(c);addons(c);festival(c);
+  heroSlides(c);heroLogo(c);video(c);social(c);spLinks(c);menu(c);lang(c);consent(c);addons(c);festival(c);
   if(window.SiteFX)try{window.SiteFX.init({root:$("#siteInner"),brand:c.theme.introTitle||c.brand.logoText,badge:c.poweredBy})}catch(e){}
   setIcon(c);fitLines();
 }

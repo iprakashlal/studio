@@ -412,7 +412,7 @@ export default {
     if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
     const u = new URL(req.url), p = u.pathname.replace(/\/+$/, "") || "/";
     try {
-      if (p === "/") return json({ ok: true, service: "site-studio-db", v: V, mail: !!(env.RESEND_API_KEY && env.MAIL_FROM), ...(env.CF_TOKEN && env.CF_ACCOUNT ? { deploy: true, account: env.CF_ACCOUNT } : {}), ...(env.GH_TOKEN ? { gh: true } : {}), ...(env.AI ? { ai: true, pamphlet: 2 } : {}), reviews: true, look: 1, translate: 1, accounts: 2, cfx: 4, studioPages: 1, del: 1, enqMail: 3, ...(otherAccounts(env).length ? { more: otherAccounts(env).length } : {}) });
+      if (p === "/") return json({ ok: true, service: "site-studio-db", v: V, mail: !!(env.RESEND_API_KEY && env.MAIL_FROM), ...(env.CF_TOKEN && env.CF_ACCOUNT ? { deploy: true, account: env.CF_ACCOUNT } : {}), ...(env.GH_TOKEN ? { gh: true } : {}), ...(env.AI ? { ai: true, pamphlet: 2 } : {}), reviews: true, look: 1, translate: 1, approvals: 1, accounts: 2, cfx: 4, studioPages: 1, del: 1, enqMail: 3, ...(otherAccounts(env).length ? { more: otherAccounts(env).length } : {}) });
 
       // ---- sign in with an emailed code (members only)
       if (p === "/auth/code" && req.method === "POST") {
@@ -478,6 +478,51 @@ export default {
         if (!/^[a-z0-9][a-z0-9-]{0,59}$/.test(id)) return err(404, "Not found.");
         const f = await readFile(env, "studio:" + id, "public/pages.json"); if (!f) return err(404, "Not found.");
         return new Response(f.bytes, { headers: { ...cors, "Content-Type": "application/json", "Cache-Control": "no-store" } });
+      }
+      // ---- client approval (public, by an unguessable link): GET /rv/<token> the snapshot and its notes,
+      //      GET /rv/<token>/f/<path> a picture of that project, POST /rv/<token>/note | /decide
+      if (p.startsWith("/rv/") && !u.searchParams.has("scope")) {
+        const [, , token, sub, ...rest] = p.split("/");
+        if (!/^[a-f0-9]{32}$/.test(token || "")) return err(404, "Not found.");
+        const a: any = await env.DB.prepare("select token, scope, project, name, template, note, status, decided_by, decided_at, created_by, created_at" + (sub ? "" : ", content") + " from approvals where token = ?").bind(token).first();
+        if (!a) return err(404, "Not found.");
+        if (a.status === "closed") return err(410, "This review link has been closed. Ask for a new one.");
+        if (sub === "f" && req.method === "GET") {
+          const path = decodeURIComponent(rest.join("/"));
+          if (!pathOk(path) || !path.startsWith("assets/")) return err(404, "Not found.");
+          const f = await readFile(env, a.scope, `projects/${a.project}/${path}`); if (!f) return err(404, "Not found.");
+          return new Response(f.bytes, { headers: { ...cors, "Content-Type": f.type || "application/octet-stream", "Cache-Control": "private, max-age=600", "X-Content-Type-Options": "nosniff" } });
+        }
+        const notes = async () => ((await env.DB.prepare("select id, who, body, page, kind, created_at from approval_notes where token = ? order by id limit 300").bind(token).all()).results || []);
+        if (!sub && req.method === "GET") {
+          let content: any = {}; try { content = JSON.parse(a.content); } catch { /* an empty preview */ }
+          return json({ name: a.name, template: a.template, note: a.note, status: a.status, decided_by: a.decided_by, decided_at: a.decided_at, created_at: a.created_at, content, notes: await notes() });
+        }
+        if ((sub === "note" || sub === "decide") && req.method === "POST") {
+          const b = (await req.json().catch(() => ({}))) as any;
+          const whoIs = oneLine(String(b.who || "")).slice(0, 80), body = String(b.body || "").trim().slice(0, 2000), now = new Date().toISOString();
+          if (!whoIs) return err(400, "Enter your name.");
+          const hour = new Date(Date.now() - 3600_000).toISOString();
+          const n: any = await env.DB.prepare("select count(*) n, sum(case when created_at > ? then 1 else 0 end) h from approval_notes where token = ?").bind(hour, token).first();
+          if ((n?.n || 0) >= 300 || (n?.h || 0) >= 40) return err(429, "Too many notes on this link for now. Try again later.");
+          let kind = "comment", status = a.status;
+          if (sub === "decide") {
+            if (b.decision !== "approved" && b.decision !== "changes") return err(400, "Choose approve or request changes.");
+            if (b.decision === "changes" && !body) return err(400, "Say what should change.");
+            kind = b.decision; status = b.decision;
+            await env.DB.prepare("update approvals set status = ?, decided_by = ?, decided_at = ? where token = ?").bind(status, whoIs, now, token).run();
+          } else if (!body) return err(400, "Write your comment.");
+          await env.DB.prepare("insert into approval_notes (token, who, body, page, kind, created_at) values (?, ?, ?, ?, ?, ?)").bind(token, whoIs, body, oneLine(String(b.page || "")).slice(0, 120), kind, now).run();
+          // Tell the person who shared it (a copy only: the note is saved either way).
+          const mail = (async () => {
+            if (!env.RESEND_API_KEY || !env.MAIL_FROM || !EMAIL_RE.test(a.created_by || "")) return;
+            const what = kind === "approved" ? "approved" : kind === "changes" ? "asked for changes to" : "commented on";
+            await sendMail(env, a.created_by, `${whoIs} ${what} ${oneLine(a.name)}`.slice(0, 150), WRAP(`<h2 style="margin:0 0 12px;font-size:20px">${hesc(whoIs)} ${what} ${hesc(a.name)}</h2>${body ? paras(body) : ""}${paras("Open the project in your Studio → Share for approval to read it and reply.", "margin:0 0 8px;color:#667;font-size:13px")}`));
+          })().catch((e) => { if ((env as any).DEBUG) console.log("approval mail:", e?.message); });
+          if (ctx?.waitUntil) ctx.waitUntil(mail); else await mail;
+          return json({ ok: true, status, notes: await notes() });
+        }
+        return err(404, "Not found.");
       }
       // ---- enquiries from a hosted site's form (public): POST /enquire/<site>; members read them with /e/*
       if (p.startsWith("/enquire/") && req.method === "POST") {
@@ -798,6 +843,36 @@ export default {
         if (role !== "owner" && role !== "partner") return err(403, "Only owners can remove people.");
         const b = (await req.json()) as any; await env.DB.prepare("delete from members where scope = ? and email = ?").bind(scope, String(b.email || "").toLowerCase()).run();
         return json({ ok: true });
+      }
+      // ---- client approval, the Studio's side (members of the Studio): share, list, reply, close
+      if (p.startsWith("/rv/")) {
+        if (!scope.startsWith("studio:")) return err(400, "Sharing for approval belongs to a Studio.");
+        const b = req.method === "POST" ? ((await req.json().catch(() => ({}))) as any) : {};
+        const project = String(b.project || u.searchParams.get("project") || "");
+        if (p === "/rv/new" && req.method === "POST") {
+          if (role === "viewer") return err(403, "Viewers can't share for approval.");
+          if (!/^[\w-]{1,80}$/.test(project)) return err(400, "Which project?");
+          const content = JSON.stringify(b.content || {}); if (content.length > 1_800_000) return err(413, "This project's content is too large to share this way.");
+          const token = [...crypto.getRandomValues(new Uint8Array(16))].map((x) => x.toString(16).padStart(2, "0")).join("");
+          await env.DB.prepare("insert into approvals (token, scope, project, name, template, content, note, created_by, created_at) values (?, ?, ?, ?, ?, ?, ?, ?, ?)")
+            .bind(token, scope, project, oneLine(String(b.name || "Project")).slice(0, 120), String(b.template || "").slice(0, 40), content, String(b.note || "").trim().slice(0, 2000), email, new Date().toISOString()).run();
+          return json({ token });
+        }
+        if (p === "/rv/list") {
+          const rows = ((await env.DB.prepare("select token, name, note, status, decided_by, decided_at, created_by, created_at from approvals where scope = ? and project = ? order by created_at desc limit 20").bind(scope, project).all()).results || []) as any[];
+          for (const r of rows) r.notes = (await env.DB.prepare("select id, who, body, page, kind, created_at from approval_notes where token = ? order by id limit 300").bind(r.token).all()).results || [];
+          return json(rows);
+        }
+        const tok = String(b.token || ""), own: any = await env.DB.prepare("select token from approvals where token = ? and scope = ?").bind(tok, scope).first();
+        if (!own) return err(404, "That review link isn't in this Studio.");
+        if (p === "/rv/reply" && req.method === "POST") {
+          const body = String(b.body || "").trim().slice(0, 2000); if (!body) return err(400, "Write your reply.");
+          await env.DB.prepare("insert into approval_notes (token, who, body, page, kind, created_at) values (?, ?, ?, '', 'reply', ?)").bind(tok, oneLine(String(b.who || email)).slice(0, 80), body, new Date().toISOString()).run();
+          return json({ ok: true });
+        }
+        if (p === "/rv/close" && req.method === "POST") { await env.DB.prepare("update approvals set status = 'closed', content = '{}' where token = ?").bind(tok).run(); return json({ ok: true }); }
+        if (p === "/rv/delete" && req.method === "POST") { await env.DB.batch([env.DB.prepare("delete from approval_notes where token = ?").bind(tok), env.DB.prepare("delete from approvals where token = ?").bind(tok)]); return json({ ok: true }); }
+        return err(404, "Not found.");
       }
       if (p === "/e/list") {
         const site = scope.replace(/^site:/, "");

@@ -6,6 +6,7 @@ import { useToast } from "../ui/kit";
 import { Workspace } from "./Workspace";
 import { ThemesPage } from "./ThemesPage";
 import { StudioPageLinks, StudioPageView } from "./StudioPage";
+import { ReviewPage } from "./ReviewPage";
 import { useBrand } from "../lib/brand";
 import { deviceSecret, loadHostConfig, type StudioHostCfg } from "../lib/studiohost";
 import { backendOf, isHosted } from "../lib/backend";
@@ -81,6 +82,10 @@ export function App() {
   // The Studio's own pages (privacy, terms…) are public too: #/pages/<name>.
   const pg = /^#\/pages\/([^?]+)/.exec(hash);
   if (pg && host !== undefined) return <StudioPageView slug={decodeURIComponent(pg[1])} host={host} repo={repo} />;
+
+  // A client's review link (#/review/<token>) is public too: the link is the key.
+  const rvw = /^#\/review\/([a-f0-9]{32})/.exec(hash);
+  if (rvw && host !== undefined) return <ReviewPage token={rvw[1]} host={host} />;
 
   if (host === undefined) return <div className="grid min-h-screen place-items-center"><StepLoader title="Starting the Studio" at={0} steps={["Finding where this Studio keeps its files", "Signing in"]} /></div>;
   if (host && !repo) return <StudioGate links={<StudioPageLinks host={host} where="gate" />} cfg={host} brand={brandName} onIn={(email) => { const s: Session = { cfg: { owner: host.kind, repo: host.studio, branch: "main" }, token: deviceSecret(host.studio), username: email }; sess.save(NS, s); setSession(s); }} />;

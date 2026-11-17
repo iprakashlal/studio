@@ -7,7 +7,22 @@ import { checkTarget, liveTargets, pushTarget, type LiveTarget, type TargetState
 import type { Studio, StudioIndex } from "../lib/studio";
 import { fmtDate, timeAgo } from "../lib/util";
 import { STUDIO_BUILD } from "../build-info";
-import { Modal, useToast } from "../ui/kit";
+import { Modal, ProgressBar, partOf, useToast } from "../ui/kit";
+
+/** How far one site's update is (0–100), from the step it reports. */
+export function pushPct(detail: string | undefined, prev = 4): number {
+  const d = detail || "";
+  if (/^Getting the new server code/.test(d)) return 25;
+  if (/^Uploading to Cloudflare/.test(d)) return 65;
+  if (/^Checking photos/.test(d)) return partOf(d, 6, 26);
+  if (/^Checking content/.test(d)) return 32;
+  if (/^Uploading pages/.test(d)) return partOf(d, 40, 97);
+  if (/^Done/.test(d)) return 100;
+  if (/^Reading the live content/.test(d)) return 12;
+  if (/^Building pages/.test(d)) return 38;
+  if (/^Uploading \d+ files/.test(d)) return 66;
+  return prev;
+}
 
 const BADGE: Record<TargetState["s"], [string, string]> = {
   checking: ["Checking…", "border-ink-500 text-ink-300"],
@@ -54,7 +69,8 @@ export function PushUpdatesDialog({ studio, index, token, onClose }: { studio: S
       if (t.kind === "hosted" && have[t.key] === false) { set(t.key, { s: "skipped", msg: `${t.label} isn't connected on this device (Settings → Hostings → Hosting accounts).` }); continue; }
       set(t.key, { s: "pushing" });
       try {
-        await pushTarget(t, { studio, pages: pagesFor, token, step: (d) => set(t.key, { s: "pushing", detail: d }) });
+        let pct = 4;
+        await pushTarget(t, { studio, pages: pagesFor, token, step: (d) => { pct = Math.max(pct, pushPct(d, pct)); set(t.key, { s: "pushing", detail: d, pct }); } });
         set(t.key, { s: "done" }); ok++;
       } catch (e) { set(t.key, { s: "failed", msg: explain(e) }); bad++; }
     }
@@ -62,6 +78,10 @@ export function PushUpdatesDialog({ studio, index, token, onClose }: { studio: S
     toast(bad ? `${ok} site(s) updated, ${bad} failed` : `${ok} site(s) updated`, bad ? "bad" : "ok");
   };
 
+  // The whole run: finished sites count in full, the one in hand by how far it is.
+  const ran = chosen.filter((t) => ["done", "failed", "skipped"].includes(st[t.key]?.s)), now = chosen.find((t) => st[t.key]?.s === "pushing"), nowV = now && st[now.key];
+  const overall = chosen.length ? ((ran.length + (nowV && nowV.s === "pushing" ? (nowV.pct || 0) / 100 : 0)) / chosen.length) * 100 : 0;
+  const failedN = chosen.filter((t) => st[t.key]?.s === "failed").length;
   const allOld = targets.filter((t) => st[t.key]?.s === "old" || st[t.key]?.s === "current");
   const footer = finished
     ? <button className="btn btn-pri" onClick={onClose}>Done</button>
@@ -82,6 +102,10 @@ export function PushUpdatesDialog({ studio, index, token, onClose }: { studio: S
               <button type="button" className="text-brand-300 underline" onClick={() => setPick({})}>Select none</button>
             </div>
           )}
+          {(running || finished) && chosen.length > 0 && <div className="rounded-xl border border-ink-700 px-3 py-2.5" aria-label="Overall progress">
+            <ProgressBar value={finished ? 100 : overall} tone={finished ? (failedN ? "bad" : "ok") : "run"} label="All chosen sites"
+              detail={finished ? `${ran.length - failedN - chosen.filter((t) => st[t.key]?.s === "skipped").length} of ${chosen.length} updated${failedN ? ` · ${failedN} failed` : ""}` : now ? `Site ${ran.length + 1} of ${chosen.length} · ${now.project.name}` : "Starting…"} />
+          </div>}
           <ul className="flex flex-col divide-y divide-ink-700 rounded-xl border border-ink-700" aria-label="Live sites">
             {targets.map((t) => <Row key={t.key} t={t} v={st[t.key] || { s: "checking" }} on={!!pick[t.key]} lock={running || finished} onPick={(b) => setPick((m) => ({ ...m, [t.key]: b }))} />)}
           </ul>
@@ -100,15 +124,17 @@ function Row({ t, v, on, lock, onPick }: { t: LiveTarget; v: TargetState; on: bo
   const canPick = v.s === "old" || v.s === "current";
   const sub = v.s === "old" ? (v.at ? `Last ${t.kind === "worker" ? "deployed" : "built"} ${timeAgo(v.at)}${v.build ? ` with build ${v.build}` : " with an earlier Studio"}` : "Built with an earlier Studio")
     : v.s === "current" ? `Already on this build · ${timeAgo(v.at)}`
-    : v.s === "pushing" ? v.detail || "Starting…"
     : v.s === "failed" || v.s === "unreachable" || v.s === "skipped" ? v.msg : "";
   return (
     <li className="flex items-center gap-3 px-3 py-2.5">
       <input id={id} type="checkbox" className="h-4 w-4 shrink-0 accent-brand-400" checked={on} disabled={lock || !canPick} onChange={(e) => onPick(e.target.checked)} />
-      <label htmlFor={id} className="min-w-0 flex-1">
+      <div className="min-w-0 flex-1"><label htmlFor={id} className="block min-w-0">
         <span className="block truncate text-sm font-semibold text-ink-100">{t.project.name} <span className="font-normal text-ink-400">· {t.label}</span></span>
         <span className="block truncate text-[12px] text-ink-400"><a className="text-brand-300 underline" href={t.url} target="_blank" rel="noopener noreferrer">{t.url.replace(/^https:\/\//, "")}</a>{sub && <> · {sub}</>}</span>
       </label>
+        {v.s === "pushing" && <div className="mt-1.5"><ProgressBar value={v.pct ?? 4} label={`Updating ${t.project.name}`} detail={v.detail || "Starting…"} /></div>}
+        {v.s === "done" && <div className="mt-1.5"><ProgressBar value={100} tone="ok" label={`${t.project.name} updated`} /></div>}
+      </div>
       <span className={`chip shrink-0 ${cls}`}>{label}</span>
     </li>
   );

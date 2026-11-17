@@ -33,7 +33,7 @@
 .shp.hexagon { clip-path: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%); }
 .shp.half { border-radius: 999px 999px 0 0; height: 50% !important; }
 .shp.pill { border-radius: 999px; height: 60% !important; }
-.scroll-thin { scrollbar-width: thin; scrollbar-color: #2E3A4C transparent; }
+.scroll-thin { scrollbar-width: thin; scrollbar-color: rgb(var(--ink-600, 46 58 76)) transparent; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
@@ -52,3 +52,16 @@
 .fold-cards section.card[data-fold="closed"] > [data-fold-head]::after { transform: rotate(-45deg); }
 .fold-cards section.card > [data-fold-head]:focus-visible { outline: 2px solid rgb(91 124 255 / .7); outline-offset: 4px; border-radius: 4px; }
 .fold-cards section.card[data-fold="closed"] > :not([data-fold-head]) { display: none !important; }
+
+/* Light mode (Settings → Studio look). The ink and brand colours swap through CSS variables (src/lib/tint.ts);
+   the status colours below are written for a dark page, so on a light one they take their deeper shades. */
+:root[data-ui="light"] { color-scheme: light; }
+:root[data-ui="light"] .text-amber-100, :root[data-ui="light"] .text-amber-200 { color: #8a4b08; }
+:root[data-ui="light"] .text-amber-300 { color: #a15c07; }
+:root[data-ui="light"] .text-emerald-100, :root[data-ui="light"] .text-emerald-200 { color: #046c4e; }
+:root[data-ui="light"] .text-emerald-300 { color: #047857; }
+:root[data-ui="light"] .hover\:text-red-300:hover, :root[data-ui="light"] .text-red-100, :root[data-ui="light"] .text-red-200, :root[data-ui="light"] .text-red-300 { color: #b42318; }
+:root[data-ui="light"] .text-rose-200 { color: #be123c; }
+:root[data-ui="light"] .text-sky-100, :root[data-ui="light"] .text-sky-200, :root[data-ui="light"] .text-sky-300 { color: #0b6596; }
+:root[data-ui="light"] .border-white\/15, :root[data-ui="light"] .border-white\/20 { border-color: rgb(0 0 0 / .12); }
+:root[data-ui="light"] .card { box-shadow: 0 1px 2px rgb(16 24 40 / .05); }

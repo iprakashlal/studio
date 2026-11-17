@@ -25,9 +25,10 @@ import { Editor } from "../editor/Editor";
 import { Preview } from "../editor/Preview";
 import { BackupPanel } from "../editor/BackupPanel";
 import { useAssetMap } from "../editor/useAssets";
+import { BrandKitDialog } from "./BrandKitDialog";
 import { Field, Modal, StepLoader, Toggle, useConfirm, useToast } from "../ui/kit";
 
-type Modal = "" | "export" | "publish" | "host" | "live" | "history" | "details" | "backend" | "inbox" | "write" | "pamphlet" | "reviews";
+type Modal = "" | "export" | "publish" | "host" | "live" | "history" | "details" | "backend" | "inbox" | "write" | "pamphlet" | "reviews" | "kit";
 
 export function ProjectView({ studio, index, project, session, onIndex }: { studio: Studio; index: StudioIndex; project: ProjectMeta; session: Session; onIndex: (i: StudioIndex) => void }) {
   const toast = useToast();
@@ -150,6 +151,7 @@ export function ProjectView({ studio, index, project, session, onIndex }: { stud
       ? [{ id: "host" as Modal, label: `Publish to ${project.host.kind === "cloudflare" ? "Cloudflare" : "Netlify"}`, hint: "Publish this site to its hosting, with content and photos in your own database." }]
       : [{ id: "host" as Modal, label: "Host to External Services", hint: "Move the site to Cloudflare or Netlify hosting, with content and photos in your own database, and your own domain." }]),
     { id: "publish", label: "Publish to GitHub", hint: "Publish (or update) a copy of the site on GitHub Pages." },
+    { id: "kit", label: "Brand kit", hint: "A visiting card, QR standee, pamphlet and festival posts drawn from this site's theme and logo, ready to print or post." },
     ...((project.publish || project.host) && !demo ? [{ id: "live" as Modal, label: "Live sites", hint: "When each live site last changed, and pull its content." }] : []),
     { id: "history", label: `History${project.exports.length ? ` (${project.exports.length})` : ""}`, hint: "Earlier versions you published or exported: download them or load one into the editor." },
     { id: "export", label: "Export ZIP", hint: "Download the whole site as a ZIP file." },
@@ -259,6 +261,7 @@ export function ProjectView({ studio, index, project, session, onIndex }: { stud
       {modal === "host" && <HostDialog {...{ studio, project, tpl, draft, dirty, save, onIndex, getBlob, session }} onClose={() => setModal("")} />}
       {modal === "live" && <LiveSitesDialog {...{ studio, project, session, dirty, onIndex }} current={draft} defaults={defaults.current} onImported={(c) => { replaceDraft(c); setSavedV(v + 1); setConflict(null); }} onClose={() => setModal("")} />}
       {modal === "reviews" && <GoogleReviewsDialog {...{ session, project, draft }} onApply={(c, n) => { replaceDraft(c); toast(`${n} Google review${n === 1 ? "" : "s"} added. Check them, then Save.`); }} onClose={() => setModal("")} />}
+      {modal === "kit" && draft && <BrandKitDialog project={project} draft={draft} img={img} onClose={() => setModal("")} />}
       {modal === "pamphlet" && <PamphletDialog {...{ session, project, draft, upload }} onApply={(c, n) => { replaceDraft(c); toast(`${n} product${n === 1 ? "" : "s"} filled in. Check them, then Save.`); }} onClose={() => setModal("")} />}
       {modal === "write" && <WriteFromSiteDialog {...{ session, project, draft }} onApply={(c) => { replaceDraft(c); toast("New text is in the editor. Check it, then Save."); }} onClose={() => setModal("")} />}
       {modal === "history" && <HistoryDialog {...{ studio, project, tpl, getBlob }} onLoad={(c) => { replaceDraft(c); setModal(""); toast("Loaded into the editor. Save to keep it."); }} onClose={() => setModal("")} />}

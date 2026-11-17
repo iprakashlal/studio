@@ -29,10 +29,11 @@ function harvest(known: Set<string>): string[] {
 export function Translations({ root, bump }: { root: any; bump: () => void }) {
   const n = root.i18n || {}, langs: { code: string; name: string }[] = (n.langs || []).filter((l: any) => l && l.on !== false);
   const [lang, setLangState] = useState<string>(() => (langs.some((l) => l.code === n.preview) ? n.preview : langs[0]?.code || ""));
-  const [only, setOnly] = useState<"all" | "missing">("all"), [find, setFind] = useState(""), [shown, setShown] = useState(40);
+  const [only, setOnly] = useState<"all" | "missing" | "kept">("all"), [find, setFind] = useState(""), [shown, setShown] = useState(40);
   const [sure, setSure] = useState(false);
   const [busy, setBusy] = useState(""), [msg, setMsg] = useState<{ bad?: boolean; text: string } | null>(null);
   const [pct, setPct] = useState<number | null>(null);
+  const running = useRef(false);
   // A language that was just switched on becomes the one being worked on.
   const codes = langs.map((l) => l.code).join(","), before = useRef(codes);
   useEffect(() => {
@@ -49,8 +50,8 @@ export function Translations({ root, bump }: { root: any; bump: () => void }) {
     if (!lang || auto.current.has(lang)) return;
     auto.current.add(lang);
     if (Object.keys(root.i18n?.t?.[lang] || {}).length) return;
-    const t = setTimeout(() => { go.current?.(false); }, 600); // after the preview has drawn, so its buttons and labels are read too
-    return () => { clearTimeout(t); auto.current.delete(lang); };
+    const t = setTimeout(function start() { if (running.current) { timer = setTimeout(start, 800); return; } go.current?.(false); }, 600); let timer: any = 0; // after the preview has drawn, so its buttons and labels are read too
+    return () => { clearTimeout(t); clearTimeout(timer); auto.current.delete(lang); };
   }, [lang]);
   const all = (() => { const seen = new Set<string>(), out: string[] = []; for (const s of [...siteTexts(root), ...((n.ui as string[]) || [])]) { const k = norm(s); if (k && !seen.has(k)) { seen.add(k); out.push(s); } } return out; })();
   const dict: Record<string, string> = lang && root.i18n ? ((root.i18n.t ||= {})[lang] ||= {}) : {};
@@ -58,7 +59,8 @@ export function Translations({ root, bump }: { root: any; bump: () => void }) {
   const put = (s: string, v: string) => { if (v.trim()) dict[s] = v; else { delete dict[s]; delete dict[norm(s)]; } bump(); };
   const missing = all.filter((s) => !get(s).trim());
   const setLang = (c: string) => { setLangState(c); root.i18n.preview = c; bump(); };
-  const list = all.filter((s) => (only === "all" || !get(s).trim()) && (!find.trim() || (s + " " + get(s)).toLowerCase().includes(find.trim().toLowerCase())));
+  const kept = all.filter((s) => get(s).trim() && norm(get(s)) === norm(s) && s.trim().split(/\s+/).length >= 2);
+  const list = all.filter((s) => (only === "all" || (only === "kept" ? kept.includes(s) : !get(s).trim())) && (!find.trim() || (s + " " + get(s)).toLowerCase().includes(find.trim().toLowerCase())));
   const name = LANG_NAMES[lang]?.[1] || lang;
   // A language reaches visitors once everything is translated (ready). It then stays, so text added later shows as
   // "Not translated" here without taking the language off the site.
@@ -76,6 +78,10 @@ export function Translations({ root, bump }: { root: any; bump: () => void }) {
   });
 
   const translate = async (again: boolean) => {
+    if (running.current) return; running.current = true;
+    try { await translateNow(again); } finally { running.current = false; }
+  };
+  const translateNow = async (again: boolean) => {
     setMsg(null); setBusy("Reading the page's wording"); setPct(null);
     try {
       // The page's own buttons and labels are read from the preview, shown in the site's own language for a moment.
@@ -99,6 +105,7 @@ export function Translations({ root, bump }: { root: any; bump: () => void }) {
       const run = async (list: string[], size: number, at: number, upTo: number, label: string, check: boolean): Promise<string[]> => {
         const parts: string[][] = []; for (let i = 0; i < list.length; i += size) parts.push(list.slice(i, i + size));
         const missed: string[] = []; let next = 0, finished = 0;
+        setBusy(`${label}: 0 of ${list.length}`); setPct(at);
         const worker = async () => {
           for (;;) {
             const part = parts[next++]; if (!part) return;
@@ -110,11 +117,16 @@ export function Translations({ root, bump }: { root: any; bump: () => void }) {
         await Promise.all(Array.from({ length: Math.min(5, parts.length) }, worker));
         return missed;
       };
-      const again2 = await run(todo, 10, 0, 90, `Translating into ${name}`, true);
-      // Whatever didn't come through gets a second go, a few at a time.
-      const failed = again2.length ? (await run(again2, 3, 90, 100, `Translating into ${name}: finishing`, false)).length : 0;
-      setPct(100);
-      setMsg({ text: `${done} text${done === 1 ? "" : "s"} translated into ${name}.${failed ? ` ${failed} couldn't be translated: press the button again, or type them in.` : ""} Read them through: a machine translation is a first draft.` });
+      const again2 = await run(todo, 10, 0, 85, `Translating into ${name}`, true);
+      // Whatever didn't come through gets a second go a few at a time, then one by one, so one awkward text can't
+      // hold its neighbours back.
+      const again3 = again2.length ? await run(again2, 3, 85, 94, `Translating into ${name}: second pass`, false) : [];
+      const last = again3.length ? await run(again3, 1, 94, 100, `Translating into ${name}: last few`, false) : [];
+      // What the translator still left alone (names, codes, a text it can't handle) is kept as written, so the
+      // language is complete in one go. They are listed under "Kept as written" to check or type in.
+      for (const x of last) d[x] = x;
+      setPct(100); bump();
+      setMsg({ text: `${done} text${done === 1 ? "" : "s"} translated into ${name}.${last.length ? ` ${last.length} ${last.length === 1 ? "was" : "were"} kept as written because the translator left ${last.length === 1 ? "it" : "them"} alone: see “Kept as written” below to check or type ${last.length === 1 ? "it" : "them"} in.` : ""} Read them through: a machine translation is a first draft.` });
     } catch (e: any) { setMsg({ bad: true, text: /Unknown scope|Not found/i.test(e?.message || "") ? "Translating needs the database updated once (Settings → Hostings → Update the database). You can still type each translation below." : e?.message || "Translating didn't work. Try again." }); }
     setBusy(""); setPct(null);
   };
@@ -126,7 +138,7 @@ export function Translations({ root, bump }: { root: any; bump: () => void }) {
     <div className="flex flex-col gap-3" aria-label="Translations">
       <div className="flex flex-wrap items-end gap-2">
         <label className="flex flex-col gap-1"><span className="label">Language</span>
-          <select className="input py-1.5" aria-label="Language to translate" value={lang} onChange={(e) => setLang(e.target.value)}>{langs.map((l) => <option key={l.code} value={l.code}>{l.name} ({LANG_NAMES[l.code]?.[1] || l.code})</option>)}</select></label>
+          <select className="input py-1.5" aria-label="Language to translate" disabled={!!busy} title={busy ? "Wait for this translation to finish" : undefined} value={lang} onChange={(e) => setLang(e.target.value)}>{langs.map((l) => <option key={l.code} value={l.code}>{l.name} ({LANG_NAMES[l.code]?.[1] || l.code})</option>)}</select></label>
         <button type="button" className="btn btn-pri" disabled={!!busy} onClick={() => translate(false)}>{busy ? "Working…" : `Translate what's missing (${missing.length})`}</button>
         {all.length > missing.length && <button type="button" className="btn" disabled={!!busy} onClick={() => { if (sure) { setSure(false); translate(true); } else setSure(true); }} onBlur={() => setSure(false)}>{sure ? "Replace my edits in this language? Press again" : "Translate all again"}</button>}
       </div>
@@ -141,7 +153,7 @@ export function Translations({ root, bump }: { root: any; bump: () => void }) {
       <div className="flex flex-wrap items-center gap-2">
         <input className="input min-w-0 flex-1 py-1.5" type="search" aria-label="Find a text" placeholder="Find a text…" value={find} onChange={(e) => { setFind(e.target.value); setShown(40); }} />
         <div className="flex overflow-hidden rounded-lg border border-ink-600 text-[13px]" role="group" aria-label="Which texts">
-          {(["all", "missing"] as const).map((k) => <button key={k} type="button" aria-pressed={only === k} className={`px-3 py-1.5 ${only === k ? "bg-ink-700 text-ink-100" : "text-ink-300"}`} onClick={() => { setOnly(k); setShown(40); }}>{k === "all" ? `All (${all.length})` : `Not translated (${missing.length})`}</button>)}
+          {(["all", "missing", ...(kept.length ? ["kept" as const] : [])] as const).map((k) => <button key={k} type="button" aria-pressed={only === k} className={`px-3 py-1.5 ${only === k ? "bg-ink-700 text-ink-100" : "text-ink-300"}`} onClick={() => { setOnly(k); setShown(40); }}>{k === "all" ? `All (${all.length})` : k === "kept" ? `Kept as written (${kept.length})` : `Not translated (${missing.length})`}</button>)}
         </div>
       </div>
       <ul className="flex flex-col divide-y divide-ink-700 rounded-lg border border-ink-700">

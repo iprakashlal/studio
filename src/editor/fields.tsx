@@ -1,6 +1,7 @@
 import { createContext, useContext, useLayoutEffect, useRef, useState } from "react";
 import { ThemeDrawer, ThemeGallery, ThemeSwatch } from "../themes/ThemeGallery";
 import { ThemeFromRef } from "./ThemeFromRef";
+import { Translations } from "./Translations";
 import type { Made } from "../lib/themefrom";
 import { LinkedInImport } from "./LinkedInImport";
 import { pdfToText } from "../lib/pdftext";
@@ -64,6 +65,8 @@ export function FieldView({ f, obj, base }: { f: F; obj: any; base: string }) {
           {f.fields.map((x, i) => <FieldView key={i} f={x} obj={obj} base={base} />)}
         </div>
       );
+    case "translations":
+      return <Translations root={root} bump={bump} />;
     case "note":
       if (f.studio && ctx.site) return null;
       return <p className={`rounded-lg border px-3 py-2.5 text-[13px] ${f.tone === "warn" ? "border-amber-400/40 bg-amber-400/5 text-amber-100" : "border-ink-700 bg-ink-850 text-ink-300"}`}>{f.text}</p>;

@@ -230,6 +230,23 @@ export async function registerWorkers(cf: Cloudflare, s: CfDbSetup, list: { work
   for (const x of list) await cf.d1Query(s.account, s.databaseId, "insert into workers (worker, scope) values (?, ?) on conflict (worker) do update set scope = excluded.scope", [x.worker, x.scope]);
 }
 
+// ---------------------------------------------------------------- translating a site's text (Languages)
+/** Up to 30 texts into `to` (a language's English name) by Workers AI on the database. null entries failed. */
+export async function cfTranslate(api: string, o: { to: string; from: string; texts: string[] }): Promise<(string | null)[]> {
+  const j = await cfCall<any>(api, "/ai/translate", { method: "POST", body: JSON.stringify(o) });
+  if (j?.error) throw new Error(j.error);
+  if (!Array.isArray(j?.t)) throw new Error("Translating needs the database updated once (Settings → Hostings → Update the database).");
+  return j.t;
+}
+/** A database this device is signed in to, for the editor's AI helpers: the Studio's, or (in a site's admin page) the site's own. */
+export async function signedInApi(): Promise<string | null> {
+  const { loadHostConfig } = await import("./studiohost");
+  const hc = await loadHostConfig().catch(() => null);
+  if (hc?.kind === "cloudflare" && (await cfSignedIn(hc.api).catch(() => null))) return hc.api;
+  try { const j = await (await fetch("cms/site.json", { cache: "no-store" })).json(); if (j?.host?.kind === "cloudflare" && (await cfSignedIn(j.host.api).catch(() => null))) return j.host.api; } catch { /* not a site's admin page */ }
+  return null;
+}
+
 // ---------------------------------------------------------------- a reference page's look, for "theme from a reference"
 /** The design facts of a public page (colours, fonts, corners, interaction libraries), read by the database. */
 export async function cfLook(api: string, url: string): Promise<import("./lookdigest").Digest> {

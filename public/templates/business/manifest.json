@@ -23,6 +23,7 @@
     "assets/festival.js",
     "assets/consent.js",
     "assets/menu.js",
+    "assets/lang.js",
     "README.md",
     "supabase/enquiries.sql"
   ],

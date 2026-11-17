@@ -2,7 +2,7 @@ import type { Category, Field, TemplateDef } from "./types";
 import { BODY_FONTS, DISPLAY_FONTS, FX_AXES, LINE_BREAKS_AXIS, type Axis } from "../themes/catalog";
 import { BIZ_AXES, BIZ_TAGS, BIZ_THEMES, businessThemeValues } from "../themes/business";
 import { NAV_MODE_FIELD } from "../themes/fields";
-import { adminCategory, consentCategory, emailsCategory, featuresCategory, festivalCategory, menuCategory, menuItem, prepareMenu, staticPagesCategory, heroSlidesCard, prepareSlides, prepareMaintenance, seoCategory, warrantyCategory } from "./common";
+import { adminCategory, consentCategory, emailsCategory, i18nCategory, prepareI18n, featuresCategory, festivalCategory, menuCategory, menuItem, prepareMenu, staticPagesCategory, heroSlidesCard, prepareSlides, prepareMaintenance, seoCategory, warrantyCategory } from "./common";
 
 const g2 = (...fields: Field[]): Field => ({ t: "grid", cols: 2, fields });
 const g3 = (...fields: Field[]): Field => ({ t: "grid", cols: 3, fields });
@@ -207,6 +207,7 @@ const schema: Category[] = [
   featuresCategory(),
   consentCategory(),
   festivalCategory(),
+  i18nCategory(),
   seoCategory(true),
   adminCategory(),
 ];
@@ -221,6 +222,7 @@ function prepareBusiness(c: any) {
   c.products = { eyebrow: "Catalogue", title: "Products", lede: "", homeCount: 6, enquire: "Enquire", more: "View more", all: "View all products", showPrice: true, filter: true, related: true, ...(c.products && typeof c.products === "object" ? c.products : {}) };
   if (!Array.isArray(c.products.items)) c.products.items = [];
   c.hero ||= {}; prepareSlides(c.hero, c.theme?.deep || "#0E1B2C"); prepareMaintenance(c);
+  prepareI18n(c, () => schema);
   prepareMenu(c, () => (Array.isArray(c.sections) ? c.sections : []).filter((x: any) => x && x.show !== false && x.inNav).map((x: any) => menuItem(x.label || x.id, x.id)));
   // Enquiries always go to the site's database now: the old "always open the email app" choice is gone.
   if (c.contact?.form && typeof c.contact.form === "object") { const F = c.contact.form; if (F.saveTo !== "file") F.saveTo = "auto"; if (F.notifyAsk !== 1) { F.notify = true; F.notifyAsk = 1; } else F.notify = F.notify === true; F.notifyTo ??= ""; F.notifySubject ??= ""; }

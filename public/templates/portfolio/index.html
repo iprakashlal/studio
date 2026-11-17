@@ -1452,6 +1452,7 @@ function vxThree(c,stage,my,motion){const t=c.theme,T=window.THREE;
 let gen=0, fx={};
 function teardown(){gen++;document.documentElement.classList.remove("vx-lock","vx-menu-open");if(fx.three){try{fx.three.dispose();fx.three.domElement.remove()}catch(e){}}if(fx.kitAbort)fx.kitAbort.abort();if(fx.kitStop)try{fx.kitStop()}catch(e){}fx={}}
 function renderSite(c){
+  if(langGate(c))return;
   teardown();applyTheme(c.theme);
   {const one=x=>String(x||"").replace(/\s*\n\s*/g," ").trim();document.title=one(c.seo.title||c.brand.logoText);
    if(!PREVIEW){const set=(a,k,v)=>{let m=document.head.querySelector(`meta[${a}="${k}"]`);if(!v){if(m)m.remove();return}if(!m){m=document.createElement("meta");m.setAttribute(a,k);document.head.appendChild(m)}m.setAttribute("content",v)};
@@ -1462,7 +1463,7 @@ function renderSite(c){
   if(K){renderKit(c,K)}else{
   siteRoot.innerHTML=`<div id="siteInner">${siteHTML(c)}</div>`;
   initSite(c);}
-  heroSlides(c);spLinks(c);menu(c);consent(c);addons(c);festival(c);
+  heroSlides(c);spLinks(c);menu(c);lang(c);consent(c);addons(c);festival(c);
   if(window.SiteFX)try{window.SiteFX.init({root:$("#siteInner"),brand:c.theme.introTitle||c.brand.logoText,badge:c.poweredBy})}catch(e){}
   setIcon(c);fitLines();
 }
@@ -1473,6 +1474,15 @@ function addons(c){
   if(!any&&!window.SiteAddons)return;
   (adP||(adP=new Promise((ok,no)=>{if(window.SiteAddons)return ok();const s=document.createElement("script");s.src="assets/addons.js";s.onload=()=>ok();s.onerror=no;document.head.appendChild(s)})))
     .then(()=>SiteAddons.mount(c,{preview:PREVIEW,home:!(window.SitePages&&SitePages.here()),site:c.brand.logoText})).catch(()=>{})}
+/* Regional languages (assets/lang.js): the chosen language is put into the content before the page is drawn, then
+   the page's fixed wording is translated and the language switcher added. */
+let lgP,lgFail=false;
+function langGate(c){
+  if(window.SiteLang){if(PREVIEW)SiteLang.force((c.i18n||{}).preview||"");SiteLang.apply(c);return false}
+  const n=c.i18n||{};if(!(n.on&&(n.langs||[]).some(l=>l&&l.on!==false))||lgFail)return false;
+  (lgP||(lgP=new Promise((ok,no)=>{const s=document.createElement("script");s.src="assets/lang.js";s.onload=()=>ok();s.onerror=no;document.head.appendChild(s)}))).then(()=>renderSite(c),()=>{lgFail=true;renderSite(c)});
+  return true}
+function lang(c){if(window.SiteLang)SiteLang.mount(c,{navs:[".nav ul",".ks-top nav",".kp-top nav",".ke-mast nav"],again:()=>renderSite(c)})}
 /* Cookie consent (assets/consent.js): the banner that asks before analytics, marketing and other optional code runs. */
 let csP;
 function consent(c){
@@ -1517,7 +1527,7 @@ function spPage(c){
   if(p){const one=x=>String(x||"").replace(/\s*\n\s*/g," ").trim();document.title=one((c.seo.titlePattern||"{page} · {site}").replace(/\{page\}/g,one(p.title)).replace(/\{site\}/g,one(name)))}
   const links=S.list(c).filter(x=>x.inFooter!==false);
   siteRoot.innerHTML=`<div id="siteInner"><header class="sp-top"><a href="./">${esc(name)}</a><a class="sp-back" href="./">← ${esc((c.labels&&c.labels.backHome)||"Back")}</a></header><main id="main">${p?S.article(p,{preview:PREVIEW}):S.missing({home:"./"})}</main>${links.length||ckLink(c)?`<nav class="sp-links" aria-label="Pages">${links.map(x=>`<a href="?p=${encodeURIComponent(S.slug(x))}">${esc(x.navLabel||x.title)}</a>`).join("")}${ckLink(c)}</nav>`:""}<footer class="sp-links"><span>${esc(c.contact.footerLeft||"")}</span></footer></div>`;
-  S.after(p);setIcon(c);consent(c);addons(c);festival(c);return true}
+  S.after(p);setIcon(c);lang(c);consent(c);addons(c);festival(c);return true}
 /* links to the static pages under every layout's footer */
 const ckLink=c=>c.consent&&c.consent.on&&c.consent.footerLink!==false?`<a href="#cookie-settings">${esc(c.consent.reopenLabel||"Cookie settings")}</a>`:"";
 function spLinks(c){const S=window.SitePages;if(!S)return;const links=S.list(c).filter(x=>x.inFooter!==false),ck=ckLink(c);if(!links.length&&!ck)return;

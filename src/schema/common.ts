@@ -463,6 +463,9 @@ export function adminCategory(): Category {
       { t: "textarea", path: "maintenance.contact", label: "Contact line (optional)", rows: 2, hint: "For example an email address and a phone number; they become clickable." },
       { t: "toggle", path: "maintenance.showLogo", label: "Show the logo or name at the top" },
       { t: "note", text: "Pick “Maintenance page” in the preview's page list to see it before switching it on." },
+    ] }, { title: "Admin page colours", fields: [
+      { t: "toggle", path: "cms.tint", label: "Colour this site's admin page from its logo" },
+      { t: "note", text: "The admin page takes the logo's main colour for its buttons and highlights, and its dark background leans toward it. Without a logo picture (or with a black, white or grey one) it uses the site's accent colour. The site itself doesn't change." },
     ] }, { title: "Admin page address", fields: [
       { t: "text", path: "cms.adminPage", label: "Admin page name", ph: "admin", show: (v) => `Opens at yoursite/${adminSlug(v)} after you publish. Letters, numbers and dashes; spaces become dashes.` },
       { t: "note", text: "A less obvious name keeps casual visitors away from the sign-in screen. It isn't a password: the editor still needs your GitHub token. After you publish a new name, the old address stops working, so bookmark the new one." },

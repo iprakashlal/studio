@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { accentFromImage, applyTint, isHex } from "../lib/tint";
 import { CfAccount, CfGate } from "./CfGate";
 import { CfRepo, cfSession } from "../lib/cfdb";
 import { cleanMenu } from "../lib/menus";
@@ -215,6 +216,17 @@ function Workspace({ info, onInfo, repo, account, onSignOut, hosted, ghToken }: 
     return { path };
   }, [repo]);
   const photoBase = hosted ? ("api" in hosted ? cfAssetBase(hosted) : assetBase(hosted)) : "";
+  // "Colour this site's admin page from its logo" (Admin page → Admin page colours): follows the draft, so it shows at once.
+  const tintOn = !!draft?.cms?.tint, tintLogo = tintOn ? draft?.brand?.icon || draft?.brand?.logo : null;
+  const tintSrc = tintLogo?.path ? assets[tintLogo.path] || (photoBase && String(tintLogo.path).startsWith("assets/uploads/") ? photoBase + String(tintLogo.path).split("/").map(encodeURIComponent).join("/") : tintLogo.path) : /^(https:|data:image\/)/i.test(String(tintLogo?.url || "")) ? String(tintLogo.url) : "";
+  const tintFallback = String(draft?.theme?.c1 || draft?.theme?.accent || "");
+  useEffect(() => {
+    if (!tintOn) { applyTint(null); return; }
+    let on = true;
+    (tintSrc ? accentFromImage(tintSrc) : Promise.resolve(null)).then((a) => { if (on) applyTint(a || (isHex(tintFallback) ? tintFallback : null)); });
+    return () => { on = false; };
+  }, [tintOn, tintSrc, tintFallback]);
+  useEffect(() => () => applyTint(null), []);
   const img = useCallback((val: any) => (val?.path ? assets[val.path] || (photoBase && val.path.startsWith("assets/uploads/") ? photoBase + val.path.split("/").map(encodeURIComponent).join("/") : val.path) : ""), [assets, photoBase]);
 
   const conflict = async (e: any, path: string, setter: (x: string | null) => void) => {

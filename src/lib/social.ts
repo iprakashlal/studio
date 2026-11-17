@@ -1,6 +1,9 @@
 // Social and contact links: the networks the footer row knows (src/fx/social.js draws them), and finding such links
 // in text, for filling them in from an uploaded profile, CV or pamphlet.
-export type SocialItem = { kind: string; url: string; label: string; icon?: any };
+export type SocialItem = { kind: string; url: string; label: string; graphic?: string; icon?: any };
+/** The badge drawings a link can choose (src/fx/social.js draws them): plain pictures, not any network's logo. */
+export const SOCIAL_GRAPHICS: [string, string][] = [["auto", "Automatic (by the kind of link)"], ["initials", "Initials (IG, FB, YT…)"], ["camera", "Camera"], ["play", "Play button"], ["chat", "Speech bubble"], ["people", "People"], ["megaphone", "Megaphone"],
+  ["briefcase", "Briefcase"], ["code", "Code brackets"], ["pen", "Pen"], ["heart", "Heart"], ["star", "Star"], ["pin", "Map pin"], ["tag", "Price tag"], ["mail", "Envelope"], ["phone", "Phone"], ["globe", "Globe"], ["link", "Chain link"]];
 /** kind → [name, the hosts that mean it]. Order matters for the editor's list. */
 export const SOCIAL_KINDS: Record<string, [string, RegExp | null]> = {
   instagram: ["Instagram", /(^|\.)(instagram\.com|instagr\.am)$/], facebook: ["Facebook", /(^|\.)(facebook\.com|fb\.com|fb\.me)$/], x: ["X (Twitter)", /(^|\.)(x\.com|twitter\.com)$/],
@@ -11,7 +14,7 @@ export const SOCIAL_KINDS: Record<string, [string, RegExp | null]> = {
   maps: ["Google Maps", /(^|\.)(maps\.app\.goo\.gl|goo\.gl|g\.page|maps\.google\.[a-z.]+)$/], indiamart: ["IndiaMART", /(^|\.)indiamart\.com$/], justdial: ["Justdial", /(^|\.)(justdial\.com|jsdl\.in)$/],
   email: ["Email", null], phone: ["Phone", null], website: ["Website", null], other: ["Other link", null],
 };
-export const socialDefault = () => ({ on: false, title: "", style: "badges", align: "center", items: [] as SocialItem[] });
+export const socialDefault = () => ({ on: false, title: "", style: "badges", align: "center", graphics: "icons", shape: "circle", fill: "outline", size: "m", items: [] as SocialItem[] });
 
 /** Which network an address belongs to ("website" for any other https address, "" when it isn't one). */
 export function socialKind(url: string): string {
@@ -59,7 +62,7 @@ export function mergeSocial(c: any, found: SocialItem[]): number {
     if (have) { if (!String(have.url || "").trim()) { have.url = f.url; n++; } continue; }
     if (s.items.some((x: any) => x && String(x.url || "").replace(/\/$/, "") === f.url.replace(/\/$/, ""))) continue;
     if (s.items.length >= 16) break;
-    s.items.push({ kind: f.kind, url: f.url, label: f.label || "", icon: null }); n++;
+    s.items.push({ kind: f.kind, url: f.url, label: f.label || "", graphic: "auto", icon: null }); n++;
   }
   if (n) s.on = true;
   return n;

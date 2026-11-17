@@ -1,6 +1,6 @@
 /* Regional languages for every template. Content: content.i18n = {
      on, base: { code, name },                      // the language the site is written in
-     langs: [{ code, name, on }],                   // the other languages offered
+     langs: [{ code, name, on, ready }],            // the other languages; shown once on and ready (fully translated)
      t: { hi: { "<text as written>": "<translation>" } },
      paths: ["hero.title", "services.items.*.title", …],   // where the site's own text sits (made by the editor)
      auto, place: "menu" | "left" | "right" }
@@ -26,7 +26,9 @@
   function css() { if (document.getElementById("site-lang-css")) return; var s = document.createElement("style"); s.id = "site-lang-css"; s.textContent = CSS; document.head.appendChild(s); }
   var I = function (C) { return (C && C.i18n) || {}; };
   var nameOf = function (code) { for (var i = 0; i < LANGS.length; i++) if (LANGS[i][0] === code) return LANGS[i][1]; return code; };
-  function offered(C) { var n = I(C); return (Array.isArray(n.langs) ? n.langs : []).filter(function (l) { return l && l.on !== false && /^[a-z]{2,3}$/.test(l.code || ""); }); }
+  // A language is offered once it is switched on and fully translated (ready; the editor sets it). The editor's own
+  // preview shows every switched-on language, so one can be read while it is still being translated.
+  function offered(C) { var n = I(C); return (Array.isArray(n.langs) ? n.langs : []).filter(function (l) { return l && l.on !== false && /^[a-z]{2,3}$/.test(l.code || "") && (l.ready !== false || forced != null); }); }
   function wanted(C) { return !!I(C).on && offered(C).length > 0; }
   var baseCode = function (C) { return (I(C).base && I(C).base.code) || "en"; };
   var forced = null; // the editor's "show this language in the preview"

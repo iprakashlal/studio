@@ -8,6 +8,16 @@
    pimg(key,alt,w,cls), itemImg(item,key,alt,w,cls), copy(text), motion, signal (AbortSignal). */
 (function (root) {
   "use strict";
+  /* A text as the letters a reader sees: a consonant stays with its vowel signs and conjuncts (Hindi, Tamil, Bengali…),
+     and an emoji with its parts, so letter-by-letter effects never tear a word apart. */
+  var chars = window.SiteChars || (window.SiteChars = function (s) {
+    s = String(s == null ? "" : s); var seg = null, out = [], mark = null, join = /[\u094D\u09CD\u0A4D\u0ACD\u0B4D\u0BCD\u0C4D\u0CCD\u0D4D\u200D]$/;
+    try { if (window.Intl && Intl.Segmenter) seg = Array.from(new Intl.Segmenter(undefined, { granularity: "grapheme" }).segment(s), function (x) { return x.segment; }); } catch (e) {}
+    if (!seg) seg = s.match(/[\uD800-\uDBFF][\uDC00-\uDFFF]|[\s\S]/g) || [];
+    try { mark = new RegExp("^[\\p{M}\\u200C\\u200D]", "u"); } catch (e) { mark = /^[\u0300-\u036F\u0900-\u0903\u093A-\u094F\u200C\u200D]/; }
+    seg.forEach(function (g) { var n = out.length; if (n && (mark.test(g) || join.test(out[n - 1]))) out[n - 1] += g; else out.push(g); });
+    return out;
+  });
   var K = {};
   function on(c, id) { return c.sections.some(function (s) { return s.id === id && s.visible; }); }
   function navOf(c) { return c.sections.filter(function (s) { return s.visible && s.id !== "contact" && (s.id !== "projects" || c.projects.items.length); }); }
@@ -572,7 +582,7 @@
       if (on(c, "projects") && c.projects.items.length) cards.push('<article class="kp-card w12" id="projects" style="background:transparent;border-style:dashed;box-shadow:none"><h2 style="text-align:center;margin-bottom:24px">' + h.rich(c.projects.title) + '</h2><div class="kp-polas">' + c.projects.items.map(function (p, i) { return '<div class="kp-pola" data-drag><figure>' + h.itemImg(p, i + 3, p.title, 500) + "</figure><b>" + h.esc(p.title) + "</b><small>" + h.esc(p.body) + "</small></div>"; }).join("") + "</div></article>");
       if (on(c, "learning")) cards.push('<article class="kp-card w6" id="learning"><h3>' + h.rich(c.learning.title) + "</h3>" + c.learning.items.map(function (l) { return "<p><b>" + h.esc(l.title) + "</b> · " + h.esc(l.sub) + "</p>"; }).join("") + "</article>");
       if (on(c, "contact")) cards.push('<article class="kp-card w6 c1" id="contact"><h2>' + h.rich(c.contact.title) + "</h2>" + (c.contact.email ? '<button class="kp-big" type="button" data-copy="' + h.esc(c.contact.email) + '">Say hi 👋</button>' : "") + '<p style="display:flex;gap:16px;margin-top:20px">' + links(h, c) + "</p></article>");
-      var letters = Array.from(H.firstName || "").map(function (ch) { return "<span>" + h.esc(ch) + "</span>"; }).join("");
+      var letters = chars(H.firstName || "").map(function (ch) { return "<span>" + h.esc(ch) + "</span>"; }).join("");
       return '<header class="kp-top"><b>' + ic(h) + h.esc(c.brand.logoText) + "</b><nav>" + navOf(c).map(function (s) { return '<a href="#' + s.id + '">' + h.esc(s.navLabel) + "</a>"; }).join("") + '</nav></header><main id="top"><section class="kp-hero">' + stickers + '<div><h1 data-fx-text>' + letters + "<br>" + h.esc(H.lastName) + "</h1><p>" + h.rich(H.role) + '</p><span class="kp-hint">✋ drag the stickers</span></div></section><section class="kp-board">' + cards.join("") + '</section></main><footer style="text-align:center;padding:30px;font-weight:700">' + h.esc(c.contact.footerLeft) + "</footer>";
     },
     init: function (root, c, h) {

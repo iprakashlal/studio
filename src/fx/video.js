@@ -1,5 +1,6 @@
 /* A video section for every template's home page. Content: content.video = {
      on, url,                       // a YouTube or Vimeo link, or the address of a video file (.mp4 / .webm)
+     file,                          // or an uploaded video (the editor's file object); it is used instead of the link
      poster,                        // a picture shown before the video plays (the editor's picture object)
      layout: "center" | "wide" | "full" | "left" | "right",   // left / right: the video sits on that side, the text beside it
      place:  "top" | "middle" | "bottom" | "end",              // after the first screen · mid page · before the last section · last
@@ -77,7 +78,8 @@
   function mount(C, o) {
     o = o || {}; var old = document.getElementById("site-video"); if (old) old.remove();
     var V = (C && C.video) || {}; if (!V.on || o.home === false) return null;
-    var src = source(V.url); if (!src) return null;
+    var up = V.file ? (o.imgUrl ? o.imgUrl(V.file) : V.file.url || "") : "";
+    var src = up ? { kind: "file", src: up } : source(V.url); if (!src) return null;
     var all = Array.prototype.slice.call(document.querySelectorAll(o.sections || "main > section")); if (!all.length) return null;
     var parent = all[0].parentNode, list = all.filter(function (s) { return s.parentNode === parent; });
     var layout = /^(center|wide|full|left|right)$/.test(V.layout) ? V.layout : "center", side = layout === "left" || layout === "right";

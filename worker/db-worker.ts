@@ -42,7 +42,7 @@ async function hmac(secret: string, data: string) {
 const emailOk = (e: string) => /^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,}$/.test(e);
 const scopeOk = (s: string) => /^(studio|site):[a-z0-9][a-z0-9-]{0,59}$/.test(s);
 const pathOk = (p: string) => !!p && p.length < 400 && !p.includes("..") && !p.startsWith("/") && /^[\w\-./ ()@+,]+$/.test(p);
-const TYPES: Record<string, string> = { json: "application/json", html: "text/html; charset=utf-8", css: "text/css", js: "text/javascript", md: "text/markdown", txt: "text/plain", svg: "image/svg+xml", png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", webp: "image/webp", gif: "image/gif", avif: "image/avif", pdf: "application/pdf", ico: "image/x-icon" };
+const TYPES: Record<string, string> = { json: "application/json", html: "text/html; charset=utf-8", css: "text/css", js: "text/javascript", md: "text/markdown", txt: "text/plain", svg: "image/svg+xml", png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", webp: "image/webp", gif: "image/gif", avif: "image/avif", pdf: "application/pdf", ico: "image/x-icon", mp4: "video/mp4", webm: "video/webm" };
 const typeOf = (p: string) => TYPES[(p.split(".").pop() || "").toLowerCase()] || "application/octet-stream";
 // Hosted sites: what anyone may read without signing in.
 const publicPath = (p: string) => p === "content.json" || p === "cms/site.json" || p.startsWith("assets/");
@@ -481,7 +481,15 @@ export default {
         const [, , site, ...rest] = p.split("/"); const path = decodeURIComponent(rest.join("/"));
         if (!/^[a-z0-9][a-z0-9-]{0,59}$/.test(site) || !pathOk(path) || !publicPath(path)) return err(404, "Not found.");
         const f = await readFile(env, "site:" + site, path); if (!f) return err(404, "Not found.");
-        return new Response(f.bytes, { headers: { ...cors, "Content-Type": f.type || typeOf(path), "Cache-Control": path.startsWith("assets/") && !path.startsWith("assets/data/") ? "public, max-age=31536000, immutable" : "no-store", "x-sha": f.sha, "x-updated": f.updated_at } });
+        const head = { ...cors, "Content-Type": f.type || typeOf(path), "Cache-Control": path.startsWith("assets/") && !path.startsWith("assets/data/") ? "public, max-age=31536000, immutable" : "no-store", "x-sha": f.sha, "x-updated": f.updated_at, "Accept-Ranges": "bytes" };
+        // A part of the file (Range: bytes=a-b), which video players use to seek, and iPhones need to play at all.
+        const rg = /^bytes=(\d*)-(\d*)$/.exec(req.headers.get("Range") || ""), size = f.bytes.length;
+        if (rg && (rg[1] || rg[2])) {
+          const from = rg[1] ? +rg[1] : Math.max(0, size - +rg[2]), to = rg[1] && rg[2] ? Math.min(+rg[2], size - 1) : size - 1;
+          if (from >= size || from > to) return new Response(null, { status: 416, headers: { ...cors, "Content-Range": `bytes */${size}` } });
+          return new Response(f.bytes.slice(from, to + 1), { status: 206, headers: { ...head, "Content-Range": `bytes ${from}-${to}/${size}` } });
+        }
+        return new Response(f.bytes, { headers: head });
       }
       // ---- the Studio's own public pages (privacy, terms…): GET /sp/<studio> → its public/pages.json
       if (p.startsWith("/sp/") && req.method === "GET") {

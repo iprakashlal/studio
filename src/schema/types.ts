@@ -22,6 +22,8 @@ export type Field =
   | { t: "colorKey"; path: string; label: string }
   | { t: "shape"; path: string; label: string }
   | { t: "image"; path: string; label: string; hint?: string }
+  /** An uploaded video file (MP4 or WebM), kept with the site's pictures. */
+  | { t: "videoFile"; path: string; label: string; hint?: string }
   | { t: "images"; path: string; label: string; hint?: string }
   | { t: "strings"; path: string; label: string; addLabel?: string; number?: boolean; multiline?: boolean }
   | { t: "list"; path: string; label?: string; item: Field[]; add: () => any; title: (it: any, i: number) => string; max?: number; fixed?: boolean }

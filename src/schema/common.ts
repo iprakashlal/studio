@@ -151,7 +151,7 @@ export function socialCategory(group = "Pages", sub?: string, extra = ""): Categ
   };
 }
 /** The settings a new video section starts with (content.video; drawn by src/fx/video.js). */
-export const videoDefault = () => ({ on: false, url: "", poster: null as any, layout: "center", place: "top", ratio: "16:9", eyebrow: "", title: "", text: "", links: [] as { label: string; url: string }[], auto: false, controls: true, round: true });
+export const videoDefault = () => ({ on: false, url: "", file: null as any, poster: null as any, layout: "center", place: "top", ratio: "16:9", eyebrow: "", title: "", text: "", links: [] as { label: string; url: string }[], auto: false, controls: true, round: true });
 /** Older content gets the video section's fields (off). */
 export function prepareVideo(c: any) {
   if (!c || typeof c !== "object") return;
@@ -169,6 +169,7 @@ export function videoCategory(group = "Pages", sub?: string, extra = ""): Catego
         { t: "toggle", path: "video.on", label: "Show the video section" },
         { t: "text", path: "video.url", label: "Video link", ph: "https://youtu.be/…  or  https://…/film.mp4", hint: "A YouTube or Vimeo link, or the address of a video file (.mp4 or .webm).",
           show: (v) => { const u = String(v || "").trim(); return !u ? "" : /youtube\.com|youtu\.be/i.test(u) ? "A YouTube video. It loads when the visitor presses play." : /vimeo\.com/i.test(u) ? "A Vimeo video. It loads when the visitor presses play." : /^https:\/\//i.test(u) || !/^[a-z][a-z0-9+.-]*:/i.test(u) ? "A video file, played by the site's own player." : "Use a link that starts with https://"; } },
+        { t: "videoFile", path: "video.file", label: "Or upload a video", hint: "MP4 or WebM, up to 20 MB. An uploaded video is used instead of the link above, and is played by the site's own player. For a longer film, put it on YouTube or Vimeo and paste its link." },
         { t: "image", path: "video.poster", label: "Cover picture", hint: "Shown before the video plays. Without one, a YouTube or Vimeo video shows a dark panel with a play button." },
         ...(extra ? [{ t: "note", text: extra } as Field] : []),
       ] },

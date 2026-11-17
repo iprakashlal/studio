@@ -10,7 +10,7 @@ import { limitThemes } from "../themes/limit";
 import { themeCode } from "../themes/codes";
 import type { Field as F, TemplateDef } from "../schema/types";
 import { getP, setP, clone, vpaOk, paypalOk, httpsOk, hostIs, emailOk, phoneOk } from "../lib/util";
-import { Field, Toggle, useConfirm, useToast } from "../ui/kit";
+import { Field, ProgressBar, Toggle, useConfirm, useToast } from "../ui/kit";
 
 export type EditorCtx = {
   tpl: TemplateDef;
@@ -185,6 +185,8 @@ export function FieldView({ f, obj, base }: { f: F; obj: any; base: string }) {
     }
     case "image":
       return <ImageField id={id} label={f.label} hint={f.hint} value={val} onChange={set} />;
+    case "videoFile":
+      return <VideoFileField id={id} label={f.label} hint={f.hint} value={val} onChange={set} />;
     case "images":
       return <ImagesField id={id} label={f.label} hint={f.hint} value={Array.isArray(val) ? val : []} onChange={set} />;
     case "strings":
@@ -286,6 +288,43 @@ function ImageField({ id, label, hint, value, onChange }: { id: string; label: s
         </div>
       </div>
       <span className="hint">{hint || "JPG, PNG, WebP or SVG, up to 5 MB."}</span>
+    </div>
+  );
+}
+
+/** An uploaded video: MP4 or WebM up to 20 MB, stored with the site's pictures (so it is saved, backed up and published with them). */
+function VideoFileField({ id, label, hint, value, onChange }: { id: string; label: string; hint?: string; value: any; onChange: (v: any) => void }) {
+  const { img, upload } = useCtx();
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  const pick = async (file?: File) => {
+    if (!file) return;
+    if (!/^video\/(mp4|webm)$/.test(file.type) && !/\.(mp4|webm)$/i.test(file.name)) { toast(`${file.name}: use an MP4 or WebM video.`, "bad"); return; }
+    if (file.size > 20 * 1024 * 1024) { toast(`${file.name} is ${(file.size / 1048576).toFixed(0)} MB. Uploads go up to 20 MB: shorten or compress it, or put it on YouTube or Vimeo and paste the link.`, "bad"); return; }
+    setBusy(true);
+    try { onChange(await upload(file)); toast("Video uploaded. Save to keep it."); }
+    catch (e: any) { toast("Upload failed: " + (e?.message || "try again"), "bad"); }
+    finally { setBusy(false); }
+  };
+  const src = value ? img(value) : "", name = String(value?.path || "").split("/").pop()?.replace(/^\d+-/, "") || "";
+  return (
+    <div data-field className="flex flex-col gap-1.5 rounded-lg">
+      <span className="label">{label}</span>
+      <div className="flex flex-wrap items-center gap-3.5">
+        <div className="grid h-20 w-36 flex-none place-items-center overflow-hidden rounded-xl border border-dashed border-ink-600 bg-ink-950 text-[11px] text-ink-500">
+          {value ? (src ? <video src={src} muted playsInline preload="metadata" className="h-full w-full object-cover" aria-label={`Uploaded video ${name}`} /> : "Loading…") : "No video"}
+        </div>
+        <div className="flex min-w-0 flex-col gap-1.5">
+          {value && <span className="truncate text-[13px] text-ink-300">{name}</span>}
+          <div className="flex flex-wrap gap-2">
+            <label htmlFor={id} className="btn btn-sm cursor-pointer">{busy ? "Uploading…" : value ? "Replace" : "Upload a video"}</label>
+            <input id={id} type="file" accept="video/mp4,video/webm,.mp4,.webm" hidden disabled={busy} onChange={async (e) => { const f = e.target.files?.[0]; e.target.value = ""; await pick(f); }} />
+            {value && <button type="button" className="btn btn-sm btn-danger" onClick={() => onChange(null)}>Remove</button>}
+          </div>
+        </div>
+      </div>
+      {busy && <ProgressBar value={null} label="Uploading the video" detail="Uploading… a large video can take a minute." />}
+      <span className="hint">{hint || "MP4 or WebM, up to 20 MB."}</span>
     </div>
   );
 }

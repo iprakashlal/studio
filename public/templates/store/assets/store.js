@@ -426,7 +426,7 @@ function header() {
   const cur = (p) => (PAGE === p ? ' aria-current="page"' : "");
   return `${B.showAnnouncement && B.announcement ? `<div class="announce">${ml(B.announcement)}</div>` : ""}
   <header class="hdr"><div class="wrap" style="position:relative">
-    <a class="brand" href="index.html"><span class="mark">${B.logo ? `<img src="${esc(imgUrl(B.logo))}" alt="">` : esc(initials)}</span><b>${esc(B.name)}</b></a>
+    <a class="brand" href="index.html"><span class="mark" style="${markCss()}">${B.logo ? `<img src="${esc(imgUrl(B.logo))}" alt=""${B.logoFit === "wide" ? ` style="height:${markH()}px;width:auto;max-width:min(${markH() * 6}px,52vw);object-fit:contain"` : ""}>` : esc(initials)}</span>${B.showName === false && B.logo ? "" : `<b>${esc(B.name)}</b>`}</a>
     <nav class="nav" id="nav" aria-label="Main"><a href="index.html"${cur("home")}>${esc(N.home)}</a><a href="shop.html"${cur("shop")}>${esc(N.shop)}</a>${swOn() && C.warranty.inNav ? `<a href="warranty.html"${cur("warranty")}>${esc(C.warranty.navLabel || "Warranty")}</a>` : ""}${N.showPortfolio ? `<a href="portfolio.html"${cur("portfolio")}>${esc(N.portfolio)}</a>` : ""}${spList().filter((p) => p.inNav).map((p) => `<a href="${esc(spHref(p))}"${PAGE === "page" && spSlug(p) === spSlug({ slug: spCur() }) ? ' aria-current="page"' : ""}>${esc(p.navLabel || p.title)}</a>`).join("")}${ACCOUNTS() ? `<a href="account.html"${cur("account")}>${esc(N.account)}</a>` : ""}</nav>
     <a class="cartlink" href="cart.html"${cur("cart")}><span class="t">${esc(N.cart)}</span><span class="n" data-cartcount>${cartCount()}</span></a>
     <button class="menubtn" type="button" aria-controls="nav" aria-expanded="false" aria-label="Menu">☰</button>
@@ -717,6 +717,17 @@ function festival() {
   (fsP ||= new Promise((ok, no) => { if (window.SiteFestival) return ok(); const s = document.createElement("script"); s.src = "assets/festival.js"; s.onload = () => ok(); s.onerror = no; document.head.appendChild(s); }))
     .then(() => window.SiteFestival.mount(C, { preview: PREVIEW, site: C.brand.name })).catch(() => {});
 }
+/* The logo's size and shape in the menu (Brand → Logo): a square icon of the chosen height, or a wide logo that keeps
+   its own proportions (never cropped, no backing or rounded corners). */
+const markH = () => Math.max(20, Math.min(96, +C.brand.logoSize || 38));
+function markCss() {
+  const B = C.brand, h = markH();
+  return B.logoFit === "wide" && B.logo ? `height:${h}px;width:auto;background:none;border-radius:0` : h !== 38 ? `width:${h}px;height:${h}px;font-size:${Math.round(h * 0.4)}px` : "";
+}
+function heroLogo() {
+  const B = C.brand, src = PAGE === "home" && B.logoOnHero && B.logo ? imgUrl(B.logo) : "";
+  if (window.SiteLogo) window.SiteLogo.hero(src, { at: "#main h1", size: B.heroLogoSize, radius: C.theme.logoRadius ?? 26, wide: B.logoFit === "wide", edit: "brand.logo" });
+}
 /* Social links in the footer (assets/social.js). */
 let ssP;
 function social() {
@@ -848,7 +859,7 @@ function bind() {
   if (PAGE === "account") bindAccount();
   if (PAGE === "warranty") swMount();
   if (PAGE === "page" && window.SitePages) window.SitePages.after(spHere());
-  video(); social(); menu(); lang(); consent(); addons(); festival();
+  heroLogo(); video(); social(); menu(); lang(); consent(); addons(); festival();
   if (location.hash && PAGE === "policies") { const el = document.getElementById(location.hash.slice(1)); if (el) el.scrollIntoView(); }
 }
 function bindShop() {

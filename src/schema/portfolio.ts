@@ -1,6 +1,6 @@
 import type { Category, Field, TemplateDef } from "./types";
 import { AXES, BODY_FONTS, DISPLAY_FONTS, KIT_AXIS, LINE_BREAKS_AXIS, PORTFOLIO_AXES, THEMES, onColor, portfolioThemeValues } from "../themes/catalog";
-import { adminCategory, videoCategory, socialCategory, consentCategory, emailsCategory, i18nCategory, prepareI18n, featuresCategory, festivalCategory, menuCategory, menuItem, prepareMenu, staticPagesCategory, heroSlidesCard, prepareSlides, prepareMaintenance, seoCategory } from "./common";
+import { adminCategory, videoCategory, socialCategory, logoFields, consentCategory, emailsCategory, i18nCategory, prepareI18n, featuresCategory, festivalCategory, menuCategory, menuItem, prepareMenu, staticPagesCategory, heroSlidesCard, prepareSlides, prepareMaintenance, seoCategory } from "./common";
 import VELOCITY_DEFAULTS from "./velocity-defaults.json";
 import { NAV_MODE_FIELD, NAV_MODE_NOTE, themeCards } from "../themes/fields";
 
@@ -85,6 +85,8 @@ const schema: Category[] = [
       { title: "Logo icon", fields: [
         { t: "image", path: "brand.icon", label: "Logo icon", hint: "A square image works best (PNG, SVG or JPG). Its corners follow the logo shape under Shape & effects. It also becomes the browser tab icon." },
         { t: "toggle", path: "brand.iconInMenu", label: "Show the icon in the menu, before your name" },
+        ...logoFields("brand.icon", 30, "your name in the hero"),
+        { t: "note", text: "Above the name: shown where the layout has a hero with your name in the page itself. The Profile dashboard, Terminal, Drag canvas and Broadsheet layouts keep the name elsewhere, so the logo isn't added there." },
         { t: "toggle", path: "brand.iconOnHero", label: "Show it on the hero as your picture (a disc on the right; also the Velocity portrait and Arch picture graphic)" },
         { t: "when", path: "brand.iconOnHero", is: "true", fields: [
           { t: "image", path: "hero.discImage", label: "Different image for the hero, e.g. your photo (optional)", hint: "Leave empty to use the logo icon." },

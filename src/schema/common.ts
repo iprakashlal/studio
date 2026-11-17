@@ -82,6 +82,29 @@ export function prepareFestival(c: any) {
 }
 /** Features → Festival overlay: greetings and decorations on India's festivals (assets/festival.js). It runs by
  *  itself on the official days while switched on; the owner picks festivals, dates and wording, or switches it off. */
+/** The logo's size and shape in the menu, and the logo above the hero's title: shared by the three templates.
+ *  path: the logo picture's own field ("brand.logo", or "brand.icon" in the portfolio). */
+export function logoFields(path: string, def: number, title = "the hero title"): Field[] {
+  void path;
+  return [
+      { t: "grid", cols: 2, fields: [
+        { t: "select", path: "brand.logoFit", label: "Logo shape in the menu", options: [{ value: "square", label: "Square icon (cropped to a square)" }, { value: "wide", label: "Wide logo (keeps its own shape, never cropped)" }] },
+        { t: "range", path: "brand.logoSize", label: "Logo height in the menu", min: 20, max: 96, step: 2, unit: "px" }] },
+      { t: "note", text: `Choose Wide for a logo that is longer than it is tall (a wordmark, or an icon with the name beside it): it keeps its proportions and its corners. The height applies to both shapes; ${def}px is the usual size.` },
+      { t: "toggle", path: "brand.logoOnHero", label: `Show the logo above ${title}` },
+      { t: "when", path: "brand.logoOnHero", is: "true", fields: [{ t: "range", path: "brand.heroLogoSize", label: "Its height there", min: 32, max: 240, step: 4, unit: "px" }] },
+  ];
+}
+/** Older content gets the logo's size settings (the template's usual size, square, not on the hero). */
+export function prepareLogo(c: any) {
+  const B = c?.brand; if (!B || typeof B !== "object") return;
+  const def = B.logoText !== undefined ? 30 : Array.isArray(c.products) ? 38 : 36;
+  if (B.logoFit !== "wide") B.logoFit = "square";
+  if (!(+B.logoSize >= 16)) B.logoSize = def;
+  if (typeof B.logoOnHero !== "boolean") B.logoOnHero = false;
+  if (!(+B.heroLogoSize >= 32)) B.heroLogoSize = 72;
+  if (B.logoText === undefined && typeof B.showName !== "boolean") B.showName = true;
+}
 /** Older content gets the footer's social links (off), seeded once from the links the site already has elsewhere. */
 export function prepareSocial(c: any) {
   if (!c || typeof c !== "object") return;
@@ -633,7 +656,7 @@ export const maintenanceDefault = () => ({ on: false, title: "We'll be back soon
 export function prepareMaintenance(c: any) {
   if (!c || typeof c !== "object") return;
   const d = maintenanceDefault(), m = c.maintenance && typeof c.maintenance === "object" ? c.maintenance : {};
-  prepareAddons(c); prepareEmails(c); prepareFestival(c); prepareConsent(c); prepareVideo(c); prepareSocial(c);
+  prepareAddons(c); prepareEmails(c); prepareFestival(c); prepareConsent(c); prepareVideo(c); prepareSocial(c); prepareLogo(c);
   c.maintenance = { ...d, ...m, button: { ...d.button, ...(m.button && typeof m.button === "object" ? m.button : {}) } };
 }
 export function prepareSlides(hero: any, overlayColor?: string) {

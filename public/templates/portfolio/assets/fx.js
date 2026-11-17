@@ -603,5 +603,25 @@
     onScroll();
   }
 
+  /* The site's logo above the hero's title (Brand → "Show the logo above the hero title"), for every template: it is
+     put in front of the page's first main heading (and the small label above it, when there is one), so it follows
+     whichever hero layout the theme draws. o: { size (px high), radius (% corners, square logos), wide, edit }. */
+  function heroLogo(src, o) {
+    o = o || {}; Array.prototype.forEach.call(document.querySelectorAll(".site-hero-logo"), function (n) { n.remove(); });
+    if (!src) return null;
+    var h1 = Array.prototype.filter.call(document.querySelectorAll(o.at || "main h1, #main h1, h1"), function (h) { return !h.closest("header,nav,aside,noscript,footer,[hidden]") && h.getClientRects().length; })[0];
+    if (!h1) return null;
+    var before = h1, prev = h1.previousElementSibling;
+    if (prev && /eyebrow|kicker|pill|tag|chip|label|h-eye|vx-eye/i.test(prev.className || "") && (prev.textContent || "").length < 140) before = prev;
+    var size = Math.max(32, Math.min(240, +o.size || 72)), d = document.createElement("div");
+    d.className = "site-hero-logo"; if (o.edit) d.setAttribute("data-edit", o.edit);
+    d.style.cssText = "display:block;line-height:0;margin:0 0 " + Math.round(size * 0.28 + 8) + "px;position:relative;z-index:2";
+    var im = document.createElement("img"); im.src = src; im.alt = "";
+    im.style.cssText = o.wide ? "height:" + size + "px;width:auto;max-width:min(100%," + size * 5 + "px);object-fit:contain;display:inline-block"
+      : "width:" + size + "px;height:" + size + "px;object-fit:cover;display:inline-block;border-radius:" + Math.max(0, Math.min(50, o.radius == null ? 22 : +o.radius)) + "%";
+    d.appendChild(im); before.parentNode.insertBefore(d, before);
+    return d;
+  }
+  window.SiteLogo = { hero: heroLogo };
   window.SiteFX = { init: init, version: 1 };
 })();

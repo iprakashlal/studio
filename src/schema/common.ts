@@ -1,5 +1,6 @@
 import { FESTIVALS, FESTIVAL_DECOS, festivalWhen } from "../lib/festivals";
 // Settings both templates share: where the site's own CMS lives.
+import { SOCIAL_KINDS, socialDefault, socialKind, mergeSocial, type SocialItem } from "../lib/social";
 import type { Category, Field } from "./types";
 
 /** Page names a site already uses, so the admin page can't take them. */
@@ -81,6 +82,44 @@ export function prepareFestival(c: any) {
 }
 /** Features → Festival overlay: greetings and decorations on India's festivals (assets/festival.js). It runs by
  *  itself on the official days while switched on; the owner picks festivals, dates and wording, or switches it off. */
+/** Older content gets the footer's social links (off), seeded once from the links the site already has elsewhere. */
+export function prepareSocial(c: any) {
+  if (!c || typeof c !== "object") return;
+  const d = socialDefault(), first = !c.social || typeof c.social !== "object", v = first ? {} : c.social;
+  c.social = { ...d, ...v, items: (Array.isArray(v.items) ? v.items : []).filter((x: any) => x && typeof x === "object").map((x: any) => ({ kind: SOCIAL_KINDS[x.kind] ? x.kind : "other", url: String(x.url || ""), label: String(x.label || ""), icon: x.icon || null })) };
+  if (!first) return;
+  const K = c.contact || {}, found: SocialItem[] = [];
+  const add = (url: any) => { const u = String(url || "").trim(), kind = u ? socialKind(u) : ""; if (kind && kind !== "website" && kind !== "email" && kind !== "phone") found.push({ kind, url: u, label: "" }); };
+  add(K.linkedin); add(K.instagram); add(K.facebook);
+  if (String(K.whatsapp || "").replace(/\D/g, "").length >= 10) found.push({ kind: "whatsapp", url: "https://wa.me/" + String(K.whatsapp).replace(/\D/g, ""), label: "" });
+  for (const l of Array.isArray(K.links) ? K.links : []) add(l?.url);
+  mergeSocial(c, found.filter((f) => !/^https:\/\/(www\.)?(linkedin\.com|github\.com)\/?$/.test(f.url)));
+  c.social.on = false; // seeded, not switched on: the owner decides
+}
+/** Footer → social links, for every template. */
+export function socialCategory(group = "Pages", sub?: string, extra = ""): Category {
+  const g2 = (...fields: Field[]): Field => ({ t: "grid", cols: 2, fields });
+  return {
+    id: "social", label: "Social links", group, ...(sub ? { sub } : {}),
+    desc: "Links to your social media and other profiles, in the site's footer: as round badges, as labels, or both.",
+    cards: [
+      { title: "Social links in the footer", fields: [
+        { t: "toggle", path: "social.on", label: "Show social links in the footer" },
+        g2({ t: "select", path: "social.style", label: "Shown as", options: [{ value: "badges", label: "Round badges" }, { value: "labels", label: "Labels (text)" }, { value: "both", label: "Badge and label" }] },
+          { t: "select", path: "social.align", label: "Position", options: [{ value: "center", label: "Centre" }, { value: "left", label: "Left" }, { value: "right", label: "Right" }] }),
+        { t: "text", path: "social.title", label: "Small heading before the links", ph: "Follow us" },
+        ...(extra ? [{ t: "note", text: extra } as Field] : []),
+        { t: "note", text: "A badge is a neutral round mark with the network's initials (IG, FB, YT…). The networks' own logos are their trademarks, so the site doesn't draw them: to show a logo, upload it as that link's own icon." },
+      ] },
+      { title: "The links", fields: [
+        { t: "note", text: "Paste the profile's full address, or just the handle or number (@yourname, a WhatsApp number). Links found in a profile, CV or pamphlet you upload are filled in here for you; change or remove any of them." },
+        { t: "list", path: "social.items", label: "Links", max: 16, add: () => ({ kind: "instagram", url: "", label: "", icon: null }), title: (it: any, i: number) => `${SOCIAL_KINDS[it?.kind]?.[0] || "Link"}${it?.label ? " · " + it.label : ""}${it?.url ? "" : " · no link yet"}` || `Link ${i + 1}`,
+          item: [g2({ t: "select", path: "kind", label: "Network", options: Object.entries(SOCIAL_KINDS).map(([value, [label]]) => ({ value, label })) }, { t: "text", path: "url", label: "Profile link, handle or number", ph: "https://…  or  @yourname" }),
+            g2({ t: "text", path: "label", label: "Label (optional)", ph: "Shown as text, and read out for badges" }, { t: "image", path: "icon", label: "Your own icon (optional)", hint: "A small square picture, shown in place of the badge." })] },
+      ] },
+    ],
+  };
+}
 /** The settings a new video section starts with (content.video; drawn by src/fx/video.js). */
 export const videoDefault = () => ({ on: false, url: "", poster: null as any, layout: "center", place: "top", ratio: "16:9", eyebrow: "", title: "", text: "", links: [] as { label: string; url: string }[], auto: false, controls: true, round: true });
 /** Older content gets the video section's fields (off). */
@@ -587,7 +626,7 @@ export const maintenanceDefault = () => ({ on: false, title: "We'll be back soon
 export function prepareMaintenance(c: any) {
   if (!c || typeof c !== "object") return;
   const d = maintenanceDefault(), m = c.maintenance && typeof c.maintenance === "object" ? c.maintenance : {};
-  prepareAddons(c); prepareEmails(c); prepareFestival(c); prepareConsent(c); prepareVideo(c);
+  prepareAddons(c); prepareEmails(c); prepareFestival(c); prepareConsent(c); prepareVideo(c); prepareSocial(c);
   c.maintenance = { ...d, ...m, button: { ...d.button, ...(m.button && typeof m.button === "object" ? m.button : {}) } };
 }
 export function prepareSlides(hero: any, overlayColor?: string) {

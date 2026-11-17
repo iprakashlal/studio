@@ -268,10 +268,10 @@ export async function cfWrite(api: string, o: { url?: string; text?: string; bra
 // ---------------------------------------------------------------- reading a product pamphlet
 export type PamphletProduct = { name: string; category: string; summary: string; price: string; features: string[]; details: string; specs: { label: string; value: string }[]; page: number };
 /** Turns a pamphlet's text (and pictures of pages without text) into catalogue entries, with Workers AI on the database. */
-export async function cfProducts(api: string, o: { text?: string; images?: { page: number; data: string }[]; hint?: string }): Promise<PamphletProduct[] & { guessed?: boolean }> {
+export async function cfProducts(api: string, o: { text?: string; images?: { page: number; data: string }[]; hint?: string }): Promise<PamphletProduct[] & { guessed?: boolean; social?: { kind: string; url: string; label: string }[] }> {
   const j = await cfCall<any>(api, "/ai/products", { method: "POST", body: JSON.stringify(o) });
   if (j?.error) throw new Error(j.error);
-  return Object.assign(j.products || [], { guessed: !!j.guessed });
+  return Object.assign(j.products || [], { guessed: !!j.guessed, social: Array.isArray(j.social) ? j.social.filter((x: any) => x && typeof x.kind === "string" && /^https:\/\//.test(x.url || "")).slice(0, 16).map((x: any) => ({ kind: x.kind, url: String(x.url), label: "" })) : [] });
 }
 
 // ---------------------------------------------------------------- Google reviews

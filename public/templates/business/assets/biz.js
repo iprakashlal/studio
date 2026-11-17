@@ -534,6 +534,14 @@ function festival() {
   (fsP ||= new Promise((ok, no) => { if (window.SiteFestival) return ok(); const s = document.createElement("script"); s.src = "assets/festival.js"; s.onload = () => ok(); s.onerror = no; document.head.appendChild(s); }))
     .then(() => window.SiteFestival.mount(C, { preview: PREVIEW, site: C.brand.name })).catch(() => {});
 }
+/* Social links in the footer (assets/social.js). */
+let ssP;
+function social() {
+  const S = C.social || {};
+  if (!S.on && !window.SiteSocial) return;
+  (ssP ||= new Promise((ok, no) => { if (window.SiteSocial) return ok(); const s = document.createElement("script"); s.src = "assets/social.js"; s.onload = () => ok(); s.onerror = no; document.head.appendChild(s); }))
+    .then(() => window.SiteSocial.mount(C, { footer: "footer.foot", before: ".foot-legal", imgUrl })).catch(() => {});
+}
 /* The video section (assets/video.js): one video on the home page, placed among its sections. */
 let svP;
 function video() {
@@ -616,7 +624,7 @@ function render() {
   bind();
   if (PAGE === "warranty") swMount();
   if (PAGE === "page" && window.SitePages) window.SitePages.after(window.SitePages.find(C, spCur(), PREVIEW));
-  slides(); video(); menu(); lang(); consent(); addons(); festival();
+  slides(); video(); social(); menu(); lang(); consent(); addons(); festival();
   if (window.SiteFX) try { window.SiteFX.init({ root: $("#app"), brand: C.theme.introTitle || C.brand.name, badge: C.poweredBy }); } catch (e) {}
 }
 

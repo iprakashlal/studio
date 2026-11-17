@@ -26,6 +26,7 @@ function otherAccounts(env: any): { id: string; name: string }[] {
 
 import { CFDB_SCHEMA, CFDB_VERSION, CFDB_WORKER_NAME } from "../src/lib/cfdbSchema";
 import { digestPage, sheetLinks } from "../src/lib/lookdigest";
+import { socialFromText } from "../src/lib/social";
 export const SCHEMA = CFDB_SCHEMA;
 
 const cors = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, content-type, x-sha", "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS", "Access-Control-Max-Age": "86400", "Access-Control-Expose-Headers": "x-sha, x-updated" };
@@ -328,7 +329,8 @@ async function readPamphlet(env: Env, q: any) {
   // The AI found nothing, but the pamphlet has text: build the product from the text itself, for the owner to check.
   if (!products.length) { products = clean(fromText(all)); guessed = products.length > 0; }
   if (!products.length) return { error: "No products were found in that pamphlet. Add a note naming the product (for example \"one product: MZ 1250 welder\") and try again." };
-  return { products, read: words(all).length, ...(guessed ? { guessed: true } : {}) };
+  // The pamphlet's own social links (also read from page pictures), for the site's footer row.
+  return { products, read: words(all).length, social: socialFromText(all), ...(guessed ? { guessed: true } : {}) };
 }
 
 /** Translates up to 30 short texts in one go. Returns { t: (string | null)[] } in the same order (null: try again). */

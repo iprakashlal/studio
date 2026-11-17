@@ -15,6 +15,16 @@
    Visitors who ask for reduced motion get a still page (only static overlays stay). */
 (function () {
   "use strict";
+  /* A text as the letters a reader sees: a consonant stays with its vowel signs and conjuncts (Hindi, Tamil, Bengali…),
+     and an emoji with its parts, so letter-by-letter effects never tear a word apart. */
+  var chars = window.SiteChars || (window.SiteChars = function (s) {
+    s = String(s == null ? "" : s); var seg = null, out = [], mark = null, join = /[\u094D\u09CD\u0A4D\u0ACD\u0B4D\u0BCD\u0C4D\u0CCD\u0D4D\u200D]$/;
+    try { if (window.Intl && Intl.Segmenter) seg = Array.from(new Intl.Segmenter(undefined, { granularity: "grapheme" }).segment(s), function (x) { return x.segment; }); } catch (e) {}
+    if (!seg) seg = s.match(/[\uD800-\uDBFF][\uDC00-\uDFFF]|[\s\S]/g) || [];
+    try { mark = new RegExp("^[\\p{M}\\u200C\\u200D]", "u"); } catch (e) { mark = /^[\u0300-\u036F\u0900-\u0903\u093A-\u094F\u200C\u200D]/; }
+    seg.forEach(function (g) { var n = out.length; if (n && (mark.test(g) || join.test(out[n - 1]))) out[n - 1] += g; else out.push(g); });
+    return out;
+  });
   if (window.SiteFX) return;
 
   var doc = document.documentElement;
@@ -177,7 +187,7 @@
   var cover = null;
   /** The intro panels with the site name in the middle (kind: split, or a single panel). */
   function panels(kind, brand) {
-    var letters = String(brand || "").slice(0, 24).split("").map(function (ch, i) { return '<span style="--i:' + i + '">' + (ch === " " ? "&nbsp;" : escHtml(ch)) + "</span>"; }).join("");
+    var letters = chars(String(brand || "")).slice(0, 24).map(function (ch, i) { return '<span style="--i:' + i + '">' + (ch === " " ? "&nbsp;" : escHtml(ch)) + "</span>"; }).join("");
     return (kind === "split" ? '<div class="fx-p fx-pt"></div><div class="fx-p fx-pb"></div>' : '<div class="fx-p"></div>') + (letters ? '<div class="fx-brand">' + letters + "</div>" : "");
   }
   try {
@@ -214,7 +224,7 @@
   /* ---------------------------------------------------------------- loader */
   function playLoader(kind, brand) {
     var c = colors();
-    var letters = String(brand || "").slice(0, 24).split("").map(function (ch, i) { return '<span style="--i:' + i + '">' + (ch === " " ? "&nbsp;" : escHtml(ch)) + "</span>"; }).join("");
+    var letters = chars(String(brand || "")).slice(0, 24).map(function (ch, i) { return '<span style="--i:' + i + '">' + (ch === " " ? "&nbsp;" : escHtml(ch)) + "</span>"; }).join("");
     var html = kind === "split" ? '<div class="fx-p fx-pt"></div><div class="fx-p fx-pb"></div>' : '<div class="fx-p"></div>';
     if (kind !== "counter" && letters) html += '<div class="fx-brand">' + letters + "</div>";
     if (kind === "counter") html += '<div class="fx-num">0<small>%</small></div><div class="fx-bar"></div>';
@@ -283,7 +293,7 @@
         if (/^\s+$/.test(p)) { frag.appendChild(document.createTextNode(" ")); return; }
         var w = el("span", "fx-w"); w.setAttribute("aria-hidden", "true"); w.style.setProperty("--k", wi++);
         if (mode === "letters") {
-          Array.from(p).forEach(function (ch) { var c = el("span", "fx-c"); c.textContent = ch; c.style.setProperty("--i", Math.min(ci++, 45)); w.appendChild(c); });
+          chars(p).forEach(function (ch) { var c = el("span", "fx-c"); c.textContent = ch; c.style.setProperty("--i", Math.min(ci++, 45)); w.appendChild(c); });
         } else { var i = el("span", "fx-wi"); i.textContent = p; w.appendChild(i); }
         frag.appendChild(w);
       });
@@ -300,7 +310,10 @@
   }
   var ORIG = new WeakMap();
   function scramble(node) {
-    if (node.__fxs) return; node.__fxs = true;
+    if (node.__fxs) return;
+    // Scrambling swaps single code units, which would tear vowel signs off their letters: only for plain alphabets.
+    try { if (new RegExp("\\p{M}", "u").test(node.textContent || "")) return; } catch (e) {}
+    node.__fxs = true;
     var tn = [], w = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
     while (w.nextNode()) tn.push(w.currentNode);
     tn.forEach(function (t) { if (!ORIG.has(t)) ORIG.set(t, t.nodeValue); });

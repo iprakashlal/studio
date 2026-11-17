@@ -301,7 +301,7 @@ export function prepareI18n(c: any, schema: () => Category[]) {
   const have: any[] = Array.isArray(n.langs) ? n.langs.filter((x: any) => x && typeof x === "object" && LANG_NAMES[x.code]) : [];
   const base = n.base && LANG_NAMES[n.base.code] ? { code: n.base.code, name: String(n.base.name || LANG_NAMES[n.base.code][0]) } : d.base;
   c.i18n = { ...d, ...n, base, t: n.t && typeof n.t === "object" ? n.t : {}, ui: Array.isArray(n.ui) ? n.ui : [], paths: textPaths(schema()),
-    langs: Object.entries(LANG_NAMES).filter(([k]) => k !== base.code).map(([code, [name]]) => { const h = have.find((x) => x.code === code); return { code, name: String(h?.name || name), on: h?.on === true }; }) };
+    langs: Object.entries(LANG_NAMES).filter(([k]) => k !== base.code).map(([code, [name]]) => { const h = have.find((x) => x.code === code); return { code, name: String(h?.name || name), on: h?.on === true, ...(typeof h?.ready === "boolean" ? { ready: h.ready } : {}) }; }) };
 }
 /** Settings → Languages: other languages for the site, a switcher for visitors, and the translations. */
 export function i18nCategory(group = "Settings"): Category {
@@ -315,8 +315,8 @@ export function i18nCategory(group = "Settings"): Category {
         { t: "when", path: "i18n.on", is: "true", fields: [
           g2({ t: "select", path: "i18n.base.code", label: "The site is written in", options: Object.entries(LANG_NAMES).map(([value, [n, e]]) => ({ value, label: n === e ? e : `${e} (${n})` })) },
             { t: "text", path: "i18n.base.name", label: "Its name in the switcher", ph: "English" }),
-          { t: "note", text: "Switch on each language you want. It is translated straight away (you'll see the progress under Translations below) and shows in the switcher as soon as it is on." },
-          { t: "list", path: "i18n.langs", fixed: true, add: () => ({}), title: (it) => `${LANG_NAMES[it?.code]?.[1] || it?.code} · ${it?.name || ""}${it?.on ? " · on" : ""}`,
+          { t: "note", text: "Switch on each language you want. It is translated straight away, with a progress bar under Translations below, and appears in the site's switcher once its translation is complete." },
+          { t: "list", path: "i18n.langs", fixed: true, add: () => ({}), title: (it) => `${LANG_NAMES[it?.code]?.[1] || it?.code} · ${it?.name || ""}${it?.on ? (it?.ready === false ? " · on · being translated, not shown to visitors yet" : " · on") : ""}`,
             item: [g2({ t: "toggle", path: "on", label: "Offer this language" }, { t: "text", path: "name", label: "Name in the switcher" })] },
           g2({ t: "select", path: "i18n.place", label: "Language switcher", options: [{ value: "menu", label: "In the menu" }, { value: "right", label: "Floating, bottom right" }, { value: "left", label: "Floating, bottom left" }] },
             { t: "toggle", path: "i18n.auto", label: "First visit: use the visitor's own language when the site has it" }),

@@ -105,6 +105,27 @@ export function Spinner({ label }: { label?: string }) {
 }
 
 /** A page load in steps: a percentage counter, a progress bar, and what is happening now. */
+/** A slim progress bar. value: 0–100, or null while the amount isn't known yet (it then shows a moving stripe). */
+export function ProgressBar({ value, label, tone = "run", detail }: { value: number | null; label: string; tone?: "run" | "ok" | "bad"; detail?: string }) {
+  const v = value == null ? null : Math.max(0, Math.min(100, Math.round(value)));
+  const fill = tone === "ok" ? "bg-emerald-400" : tone === "bad" ? "bg-rose-400" : "bg-brand-400";
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="flex items-center gap-2">
+        <div role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={100} {...(v == null ? {} : { "aria-valuenow": v })} className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-ink-700">
+          {v == null ? <div className={`h-full w-1/3 animate-pulse rounded-full ${fill}`} /> : <div className={`h-full rounded-full ${fill} transition-[width] duration-300 ease-out`} style={{ width: v + "%" }} />}
+        </div>
+        {v != null && <span className="w-9 shrink-0 text-right text-[11px] tabular-nums text-ink-400">{v}%</span>}
+      </div>
+      {detail && <p className="truncate text-[12px] text-ink-400" role="status">{detail}</p>}
+    </div>
+  );
+}
+/** How far along a step message is, for the messages that say "3 of 12" (lo–hi is the stretch that step covers). */
+export function partOf(text: string, lo: number, hi: number): number {
+  const m = /(\d+) of (\d+)/.exec(text || ""); if (!m || !+m[2]) return lo;
+  return lo + (hi - lo) * Math.min(1, +m[1] / +m[2]);
+}
 export function StepLoader({ title, steps, at, detail }: { title: string; steps: string[]; at: number; detail?: string }) {
   // Each finished step counts fully; the current one creeps forward (up to 90% of its share) while it runs.
   const share = 100 / Math.max(1, steps.length), floor = Math.min(100, at * share);

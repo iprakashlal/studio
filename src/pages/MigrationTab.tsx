@@ -18,7 +18,7 @@ import type { Studio, StudioIndex } from "../lib/studio";
 import { jsonB64 } from "../lib/repo";
 import { useBrand } from "../lib/brand";
 import { STUDIO_BUILD } from "../build-info";
-import { Field, Spinner, useToast } from "../ui/kit";
+import { Field, ProgressBar, Spinner, partOf, useToast } from "../ui/kit";
 import { NetlifyAccount } from "./HostDialog";
 import { BringAcross } from "./BringAcross";
 import { autoUpdatePref } from "../lib/autoupdate";
@@ -274,7 +274,8 @@ function HostedHere({ session, nf, setNf, index }: { session: Session; nf: Netli
         <h3 className="text-[15px] font-extrabold">Studio updates</h3>
         <p className="text-sm text-ink-300">This Studio: build <code className="font-mono text-xs">{mine || "…"}</code>. Latest: <code className="font-mono text-xs">{latest || "…"}</code>{latest && mine && latest === mine ? " · up to date" : ""}.</p>
         {where === "netlify" ? !nf && <NetlifyAccount session={session} onToken={(t) => setNf(t ? new Netlify(t) : null)} /> : !cfAcc.ready && (viaDb ? <p className="text-sm text-emerald-300">Updates go through your Cloudflare database: no token needed on this device.</p> : cfAcc.ui)}
-        <button type="button" className="btn btn-pri self-start" disabled={!pagesOk || !cfg?.source || !!step || (!!latest && latest === mine)} onClick={update}>{step ? step + "…" : "Update to the latest Studio"}</button>
+        <button type="button" className="btn btn-pri self-start" disabled={!pagesOk || !cfg?.source || !!step || (!!latest && latest === mine)} onClick={update}>{step ? "Updating…" : "Update to the latest Studio"}</button>
+        {step && <ProgressBar value={/^Reading the Studio/.test(step) ? 8 : /^Creating the Studio/.test(step) ? 15 : /^Uploading the Studio/.test(step) ? partOf(step, 20, 98) : null} label="Updating this Studio" detail={step + "…"} />}
         <label className="flex items-start gap-2 text-sm"><input type="checkbox" className="mt-1 accent-brand-400" checked={auto} onChange={(e) => { autoUpdatePref.set(e.target.checked); setAuto(e.target.checked); }} />
           <span><b>Update automatically</b> <span className="text-ink-400">— when this Studio opens on this device and a newer build is out, it updates itself (your projects aren't touched). Needs the Cloudflare token on this device, or Publish from any device turned on.</span></span></label>
         {err && <p role="alert" className="text-sm text-red-300">{err}</p>}

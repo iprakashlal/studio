@@ -21,7 +21,7 @@ import { Cloudflare, cfVault } from "./cloudflare";
 export type LiveTarget = { key: string; project: ProjectMeta; kind: "hosted" | "github" | "worker"; label: string; url: string; repo: Repo | null };
 export type TargetState =
   | { s: "checking" } | { s: "current"; at: string } | { s: "old"; at: string | null; build: string | null }
-  | { s: "unreachable"; msg: string } | { s: "pushing"; detail?: string } | { s: "done" } | { s: "failed"; msg: string } | { s: "skipped"; msg: string };
+  | { s: "unreachable"; msg: string } | { s: "pushing"; detail?: string; /** 0–100 */ pct?: number } | { s: "done" } | { s: "failed"; msg: string } | { s: "skipped"; msg: string };
 
 const ghUrl = (t: { owner: string; repo: string }) => `https://${t.owner}.github.io/${t.repo === `${t.owner}.github.io` ? "" : t.repo + "/"}`;
 

@@ -139,7 +139,14 @@
     if (wanted(C)) watch();
     return lang;
   }
-  /** The editor's preview: show this language now ("" = the site's own). */
-  function force(code) { forced = code == null ? null : String(code); }
+  /** The editor's preview: show this language ("" = the site's own) until the switcher in the preview picks another. */
+  var given; // what the editor last asked for
+  function force(code) {
+    code = code == null ? null : String(code);
+    // The template repeats the editor's choice on every redraw. Only a new choice counts, so a language picked
+    // with the switcher inside the preview stays until the editor asks for another.
+    if (code === given) return;
+    given = code; forced = code;
+  }
   window.SiteLang = { wanted: wanted, current: current, apply: apply, mount: mount, force: force, LANGS: LANGS, KEY: KEY };
 })();

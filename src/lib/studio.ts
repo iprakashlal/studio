@@ -44,7 +44,12 @@ export type ProjectMeta = {
   /** content.json's blob sha on the live site when the two were last in step, and when that was. */
   siteSha?: string;
   syncedAt?: string;
+  /** A private payment marker and note, shown on the project's card. Never part of the site or of a share. */
+  pay?: PayInfo;
 };
+/** Paid, part paid or due, with a note. */
+export type PayInfo = { state?: "paid" | "part" | "due"; note?: string };
+export const cleanPay = (x: any): PayInfo | undefined => { const state = ["paid", "part", "due"].includes(x?.state) ? x.state : undefined, note = typeof x?.note === "string" ? x.note.trim().slice(0, 600) : ""; return state || note ? { ...(state ? { state } : {}), ...(note ? { note } : {}) } : undefined; };
 /** How a project's live site compares with the Studio's copy. */
 export type SiteState =
   | { kind: "none" | "same" }
@@ -118,6 +123,10 @@ export class Studio {
     );
   }
 
+  /** Saves a project's payment marker and note (without counting as an edit of the site). */
+  async savePay(id: string, pay: PayInfo): Promise<StudioIndex> {
+    return this.updateIndex((i) => { const m = i.projects.find((x) => x.id === id); if (m) { const c = cleanPay(pay); if (c) m.pay = c; else delete m.pay; } }, "Update a payment note");
+  }
   async updateMeta(id: string, patch: Partial<ProjectMeta>, message = "Update project details"): Promise<StudioIndex> {
     return this.updateIndex((i) => {
       const m = i.projects.find((x) => x.id === id);
@@ -151,7 +160,7 @@ export class Studio {
       const b = await this.assetBlob(id, p);
       if (b) files.push({ path: `projects/${nid}/${p}`, base64: bytesB64(await blobToBytes(b)) });
     }
-    const copy: ProjectMeta = { ...src, id: nid, name, status: "draft", version: 0, exports: [], publish: undefined, host: undefined, createdAt: now(), updatedAt: now() };
+    const copy: ProjectMeta = { ...src, id: nid, name, status: "draft", version: 0, exports: [], publish: undefined, host: undefined, pay: undefined, createdAt: now(), updatedAt: now() };
     return this.updateIndex((i) => i.projects.unshift(copy), `Duplicate ${src.name}`, files);
   }
 

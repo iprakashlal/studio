@@ -18,6 +18,8 @@ export type PartnerRec = {
   /** Where the client Studio keeps its files: Supabase (sbUrl, sbKey) or the Studio database on Cloudflare (api). */
   backend?: "supabase" | "cloudflare"; api?: string; sbUrl?: string; sbKey?: string;
   accounts: "mine" | "client"; clientEmails: string[]; partnerEmail: string; at: string; shared: SharedSite[];
+  /** A private payment marker and note for this client (kept in this Studio only). */
+  pay?: import("./studio").PayInfo;
 };
 export type SiteSync = "same" | "mine" | "theirs" | "both" | "gone";
 
@@ -90,8 +92,9 @@ const shaOf = async (r: Repo, id: string) => { const t = await r.getText(`projec
 
 /** The project's entry for the client Studio: what it is and its history, not your hosting or publishing. */
 const metaFor = (m: ProjectMeta, partner: { name: string; url?: string }, prev?: ProjectMeta): ProjectMeta => {
-  const { publish, host, worker, inbox, siteSha, syncedAt, ...rest } = m as any;
-  return { ...rest, ...(prev ? { publish: prev.publish, host: prev.host, worker: prev.worker, inbox: prev.inbox, siteSha: prev.siteSha, syncedAt: prev.syncedAt } : {}), partner, updatedAt: now(), contentAt: now() } as ProjectMeta;
+  const { publish, host, worker, inbox, siteSha, syncedAt, pay, ...rest } = m as any; // pay: a private note of this Studio
+  void pay;
+  return { ...rest, ...(prev ? { pay: prev.pay, publish: prev.publish, host: prev.host, worker: prev.worker, inbox: prev.inbox, siteSha: prev.siteSha, syncedAt: prev.syncedAt } : {}), partner, updatedAt: now(), contentAt: now() } as ProjectMeta;
 };
 async function upsertRemoteMeta(remote: Repo, m: ProjectMeta, partner: { name: string; url?: string }) {
   const cur = await remote.getJSON<StudioIndex>("studio.json");

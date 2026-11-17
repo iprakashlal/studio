@@ -32,3 +32,18 @@ export function rvAssets(api: string, token: string, content: any): Record<strin
   walk(content); return out;
 }
 export const STATUS_WORDS: Record<RvStatus, string> = { open: "Waiting for the client", approved: "Approved", changes: "Changes requested", closed: "Link closed" };
+
+/** What the client last said about a project, for its card: the newest link that is still open. */
+export type RvSummary = { token: string; status: RvStatus; decided_by: string; decided_at: string | null; created_at: string; comments: number; last?: { who: string; body: string; kind: RvNote["kind"]; created_at: string }; /** The client wrote last: a reply is due. */ waiting: boolean };
+export const summarise = (list: Review[]): RvSummary | undefined => {
+  const r = list.find((x) => x.status !== "closed"); if (!r) return undefined;
+  const theirs = r.notes.filter((n) => n.kind !== "reply"), last = theirs[theirs.length - 1], end = r.notes[r.notes.length - 1];
+  return { token: r.token, status: r.status, decided_by: r.decided_by, decided_at: r.decided_at, created_at: r.created_at, comments: theirs.length, ...(last ? { last: { who: last.who, body: last.body.slice(0, 240), kind: last.kind, created_at: last.created_at } } : {}), waiting: !!end && end.kind === "comment" };
+};
+/** Every project's summary in one call; with an older database, one call for each project (a few at a time). */
+export async function rvSummary(api: string, studio: string, projects: string[]): Promise<Record<string, RvSummary>> {
+  try { const r = await cfCall<{ summary: Record<string, RvSummary> }>(api, `/rv/summary?${sc(studio)}`); if (r && r.summary) return r.summary; } catch { /* an older database: ask project by project */ }
+  const out: Record<string, RvSummary> = {}, todo = projects.slice(0, 40);
+  await Promise.all([0, 1, 2, 3].map(async () => { for (let id = todo.shift(); id; id = todo.shift()) { try { const s = summarise(await rvList(api, studio, id)); if (s) out[id] = s; } catch { /* no review links for it */ } } }));
+  return out;
+}

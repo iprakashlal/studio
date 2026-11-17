@@ -62,6 +62,8 @@ export function ProjectView({ studio, index, project, session, onIndex }: { stud
         const c = await studio.loadContent(project.id);
         setOpenAt(2);
         if (live) setDraft(merge(defaults.current, c || {}));
+        // Came from the card's client-feedback strip: open the review link's comments.
+        try { if (live && sessionStorage.getItem("site-studio:open-approve") === project.id) { sessionStorage.removeItem("site-studio:open-approve"); setModal("approve"); } } catch { /* private mode */ }
       } catch (e) {
         if (live) setErr(explain(e));
         return;

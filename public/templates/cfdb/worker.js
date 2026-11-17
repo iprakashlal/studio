@@ -16,7 +16,7 @@ create index if not exists approvals_project on approvals (scope, project, creat
 create table if not exists approval_notes (id integer primary key autoincrement, token text not null, who text not null, body text not null, page text not null default '', kind text not null default 'comment', created_at text not null);
 create index if not exists approval_notes_token on approval_notes (token, id);
 `;
-var CFDB_VERSION = 19;
+var CFDB_VERSION = 20;
 var CFDB_WORKER_NAME = "picaffectz-db";
 
 // src/lib/lookdigest.ts
@@ -1294,6 +1294,28 @@ var db_worker_default = {
           const rows = (await env.DB.prepare("select token, name, note, status, decided_by, decided_at, created_by, created_at from approvals where scope = ? and project = ? order by created_at desc limit 20").bind(scope, project).all()).results || [];
           for (const r of rows) r.notes = (await env.DB.prepare("select id, who, body, page, kind, created_at from approval_notes where token = ? order by id limit 300").bind(r.token).all()).results || [];
           return json(rows);
+        }
+        if (p === "/rv/summary") {
+          const rows = (await env.DB.prepare("select token, project, status, decided_by, decided_at, created_at from approvals where scope = ? and status != 'closed' order by created_at desc limit 400").bind(scope).all()).results || [];
+          const summary = {}, byTok = {};
+          for (const r of rows) if (!summary[r.project]) {
+            summary[r.project] = byTok[r.token] = { token: r.token, status: r.status, decided_by: r.decided_by || "", decided_at: r.decided_at || null, created_at: r.created_at, comments: 0, waiting: false };
+          }
+          const toks = Object.keys(byTok);
+          for (let i = 0; i < toks.length; i += 40) {
+            const part = toks.slice(i, i + 40);
+            const notes = (await env.DB.prepare(`select token, who, body, kind, created_at from approval_notes where token in (${part.map(() => "?").join(",")}) order by id`).bind(...part).all()).results || [];
+            for (const n of notes) {
+              const s = byTok[n.token];
+              if (!s) continue;
+              s.waiting = n.kind === "comment";
+              if (n.kind !== "reply") {
+                s.comments++;
+                s.last = { who: n.who, body: String(n.body || "").slice(0, 240), kind: n.kind, created_at: n.created_at };
+              }
+            }
+          }
+          return json({ summary });
         }
         const tok = String(b.token || ""), own = await env.DB.prepare("select token from approvals where token = ? and scope = ?").bind(tok, scope).first();
         if (!own) return err(404, "That review link isn't in this Studio.");

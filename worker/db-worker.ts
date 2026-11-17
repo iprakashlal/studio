@@ -343,7 +343,9 @@ async function translateTexts(env: Env, q: any): Promise<any> {
     try {
       const r: any = await env.AI.run("@cf/meta/llama-3.3-70b-instruct-fp8-fast", { messages: [{ role: "system", content: sys }, { role: "user", content: JSON.stringify({ texts: Object.fromEntries(idx.map((i) => [String(i + 1), texts[i]])) }) }], max_tokens: 6000, temperature: 0.2, response_format: { type: "json_object" } });
       const raw = typeof r?.response === "string" ? r.response : JSON.stringify(r?.response ?? r);
-      let j: any; try { j = JSON.parse(raw); } catch { const m = /\{[\s\S]*\}/.exec(raw); j = m ? JSON.parse(m[0]) : null; }
+      let j: any = null; try { j = JSON.parse(raw); } catch { try { const m = /\{[\s\S]*\}/.exec(raw); j = m ? JSON.parse(m[0]) : null; } catch { j = null; } }
+      // An answer that isn't valid JSON as a whole (cut short, a stray quote) still holds good numbered lines.
+      if (!j) for (const m of raw.matchAll(/"(\d+)"\s*:\s*"((?:[^"\\]|\\.)*)"/g)) { try { const v = JSON.parse('"' + m[2] + '"'); if (typeof v === "string" && v.trim() && idx.includes(+m[1] - 1)) got.set(+m[1] - 1, v.slice(0, 4000)); } catch { /* that line is asked again */ } }
       const t = j?.t;
       if (Array.isArray(t)) { if (t.length === idx.length) t.forEach((x: any, k: number) => { if (typeof x === "string" && x.trim()) got.set(idx[k], x.slice(0, 4000)); }); }
       else if (t && typeof t === "object") for (const i of idx) { const x = t[String(i + 1)]; if (typeof x === "string" && x.trim()) got.set(i, x.slice(0, 4000)); }
@@ -416,7 +418,7 @@ export default {
     if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
     const u = new URL(req.url), p = u.pathname.replace(/\/+$/, "") || "/";
     try {
-      if (p === "/") return json({ ok: true, service: "site-studio-db", v: V, mail: !!(env.RESEND_API_KEY && env.MAIL_FROM), ...(env.CF_TOKEN && env.CF_ACCOUNT ? { deploy: true, account: env.CF_ACCOUNT } : {}), ...(env.GH_TOKEN ? { gh: true } : {}), ...(env.AI ? { ai: true, pamphlet: 2 } : {}), reviews: true, look: 1, translate: 2, approvals: 1, accounts: 2, cfx: 4, studioPages: 1, del: 1, enqMail: 3, ...(otherAccounts(env).length ? { more: otherAccounts(env).length } : {}) });
+      if (p === "/") return json({ ok: true, service: "site-studio-db", v: V, mail: !!(env.RESEND_API_KEY && env.MAIL_FROM), ...(env.CF_TOKEN && env.CF_ACCOUNT ? { deploy: true, account: env.CF_ACCOUNT } : {}), ...(env.GH_TOKEN ? { gh: true } : {}), ...(env.AI ? { ai: true, pamphlet: 2 } : {}), reviews: true, look: 1, translate: 3, approvals: 1, accounts: 2, cfx: 4, studioPages: 1, del: 1, enqMail: 3, ...(otherAccounts(env).length ? { more: otherAccounts(env).length } : {}) });
 
       // ---- sign in with an emailed code (members only)
       if (p === "/auth/code" && req.method === "POST") {

@@ -260,15 +260,72 @@ function addToCart(id, opt, qty) {
   if (ex) ex.qty = Math.min(max, ex.qty + qty); else cart.push({ id, opt, qty: Math.min(max, qty) });
   saveCart();
 }
-function totals(lines = cartLines()) {
-  const S = C.settings, sub = lines.reduce((s, l) => s + Number(l.p.price) * l.qty, 0);
-  const free = Number(S.freeShippingOver) > 0 && sub >= Number(S.freeShippingOver);
-  const ship = !lines.length || free ? 0 : Number(S.shippingFee) || 0;
+/* Delivery areas (content.shipping): the same rules as the shop backend (functions/shop/index.ts). */
+function pinsMatch(list, pin) {
+  const p = String(pin || "").replace(/\D/g, ""); if (p.length < 4) return false;
+  return String(list || "").split(/[\s,;]+/).filter(Boolean).some((t) => {
+    const r = /^(\d{4,6})-(\d{4,6})$/.exec(t); if (r) return p.length === r[1].length && +p >= +r[1] && +p <= +r[2];
+    return /^\d{2,6}$/.test(t) && (t.length === p.length ? t === p : p.startsWith(t));
+  });
+}
+function shipQuote(pin) {
+  const H = C.shipping || {}, open = { ok: true, zone: "", fee: null, freeOver: null, days: "", cod: true, known: false };
+  if (!H.on) return open;
+  const num = (v) => (v === "" || v == null || isNaN(Number(v)) ? null : Math.max(0, Number(v)));
+  if (String(pin || "").replace(/\D/g, "").length < 4) return open;
+  const z = (Array.isArray(H.zones) ? H.zones : []).find((x) => x && x.on !== false && pinsMatch(x.pins, pin));
+  if (z) return { ok: true, zone: String(z.name || ""), fee: num(z.fee), freeOver: num(z.freeOver), days: String(z.days || ""), cod: z.cod !== false, known: true };
+  if (H.rest === "no") return { ...open, ok: false, known: true };
+  return { ok: true, zone: "", fee: num(H.restFee), freeOver: null, days: String(H.restDays || ""), cod: H.restCod !== false, known: true };
+}
+const shipOn = () => !!(C.shipping && C.shipping.on);
+const curPin = () => String(store.get("pin", "") || (store.get("me", {}) || {}).pin || "");
+/** What a PIN check says, in words. */
+function pinSays(pin) {
+  const H = C.shipping || {}, q = shipQuote(pin), t = totals(cartLines(), pin);
+  if (String(pin || "").replace(/\D/g, "").length < 6) return { ok: null, text: "" };
+  if (!q.ok) return { ok: false, text: H.blockMsg || `Sorry, we don't deliver to ${pin} yet.` };
+  const fee = q.fee != null ? q.fee : Number(C.settings.shippingFee) || 0, over = q.freeOver != null ? q.freeOver : Number(C.settings.freeShippingOver) || 0;
+  return { ok: true, text: `Delivers to ${pin}${q.days ? ` in ${q.days}` : ""}. ${cartLines().length && !t.ship ? "Shipping is free." : fee ? `Shipping ${money(fee)}${over > 0 ? `, free over ${money(over)}` : ""}.` : "Shipping is free."}${q.cod ? "" : " Cash on delivery isn't available here."}` };
+}
+function pinBox() {
+  if (!shipOn()) return "";
+  const pin = curPin(), r = pinSays(pin);
+  return `<div class="pinbox" style="margin:14px 0"><label class="lbl" for="pinchk">${esc((C.shipping || {}).checkLabel || "Check delivery to your PIN code")}</label>
+    <div style="display:flex;gap:8px;margin-top:6px;max-width:340px"><input class="in" id="pinchk" inputmode="numeric" maxlength="6" autocomplete="postal-code" placeholder="6-digit PIN" value="${esc(pin)}"><button type="button" class="btn" data-pinchk>Check</button></div>
+    <p class="soft" id="pinres" role="status" style="font-size:14px;margin-top:6px${r.ok === false ? ";color:var(--sale,#c0392b)" : ""}">${esc(r.text)}</p></div>`;
+}
+/** The shipment's courier and tracking link, once the shop has added them to an order. */
+function trackInfo(o) {
+  let t = o && o.track; if (!t) try { t = JSON.parse(String((o && o.address && o.address.track) || "")); } catch (e) { t = null; }
+  if (!t || !(t.awb || t.url || t.link)) return "";
+  const link = safeUrl(t.link || t.url || "");
+  return `<p class="note" style="margin-top:10px">Shipped with <b>${esc(t.name || "courier")}</b>${t.awb ? `, tracking number <b style="font-family:monospace">${esc(t.awb)}</b>` : ""}.${link ? ` <a class="link" href="${esc(link)}" target="_blank" rel="noopener">Track your parcel ↗</a>` : ""}</p>`;
+}
+/* GST invoice (assets/invoice.js), opened from an order. */
+const gstOn = () => !!(C.gst && C.gst.on);
+const invBtn = (id) => (gstOn() ? `<button type="button" class="btn" data-inv="${esc(id)}">Download invoice</button>` : "");
+let invP;
+function openInvoice(o) {
+  (invP ||= new Promise((ok, no) => { if (window.SiteInvoice) return ok(); const s = document.createElement("script"); s.src = "assets/invoice.js"; s.onload = () => ok(); s.onerror = no; document.head.appendChild(s); }))
+    .then(() => window.SiteInvoice.open(o, C)).catch(() => {});
+}
+/** An order as the invoice reads it, from either a saved order here or one from the account list. */
+function invOrder(id) {
+  const loc = store.get("orders", []).find((x) => x.id === id), acc = (window.__accOrders || []).find((x) => x.order_no === id);
+  if (acc) return { id: acc.order_no, at: acc.created_at, items: acc.items, t: acc.totals, c: { name: acc.name || (loc && loc.c.name) || "", email: acc.email || "", phone: acc.phone || "", ...(acc.address || (loc && loc.c) || {}), gstin: (loc && loc.c.gstin) || "" } };
+  return loc || null;
+}
+function totals(lines = cartLines(), pin = curPin()) {
+  const S = C.settings, sub = lines.reduce((s, l) => s + Number(l.p.price) * l.qty, 0), q = shipQuote(pin);
+  const over = q.freeOver != null ? q.freeOver : Number(S.freeShippingOver);
+  const free = over > 0 && sub >= over;
+  const ship = !lines.length || free ? 0 : q.fee != null ? q.fee : Number(S.shippingFee) || 0;
   const pct = Number(S.taxPercent) || 0;
   const taxAdd = pct && !S.taxIncluded ? Math.round(sub * pct) / 100 : 0;
   const taxIn = pct && S.taxIncluded ? Math.round((sub - sub / (1 + pct / 100)) * 100) / 100 : 0;
   const total = Math.round((sub + ship + taxAdd) * 100) / 100;
-  const left = Number(S.freeShippingOver) > 0 && !free ? Number(S.freeShippingOver) - sub : 0;
+  const left = over > 0 && !free ? over - sub : 0;
   return { sub, ship, taxAdd, taxIn, total, left, free };
 }
 function methods() {
@@ -459,6 +516,7 @@ const PAGES = {
       <p class="stock ${p.stock}">${p.stock === "out" ? "Sold out" : p.stock === "low" ? "Only a few left" : "In stock"}</p>
       ${p.short ? `<p style="font-size:17px">${esc(p.short)}</p>` : ""}
       ${p.options && p.options.length ? `<div class="opt"><span class="lbl" id="optl">${esc(p.optionName || "Option")}</span><div class="optbtns" role="group" aria-labelledby="optl">${p.options.map((o, i) => `<button type="button" data-o="${esc(o)}" aria-pressed="${i === 0}">${esc(o)}</button>`).join("")}</div></div>` : ""}
+      ${pinBox()}
       ${p.stock !== "out" ? `<div class="opt"><span class="lbl">Quantity</span><div class="buy"><div class="qty"><button type="button" data-q="-1" aria-label="Fewer">−</button><output id="qty" aria-live="polite">1</output><button type="button" data-q="1" aria-label="More">+</button></div>
         <button class="btn pri" type="button" id="add">Add to cart</button><button class="btn" type="button" id="buynow">Buy now</button></div></div>` : `<a class="btn" href="shop.html">See other products</a>`}
       ${ACCOUNTS() && C.backend.wishlist ? `<button class="btn wish" type="button" id="wish" aria-pressed="false">♡ Save to wishlist</button>` : ""}
@@ -476,7 +534,7 @@ const PAGES = {
     <div class="wrap two"><div class="lines">${lines.map((l, i) => `<div class="line"><a class="im" href="${productUrl(l.p)}">${pimg(l.p)}</a><div><h3>${esc(l.p.name)}</h3><p class="meta">${l.opt ? esc(l.opt) + " · " : ""}${esc(money(l.p.price))} each</p>
       <div class="act"><div class="qty"><button type="button" data-line="${i}" data-d="-1" aria-label="Fewer"${l.qty <= 1 ? " disabled" : ""}>−</button><output>${l.qty}</output><button type="button" data-line="${i}" data-d="1" aria-label="More"${l.qty >= max ? " disabled" : ""}>+</button></div><button class="rm" type="button" data-rm="${i}">Remove</button></div></div>
       <div class="tot">${esc(money(l.p.price * l.qty))}</div></div>`).join("")}</div>
-    <aside class="sum"><h2>Summary</h2>${summaryRows(t)}
+    <aside class="sum"><h2>Summary</h2><div id="sumrows">${summaryRows(t)}</div>${pinBox()}
       ${t.left > 0 ? `<p class="note">Add <b>${esc(money(t.left))}</b> more for free shipping.</p>` : ""}
       ${below ? `<p class="note">The minimum order is <b>${esc(money(S.minOrder))}</b>.</p>` : ""}
       <a class="btn pri block" href="checkout.html"${below ? ' aria-disabled="true" style="pointer-events:none;opacity:.45"' : ""}>Checkout</a><a class="link" style="text-align:center" href="shop.html">Continue shopping</a></aside></div>`;
@@ -497,11 +555,11 @@ const PAGES = {
     return `<section class="page-h"><div class="wrap"><h1 class="fit">${ml(K.title)}</h1>${K.intro ? `<p>${ml(K.intro)}</p>` : ""}</div></section>
     <form class="wrap two" id="co" novalidate><div class="form">
       <div class="box"><h2>Your details</h2><div class="fgrid">${fld("name", "Full name", "text", true, false, "name")}${fld("email", "Email", "email", true, false, "email")}${K.askPhone ? fld("phone", "Phone", "tel", true, false, "tel") : ""}</div></div>
-      ${K.askAddress ? `<div class="box"><h2>Delivery address</h2><div class="fgrid">${fld("address", "Address", "text", true, true, "street-address")}${fld("city", "City", "text", true, false, "address-level2")}${fld("pin", "PIN / postcode", "text", true, false, "postal-code")}${fld("state", "State", "text", true, false, "address-level1")}</div></div>` : ""}
+      ${K.askAddress ? `<div class="box"><h2>Delivery address</h2><div class="fgrid">${fld("address", "Address", "text", true, true, "street-address")}${fld("city", "City", "text", true, false, "address-level2")}${fld("pin", "PIN / postcode", "text", true, false, "postal-code")}${fld("state", "State", "text", true, false, "address-level1")}${gstOn() && C.gst.askGstin ? fld("gstin", "GSTIN, for a business invoice", "text", false, true) : ""}</div>${shipOn() ? `<p class="soft" id="pin-msg" role="status" style="font-size:14px;margin-top:8px"></p>` : ""}</div>` : ""}
       ${K.askNotes ? `<div class="box"><div class="f"><label for="notes">Notes <span class="soft">(optional)</span></label><textarea class="in" id="notes" name="notes" rows="3"></textarea></div></div>` : ""}
       <div class="box"><h2>Payment</h2>${ms.length ? `<div class="pays" role="radiogroup" aria-label="Payment method">${ms.map((m, i) => `<label class="pay"><input type="radio" name="pm" value="${m.id}"${i === 0 ? " checked" : ""}><div><b>${esc(m.label)}</b><span>${esc(m.desc)}</span></div></label>`).join("")}</div>` : `<p class="note">Online payment isn't set up yet. Place the order and we'll contact you about payment.</p>`}</div>
     </div>
-    <aside class="sum"><h2>Order</h2><div class="mini">${lines.map((l) => `<div class="it"><div class="im">${pimg(l.p)}</div><div>${esc(l.p.name)}${l.opt ? `<br><span class="soft">${esc(l.opt)}</span>` : ""} × ${l.qty}</div><b>${esc(money(l.p.price * l.qty))}</b></div>`).join("")}</div>${summaryRows(t)}
+    <aside class="sum"><h2>Order</h2><div class="mini">${lines.map((l) => `<div class="it"><div class="im">${pimg(l.p)}</div><div>${esc(l.p.name)}${l.opt ? `<br><span class="soft">${esc(l.opt)}</span>` : ""} × ${l.qty}</div><b>${esc(money(l.p.price * l.qty))}</b></div>`).join("")}</div><div id="sumrows">${summaryRows(t)}</div>
       <p class="err" id="co-err" role="alert"></p><button class="btn pri block" type="submit">${esc(K.button)}</button><p class="soft" style="font-size:13px">${BE() ? "You'll see the exact total before you pay." : "Nothing is charged yet. You'll pay and send the order on the next screen."}</p></aside></form>`;
   },
   portfolio() {
@@ -581,7 +639,8 @@ function serverDone(o) {
     <div><span class="lbl">Your order number</span><br><span class="oid">${esc(o.id)}</span></div>
     <div class="box"><div class="step"><i>${paid || cod ? "✓" : "1"}</i><div><h2 style="font-size:22px">${paid ? "Paid" : cod ? "Pay on delivery" : `Pay ${total}`}</h2>${pay}</div></div></div>
     <div class="box"><h2 style="font-size:20px">Your order</h2><div class="mini">${o.items.map((i) => `<div class="it" style="grid-template-columns:minmax(0,1fr) auto"><div>${esc(i.name)}${i.opt ? ` <span class="soft">(${esc(i.opt)})</span>` : ""} × ${i.qty}</div><b>${esc(money(i.price * i.qty))}</b></div>`).join("")}</div>${summaryRows({ ...o.t, left: 0 })}</div>
-    <div class="buy">${ACCOUNTS() ? `<a class="btn" href="account.html#orders">Track in your account</a>` : ""}${wa ? `<a class="btn" href="https://wa.me/${wa}?text=${encodeURIComponent(`Hi, about my order ${o.id}`)}" target="_blank" rel="noopener">Message us on WhatsApp</a>` : ""}</div>
+    ${trackInfo(o)}
+    <div class="buy">${invBtn(o.id)}${ACCOUNTS() ? `<a class="btn" href="account.html#orders">Track in your account</a>` : ""}${wa ? `<a class="btn" href="https://wa.me/${wa}?text=${encodeURIComponent(`Hi, about my order ${o.id}`)}" target="_blank" rel="noopener">Message us on WhatsApp</a>` : ""}</div>
     <a class="link" href="shop.html">Continue shopping</a></div></div>`;
 }
 async function openRazorpay(o) {
@@ -623,7 +682,7 @@ function orderDone(o) {
     <div><span class="lbl">Your order number</span><br><span class="oid">${esc(o.id)}</span></div>
     <div class="box"><div class="step"><i>1</i><div><h2 style="font-size:22px">Pay ${esc(money(o.t.total))}</h2>${pay}</div></div></div>
     <div class="box"><div class="step"><i>2</i><div><h2 style="font-size:22px">Send us the order</h2><p>This opens ${viaWa && viaMail ? "WhatsApp or your email app" : viaWa ? "WhatsApp" : "your email app"} with the full order written out. Just press send.</p>
-      <div class="buy">${viaWa ? `<a class="btn pri" href="https://wa.me/${wa}?text=${encodeURIComponent(txt)}" target="_blank" rel="noopener">Send on WhatsApp</a>` : ""}${viaMail ? `<a class="btn${viaWa ? "" : " pri"}" href="mailto:${esc(mail)}?subject=${encodeURIComponent(`Order ${o.id}`)}&body=${encodeURIComponent(txt)}">Send by email</a>` : ""}</div>
+      <div class="buy">${invBtn(o.id)}${viaWa ? `<a class="btn pri" href="https://wa.me/${wa}?text=${encodeURIComponent(txt)}" target="_blank" rel="noopener">Send on WhatsApp</a>` : ""}${viaMail ? `<a class="btn${viaWa ? "" : " pri"}" href="mailto:${esc(mail)}?subject=${encodeURIComponent(`Order ${o.id}`)}&body=${encodeURIComponent(txt)}">Send by email</a>` : ""}</div>
       ${!viaWa && !viaMail ? `<p class="note">Copy the order below and send it to ${esc(C.contact.email || "us")}.</p>` : ""}
       <pre class="msg" id="msg">${esc(txt)}</pre><button class="btn" type="button" data-copy-msg>Copy order details</button></div></div></div>
     <a class="link" href="shop.html">Continue shopping</a></div></div>`;
@@ -671,6 +730,21 @@ function langGate() {
   return true;
 }
 function lang() { if (window.SiteLang) window.SiteLang.mount(C, { navs: ["#nav"], again: render }); }
+/* PIN checks, the checkout's live shipping figure and the invoice button work on whatever page is drawn. */
+document.addEventListener("click", (e) => {
+  const b = e.target.closest && e.target.closest("[data-pinchk]");
+  if (b) { const i = $("#pinchk"), pin = i ? i.value.replace(/\D/g, "").slice(0, 6) : ""; const out = $("#pinres"); if (pin.length < 6) { if (out) { out.textContent = "Enter the 6 digits of your PIN code."; out.style.color = ""; } return; } store.set("pin", pin); const r = pinSays(pin); if (out) { out.textContent = r.text; out.style.color = r.ok === false ? "var(--sale,#c0392b)" : ""; } const rows = $("#sumrows"); if (rows) rows.innerHTML = summaryRows(totals()); return; }
+  const v = e.target.closest && e.target.closest("[data-inv]");
+  if (v) { const o = invOrder(v.getAttribute("data-inv")); if (o) openInvoice(o); }
+});
+document.addEventListener("input", (e) => {
+  if (!e.target || e.target.id !== "pin" || !shipOn()) return;
+  const pin = e.target.value.replace(/\D/g, ""), msg = $("#pin-msg"), er = $("#pin-e"); if (er) er.textContent = "";
+  if (pin.length < 6) { if (msg) msg.textContent = ""; return; }
+  store.set("pin", pin); const r = pinSays(pin); if (msg) { msg.textContent = r.text; msg.style.color = r.ok === false ? "var(--sale,#c0392b)" : ""; }
+  const rows = $("#sumrows"); if (rows) rows.innerHTML = summaryRows(totals(cartLines(), pin));
+  const cod = $('input[name="pm"][value="cod"]'); if (cod) { const q = shipQuote(pin); cod.disabled = !q.cod; if (!q.cod && cod.checked) { const other = $('input[name="pm"]:not([value="cod"])'); if (other) other.checked = true; } }
+});
 /* Cookie consent (assets/consent.js): the banner that asks before analytics, marketing and other optional code runs. */
 let csP;
 function consent() {
@@ -858,11 +932,16 @@ function bindCheckout() {
     });
     if (bad) { bad.focus(); return; }
     const fd = Object.fromEntries(new FormData(form).entries());
+    if (shipOn() && fd.pin) {
+      store.set("pin", String(fd.pin).trim()); const q = shipQuote(fd.pin);
+      if (!q.ok) { const er = $("#pin-e"); if (er) er.textContent = (C.shipping || {}).blockMsg || "Sorry, we don't deliver to that PIN code yet."; $("#pin").focus(); return; }
+      if (fd.pm === "cod" && !q.cod) { $("#co-err").textContent = "Cash on delivery isn't available for that PIN code. Please choose another way to pay."; return; }
+    }
     const lines = cartLines(), ms = methods(), m = ms.find((x) => x.id === fd.pm);
     if (BE() && !PREVIEW) return placeServerOrder(form, fd, lines, m);
     const o = { id: newOrderId(), at: new Date().toISOString(), method: m ? m.id : "none", methodLabel: m ? m.label : "To be arranged",
       items: lines.map((l) => ({ id: l.p.id, name: l.p.name, opt: l.opt, qty: l.qty, price: Number(l.p.price) })), t: totals(lines),
-      c: { name: fd.name || "", email: fd.email || "", phone: fd.phone || "", address: fd.address || "", city: fd.city || "", pin: fd.pin || "", state: fd.state || "", notes: fd.notes || "" } };
+      c: { name: fd.name || "", email: fd.email || "", phone: fd.phone || "", address: fd.address || "", city: fd.city || "", pin: fd.pin || "", state: fd.state || "", notes: fd.notes || "", gstin: String(fd.gstin || "").trim().toUpperCase().slice(0, 15) } };
     store.set("me", { name: o.c.name, email: o.c.email, phone: o.c.phone, address: o.c.address, city: o.c.city, pin: o.c.pin, state: o.c.state });
     store.set("orders", [o, ...store.get("orders", [])].slice(0, 10));
     cart = []; saveCart();
@@ -874,7 +953,7 @@ async function placeServerOrder(form, fd, lines, m) {
   const btn = $('button[type="submit"]', form), err = $("#co-err");
   if (!m) { err.textContent = "Online ordering isn't set up yet. Please contact us to order."; return; }
   btn.disabled = true; btn.textContent = "Placing order…"; err.textContent = "";
-  const c = { name: fd.name || "", email: (USER && USER.email) || fd.email || "", phone: fd.phone || "", address: fd.address || "", city: fd.city || "", pin: fd.pin || "", state: fd.state || "", notes: fd.notes || "" };
+  const c = { name: fd.name || "", email: (USER && USER.email) || fd.email || "", phone: fd.phone || "", address: fd.address || "", city: fd.city || "", pin: fd.pin || "", state: fd.state || "", notes: fd.notes || "", gstin: String(fd.gstin || "").trim().toUpperCase().slice(0, 15) };
   try {
     await sbInit();
     const r = await fn("create-order", { method: m.id, items: lines.map((l) => ({ id: l.p.id, opt: l.opt, qty: l.qty })), customer: c });
@@ -954,7 +1033,8 @@ function drawAccount(box) {
   if (tab === "orders") {
     tp.innerHTML = `<p class="soft">Loading your orders…</p>`;
     api.myOrders().then((data) => {
-      tp.innerHTML = data && data.length ? `<div class="olist">${data.map((o) => `<article class="ocard"><div class="ocard-h"><div><b>Order ${esc(o.order_no)}</b><span class="soft">${new Date(o.created_at).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })} · ${esc(ST_LABEL[o.status] || o.status)}</span></div><b>${esc(money(o.totals.total))}</b></div>${track(o)}
+      window.__accOrders = data || [];
+      tp.innerHTML = data && data.length ? `<div class="olist">${data.map((o) => `<article class="ocard"><div class="ocard-h"><div><b>Order ${esc(o.order_no)}</b><span class="soft">${new Date(o.created_at).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })} · ${esc(ST_LABEL[o.status] || o.status)}</span></div><b>${esc(money(o.totals.total))}</b></div>${track(o)}${trackInfo(o)}${gstOn() ? `<div style="margin-top:10px">${invBtn(o.order_no)}</div>` : ""}
         <ul class="oitems">${o.items.map((i) => `<li>${esc(i.name)}${i.opt ? ` <span class="soft">(${esc(i.opt)})</span>` : ""} × ${i.qty}</li>`).join("")}</ul></article>`).join("")}</div>`
         : `<div class="empty"><p>No orders yet.</p><a class="btn pri" href="shop.html">Start shopping</a></div>`;
     }, () => { tp.innerHTML = `<p>Your orders couldn't load. Try again.</p>`; });

@@ -10,4 +10,6 @@ for (const t of readdirSync(root)) {
   mkdirSync(join(root, t, "assets"), { recursive: true });
   for (const f of files) copyFileSync(join("src/fx", f), join(root, t, "assets", f));
 }
+// Only the shop needs the invoice.
+copyFileSync("src/fx/invoice.js", join(root, "store", "assets", "invoice.js"));
 console.log("fx.js and motifs.js synced to templates");

@@ -1,3 +1,4 @@
+import "../fx/invoice.js";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createClient, type SupabaseClient, type User } from "@supabase/supabase-js";
 import { basePath, fmtDate, money } from "../lib/util";
@@ -203,8 +204,30 @@ function waText(o: Order, shop: string) {
   return `Hi ${o.name}, ${m[o.status] || `about your order ${o.order_no}.`}\n— ${shop}`;
 }
 
-function OrderRow({ o, shop, call, onChange, profile }: { o: Order; shop: string; call: (b: any) => Promise<any>; onChange: (o: Order) => void; profile?: Profile }) {
+/** Couriers for an order's shipment; {awb} in the link becomes the tracking number (the same list as the shop backend). */
+const COURIERS: Record<string, { name: string; url: string; book: string }> = {
+  delhivery: { name: "Delhivery", url: "https://www.delhivery.com/track-v2/package/{awb}", book: "https://one.delhivery.com/" },
+  shiprocket: { name: "Shiprocket", url: "https://shiprocket.co/tracking/{awb}", book: "https://app.shiprocket.in/" },
+  xpressbees: { name: "Xpressbees", url: "https://www.xpressbees.com/shipment/tracking?awbNo={awb}", book: "https://www.xpressbees.com/" },
+  ecom: { name: "Ecom Express", url: "https://ecomexpress.in/tracking/?awb_field={awb}", book: "https://ecomexpress.in/" },
+  ekart: { name: "Ekart", url: "https://ekartlogistics.com/shipmenttrack/{awb}", book: "https://ekartlogistics.com/" },
+  bluedart: { name: "Blue Dart", url: "https://www.bluedart.com/tracking", book: "https://www.bluedart.com/" },
+  dtdc: { name: "DTDC", url: "https://www.dtdc.in/trace.asp", book: "https://www.dtdc.in/" },
+  indiapost: { name: "India Post", url: "https://www.indiapost.gov.in/_layouts/15/dop.portal.tracking/trackconsignment.aspx", book: "https://www.indiapost.gov.in/" },
+  other: { name: "Another courier", url: "", book: "" },
+};
+const trackOf = (o: Order): { courier: string; awb: string; url: string; name: string } | null => { try { const t = JSON.parse(String((o.address as any)?.track || "")); return t && (t.awb || t.url) ? t : null; } catch { return null; } };
+/** The parcel's label details, to paste into a courier's booking form. */
+const labelText = (o: Order) => [o.name, o.address?.address, [o.address?.city, o.address?.pin].filter(Boolean).join(" "), o.address?.state, o.phone ? "Phone: " + o.phone : "", `Order ${o.order_no}`, `${o.method === "cod" && o.payment_status !== "paid" ? "COD to collect: " + o.totals.total : "Prepaid"}`, `Items: ${o.items.map((i) => `${i.name} x ${i.qty}`).join(", ")}`].filter(Boolean).join("\n");
+
+function OrderRow({ o, shop, call, onChange, profile, content }: { o: Order; shop: string; call: (b: any) => Promise<any>; onChange: (o: Order) => void; profile?: Profile; content?: any }) {
   const toast = useToast();
+  const tk = trackOf(o);
+  const [courier, setCourier] = useState(tk?.courier || "delhivery"), [awb, setAwb] = useState(tk?.awb || ""), [turl, setTurl] = useState(tk?.url || "");
+  const invoice = () => {
+    const SI = (window as any).SiteInvoice; if (!SI) return toast("The invoice couldn't be drawn. Reload the page and try again.", "bad");
+    SI.open({ id: o.order_no, at: (o as any).created_at, items: o.items, t: o.totals, c: { name: o.name, email: o.email, phone: o.phone, ...(o.address || {}) } }, content);
+  };
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [ref, setRef] = useState(o.payment_ref || "");
@@ -254,8 +277,23 @@ function OrderRow({ o, shop, call, onChange, profile }: { o: Order; shop: string
               </div>
             )}
             <div className="flex flex-wrap gap-2 lg:ml-auto">
+              {content?.gst?.on && <button type="button" className="btn" onClick={invoice}>GST invoice</button>}
               {phone && <a className="btn" href={`https://wa.me/${phone}?text=${encodeURIComponent(waText(o, shop))}`} target="_blank" rel="noopener">WhatsApp customer</a>}
               <a className="btn" href={`mailto:${o.email}?subject=${encodeURIComponent(`Your order ${o.order_no}`)}`}>Email customer</a>
+            </div>
+          </div>
+          <div className="flex flex-col gap-2 rounded-lg border border-ink-700 p-3 text-sm lg:col-span-2" aria-label={`Shipment for ${o.order_no}`}>
+            <b>Shipment</b>
+            <div className="flex flex-wrap items-end gap-2">
+              <Field label="Courier" htmlFor={`cr-${o.order_no}`}><select id={`cr-${o.order_no}`} className="input py-2" value={courier} onChange={(e) => setCourier(e.target.value)}>{Object.entries(COURIERS).map(([k, c]) => <option key={k} value={k}>{c.name}</option>)}</select></Field>
+              <Field label="Tracking number (AWB)" htmlFor={`awb-${o.order_no}`}><input id={`awb-${o.order_no}`} className="input py-2 font-mono" value={awb} onChange={(e) => setAwb(e.target.value)} /></Field>
+              <Field label="Tracking link (optional)" htmlFor={`tu-${o.order_no}`}><input id={`tu-${o.order_no}`} className="input py-2" placeholder={COURIERS[courier]?.url.replace("{awb}", awb || "…") || "https://…"} value={turl} onChange={(e) => setTurl(e.target.value)} /></Field>
+              <button type="button" className="btn btn-pri" disabled={busy || (!awb.trim() && !turl.trim() && !tk)} onClick={() => act({ action: "set-tracking", courier, awb: awb.trim(), url: turl.trim(), name: COURIERS[courier]?.name === "Another courier" ? "" : COURIERS[courier]?.name }, awb.trim() || turl.trim() ? "Tracking saved. The customer sees it on their order." : "Tracking removed.")}>Save tracking</button>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 text-[13px] text-ink-300">
+              <button type="button" className="btn btn-sm" onClick={() => navigator.clipboard?.writeText(labelText(o)).then(() => toast("Address and parcel details copied. Paste them into the courier's booking form."), () => toast("Couldn't copy. Select the address above and copy it.", "bad"))}>Copy parcel details</button>
+              {COURIERS[courier]?.book && <a className="btn btn-sm" href={COURIERS[courier].book} target="_blank" rel="noopener noreferrer">Open {COURIERS[courier].name} to book ↗</a>}
+              <span className="min-w-0 flex-1 text-ink-400">Book the pickup on the courier's site, then save its tracking number here before setting the status to Shipped, so the shipped email carries the link.</span>
             </div>
           </div>
           <p className="hint lg:col-span-2">Shipped, Delivered and Cancelled email the customer automatically. Mark paid emails both of you.</p>
@@ -268,12 +306,12 @@ function OrderRow({ o, shop, call, onChange, profile }: { o: Order; shop: string
 export function OrdersPanel({ content }: { content: any }) {
   return (
     <OwnerGate content={content}>
-      {(o) => <Orders o={o} shop={content?.brand?.name || "Shop"} />}
+      {(o) => <Orders o={o} shop={content?.brand?.name || "Shop"} content={content} />}
     </OwnerGate>
   );
 }
 
-function Orders({ o: owner, shop }: { o: Owner; shop: string }) {
+function Orders({ o: owner, shop, content }: { o: Owner; shop: string; content: any }) {
   const { orders, profiles, err, load, setOrders } = useData(owner);
   const call = owner.call, email = owner.user?.email || "";
   const [q, setQ] = useState("");
@@ -307,7 +345,7 @@ function Orders({ o: owner, shop }: { o: Owner; shop: string }) {
       </div>
       <p className="text-xs text-ink-400">{list.length} of {orders.length} orders · signed in as {email}</p>
       <div className="flex flex-col gap-2">
-        {list.length ? list.map((o) => <OrderRow key={o.order_no} o={o} shop={shop} call={call} profile={prof(o)} onChange={(n) => setOrders((all) => (all || []).map((x) => (x.order_no === n.order_no ? n : x)))} />)
+        {list.length ? list.map((o) => <OrderRow content={content} key={o.order_no} o={o} shop={shop} call={call} profile={prof(o)} onChange={(n) => setOrders((all) => (all || []).map((x) => (x.order_no === n.order_no ? n : x)))} />)
           : <p className="card p-5 text-sm text-ink-300">{orders.length ? "No orders match." : "No orders yet. They appear here as soon as customers check out."}</p>}
       </div>
       <button type="button" className="btn btn-ghost btn-sm self-start" onClick={() => owner.signOut()}>Sign out of the shop backend</button>

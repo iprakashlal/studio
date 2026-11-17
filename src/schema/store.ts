@@ -10,6 +10,7 @@ const FONTS_B = BODY_FONTS;
 const g2 = (...fields: Field[]): Field => ({ t: "grid", cols: 2, fields });
 const g3 = (...fields: Field[]): Field => ({ t: "grid", cols: 3, fields });
 
+const GST_STATES = ["Andaman and Nicobar Islands", "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chandigarh", "Chhattisgarh", "Dadra and Nagar Haveli and Daman and Diu", "Delhi", "Goa", "Gujarat", "Haryana", "Himachal Pradesh", "Jammu and Kashmir", "Jharkhand", "Karnataka", "Kerala", "Ladakh", "Lakshadweep", "Madhya Pradesh", "Maharashtra", "Manipur", "Meghalaya", "Mizoram", "Nagaland", "Odisha", "Puducherry", "Punjab", "Rajasthan", "Sikkim", "Tamil Nadu", "Telangana", "Tripura", "Uttar Pradesh", "Uttarakhand", "West Bengal"];
 const schema: Category[] = [
   {
     id: "look", label: "Theme & layout", group: "Design", desc: `Choose from ${THEMES.length} themes, then fine-tune the layout, elements and animation.`,
@@ -71,6 +72,7 @@ const schema: Category[] = [
         item: [
           g2({ t: "text", path: "name", label: "Name" }, { t: "ref", path: "category", label: "Category", source: "categories", valueKey: "id", labelKey: "name", empty: "No category" }),
           g3({ t: "number", path: "price", label: "Price", min: 0, step: 1 }, { t: "number", path: "compareAt", label: "Was price (optional)", min: 0, step: 1 }, { t: "select", path: "stock", label: "Stock", options: [{ value: "in", label: "In stock" }, { value: "low", label: "Low stock" }, { value: "out", label: "Sold out" }] }),
+          { t: "when", path: "gst.on", is: "true", fields: [g2({ t: "text", path: "hsn", label: "HSN code (for the GST invoice)", ph: "the shop's default" }, { t: "select", path: "gstRate", label: "GST rate", options: [{ value: "", label: "The shop's default rate" }, ...["0", "0.25", "3", "5", "12", "18", "28"].map((v) => ({ value: v, label: v + "%" }))] })] },
           { t: "images", path: "images", label: "Photos", hint: "The first photo is the main one." },
           { t: "text", path: "short", label: "One-line summary" },
           { t: "textarea", path: "description", label: "Description", rows: 5, hint: "Leave a blank line between paragraphs." },
@@ -116,6 +118,55 @@ const schema: Category[] = [
       { title: "Shipping", fields: [g2({ t: "number", path: "settings.shippingFee", label: "Shipping fee", min: 0 }, { t: "number", path: "settings.freeShippingOver", label: "Free shipping over (0 = never)", min: 0 })] },
       { title: "Tax", fields: [g3({ t: "number", path: "settings.taxPercent", label: "Tax %", min: 0, step: 0.1 }, { t: "text", path: "settings.taxLabel", label: "Tax name" }, { t: "toggle", path: "settings.taxIncluded", label: "Prices include tax" })] },
       { title: "Order numbers", fields: [{ t: "text", path: "settings.orderPrefix", label: "Order number prefix", hint: "Orders look like PREFIX-1105-4821." }] },
+    ],
+  },
+  {
+    id: "delivery", label: "Delivery areas", group: "Selling", desc: "Which PIN codes you deliver to, what each area costs and how long it takes. Shoppers check their PIN on the product page and in the cart.",
+    cards: [
+      { title: "Delivery by PIN code", fields: [
+        { t: "toggle", path: "shipping.on", label: "Deliver by PIN code" },
+        { t: "note", text: "While this is off, every order ships at the flat fee under Prices & shipping. Switch it on to set areas with their own charge, delivery time and cash-on-delivery rule, and to stop orders from places you don't reach." },
+        { t: "when", path: "shipping.on", is: "true", fields: [
+          { t: "list", path: "shipping.zones", max: 30, add: () => ({ id: "z-" + Math.random().toString(36).slice(2, 8), on: true, name: "New area", pins: "", fee: "", freeOver: "", days: "", cod: true }),
+            title: (it) => `${it?.name || "Area"}${it?.fee !== "" && it?.fee != null ? ` · ${Number(it.fee) ? "fee " + it.fee : "free"}` : ""}${it?.days ? ` · ${it.days}` : ""}${it?.on === false ? " · off" : ""}`,
+            item: [
+              g2({ t: "text", path: "name", label: "Area name (for you)", ph: "Mumbai" }, { t: "toggle", path: "on", label: "Deliver here" }),
+              { t: "textarea", path: "pins", label: "PIN codes", rows: 2, hint: "Separate with commas. A full PIN (400001), a range (400001-400104), or the first digits for a whole region (40 covers every PIN starting with 40)." },
+              g3({ t: "number", path: "fee", label: "Shipping fee", min: 0, hint: "Empty uses the flat fee." }, { t: "number", path: "freeOver", label: "Free over", min: 0, hint: "Empty uses the shop's rule." }, { t: "text", path: "days", label: "Delivery time", ph: "2–3 days" }),
+              { t: "toggle", path: "cod", label: "Cash on delivery available here" },
+            ] },
+          { t: "note", text: "Areas are checked from the top: the first one that covers a PIN wins. Put the most specific area first." },
+        ] },
+      ] },
+      { title: "Everywhere else", fields: [
+        { t: "when", path: "shipping.on", is: "true", fields: [
+          { t: "select", path: "shipping.rest", label: "A PIN code that no area covers", options: [{ value: "serve", label: "Still deliver there" }, { value: "no", label: "Don't deliver: the order is stopped" }] },
+          { t: "when", path: "shipping.rest", is: "serve", fields: [g3({ t: "number", path: "shipping.restFee", label: "Shipping fee", min: 0, hint: "Empty uses the flat fee." }, { t: "text", path: "shipping.restDays", label: "Delivery time", ph: "5–7 days" }, { t: "toggle", path: "shipping.restCod", label: "Cash on delivery" })] },
+          { t: "when", path: "shipping.rest", is: "no", fields: [{ t: "text", path: "shipping.blockMsg", label: "What shoppers are told", ph: "Sorry, we don't deliver to that PIN code yet." }] },
+          { t: "text", path: "shipping.checkLabel", label: "Label above the PIN box", ph: "Check delivery to your PIN code" },
+        ] },
+        { t: "note", text: "With a shop backend, the backend checks the PIN and the fee again when the order is placed. Publish the site and update the backend once after changing these (Accounts & backend)." },
+      ] },
+      { title: "Couriers and tracking", fields: [
+        { t: "note", text: "When an order ships, open it under Orders, choose the courier and type its tracking number: the customer sees a “Track your parcel” link on their order and in the shipped email. Orders also has buttons that open each courier's booking page with the address ready to paste. Booking itself happens on the courier's own site." },
+      ] },
+    ],
+  },
+  {
+    id: "gst", label: "GST invoices", group: "Selling", desc: "A tax invoice for every order, with your GSTIN, HSN codes and the CGST/SGST or IGST split, that customers and you can print or save as PDF.",
+    cards: [
+      { title: "GST invoice", fields: [
+        { t: "toggle", path: "gst.on", label: "Offer a GST invoice on every order" },
+        { t: "when", path: "gst.on", is: "true", fields: [
+          g2({ t: "text", path: "gst.legalName", label: "Legal name of the business", ph: "as on the GST certificate" }, { t: "text", path: "gst.gstin", label: "GSTIN", ph: "27ABCDE1234F1Z5" }),
+          { t: "textarea", path: "gst.address", label: "Registered address", rows: 2 },
+          g3({ t: "select", path: "gst.state", label: "State", options: [{ value: "", label: "Choose the state" }, ...GST_STATES.map((n) => ({ value: n, label: n }))] }, { t: "text", path: "gst.pan", label: "PAN (optional)" }, { t: "text", path: "gst.prefix", label: "Invoice number starts with", ph: "INV-" }),
+          g3({ t: "select", path: "gst.defaultRate", label: "Usual GST rate", options: ["0", "0.25", "3", "5", "12", "18", "28"].map((v) => ({ value: v, label: v + "%" })) }, { t: "text", path: "gst.defaultHsn", label: "Usual HSN code" }, { t: "toggle", path: "gst.askGstin", label: "Ask business buyers for their GSTIN at checkout" }),
+          g2({ t: "text", path: "gst.sign", label: "Signature line", ph: "Authorised signatory" }, { t: "text", path: "gst.notes", label: "Note at the bottom (optional)", ph: "Goods once sold are not returnable." }),
+          { t: "note", text: "Each product can have its own HSN code and rate (Products → open a product). Prices are read as including GST, so the invoice total always equals what the customer paid; if the shop adds one tax percentage on top (Prices & shipping → Tax, not included), that percentage is used instead. Buyers in your state get CGST + SGST, others IGST. The invoice number is your prefix plus the order number." },
+          { t: "note", text: "This prepares the invoice; it doesn't file anything with the GST portal. Have your accountant check the rates, HSN codes and number series before you rely on it.", tone: "warn" },
+        ] },
+      ] },
     ],
   },
   {
@@ -203,6 +254,12 @@ const schema: Category[] = [
 /** Defaults for settings added after a shop was made. */
 export const STORE_LABELS = { allProducts: "All products", viewAll: "View all", help: "Help", contact: "Contact" };
 export function prepareStore(c: any) {
+  if (c && typeof c === "object") {
+    const H = c.shipping && typeof c.shipping === "object" ? c.shipping : {};
+    c.shipping = { on: false, rest: "serve", restFee: "", restDays: "", restCod: true, blockMsg: "", checkLabel: "", ...H, zones: Array.isArray(H.zones) ? H.zones : [] };
+    const G = c.gst && typeof c.gst === "object" ? c.gst : {};
+    c.gst = { on: false, legalName: "", gstin: "", address: "", state: "", pan: "", prefix: "INV-", defaultHsn: "", askGstin: false, sign: "", notes: "", ...G, defaultRate: String(G.defaultRate ?? "18") };
+  }
   if (c && typeof c === "object" && c.home?.hero) prepareSlides(c.home.hero, "#000000");
   prepareMaintenance(c);
   prepareI18n(c, () => schema);

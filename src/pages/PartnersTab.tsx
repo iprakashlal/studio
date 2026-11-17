@@ -16,6 +16,8 @@ import { appBase, appFiles } from "../lib/migrate";
 import { loadHostConfig } from "../lib/studiohost";
 import { deployClientApp, getClientFeatures, hostOf, partnerSignedIn, prepareClientSupabase, pullSite, remoteRepo, seedClientStudio, sendSite, setClientFeatures, siteSync, type PartnerRec, type SharedSite, type SiteSync } from "../lib/partners";
 import { CLIENT_FEATURES, cleanThemeList } from "../lib/features";
+import { PayNote } from "./PayNote";
+import { cleanPay } from "../lib/studio";
 import { THEMES, type Theme } from "../themes/catalog";
 import { BIZ_THEMES } from "../themes/business";
 import { themeCode } from "../themes/codes";
@@ -262,6 +264,7 @@ function PartnerCard({ p, studio, index, nf, setNf, session, myEmail, studioToke
         <span className="chip">{p.accounts === "mine" ? "On my accounts" : "On the client's accounts"}</span>
         <span className="chip">{p.shared.length} site{p.shared.length === 1 ? "" : "s"}</span>
       </div>
+      <PayNote id={"partner:" + p.id} pay={p.pay} onSave={(pay) => onChange((x) => { const { pay: _old, ...rest } = x; void _old; const c = cleanPay(pay); return c ? { ...rest, pay: c } : rest; }, `Payment note for ${p.name}`)} />
       {signed === false && (
         <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-400/40 bg-amber-400/5 p-3 text-[13px] text-amber-100">
           <span>Sign in to {p.name}'s Studio as <b>{p.partnerEmail}</b> on this device to share and sync.</span>

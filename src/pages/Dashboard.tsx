@@ -13,12 +13,39 @@ import { slugify, timeAgo } from "../lib/util";
 import { Empty, Field, Logo, Modal, useConfirm, useToast } from "../ui/kit";
 import { BrandMark } from "../lib/brand";
 import { PushUpdatesDialog } from "./PushUpdates";
+import { PayNote } from "./PayNote";
+import { loadHostConfig } from "../lib/studiohost";
+import { rvSummary, type RvSummary } from "../lib/approvals";
 
 const STATUS: Record<ProjectMeta["status"], { label: string; cls: string }> = {
   draft: { label: "Draft", cls: "border-ink-500 text-ink-300" },
   exported: { label: "Exported", cls: "border-sky-400/60 text-sky-200" },
   published: { label: "Published", cls: "border-emerald-400/60 text-emerald-200" },
 };
+
+/** What the client said on the project's review link, in two lines: the decision, then their latest words. Opens the replies. */
+function Feedback({ s, id }: { s: RvSummary; id: string }) {
+  const look = s.status === "approved" ? { cls: "border-emerald-400/40 bg-emerald-400/5", ic: "bg-emerald-400/20 text-emerald-200", head: "Approved", d: "M5 12.5l4.5 4.5L19 7.5" }
+    : s.status === "changes" ? { cls: "border-amber-400/40 bg-amber-400/5", ic: "bg-amber-400/20 text-amber-200", head: "Changes requested", d: "M4 20h4L19 9l-4-4L4 16v4ZM13.5 6.5l4 4" }
+    : { cls: "border-ink-700 bg-ink-850/60", ic: "bg-ink-700 text-ink-300", head: s.comments ? "In review" : "Waiting for the client", d: "M12 7v5l3 2M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" };
+  const when = s.status === "open" ? (s.last ? timeAgo(s.last.created_at) : "shared " + timeAgo(s.created_at)) : timeAgo(s.decided_at || s.created_at);
+  return (
+    <a href={`#/p/${id}`} onClick={() => { try { sessionStorage.setItem("site-studio:open-approve", id); } catch { /* private mode */ } }} data-fb={s.status}
+      className={`relative z-10 flex items-start gap-2.5 rounded-xl border px-3 py-2 text-[13px] transition hover:border-ink-400 ${look.cls}`} aria-label="Client feedback" title="Open the review link's comments">
+      <span className={`mt-0.5 grid h-6 w-6 flex-none place-items-center rounded-full ${look.ic}`}><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d={look.d} /></svg></span>
+      <span className="min-w-0 flex-1">
+        <span className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+          <b className="text-ink-100">{look.head}</b>
+          {s.status !== "open" && s.decided_by && <span className="truncate text-ink-300">by {s.decided_by}</span>}
+          <span className="text-ink-400">· {when}</span>
+          {s.waiting && <span className="chip border-brand-400/60 px-1.5 py-0 text-[11px] text-brand-200">Reply due</span>}
+          {s.comments > 0 && <span className="ml-auto flex-none text-[12px] text-ink-400" title={`${s.comments} from the client`}>{s.comments} 💬</span>}
+        </span>
+        {s.last?.body && <span className="mt-0.5 line-clamp-2 block text-ink-300">“{s.last.body}”{s.status === "open" || s.last.who !== s.decided_by ? <span className="text-ink-500"> — {s.last.who}</span> : null}</span>}
+      </span>
+    </a>
+  );
+}
 
 /** Last live-site check per project, so going back and forth doesn't re-check every time. */
 const checked = new Map<string, number>();
@@ -33,6 +60,14 @@ export function Dashboard({ studio, index, onIndex, token, hid = () => false, ma
   const toast = useToast();
   const [live, setLive] = useState<Record<string, "checking" | "pulled" | "conflict">>({});
   const [pushing, setPushing] = useState(false);
+  // What clients said on their review links (a Studio on Cloudflare keeps those), for the cards.
+  const [fb, setFb] = useState<Record<string, RvSummary>>({});
+  const ids = index.projects.map((p) => p.id).join(",");
+  useEffect(() => {
+    if (studio.repo.demo || !ids) return; let on = true;
+    loadHostConfig().then(async (h) => { if (h?.kind !== "cloudflare") return; const s = await rvSummary(h.api, h.studio, ids.split(",")); if (on) setFb(s); }).catch(() => {});
+    return () => { on = false; };
+  }, [ids]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Central control: published projects pick up edits made in their sites' own CMS.
   useEffect(() => {
@@ -115,10 +150,14 @@ export function Dashboard({ studio, index, onIndex, token, hid = () => false, ma
                     {p.client.trim() ? <button type="button" className="relative z-10 inline-flex items-center gap-1.5 rounded-full border border-ink-600 px-2.5 py-0.5 text-[12.5px] font-semibold text-ink-100 hover:border-ink-400" title={`Show only ${p.client.trim()}'s sites`} onClick={() => setClient(p.client.trim())}><span className="text-ink-400">Client</span>{p.client.trim()}</button> : <span>No client set</span>}
                     {p.summary && <span>{p.summary}</span>}
                   </p>
-                  <dl className="mt-auto grid grid-cols-2 gap-2 border-t border-ink-700 pt-3 text-xs">
-                    <div><dt className="text-ink-500">Edited</dt><dd className="font-semibold text-ink-200">{timeAgo(p.updatedAt)}</dd></div>
-                    <div><dt className="text-ink-500">Last export</dt><dd className="font-semibold text-ink-200">{last ? `v${last.version} · ${timeAgo(last.at)}` : "Not yet"}</dd></div>
-                  </dl>
+                  {fb[p.id] && <Feedback s={fb[p.id]} id={p.id} />}
+                  <div className="mt-auto flex flex-col gap-3">
+                    <PayNote id={"p:" + p.id} pay={p.pay} onSave={async (pay) => onIndex(await studio.savePay(p.id, pay))} />
+                    <dl className="flex flex-wrap gap-x-4 gap-y-1 border-t border-ink-700 pt-3 text-xs text-ink-400">
+                      <div className="flex gap-1.5"><dt>Edited</dt><dd className="font-semibold text-ink-200">{timeAgo(p.updatedAt)}</dd></div>
+                      <div className="flex gap-1.5"><dt>Last export</dt><dd className="font-semibold text-ink-200">{last ? `v${last.version} · ${timeAgo(last.at)}` : "Not yet"}</dd></div>
+                    </dl>
+                  </div>
                   <div className="relative z-10 flex flex-wrap gap-2">
                     <a href={`#/p/${p.id}`} className="btn btn-pri btn-sm">Open</a>
                     {!hid("duplicate") && !hid("new") && !hid("tpl-" + p.template) && room(p.template) && <button className="btn btn-sm" disabled={!!busy} onClick={() => run("dup" + p.id, () => studio.duplicate(p.id, `${p.name} (copy)`), "Project duplicated")}>{busy === "dup" + p.id ? "Copying…" : "Duplicate"}</button>}

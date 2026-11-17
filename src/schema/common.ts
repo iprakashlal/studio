@@ -81,6 +81,49 @@ export function prepareFestival(c: any) {
 }
 /** Features → Festival overlay: greetings and decorations on India's festivals (assets/festival.js). It runs by
  *  itself on the official days while switched on; the owner picks festivals, dates and wording, or switches it off. */
+/** The settings a new video section starts with (content.video; drawn by src/fx/video.js). */
+export const videoDefault = () => ({ on: false, url: "", poster: null as any, layout: "center", place: "top", ratio: "16:9", eyebrow: "", title: "", text: "", links: [] as { label: string; url: string }[], auto: false, controls: true, round: true });
+/** Older content gets the video section's fields (off). */
+export function prepareVideo(c: any) {
+  if (!c || typeof c !== "object") return;
+  const d = videoDefault(), v = c.video && typeof c.video === "object" ? c.video : {};
+  c.video = { ...d, ...v, links: Array.isArray(v.links) ? v.links.filter((l: any) => l && typeof l === "object") : [] };
+}
+/** The video section, for every template: one video on the home page, with its position, width and the text beside it. */
+export function videoCategory(group = "Pages", sub?: string, extra = ""): Category {
+  const g2 = (...fields: Field[]): Field => ({ t: "grid", cols: 2, fields });
+  return {
+    id: "video", label: "Video", group, ...(sub ? { sub } : {}),
+    desc: "A video on the home page: centred, wide, edge to edge, or on the left or right with a heading, a description and buttons beside it.",
+    cards: [
+      { title: "The video", fields: [
+        { t: "toggle", path: "video.on", label: "Show the video section" },
+        { t: "text", path: "video.url", label: "Video link", ph: "https://youtu.be/…  or  https://…/film.mp4", hint: "A YouTube or Vimeo link, or the address of a video file (.mp4 or .webm).",
+          show: (v) => { const u = String(v || "").trim(); return !u ? "" : /youtube\.com|youtu\.be/i.test(u) ? "A YouTube video. It loads when the visitor presses play." : /vimeo\.com/i.test(u) ? "A Vimeo video. It loads when the visitor presses play." : /^https:\/\//i.test(u) || !/^[a-z][a-z0-9+.-]*:/i.test(u) ? "A video file, played by the site's own player." : "Use a link that starts with https://"; } },
+        { t: "image", path: "video.poster", label: "Cover picture", hint: "Shown before the video plays. Without one, a YouTube or Vimeo video shows a dark panel with a play button." },
+        ...(extra ? [{ t: "note", text: extra } as Field] : []),
+      ] },
+      { title: "Position and size", fields: [
+        g2({ t: "select", path: "video.layout", label: "Layout", options: [{ value: "center", label: "Centre" }, { value: "wide", label: "Wide" }, { value: "full", label: "Full bleed (edge to edge)" }, { value: "left", label: "Video on the left, text on the right" }, { value: "right", label: "Video on the right, text on the left" }] },
+          { t: "select", path: "video.place", label: "Where on the home page", options: [{ value: "top", label: "After the first screen" }, { value: "middle", label: "In the middle of the page" }, { value: "bottom", label: "Before the last section" }, { value: "end", label: "At the end of the page" }] },
+          { t: "select", path: "video.ratio", label: "Shape", options: [{ value: "16:9", label: "Widescreen (16:9)" }, { value: "4:3", label: "Classic (4:3)" }, { value: "1:1", label: "Square" }, { value: "9:16", label: "Upright, for phone videos (9:16)" }] },
+          { t: "toggle", path: "video.round", label: "Rounded corners" }),
+        g2({ t: "toggle", path: "video.auto", label: "Play by itself, silently, on a loop" }, { t: "toggle", path: "video.controls", label: "Show the player's controls" }),
+        { t: "note", text: "Playing by itself and hiding the controls apply to a video file. A YouTube or Vimeo video always starts when the visitor presses play, and uses its own controls." },
+      ] },
+      { title: "Text and buttons", fields: [
+        { t: "when", path: "video.layout", is: "full", fields: [{ t: "note", text: "Full bleed shows the video alone. Choose another layout to show a heading, a description and buttons with it." }] },
+        { t: "when", path: "video.layout", not: "full", fields: [
+          { t: "note", text: "With the video on the left or right, this text sits beside it. With Centre or Wide it sits above the video. Leave it all empty to show the video alone." },
+          { t: "text", path: "video.eyebrow", label: "Small label above" },
+          { t: "text", path: "video.title", label: "Title" },
+          { t: "textarea", path: "video.text", label: "Description", rows: 4 },
+          { t: "list", path: "video.links", label: "Buttons", max: 3, add: () => ({ label: "", url: "" }), title: (it: any, i: number) => it?.label || `Button ${i + 1}`, item: [g2({ t: "text", path: "label", label: "Label" }, { t: "text", path: "url", label: "Link", ph: "https://…  or  contact.html" })] },
+        ] },
+      ] },
+    ],
+  };
+}
 export function festivalCategory(): Category {
   const g2 = (...fields: Field[]): Field => ({ t: "grid", cols: 2, fields });
   const byId = (id: string) => FESTIVALS.find((d) => d.id === id);
@@ -541,7 +584,7 @@ export const maintenanceDefault = () => ({ on: false, title: "We'll be back soon
 export function prepareMaintenance(c: any) {
   if (!c || typeof c !== "object") return;
   const d = maintenanceDefault(), m = c.maintenance && typeof c.maintenance === "object" ? c.maintenance : {};
-  prepareAddons(c); prepareEmails(c); prepareFestival(c); prepareConsent(c);
+  prepareAddons(c); prepareEmails(c); prepareFestival(c); prepareConsent(c); prepareVideo(c);
   c.maintenance = { ...d, ...m, button: { ...d.button, ...(m.button && typeof m.button === "object" ? m.button : {}) } };
 }
 export function prepareSlides(hero: any, overlayColor?: string) {

@@ -717,6 +717,14 @@ function festival() {
   (fsP ||= new Promise((ok, no) => { if (window.SiteFestival) return ok(); const s = document.createElement("script"); s.src = "assets/festival.js"; s.onload = () => ok(); s.onerror = no; document.head.appendChild(s); }))
     .then(() => window.SiteFestival.mount(C, { preview: PREVIEW, site: C.brand.name })).catch(() => {});
 }
+/* The video section (assets/video.js): one video on the home page, placed among its sections. */
+let svP;
+function video() {
+  const V = C.video || {};
+  if (!V.on && !window.SiteVideo) return;
+  (svP ||= new Promise((ok, no) => { if (window.SiteVideo) return ok(); const s = document.createElement("script"); s.src = "assets/video.js"; s.onload = () => ok(); s.onerror = no; document.head.appendChild(s); }))
+    .then(() => window.SiteVideo.mount(C, { sections: "#main > section", home: PAGE === "home", imgUrl })).catch(() => {});
+}
 /** The footer's link that reopens the consent choices (while the banner is on). */
 const ckOn = () => !!(C.consent && C.consent.on && C.consent.footerLink !== false);
 /* Regional languages (assets/lang.js): the chosen language is put into the content before the page is drawn, then
@@ -832,7 +840,7 @@ function bind() {
   if (PAGE === "account") bindAccount();
   if (PAGE === "warranty") swMount();
   if (PAGE === "page" && window.SitePages) window.SitePages.after(spHere());
-  menu(); lang(); consent(); addons(); festival();
+  video(); menu(); lang(); consent(); addons(); festival();
   if (location.hash && PAGE === "policies") { const el = document.getElementById(location.hash.slice(1)); if (el) el.scrollIntoView(); }
 }
 function bindShop() {

@@ -69,16 +69,53 @@ export function money(v: number, cur: string): string {
 }
 
 /** Same formula as the shop's cart page, so shoppers see the exact amount they're charged. */
-export function computeTotals(items: Item[], s: any): Totals {
+// ---- delivery areas (content.shipping); the shop page (assets/store.js) carries the same rules
+export type ShipQuote = { ok: boolean; zone: string; fee: number | null; freeOver: number | null; days: string; cod: boolean };
+/** Does a list like "400001-400104, 4110, 560001" cover this PIN? (a PIN, a range, or the first digits) */
+export function pinsMatch(list: unknown, pin: string): boolean {
+  const p = String(pin || "").replace(/\D/g, ""); if (p.length < 4) return false;
+  return String(list || "").split(/[\s,;]+/).filter(Boolean).some((t) => {
+    const r = /^(\d{4,6})-(\d{4,6})$/.exec(t); if (r) return p.length === r[1].length && +p >= +r[1] && +p <= +r[2];
+    return /^\d{2,6}$/.test(t) && (t.length === p.length ? t === p : p.startsWith(t));
+  });
+}
+/** Where and for how much an order ships. With delivery areas off (or no PIN to go by) everything is served at the shop's flat fee. */
+export function shipQuote(c: any, pin: string): ShipQuote {
+  const H = c?.shipping || {}, open: ShipQuote = { ok: true, zone: "", fee: null, freeOver: null, days: "", cod: true };
+  if (!H.on) return open;
+  const num = (v: unknown) => (v === "" || v == null || isNaN(Number(v)) ? null : Math.max(0, Number(v)));
+  const z = (Array.isArray(H.zones) ? H.zones : []).find((x: any) => x && x.on !== false && pinsMatch(x.pins, pin));
+  if (z) return { ok: true, zone: String(z.name || ""), fee: num(z.fee), freeOver: num(z.freeOver), days: String(z.days || ""), cod: z.cod !== false };
+  if (H.rest === "no") return { ...open, ok: false };
+  return { ok: true, zone: "", fee: num(H.restFee), freeOver: null, days: String(H.restDays || ""), cod: H.restCod !== false };
+}
+export function computeTotals(items: Item[], s: any, q?: ShipQuote | null): Totals {
   const sub = round2(items.reduce((t, i) => t + i.price * i.qty, 0));
-  const free = Number(s.freeShippingOver) > 0 && sub >= Number(s.freeShippingOver);
-  const ship = !items.length || free ? 0 : Number(s.shippingFee) || 0;
+  const over = q && q.freeOver != null ? q.freeOver : Number(s.freeShippingOver);
+  const free = over > 0 && sub >= over;
+  const ship = !items.length || free ? 0 : q && q.fee != null ? q.fee : Number(s.shippingFee) || 0;
   const pct = Number(s.taxPercent) || 0;
   const taxAdd = pct && !s.taxIncluded ? Math.round(sub * pct) / 100 : 0;
   const taxIn = pct && s.taxIncluded ? round2(sub - sub / (1 + pct / 100)) : 0;
   return { sub, ship, taxAdd, taxIn, total: round2(sub + ship + taxAdd) };
 }
-
+/** Couriers the owner can pick for an order; {awb} in a link is replaced by the tracking number. */
+export const COURIERS: Record<string, { name: string; url: string }> = {
+  delhivery: { name: "Delhivery", url: "https://www.delhivery.com/track-v2/package/{awb}" },
+  shiprocket: { name: "Shiprocket", url: "https://shiprocket.co/tracking/{awb}" },
+  xpressbees: { name: "Xpressbees", url: "https://www.xpressbees.com/shipment/tracking?awbNo={awb}" },
+  ecom: { name: "Ecom Express", url: "https://ecomexpress.in/tracking/?awb_field={awb}" },
+  ekart: { name: "Ekart", url: "https://ekartlogistics.com/shipmenttrack/{awb}" },
+  bluedart: { name: "Blue Dart", url: "https://www.bluedart.com/tracking" },
+  dtdc: { name: "DTDC", url: "https://www.dtdc.in/trace.asp" },
+  indiapost: { name: "India Post", url: "https://www.indiapost.gov.in/_layouts/15/dop.portal.tracking/trackconsignment.aspx" },
+  other: { name: "Courier", url: "" },
+};
+/** The tracking link for a shipment: the owner's own link when given, else the courier's page for that number. */
+export function trackLink(t: { courier?: string; awb?: string; url?: string } | null | undefined): string {
+  if (!t) return ""; const own = String(t.url || "").trim(); if (/^https:\/\/[^\s]+$/i.test(own)) return own;
+  const c = COURIERS[String(t.courier || "")]; return c && c.url && t.awb ? c.url.replace("{awb}", encodeURIComponent(String(t.awb))) : "";
+}
 export function methodsFor(c: any): string[] {
   const P = c.payments || {}, out: string[] = [];
   if (P.upi?.enabled && vpaOk(P.upi.vpa) && c.settings?.currency === "INR") out.push("upi");
@@ -172,7 +209,9 @@ async function notify(d: Deps, o: Order, kind: "paid" | "cod" | "awaiting" | "re
     }
   } else {
     const words = { shipped: ["has shipped", "Your order is on its way."], delivered: ["was delivered", "Your order has been delivered. We hope you love it."], cancelled: ["was cancelled", "Your order has been cancelled. Reply to this email if you have questions."] }[kind];
-    await cust(`Order ${o.order_no} ${words[0]}`, `Order ${words[0]}`, `Hi ${esc(o.name)}, ${words[1]}`);
+    const tr = kind === "shipped" ? trackOf(o) : null;
+    const trLine = tr ? ` It is with <b>${esc(tr.name)}</b>${tr.awb ? `, tracking number <b style="font-family:monospace">${esc(tr.awb)}</b>` : ""}.${tr.link ? ` <a href="${esc(tr.link)}">Track your parcel</a>.` : ""}` : "";
+    await cust(`Order ${o.order_no} ${words[0]}`, `Order ${words[0]}`, `Hi ${esc(o.name)}, ${words[1]}${trLine}`);
   }
   return log;
 }
@@ -247,7 +286,10 @@ async function createOrder(d: Deps, body: any, token: string | null) {
     if (opt && !(p.options || []).includes(opt)) throw new HttpError(409, `The option “${opt}” for ${p.name} has changed. Please add it to your cart again.`);
     items.push({ id: p.id, name: str(p.name, 160), opt, qty, price: round2(Number(p.price) || 0) });
   }
-  const totals = computeTotals(items, S);
+  const quote = shipQuote(c, str(cust.pin, 20));
+  if (!quote.ok) throw new HttpError(409, str(c.shipping?.blockMsg, 300) || "Sorry, we don't deliver to that PIN code yet.");
+  if (method === "cod" && !quote.cod) throw new HttpError(409, "Cash on delivery isn't available for that PIN code. Please choose another way to pay.");
+  const totals = computeTotals(items, S, quote);
   if (Number(S.minOrder) > 0 && totals.sub < Number(S.minOrder)) throw new HttpError(400, `The minimum order is ${money(Number(S.minOrder), cur)}.`);
 
   const now = d.now();
@@ -283,7 +325,7 @@ async function createOrder(d: Deps, body: any, token: string | null) {
   return out;
 }
 
-export const publicOrder = (o: Order) => ({ order_no: o.order_no, status: o.status, payment_status: o.payment_status, totals: o.totals, currency: o.currency, items: o.items, method: o.method, created_at: o.created_at, reported: (o.method === "upi" || o.method === "paypal") && !!o.payment_ref });
+export const publicOrder = (o: Order) => ({ order_no: o.order_no, status: o.status, payment_status: o.payment_status, totals: o.totals, currency: o.currency, items: o.items, method: o.method, created_at: o.created_at, reported: (o.method === "upi" || o.method === "paypal") && !!o.payment_ref , track: trackOf(o) });
 
 async function upiReference(d: Deps, b: any) {
   const o = await d.db.getOrder({ order_no: str(b.order_no, 40) });
@@ -361,7 +403,18 @@ async function admin(d: Deps, b: any, token: string | null) {
     }
     return { order: next };
   }
+  if (b.action === "set-tracking") {
+    // Kept with the delivery address (address.track), so both kinds of order storage hold it without a new column.
+    const courier = COURIERS[String(b.courier)] ? String(b.courier) : "other", awb = str(b.awb, 60).replace(/[^\w-]/g, ""), url = /^https:\/\/[^\s]+$/i.test(str(b.url, 400)) ? str(b.url, 400) : "";
+    const track = awb || url ? JSON.stringify({ courier, awb, url, name: str(b.name, 40) || COURIERS[courier].name, at: d.now().toISOString() }) : "";
+    const address = { ...(o.address || {}) }; if (track) address.track = track; else delete address.track;
+    return { order: await d.db.updateOrder(o.order_no, { address }) };
+  }
   throw new HttpError(400, "Unknown action.");
+}
+/** An order's shipment details (courier, tracking number, link), when the owner has added them. */
+export function trackOf(o: { address?: Record<string, string> } | null | undefined): { courier: string; awb: string; url: string; name: string; link: string } | null {
+  try { const t = JSON.parse(String(o?.address?.track || "")); return t && (t.awb || t.url) ? { courier: String(t.courier || "other"), awb: String(t.awb || ""), url: String(t.url || ""), name: String(t.name || "Courier"), link: trackLink(t) } : null; } catch { return null; }
 }
 
 // ---------------------------------------------------------------- HTTP

@@ -24,6 +24,7 @@
     "assets/consent.js",
     "assets/menu.js",
     "assets/lang.js",
+    "assets/invoice.js",
     "README.md",
     "supabase/schema.sql",
     "supabase/functions/shop/index.ts",

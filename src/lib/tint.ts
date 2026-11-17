@@ -3,6 +3,9 @@
 // the accent takes the logo's main colour, made bright enough for the dark workbench and dark enough for white
 // button text; the neutrals keep their own lightness and lean toward the same hue.
 type RGB = [number, number, number];
+export type UiMode = "dark" | "light";
+// Light mode turns the same ink scale around: 950 is the page, 900 the cards, 100 the main text.
+const INK_LIGHT: Record<string, string> = { 950: "#F3F5F9", 900: "#FFFFFF", 850: "#F8FAFC", 800: "#EDF1F6", 700: "#DCE2EA", 600: "#C6CFDB", 500: "#8692A6", 400: "#5B677B", 300: "#46526A", 200: "#2B3546", 100: "#131A26" };
 const INK: Record<string, string> = { 950: "#0B0F17", 900: "#0F141D", 850: "#131A25", 800: "#18202D", 700: "#222C3B", 600: "#2E3A4C", 500: "#4A5870", 400: "#7D8AA0", 300: "#A9B3C4", 200: "#D3D9E3", 100: "#EEF1F6" };
 
 const rgb = (h: string): RGB => { const x = h.replace("#", ""), f = x.length === 3 ? x.split("").map((c) => c + c).join("") : x.slice(0, 6); return [0, 2, 4].map((i) => parseInt(f.slice(i, i + 2), 16)) as RGB; };
@@ -53,21 +56,34 @@ export async function accentFromImage(src: string): Promise<string | null> {
   finally { if (made) URL.revokeObjectURL(url); }
 }
 
-/** The interface colours for an accent: brand 300–600 and the ink neutrals, as #rrggbb. */
-export function tintPalette(accent: string): Record<string, string> {
+/** The interface colours for an accent (or the standard accent when none): brand 300–600 and the ink neutrals, as #rrggbb.
+ *  In light mode the ink scale is the light one and brand 300/400 (used for link text) go darker so they read on white. */
+export function tintPalette(accent: string | null, mode: UiMode = "dark"): Record<string, string> {
+  const light = mode === "light";
+  if (!accent) return light ? { "brand-300": "#3F5FE0", "brand-400": "#4A67F0", ...Object.fromEntries(Object.entries(INK_LIGHT).map(([k, v]) => ["ink-" + k, v])) } : {};
   let [h, s] = hsl(rgb(accent)); s = Math.max(0.5, Math.min(0.92, s));
   // 500 is the button colour: as light as it can be while white text on it still reads (3.4:1).
   let l = 0.66; const white: RGB = [255, 255, 255];
   while (l > 0.3 && contrast(fromHsl(h, s, l), white) < 3.4) l -= 0.01;
-  const out: Record<string, string> = { "brand-500": hex(fromHsl(h, s, l)), "brand-600": hex(fromHsl(h, s, Math.max(0.2, l - 0.09))), "brand-400": hex(fromHsl(h, Math.min(1, s + 0.06), Math.min(0.8, Math.max(l + 0.1, 0.68)))), "brand-300": hex(fromHsl(h, Math.min(1, s + 0.06), Math.min(0.88, Math.max(l + 0.18, 0.8)))) };
-  for (const [k, v] of Object.entries(INK)) { const [, is, il] = hsl(rgb(v)); out["ink-" + k] = hex(fromHsl(h, Math.min(is, 0.3), il)); }
+  const out: Record<string, string> = { "brand-500": hex(fromHsl(h, s, l)), "brand-600": hex(fromHsl(h, s, Math.max(0.2, l - 0.09))) };
+  if (light) { out["brand-400"] = hex(fromHsl(h, s, Math.max(0.25, l - 0.05))); out["brand-300"] = hex(fromHsl(h, s, Math.max(0.22, l - 0.12))); }
+  else { out["brand-400"] = hex(fromHsl(h, Math.min(1, s + 0.06), Math.min(0.8, Math.max(l + 0.1, 0.68)))); out["brand-300"] = hex(fromHsl(h, Math.min(1, s + 0.06), Math.min(0.88, Math.max(l + 0.18, 0.8)))); }
+  for (const [k, v] of Object.entries(light ? INK_LIGHT : INK)) {
+    const [, is, il] = hsl(rgb(v));
+    // Light backgrounds take a clearer wash of the logo's hue than the dark ones do; text stays nearly neutral.
+    const ts = light ? (il > 0.85 ? 0.45 : Math.min(is, 0.25)) : Math.min(is, 0.3);
+    out["ink-" + k] = il >= 0.999 ? v : hex(fromHsl(h, ts, il));
+  }
   return out;
 }
-/** Colours this page's interface from an accent (#rrggbb), or puts the standard colours back (null). */
-export function applyTint(accent: string | null | undefined) {
+/** Colours this page's interface from an accent (#rrggbb) — or the standard colours (null) — in dark or light mode. */
+export function applyTint(accent: string | null | undefined, mode: UiMode = "dark") {
   const id = "ui-tint"; let el = document.getElementById(id);
-  if (!isHex(accent)) { el?.remove(); return; }
+  const root = document.documentElement;
+  if (mode === "light") root.dataset.ui = "light"; else delete root.dataset.ui;
+  const pal = tintPalette(isHex(accent) ? accent : null, mode);
+  if (!Object.keys(pal).length) { el?.remove(); return; }
   if (!el) { el = document.createElement("style"); el.id = id; document.head.appendChild(el); }
-  const css = ":root{" + Object.entries(tintPalette(accent)).map(([k, v]) => `--${k}:${rgb(v).join(" ")}`).join(";") + "}";
+  const css = ":root{" + Object.entries(pal).map(([k, v]) => `--${k}:${rgb(v).join(" ")}`).join(";") + "}";
   if (el.textContent !== css) el.textContent = css;
 }

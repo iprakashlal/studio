@@ -88,7 +88,7 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
     (async () => {
       let logo = "";
       if (sb.logo) { const blob = await repo.getRaw(sb.logo).catch(() => null); if (blob) logo = await new Promise<string>((ok) => { const r = new FileReader(); r.onload = () => ok(String(r.result || "")); r.onerror = () => ok(""); r.readAsDataURL(new Blob([blob], { type: "image/png" })); }); }
-      setBrand({ name: sb.name, logo, v: sb.v, tint: sb.tint || "" });
+      setBrand({ name: sb.name, logo, v: sb.v, tint: sb.tint || "", mode: sb.mode === "light" ? "light" : "dark" });
     })();
   }, [index?.brand?.v]);
 
@@ -218,15 +218,16 @@ function BrandCard({ studio, onIndex }: { studio: Studio; onIndex: (i: StudioInd
   const [accent, setAccent] = useState<string | null | undefined>(undefined); // undefined: reading
   useEffect(() => { let on = true; setAccent(undefined); (shown ? accentFromImage(shown) : Promise.resolve(null)).then((a) => { if (on) setAccent(a); }); return () => { on = false; }; }, [shown]);
   const tint = tintOn && shown && accent ? accent : "";
-  const pal = accent ? tintPalette(accent) : null;
+  const [mode, setMode] = useState<"dark" | "light">(b.mode === "light" ? "light" : "dark");
+  const pal = accent ? tintPalette(accent, mode) : null;
   const save = async () => {
     setBusy(true);
     try {
-      const i = await studio.saveBrand(name.trim() || DEFAULT_NAME, logo, tint);
+      const i = await studio.saveBrand(name.trim() || DEFAULT_NAME, logo, tint, mode);
       onIndex(i);
-      setBrand({ name: name.trim() || DEFAULT_NAME, logo: shown, v: i.brand?.v, tint });
+      setBrand({ name: name.trim() || DEFAULT_NAME, logo: shown, v: i.brand?.v, tint, mode });
       setLogo(null);
-      toast(tint ? "Saved. The Studio now wears the logo's colours on every device you sign in on." : "Saved. Every device you sign in on shows the new name and logo.");
+      toast(tint ? `Saved. The Studio now wears the logo's colours${mode === "light" ? " in light mode" : ""} on every device you sign in on.` : "Saved. Every device you sign in on shows the new name and logo.");
     } catch (e) { toast(explain(e), "bad"); }
     setBusy(false);
   };
@@ -240,19 +241,25 @@ function BrandCard({ studio, onIndex }: { studio: Studio; onIndex: (i: StudioInd
         {shown && <button type="button" className="btn btn-sm" onClick={() => setLogo("")}>Remove</button>}
         <span className="hint">A square image works best. It's also the browser-tab icon.</span>
       </div>
+      <div className="flex flex-col gap-1.5"><span className="label">Studio look</span>
+        <div className="flex self-start rounded-lg border border-ink-600" role="radiogroup" aria-label="Studio look">
+          {([["dark", "Dark"], ["light", "Light"]] as const).map(([k, l]) => <button key={k} type="button" role="radio" aria-checked={mode === k} onClick={() => setMode(k)} className={`btn btn-sm border-0 ${mode === k ? "bg-ink-700" : "bg-transparent"}`}>{l}</button>)}
+        </div>
+        <span className="hint">Works with or without the logo's colours below.</span>
+      </div>
       <div className="flex flex-col gap-2 rounded-xl border border-ink-700 p-3" aria-label="Colours from the logo">
         <Toggle id="b-tint" label="Colour the Studio from the logo" checked={tintOn && !!shown} onChange={(v) => setTintOn(v)} />
-        {!shown ? <p className="hint">Upload a logo first. Its main colour becomes the Studio's accent, and the dark background leans toward it.</p>
+        {!shown ? <p className="hint">Upload a logo first. Its main colour becomes the Studio's accent, and the background leans toward it.</p>
           : accent === undefined ? <p className="hint">Reading the logo's colours…</p>
           : !accent || !pal ? <p className="text-[13px] text-amber-200">This logo is black, white or grey, so there's no colour to take from it. The Studio keeps its standard colours.</p>
           : <div className="flex flex-wrap items-center gap-2 text-[13px] text-ink-300">
               <span>From this logo:</span>
               {["brand-600", "brand-500", "brand-400", "brand-300", "ink-800", "ink-950"].map((k) => <span key={k} title={pal[k]} className="h-6 w-6 rounded-md border border-white/15" style={{ background: pal[k] }} />)}
               <span className="rounded-lg px-3 py-1.5 text-[13px] font-bold text-white" style={{ background: pal["brand-500"] }}>Button</span>
-              <span className="hint">{tintOn ? (tint === (b.tint || "") ? "In use." : "Save to use it on every device.") : "Switch on to use these."}</span>
+              <span className="hint">{tintOn ? (tint === (b.tint || "") && mode === (b.mode || "dark") ? "In use." : "Save to use it on every device.") : "Switch on to use these."}</span>
             </div>}
       </div>
-      <button type="button" className="btn btn-pri self-start" disabled={busy || (tintOn && !!shown && accent === undefined) || (name.trim() === b.name && logo === null && tint === (b.tint || ""))} onClick={save}>{busy ? "Saving…" : "Save name & logo"}</button>
+      <button type="button" className="btn btn-pri self-start" disabled={busy || (tintOn && !!shown && accent === undefined) || (name.trim() === b.name && logo === null && tint === (b.tint || "") && mode === (b.mode || "dark"))} onClick={save}>{busy ? "Saving…" : "Save name & logo"}</button>
     </section>
   );
 }

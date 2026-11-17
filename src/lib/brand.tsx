@@ -4,14 +4,14 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import { basePath } from "./util";
-import { applyTint, isHex } from "./tint";
+import { applyTint, isHex, type UiMode } from "./tint";
 
 export const DEFAULT_NAME = "Picaffectz Studio";
-export type Brand = { name: string; logo: string /* small data: URL, or "" */; v?: number; /** The interface is coloured from the logo: its main colour (#rrggbb), or "" for the standard colours. */ tint?: string };
+export type Brand = { name: string; logo: string /* small data: URL, or "" */; v?: number; /** The interface is coloured from the logo: its main colour (#rrggbb), or "" for the standard colours. */ tint?: string; /** Light or dark interface (dark when unset). */ mode?: UiMode };
 
 const KEY = () => "studio-brand:" + basePath();
 function load(): Brand {
-  try { const b = JSON.parse(localStorage.getItem(KEY()) || "null"); if (b && typeof b.name === "string") return { name: b.name || DEFAULT_NAME, logo: typeof b.logo === "string" && b.logo.startsWith("data:image/") ? b.logo : "", v: b.v, tint: isHex(b.tint) ? b.tint : "" }; } catch { /* ignore */ }
+  try { const b = JSON.parse(localStorage.getItem(KEY()) || "null"); if (b && typeof b.name === "string") return { name: b.name || DEFAULT_NAME, logo: typeof b.logo === "string" && b.logo.startsWith("data:image/") ? b.logo : "", v: b.v, tint: isHex(b.tint) ? b.tint : "", mode: b.mode === "light" ? "light" : "dark" }; } catch { /* ignore */ }
   return { name: DEFAULT_NAME, logo: "" };
 }
 let cur = load();
@@ -21,13 +21,13 @@ function applyDoc(b: Brand) {
   let l = document.querySelector<HTMLLinkElement>("link[rel=icon]");
   if (b.logo) { if (!l) { l = document.createElement("link"); l.rel = "icon"; document.head.appendChild(l); } l.href = b.logo; }
   else if (l) l.remove();
-  applyTint(b.tint || null);
+  applyTint(b.tint || null, b.mode);
 }
 applyDoc(cur);
 
 export const brand = () => cur;
 export function setBrand(b: Partial<Brand>) {
-  cur = { name: (b.name ?? cur.name).trim() || DEFAULT_NAME, logo: b.logo ?? cur.logo, v: b.v ?? cur.v, tint: b.tint ?? cur.tint ?? "" };
+  cur = { name: (b.name ?? cur.name).trim() || DEFAULT_NAME, logo: b.logo ?? cur.logo, v: b.v ?? cur.v, tint: b.tint ?? cur.tint ?? "", mode: b.mode ?? cur.mode ?? "dark" };
   try { localStorage.setItem(KEY(), JSON.stringify(cur)); } catch { /* private mode: this session only */ }
   applyDoc(cur);
   subs.forEach((f) => f(cur));

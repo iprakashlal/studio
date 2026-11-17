@@ -426,7 +426,7 @@ function header() {
   const cur = (p) => (PAGE === p ? ' aria-current="page"' : "");
   return `${B.showAnnouncement && B.announcement ? `<div class="announce">${ml(B.announcement)}</div>` : ""}
   <header class="hdr"><div class="wrap" style="position:relative">
-    <a class="brand" href="index.html"><span class="mark" style="${markCss()}">${B.logo ? `<img src="${esc(imgUrl(B.logo))}" alt=""${B.logoFit === "wide" ? ` style="height:${markH()}px;width:auto;max-width:min(${markH() * 6}px,52vw);object-fit:contain"` : ""}>` : esc(initials)}</span>${B.showName === false && B.logo ? "" : `<b>${esc(B.name)}</b>`}</a>
+    <a class="brand" href="index.html"><span class="mark" style="${markCss()}">${B.logoVideo ? `<video src="${esc(imgUrl(B.logoVideo))}"${B.logo ? ` poster="${esc(imgUrl(B.logo))}"` : ""} autoplay muted loop playsinline aria-hidden="true" style="${B.logoFit === "wide" ? `height:${markH()}px;width:auto;max-width:min(${markH() * 6}px,52vw);object-fit:contain` : "width:100%;height:100%;object-fit:cover"};display:block"></video>` : B.logo ? `<img src="${esc(imgUrl(B.logo))}" alt=""${B.logoFit === "wide" ? ` style="height:${markH()}px;width:auto;max-width:min(${markH() * 6}px,52vw);object-fit:contain"` : ""}>` : esc(initials)}</span>${B.showName === false && (B.logo || B.logoVideo) ? "" : `<b>${esc(B.name)}</b>`}</a>
     <nav class="nav" id="nav" aria-label="Main"><a href="index.html"${cur("home")}>${esc(N.home)}</a><a href="shop.html"${cur("shop")}>${esc(N.shop)}</a>${swOn() && C.warranty.inNav ? `<a href="warranty.html"${cur("warranty")}>${esc(C.warranty.navLabel || "Warranty")}</a>` : ""}${N.showPortfolio ? `<a href="portfolio.html"${cur("portfolio")}>${esc(N.portfolio)}</a>` : ""}${spList().filter((p) => p.inNav).map((p) => `<a href="${esc(spHref(p))}"${PAGE === "page" && spSlug(p) === spSlug({ slug: spCur() }) ? ' aria-current="page"' : ""}>${esc(p.navLabel || p.title)}</a>`).join("")}${ACCOUNTS() ? `<a href="account.html"${cur("account")}>${esc(N.account)}</a>` : ""}</nav>
     <a class="cartlink" href="cart.html"${cur("cart")}><span class="t">${esc(N.cart)}</span><span class="n" data-cartcount>${cartCount()}</span></a>
     <button class="menubtn" type="button" aria-controls="nav" aria-expanded="false" aria-label="Menu">☰</button>
@@ -722,11 +722,11 @@ function festival() {
 const markH = () => Math.max(20, Math.min(96, +C.brand.logoSize || 38));
 function markCss() {
   const B = C.brand, h = markH();
-  return B.logoFit === "wide" && B.logo ? `height:${h}px;width:auto;background:none;border-radius:0` : h !== 38 ? `width:${h}px;height:${h}px;font-size:${Math.round(h * 0.4)}px` : "";
+  return B.logoFit === "wide" && (B.logo || B.logoVideo) ? `height:${h}px;width:auto;background:none;border-radius:0` : h !== 38 ? `width:${h}px;height:${h}px;font-size:${Math.round(h * 0.4)}px` : "";
 }
 function heroLogo() {
-  const B = C.brand, src = PAGE === "home" && B.logoOnHero && B.logo ? imgUrl(B.logo) : "";
-  if (window.SiteLogo) window.SiteLogo.hero(src, { at: "#main h1", size: B.heroLogoSize, radius: C.theme.logoRadius ?? 26, wide: B.logoFit === "wide", edit: "brand.logo" });
+  const B = C.brand, on = PAGE === "home" && B.logoOnHero, src = on && B.logo ? imgUrl(B.logo) : "";
+  if (window.SiteLogo) window.SiteLogo.hero(src, { video: on && B.logoVideo ? imgUrl(B.logoVideo) : "", at: "#main h1", size: B.heroLogoSize, radius: C.theme.logoRadius ?? 26, wide: B.logoFit === "wide", edit: "brand.logo" });
 }
 /* Social links in the footer (assets/social.js). */
 let ssP;
@@ -834,7 +834,7 @@ function render() {
 let slP, slGen = 0;
 function slides() {
   const S = C.home && C.home.hero && C.home.hero.slides, g = ++slGen, host = PAGE === "home" ? $("#main .hero") : null;
-  if (!host || !S || !S.enabled || !(S.items || []).some((x) => x && x.image)) { if (window.SiteSlides) window.SiteSlides.stop(); return; }
+  if (!host || !S || !S.enabled || !(S.items || []).some((x) => x && (x.image || x.video))) { if (window.SiteSlides) window.SiteSlides.stop(); return; }
   (slP ||= new Promise((ok, no) => { if (window.SiteSlides) return ok(window.SiteSlides); const s = document.createElement("script"); s.src = "assets/slides.js"; s.onload = () => ok(window.SiteSlides); s.onerror = no; document.head.appendChild(s); }))
     .then((w) => { if (g === slGen) w.mount(host, S, { imgUrl, title: "h1", text: ".lead", hide: ".art,.hx-art,.orn" }); }).catch(() => {});
 }

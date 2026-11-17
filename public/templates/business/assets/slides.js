@@ -3,7 +3,8 @@
    renders; calling it again (for example in the Studio's live preview) replaces the previous slideshow.
 
    settings (content: hero.slides, or home.hero.slides in the shop):
-     enabled, items: [{ image, title, text, position }], effect: fade | slide | zoom | kenburns, interval (s),
+     enabled, items: [{ image, video, title, text, position }],   // video: an uploaded clip that plays (silently, on a loop) while its slide shows; the photo is its cover
+      effect: fade | slide | zoom | kenburns, interval (s),
      speed (s), overlay (0-90 %), overlayColor, overlayStyle: solid | left | bottom, textColor: light | dark | theme,
      height: auto | tall | full, dots, arrows, pause (pause while hovered or focused), hideArt,
      artOpacity (10-100 %: how solid the hero's own picture or cards are over the photos, when they aren't hidden)
@@ -13,7 +14,7 @@
   var CSS = ".hs-host{isolation:isolate;overflow:hidden}" +
     ".hs-bg{position:absolute;inset:0;z-index:-1;pointer-events:none;overflow:hidden}" +
     ".hs-s{position:absolute;inset:0;background-size:cover;background-repeat:no-repeat;opacity:0;transition:opacity var(--hs-sp,1s) ease,transform var(--hs-sp,1s) cubic-bezier(.2,.7,.2,1)}" +
-    ".hs-s.on{opacity:1}" +
+    ".hs-s.on{opacity:1}.hs-s video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}" +
     ".hs-e-slide .hs-s{opacity:1;transform:translateX(100%)}.hs-e-slide .hs-s.on{transform:none}.hs-e-slide .hs-s.out{transform:translateX(-100%)}" +
     ".hs-e-zoom .hs-s{transform:scale(1.14)}.hs-e-zoom .hs-s.on{transform:scale(1)}" +
     ".hs-e-kenburns .hs-s.on{animation:hs-kb var(--hs-iv,6s) linear both}@keyframes hs-kb{from{transform:scale(1)}to{transform:scale(1.14)}}" +
@@ -47,7 +48,7 @@
     o = o || {};
     if (!host || !S || !S.enabled) return;
     var url = o.imgUrl || function (i) { return i && (i.url || i.path) || ""; };
-    var items = (S.items || []).map(function (it) { return { u: url(it && it.image), it: it || {} }; }).filter(function (x) { return x.u; });
+    var items = (S.items || []).map(function (it) { return { u: url(it && it.image), v: url(it && it.video), it: it || {} }; }).filter(function (x) { return x.u || x.v; });
     if (!items.length) return;
     css();
     var reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -63,7 +64,8 @@
     var bg = document.createElement("div");
     bg.className = "hs-bg hs-e-" + effect + " fx-skip"; bg.setAttribute("aria-hidden", "true");
     bg.style.setProperty("--hs-sp", sp + "s"); bg.style.setProperty("--hs-iv", (iv + sp) + "s");
-    bg.innerHTML = items.map(function (x, i) { return '<div class="hs-s' + (i === 0 ? " on" : "") + '" style="background-position:' + (POS[x.it.position] || POS.center) + '" data-u="' + escH(x.u) + '"></div>'; }).join("") +
+    bg.innerHTML = items.map(function (x, i) { return '<div class="hs-s' + (i === 0 ? " on" : "") + '" style="background-position:' + (POS[x.it.position] || POS.center) + '" data-u="' + escH(x.u) + '">' +
+      (x.v ? '<video muted loop playsinline preload="none" data-v="' + escH(x.v) + '" style="object-position:' + (POS[x.it.position] || POS.center) + '"></video>' : "") + "</div>"; }).join("") +
       '<div class="hs-ov"></div>';
     var ov = bg.lastChild, a = Math.max(0, Math.min(90, S.overlay == null ? 40 : +S.overlay)) / 100, col = /^#[0-9a-f]{3,8}$/i.test(S.overlayColor || "") ? S.overlayColor : "#000000";
     var mix = function (p) { return "color-mix(in srgb," + col + " " + Math.round(p * 100) + "%,transparent)"; };
@@ -71,8 +73,10 @@
     if (S.overlayStyle !== "left" && S.overlayStyle !== "bottom") ov.style.opacity = a;
     host.insertBefore(bg, host.firstChild); st.made.push(bg);
     var slides = [].slice.call(bg.querySelectorAll(".hs-s"));
-    var load = function (i) { var s = slides[i]; if (s && !s.style.backgroundImage) s.style.backgroundImage = "url(\"" + s.dataset.u.replace(/"/g, "%22") + "\")"; };
-    load(0); load(1 % slides.length);
+    var load = function (i) { var s = slides[i]; if (!s) return; if (s.dataset.u && !s.style.backgroundImage) s.style.backgroundImage = "url(\"" + s.dataset.u.replace(/"/g, "%22") + "\")"; var v = s.querySelector("video"); if (v && !v.getAttribute("src")) { v.muted = true; v.src = v.dataset.v; } };
+    // A slide's video plays only while that slide shows (and not at all for visitors who asked for less motion).
+    var film = function (i) { slides.forEach(function (s, k) { var v = s.querySelector("video"); if (!v) return; if (k === i && !reduced) { var p = v.play(); if (p && p.catch) p.catch(function () {}); } else { try { v.pause(); } catch (e) {} } }); };
+    load(0); load(1 % slides.length); film(0);
     if (S.hideArt !== false && o.hide) [].slice.call(host.querySelectorAll(o.hide)).forEach(function (n) { n.dataset.hsD = n.style.display; n.style.display = "none"; st.hidden.push(n); });
     // Kept over the photos: as solid as asked (the photos show through the cards or picture).
     var ao = S.artOpacity == null || S.artOpacity === "" ? 100 : Math.max(10, Math.min(100, +S.artOpacity || 100));
@@ -101,7 +105,7 @@
       if (effect === "kenburns") { slides[i].style.animation = "none"; void slides[i].offsetWidth; slides[i].style.animation = ""; }
       prev.classList.remove("on"); slides[i].classList.add("on");
       at = i; dots.forEach(function (d, k) { d.setAttribute("aria-current", String(k === i)); });
-      words(i);
+      words(i); film(i);
     }
     var auto = !reduced && slides.length > 1;
     function play() { clearInterval(st.t); if (auto && !paused) st.t = setInterval(function () { if (!document.hidden) go(at + 1); }, iv * 1000); }

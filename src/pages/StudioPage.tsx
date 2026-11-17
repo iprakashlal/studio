@@ -10,7 +10,7 @@ import { cfDeployInfo } from "../lib/cfdb";
 import { PAGES_FILE, pageHref, repoPages, savePages, slugOf, studioPageDefault, useStudioPages, type StudioPage } from "../lib/studiopages";
 import { pageSlug, staticPageFields } from "../schema/common";
 import { BrandMark, useBrand } from "../lib/brand";
-import { Logo, useToast } from "../ui/kit";
+import { Logo, useToast, Skel, SkelLines, SkelRows } from "../ui/kit";
 import { Ctx, FieldView } from "../editor/fields";
 import { TEMPLATES } from "../schema";
 import { basePath, textToB64 } from "../lib/util";
@@ -48,7 +48,7 @@ export function StudioPageView({ slug, host, repo }: { slug: string; host: Studi
           <a href="#/" className="btn btn-ghost btn-sm ml-auto text-ink-400">← {repo ? "Back to the Studio" : "Sign in"}</a>
         </div>
       </header>
-      {html ? <div onClick={jump} dangerouslySetInnerHTML={{ __html: html }} /> : <p className="py-24 text-center text-sm text-ink-400">Loading…</p>}
+      {html ? <div onClick={jump} dangerouslySetInnerHTML={{ __html: html }} /> : <div className="py-10"><Skel className="mb-6 h-9 w-72" /><SkelLines n={8} /></div>}
       <footer className="border-t border-ink-700 py-5"><StudioPageLinks host={host} repo={repo} where="footer" /></footer>
     </div>
   );
@@ -92,7 +92,7 @@ export function StudioPagesCard({ repo }: { repo: Repo }) {
       <p className="text-sm text-ink-300">The Studio's own reading pages, such as its privacy policy and terms. Each one opens at <span className="font-mono text-[12.5px]">{addr}&lt;name&gt;</span> and can be linked on the sign-in screen and under the Studio. Saved in the Studio's files (<code className="font-mono text-xs">{PAGES_FILE}</code>), so every device shows the same.</p>
       {reach === "update" && <p className="rounded-lg border border-amber-400/40 bg-amber-400/5 px-3 py-2 text-[13px] text-amber-100">People who aren't signed in can read these after one update of your Studio's database: Settings → Hostings → Sites and hosting accounts → Update the database.</p>}
       {reach === "private" && <p className="rounded-lg border border-amber-400/40 bg-amber-400/5 px-3 py-2 text-[13px] text-amber-100">This Studio keeps its files in a private GitHub repository, so only people signed in to the Studio can read these pages. A Studio on Cloudflare (Settings → Migration) shows them to everyone.</p>}
-      {!draft ? <p className="text-sm text-ink-400">Loading…</p> : (
+      {!draft ? <SkelRows n={3} label="Loading the pages" /> : (
         <Ctx.Provider value={ctx}>
           <div className="flex flex-col gap-3" data-v={v}>{fields.map((f, i) => <FieldView key={i} f={f} obj={draft} base="studio-pages" />)}</div>
         </Ctx.Provider>
@@ -130,7 +130,7 @@ export function StudioEmailCard({ repo }: { repo: Repo }) {
       <h3 className="text-[15px] font-extrabold">Sign-in email</h3>
       <p className="text-sm text-ink-300">The email that carries the 6-digit code when someone signs in to this Studio. Leave a box empty to keep the standard wording shown in grey. <span className="font-mono text-[12.5px]">{"{studio}"}</span> is filled in with the Studio's name. Each site has its own under Forms &amp; records → Email templates in its admin page.</p>
       {cf === false && <p className="rounded-lg border border-amber-400/40 bg-amber-400/5 px-3 py-2 text-[13px] text-amber-100">Sign-in codes are only emailed by a Studio on Cloudflare (Settings → Migration). This Studio signs in another way, so the wording isn't used yet.</p>}
-      {!t ? <p className="text-sm text-ink-400">Loading…</p> : <>
+      {!t ? <SkelLines n={5} /> : <>
         <label className="flex flex-col gap-1"><span className="label">Subject and heading</span><input className="input" value={t.subject} onChange={set("subject")} placeholder="Your sign-in code" maxLength={150} /></label>
         <label className="flex flex-col gap-1"><span className="label">Line above the code</span><textarea className="input" rows={2} value={t.intro} onChange={set("intro")} placeholder={`Enter this code to sign in to ${b.name}:`} maxLength={600} /></label>
         <label className="flex flex-col gap-1"><span className="label">Line below the code</span><textarea className="input" rows={2} value={t.footer} onChange={set("footer")} placeholder="It works for 10 minutes. If you didn't ask for it, ignore this email." maxLength={600} /></label>

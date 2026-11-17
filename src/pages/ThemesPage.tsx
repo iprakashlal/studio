@@ -8,7 +8,7 @@ import { ThemeSwatch } from "../themes/ThemeGallery";
 import { themeCode } from "../themes/codes";
 import { TEMPLATES } from "../schema";
 import { Preview } from "../editor/Preview";
-import { Logo, useToast } from "../ui/kit";
+import { Logo, useToast, Skel } from "../ui/kit";
 
 // A public page (no sign-in) that shows every theme, so you can send it to a client.
 // Hover a card for a live preview, click it for a bigger one, and quote the theme ID (T-07) to choose.
@@ -17,7 +17,7 @@ import { Logo, useToast } from "../ui/kit";
 type Kind = "portfolio" | "store" | "business";
 const KINDS: { id: Kind; label: string }[] = [{ id: "portfolio", label: "Personal portfolio" }, { id: "store", label: "Shop" }, { id: "business", label: "Business portfolio" }];
 /** Business sites have their own themes; personal portfolios and shops share the rest. */
-const poolOf = (k: Kind): Theme[] => limitThemes(k === "business" ? BIZ_THEMES : THEMES);
+const poolOf = (k: Kind): Theme[] => limitThemes(k === "business" ? BIZ_THEMES : THEMES, undefined, k);
 const ALL: Theme[] = [...THEMES, ...BIZ_THEMES];
 const LS = "site-studio:theme-shortlist";
 
@@ -255,7 +255,7 @@ function ThemeModal(p: { theme: Theme; kind: Kind; setKind: (k: Kind) => void; s
         </div>
         {p.sample ? (
           <Preview key={t.id + p.kind} tpl={TEMPLATES[p.kind]} base={`templates/${p.kind}/`} content={withTheme(p.sample, p.kind, t)} version={v} assets={{}} editable={false} />
-        ) : <div className="grid flex-1 place-items-center text-ink-400">Loading preview…</div>}
+        ) : <div role="status" aria-label="Loading the preview" className="flex flex-1 flex-col gap-4 p-6"><Skel className="h-10 w-full rounded-lg" /><Skel className="min-h-[40vh] w-full flex-1 rounded-xl" /><div className="grid grid-cols-3 gap-4"><Skel className="h-24 rounded-xl" /><Skel className="h-24 rounded-xl" /><Skel className="h-24 rounded-xl" /></div></div>}
         <p className="border-t border-ink-700 px-4 py-2 text-xs text-ink-400">Sample content shown. Your own text, photos and products replace it. To choose this design, quote <b className="text-ink-200">{themeCode(t)} · {t.name}</b>.</p>
       </div>
     </div>

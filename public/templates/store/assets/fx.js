@@ -624,6 +624,25 @@
     d.appendChild(im); before.parentNode.insertBefore(d, before);
     return d;
   }
+  /* Skeleton loading: the outline of a page (menu bar, headline, picture, cards) shown in an empty page root while
+     the site's content is fetched, so a visitor on a slow connection sees the page taking shape instead of a blank
+     screen. The template's first render replaces it. Neutral greys, so it sits on any theme's background. */
+  function skeleton(root) {
+    if (!root || root.firstElementChild) return null;
+    var b = function (st) { return '<i style="' + st + '"></i>'; }, row = function (inner, st) { return '<div style="display:flex;gap:14px;align-items:center;' + (st || "") + '">' + inner + "</div>"; };
+    var d = document.createElement("div"); d.className = "site-skel"; d.setAttribute("role", "status"); d.setAttribute("aria-label", "Loading");
+    d.innerHTML = "<style>.site-skel{max-width:1200px;margin:0 auto;padding:22px clamp(18px,4vw,32px) 60px;min-height:100vh}.site-skel i{display:block;border-radius:10px;background:linear-gradient(100deg,rgba(128,128,128,.16) 30%,rgba(128,128,128,.3) 50%,rgba(128,128,128,.16) 70%);background-size:220% 100%;animation:site-skel 1.6s ease-in-out infinite}" +
+      "@keyframes site-skel{from{background-position:120% 0}to{background-position:-100% 0}}@media (prefers-reduced-motion:reduce){.site-skel i{animation:none}}.site-skel .sk-hero{display:grid;grid-template-columns:1.1fr 1fr;gap:clamp(24px,5vw,64px);align-items:center;margin-top:clamp(40px,8vw,90px)}.site-skel .sk-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:clamp(48px,8vw,96px)}@media (max-width:760px){.site-skel .sk-hero,.site-skel .sk-cards{grid-template-columns:1fr}.site-skel .sk-nav i:nth-child(n+3):not(:last-child){display:none}}</style>" +
+      row(b("width:40px;height:40px;border-radius:12px") + b("width:130px;height:16px") + '<span style="flex:1"></span>' + b("width:64px;height:12px") + b("width:64px;height:12px") + b("width:64px;height:12px") + b("width:110px;height:38px;border-radius:99px"), "").replace("<div ", '<div class="sk-nav" ') +
+      '<div class="sk-hero"><div>' + b("width:38%;height:12px") + b("width:92%;height:44px;margin-top:22px") + b("width:70%;height:44px;margin-top:12px") + b("width:88%;height:13px;margin-top:28px") + b("width:80%;height:13px;margin-top:10px") + b("width:56%;height:13px;margin-top:10px") +
+      row(b("width:150px;height:46px;border-radius:99px") + b("width:120px;height:46px;border-radius:99px"), "margin-top:30px") + "</div>" + b("width:100%;aspect-ratio:5/4;border-radius:22px") + "</div>" +
+      '<div class="sk-cards">' + [0, 1, 2].map(function () { return "<div>" + b("width:100%;aspect-ratio:16/10;border-radius:16px") + b("width:70%;height:15px;margin-top:16px") + b("width:92%;height:11px;margin-top:10px") + b("width:60%;height:11px;margin-top:8px") + "</div>"; }).join("") + "</div>";
+    root.appendChild(d);
+    // If the page never draws into this root (an error, a full-screen notice), the outline doesn't stay forever.
+    setTimeout(function () { if (d.parentNode) d.remove(); }, 12000);
+    return d;
+  }
+  window.SiteSkeleton = { show: skeleton };
   window.SiteLogo = { hero: heroLogo };
   window.SiteFX = { init: init, version: 1 };
 })();

@@ -1,4 +1,4 @@
-// Settings → Studio Partners: set up Studios for clients (on your accounts or theirs), share sites with them and
+// Studio Partners (its own page, #/partners): set up Studios for clients (on your accounts or theirs), share sites with them and
 // keep those sites in step both ways. Each client Studio shows as a card with its shared sites and their status.
 import { isHosted } from "../lib/backend";
 import { useEffect, useRef, useState } from "react";
@@ -15,7 +15,10 @@ import { useBrand } from "../lib/brand";
 import { appBase, appFiles } from "../lib/migrate";
 import { loadHostConfig } from "../lib/studiohost";
 import { deployClientApp, getClientFeatures, hostOf, partnerSignedIn, prepareClientSupabase, pullSite, remoteRepo, seedClientStudio, sendSite, setClientFeatures, siteSync, type PartnerRec, type SharedSite, type SiteSync } from "../lib/partners";
-import { CLIENT_FEATURES } from "../lib/features";
+import { CLIENT_FEATURES, cleanThemeList } from "../lib/features";
+import { THEMES, type Theme } from "../themes/catalog";
+import { BIZ_THEMES } from "../themes/business";
+import { themeCode } from "../themes/codes";
 import { partnerPlan, teardownPartner } from "../lib/teardown";
 import { TeardownDialog } from "./TeardownDialog";
 import { transferFiles } from "../lib/migrate";
@@ -51,6 +54,42 @@ export function PartnersTab({ studio, index, session, onIndex }: { studio: Studi
         onDone={async (rec) => { await save((l) => [...l.filter((x) => x.id !== rec.id), rec], `Add client Studio ${rec.name}`); setAdding(false); }} />}
       {(index.partners || []).map((p) => <PartnerCard key={p.id} p={p} studio={studio} index={index} nf={nf} setNf={setNf} session={session} myEmail={myEmail} studioToken={session.token} partner={partner}
         onChange={(fn, msg) => save((l) => l.map((x) => (x.id === p.id ? fn(x) : x)), msg)} onRemove={() => save((l) => l.filter((x) => x.id !== p.id), `Remove client Studio ${p.name}`)} />)}
+    </div>
+  );
+}
+
+// The themes of each type of site (the shop and the portfolio share one catalogue).
+const THEME_KINDS: { id: "portfolio" | "store" | "business"; label: string; pool: Theme[] }[] = [{ id: "portfolio", label: "Portfolio sites", pool: THEMES }, { id: "store", label: "Online shops", pool: THEMES }, { id: "business", label: "Business sites", pool: BIZ_THEMES as unknown as Theme[] }];
+/** Choosing the themes a client Studio may use for one type of site: all of them, or the ticked ones. */
+function ThemePick({ label, pool, value, onChange }: { label: string; pool: Theme[]; value: string[]; onChange: (ids: string[]) => void }) {
+  const [open, setOpen] = useState(false), [find, setFind] = useState("");
+  const all = value.length === 0, on = new Set(value);
+  const q = find.trim().toLowerCase(), shown = pool.filter((t) => !q || (themeCode(t) + " " + t.name + " " + (t.tags || []).join(" ")).toLowerCase().includes(q));
+  const toggle = (id: string) => { const n = new Set(on); n.has(id) ? n.delete(id) : n.add(id); onChange(pool.filter((t) => n.has(t.id)).map((t) => t.id)); };
+  return (
+    <div className="rounded-lg border border-ink-700" aria-label={`Themes for ${label}`}>
+      <button type="button" className="flex w-full items-center gap-2 px-3 py-2 text-left" aria-expanded={open} onClick={() => setOpen(!open)}>
+        <span className="font-semibold text-ink-200">{label}</span>
+        <span className="text-ink-400">· {all ? `all ${pool.length} themes` : `${value.length} of ${pool.length} themes`}</span>
+        <span className="ml-auto text-ink-400">{open ? "Close" : "Choose"}</span>
+      </button>
+      {open && <div className="flex flex-col gap-2 border-t border-ink-700 p-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <input className="input min-w-0 flex-1 py-1.5" type="search" placeholder="Find a theme by name, code or style…" aria-label={`Find a theme for ${label}`} value={find} onChange={(e) => setFind(e.target.value)} />
+          <button type="button" className="btn btn-sm" onClick={() => onChange([])}>All themes</button>
+          <button type="button" className="btn btn-sm" onClick={() => onChange([...new Set([...value, ...shown.map((t) => t.id)])])}>Tick {q ? "these" : "all"}</button>
+          <button type="button" className="btn btn-sm" disabled={all} onClick={() => onChange(value.filter((id) => !shown.some((t) => t.id === id)))}>Untick {q ? "these" : "all"}</button>
+        </div>
+        {all && <span className="text-ink-400">Every theme is allowed. Tick the ones to keep, and only those are offered.</span>}
+        <ul className="grid max-h-72 gap-x-3 gap-y-1 overflow-y-auto pr-1 sm:grid-cols-2">
+          {shown.map((t) => <li key={t.id}><label className="flex cursor-pointer items-center gap-2 rounded-md px-1 py-1 hover:bg-ink-800">
+            <input type="checkbox" className="accent-brand-500" checked={on.has(t.id)} onChange={() => toggle(t.id)} />
+            <span aria-hidden className="flex h-5 w-9 flex-none overflow-hidden rounded border border-white/15">{[t.colors.bg, t.colors.c1, t.colors.c2].map((c, i) => <i key={i} className="flex-1" style={{ background: c }} />)}</span>
+            <span className="truncate"><span className="font-mono text-[12px] text-ink-400">{themeCode(t)}</span> {t.name}</span>
+          </label></li>)}
+          {!shown.length && <li className="text-ink-400">No theme matches.</li>}
+        </ul>
+      </div>}
     </div>
   );
 }
@@ -187,9 +226,9 @@ function PartnerCard({ p, studio, index, nf, setNf, session, myEmail, studioToke
   const [myDb, setMyDb] = useState<{ api: string; studio: string } | null>(null);
   useEffect(() => { loadHostConfig().then((c) => setMyDb(c?.kind === "cloudflare" ? { api: c.api, studio: c.studio } : null)).catch(() => {}); }, []);
   // Limits: how many themes they can choose from and how many sites of each type they can have ("" = no limit).
-  const [lim, setLim] = useState<{ themes: string; portfolio: string; store: string; business: string }>({ themes: "", portfolio: "", store: "", business: "" }), [limSaved, setLimSaved] = useState("");
-  useEffect(() => { if (signed) getClientFeatures(remoteRepo(p)).then((f) => { setHide(f.hide); const l = { themes: f.themes ? String(f.themes) : "", portfolio: f.max?.portfolio != null ? String(f.max.portfolio) : "", store: f.max?.store != null ? String(f.max.store) : "", business: f.max?.business != null ? String(f.max.business) : "" }; setLim(l); setLimSaved(JSON.stringify(l)); }).catch(() => setHide([])); }, [signed, p.studio, p.api, p.sbUrl]);
-  const featuresNow = (h: string[], l = lim) => { const max: Record<string, number> = {}; for (const k of ["portfolio", "store", "business"] as const) if (l[k].trim() !== "" && +l[k] >= 0) max[k] = Math.floor(+l[k]); return { hide: h, ...(+l.themes > 0 ? { themes: Math.floor(+l.themes) } : {}), ...(Object.keys(max).length ? { max } : {}) }; };
+  const [lim, setLim] = useState<{ themes: string; portfolio: string; store: string; business: string; list: Record<string, string[]> }>({ themes: "", portfolio: "", store: "", business: "", list: {} }), [limSaved, setLimSaved] = useState("");
+  useEffect(() => { if (signed) getClientFeatures(remoteRepo(p)).then((f) => { setHide(f.hide); const l = { list: cleanThemeList(f.themeList), themes: f.themes ? String(f.themes) : "", portfolio: f.max?.portfolio != null ? String(f.max.portfolio) : "", store: f.max?.store != null ? String(f.max.store) : "", business: f.max?.business != null ? String(f.max.business) : "" }; setLim(l); setLimSaved(JSON.stringify(l)); }).catch(() => setHide([])); }, [signed, p.studio, p.api, p.sbUrl]);
+  const featuresNow = (h: string[], l = lim) => { const max: Record<string, number> = {}; for (const k of ["portfolio", "store", "business"] as const) if (l[k].trim() !== "" && +l[k] >= 0) max[k] = Math.floor(+l[k]); const themeList = cleanThemeList(l.list); return { hide: h, ...(+l.themes > 0 ? { themes: Math.floor(+l.themes) } : {}), ...(Object.keys(themeList).length ? { themeList } : {}), ...(Object.keys(max).length ? { max } : {}) }; };
   const toggleFeature = (key: string) => run("feat", async () => { const next = (hide || []).includes(key) ? (hide || []).filter((k) => k !== key) : [...(hide || []), key]; await setClientFeatures(remoteRepo(p), featuresNow(next, JSON.parse(limSaved || JSON.stringify(lim)))); setHide(next); });
   const saveLimits = () => run("lim", async () => { await setClientFeatures(remoteRepo(p), featuresNow(hide || [])); setLimSaved(JSON.stringify(lim)); toast("Limits saved. They apply the next time they open their Studio."); });
   const check = async () => {
@@ -266,12 +305,18 @@ function PartnerCard({ p, studio, index, nf, setNf, session, myEmail, studioToke
           </div>
           <div className="mt-3 border-t border-ink-700 pt-3" aria-label="Limits">
             <b className="text-ink-200">Limits</b> <span className="text-ink-400">(leave a box empty for no limit)</span>
-            <div className="mt-2 grid gap-2 sm:grid-cols-4">
-              {([["themes", "Themes to choose from"], ["portfolio", "Portfolio sites"], ["store", "Online shops"], ["business", "Business sites"]] as const).map(([k, l]) => (
-                <label key={k} className="flex flex-col gap-1"><span className="text-ink-400">{l}</span><input className="input py-1.5" type="number" min={0} max={999} inputMode="numeric" aria-label={l} value={lim[k]} placeholder={k === "themes" ? "all" : "no limit"} onChange={(e) => setLim({ ...lim, [k]: e.target.value })} /></label>
+            <div className="mt-2 grid gap-2 sm:grid-cols-3">
+              {([["portfolio", "Portfolio sites"], ["store", "Online shops"], ["business", "Business sites"]] as const).map(([k, l]) => (
+                <label key={k} className="flex flex-col gap-1"><span className="text-ink-400">{l}</span><input className="input py-1.5" type="number" min={0} max={999} inputMode="numeric" aria-label={l} value={lim[k]} placeholder="no limit" onChange={(e) => setLim({ ...lim, [k]: e.target.value })} /></label>
               ))}
             </div>
-            <div className="mt-2 flex flex-wrap items-center gap-2"><button type="button" className="btn btn-sm" disabled={busy === "lim" || JSON.stringify(lim) === limSaved} onClick={saveLimits}>{busy === "lim" ? "Saving…" : "Save limits"}</button><span className="text-ink-400">Themes: the first ones in each template's list. Sites: once they reach the number, that type isn't offered under New project.</span></div>
+            <div className="mt-3 flex flex-col gap-2" aria-label="Themes they can use">
+              <b className="text-ink-200">Themes they can use</b>
+              <span className="text-ink-400">Choose the themes for each type of site. A type left on “All themes” has no limit. A site already on another theme keeps it.</span>
+              {THEME_KINDS.map(({ id, label, pool }) => <ThemePick key={id} label={label} pool={pool} value={lim.list[id] || []} onChange={(ids) => setLim({ ...lim, themes: "", list: { ...lim.list, [id]: ids } })} />)}
+              {+lim.themes > 0 && <span className="text-amber-200">This Studio still has the older limit “the first {lim.themes} themes of each type”. Choosing themes above replaces it.</span>}
+            </div>
+            <div className="mt-2 flex flex-wrap items-center gap-2"><button type="button" className="btn btn-sm" disabled={busy === "lim" || JSON.stringify(lim) === limSaved} onClick={saveLimits}>{busy === "lim" ? "Saving…" : "Save limits"}</button><span className="text-ink-400">Sites: once they reach the number, that type isn't offered under New project.</span></div>
           </div>
         </details>
       )}

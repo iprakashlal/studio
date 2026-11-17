@@ -5,6 +5,7 @@
 //   projects/<id>/assets/uploads/*      images used by the site
 //   projects/<id>/exports/v<N>.json     content snapshot saved with each export
 
+import { cleanThemeList } from "../themes/limit";
 import { cleanBadge, type BadgeCfg } from "./badge";
 import { cleanMenu, cleanMenus, type MenuCfg } from "./menus";
 import type { Repo } from "./repo";
@@ -51,7 +52,7 @@ export type SiteState =
 export type CategoryRec = { id: string; name: string; color: string };
 /** The Studio's own name and logo (logo: a file in the data repository). */
 export type StudioBrand = { name: string; logo?: string; v?: number; /** Colour the Studio from the logo: the logo's main colour (#rrggbb). */ tint?: string; /** Light or dark Studio (dark when unset). */ mode?: "light" | "dark" };
-export type StudioIndex = { version: 1; categories: CategoryRec[]; projects: ProjectMeta[]; /** A client Studio: what its partner hid (see lib/features.ts). */ clientFeatures?: { hide: string[]; themes?: number; max?: Record<string, number> }; /** Which numbers the dashboard shows (lib/dashstats.ts). */ dash?: { stats: string[] }; brand?: StudioBrand; /** The "Powered by" badge every site shows (its look; each site only turns it on or off). */ badge?: import("./badge").BadgeCfg; /** Admin menus per template: renamed, reordered, combined sections. */ menus?: import("./menus").Menus; /** Where this Studio was moved (Netlify + Supabase). */ hosted?: import("./studiohost").HostedStudio; /** Client Studios (Studio Partners). */ partners?: import("./partners").PartnerRec[]; /** Project tools shown in the project's top bar (the rest are in Settings → Publish & tools). */ pinned?: string[] };
+export type StudioIndex = { version: 1; categories: CategoryRec[]; projects: ProjectMeta[]; /** A client Studio: what its partner hid (see lib/features.ts). */ clientFeatures?: { hide: string[]; themes?: number; themeList?: Record<string, string[]>; max?: Record<string, number> }; /** Which numbers the dashboard shows (lib/dashstats.ts). */ dash?: { stats: string[] }; brand?: StudioBrand; /** The "Powered by" badge every site shows (its look; each site only turns it on or off). */ badge?: import("./badge").BadgeCfg; /** Admin menus per template: renamed, reordered, combined sections. */ menus?: import("./menus").Menus; /** Where this Studio was moved (Netlify + Supabase). */ hosted?: import("./studiohost").HostedStudio; /** Client Studios (Studio Partners). */ partners?: import("./partners").PartnerRec[]; /** Project tools shown in the project's top bar (the rest are in Settings → Publish & tools). */ pinned?: string[] };
 
 export const CATEGORY_COLORS = ["#5B7CFF", "#3FB97A", "#F2A541", "#F06A6A", "#B57BFF", "#34C3D9", "#E86FB0", "#9AA6BC"];
 
@@ -283,7 +284,7 @@ function normalise(i: any): StudioIndex {
     ...(i?.badge && typeof i.badge === "object" ? { badge: cleanBadge(i.badge) } : {}),
     ...(i?.menus && Object.keys(cleanMenus(i.menus)).length ? { menus: cleanMenus(i.menus) } : {}),
     ...(i?.hosted && typeof i.hosted.url === "string" ? { hosted: i.hosted } : {}),
-    ...(Array.isArray(i?.clientFeatures?.hide) ? { clientFeatures: { hide: i.clientFeatures.hide.filter((x: any) => typeof x === "string").slice(0, 60), ...(+i.clientFeatures.themes > 0 ? { themes: Math.floor(+i.clientFeatures.themes) } : {}), ...(i.clientFeatures.max && typeof i.clientFeatures.max === "object" ? { max: Object.fromEntries(Object.entries(i.clientFeatures.max).filter(([k, v]) => /^[a-z]{1,20}$/.test(k) && Number.isFinite(+(v as any)) && +(v as any) >= 0).map(([k, v]) => [k, Math.floor(+(v as any))])) } : {}) } } : {}),
+    ...(Array.isArray(i?.clientFeatures?.hide) ? { clientFeatures: { hide: i.clientFeatures.hide.filter((x: any) => typeof x === "string").slice(0, 60), ...(+i.clientFeatures.themes > 0 ? { themes: Math.floor(+i.clientFeatures.themes) } : {}), ...(Object.keys(cleanThemeList(i.clientFeatures.themeList)).length ? { themeList: cleanThemeList(i.clientFeatures.themeList) } : {}), ...(i.clientFeatures.max && typeof i.clientFeatures.max === "object" ? { max: Object.fromEntries(Object.entries(i.clientFeatures.max).filter(([k, v]) => /^[a-z]{1,20}$/.test(k) && Number.isFinite(+(v as any)) && +(v as any) >= 0).map(([k, v]) => [k, Math.floor(+(v as any))])) } : {}) } } : {}),
     ...(Array.isArray(i?.dash?.stats) ? { dash: { stats: i.dash.stats.filter((x: any) => typeof x === "string").slice(0, 20) } } : {}),
     ...(Array.isArray(i?.partners) ? { partners: i.partners.filter((x: any) => x && typeof x.id === "string") } : {}),
     ...(Array.isArray(i?.pinned) ? { pinned: i.pinned.filter((x: any) => typeof x === "string").slice(0, 20) } : {}),

@@ -105,6 +105,41 @@ export function Spinner({ label }: { label?: string }) {
 }
 
 /** A page load in steps: a percentage counter, a progress bar, and what is happening now. */
+/** A grey placeholder block that shimmers while something loads. Size it with classes (h-4 w-40, …). */
+export function Skel({ className = "" }: { className?: string }) { return <span aria-hidden className={`skel block rounded-md ${className}`} />; }
+/** A few placeholder lines of text. */
+export function SkelLines({ n = 3, className = "" }: { n?: number; className?: string }) {
+  return <div role="status" aria-label="Loading" className={`flex flex-col gap-2.5 ${className}`}>{Array.from({ length: n }, (_, i) => <Skel key={i} className={`h-3.5 ${["w-11/12", "w-4/5", "w-2/3", "w-3/4", "w-1/2"][i % 5]}`} />)}</div>;
+}
+/** Placeholder rows for a list or table that is loading. */
+export function SkelRows({ n = 4, label = "Loading" }: { n?: number; label?: string }) {
+  return <div role="status" aria-label={label} className="flex flex-col divide-y divide-ink-700 rounded-xl border border-ink-700">{Array.from({ length: n }, (_, i) => <div key={i} className="flex items-center gap-3 p-3"><Skel className="h-9 w-9 flex-none rounded-lg" /><div className="flex min-w-0 flex-1 flex-col gap-2"><Skel className={`h-3.5 ${i % 2 ? "w-1/2" : "w-2/3"}`} /><Skel className="h-3 w-1/3" /></div><Skel className="h-7 w-20 flex-none rounded-lg" /></div>)}</div>;
+}
+/** The dashboard's shape while the project list loads: the stat tiles, the filters and a grid of project cards. */
+export function SkelDashboard({ note }: { note?: string }) {
+  return (
+    <main role="status" aria-label={note || "Loading your projects"} className="mx-auto flex max-w-[1400px] flex-col gap-5 px-4 py-8 sm:px-6">
+      <div className="flex items-center gap-3"><Skel className="h-9 w-9 rounded-xl" /><Skel className="h-8 w-44" /><Skel className="ml-auto h-10 w-32 rounded-lg" /></div>
+      {note && <p className="text-sm text-ink-400">{note}…</p>}
+      <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-ink-700 sm:grid-cols-4">{Array.from({ length: 4 }, (_, i) => <div key={i} className="flex flex-col gap-2 p-4"><Skel className="h-7 w-10" /><Skel className="h-3 w-24" /></div>)}</div>
+      <div className="flex flex-wrap gap-2"><Skel className="h-10 w-64 rounded-lg" /><Skel className="h-10 w-36 rounded-lg" /><Skel className="h-10 w-28 rounded-lg" /></div>
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{Array.from({ length: 6 }, (_, i) => <div key={i} className="card flex flex-col gap-3 p-4"><Skel className="aspect-[16/9] w-full rounded-lg" /><Skel className="h-4 w-2/3" /><Skel className="h-3 w-1/2" /><div className="flex gap-2"><Skel className="h-8 w-20 rounded-lg" /><Skel className="h-8 w-20 rounded-lg" /></div></div>)}</div>
+    </main>
+  );
+}
+/** The editor's shape while a site opens: the section list, the form and the live preview. */
+export function SkelEditor({ note }: { note?: string }) {
+  return (
+    <div role="status" aria-label={note || "Opening the editor"} className="flex min-h-screen flex-col">
+      <div className="flex items-center gap-3 border-b border-ink-700 px-4 py-3"><Skel className="h-8 w-8 rounded-lg" /><Skel className="h-5 w-40" />{note && <span className="text-sm text-ink-400">{note}…</span>}<span className="ml-auto flex gap-2"><Skel className="h-9 w-24 rounded-lg" /><Skel className="h-9 w-20 rounded-lg" /><Skel className="h-9 w-32 rounded-lg" /></span></div>
+      <div className="grid flex-1 grid-cols-1 lg:grid-cols-[210px_minmax(0,1fr)_minmax(0,1.15fr)]">
+        <div className="hidden flex-col gap-3 border-r border-ink-700 p-4 lg:flex">{Array.from({ length: 12 }, (_, i) => <Skel key={i} className={`h-4 ${i % 4 === 0 ? "w-16 opacity-60" : i % 3 ? "w-28" : "w-36"}`} />)}</div>
+        <div className="flex flex-col gap-4 p-5"><Skel className="h-7 w-48" /><Skel className="h-3.5 w-80 max-w-full" />{Array.from({ length: 3 }, (_, i) => <div key={i} className="card flex flex-col gap-3 p-4"><Skel className="h-4 w-32" /><Skel className="h-10 w-full rounded-lg" /><div className="grid grid-cols-2 gap-3"><Skel className="h-10 rounded-lg" /><Skel className="h-10 rounded-lg" /></div></div>)}</div>
+        <div className="hidden flex-col gap-3 border-l border-ink-700 p-4 lg:flex"><div className="flex gap-2"><Skel className="h-8 w-40 rounded-lg" /><Skel className="ml-auto h-8 w-48 rounded-lg" /></div><Skel className="min-h-[60vh] w-full flex-1 rounded-xl" /></div>
+      </div>
+    </div>
+  );
+}
 /** A slim progress bar. value: 0–100, or null while the amount isn't known yet (it then shows a moving stripe). */
 export function ProgressBar({ value, label, tone = "run", detail }: { value: number | null; label: string; tone?: "run" | "ok" | "bad"; detail?: string }) {
   const v = value == null ? null : Math.max(0, Math.min(100, Math.round(value)));

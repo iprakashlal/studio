@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import type { ProjectMeta } from "../lib/studio";
 import { loadHostConfig } from "../lib/studiohost";
 import { reviewLink, rvClose, rvDelete, rvList, rvNew, rvReply, STATUS_WORDS, type Review } from "../lib/approvals";
-import { Modal, useToast } from "../ui/kit";
+import { Modal, useToast, SkelLines } from "../ui/kit";
 import { NoteList } from "./ReviewPage";
 
 const day = (iso: string) => { try { return new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }); } catch { return ""; } };
@@ -26,7 +26,7 @@ export function ApprovalDialog({ project, draft, dirty, me, onClose }: { project
   return (
     <Modal title="Share for approval" onClose={onClose} wide>
       <div className="flex flex-col gap-4 text-sm">
-        {db === undefined ? <p className="text-ink-300">Loading…</p> : !db ? (
+        {db === undefined ? <SkelLines n={4} /> : !db ? (
           <p className="rounded-lg border border-amber-400/40 bg-amber-400/5 px-3 py-2.5 text-amber-100">Sharing for approval needs the Studio on Cloudflare, where the review link and the client's comments are kept. Move it under Settings → Migration.</p>
         ) : <>
           <p className="text-ink-300">Send your client a private link to this project as it is now. They see the whole site in a live preview, on any device, without signing in, and can comment, ask for changes or approve. Nothing is published by sharing.</p>

@@ -27,7 +27,7 @@ import { BackupPanel } from "../editor/BackupPanel";
 import { useAssetMap } from "../editor/useAssets";
 import { BrandKitDialog } from "./BrandKitDialog";
 import { ApprovalDialog } from "./ApprovalDialog";
-import { Field, Modal, StepLoader, Toggle, useConfirm, useToast } from "../ui/kit";
+import { Field, Modal, SkelEditor, Toggle, useConfirm, useToast } from "../ui/kit";
 
 type Modal = "" | "export" | "publish" | "host" | "live" | "history" | "details" | "backend" | "inbox" | "write" | "pamphlet" | "reviews" | "kit" | "approve";
 
@@ -207,7 +207,7 @@ export function ProjectView({ studio, index, project, session, onIndex }: { stud
   if (err) return <main className="mx-auto max-w-xl px-4 py-16"><div className="card p-6"><h1 className="text-xl font-extrabold">Couldn't open the project</h1><p className="mt-2 text-sm text-ink-300">{err}</p></div></main>;
   // The preview shows the badge with the Studio's look (sites get it from assets/badge.js when published).
   const previewContent = useMemo(() => (draft ? { ...draft, poweredBy: { ...(draft.poweredBy || {}), design: currentBadge() } } : draft), [draft, v, index.badge]);
-  if (!draft) return <main className="grid min-h-screen place-items-center"><StepLoader title={`Opening ${project.name}`} at={openAt} steps={[`Loading the ${tpl.name} template`, "Reading the project's content", "Opening the editor and preview"]} /></main>;
+  if (!draft) return <SkelEditor note={[`Loading the ${tpl.name} template`, "Reading the project's content", "Opening the editor and preview"][Math.min(2, openAt)]} />;
 
   const cat = index.categories.find((c) => c.id === project.category);
 

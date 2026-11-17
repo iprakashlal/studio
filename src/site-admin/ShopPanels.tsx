@@ -2,7 +2,7 @@ import "../fx/invoice.js";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createClient, type SupabaseClient, type User } from "@supabase/supabase-js";
 import { basePath, fmtDate, money } from "../lib/util";
-import { Field, Spinner, useToast } from "../ui/kit";
+import { Field, Spinner, useToast, SkelRows } from "../ui/kit";
 
 // Orders and Customers for shops with a backend: Supabase (access rules show everything only to
 // emails in shop_admins) or the Cloudflare Worker (only to OWNER_EMAIL / ADMIN_EMAILS). The owner
@@ -320,7 +320,7 @@ function Orders({ o: owner, shop, content }: { o: Owner; shop: string; content: 
   const byUser = useMemo(() => new Map((profiles || []).map((p) => [p.id, p])), [profiles]);
   const byEmail = useMemo(() => new Map((profiles || []).map((p) => [p.email.toLowerCase(), p])), [profiles]);
   if (err) return <section className="card p-5 text-sm text-red-300">Couldn't load orders: {err}</section>;
-  if (!orders) return <Spinner label="Loading orders…" />;
+  if (!orders) return <SkelRows n={5} label="Loading orders" />;
   const prof = (o: Order) => (o.user_id && byUser.get(o.user_id)) || byEmail.get(o.email.toLowerCase());
   const s = q.trim().toLowerCase();
   const list = orders.filter((o) => (!st || o.status === st) && (!pay || o.payment_status === pay)
@@ -363,7 +363,7 @@ function Customers({ o: owner, shop }: { o: Owner; shop: string }) {
   const [q, setQ] = useState("");
   const [open, setOpen] = useState<string | null>(null);
   if (err) return <section className="card p-5 text-sm text-red-300">Couldn't load customers: {err}</section>;
-  if (!orders || !profiles) return <Spinner label="Loading customers…" />;
+  if (!orders || !profiles) return <SkelRows n={5} label="Loading customers" />;
   const ordersOf = (p: Profile) => orders.filter((o) => o.user_id === p.id || o.email.toLowerCase() === p.email.toLowerCase());
   const s = q.trim().toLowerCase();
   const list = profiles.filter((p) => !s || `${p.account_no} ${p.email} ${p.name} ${p.phone}`.toLowerCase().includes(s));

@@ -14,7 +14,7 @@ function infoFrom(project: ProjectMeta, c: any, logo: string, fontCss: string): 
   const B = c?.brand || {}, K = c?.contact || {}, T = c?.theme || {}, tpl = project.template;
   const name = one(B.name || B.logoText || [c?.hero?.firstName, c?.hero?.lastName].filter(Boolean).join(" ") || project.name);
   const site = project.host ? siteAddress(project.host) : project.publish ? `https://${project.publish.owner}.github.io/${project.publish.repo}/` : "";
-  const list: any[] = tpl === "business" ? c?.services?.items || [] : tpl === "store" ? c?.categories || [] : c?.work?.items || c?.projects?.items || [];
+  const list: any[] = tpl === "restaurant" ? (c?.food?.categories || []).map((k: any) => ({ ...k, title: k?.name })) : tpl === "business" ? c?.services?.items || [] : tpl === "store" ? c?.categories || [] : c?.work?.items || c?.projects?.items || [];
   const points = list.slice(0, 4).map((x) => ({ title: one(x?.title || x?.name), text: one(x?.body || x?.text || x?.desc || x?.description || x?.summary || "") })).filter((p) => p.title);
   return {
     name, tagline: one(B.tagline || c?.hero?.eyebrow || ""), person: tpl === "portfolio" ? name : "", role: tpl === "portfolio" ? one(c?.hero?.eyebrow || "") : "",

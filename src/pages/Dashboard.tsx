@@ -257,7 +257,7 @@ function NewProject({ studio, index, onClose, onCreated, templates }: { studio: 
   // The themes this Studio may use for the chosen type (a client Studio's partner can narrow them): a new site starts on one of them.
   const pool = TEMPLATES[f.template].themes || THEMES, offered = limitThemes(pool, undefined, f.template);
   useEffect(() => { if (offered.length && offered.length < pool.length && !offered.some((t) => t.id === f.theme)) setF((x) => ({ ...x, theme: offered[0].id })); }, [f.template, f.theme, offered.length]);
-  const pick = (template: string) => setF((x) => ({ ...x, template, starter: "default", theme: (TEMPLATES[template].themes || []).some((t) => t.id === x.theme) || (!TEMPLATES[template].themes && !x.theme.startsWith("biz-")) ? x.theme : "" }));
+  const pick = (template: string) => setF((x) => ({ ...x, template, starter: "default", theme: (TEMPLATES[template].themes || []).some((t) => t.id === x.theme) || (!TEMPLATES[template].themes && !/^(biz|rest)-/.test(x.theme)) ? x.theme : "" }));
   useEffect(() => {
     if (!man[f.template]) loadManifest(f.template).then((m) => setMan((o) => ({ ...o, [f.template]: m }))).catch(() => {});
   }, [f.template]);
@@ -284,7 +284,7 @@ function NewProject({ studio, index, onClose, onCreated, templates }: { studio: 
       </div>
       <div className="flex flex-col gap-2">
         <span className="label">Template</span>
-        <div className="grid gap-3 sm:grid-cols-3" role="radiogroup" aria-label="Template">
+        <div className="grid gap-3 sm:grid-cols-2" role="radiogroup" aria-label="Template">
           {templates.map((t) => (
             <button key={t.id} type="button" role="radio" aria-checked={f.template === t.id} onClick={() => pick(t.id)}
               className={`flex flex-col gap-1.5 rounded-xl border p-4 text-left ${f.template === t.id ? "border-brand-500 bg-brand-500/10" : "border-ink-600 bg-ink-950 hover:border-ink-400"}`}>
@@ -308,7 +308,7 @@ function NewProject({ studio, index, onClose, onCreated, templates }: { studio: 
           <button type="button" className={`rounded-full border px-2.5 py-1 text-xs font-semibold normal-case tracking-normal ${!f.theme ? "border-brand-500 bg-brand-500/15 text-ink-100" : "border-ink-600 text-ink-400"}`} aria-pressed={!f.theme} onClick={() => setF({ ...f, theme: "" })}>Template's own look</button>
         </span>
         <div className="max-h-[340px] overflow-y-auto pr-1 scroll-thin">
-          <ThemeGallery compact current={f.theme} themes={offered} tags={TEMPLATES[f.template].themeTags} onPick={(t) => setF({ ...f, theme: t.id })} />
+          <ThemeGallery compact current={f.theme || (TEMPLATES[f.template].themes ? offered[0]?.id : "")} themes={offered} tags={TEMPLATES[f.template].themeTags} onPick={(t) => setF({ ...f, theme: t.id })} />
         </div>
         <p className="text-xs text-ink-500">You can change the theme any time in Design → Theme &amp; layout.</p>
       </div>

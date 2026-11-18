@@ -11,7 +11,7 @@ import { Field, Modal } from "../ui/kit";
 import { useAiDb } from "./AiGate";
 
 export function WriteFromSiteDialog({ session, project, draft, onApply, onClose }: { session: Session; project: ProjectMeta; draft: any; onApply: (c: any) => void; onClose: () => void }) {
-  const kind = project.template === "store" ? "store" : project.template === "business" ? "business" : "portfolio";
+  const kind = project.template === "store" ? "store" : project.template === "business" ? "business" : project.template === "restaurant" ? "restaurant" : "portfolio";
   const db = useAiDb(session, project), api = db.api;
   const [url, setUrl] = useState(""), [text, setText] = useState("");
   // Where the text comes from: a site, a PDF (a brochure or profile), or pasted text.
@@ -45,7 +45,7 @@ export function WriteFromSiteDialog({ session, project, draft, onApply, onClose 
   const run = (label: string, f: () => Promise<void>) => async () => { setErr(""); setBusy(label); try { await f(); } catch (e: any) { setErr(e?.message || "Something went wrong."); if (e?.thin) setShowText(true); } setBusy(""); };
   const write = run("Reading and writing", async () => {
     const body = src === "pdf" ? { text: pdf!.text } : showText && text.trim() ? { text: text.trim() } : { url: url.trim() };
-    const r = await cfWrite(api!, { ...body, brand: brandName.trim(), notes: notes.trim(), kind });
+    const r = await cfWrite(api!, { ...body, brand: brandName.trim(), notes: notes.trim(), kind: kind === "restaurant" ? "business" : kind });
     const b = dropFlagged(r.brief, r.flagged || []);
     setRes({ brief: b, flagged: r.flagged || [] }); setPick(new Set(groupsOf(kind, b, contact()).map((g) => g.id)));
   });

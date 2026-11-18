@@ -42,7 +42,7 @@ export type Field =
   /** Import name, experience, education and skills from a LinkedIn profile PDF or data export. */
   | { t: "linkedin" }
   /** Studio only: "Fill in from a pamphlet" (business products), opened by the project view. */
-  | { t: "pamphlet" }
+  | { t: "pamphlet"; /** Its own wording (the restaurant's menu reader). */ text?: string; button?: string }
   /** Studio only: "Add reviews from Google" (business and shop testimonials). */
   | { t: "googleReviews" }
   /** Languages: the table of the site's texts and their translations (content.i18n.t). */

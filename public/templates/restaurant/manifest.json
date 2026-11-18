@@ -1,0 +1,36 @@
+{
+  "files": [
+    "index.html",
+    "menu.html",
+    "about.html",
+    "gallery.html",
+    "contact.html",
+    "page.html",
+    "404.html",
+    "admin.html",
+    "assets/rest.css",
+    "assets/rest.js",
+    "assets/fx.js",
+    "assets/slides.js",
+    "assets/motifs.js",
+    "assets/pages.js",
+    "assets/maint.js",
+    "assets/addons.js",
+    "assets/festival.js",
+    "assets/consent.js",
+    "assets/menu.js",
+    "assets/lang.js",
+    "assets/video.js",
+    "assets/social.js",
+    "README.md",
+    "supabase/enquiries.sql"
+  ],
+  "starters": [
+    {
+      "id": "default",
+      "name": "Restaurant",
+      "description": "A sample restaurant with a full menu, signature dishes, offers, opening hours, a map and a table-booking form.",
+      "file": "content.json"
+    }
+  ]
+}

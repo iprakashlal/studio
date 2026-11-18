@@ -27,8 +27,9 @@ export function groupsOf(kind: string, b: Brief, k: Contact = {}): WriteGroup[] 
   const g: WriteGroup[] = [
     { id: "hero", label: "First screen (hero)", preview: [b.hero_eyebrow, b.hero_title, b.hero_text, b.hero_cta].map(str).filter(Boolean) },
     { id: "about", label: kind === "store" ? "Our story" : "About", preview: [b.about_title, b.about_text, b.mission, b.vision].map(str).filter(Boolean) },
-    { id: "services", label: kind === "portfolio" ? "Skills" : kind === "store" ? "Shop intro" : "Services", preview: kind === "store" ? [str(b.services_intro)].filter(Boolean) : [str(b.services_title), ...svc].filter(Boolean) },
+    { id: "services", label: kind === "portfolio" ? "Skills" : kind === "store" ? "Shop intro" : kind === "restaurant" ? "Highlights and what you offer" : "Services", preview: kind === "store" ? [str(b.services_intro)].filter(Boolean) : [str(b.services_title), ...svc].filter(Boolean) },
   ];
+  if (kind === "restaurant") g.push({ id: "faq", label: "FAQ", preview: okList(b.faq, (x) => (str(x?.q) ? `${str(x.q)} ${str(x.a)}` : null)) });
   if (kind === "business") g.push(
     { id: "values", label: "Values", preview: okList(b.values, (x) => (str(x?.title) ? `${str(x.title)}: ${str(x.text)}` : null)) },
     { id: "process", label: "How we work", preview: okList(b.process, (x) => (str(x?.title) ? `${str(x.title)}: ${str(x.text)}` : null)) },
@@ -38,7 +39,7 @@ export function groupsOf(kind: string, b: Brief, k: Contact = {}): WriteGroup[] 
   g.push(
     { id: "cta", label: kind === "portfolio" ? "Contact" : "Call to action", preview: [b.cta_title, b.cta_text].map(str).filter(Boolean) },
     { id: "seo", label: "Tagline and search listing", preview: [b.brand_tagline, b.seo_title, b.seo_description].map(str).filter(Boolean) },
-    { id: "footer", label: "Contact details and footer", preview: [k.email && `Email: ${k.email}`, kind !== "portfolio" && k.phone && `Phone: ${k.phone}`, str(b.footer_text), k.brand && (kind === "store" ? "" : `© ${year()} ${k.brand}${kind === "business" ? ". All rights reserved." : ""}`)].map(str).filter(Boolean) },
+    { id: "footer", label: "Contact details and footer", preview: [k.email && `Email: ${k.email}`, kind !== "portfolio" && k.phone && `Phone: ${k.phone}`, str(b.footer_text), k.brand && (kind === "store" ? "" : `© ${year()} ${k.brand}${kind === "business" || kind === "restaurant" ? ". All rights reserved." : ""}`)].map(str).filter(Boolean) },
   );
   return g.filter((x) => x.preview.length);
 }
@@ -68,6 +69,23 @@ export function applyBrief(kind: string, draft: any, b: Brief, brand: string, gr
     if (on("about")) { set(c, "about.title", str(b.about_title)); set(c, "about.body", str(b.about_text)); set(c, "about.mission", str(b.mission)); set(c, "about.vision", str(b.vision)); }
     if (on("values")) { const v = pairs(b.values); if (v.length) set(c, "about.values", v.slice(0, 6).map((x) => ({ title: x.title, body: x.text }))); }
     if (on("process")) { const v = pairs(b.process); if (v.length) set(c, "process.steps", v.slice(0, 6).map((x) => ({ title: x.title, body: x.text }))); }
+    if (on("faq")) { const v = okList(b.faq, (x) => (str(x?.q) && str(x?.a) ? { q: str(x.q), a: str(x.a) } : null)); if (v.length) set(c, "faq.items", v.slice(0, 8)); }
+    if (on("cta")) { set(c, "cta.title", str(b.cta_title)); set(c, "cta.body", str(b.cta_text)); }
+    if (on("seo")) { set(c, "brand.tagline", str(b.brand_tagline)); set(c, "seo.title", str(b.seo_title)); set(c, "seo.description", str(b.seo_description)); }
+    const r = rename(c, oldBrand, brand); r.brand = { ...(r.brand || {}), name: brand };
+    if (on("footer")) { contactTo(r, k, "contact.email", "contact.phone"); set(r, "footer.text", str(b.footer_text)); set(r, "footer.legal", `© {year} ${brand}. All rights reserved.`); }
+    return r;
+  }
+  if (kind === "restaurant") {
+    if (on("hero")) { set(c, "hero.eyebrow", str(b.hero_eyebrow)); set(c, "hero.title", str(b.hero_title)); set(c, "hero.lede", str(b.hero_text)); set(c, "hero.ctaPrimary", str(b.hero_cta)); }
+    if (on("services")) {
+      // What the place offers becomes the row of highlights and, beyond four, the events & catering cards.
+      const it = pairs(b.services), oldH = c.highlights?.items || [], oldE = c.events?.items || [];
+      if (it.length) { c.highlights ||= {}; c.highlights.items = it.slice(0, 4).map((x, i) => ({ icon: oldH[i]?.icon || "star", title: x.title, body: x.text })); }
+      if (it.length > 4) { c.events ||= {}; c.events.items = it.slice(4, 7).map((x, i) => ({ icon: oldE[i]?.icon || "people", title: x.title, body: x.text })); }
+      set(c, "food.lede", str(b.services_intro));
+    }
+    if (on("about")) { set(c, "about.title", str(b.about_title)); set(c, "about.body", [str(b.about_text), str(b.mission)].filter(Boolean).join("\n\n")); }
     if (on("faq")) { const v = okList(b.faq, (x) => (str(x?.q) && str(x?.a) ? { q: str(x.q), a: str(x.a) } : null)); if (v.length) set(c, "faq.items", v.slice(0, 8)); }
     if (on("cta")) { set(c, "cta.title", str(b.cta_title)); set(c, "cta.body", str(b.cta_text)); }
     if (on("seo")) { set(c, "brand.tagline", str(b.brand_tagline)); set(c, "seo.title", str(b.seo_title)); set(c, "seo.description", str(b.seo_description)); }

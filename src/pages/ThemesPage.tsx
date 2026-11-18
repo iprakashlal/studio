@@ -3,6 +3,7 @@ import { STUDIO_BUILD } from "../build-info";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { THEMES, THEME_TAGS, portfolioThemeValues, storeThemeValues, type Theme } from "../themes/catalog";
 import { BIZ_TAGS, BIZ_THEMES, businessThemeValues } from "../themes/business";
+import { REST_TAGS, REST_THEMES, restaurantThemeValues } from "../themes/restaurant";
 import { limitThemes } from "../themes/limit";
 import { ThemeSwatch } from "../themes/ThemeGallery";
 import { themeCode } from "../themes/codes";
@@ -14,16 +15,19 @@ import { Logo, useToast, Skel } from "../ui/kit";
 // Hover a card for a live preview, click it for a bigger one, and quote the theme ID (T-07) to choose.
 // URL: #/themes?v=store&t=velocity&list=velocity,blueprint
 
-type Kind = "portfolio" | "store" | "business";
-const KINDS: { id: Kind; label: string }[] = [{ id: "portfolio", label: "Personal portfolio" }, { id: "store", label: "Shop" }, { id: "business", label: "Business portfolio" }];
+type Kind = "portfolio" | "store" | "business" | "restaurant";
+/** Which list of themes a type uses: business and restaurant sites have their own. */
+const family = (k: Kind) => (k === "business" || k === "restaurant" ? k : "shared");
+const familyOf = (t: Theme) => (t.id.startsWith("biz-") ? "business" : t.id.startsWith("rest-") ? "restaurant" : "shared");
+const KINDS: { id: Kind; label: string }[] = [{ id: "portfolio", label: "Personal portfolio" }, { id: "store", label: "Shop" }, { id: "business", label: "Business portfolio" }, { id: "restaurant", label: "Restaurant & café" }];
 /** Business sites have their own themes; personal portfolios and shops share the rest. */
-const poolOf = (k: Kind): Theme[] => limitThemes(k === "business" ? BIZ_THEMES : THEMES, undefined, k);
-const ALL: Theme[] = [...THEMES, ...BIZ_THEMES];
+const poolOf = (k: Kind): Theme[] => limitThemes(k === "business" ? BIZ_THEMES : k === "restaurant" ? REST_THEMES : THEMES, undefined, k);
+const ALL: Theme[] = [...THEMES, ...BIZ_THEMES, ...REST_THEMES];
 const LS = "site-studio:theme-shortlist";
 
 function parse(): { v: Kind; t: string; list: string[] } {
   const q = new URLSearchParams(location.hash.split("?")[1] || "");
-  const v: Kind = q.get("v") === "store" ? "store" : q.get("v") === "business" ? "business" : "portfolio";
+  const v: Kind = q.get("v") === "store" ? "store" : q.get("v") === "business" ? "business" : q.get("v") === "restaurant" ? "restaurant" : "portfolio";
   return { v, t: q.get("t") || "", list: (q.get("list") || "").split(",").filter((id) => ALL.some((t) => t.id === id)) };
 }
 function link(p: { v: Kind; t?: string; list?: string[] }) {
@@ -34,7 +38,7 @@ function link(p: { v: Kind; t?: string; list?: string[] }) {
   const s = q.toString();
   return location.origin + location.pathname + "#/themes" + (s ? "?" + s : "");
 }
-const values = (k: Kind, t: Theme) => (k === "store" ? storeThemeValues(t) : k === "business" ? businessThemeValues(t) : portfolioThemeValues(t));
+const values = (k: Kind, t: Theme) => (k === "store" ? storeThemeValues(t) : k === "business" ? businessThemeValues(t) : k === "restaurant" ? restaurantThemeValues(t) : portfolioThemeValues(t));
 const withTheme = (sample: any, k: Kind, t: Theme) => sample && { ...sample, theme: { ...(sample.theme || {}), ...values(k, t) } };
 const readList = (): string[] => { try { return JSON.parse(localStorage.getItem(LS) || "[]").filter((id: string) => ALL.some((t) => t.id === id)); } catch { return []; } };
 
@@ -48,13 +52,13 @@ export function ThemesPage({ signedIn }: { signedIn: boolean }) {
   const [mine, setMine] = useState<string[]>(readList);
   const [shared] = useState<string[]>(init.list);
   const [only, setOnly] = useState<"" | "shared" | "mine">(init.list.length ? "shared" : "");
-  const [samples, setSamples] = useState<Record<Kind, any>>({ portfolio: null, store: null, business: null });
-  const pool = poolOf(kind), tags = kind === "business" ? BIZ_TAGS : THEME_TAGS;
+  const [samples, setSamples] = useState<Record<Kind, any>>({ portfolio: null, store: null, business: null, restaurant: null });
+  const pool = poolOf(kind), tags = kind === "business" ? BIZ_TAGS : kind === "restaurant" ? REST_TAGS : THEME_TAGS;
   // Switching between business and the other types changes the theme list: clear what doesn't belong.
-  const switchKind = (k: Kind) => { if ((k === "business") !== (kind === "business")) { setTag(""); setOpen(""); setHover(null); } setKind(k); };
+  const switchKind = (k: Kind) => { if (family(k) !== family(kind)) { setTag(""); setOpen(""); setHover(null); } setKind(k); };
 
   useEffect(() => {
-    for (const k of ["portfolio", "store", "business"] as Kind[])
+    for (const k of ["portfolio", "store", "business", "restaurant"] as Kind[])
       fetch(`templates/${k}/content.json`, { cache: "no-store" }).then((r) => r.json()).then((c) => {
         TEMPLATES[k].prepare?.(c);
         setSamples((s) => ({ ...s, [k]: c }));
@@ -119,7 +123,7 @@ export function ThemesPage({ signedIn }: { signedIn: boolean }) {
         <div className="flex flex-wrap items-end justify-between gap-6">
           <div className="max-w-2xl">
             <h1 className="text-3xl font-extrabold tracking-tight sm:text-4xl">Pick a look for your site</h1>
-            <p className="mt-2 text-ink-300">{kind === "business" ? `${BIZ_THEMES.length} business themes for companies, firms, agencies and practices.` : `${THEMES.length} themes for personal portfolios and shops.`} Hover a theme to preview it, or click it to open a bigger preview. When you've chosen, send the <b className="text-ink-100">theme ID</b> (like <code className="rounded bg-ink-800 px-1.5 py-0.5 text-brand-300">{kind === "business" ? "B-07" : "T-07"}</code>), or star a few and share your shortlist.</p>
+            <p className="mt-2 text-ink-300">{kind === "restaurant" ? `${REST_THEMES.length} restaurant themes for restaurants, cafés, bakeries and bars: half classic, half modern, no two alike.` : kind === "business" ? `${BIZ_THEMES.length} business themes for companies, firms, agencies and practices.` : `${THEMES.length} themes for personal portfolios and shops.`} Hover a theme to preview it, or click it to open a bigger preview. When you've chosen, send the <b className="text-ink-100">theme ID</b> (like <code className="rounded bg-ink-800 px-1.5 py-0.5 text-brand-300">{kind === "business" ? "B-07" : "T-07"}</code>), or star a few and share your shortlist.</p>
           </div>
           <div className="flex rounded-xl border border-ink-600 p-1" role="group" aria-label="Preview as">
             {KINDS.map((k) => (
@@ -137,7 +141,7 @@ export function ThemesPage({ signedIn }: { signedIn: boolean }) {
         )}
 
         <div className="sticky top-[57px] z-20 -mx-4 mt-6 flex flex-wrap items-center gap-2 border-b border-ink-800 bg-ink-950/95 px-4 py-3 backdrop-blur">
-          <input className="input w-56 py-2 text-sm" placeholder={`Search name or ID, e.g. ${kind === "business" ? "B-07" : "T-07"}`} aria-label="Search themes" value={q} onChange={(e) => setQ(e.target.value)} />
+          <input className="input w-56 py-2 text-sm" placeholder={`Search name or ID, e.g. ${kind === "restaurant" ? "R-007" : kind === "business" ? "B-07" : "T-07"}`} aria-label="Search themes" value={q} onChange={(e) => setQ(e.target.value)} />
           {["", ...tags].map((x) => (
             <button key={x || "all"} type="button" aria-pressed={tag === x} onClick={() => setTag(x)}
               className={`rounded-full border px-3 py-1.5 text-xs font-semibold ${tag === x ? "border-brand-500 bg-brand-500/15 text-ink-100" : "border-ink-600 text-ink-400 hover:text-ink-100"}`}>{x || "All"}</button>
@@ -242,7 +246,7 @@ function ThemeModal(p: { theme: Theme; kind: Kind; setKind: (k: Kind) => void; s
           <div className="flex items-center gap-1" aria-label="Colours">{[c.bg, c.surface, c.text, c.c1, c.c2, c.c3].map((x, i) => <span key={i} className="h-5 w-5 rounded-full border border-white/20" style={{ background: x }} title={x} />)}</div>
           <div className="ml-auto flex flex-wrap items-center gap-2">
             <div className="flex rounded-lg border border-ink-600 p-0.5" role="group" aria-label="Preview as">
-              {KINDS.filter((k) => (k.id === "business") === t.id.startsWith("biz-")).map((k) => <button key={k.id} type="button" aria-pressed={p.kind === k.id} onClick={() => p.setKind(k.id)} className={`rounded-md px-3 py-1.5 text-xs font-bold ${p.kind === k.id ? "bg-ink-700 text-ink-100" : "text-ink-400"}`}>{k.label}</button>)}
+              {KINDS.filter((k) => family(k.id) === familyOf(t)).map((k) => <button key={k.id} type="button" aria-pressed={p.kind === k.id} onClick={() => p.setKind(k.id)} className={`rounded-md px-3 py-1.5 text-xs font-bold ${p.kind === k.id ? "bg-ink-700 text-ink-100" : "text-ink-400"}`}>{k.label}</button>)}
             </div>
             <button type="button" className="btn btn-sm" onClick={p.onCopyId}>Copy ID</button>
             <button type="button" className="btn btn-sm" onClick={p.onCopyLink}>Copy link</button>

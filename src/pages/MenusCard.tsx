@@ -15,6 +15,7 @@ const EXTRAS: Record<string, { id: string; label: string; group: string; desc: s
     { id: "warranty-records", label: "Warranty records", group: "Content", desc: "" },
   ],
   business: [{ id: "enquiries", label: "Enquiries", group: "Content", desc: "" }, { id: "warranty-records", label: "Warranty records", group: "Content", desc: "" }],
+  restaurant: [{ id: "enquiries", label: "Enquiries", group: "Content", desc: "" }],
   "*": [
     { id: "backup", label: "Backup & reset", group: "Settings", desc: "" },
     { id: "account", label: "Account", group: "Settings", desc: "", note: "admin page" },

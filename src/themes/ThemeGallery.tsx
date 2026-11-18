@@ -1,11 +1,13 @@
 import { useMemo, useState } from "react";
 import { THEMES, THEME_TAGS, hasFx, Motifs, type Theme } from "./catalog";
 import { themeCode } from "./codes";
+import { RestSwatch, restLine } from "./RestSwatch";
 
 /** A small drawing of the theme: background, a card in its card style, a button in its button style, and the hero layout. */
 export function ThemeSwatch({ t }: { t: Theme }) {
   const c = t.colors, r = Math.min(t.radius, 16) / 2;
   if (t.id.startsWith("biz-")) return <BizSwatch t={t} />;
+  if (t.id.startsWith("rest-")) return <RestSwatch t={t} />;
   if (t.signature)
     return (
       <div className="relative flex h-[84px] flex-col justify-between overflow-hidden p-2" style={{ background: c.bg }}>
@@ -69,7 +71,7 @@ export function ThemeGallery({ current, onPick, compact, dense, themes = THEMES,
   const on = (t: Theme) => (chosen ? chosen.includes(t.id) : current === t.id);
   const [tag, setTag] = useState("");
   const [q, setQ] = useState("");
-  const num = (x: string) => x.trim().toUpperCase().replace(/^[TB]-?0*/, "");
+  const num = (x: string) => x.trim().toUpperCase().replace(/^[TBR]-?0*/, "");
   const list = useMemo(() => themes.filter((t) => (!tag || t.tags.includes(tag)) && (!q || t.name.toLowerCase().includes(q.toLowerCase()) || num(themeCode(t)) === num(q))), [themes, tag, q]);
   return (
     <div className="flex flex-col gap-3">
@@ -89,7 +91,7 @@ export function ThemeGallery({ current, onPick, compact, dense, themes = THEMES,
               <span className="min-w-0">
                 <span className="block font-mono text-[11px] leading-tight text-ink-400">{themeCode(t)}</span>
                 <b className={`line-clamp-2 block leading-snug ${dense ? "text-[12px]" : "text-[13px]"}`}>{t.signature && <span className="mr-1 text-brand-400" title="Signature layout">★</span>}{t.name}</b>
-                {!dense && <span className="line-clamp-2 block text-[11px] leading-snug text-ink-400">{t.signature ? "Signature layout · own sections" : <>{t.kit !== "classic" ? "Own layout · " : ""}{Motifs.packs[t.motif]?.name || t.display}{hasFx(t) ? " · " + fxSummary(t) : ""}</>}</span>}
+                {!dense && <span className="line-clamp-2 block text-[11px] leading-snug text-ink-400">{t.signature ? "Signature layout · own sections" : <>{t.kit !== "classic" ? "Own layout · " : ""}{t.id.startsWith("rest-") ? restLine(t) : Motifs.packs[t.motif]?.name || t.display}{hasFx(t) ? " · " + fxSummary(t) : ""}</>}</span>}
               </span>
               {on(t) ? <span className="text-xs font-bold text-brand-400">✓</span> : !dense && hasFx(t) && <span className="shrink-0 rounded-full border border-brand-500/50 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-brand-400" title="Interactive theme: cursor, intro and scroll effects">fx</span>}
             </span>

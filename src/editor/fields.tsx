@@ -209,8 +209,8 @@ export function FieldView({ f, obj, base }: { f: F; obj: any; base: string }) {
     case "pamphlet":
       return (
         <div className="flex flex-wrap items-center gap-3 rounded-lg border border-brand-500/40 bg-brand-500/5 p-3">
-          <p className="min-w-0 flex-1 text-[13px] text-ink-300">Have a product pamphlet or brochure? Upload it and the products are filled in for you.</p>
-          <button type="button" className="btn btn-sm btn-pri" onClick={() => dispatchEvent(new CustomEvent(PAMPHLET_EVENT))}>Fill in from a pamphlet</button>
+          <p className="min-w-0 flex-1 text-[13px] text-ink-300">{f.text || "Have a product pamphlet or brochure? Upload it and the products are filled in for you."}</p>
+          <button type="button" className="btn btn-sm btn-pri" onClick={() => dispatchEvent(new CustomEvent(PAMPHLET_EVENT))}>{f.button || "Fill in from a pamphlet"}</button>
         </div>
       );
     case "linkedin":
@@ -652,7 +652,7 @@ function AdminSectionsField() {
   root.cms = root.cms || {};
   const hide: string[] = Array.isArray(root.cms.hide) ? root.cms.hide : [];
   const rows: [string, string, string][] = [...tpl.schema.filter((c) => !c.showIf || c.showIf(root)).map((c) => [c.id, c.site?.label || c.label, c.site?.group || c.group] as [string, string, string]),
-    ...ADMIN_EXTRAS.filter(([id]) => (id === "orders" || id === "customers" ? tpl.id === "store" : id === "enquiries" ? tpl.id === "business" : tpl.id !== "portfolio"))];
+    ...ADMIN_EXTRAS.filter(([id]) => (id === "orders" || id === "customers" ? tpl.id === "store" : id === "enquiries" ? tpl.id === "business" || tpl.id === "restaurant" : id === "warranty-records" ? tpl.id !== "portfolio" && tpl.id !== "restaurant" : tpl.id !== "portfolio"))];
   const groups = [...new Set(rows.map((r) => r[2]))];
   const set = (next: string[]) => { root.cms.hide = next; bump(); };
   const toggle = (id: string) => set(hide.includes(id) ? hide.filter((x) => x !== id) : [...hide, id]);

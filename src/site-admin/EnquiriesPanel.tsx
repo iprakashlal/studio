@@ -10,7 +10,14 @@ import type { CfSiteCfg } from "../lib/supa";
 type Enquiry = { id: number; site: string; data: Record<string, string>; page: string; status: string; created_at: string };
 const STATUS: [string, string][] = [["new", "New"], ["read", "Read"], ["replied", "Replied"], ["archived", "Archived"]];
 const pill = (s: string) => ({ new: "border-brand-400/60 text-brand-200", read: "border-ink-500 text-ink-300", replied: "border-emerald-400/50 text-emerald-200", archived: "border-ink-600 text-ink-500" } as Record<string, string>)[s] || "border-ink-500 text-ink-300";
-const LABELS: Record<string, string> = { name: "Name", email: "Email", phone: "Phone", company: "Company", service: "Interested in", budget: "Budget", message: "Message", consent: "Agreed to be contacted" };
+const LABELS: Record<string, string> = { name: "Name", email: "Email", phone: "Phone", company: "Company", service: "Interested in", budget: "Budget", message: "Message", consent: "Agreed to be contacted", type: "Request", date: "Date", time: "Time", guests: "Guests", occasion: "Occasion"};
+/** A booking request in one line: "Fri 20 Nov · 20:00 · 6 guests · Anniversary" (empty for an ordinary enquiry). */
+export const bookingLine = (d: any): string => {
+  if (!d || !(d.date || d.time || d.guests)) return "";
+  let day = String(d.date || "");
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(day); if (m) { const x = new Date(+m[1], +m[2] - 1, +m[3]); if (!isNaN(+x)) day = x.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" }); }
+  return [day, d.time, d.guests && (/^\d+$/.test(String(d.guests)) ? `${d.guests} guest${String(d.guests) === "1" ? "" : "s"}` : String(d.guests)), d.occasion].filter(Boolean).join(" · ");
+};
 const when = (iso: string) => { try { return new Date(iso).toLocaleString(undefined, { day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" }); } catch { return iso; } };
 
 /** Where a business site's enquiries are: its hosted Supabase, else the form's own Supabase settings. */
@@ -175,7 +182,8 @@ function EnquiryList<R extends Row>({ rows, setStatus, remove, load, name, who }
               <button type="button" aria-expanded={isOpen} onClick={() => { setOpen(isOpen ? null : r.id); if (!isOpen && r.status === "new") setStatus(r, "read"); }} className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 text-left">
                 {r.status === "new" && <span className="h-2 w-2 rounded-full bg-brand-400" aria-label="New" />}
                 <b className="text-sm">{d.name || "No name"}</b>
-                <span className="text-[13px] text-ink-400">{[d.company, d.service].filter(Boolean).join(" · ")}</span>
+                <span className="text-[13px] text-ink-400">{[d.company, d.service, d.type && bookingLine(d) ? d.type : ""].filter(Boolean).join(" · ")}</span>
+                {bookingLine(d) && <span className="chip border-brand-400/50 text-brand-200" data-booking>{bookingLine(d)}</span>}
                 <span className="ml-auto text-xs text-ink-500">{when(r.created_at)}</span>
                 <span className={`chip ${pill(r.status)}`}>{STATUS.find(([k]) => k === r.status)?.[1] || r.status}</span>
                 <span className="w-full truncate text-[13px] text-ink-300">{d.message}</span>
@@ -190,6 +198,7 @@ function EnquiryList<R extends Row>({ rows, setStatus, remove, load, name, who }
                   </dl>
                   <div className="flex flex-wrap items-center gap-2">
                     {d.email && <a className="btn btn-sm btn-pri" href={`mailto:${d.email}?subject=${encodeURIComponent("Re: your enquiry")}`} onClick={() => setStatus(r, "replied")}>Reply by email</a>}
+                    {d.phone && <a className={`btn btn-sm ${d.email ? "" : "btn-pri"}`} href={`tel:${String(d.phone).replace(/[^\d+]/g, "")}`}>Call</a>}
                     {d.phone && <a className="btn btn-sm" href={`https://wa.me/${d.phone.replace(/\D/g, "")}`} target="_blank" rel="noopener">WhatsApp</a>}
                     <select aria-label="Status" className="input w-auto py-1.5 text-sm" value={r.status} onChange={(e) => setStatus(r, e.target.value)}>{STATUS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
                     <button className="btn btn-sm btn-danger ml-auto" onClick={() => remove(r)}>Delete</button>

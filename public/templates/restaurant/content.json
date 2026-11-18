@@ -1,0 +1,904 @@
+{
+  "theme": {
+    "bg": "#FBF6EE",
+    "surface": "#FEFCFA",
+    "deep": "#2A1710",
+    "text": "#2A1710",
+    "soft": "#756760",
+    "line": "#DCD5CD",
+    "c1": "#B4441C",
+    "c2": "#2F5D50",
+    "c3": "#E0A53A",
+    "fontDisplay": "Fraunces",
+    "fontBody": "Mulish",
+    "radius": 14,
+    "preset": "rest-copper-pot",
+    "layout": "split",
+    "nav": "bar",
+    "cards": "elevated",
+    "buttons": "pill",
+    "heading": "serif",
+    "shead": "ornament",
+    "pattern": "none",
+    "width": "normal",
+    "motionStyle": "rise",
+    "bands": "soft",
+    "heroArt": "arch",
+    "menuStyle": "classic",
+    "divider": "none",
+    "ornament": "flourish",
+    "gallery": "grid",
+    "cursor": "none",
+    "loader": "none",
+    "textfx": "none",
+    "hoverfx": "none",
+    "scrollfx": "none",
+    "overlay": "none",
+    "introBg": "",
+    "introFg": "",
+    "introTitle": "",
+    "introFont": "display",
+    "introCase": "upper",
+    "logoRadius": 50,
+    "scrollEase": "light",
+    "lineBreaks": "typed"
+  },
+  "cms": {
+    "adminPage": "admin"
+  },
+  "poweredBy": {
+    "show": true
+  },
+  "brand": {
+    "name": "Copper Pot Kitchen",
+    "tagline": "Slow-cooked food, served warm",
+    "logo": null,
+    "showName": true
+  },
+  "site": {
+    "multiPage": false,
+    "mobileBar": true,
+    "pageLabels": {
+      "home": "Home",
+      "menu": "Menu",
+      "about": "Our story",
+      "gallery": "Gallery",
+      "contact": "Visit & book"
+    }
+  },
+  "nav": {
+    "cta": "Book a table",
+    "ctaTarget": "reserve"
+  },
+  "notice": {
+    "on": false,
+    "text": "",
+    "label": "",
+    "target": "offers"
+  },
+  "sections": [
+    {
+      "id": "hero",
+      "label": "Home",
+      "show": true,
+      "inNav": false
+    },
+    {
+      "id": "highlights",
+      "label": "Highlights",
+      "show": true,
+      "inNav": false
+    },
+    {
+      "id": "about",
+      "label": "Our story",
+      "show": true,
+      "inNav": true
+    },
+    {
+      "id": "specials",
+      "label": "Signature dishes",
+      "show": true,
+      "inNav": false
+    },
+    {
+      "id": "food",
+      "label": "Menu",
+      "show": true,
+      "inNav": true
+    },
+    {
+      "id": "offers",
+      "label": "Offers",
+      "show": true,
+      "inNav": false
+    },
+    {
+      "id": "gallery",
+      "label": "Gallery",
+      "show": true,
+      "inNav": true
+    },
+    {
+      "id": "chef",
+      "label": "Our team",
+      "show": true,
+      "inNav": false
+    },
+    {
+      "id": "events",
+      "label": "Events & catering",
+      "show": true,
+      "inNav": true
+    },
+    {
+      "id": "press",
+      "label": "Featured in",
+      "show": true,
+      "inNav": false
+    },
+    {
+      "id": "testimonials",
+      "label": "Reviews",
+      "show": true,
+      "inNav": false
+    },
+    {
+      "id": "order",
+      "label": "Order online",
+      "show": true,
+      "inNav": false
+    },
+    {
+      "id": "reserve",
+      "label": "Book a table",
+      "show": true,
+      "inNav": false
+    },
+    {
+      "id": "contact",
+      "label": "Visit us",
+      "show": true,
+      "inNav": true
+    },
+    {
+      "id": "faq",
+      "label": "FAQ",
+      "show": true,
+      "inNav": false
+    },
+    {
+      "id": "cta",
+      "label": "Call to action",
+      "show": true,
+      "inNav": false
+    }
+  ],
+  "hero": {
+    "eyebrow": "Modern Indian kitchen · Pune",
+    "title": "Slow-cooked food,\nserved *warm*.",
+    "lede": "Copper-pot curries, breads from a clay oven and a short menu that changes with the season. Lunch and dinner, every day.",
+    "ctaPrimary": "Book a table",
+    "ctaPrimaryTarget": "reserve",
+    "ctaSecondary": "See the menu",
+    "ctaSecondaryTarget": "food",
+    "image": null,
+    "images": [],
+    "stamp": "Est. 2014 · Cooked over fire",
+    "showStatus": true,
+    "badges": [
+      "Open all week",
+      "Vegetarian and vegan dishes",
+      "Private dining for 20"
+    ],
+    "slides": {
+      "enabled": false,
+      "items": [],
+      "effect": "fade",
+      "interval": 6,
+      "speed": 1.2,
+      "overlay": 45,
+      "overlayColor": "#2A1710",
+      "overlayStyle": "left",
+      "textColor": "light",
+      "height": "tall",
+      "dots": true,
+      "arrows": false,
+      "pause": true,
+      "hideArt": true,
+      "artOpacity": 100
+    }
+  },
+  "highlights": {
+    "items": [
+      {
+        "icon": "flame",
+        "title": "Cooked over fire",
+        "body": "A clay oven and charcoal grill, lit every morning."
+      },
+      {
+        "icon": "leaf",
+        "title": "Local produce",
+        "body": "Vegetables from farms within 60 km, picked the same week."
+      },
+      {
+        "icon": "bowl",
+        "title": "Made from scratch",
+        "body": "Spice blends, breads and chutneys are all made in house."
+      },
+      {
+        "icon": "people",
+        "title": "Room for groups",
+        "body": "A private room for up to 20 guests."
+      }
+    ]
+  },
+  "about": {
+    "eyebrow": "Our story",
+    "title": "A family kitchen that grew",
+    "body": "Copper Pot began in 2014 with six tables and one handed-down recipe book. The curries are still cooked the slow way, in heavy copper pots, for as long as they need.\n\nToday the kitchen is bigger, but the idea is the same: a short menu, cooked with care, at a fair price.",
+    "image": null,
+    "signature": "Meera & Arjun, founders",
+    "facts": [
+      {
+        "value": "2014",
+        "label": "Cooking since"
+      },
+      {
+        "value": "42",
+        "label": "Seats"
+      },
+      {
+        "value": "4.7★",
+        "label": "Guest rating"
+      }
+    ]
+  },
+  "specials": {
+    "eyebrow": "Chef's picks",
+    "title": "Signature dishes",
+    "lede": "The plates our regulars come back for.",
+    "items": [
+      {
+        "name": "Copper pot dal",
+        "desc": "Black lentils simmered overnight, finished with white butter.",
+        "price": "340",
+        "tag": "Since day one",
+        "diet": "veg",
+        "image": null
+      },
+      {
+        "name": "Charcoal lamb chops",
+        "desc": "Marinated for a day, grilled to order, mint chutney.",
+        "price": "690",
+        "tag": "Chef's special",
+        "diet": "nonveg",
+        "image": null
+      },
+      {
+        "name": "Smoked aubergine",
+        "desc": "Fire-roasted, whipped yoghurt, pomegranate, crisp shallots.",
+        "price": "320",
+        "tag": "Vegetarian",
+        "diet": "veg",
+        "image": null
+      }
+    ]
+  },
+  "food": {
+    "eyebrow": "The menu",
+    "title": "What we're cooking",
+    "lede": "A short menu that follows the season. Ask us about allergens: we are happy to adapt a dish.",
+    "currency": "₹",
+    "dietMarks": true,
+    "filters": true,
+    "search": true,
+    "photos": true,
+    "homeCount": 3,
+    "all": "See the full menu",
+    "pdfUrl": "",
+    "pdfLabel": "Download the menu (PDF)",
+    "note": "Prices are in rupees and exclude taxes. A 5% service charge applies to tables of eight or more.",
+    "categories": [
+      {
+        "name": "Small plates",
+        "note": "To share while you decide",
+        "image": null,
+        "items": [
+          {
+            "name": "Dahi puri",
+            "desc": "Crisp shells, spiced potato, sweet yoghurt, tamarind.",
+            "price": "220",
+            "diet": "veg",
+            "spice": "1",
+            "tag": "",
+            "allergens": "dairy, gluten",
+            "image": null,
+            "variants": [],
+            "soldOut": false
+          },
+          {
+            "name": "Paneer tikka",
+            "desc": "Clay-oven paneer, bell peppers, mint chutney.",
+            "price": "320",
+            "diet": "veg",
+            "spice": "2",
+            "tag": "Bestseller",
+            "allergens": "dairy",
+            "image": null,
+            "variants": [],
+            "soldOut": false
+          },
+          {
+            "name": "Chilli garlic prawns",
+            "desc": "Tiger prawns, burnt garlic, curry leaf.",
+            "price": "480",
+            "diet": "nonveg",
+            "spice": "3",
+            "tag": "",
+            "allergens": "shellfish",
+            "image": null,
+            "variants": [],
+            "soldOut": false
+          },
+          {
+            "name": "Crispy corn",
+            "desc": "Sweet corn kernels, lime, chilli salt.",
+            "price": "240",
+            "diet": "vegan",
+            "spice": "1",
+            "tag": "",
+            "allergens": "",
+            "image": null,
+            "variants": [],
+            "soldOut": false
+          }
+        ]
+      },
+      {
+        "name": "From the clay oven",
+        "note": "",
+        "image": null,
+        "items": [
+          {
+            "name": "Tandoori chicken",
+            "desc": "Free-range chicken, yoghurt and Kashmiri chilli marinade.",
+            "price": "",
+            "diet": "nonveg",
+            "spice": "2",
+            "tag": "",
+            "allergens": "dairy",
+            "image": null,
+            "variants": [
+              {
+                "label": "Half",
+                "price": "360"
+              },
+              {
+                "label": "Full",
+                "price": "620"
+              }
+            ],
+            "soldOut": false
+          },
+          {
+            "name": "Charcoal lamb chops",
+            "desc": "Marinated for a day, grilled to order.",
+            "price": "690",
+            "diet": "nonveg",
+            "spice": "2",
+            "tag": "Chef's special",
+            "allergens": "dairy",
+            "image": null,
+            "variants": [],
+            "soldOut": false
+          },
+          {
+            "name": "Malai broccoli",
+            "desc": "Cream cheese and cardamom marinade, charred edges.",
+            "price": "310",
+            "diet": "veg",
+            "spice": "0",
+            "tag": "",
+            "allergens": "dairy, nuts",
+            "image": null,
+            "variants": [],
+            "soldOut": false
+          }
+        ]
+      },
+      {
+        "name": "Copper pot curries",
+        "note": "Served with steamed rice or two rotis",
+        "image": null,
+        "items": [
+          {
+            "name": "Copper pot dal",
+            "desc": "Black lentils simmered overnight, white butter.",
+            "price": "340",
+            "diet": "veg",
+            "spice": "1",
+            "tag": "Since day one",
+            "allergens": "dairy",
+            "image": null,
+            "variants": [],
+            "soldOut": false
+          },
+          {
+            "name": "Butter chicken",
+            "desc": "Smoked tomato gravy, fenugreek, cream.",
+            "price": "460",
+            "diet": "nonveg",
+            "spice": "1",
+            "tag": "Bestseller",
+            "allergens": "dairy, nuts",
+            "image": null,
+            "variants": [],
+            "soldOut": false
+          },
+          {
+            "name": "Coastal fish curry",
+            "desc": "Catch of the day, coconut, kokum, curry leaf.",
+            "price": "520",
+            "diet": "nonveg",
+            "spice": "2",
+            "tag": "",
+            "allergens": "fish",
+            "image": null,
+            "variants": [],
+            "soldOut": false
+          },
+          {
+            "name": "Jackfruit kofta",
+            "desc": "Tender jackfruit dumplings in a cashew gravy.",
+            "price": "380",
+            "diet": "vegan",
+            "spice": "1",
+            "tag": "New",
+            "allergens": "nuts",
+            "image": null,
+            "variants": [],
+            "soldOut": false
+          }
+        ]
+      },
+      {
+        "name": "Breads & rice",
+        "note": "",
+        "image": null,
+        "items": [
+          {
+            "name": "Butter naan",
+            "desc": "",
+            "price": "70",
+            "diet": "veg",
+            "spice": "0",
+            "tag": "",
+            "allergens": "gluten, dairy",
+            "image": null,
+            "variants": [],
+            "soldOut": false
+          },
+          {
+            "name": "Garlic naan",
+            "desc": "",
+            "price": "90",
+            "diet": "veg",
+            "spice": "0",
+            "tag": "",
+            "allergens": "gluten, dairy",
+            "image": null,
+            "variants": [],
+            "soldOut": false
+          },
+          {
+            "name": "Tandoori roti",
+            "desc": "Whole wheat.",
+            "price": "50",
+            "diet": "vegan",
+            "spice": "0",
+            "tag": "",
+            "allergens": "gluten",
+            "image": null,
+            "variants": [],
+            "soldOut": false
+          },
+          {
+            "name": "Saffron pulao",
+            "desc": "Aged basmati, saffron, fried onions.",
+            "price": "260",
+            "diet": "veg",
+            "spice": "0",
+            "tag": "",
+            "allergens": "",
+            "image": null,
+            "variants": [],
+            "soldOut": false
+          }
+        ]
+      },
+      {
+        "name": "Desserts & drinks",
+        "note": "",
+        "image": null,
+        "items": [
+          {
+            "name": "Gulab jamun",
+            "desc": "Warm, with saffron rabri.",
+            "price": "190",
+            "diet": "veg",
+            "spice": "0",
+            "tag": "",
+            "allergens": "dairy, gluten",
+            "image": null,
+            "variants": [],
+            "soldOut": false
+          },
+          {
+            "name": "Mango kulfi",
+            "desc": "Alphonso mango, pistachio crumb.",
+            "price": "210",
+            "diet": "veg",
+            "spice": "0",
+            "tag": "Seasonal",
+            "allergens": "dairy, nuts",
+            "image": null,
+            "variants": [],
+            "soldOut": false
+          },
+          {
+            "name": "Masala chai",
+            "desc": "",
+            "price": "90",
+            "diet": "veg",
+            "spice": "0",
+            "tag": "",
+            "allergens": "dairy",
+            "image": null,
+            "variants": [],
+            "soldOut": false
+          },
+          {
+            "name": "Fresh lime soda",
+            "desc": "Sweet, salted or both.",
+            "price": "120",
+            "diet": "vegan",
+            "spice": "0",
+            "tag": "",
+            "allergens": "",
+            "image": null,
+            "variants": [],
+            "soldOut": false
+          }
+        ]
+      }
+    ]
+  },
+  "offers": {
+    "eyebrow": "This month",
+    "title": "Offers",
+    "items": [
+      {
+        "title": "Weekday lunch thali",
+        "body": "Two curries, dal, rice, bread and dessert.",
+        "when": "Mon–Fri, 12–3 pm",
+        "price": "₹399",
+        "code": "",
+        "image": null
+      },
+      {
+        "title": "Early dinner",
+        "body": "15% off the food bill when you are seated before 7 pm.",
+        "when": "Sun–Thu",
+        "price": "15% off",
+        "code": "EARLY15",
+        "image": null
+      }
+    ]
+  },
+  "gallery": {
+    "eyebrow": "Gallery",
+    "title": "A look inside",
+    "lede": "",
+    "homeCount": 6,
+    "all": "See all photos",
+    "items": []
+  },
+  "chef": {
+    "eyebrow": "The people",
+    "title": "Who's in the kitchen",
+    "lede": "",
+    "members": [
+      {
+        "name": "Meera Kulkarni",
+        "role": "Head chef & co-founder",
+        "bio": "Grew up in her grandmother's kitchen in Kolhapur. Runs the pass every evening.",
+        "photo": null
+      },
+      {
+        "name": "Arjun Kulkarni",
+        "role": "Front of house",
+        "bio": "Knows most regulars by name, and their usual order.",
+        "photo": null
+      }
+    ]
+  },
+  "events": {
+    "eyebrow": "Events & catering",
+    "title": "Celebrate with us",
+    "lede": "Birthdays, team dinners and family gatherings, at our place or yours.",
+    "items": [
+      {
+        "icon": "people",
+        "title": "Private dining",
+        "body": "A separate room for up to 20 guests, with a set menu from ₹1,200 a head."
+      },
+      {
+        "icon": "cake",
+        "title": "Celebrations",
+        "body": "Tell us the occasion: we'll plan the menu, the cake and the table."
+      },
+      {
+        "icon": "truck",
+        "title": "Outdoor catering",
+        "body": "Live counters and buffet menus for 30 to 300 guests."
+      }
+    ],
+    "button": "Plan an event",
+    "type": "Private event"
+  },
+  "press": {
+    "title": "As featured in",
+    "logos": [
+      {
+        "name": "The City Table",
+        "logo": null
+      },
+      {
+        "name": "Good Food Guide",
+        "logo": null
+      },
+      {
+        "name": "Pune Eats",
+        "logo": null
+      }
+    ]
+  },
+  "testimonials": {
+    "eyebrow": "Reviews",
+    "title": "What guests say",
+    "items": [
+      {
+        "quote": "The dal alone is worth the trip. Warm service, and they remembered our anniversary.",
+        "name": "Rhea Menon",
+        "role": "",
+        "company": "",
+        "rating": "5"
+      },
+      {
+        "quote": "Our go-to for family dinners. The kids love the naan and the grandparents love the pace.",
+        "name": "Vikram Joshi",
+        "role": "",
+        "company": "",
+        "rating": "5"
+      },
+      {
+        "quote": "Booked the private room for 18 people. The team handled everything.",
+        "name": "Sana Sheikh",
+        "role": "",
+        "company": "",
+        "rating": "5"
+      }
+    ]
+  },
+  "order": {
+    "eyebrow": "At home",
+    "title": "Order online",
+    "lede": "Pick up from the restaurant or get it delivered.",
+    "links": [
+      {
+        "label": "Order for pickup",
+        "url": "",
+        "note": "Ready in 25 minutes"
+      },
+      {
+        "label": "Order for delivery",
+        "url": "",
+        "note": "Within 6 km"
+      }
+    ],
+    "call": true,
+    "whatsapp": true,
+    "whatsappText": "Hello, I'd like to place an order."
+  },
+  "reserve": {
+    "eyebrow": "Reservations",
+    "title": "Book a table",
+    "lede": "Tell us when you'd like to come. We'll confirm by phone or message.",
+    "note": "For groups of more than 10, please call us."
+  },
+  "hours": {
+    "title": "Opening hours",
+    "format": "12",
+    "utcOffset": "+05:30",
+    "showStatus": true,
+    "note": "Kitchen closes 30 minutes before closing time.",
+    "openLabel": "Open now",
+    "closedLabel": "Closed now",
+    "days": [
+      {
+        "day": "Monday",
+        "closed": false,
+        "open": "12:00",
+        "close": "23:00",
+        "open2": "",
+        "close2": ""
+      },
+      {
+        "day": "Tuesday",
+        "closed": false,
+        "open": "12:00",
+        "close": "23:00",
+        "open2": "",
+        "close2": ""
+      },
+      {
+        "day": "Wednesday",
+        "closed": false,
+        "open": "12:00",
+        "close": "23:00",
+        "open2": "",
+        "close2": ""
+      },
+      {
+        "day": "Thursday",
+        "closed": false,
+        "open": "12:00",
+        "close": "23:00",
+        "open2": "",
+        "close2": ""
+      },
+      {
+        "day": "Friday",
+        "closed": false,
+        "open": "12:00",
+        "close": "23:30",
+        "open2": "",
+        "close2": ""
+      },
+      {
+        "day": "Saturday",
+        "closed": false,
+        "open": "12:00",
+        "close": "23:30",
+        "open2": "",
+        "close2": ""
+      },
+      {
+        "day": "Sunday",
+        "closed": false,
+        "open": "12:00",
+        "close": "23:00",
+        "open2": "",
+        "close2": ""
+      }
+    ]
+  },
+  "contact": {
+    "eyebrow": "Visit us",
+    "title": "Find us",
+    "lede": "",
+    "email": "hello@copperpot.example",
+    "phone": "+91 20 4000 1234",
+    "whatsapp": "",
+    "address": "14 Lane 6, Koregaon Park\nPune 411001",
+    "mapUrl": "",
+    "mapEmbed": true,
+    "parking": "Valet parking in the evening",
+    "form": {
+      "enabled": true,
+      "title": "Request a table",
+      "askEmail": true,
+      "askGuests": true,
+      "maxGuests": 10,
+      "askDate": true,
+      "askTime": true,
+      "slots": [
+        "12:00",
+        "12:30",
+        "13:00",
+        "13:30",
+        "14:00",
+        "19:00",
+        "19:30",
+        "20:00",
+        "20:30",
+        "21:00",
+        "21:30"
+      ],
+      "askOccasion": true,
+      "occasions": [
+        "Birthday",
+        "Anniversary",
+        "Business meal",
+        "Date night"
+      ],
+      "askType": true,
+      "types": [
+        "Table booking",
+        "Private event",
+        "Catering",
+        "Something else"
+      ],
+      "messageLabel": "Anything we should know?",
+      "submit": "Request booking",
+      "success": "Thank you. We have your request and will confirm it shortly.",
+      "consent": "I agree to be contacted about this booking.",
+      "saveTo": "auto",
+      "fileUrl": "",
+      "sbUrl": "",
+      "sbKey": "",
+      "site": "",
+      "notify": false,
+      "notifyTo": "",
+      "notifySubject": "New booking request from {name}"
+    }
+  },
+  "faq": {
+    "eyebrow": "Good to know",
+    "title": "Questions guests ask",
+    "items": [
+      {
+        "q": "Do I need a reservation?",
+        "a": "Walk-ins are welcome. On Friday and Saturday evenings a booking is the safest way to get a table."
+      },
+      {
+        "q": "Do you have vegan and gluten-free dishes?",
+        "a": "Yes. They are marked on the menu, and the kitchen can adapt several others. Please tell your server about any allergy."
+      },
+      {
+        "q": "Is there parking?",
+        "a": "There is valet parking in the evening and street parking during the day."
+      },
+      {
+        "q": "Can I bring a cake?",
+        "a": "Of course. We'll keep it chilled and bring it out when you're ready. No cakeage fee."
+      }
+    ]
+  },
+  "cta": {
+    "title": "Hungry yet?",
+    "body": "Book a table for tonight, or call us and we'll have it ready to take away.",
+    "button": "Book a table",
+    "target": "reserve"
+  },
+  "footer": {
+    "text": "Slow-cooked food, served warm. Lunch and dinner, every day.",
+    "legal": "© {year} Copper Pot Kitchen. All rights reserved.",
+    "links": [
+      {
+        "label": "Privacy",
+        "url": ""
+      },
+      {
+        "label": "Terms",
+        "url": ""
+      }
+    ]
+  },
+  "seo": {
+    "title": "Copper Pot Kitchen · Modern Indian restaurant in Pune",
+    "description": "Copper-pot curries, clay-oven breads and a seasonal menu. Book a table or order online.",
+    "titlePattern": "{page} · {site}",
+    "keywords": "",
+    "author": "",
+    "image": null,
+    "siteUrl": "",
+    "themeColor": "",
+    "noindex": false,
+    "googleVerification": "",
+    "meta": [],
+    "cuisine": "Indian",
+    "priceRange": "₹₹"
+  }
+}

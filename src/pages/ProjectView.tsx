@@ -170,8 +170,8 @@ export function ProjectView({ studio, index, project, session, onIndex }: { stud
   };
 
   const extras = useMemo(() => [
-    ...(project.template === "business" ? [{
-      id: "enquiries", label: "Enquiries", group: "Forms & records", desc: "Messages sent through the website's enquiry form.",
+    ...(project.template === "business" || project.template === "restaurant" ? [{
+      id: "enquiries", label: "Enquiries", group: "Forms & records", desc: project.template === "restaurant" ? "Table-booking and event requests sent through the website's form." : "Messages sent through the website's enquiry form.",
       render: () => <EnquiriesPanel cfg={project.host?.cf ? null : enquiriesCfg(draft, project.host?.sb)} cf={project.host?.cf} account={project.host?.account} hosted={!!project.host} email={draft?.contact?.email} form={draft?.contact?.form} ghToken={ghPublish.token(session.token)} inStudio />,
     }] : []),
     ...(project.template === "store" || project.template === "business" ? [{
@@ -267,7 +267,7 @@ export function ProjectView({ studio, index, project, session, onIndex }: { stud
       {modal === "reviews" && <GoogleReviewsDialog {...{ session, project, draft }} onApply={(c, n) => { replaceDraft(c); toast(`${n} Google review${n === 1 ? "" : "s"} added. Check them, then Save.`); }} onClose={() => setModal("")} />}
       {modal === "approve" && draft && <ApprovalDialog project={project} draft={draft} dirty={dirty} me={session.username || ""} onClose={() => setModal("")} />}
       {modal === "kit" && draft && <BrandKitDialog project={project} draft={draft} img={img} onClose={() => setModal("")} />}
-      {modal === "pamphlet" && <PamphletDialog {...{ session, project, draft, upload }} onApply={(c, n) => { replaceDraft(c); toast(`${n} product${n === 1 ? "" : "s"} filled in. Check them, then Save.`); }} onClose={() => setModal("")} />}
+      {modal === "pamphlet" && <PamphletDialog {...{ session, project, draft, upload }} onApply={(c, n) => { replaceDraft(c); toast(project.template === "restaurant" ? `${n} dish${n === 1 ? "" : "es"} filled in. Check them, then Save.` : `${n} product${n === 1 ? "" : "s"} filled in. Check them, then Save.`); }} onClose={() => setModal("")} />}
       {modal === "write" && <WriteFromSiteDialog {...{ session, project, draft }} onApply={(c) => { replaceDraft(c); toast("New text is in the editor. Check it, then Save."); }} onClose={() => setModal("")} />}
       {modal === "history" && <HistoryDialog {...{ studio, project, tpl, getBlob }} onLoad={(c) => { replaceDraft(c); setModal(""); toast("Loaded into the editor. Save to keep it."); }} onClose={() => setModal("")} />}
       {modal === "details" && <DetailsDialog {...{ studio, index, project, session, onIndex }} onImported={(c) => { replaceDraft(c); setSavedV(v + 1); }} onClose={() => setModal("")} />}

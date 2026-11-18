@@ -20,6 +20,7 @@ import { PayNote } from "./PayNote";
 import { cleanPay } from "../lib/studio";
 import { THEMES, type Theme } from "../themes/catalog";
 import { BIZ_THEMES } from "../themes/business";
+import { REST_THEMES } from "../themes/restaurant";
 import { themeCode } from "../themes/codes";
 import { partnerPlan, teardownPartner } from "../lib/teardown";
 import { TeardownDialog } from "./TeardownDialog";
@@ -61,7 +62,7 @@ export function PartnersTab({ studio, index, session, onIndex }: { studio: Studi
 }
 
 // The themes of each type of site (the shop and the portfolio share one catalogue).
-const THEME_KINDS: { id: "portfolio" | "store" | "business"; label: string; pool: Theme[] }[] = [{ id: "portfolio", label: "Portfolio sites", pool: THEMES }, { id: "store", label: "Online shops", pool: THEMES }, { id: "business", label: "Business sites", pool: BIZ_THEMES as unknown as Theme[] }];
+const THEME_KINDS: { id: "portfolio" | "store" | "business" | "restaurant"; label: string; pool: Theme[] }[] = [{ id: "portfolio", label: "Portfolio sites", pool: THEMES }, { id: "store", label: "Online shops", pool: THEMES }, { id: "business", label: "Business sites", pool: BIZ_THEMES as unknown as Theme[] }, { id: "restaurant", label: "Restaurant sites", pool: REST_THEMES as unknown as Theme[] }];
 /** Choosing the themes a client Studio may use for one type of site: all of them, or the ticked ones. */
 function ThemePick({ label, pool, value, onChange }: { label: string; pool: Theme[]; value: string[]; onChange: (ids: string[]) => void }) {
   const [open, setOpen] = useState(false), [find, setFind] = useState("");
@@ -228,9 +229,9 @@ function PartnerCard({ p, studio, index, nf, setNf, session, myEmail, studioToke
   const [myDb, setMyDb] = useState<{ api: string; studio: string } | null>(null);
   useEffect(() => { loadHostConfig().then((c) => setMyDb(c?.kind === "cloudflare" ? { api: c.api, studio: c.studio } : null)).catch(() => {}); }, []);
   // Limits: how many themes they can choose from and how many sites of each type they can have ("" = no limit).
-  const [lim, setLim] = useState<{ themes: string; portfolio: string; store: string; business: string; list: Record<string, string[]> }>({ themes: "", portfolio: "", store: "", business: "", list: {} }), [limSaved, setLimSaved] = useState("");
-  useEffect(() => { if (signed) getClientFeatures(remoteRepo(p)).then((f) => { setHide(f.hide); const l = { list: cleanThemeList(f.themeList), themes: f.themes ? String(f.themes) : "", portfolio: f.max?.portfolio != null ? String(f.max.portfolio) : "", store: f.max?.store != null ? String(f.max.store) : "", business: f.max?.business != null ? String(f.max.business) : "" }; setLim(l); setLimSaved(JSON.stringify(l)); }).catch(() => setHide([])); }, [signed, p.studio, p.api, p.sbUrl]);
-  const featuresNow = (h: string[], l = lim) => { const max: Record<string, number> = {}; for (const k of ["portfolio", "store", "business"] as const) if (l[k].trim() !== "" && +l[k] >= 0) max[k] = Math.floor(+l[k]); const themeList = cleanThemeList(l.list); return { hide: h, ...(+l.themes > 0 ? { themes: Math.floor(+l.themes) } : {}), ...(Object.keys(themeList).length ? { themeList } : {}), ...(Object.keys(max).length ? { max } : {}) }; };
+  const [lim, setLim] = useState<{ themes: string; portfolio: string; store: string; business: string; restaurant: string; list: Record<string, string[]> }>({ themes: "", portfolio: "", store: "", business: "", restaurant: "", list: {} }), [limSaved, setLimSaved] = useState("");
+  useEffect(() => { if (signed) getClientFeatures(remoteRepo(p)).then((f) => { setHide(f.hide); const l = { list: cleanThemeList(f.themeList), themes: f.themes ? String(f.themes) : "", portfolio: f.max?.portfolio != null ? String(f.max.portfolio) : "", store: f.max?.store != null ? String(f.max.store) : "", business: f.max?.business != null ? String(f.max.business) : "", restaurant: f.max?.restaurant != null ? String(f.max.restaurant) : "" }; setLim(l); setLimSaved(JSON.stringify(l)); }).catch(() => setHide([])); }, [signed, p.studio, p.api, p.sbUrl]);
+  const featuresNow = (h: string[], l = lim) => { const max: Record<string, number> = {}; for (const k of ["portfolio", "store", "business", "restaurant"] as const) if (l[k].trim() !== "" && +l[k] >= 0) max[k] = Math.floor(+l[k]); const themeList = cleanThemeList(l.list); return { hide: h, ...(+l.themes > 0 ? { themes: Math.floor(+l.themes) } : {}), ...(Object.keys(themeList).length ? { themeList } : {}), ...(Object.keys(max).length ? { max } : {}) }; };
   const toggleFeature = (key: string) => run("feat", async () => { const next = (hide || []).includes(key) ? (hide || []).filter((k) => k !== key) : [...(hide || []), key]; await setClientFeatures(remoteRepo(p), featuresNow(next, JSON.parse(limSaved || JSON.stringify(lim)))); setHide(next); });
   const saveLimits = () => run("lim", async () => { await setClientFeatures(remoteRepo(p), featuresNow(hide || [])); setLimSaved(JSON.stringify(lim)); toast("Limits saved. They apply the next time they open their Studio."); });
   const check = async () => {
@@ -308,8 +309,8 @@ function PartnerCard({ p, studio, index, nf, setNf, session, myEmail, studioToke
           </div>
           <div className="mt-3 border-t border-ink-700 pt-3" aria-label="Limits">
             <b className="text-ink-200">Limits</b> <span className="text-ink-400">(leave a box empty for no limit)</span>
-            <div className="mt-2 grid gap-2 sm:grid-cols-3">
-              {([["portfolio", "Portfolio sites"], ["store", "Online shops"], ["business", "Business sites"]] as const).map(([k, l]) => (
+            <div className="mt-2 grid gap-2 sm:grid-cols-4">
+              {([["portfolio", "Portfolio sites"], ["store", "Online shops"], ["business", "Business sites"], ["restaurant", "Restaurant sites"]] as const).map(([k, l]) => (
                 <label key={k} className="flex flex-col gap-1"><span className="text-ink-400">{l}</span><input className="input py-1.5" type="number" min={0} max={999} inputMode="numeric" aria-label={l} value={lim[k]} placeholder="no limit" onChange={(e) => setLim({ ...lim, [k]: e.target.value })} /></label>
               ))}
             </div>

@@ -18,6 +18,6 @@ export const limitThemes = <T extends { id: string }>(all: T[], keep?: string, k
 /** { portfolio: [theme ids], store: […], business: […] }, with empty and odd entries dropped. */
 export const cleanThemeList = (x: any): Record<string, string[]> => {
   const out: Record<string, string[]> = {};
-  for (const k of ["portfolio", "store", "business"]) { const l = Array.isArray(x?.[k]) ? [...new Set(x[k].filter((id: any) => typeof id === "string" && /^[\w-]{1,60}$/.test(id)))].slice(0, 400) as string[] : []; if (l.length) out[k] = l; }
+  for (const k of ["portfolio", "store", "business", "restaurant"]) { const l = Array.isArray(x?.[k]) ? [...new Set(x[k].filter((id: any) => typeof id === "string" && /^[\w-]{1,60}$/.test(id)))].slice(0, 400) as string[] : []; if (l.length) out[k] = l; }
   return out;
 };

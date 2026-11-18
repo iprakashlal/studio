@@ -27,13 +27,16 @@ export function PamphletDialog({ session, project, draft, upload, onApply, onClo
   const [preview, setPreview] = useState<{ i: number; urls: string[] } | null>(null);
   const accent: string = draft?.theme?.c1 || draft?.theme?.accent || "#5B7CFF";
   const shop = project.template === "store"; // the shop keeps its products as a list with numbers for prices
+  const menu = project.template === "restaurant"; // a restaurant's menu: each product is a dish, its category the menu section
   const [busy, setBusy] = useState(""), [err, setErr] = useState("");
   const [found, setFound] = useState<PamphletProduct[] | null>(null), [guessed, setGuessed] = useState(false);
   const [pick, setPick] = useState<Set<number>>(new Set());
   const doc = useRef<Pamphlet | null>(null);
   const [drag, setDrag] = useState(false);
   const social = useRef<SocialItem[]>([]); // links the database read from the pamphlet's page pictures
-  const existing: any[] = draft?.products?.items || [];
+  const existing: any[] = menu ? (draft?.food?.categories || []).flatMap((k: any) => k?.items || []) : draft?.products?.items || [];
+  const W = menu ? { one: "dish", many: "dishes", doc: "menu", where: "menu" } : { one: "product", many: "products", doc: "pamphlet", where: "catalogue" };
+  useEffect(() => { if (menu) setPhotos("none"); }, [menu]);
   // Thumbnails of the pictures found (revoked when they change or the dialog closes).
   const picUrls = useMemo(() => (found && doc.current ? doc.current.pics.map((x) => URL.createObjectURL(x.blob)) : []), [found]);
   useEffect(() => () => picUrls.forEach((u) => URL.revokeObjectURL(u)), [picUrls]);
@@ -57,7 +60,7 @@ export function PamphletDialog({ session, project, draft, upload, onApply, onClo
       const pics = doc.current.pages.filter((p) => p.image).length;
       setBusy(pics ? `Reading ${pics} page picture${pics > 1 ? "s" : ""} and finding the products` : "Finding the products");
       const inp = pamphletInput(doc.current);
-      const list = await cfProducts(db.api!, { ...inp, hint: [inp.hint, hint.trim()].filter(Boolean).join("\n") });
+      const list = await cfProducts(db.api!, { ...inp, hint: [inp.hint, menu ? "This is a restaurant's menu. List every dish and drink as one entry: name = the dish, category = the menu section it is printed under (Starters, Mains, Desserts…), price = its price as printed, summary = its description if one is printed. Do not invent descriptions." : "", hint.trim()].filter(Boolean).join("\n") });
       social.current = list.social || [];
       setFound(list); setGuessed(!!list.guessed); setPick(new Set(list.map((_, i) => i))); setPicOf(guessPics(list, doc.current.pics));
       if (!doc.current.pics.length && photos === "styled") setPhotos(doc.current.kind === "pdf" ? "page" : "none");
@@ -68,6 +71,23 @@ export function PamphletDialog({ session, project, draft, upload, onApply, onClo
     setErr(""); setBusy("Adding to your catalogue");
     try {
       const c = clone(draft);
+      if (menu) {
+        // Each dish goes under its menu section (made when it's new). A dish already on the menu only gets what it lacks.
+        c.food ||= {}; const cats: any[] = Array.isArray(c.food.categories) ? c.food.categories : (c.food.categories = []);
+        const price = (x: string) => { const t = String(x || "").trim(), m = t.replace(/,/g, "").match(/^\D{0,4}(\d+(?:\.\d+)?)\s*(?:\/-|only)?$/i); return m ? m[1] : t; };
+        let n = 0;
+        for (const [i, p] of (found || []).entries()) {
+          if (!pick.has(i) || !p.name.trim()) continue;
+          const old = cats.flatMap((k) => k.items || []).find((d: any) => same(String(d?.name || ""), p.name));
+          if (old) { if (!String(old.price || "").trim() && p.price) old.price = price(p.price); if (!String(old.desc || "").trim() && p.summary) old.desc = p.summary; n++; continue; }
+          const name = (p.category || "").trim() || "Menu";
+          let k = cats.find((x) => same(String(x?.name || ""), name)); if (!k) { k = { name, note: "", image: null, items: [] }; cats.push(k); }
+          (k.items ||= []).push({ name: p.name.trim(), desc: p.summary || "", price: price(p.price), diet: "", spice: "0", tag: "", allergens: "", image: null, variants: [], soldOut: false }); n++;
+        }
+        const sec = (c.sections || []).find((s: any) => s.id === "food"); if (sec) sec.show = true;
+        mergeSocial(c, [...socialFromText((doc.current?.pages || []).map((x) => x.text).join("\n")), ...social.current]);
+        onApply(c, n); onClose(); setBusy(""); return;
+      }
       if (!shop) c.products ||= {};
       const items: any[] = shop ? (Array.isArray(c.products) ? c.products : (c.products = [])) : (c.products.items ||= []);
       // Shop: a product's category is one of the shop's categories (made when it's new), its price a number.
@@ -133,31 +153,32 @@ export function PamphletDialog({ session, project, draft, upload, onApply, onClo
   };
 
   const footer = found
-    ? <><button className="btn" onClick={() => setFound(null)}>Back</button><button className="btn btn-pri" disabled={!pick.size || !!busy} onClick={apply}>{busy ? busy + "…" : `Add ${pick.size} to the catalogue`}</button></>
-    : <><button className="btn" onClick={onClose}>Cancel</button>{db.ready && <button className="btn btn-pri" disabled={!files.length || !!busy} onClick={read}>{busy ? busy + "…" : "Read the pamphlet"}</button>}</>;
+    ? <><button className="btn" onClick={() => setFound(null)}>Back</button><button className="btn btn-pri" disabled={!pick.size || !!busy} onClick={apply}>{busy ? busy + "…" : `Add ${pick.size} to the ${W.where}`}</button></>
+    : <><button className="btn" onClick={onClose}>Cancel</button>{db.ready && <button className="btn btn-pri" disabled={!files.length || !!busy} onClick={read}>{busy ? busy + "…" : menu ? "Read the menu" : "Read the pamphlet"}</button>}</>;
 
   return (
-    <Modal title="Fill in products from a pamphlet" onClose={onClose} wide footer={footer}>
+    <Modal title={menu ? "Fill in the menu from a photo or PDF" : "Fill in products from a pamphlet"} onClose={onClose} wide footer={footer}>
       <div className="flex flex-col gap-3 text-sm">
-        {!found && <p className="text-ink-300">Upload your product pamphlet or brochure (a PDF, or photos of its pages). The Studio reads it and fills in each product: name, category, price, short description, features, full description and specifications. Only what the pamphlet says is used. You review everything before it goes in, and nothing is saved until you press Save.</p>}
+        {!found && menu && <p className="text-ink-300">Upload your menu (a PDF, a sheet, or photos of the printed menu or menu board). The Studio reads it and fills in each section and dish with its price and description. Only what the menu says is used. You review everything before it goes in, and nothing is saved until you press Save. Diet marks, spice and photos are yours to add afterwards.</p>}
+        {!found && !menu && <p className="text-ink-300">Upload your product pamphlet or brochure (a PDF, or photos of its pages). The Studio reads it and fills in each product: name, category, price, short description, features, full description and specifications. Only what the pamphlet says is used. You review everything before it goes in, and nothing is saved until you press Save.</p>}
         {db.ui}
         {db.ready && !found && <>
           <label className={`flex cursor-pointer flex-col items-center gap-1 rounded-xl border-2 border-dashed px-4 py-7 text-center ${drag ? "border-brand-400 bg-brand-500/10" : "border-ink-600"}`}
             onDragOver={(e) => { e.preventDefault(); setDrag(true); }} onDragLeave={() => setDrag(false)} onDrop={(e) => { e.preventDefault(); setDrag(false); choose(e.dataTransfer.files); }}>
             <input type="file" className="sr-only" aria-label="Pamphlet file" accept=".pdf,application/pdf,.xlsx,.csv,text/csv,image/jpeg,image/png,image/webp" multiple onChange={(e) => choose(e.target.files)} />
-            <b className="text-ink-100">{files.length ? files.map((f) => f.name).join(", ") : "Choose the pamphlet"}</b>
+            <b className="text-ink-100">{files.length ? files.map((f) => f.name).join(", ") : menu ? "Choose the menu" : "Choose the pamphlet"}</b>
             <span className="text-[12.5px] text-ink-400">A PDF (up to 12 pages), an Excel (.xlsx) or CSV sheet with one product per row, or up to 8 photos of the pages. Or drop the files here.</span>
           </label>
           <label className="flex flex-col gap-1.5"><span className="label">Anything to know (optional)</span>
-            <textarea className="input min-h-[60px]" placeholder="For example: prices are per piece and include GST. Group the products by series." value={hint} onChange={(e) => setHint(e.target.value)} /></label>
-          <PhotoChoice photos={photos} setPhotos={setPhotos} styles={styles} setStyles={setStyles} />
+            <textarea className="input min-h-[60px]" placeholder={menu ? "For example: skip the drinks page. Prices are in rupees." : "For example: prices are per piece and include GST. Group the products by series."} value={hint} onChange={(e) => setHint(e.target.value)} /></label>
+          {!menu && <PhotoChoice photos={photos} setPhotos={setPhotos} styles={styles} setStyles={setStyles} />}
           <p className="text-[12.5px] text-ink-400">Pages that are pictures (scans, photos) are read by Cloudflare's AI too. Clear, straight photos read best.</p>
         </>}
         {found && <>
-          <p className="text-ink-300">Found {found.length} product{found.length === 1 ? "" : "s"}. Untick any you don't want. Products already in your catalogue with the same name only get what they're missing.</p>
+          <p className="text-ink-300">Found {found.length} {found.length === 1 ? W.one : W.many}. Untick any you don't want. {menu ? "Dishes already on your menu" : "Products already in your catalogue"} with the same name only get what they're missing.</p>
           {guessed && <p role="status" className="rounded-lg border border-amber-400/30 bg-amber-400/5 px-3 py-2 text-[12.5px] text-amber-100">The AI didn't return the products this time, so they were read straight from the pamphlet's text. Check the name, type and details before adding.</p>}
-          <PhotoChoice photos={photos} setPhotos={setPhotos} styles={styles} setStyles={setStyles} hasPics={!!doc.current?.pics.length} />
-          <div className="flex flex-col gap-2" aria-label="Products found">
+          {!menu && <PhotoChoice photos={photos} setPhotos={setPhotos} styles={styles} setStyles={setStyles} hasPics={!!doc.current?.pics.length} />}
+          <div className="flex flex-col gap-2" aria-label={menu ? "Dishes found" : "Products found"}>
             {found.map((p, i) => {
               const dup = existing.some((x) => same(String(x?.name || ""), p.name));
               const cycle = (d: number) => { const n = (doc.current?.pics.length || 0) + 1, cur = (picOf[i] ?? -1) + 1; const nx = [...picOf]; nx[i] = ((cur + d + n) % n) - 1; setPicOf(nx); setPreview(null); };

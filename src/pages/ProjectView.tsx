@@ -148,7 +148,7 @@ export function ProjectView({ studio, index, project, session, onIndex }: { stud
 
   const replaceDraft = (c: any) => { setDraft(merge(defaults.current || {}, clone(c))); setV((n) => n + 1); };
 
-  // Project tools: in Settings → Publish & tools, and in the top bar when pinned (a Studio-wide choice).
+  // Project tools: in Settings → Publish & tools, and in the top bar when pinned (each project's own choice).
   const demo = studio.repo.demo;
   const tools: { id: Modal; label: string; hint: string }[] = [
     ...(project.host
@@ -162,11 +162,11 @@ export function ProjectView({ studio, index, project, session, onIndex }: { stud
     { id: "export", label: "Export ZIP", hint: "Download the whole site as a ZIP file." },
     ...(!demo ? [{ id: "write" as Modal, label: "Write text from a site", hint: "Write new, original text for your brand from a site in the same line of business." }] : []),
   ];
-  const pinned = index.pinned ?? ["host"];
+  const pinned = project.pinned ?? index.pinned ?? ["host"];
   const [pinBusy, setPinBusy] = useState(false);
   const pin = async (id: string, on: boolean) => {
     setPinBusy(true);
-    try { onIndex(await studio.savePinned(on ? [...pinned, id] : pinned.filter((x) => x !== id))); } catch (e: any) { toast(e?.message || "Couldn't save that.", "bad"); }
+    try { onIndex(await studio.savePinned(project.id, on ? [...pinned, id] : pinned.filter((x) => x !== id))); } catch (e: any) { toast(e?.message || "Couldn't save that.", "bad"); }
     setPinBusy(false);
   };
 
@@ -188,7 +188,7 @@ export function ProjectView({ studio, index, project, session, onIndex }: { stud
       render: () => <WarrantyPanel repo={site} cfg={draft?.warranty} why={studio.repo.demo ? "Sign in with your repository to keep records." : "Publish the site first (to GitHub or Host to External Services): records are saved straight to the live site."} />,
     }] : []),
     {
-      id: "tools", label: "Publish & tools", group: "Settings", desc: "Publish, live sites, history, ZIP export and writing text. Pin the ones you use most to the top bar.",
+      id: "tools", label: "Publish & tools", group: "Settings", desc: "Publish, live sites, history, ZIP export and writing text. Pin the ones you use most to this project's top bar; other projects keep their own.",
       render: () => (
         <div className="flex flex-col gap-2.5" aria-label="Project tools">
           {tools.map((t) => (

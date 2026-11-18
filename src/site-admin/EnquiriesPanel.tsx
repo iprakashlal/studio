@@ -22,7 +22,7 @@ export const orderNext = (d: any, status: string): [string, string] | null => {
 };
 const pill = (s: string) => ({ new: "border-brand-400/60 text-brand-200", read: "border-ink-500 text-ink-300", replied: "border-emerald-400/50 text-emerald-200", archived: "border-ink-600 text-ink-500", accepted: "border-emerald-400/50 text-emerald-200", preparing: "border-amber-400/50 text-amber-200", ready: "border-sky-400/50 text-sky-200", out: "border-sky-400/50 text-sky-200", done: "border-ink-500 text-ink-300", cancelled: "border-rose-400/50 text-rose-200" } as Record<string, string>)[s] || "border-ink-500 text-ink-300";
 const LABELS: Record<string, string> = { name: "Name", email: "Email", phone: "Phone", company: "Company", service: "Interested in", budget: "Budget", message: "Message", consent: "Agreed to be contacted", type: "Request", date: "Date", time: "Time", guests: "Guests", occasion: "Occasion", order_no: "Order number", mode: "Order type", when: "For", address: "Address", table: "Table", items: "Items", total: "To pay", payment: "Payment" };
-const HIDE = new Set(["okey", "pay_state"]);
+const HIDE = new Set(["okey", "pay_state", "rz_order", "rz_payment"]);
 /** A booking request in one line: "Fri 20 Nov · 20:00 · 6 guests · Anniversary" (empty for an ordinary enquiry). */
 export const bookingLine = (d: any): string => {
   if (!d || !(d.date || d.time || d.guests)) return "";
@@ -204,7 +204,7 @@ function EnquiryList<R extends Row>({ rows: every, setStatus, remove, load, name
                 <b className="text-sm">{d.name || "No name"}</b>
                 <span className="text-[13px] text-ink-400">{[d.company, d.service, d.type && bookingLine(d) ? d.type : ""].filter(Boolean).join(" · ")}</span>
                 {bookingLine(d) && <span className="chip border-brand-400/50 text-brand-200" data-booking>{bookingLine(d)}</span>}
-                {ord && d.utr && <span className={`chip ${d._paid ? "border-emerald-400/50 text-emerald-200" : "border-amber-400/60 text-amber-200"}`} data-pay>{d._paid ? "Paid" : "Payment to check"}</span>}
+                {ord && (d.utr || d._paid) && <span className={`chip ${d._paid ? "border-emerald-400/50 text-emerald-200" : "border-amber-400/60 text-amber-200"}`} data-pay>{d._paid ? "Paid" : "Payment to check"}</span>}
                 {ord && <span className="chip border-brand-400/50 text-brand-200" data-order>{[`Order ${d.order_no}`, d.mode, d.when, d.total].filter(Boolean).join(" · ")}</span>}
                 <span className="ml-auto text-xs text-ink-500">{when(r.created_at)}</span>
                 <span className={`chip ${pill(r.status)}`}>{(ord ? ORDER_STATUS : STATUS).find(([k]) => k === r.status)?.[1] || r.status}</span>
@@ -216,8 +216,11 @@ function EnquiryList<R extends Row>({ rows: every, setStatus, remove, load, name
                     {Object.keys(LABELS).filter((k) => d[k] && !(ord && k === "message")).map((k) => (<Fragment key={k}><dt className="text-ink-400">{LABELS[k]}</dt><dd className="whitespace-pre-wrap text-ink-100">{k === "email" ? <a className="text-brand-300 underline" href={`mailto:${d.email}`}>{d.email}</a> : k === "phone" ? <a className="text-brand-300 underline" href={`tel:${d.phone}`}>{d.phone}</a> : k === "consent" ? "Yes" : d[k]}</dd></Fragment>))}
                     {Object.keys(d).filter((k) => !LABELS[k] && d[k] && !k.startsWith("_") && !HIDE.has(k)).map((k) => (<Fragment key={k}><dt className="text-ink-400">{k}</dt><dd className="whitespace-pre-wrap">{d[k]}</dd></Fragment>))}
                     {r.page && <><dt className="text-ink-400">Sent from</dt><dd className="font-mono text-xs text-ink-400">{r.page}</dd></>}
+                    {d._phone && <><dt className="text-ink-400">Mobile number</dt><dd className="text-emerald-200">{d._phone}</dd></>}
+                    {d._wa && <><dt className="text-ink-400">WhatsApp to you</dt><dd className={/^Not sent/.test(d._wa) ? "text-amber-200" : "text-ink-300"}>{d._wa}</dd></>}
                     {d._mail && <><dt className="text-ink-400">Email to you</dt><dd className={/^Not emailed/.test(d._mail) ? "text-amber-200" : "text-ink-300"}>{mailSaid(d._mail)}</dd></>}
                   </dl>
+                  {ord && d._paid && !d.utr && <p className="rounded-lg border border-emerald-400/40 px-3 py-2 text-[13px] text-emerald-100" data-payline><b>Paid online.</b> {d._paid_by || ""} Confirmed by Razorpay; nothing to check.</p>}
                   {ord && d.utr && <p className={`rounded-lg border px-3 py-2 text-[13px] ${d._paid ? "border-emerald-400/40 text-emerald-100" : "border-amber-400/40 bg-amber-400/5 text-amber-100"}`} data-payline>
                     {d._paid ? <><b>Payment received.</b> UPI reference {d.utr}.</> : <><b>The guest says they paid {d.total} by UPI, reference {d.utr}.</b> Find that reference and amount in your UPI app or bank statement before you send the order out.</>}
                     {setPaid && <button type="button" className={`btn btn-sm ml-2 ${d._paid ? "" : "btn-pri"}`} onClick={() => setPaid(r, !d._paid)}>{d._paid ? "Not received after all" : "Payment received"}</button>}

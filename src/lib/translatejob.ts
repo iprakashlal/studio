@@ -38,7 +38,7 @@ export function pending(root: any, lang: string, texts: string[], again: boolean
 const fatal = (m: string) => /updated once|Sign in|Only members|Workers AI|allowance|isn't signed in/i.test(m);
 
 /** The engine a site's translations use: its own choice (Languages → Translate with), else the Studio's. */
-export const engineFor = (root: any): AiEngine => (root?.i18n?.engine === "system" || root?.i18n?.engine === "cloudflare" ? root.i18n.engine : aiEngine());
+export const engineFor = (root: any): AiEngine => (root?.i18n?.engine === "system" || root?.i18n?.engine === "cloudflare" || root?.i18n?.engine === "custom" ? root.i18n.engine : aiEngine());
 /** The Picaffectz system: the phrase book and the browser's own translator, on this device. `lead` opens the closing line. */
 async function runSystem(a: JobAsk, todo: string[], say: (ok: boolean, text: string) => void, already = 0, lead = "") {
   const d: Record<string, string> = (((a.root.i18n ||= {}).t ||= {})[a.lang] ||= {});
@@ -76,7 +76,7 @@ async function run(a: JobAsk) {
         for (;;) {
           const part = parts[next++]; if (!part) return;
           let out: (string | null)[] = [];
-          try { out = await cfTranslate(api, { to: a.name, from: a.from, texts: part }); }
+          try { out = await cfTranslate(api, { to: a.name, from: a.from, texts: part, engine: engineFor(a.root) }); }
           catch (e: any) { const m = String(e?.message || e); if (fatal(m)) throw e; lastErr = m; failedCalls++; }
           part.forEach((s, k) => {
             const v = out[k];

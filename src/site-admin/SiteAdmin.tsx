@@ -4,6 +4,7 @@ import { CfAccount, CfGate } from "./CfGate";
 import { CfRepo, cfSession } from "../lib/cfdb";
 import { cleanMenu } from "../lib/menus";
 import { EnquiriesPanel, enquiriesCfg } from "./EnquiriesPanel";
+import { SiteConnections } from "../pages/Connections";
 import { WarrantyPanel } from "./WarrantyPanel";
 import { GOTO_EVENT } from "../editor/Editor";
 import { TEMPLATES } from "../schema";
@@ -353,6 +354,9 @@ function Workspace({ info, onInfo, repo, account, onSignOut, hosted, ghToken }: 
     ] : []),
     ...(tpl.id === "business" || tpl.id === "restaurant" ? [
       { id: "enquiries", label: "Enquiries", group: "Forms & records", desc: tpl.id === "restaurant" ? "Table-booking and event requests sent through your website's form." : "Messages sent through your website's enquiry form.", render: () => <EnquiriesPanel cfg={hosted && "api" in hosted ? null : enquiriesCfg(saved, hosted)} cf={hosted && "api" in hosted ? hosted : undefined} hosted={!!hosted} email={saved?.contact?.email} form={saved?.contact?.form} ghToken={ghToken} only="enquiries" /> },
+    ] : []),
+    ...(tpl.id !== "portfolio" ? [
+      { id: "connections", label: "Payments & WhatsApp", group: "Forms & records", desc: tpl.id === "restaurant" ? "Optional: online payment with Razorpay on the Order now page, and WhatsApp for alerts and codes." : "Optional: WhatsApp alerts when an enquiry or order arrives, and sign-in codes on WhatsApp.", render: () => <SiteConnections cf={hosted && "api" in hosted ? hosted : null} template={tpl.id} /> },
     ] : []),
     ...((tpl.id === "restaurant" || tpl.id === "store") && !(tpl.id === "store" && saved?.backend?.enabled) ? [
       { id: "purchased", label: "Purchased orders", group: "Forms & records", desc: "Every order placed on your website: what was bought, by whom, how it is paid, and where it has got to.", render: () => <EnquiriesPanel only="orders" cfg={hosted && "api" in hosted ? null : enquiriesCfg(saved, hosted)} cf={hosted && "api" in hosted ? hosted : undefined} hosted={!!hosted} email={saved?.contact?.email} form={saved?.contact?.form} ghToken={ghToken} /> },

@@ -67,7 +67,7 @@ export function PamphletDialog({ session, project, draft, upload, onApply, onClo
       const pics = doc.current.pages.filter((p) => p.image).length;
       setBusy(pics ? `Reading ${pics} page picture${pics > 1 ? "s" : ""} and finding the products` : "Finding the products");
       const inp = pamphletInput(doc.current);
-      const list: Awaited<ReturnType<typeof cfProducts>> = sys ? await systemProducts(doc.current, { menu, step: setBusy }) : await cfProducts(db.api!, { ...inp, hint: [inp.hint, menu ? "This is a restaurant's menu. List every dish and drink as one entry: name = the dish, category = the menu section it is printed under (Starters, Mains, Desserts…), price = its price as printed, summary = its description if one is printed. Do not invent descriptions." : "", hint.trim()].filter(Boolean).join("\n") });
+      const list: Awaited<ReturnType<typeof cfProducts>> = sys ? await systemProducts(doc.current, { menu, step: setBusy }) : await cfProducts(db.api!, { ...inp, engine: eng, hint: [inp.hint, menu ? "This is a restaurant's menu. List every dish and drink as one entry: name = the dish, category = the menu section it is printed under (Starters, Mains, Desserts…), price = its price as printed, summary = its description if one is printed. Do not invent descriptions." : "", hint.trim()].filter(Boolean).join("\n") });
       social.current = list.social || [];
       setBySystem(sys ? { pictures: (list as any).pictures || 0, sure: (list as any).sure || 0 } : null);
       setFound(list); setGuessed(!!list.guessed); setPick(new Set(list.map((_, i) => i))); setPicOf(guessPics(list, doc.current.pics));

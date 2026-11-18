@@ -357,6 +357,7 @@ function applyTheme(t) {
   d.introfont = t.introFont || "display"; d.introcase = t.introCase || "upper";
   r.setProperty("--r", (+t.radius || 0) + "px");
   r.setProperty("--fd", `"${t.fontDisplay}",Georgia,serif`); r.setProperty("--fb", `"${t.fontBody}","Helvetica Neue",Arial,sans-serif`);
+  if (window.SiteFonts) { const cd = SiteFonts.use(t, "display", imgUrl), cb = SiteFonts.use(t, "body", imgUrl); if (cd) r.setProperty("--fd", `"${cd}","${t.fontDisplay}",Georgia,serif`); if (cb) r.setProperty("--fb", `"${cb}","${t.fontBody}","Helvetica Neue",Arial,sans-serif`); }
   // One stylesheet per family, so a family Google can't serve never blocks the others.
   [[FONTS[t.fontDisplay], "fontlink"], [FONTS[t.fontBody], "fontlink2"], ["JetBrains+Mono:wght@400;500", "fontlink3"]].forEach(([f, id]) => {
     let l = document.getElementById(id); if (!l) { l = document.createElement("link"); l.id = id; l.rel = "stylesheet"; document.head.appendChild(l); }

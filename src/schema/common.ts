@@ -2,6 +2,7 @@ import { FESTIVALS, FESTIVAL_DECOS, festivalWhen } from "../lib/festivals";
 // Settings both templates share: where the site's own CMS lives.
 import { SOCIAL_KINDS, SOCIAL_GRAPHICS, socialDefault, socialKind, mergeSocial, type SocialItem } from "../lib/social";
 import type { Category, Field } from "./types";
+import { fontLinkLine } from "../lib/fontlink";
 
 /** Page names a site already uses, so the admin page can't take them. */
 const RESERVED = ["index", "404", "shop", "product", "cart", "checkout", "portfolio", "policies", "account", "content", "readme", "assets", "cms", "services", "work", "about", "contact", "warranty", "products"];
@@ -330,6 +331,20 @@ export function consentCategory(): Category {
 /** code → [name in its own script, English name] (the same list assets/lang.js offers). */
 export const LANG_NAMES: Record<string, [string, string]> = { hi: ["हिन्दी", "Hindi"], mr: ["मराठी", "Marathi"], gu: ["ગુજરાતી", "Gujarati"], pa: ["ਪੰਜਾਬੀ", "Punjabi"], bn: ["বাংলা", "Bengali"], as: ["অসমীয়া", "Assamese"], or: ["ଓଡ଼ିଆ", "Odia"],
   ta: ["தமிழ்", "Tamil"], te: ["తెలుగు", "Telugu"], kn: ["ಕನ್ನಡ", "Kannada"], ml: ["മലയാളം", "Malayalam"], en: ["English", "English"] };
+/** Brand & theme → Custom fonts: the owner's own font for each font setting, from an uploaded file or a link. */
+/** The upload box, the link box and (for a stylesheet link) the name box of one custom font. */
+export const customFontFields = (k: string, label: string): Field[] => [
+  { t: "grid", cols: 2, fields: [
+    { t: "fontFile", path: `theme.customFonts.${k}.file`, label: `${label}: upload a file` },
+    { t: "text", path: `theme.customFonts.${k}.link`, label: `${label}: or paste a link`, ph: "https://fonts.google.com/specimen/Lobster", show: fontLinkLine }] },
+  { t: "when", path: `theme.customFonts.${k}.link`, not: "", fields: [{ t: "text", path: `theme.customFonts.${k}.name`, label: `${label}: the font's name in that stylesheet`, hint: "Only for a stylesheet that isn't Google Fonts, for example “brandon-grotesque” from Adobe Fonts.", ph: "brandon-grotesque" }] },
+];
+export function customFontsCard(more: Field[] = []): Category["cards"][number] {
+  return { title: "Custom fonts", fields: [
+    { t: "note", text: "Use your own font in place of one chosen above: upload the font file, or paste a link. A link can be a font file (ending in .woff2, .woff, .ttf or .otf), a font's page or embed link on Google Fonts, or another font stylesheet such as Adobe Fonts. An uploaded file is used before a link. Remove both to go back to the font chosen above. Only use fonts you have the licence for." },
+    ...customFontFields("display", "Headings font"), ...customFontFields("body", "Body font"), ...more,
+  ] };
+}
 const NOT_TEXT = /(^|\.)(url|link|href|email|phone|whatsapp|tel|slug|id|code|gstin|pincode|pincodes|domain|handle|username|key|token|vpa|upi|map|embed|video|file|path|src|sku|hsn|currency|page|cat|ph|notifyTo|fileUrl|sbUrl|sbKey|site|workerUrl|policyUrl|reopenLabel|preview|font\w*|preset)$/i;
 const NOT_TEXT_END = /(Url|Link|Href|Email|Phone|Id|Slug|Code|Color|Colour|Font|Icon|Key|Token|Handle)$/;
 const NOT_TREE = /^(theme|cms|i18n|backend|payments|emails|addons|festival\.custom|shipping\.zones|gst)(\.|$)/;

@@ -1074,6 +1074,7 @@ function applyTheme(t){
   r.setProperty("--r",(+t.radius||0)+"px");
   r.setProperty("--fd",`"${t.fontDisplay}","Arial Black",sans-serif`);
   r.setProperty("--fb",`"${t.fontBody}","Helvetica Neue",Arial,sans-serif`);
+  if(window.SiteFonts){const cd=SiteFonts.use(t,"display",imgUrl),cb=SiteFonts.use(t,"body",imgUrl);if(cd)r.setProperty("--fd",`"${cd}","${t.fontDisplay}","Arial Black",sans-serif`);if(cb)r.setProperty("--fb",`"${cb}","${t.fontBody}","Helvetica Neue",Arial,sans-serif`)}
   /* one stylesheet per family, so a family Google can't serve never blocks the other */
   [[FONTS_D[t.fontDisplay],"fontlink"],[FONTS_B[t.fontBody],"fontlink2"]].forEach(([f,id])=>{
     let l=document.getElementById(id);if(!l){l=document.createElement("link");l.id=id;l.rel="stylesheet";document.head.appendChild(l)}
@@ -1350,7 +1351,8 @@ function initVelocity(c,my,motion,root){
   const sf=VX_SIGFONTS[V.signatureFont]||VX_SIGFONTS["Great Vibes"];
   let l3=document.getElementById("fontlink3");if(!l3){l3=document.createElement("link");l3.id="fontlink3";l3.rel="stylesheet";document.head.appendChild(l3)}
   const sh="https://fonts.googleapis.com/css2?family="+sf+"&display=swap";if(l3.getAttribute("href")!==sh)l3.setAttribute("href",sh);
-  vx.style.setProperty("--sigf",`"${V.signatureFont||"Great Vibes"}",cursive`);
+  const sigFam=(window.SiteFonts&&SiteFonts.use(c.theme,"signature",imgUrl))||V.signatureFont||"Great Vibes";
+  vx.style.setProperty("--sigf",`"${sigFam}",cursive`);
   /* entrance animations play once; later live-preview edits redraw without replaying them */
   const anim=motion&&!(PREVIEW&&vxPlayed);
   if(motion)vx.classList.add("vx-motion");
@@ -1366,7 +1368,7 @@ function initVelocity(c,my,motion,root){
   const fitSig=()=>$$(".vx-sig svg",root).forEach(sv=>{try{const b=$("text",sv).getBBox();if(b.width)sv.setAttribute("viewBox",`${b.x-14} ${b.y-14} ${b.width+28} ${b.height+28}`)}catch(e){}});
   fitSig();
   if(document.fonts&&document.fonts.ready)document.fonts.ready.then(()=>{if(my!==gen)return;fit();fitSig();fx.layoutStory&&fx.layoutStory();fx.scroll&&fx.scroll()});
-  if(document.fonts&&document.fonts.load)document.fonts.load(`120px "${V.signatureFont||"Great Vibes"}"`).then(()=>{if(my===gen)fitSig()}).catch(()=>{});
+  if(document.fonts&&document.fonts.load)document.fonts.load(`120px "${sigFam}"`).then(()=>{if(my===gen)fitSig()}).catch(()=>{});
   /* loader, then the hero entrance */
   const start=()=>{if(my!==gen)return;vx.classList.add("vx-in");vxPlayed=true;
     const hs=$(".vx-sig-hero",root);if(hs)setTimeout(()=>{if(my===gen)hs.classList.add("draw")},anim?950:0)};

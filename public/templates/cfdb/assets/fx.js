@@ -642,6 +642,42 @@
     setTimeout(function () { if (d.parentNode) d.remove(); }, 12000);
     return d;
   }
+  /* Custom fonts (Brand & theme → Custom fonts): the owner's own font for headings, body text (and the portfolio's
+     signature), from an uploaded file or a link. theme.customFonts[slot] = { file: {path, variable}, link, name }.
+     use() loads it and returns the family name to put first in the font stack, or "" when there is none. */
+  var FONT_EXT = /\.(woff2|woff|ttf|otf)$/i, FONT_FMT = { woff2: "woff2", woff: "woff", ttf: "truetype", otf: "opentype" };
+  function fontLink(raw) {
+    // Accepts a bare address or pasted embed code (<link href="…">, @import url(…)).
+    var m = /https:\/\/[^\s"'<>)]+/i.exec(String(raw || "")); if (!m) return null;
+    var u; try { u = new URL(m[0].replace(/&amp;/g, "&")); } catch (e) { return null; }
+    if (FONT_EXT.test(u.pathname)) return { kind: "file", url: u.href, family: "" };
+    var fam = "";
+    if (u.hostname === "fonts.google.com") {
+      var sp = /\/specimen\/([^/?#]+)/.exec(u.pathname); if (!sp) return null;
+      try { fam = decodeURIComponent(sp[1]).replace(/\+/g, " "); } catch (e) { return null; }
+      return { kind: "css", url: "https://fonts.googleapis.com/css?family=" + encodeURIComponent(fam).replace(/%20/g, "+") + ":300,400,500,600,700,800&display=swap", family: fam };
+    }
+    if (u.hostname === "fonts.googleapis.com" || u.hostname === "fonts.bunny.net") fam = String(u.searchParams.get("family") || "").split(/[:|]/)[0].replace(/\+/g, " ").trim();
+    return { kind: "css", url: u.href, family: fam };
+  }
+  function useFont(theme, slot, urlOf) {
+    var cf = ((theme || {}).customFonts || {})[slot] || {}, id = "sitefont-" + slot, el = document.getElementById(id);
+    var fileUrl = cf.file && cf.file.path && urlOf ? String(urlOf(cf.file) || "") : "", L = !cf.file && cf.link ? fontLink(cf.link) : null;
+    var fam = "", want = "", tag = "";
+    if (fileUrl || (L && L.kind === "file")) {
+      var url = fileUrl || L.url, ext = (FONT_EXT.exec(fileUrl ? String(cf.file.path) : new URL(L.url).pathname) || [])[1], variable = fileUrl ? !!cf.file.variable : !!cf.variable;
+      fam = "Site " + slot + " font"; tag = "style";
+      want = '@font-face{font-family:"' + fam + '";src:url("' + url.replace(/["\\\n\r]/g, "") + '")' + (ext ? ' format("' + FONT_FMT[ext.toLowerCase()] + '")' : "") + ";font-display:swap" + (variable ? ";font-weight:100 900" : "") + "}";
+    } else if (L && (cf.name || L.family)) {
+      fam = String(cf.name || L.family).replace(/["\;{}<>\n\r]/g, "").trim().slice(0, 80); tag = "link"; want = L.url;
+    }
+    if (!fam) { if (el) el.remove(); return ""; }
+    if (el && el.tagName.toLowerCase() !== tag) { el.remove(); el = null; }
+    if (!el) { el = document.createElement(tag); el.id = id; if (tag === "link") el.rel = "stylesheet"; document.head.appendChild(el); }
+    if (tag === "style") { if (el.textContent !== want) el.textContent = want; } else if (el.getAttribute("href") !== want) el.setAttribute("href", want);
+    return fam;
+  }
+  window.SiteFonts = { use: useFont, link: fontLink };
   window.SiteSkeleton = { show: skeleton };
   window.SiteLogo = { hero: heroLogo };
   window.SiteFX = { init: init, version: 1 };

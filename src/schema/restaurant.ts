@@ -2,7 +2,7 @@ import type { Category, Field, TemplateDef } from "./types";
 import { FX_AXES, LINE_BREAKS_AXIS, type Axis } from "../themes/catalog";
 import { REST_AXES, REST_BODY_FONTS, REST_DISPLAY_FONTS, REST_TAGS, REST_THEMES, restaurantThemeValues } from "../themes/restaurant";
 import { NAV_MODE_FIELD } from "../themes/fields";
-import { adminCategory, videoCategory, socialCategory, logoFields, consentCategory, emailsCategory, i18nCategory, prepareI18n, featuresCategory, festivalCategory, menuCategory, menuItem, prepareMenu, staticPagesCategory, heroSlidesCard, prepareSlides, prepareMaintenance, seoCategory } from "./common";
+import { adminCategory, videoCategory, socialCategory, logoFields, consentCategory, emailsCategory, i18nCategory, prepareI18n, featuresCategory, festivalCategory, menuCategory, menuItem, prepareMenu, staticPagesCategory, heroSlidesCard, prepareSlides, prepareMaintenance, seoCategory, customFontsCard } from "./common";
 
 const g2 = (...fields: Field[]): Field => ({ t: "grid", cols: 2, fields });
 const g3 = (...fields: Field[]): Field => ({ t: "grid", cols: 3, fields });
@@ -28,7 +28,7 @@ const schema: Category[] = [
     cards: [
       { title: "Theme", fields: [{ t: "note", studio: true, text: `${REST_THEMES.length} restaurant themes (R-001 to R-${String(REST_THEMES.length).padStart(3, "0")}), half classic and half modern. Each has its own mix of hero layout, picture frame, menu bar, food-menu style, background, section edges and ornament. Picking one restyles the whole site; your content stays as it is, and every setting below stays editable.` }, { t: "themes" }] },
       { title: "Layout", fields: [g2(sel(REST_AXES.layout), sel(REST_AXES.heroArt), sel(REST_AXES.nav), NAV_MODE_FIELD, sel(REST_AXES.width), sel(REST_AXES.bands)),
-        { t: "note", text: "“Full-width photo” and “Photo in a frame” need a hero photo (Hero → Picture); the collage needs two or three. Without them the hero uses the split layout, with a round stamp made from your name." }] },
+        { t: "note", text: "“Full-width photo” and “Photo in a frame” need a hero photo (Hero → Picture); the collage needs two or three. Without a photo, each hero layout has its own arrangement, and the picture is replaced by an emblem drawn from your name. The Picture frame chooses the emblem: a plate (Plain), a printed label (Thin frame), a solid block (Offset shadow), an arch, a round stamp (Circle), a soft blob, today's card (Tilted print) or a scalloped seal." }] },
       { title: "Food menu & gallery", fields: [g2(sel(REST_AXES.menuStyle), sel(REST_AXES.gallery)),
         { t: "note", text: "Photo cards, the list and the magazine style show dish photos; the classic, chalkboard, printed card and boxes keep the menu to words and prices." }] },
       { title: "Style & graphics", fields: [g2(sel(REST_AXES.heading), sel(REST_AXES.shead), sel(REST_AXES.ornament), sel(REST_AXES.divider), sel(REST_AXES.pattern), sel(REST_AXES.cards), sel(REST_AXES.buttons), sel(REST_AXES.motionStyle)),
@@ -52,6 +52,7 @@ const schema: Category[] = [
       { title: "Typography & corners", fields: [g2({ t: "select", path: "theme.fontDisplay", label: "Headings font", options: REST_DISPLAY_FONTS }, { t: "select", path: "theme.fontBody", label: "Body font", options: REST_BODY_FONTS }),
         { t: "select", path: "theme.lineBreaks", label: LINE_BREAKS_AXIS.label, options: LINE_BREAKS_AXIS.options.map(([value, label]) => ({ value, label })) },
         { t: "range", path: "theme.radius", label: "Corner radius", min: 0, max: 28, step: 1, unit: "px" }] },
+      customFontsCard(),
     ],
   },
   {
@@ -84,7 +85,7 @@ const schema: Category[] = [
       { title: "Picture", fields: [{ t: "image", path: "hero.image", label: "Hero photo (optional)", hint: "Your best dish, the dining room or the shopfront. Without one, the hero shows a round stamp with the line below." },
         { t: "images", path: "hero.images", label: "More photos for the collage layout (up to 2)", hint: "Used by the “Three-photo collage” hero layout, beside the hero photo." },
         { t: "videoFile", path: "hero.video", label: "Or a hero video", hint: "MP4 or WebM, up to 20 MB. It plays silently on a loop in the photo's place; the photo above is shown first, while it loads. A short clip works best." },
-        { t: "text", path: "hero.stamp", label: "Line around the stamp (no photo)", ph: "Est. 2014 · Cooked over fire" }] },
+        { t: "text", path: "hero.stamp", label: "Line on the emblem (no photo)", ph: "Est. 2014 · Cooked over fire" }] },
       heroSlidesCard("hero", "the hero photo or stamp"),
     ],
   },

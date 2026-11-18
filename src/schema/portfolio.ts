@@ -1,6 +1,6 @@
 import type { Category, Field, TemplateDef } from "./types";
 import { AXES, BODY_FONTS, DISPLAY_FONTS, KIT_AXIS, LINE_BREAKS_AXIS, PORTFOLIO_AXES, THEMES, onColor, portfolioThemeValues } from "../themes/catalog";
-import { adminCategory, videoCategory, socialCategory, logoFields, consentCategory, emailsCategory, i18nCategory, prepareI18n, featuresCategory, festivalCategory, menuCategory, menuItem, prepareMenu, staticPagesCategory, heroSlidesCard, prepareSlides, prepareMaintenance, seoCategory } from "./common";
+import { adminCategory, videoCategory, socialCategory, logoFields, consentCategory, emailsCategory, i18nCategory, prepareI18n, featuresCategory, festivalCategory, menuCategory, menuItem, prepareMenu, staticPagesCategory, heroSlidesCard, prepareSlides, prepareMaintenance, seoCategory, customFontsCard, customFontFields } from "./common";
 import VELOCITY_DEFAULTS from "./velocity-defaults.json";
 import { NAV_MODE_FIELD, NAV_MODE_NOTE, themeCards } from "../themes/fields";
 
@@ -76,6 +76,7 @@ const schema: Category[] = [
       { title: "Typography", fields: [g2({ t: "select", path: "theme.fontDisplay", label: "Headings font", options: FONTS_D }, { t: "select", path: "theme.fontBody", label: "Body font", options: FONTS_B }),
         { t: "select", path: "theme.lineBreaks", label: LINE_BREAKS_AXIS.label, options: LINE_BREAKS_AXIS.options.map(([value, label]) => ({ value, label })) },
         { t: "note", text: "Headings and titles break where you press Enter. With “As typed”, a heading you typed on one line stays on one line (it shrinks a little to fit, and only wraps on screens too narrow for it)." }] },
+      customFontsCard([{ t: "when", path: "theme.layout", is: "velocity", fields: customFontFields("signature", "Signature") }]),
       { title: "Shape & effects", fields: [
         { t: "range", path: "theme.radius", label: "Corner radius", min: 0, max: 40, step: 1, unit: "px" },
         { t: "range", path: "theme.logoRadius", label: "Logo icon and browser tab icon: 0 = square, 50 = circle", min: 0, max: 50, step: 1, unit: "%" },

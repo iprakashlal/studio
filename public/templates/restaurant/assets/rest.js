@@ -315,10 +315,12 @@ function applyTheme(t) {
   if (!PREVIEW) try { localStorage.setItem("site-bg:" + location.pathname.replace(/[^/]*$/, ""), t.bg); } catch (e) {}
   ["bg", "surface", "deep", "text", "soft", "line", "c1", "c2", "c3"].forEach((k) => r.setProperty("--" + k, t[k]));
   ["c1", "c2", "c3", "deep", "surface"].forEach((k) => r.setProperty("--on-" + k, onColor(t[k])));
+  r.setProperty("--ink0", t.text); r.setProperty("--soft0", t.soft); r.setProperty("--line0", t.line);
   const ib = t.introBg || t.deep; r.setProperty("--intro-bg", ib); r.setProperty("--intro-fg", t.introFg || onColor(ib));
   r.setProperty("--logo-r", Math.max(0, Math.min(50, t.logoRadius ?? 22)) + "%");
   r.setProperty("--r", (+t.radius || 0) + "px");
   r.setProperty("--fd", `"${t.fontDisplay}",Georgia,serif`); r.setProperty("--fb", `"${t.fontBody}","Helvetica Neue",Arial,sans-serif`);
+  if (window.SiteFonts) { const cd = SiteFonts.use(t, "display", imgUrl), cb = SiteFonts.use(t, "body", imgUrl); if (cd) r.setProperty("--fd", `"${cd}","${t.fontDisplay}",Georgia,serif`); if (cb) r.setProperty("--fb", `"${cb}","${t.fontBody}","Helvetica Neue",Arial,sans-serif`); }
   const d = document.documentElement.dataset;
   for (const k of ["layout", "heroArt", "nav", "cards", "buttons", "motionStyle", "pattern", "heading", "shead", "width", "bands", "menuStyle", "divider", "ornament", "gallery", "cursor", "loader", "textfx", "hoverfx", "scrollfx", "overlay"]) d[k] = String(t[k] || "");
   d.scrollease = t.scrollEase || "light"; d.linebreaks = t.lineBreaks || "typed"; d.menu = String(t.navMode || "");
@@ -402,6 +404,39 @@ function heroStamp() {
     <text class="st-t"><textPath href="#st-c" startOffset="0" textLength="738" lengthAdjust="spacing">${esc(ring)}</textPath></text>
     <text class="st-b" x="150" y="${C.theme.ornament === "none" ? 168 : 158}" text-anchor="middle">${esc(initials(C.brand.name))}</text></svg>${orn("orn st-o")}</div>`;
 }
+/** Without a hero picture: an emblem drawn from the restaurant's own name, in the theme's colours.
+    The Picture frame setting chooses which one, so every frame shows with or without a photo. */
+function heroEmblem() {
+  const H = C.hero, T = C.theme, art = T.heroArt || "default";
+  if (art === "circle") return heroStamp();
+  const name = String(C.brand.name || "").replace(/\s+/g, " ").trim(), ini = esc(initials(name));
+  const line = String(H.stamp || C.brand.tagline || "").replace(/\s+/g, " ").trim();
+  const o = orn("orn emb-o"), nm = `<span class="emb-name">${esc(name)}</span>`, ln = line ? `<span class="emb-line">${esc(line)}</span>` : "";
+  const wrap = (k, inner) => `<div class="emb emb-${k}" aria-hidden="true"><div class="emb-b">${inner}</div></div>`;
+  if (art === "arch") return wrap("arch", `${o}<b class="emb-ini">${ini}</b>${nm}${ln}`);
+  if (art === "frame") return wrap("frame", `${ln}${nm}${o || '<i class="emb-rule"></i>'}<b class="emb-ini">${ini}</b>`);
+  if (art === "offset") return wrap("offset", `${nm}<b class="emb-ini">${ini}</b>${ln}`);
+  if (art === "blob") return wrap("blob", `<b class="emb-ini">${ini}</b>${o}${ln || nm}`);
+  if (art === "tilt") {
+    // A small printed card of what is on today: the specials, or else the first dishes on the menu.
+    const sp = (C.specials.items || []).filter((x) => x && x.name), all = sp.length ? sp : (C.food.categories || []).flatMap((k) => k.items || []).filter((x) => x && x.name);
+    const rows = all.slice(0, 4).map((x) => `<li><span>${esc(x.name)}</span><i></i>${x.price ? `<b>${esc(money(x.price))}</b>` : ""}</li>`).join("");
+    return wrap("tilt", `<span class="emb-line">${esc((sp.length ? C.specials.eyebrow || C.specials.title : C.food.eyebrow || C.food.title) || "Menu")}</span>${o || '<i class="emb-rule"></i>'}${rows ? `<ul class="emb-rows">${rows}</ul>` : `<b class="emb-ini">${ini}</b>`}${nm}`);
+  }
+  if (art === "stamp") {
+    // A scalloped seal: a disc edged with small half-circles, the line running round the top.
+    const n = 30, sc = Array.from({ length: n }, (_, i) => { const a = (i / n) * Math.PI * 2; return `<circle cx="${(150 + 132 * Math.cos(a)).toFixed(1)}" cy="${(150 + 132 * Math.sin(a)).toFixed(1)}" r="15"/>`; }).join("");
+    const t = (line || name).toUpperCase(), ring = t ? (t + " · ").repeat(Math.max(1, Math.ceil(54 / (t.length + 3)))) : "";
+    return `<div class="emb emb-seal" aria-hidden="true"><svg viewBox="0 0 300 300"><defs><path id="sl-c" d="M150 150m-100 0a100 100 0 1 1 200 0a100 100 0 1 1-200 0"/></defs>
+      <g class="sl-disc">${sc}<circle cx="150" cy="150" r="132"/></g><circle class="sl-ring" cx="150" cy="150" r="118"/><circle class="sl-ring2" cx="150" cy="150" r="78"/>
+      <text class="sl-t"><textPath href="#sl-c" startOffset="0" textLength="626" lengthAdjust="spacing">${esc(ring)}</textPath></text>
+      <text class="sl-b" x="150" y="${T.ornament === "none" ? 170 : 160}" text-anchor="middle">${ini}</text></svg>${orn("orn sl-o")}</div>`;
+  }
+  // Plain: a plate set with a fork and a knife, the initials in the middle.
+  return `<div class="emb emb-plate" aria-hidden="true"><svg viewBox="0 0 400 300"><circle class="pl-a" cx="200" cy="150" r="128"/><circle class="pl-b" cx="200" cy="150" r="92"/><circle class="pl-c" cx="200" cy="150" r="84"/>
+    <g class="pl-k"><path d="M28 62v54a12 12 0 0 0 24 0V62M40 62v176M40 128v0"/><path d="M360 238V62c-16 14-22 46-18 84h18"/></g>
+    <text class="pl-t" x="200" y="${line ? 162 : 172}" text-anchor="middle">${ini}</text>${line ? `<text class="pl-l" x="200" y="192" text-anchor="middle" textLength="${Math.min(128, line.length * 7.2).toFixed(0)}" lengthAdjust="spacingAndGlyphs">${esc(line.toUpperCase().slice(0, 26))}</text>` : ""}</svg></div>`;
+}
 function heroHTML() {
   const H = C.hero, T = C.theme, vid = imgUrl(H.video), im = imgUrl(H.image);
   // A hero video plays silently on a loop in the picture's place (the picture is its cover); still for visitors who asked for less motion.
@@ -410,7 +445,7 @@ function heroHTML() {
   const collage = T.layout === "collage" && im && more.length && !vid;
   const media = vid ? `<div class="hero-media" data-edit="hero.video">${film}</div>`
     : collage ? `<div class="hero-media col n${more.length + 1}" data-edit="hero.images"><img src="${esc(im)}" alt="">${more.map((u) => `<img src="${esc(u)}" alt="">`).join("")}</div>`
-    : im ? `<div class="hero-media" data-edit="hero.image"><img src="${esc(im)}" alt=""></div>` : `<div class="hero-media none" data-edit="hero.stamp">${heroStamp()}</div>`;
+    : im ? `<div class="hero-media" data-edit="hero.image"><img src="${esc(im)}" alt=""></div>` : `<div class="hero-media none" data-edit="hero.stamp">${heroEmblem()}</div>`;
   const badges = (H.badges || []).filter(Boolean).length ? `<ul class="badges">${H.badges.filter(Boolean).map((b) => `<li>${icon("star", "bi")}${esc(b)}</li>`).join("")}</ul>` : "";
   const pic = im || vid, bg = (T.layout === "full" || T.layout === "framed") && pic;
   return `<section class="hero${pic ? " has-img" : " no-img"}" id="hero">${bg ? `<div class="hero-bg" data-edit="${vid ? "hero.video" : "hero.image"}"${im ? ` style="background-image:url('${esc(im)}')"` : ""}>${film}</div>` : ""}

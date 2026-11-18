@@ -1,4 +1,4 @@
-import { createContext, useContext, useLayoutEffect, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ThemeDrawer, ThemeGallery, ThemeSwatch } from "../themes/ThemeGallery";
 import { ThemeFromRef } from "./ThemeFromRef";
 import { Translations } from "./Translations";
@@ -187,6 +187,8 @@ export function FieldView({ f, obj, base }: { f: F; obj: any; base: string }) {
       return <ImageField id={id} label={f.label} hint={f.hint} value={val} onChange={set} />;
     case "videoFile":
       return <VideoFileField id={id} label={f.label} hint={f.hint} value={val} onChange={set} />;
+    case "fontFile":
+      return <FontFileField id={id} label={f.label} hint={f.hint} value={val} onChange={set} />;
     case "images":
       return <ImagesField id={id} label={f.label} hint={f.hint} value={Array.isArray(val) ? val : []} onChange={set} />;
     case "strings":
@@ -293,6 +295,71 @@ function ImageField({ id, label, hint, value, onChange }: { id: string; label: s
 }
 
 /** An uploaded video: MP4 or WebM up to 20 MB, stored with the site's pictures (so it is saved, backed up and published with them). */
+/** Whether a font file is a variable font (it carries an "fvar" table), read from the file's table list. */
+export async function isVariableFont(file: Blob): Promise<boolean> {
+  try {
+    const b = new Uint8Array(await file.slice(0, 4096).arrayBuffer()), sig = String.fromCharCode(b[0], b[1], b[2], b[3]);
+    const tag = (i: number) => String.fromCharCode(b[i], b[i + 1], b[i + 2], b[i + 3]), u16 = (i: number) => (b[i] << 8) | b[i + 1];
+    if (sig === "wOFF") { const n = u16(12); for (let i = 0; i < n; i++) if (tag(44 + i * 20) === "fvar") return true; return false; }
+    if (sig === "wOF2") {
+      // Table list: a flag byte (known tag number, or 63 = the tag follows), then lengths as base-128 numbers.
+      const n = u16(12); let p = 48;
+      const num = () => { for (let i = 0; i < 5; i++) if (!(b[p++] & 0x80)) break; };
+      for (let i = 0; i < n && p < b.length - 8; i++) {
+        const fl = b[p++], k = fl & 63, ver = fl >> 6; let t = "";
+        if (k === 63) { t = tag(p); p += 4; }
+        if (k === 47 || t === "fvar") return true;
+        num(); if (k === 10 || k === 11 ? ver === 0 : ver !== 0) num();
+      }
+      return false;
+    }
+    const n = u16(4); for (let i = 0; i < n; i++) if (tag(12 + i * 16) === "fvar") return true;
+  } catch { /* unreadable: treated as one weight */ }
+  return false;
+}
+function FontFileField({ id, label, hint, value, onChange }: { id: string; label: string; hint?: string; value: any; onChange: (v: any) => void }) {
+  const { img, upload } = useCtx();
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  const pick = async (file?: File) => {
+    if (!file) return;
+    if (!/\.(woff2|woff|ttf|otf)$/i.test(file.name)) { toast(`${file.name}: use a font file (WOFF2, WOFF, TTF or OTF).`, "bad"); return; }
+    if (file.size > 3 * 1024 * 1024) { toast(`${file.name} is ${(file.size / 1048576).toFixed(1)} MB. Font uploads go up to 3 MB: a WOFF2 version is usually far smaller.`, "bad"); return; }
+    setBusy(true);
+    try { const variable = await isVariableFont(file); onChange({ ...(await upload(file)), ...(variable ? { variable: true } : {}) }); toast("Font uploaded. Save to keep it."); }
+    catch (e: any) { toast("Upload failed: " + (e?.message || "try again"), "bad"); }
+    finally { setBusy(false); }
+  };
+  const src = value?.path ? img(value) : "", name = String(value?.path || "").split("/").pop()?.replace(/^\d+-/, "") || "";
+  // The sample line is drawn in the uploaded font itself.
+  const fam = "ed-font-" + id.replace(/[^a-z0-9]/gi, "");
+  const [shown, setShown] = useState(false);
+  useEffect(() => {
+    setShown(false); if (!src || typeof FontFace === "undefined") return;
+    let on = true; const ff = new FontFace(fam, `url("${src}")`, value?.variable ? { weight: "100 900" } : {});
+    ff.load().then((f) => { if (!on) return; (document.fonts as any).add(f); setShown(true); }).catch(() => {});
+    return () => { on = false; try { (document.fonts as any).delete(ff); } catch { /* not added */ } };
+  }, [src, fam, value?.variable]);
+  return (
+    <div data-field className="flex flex-col gap-1.5 rounded-lg">
+      <span className="label">{label}</span>
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="grid h-14 min-w-[150px] flex-none place-items-center overflow-hidden rounded-xl border border-dashed border-ink-600 bg-ink-950 px-3 text-ink-200" aria-label={value ? `Sample of ${name}` : undefined}>
+          {value ? <span style={{ fontFamily: shown ? `"${fam}"` : undefined, fontSize: 22, lineHeight: 1 }}>{shown ? "Aa Bb Cc 123" : src ? "Loading…" : "…"}</span> : <span className="text-[11px] text-ink-500">No file</span>}
+        </div>
+        <div className="flex min-w-0 flex-col gap-1.5">
+          {value && <span className="break-words text-[13px] text-ink-300">{name}{value.variable ? " · variable font (every weight)" : " · one weight (bold is drawn by the browser)"}</span>}
+          <div className="flex flex-wrap gap-2">
+            <label htmlFor={id} className="btn btn-sm cursor-pointer">{busy ? "Uploading…" : value ? "Replace" : "Upload a font"}</label>
+            <input id={id} type="file" accept=".woff2,.woff,.ttf,.otf,font/woff2,font/woff,font/ttf,font/otf" hidden disabled={busy} onChange={async (e) => { const f = e.target.files?.[0]; e.target.value = ""; await pick(f); }} />
+            {value && <button type="button" className="btn btn-sm btn-danger" onClick={() => onChange(null)}>Remove</button>}
+          </div>
+        </div>
+      </div>
+      <span className="hint">{hint || "WOFF2, WOFF, TTF or OTF, up to 3 MB. WOFF2 loads fastest."}</span>
+    </div>
+  );
+}
 function VideoFileField({ id, label, hint, value, onChange }: { id: string; label: string; hint?: string; value: any; onChange: (v: any) => void }) {
   const { img, upload } = useCtx();
   const toast = useToast();

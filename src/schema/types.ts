@@ -24,6 +24,8 @@ export type Field =
   | { t: "image"; path: string; label: string; hint?: string }
   /** An uploaded video file (MP4 or WebM), kept with the site's pictures. */
   | { t: "videoFile"; path: string; label: string; hint?: string }
+  /** A font file uploaded with the site (woff2, woff, ttf, otf); stored as { path, variable }. */
+  | { t: "fontFile"; path: string; label: string; hint?: string }
   | { t: "images"; path: string; label: string; hint?: string }
   | { t: "strings"; path: string; label: string; addLabel?: string; number?: boolean; multiline?: boolean }
   | { t: "list"; path: string; label?: string; item: Field[]; add: () => any; title: (it: any, i: number) => string; max?: number; fixed?: boolean }

@@ -611,6 +611,7 @@ function menuGo(it) {
   if (t === "page") { const p = spList().find((x) => x.id === it.page); return p ? { url: spHref(p), on: PAGE === "page" && spSlug(p) === spSlug({ slug: spCur() }) } : { url: "" }; }
   if (t === "warranty") return swOn() ? { url: multi() ? PAGES.warranty : "#warranty", on: PAGE === "warranty" } : { url: "" };
   const url = href(t === "home" ? "hero" : t);
+  if (!multi() && soloSections().has(t)) return { url, on: PAGE === "section" && soloCur() === t, self: true };
   return { url: t === "home" && !multi() ? AT + "#top" : url, on: (multi() && (url === PAGES[PAGE] || (PAGE === "product" && url === PAGES.products))) || (PAGE === "section" && soloCur() === t) };
 }
 function menu() {

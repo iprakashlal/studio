@@ -55,7 +55,8 @@
   function link(a, it, o) {
     var r = (o.resolve && o.resolve(it)) || {}, url = String(r.url || "");
     a.removeAttribute("aria-current"); a.removeAttribute("id"); a.classList.remove("on", "active");
-    if (url) { a.setAttribute("href", url); if (it.newTab) { a.target = "_blank"; a.rel = "noopener"; } else { a.removeAttribute("target"); a.removeAttribute("rel"); } }
+    // A section given its own page by this switch opens in the same tab, like any page of the site (resolve says so with `self`).
+    if (url) { a.setAttribute("href", url); if (it.newTab && !r.self) { a.target = "_blank"; a.rel = "noopener"; } else { a.removeAttribute("target"); a.removeAttribute("rel"); } }
     else { a.removeAttribute("href"); a.removeAttribute("target"); a.setAttribute("role", "button"); a.tabIndex = 0; a.classList.add("sm-nolink"); }
     if (r.on) a.setAttribute("aria-current", "page");
     if (a.hasAttribute("data-nav")) { var m = /#([\w-]+)$/.exec(url); if (m) a.setAttribute("data-nav", m[1]); else a.removeAttribute("data-nav"); }

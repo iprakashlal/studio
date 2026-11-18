@@ -210,10 +210,10 @@ const schema: Category[] = [
   staticPagesCategory("portfolio"),
   emailsCategory(false),
   featuresCategory(),
-  consentCategory(),
   festivalCategory(),
   i18nCategory(),
   seoCategory(false),
+  consentCategory(),
   adminCategory(),
 ];
 

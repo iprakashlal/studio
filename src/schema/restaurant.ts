@@ -332,11 +332,11 @@ const schema: Category[] = [
   },
   emailsCategory(true),
   featuresCategory(),
-  consentCategory(),
   festivalCategory(),
   i18nCategory(),
   (() => { const s = seoCategory(true); s.cards.splice(2, 0, { title: "For search engines: about the restaurant", fields: [g2({ t: "text", path: "seo.cuisine", label: "Cuisine", ph: "Indian, North Indian" }, { t: "text", path: "seo.priceRange", label: "Price range", ph: "₹₹" }),
     { t: "note", text: "Together with your name, address, phone and opening hours, these are written into the home page in the form search engines read for restaurants, which can add your hours and rating to search results." }] }); return s; })(),
+  consentCategory(),
   adminCategory(),
 ];
 

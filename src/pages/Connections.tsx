@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { cfCall, cfSession, signedInApi } from "../lib/cfdb";
 import { Field, Toggle, useToast } from "../ui/kit";
 
-type Kind = "ai" | "wa" | "rz" | "cf" | "pe" | "st" | "pp";
+type Kind = "ai" | "wa" | "rz" | "cf" | "pe" | "st" | "pp" | "pos";
 type Saved = Record<Kind, Record<string, any> | null>;
 export type Where = { api: string; scope: string };
 
@@ -210,6 +210,38 @@ export function GatewayForm({ where, gw }: { where: Where | null | undefined; gw
         {z && <button type="button" className="btn btn-sm btn-danger ml-auto" disabled={busy} onClick={async () => { setBusy(true); try { await save(gw, null); toast(`${G.name} keys removed.`); } catch (e: any) { toast(e?.message || "Couldn't remove them.", "bad"); } setBusy(false); }}>Remove</button>}</div>
     </> });
 }
+/** Petpooja: the restaurant's billing system takes each order placed on the site and reports its status back. */
+export function PetpoojaForm({ where }: { where: Where | null | undefined }) {
+  const toast = useToast(), { saved, err, save } = useSaved(where || null);
+  const [f, setF] = useState({ on: false, appKey: "", restId: "", secret: "", token: "" }), [busy, setBusy] = useState(false);
+  const z: any = (saved as any)?.pos;
+  useEffect(() => { setF({ on: !!z?.on, appKey: txt(z?.appKey), restId: txt(z?.restId), secret: "", token: "" }); }, [saved]); // eslint-disable-line react-hooks/exhaustive-deps
+  const lead = "Orders placed on the site go straight into your Petpooja, like orders from a delivery app. When Petpooja accepts an order, marks the food ready, dispatches, delivers or cancels it, the order here and the guest's tracking page follow by themselves.";
+  if (where === undefined) return <Shell title="Petpooja" lead={lead}><Missing why="Checking your database…" /></Shell>;
+  if (!where) return <Shell title="Petpooja" lead={lead}><Missing why="Petpooja's keys are kept on the site's own Cloudflare database. Host this site on Cloudflare (Host to External Services), and sign in to it on this device as its owner; the boxes for the keys then show here." /></Shell>;
+  if (err) return <Shell title="Petpooja" lead={lead}><Missing why={err} /></Shell>;
+  if (saved && !("pos" in (saved as any))) return <Shell title="Petpooja" lead={lead}><Missing why="This site's database is an older version that doesn't know Petpooja yet. Update the database once (Settings → Hostings → Update the database), then come back here." /></Shell>;
+  const ok = f.appKey.trim() && f.restId.trim() && (f.secret.trim() || z?.secret) && (f.token.trim() || z?.token);
+  return (
+    <Shell title="Petpooja" lead={lead} on={!!z?.on && !!z?.secret && !!z?.token}>
+      <Toggle id="pos-on" checked={f.on} onChange={(v: boolean) => setF({ ...f, on: v })} label="Send the site's orders to Petpooja" />
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field label="App key" htmlFor="pos-key"><input id="pos-key" className="input font-mono" autoComplete="off" value={f.appKey} onChange={(e) => setF({ ...f, appKey: e.target.value })} /></Field>
+        <Field label="Restaurant ID (restID)" htmlFor="pos-rest" hint="Petpooja's mapping code for this outlet."><input id="pos-rest" className="input font-mono" autoComplete="off" value={f.restId} onChange={(e) => setF({ ...f, restId: e.target.value })} /></Field>
+        <Secret id="pos-secret" label="App secret" saved={!!z?.secret} value={f.secret} onChange={(v) => setF({ ...f, secret: v })} />
+        <Secret id="pos-token" label="Access token" saved={!!z?.token} value={f.token} onChange={(v) => setF({ ...f, token: v })} />
+      </div>
+      <ul className="list-disc pl-5 text-[12.5px] text-ink-400">
+        <li>Petpooja gives these four values to a restaurant when it switches on an online-ordering integration for the outlet. Ask your Petpooja account manager for “online ordering API credentials” for your own website.</li>
+        <li>Give each dish its Petpooja item ID (Menu → a dish → Petpooja item ID; sizes have their own variation ID). An order with a dish that has no ID stays here and is marked “Not sent to Petpooja”.</li>
+        <li>Extras chosen by the guest are sent as a note on the item, with their price added to it.</li>
+        <li>The keys go to your own database, stored encrypted, and are never put in the site.</li>
+      </ul>
+      <div className="flex gap-2"><button type="button" className="btn btn-sm btn-pri" disabled={!ok || busy} onClick={async () => { setBusy(true); try { await save("pos", { on: f.on, appKey: f.appKey.trim(), restId: f.restId.trim(), secret: f.secret.trim(), token: f.token.trim() }); toast(f.on ? "Petpooja is saved and on." : "Petpooja is saved (switched off)."); } catch (e: any) { toast(e?.message || "Couldn't save that.", "bad"); } setBusy(false); }}>{busy ? "Saving…" : "Save"}</button>
+        {z && <button type="button" className="btn btn-sm btn-danger ml-auto" disabled={busy} onClick={async () => { setBusy(true); try { await save("pos", null); toast("Petpooja removed."); } catch (e: any) { toast(e?.message || "Couldn't remove it.", "bad"); } setBusy(false); }}>Remove</button>}</div>
+    </Shell>
+  );
+}
 /** Kept for the places that ask for Razorpay by name. */
 export function RazorpayForm({ where }: { where: Where | null | undefined; plain?: boolean }) { return <GatewayForm where={where} gw="rz" />; }
 
@@ -218,7 +250,7 @@ export function SiteConnections({ cf, template }: { cf?: { api: string; site: st
   const where = cf && cfSession.load(cf.api) ? { api: cf.api, scope: "site:" + cf.site } : null;
   return <div className="flex max-w-3xl flex-col gap-4">
     {template === "restaurant" && <section className="card flex flex-col gap-2 p-5"><h3 className="text-[15px] font-extrabold">Restaurant backend</h3><p className="text-sm text-ink-300">Orders, payments and messages run on the site's own Cloudflare database: it saves each order under Purchased orders, works out what an order costs from your menu, confirms online payments with the gateway you connect (Razorpay, Cashfree, PhonePe, Stripe or PayPal), and sends WhatsApp messages. Keys you enter here stay on that database, encrypted. The ways to pay are switched on under Payments.</p></section>}
-    {template === "restaurant" && (Object.keys(GATEWAYS) as Gateway[]).map((g) => <section key={g} className="card flex flex-col gap-3 p-5"><h3 className="text-[15px] font-extrabold">{GATEWAYS[g].name}</h3><GatewayForm where={where} gw={g} /></section>)}<WhatsAppForm where={where} kind="site" /></div>;
+    {template === "restaurant" && (Object.keys(GATEWAYS) as Gateway[]).map((g) => <section key={g} className="card flex flex-col gap-3 p-5"><h3 className="text-[15px] font-extrabold">{GATEWAYS[g].name}</h3><GatewayForm where={where} gw={g} /></section>)}{template === "restaurant" && <PetpoojaForm where={where} />}<WhatsAppForm where={where} kind="site" /></div>;
 }
 /** The Studio's own database, looked up once. */
 export function useStudioWhere() { const [w, setW] = useState<Where | null | undefined>(undefined); useEffect(() => { let on = true; studioWhere().then((x) => on && setW(x)); return () => { on = false; }; }, []); return w; }

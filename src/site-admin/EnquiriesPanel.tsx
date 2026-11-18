@@ -220,7 +220,8 @@ function EnquiryList<R extends Row>({ rows: every, setStatus, remove, load, name
                     {d._wa && <><dt className="text-ink-400">WhatsApp to you</dt><dd className={/^Not sent/.test(d._wa) ? "text-amber-200" : "text-ink-300"}>{d._wa}</dd></>}
                     {d._mail && <><dt className="text-ink-400">Email to you</dt><dd className={/^Not emailed/.test(d._mail) ? "text-amber-200" : "text-ink-300"}>{mailSaid(d._mail)}</dd></>}
                   </dl>
-                  {ord && d._paid && !d.utr && <p className="rounded-lg border border-emerald-400/40 px-3 py-2 text-[13px] text-emerald-100" data-payline><b>Paid online.</b> {d._paid_by || ""} Confirmed by Razorpay; nothing to check.</p>}
+                  {ord && d._paid && !d.utr && <p className="rounded-lg border border-emerald-400/40 px-3 py-2 text-[13px] text-emerald-100" data-payline><b>Paid online.</b> {d._paid_by || ""} Confirmed by the payment gateway; nothing to check.</p>}
+                  {ord && d._pos && <p className={`rounded-lg border px-3 py-2 text-[13px] ${/^Not sent/.test(d._pos) ? "border-amber-400/40 text-amber-100" : "border-ink-600 text-ink-200"}`} data-posline>{d._pos}{d._pos_prep ? ` Ready in about ${d._pos_prep} min.` : ""}</p>}
                   {ord && d.utr && <p className={`rounded-lg border px-3 py-2 text-[13px] ${d._paid ? "border-emerald-400/40 text-emerald-100" : "border-amber-400/40 bg-amber-400/5 text-amber-100"}`} data-payline>
                     {d._paid ? <><b>Payment received.</b> UPI reference {d.utr}.</> : <><b>The guest says they paid {d.total} by UPI, reference {d.utr}.</b> Find that reference and amount in your UPI app or bank statement before you send the order out.</>}
                     {setPaid && <button type="button" className={`btn btn-sm ml-2 ${d._paid ? "" : "btn-pri"}`} onClick={() => setPaid(r, !d._paid)}>{d._paid ? "Not received after all" : "Payment received"}</button>}

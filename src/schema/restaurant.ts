@@ -116,7 +116,8 @@ const schema: Category[] = [
               { t: "list", path: "addons", label: "Extras guests can add when ordering (optional)", max: 6, title: (it) => `${it.title || "Extras"} · ${(it.options || []).length} choice${(it.options || []).length === 1 ? "" : "s"}`, add: () => ({ title: "Extras", max: 3, required: false, options: [] }),
                 item: [g3({ t: "text", path: "title", label: "Group name", ph: "Extras" }, { t: "number", path: "max", label: "Most a guest can pick (0 = any)", min: 0, step: 1 }, { t: "toggle", path: "required", label: "Must pick at least one" }),
                   { t: "strings", path: "options", label: "Choices, one per line. Add the price after “=” (leave it out for free).", addLabel: "Add a choice" }] },
-              { t: "list", path: "variants", label: "Sizes with their own prices (optional)", max: 6, title: (it) => `${it.label || "Size"}${it.price ? " · " + it.price : ""}`, add: () => ({ label: "", price: "" }), item: [g2({ t: "text", path: "label", label: "Size", ph: "Half" }, { t: "text", path: "price", label: "Price", ph: "180" })] }] }] }] },
+              { t: "list", path: "variants", label: "Sizes with their own prices (optional)", max: 6, title: (it) => `${it.label || "Size"}${it.price ? " · " + it.price : ""}`, add: () => ({ label: "", price: "" }), item: [g2({ t: "text", path: "label", label: "Size", ph: "Half" }, { t: "text", path: "price", label: "Price", ph: "180" }), { t: "text", path: "posId", label: "Petpooja variation ID (only with Petpooja)" }] },
+              { t: "text", path: "posId", label: "Petpooja item ID", hint: "Only if your orders go to Petpooja (Restaurant backend → Petpooja): the item's ID in your Petpooja menu. An order with a dish that has no ID is kept here but not sent to Petpooja." }] }] }] },
     ],
   },
   {

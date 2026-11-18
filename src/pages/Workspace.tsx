@@ -1,4 +1,6 @@
 import { SitesHostingCard } from "./SitesHostingCard";
+import { AiEngineCard } from "./AiEngine";
+import { setAiEngine } from "../lib/ai";
 import { hides, limitsOf, setStudioHidden, useClientStudio } from "../lib/features";
 import { setThemeAllow, setThemeLimit } from "../themes/limit";
 import { DASH_DEFAULT, DASH_STATS } from "../lib/dashstats";
@@ -54,6 +56,7 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
   const hid = useMemo(() => hides(client, index), [client, index]);
   // A client Studio's limits: how many themes it offers and how many sites of each type it may have.
   const limits = useMemo(() => limitsOf(client, index), [client, index]);
+  useEffect(() => { if (index) setAiEngine(index.ai?.engine); }, [index?.ai?.engine]);
   useEffect(() => { if (client !== undefined && index) { setThemeLimit(limits.themes); setThemeAllow(limits.themeList); } }, [client, index, limits.themes, JSON.stringify(limits.themeList)]);
   useEffect(() => { setStudioHidden(hid("festival") ? ["festival"] : []); }, [hid]);
   const [err, setErr] = useState("");
@@ -171,6 +174,7 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
           <SitesHostingCard session={session} studio={studio} index={index} onIndex={setIndex} />
           </> : <>
           <p className="text-sm text-ink-300">Your Studio keeps everything as files in <b className="text-ink-100">{isHosted(session) ? `${session.cfg.owner === "cloudflare" ? "Cloudflare" : "Supabase"} (Studio “${session.cfg.repo}”)` : `${session.cfg.owner}/${session.cfg.repo}`}</b>: <code className="font-mono text-xs">studio.json</code> for the project list and <code className="font-mono text-xs">projects/</code> for each site's content, images and export snapshots.</p>
+          <AiEngineCard studio={studio} index={index} onIndex={setIndex} />
           <DashNumbersCard studio={studio} index={index} onIndex={setIndex} />
           {isHosted(session)
             ? <section className="card flex flex-col gap-3 p-5" aria-label="Account"><h3 className="text-[15px] font-extrabold">Account</h3><p className="text-sm text-ink-300">Signed in as <b className="text-ink-100">{session.username}</b> with an email code.</p><button type="button" className="btn self-start" onClick={onSignOut}>Sign out</button></section>

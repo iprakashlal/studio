@@ -423,7 +423,7 @@ export default {
     if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
     const u = new URL(req.url), p = u.pathname.replace(/\/+$/, "") || "/";
     try {
-      if (p === "/") return json({ ok: true, service: "site-studio-db", v: V, mail: !!(env.RESEND_API_KEY && env.MAIL_FROM), ...(env.CF_TOKEN && env.CF_ACCOUNT ? { deploy: true, account: env.CF_ACCOUNT } : {}), ...(env.GH_TOKEN ? { gh: true } : {}), ...(env.AI ? { ai: true, pamphlet: 2 } : {}), reviews: true, look: 1, translate: 4, approvals: 1, accounts: 2, cfx: 4, studioPages: 1, del: 1, enqMail: 3, ...(otherAccounts(env).length ? { more: otherAccounts(env).length } : {}) });
+      if (p === "/") return json({ ok: true, service: "site-studio-db", v: V, mail: !!(env.RESEND_API_KEY && env.MAIL_FROM), ...(env.CF_TOKEN && env.CF_ACCOUNT ? { deploy: true, account: env.CF_ACCOUNT } : {}), ...(env.GH_TOKEN ? { gh: true } : {}), ...(env.AI ? { ai: true, pamphlet: 2 } : {}), reviews: true, look: 1, outline: 1, translate: 4, approvals: 1, accounts: 2, cfx: 4, studioPages: 1, del: 1, enqMail: 3, ...(otherAccounts(env).length ? { more: otherAccounts(env).length } : {}) });
 
       // ---- sign in with an emailed code (members only)
       if (p === "/auth/code" && req.method === "POST") {
@@ -585,6 +585,16 @@ export default {
         const email = await who(env, req); if (!email) return err(401, "Sign in first.");
         if (!(await env.DB.prepare("select 1 from members where email = ? limit 1").bind(email).first())) return err(403, "Only members can use this.");
         return json(await lookAt(String(((await req.json()) as any).url || "")));
+      }
+      // A reference page's text outline, for the on-device writer. No AI is used, so it costs nothing from the allowance.
+      if (p === "/ai/outline" && req.method === "POST") {
+        const email = await who(env, req); if (!email) return err(401, "Sign in first.");
+        if (!(await env.DB.prepare("select 1 from members where email = ? and role in ('owner', 'partner') limit 1").bind(email).first())) return err(403, "Only owners can use this.");
+        const q = (await req.json()) as any, u2 = publicUrl(String(q?.url || "").trim());
+        if (!u2) return json({ error: "Enter the site's public address (https://…)." });
+        let r2: Response; try { r2 = await fetch(u2.href, { headers: { "User-Agent": "Mozilla/5.0 (site-studio reference reader)", Accept: "text/html" }, redirect: "follow" }); } catch { return json({ error: "Couldn't open that address." }); }
+        if (!r2.ok) return json({ error: `That site answered ${r2.status}.` });
+        return json({ text: outlineOf((await r2.text()).slice(0, 3_000_000)).slice(0, 20000) });
       }
       if (p === "/ai/write" && req.method === "POST") {
         const email = await who(env, req); if (!email) return err(401, "Sign in first.");

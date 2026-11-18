@@ -49,6 +49,8 @@ const DEFAULT = {
     razorpay: { enabled: false, link: "", label: "Card, UPI or netbanking (Razorpay)" },
     stripe: { enabled: false, link: "", label: "International card (Stripe)" },
     paypal: { enabled: false, username: "", label: "PayPal" },
+    cashfree: { enabled: false, label: "UPI, card or netbanking (Cashfree)" },
+    phonepe: { enabled: false, label: "PhonePe (UPI, card, netbanking)" },
     cod: { enabled: true, label: "Cash on delivery", note: "Pay when your order arrives." },
   },
   orders: { whatsapp: "", email: "", sendVia: "whatsapp", messageIntro: "New order" },
@@ -328,12 +330,22 @@ function totals(lines = cartLines(), pin = curPin()) {
   const left = over > 0 && !free ? over - sub : 0;
   return { sub, ship, taxAdd, taxIn, total, left, free };
 }
+/** Gateways the shop's own database (Host to External Services) can charge with the owner's keys: the exact total, confirmed by itself. */
+let CAN = { rz: "", pg: [] };
+const GWID = { razorpay: "rz", cashfree: "cf", phonepe: "pe", stripe: "st", paypal: "pp" }, GWNAME = { razorpay: "Razorpay", cashfree: "Cashfree", phonepe: "PhonePe", stripe: "Stripe", paypal: "PayPal" };
+const dbPay = (m) => !BE() && !PREVIEW && !!(HOST && HOST.api && HOST.site) && (m === "razorpay" ? !!CAN.rz : CAN.pg.includes(GWID[m]));
+function askCan() {
+  if (askCan.done || PREVIEW || BE() || !(HOST && HOST.api && HOST.site) || PAGE !== "checkout") return; askCan.done = true;
+  fetch(HOST.api + "/site/" + encodeURIComponent(HOST.site) + "/can", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((j) => { if (!j) return; CAN = { rz: String(j.rz || ""), pg: Array.isArray(j.pg) ? j.pg : [] }; if (!cameBack() && (CAN.rz || CAN.pg.length)) render(); }).catch(() => {});
+}
 function methods() {
-  const P = C.payments, out = [];
+  const P = C.payments, out = [], own = (n) => `You pay on ${n}'s secure page and come back here. The order is placed as soon as you've paid.`;
   if (P.upi.enabled && vpaOk(P.upi.vpa) && C.settings.currency === "INR") out.push({ id: "upi", label: P.upi.label, desc: "Scan a QR code or open your UPI app. The amount is filled in." });
-  if (P.razorpay.enabled && (BE() || httpsOk(P.razorpay.link))) out.push({ id: "razorpay", label: P.razorpay.label, desc: BE() ? "Card, UPI, netbanking or wallet, in Razorpay's secure window." : "Pay on Razorpay's secure page." });
-  if (P.stripe.enabled && (BE() || httpsOk(P.stripe.link))) out.push({ id: "stripe", label: P.stripe.label, desc: "Pay on Stripe's secure page." });
-  if (P.paypal.enabled && ppOk(P.paypal.username)) out.push({ id: "paypal", label: P.paypal.label, desc: "Pay on PayPal with the amount filled in." });
+  if (P.razorpay.enabled && (BE() || dbPay("razorpay") || httpsOk(P.razorpay.link))) out.push({ id: "razorpay", label: P.razorpay.label, desc: BE() || dbPay("razorpay") ? "Card, UPI, netbanking or wallet, in Razorpay's secure window." : "Pay on Razorpay's secure page." });
+  if (P.cashfree.enabled && dbPay("cashfree")) out.push({ id: "cashfree", label: P.cashfree.label, desc: own("Cashfree") });
+  if (P.phonepe.enabled && dbPay("phonepe")) out.push({ id: "phonepe", label: P.phonepe.label, desc: own("PhonePe") });
+  if (P.stripe.enabled && (BE() || dbPay("stripe") || httpsOk(P.stripe.link))) out.push({ id: "stripe", label: P.stripe.label, desc: dbPay("stripe") ? own("Stripe") : "Pay on Stripe's secure page." });
+  if (P.paypal.enabled && (dbPay("paypal") || ppOk(P.paypal.username))) out.push({ id: "paypal", label: P.paypal.label, desc: dbPay("paypal") ? own("PayPal") : "Pay on PayPal with the amount filled in." });
   if (P.cod.enabled) out.push({ id: "cod", label: P.cod.label, desc: P.cod.note });
   return out;
 }
@@ -676,7 +688,8 @@ function orderDone(o) {
   const wa = digits(O.whatsapp), mail = O.email;
   const viaWa = wa && O.sendVia !== "email", viaMail = mail && O.sendVia !== "whatsapp";
   let pay = "";
-  if (o.method === "upi" && o.utr) pay = `<p><b>${esc(money(o.t.total))} paid by UPI</b>, reference <code>${esc(o.utr)}</code>.</p><p class="note">We check it in our UPI app and confirm your order${o.saved ? "" : " once you send it to us below"}.</p>`;
+  if (o.paid) pay = `<p><b>${esc(money(o.t.total))} paid</b> through ${esc(GWNAME[o.method] || "the payment page")}. Thank you.</p>`;
+  else if (o.method === "upi" && o.utr) pay = `<p><b>${esc(money(o.t.total))} paid by UPI</b>, reference <code>${esc(o.utr)}</code>.</p><p class="note">We check it in our UPI app and confirm your order${o.saved ? "" : " once you send it to us below"}.</p>`;
   else if (o.method === "upi") pay = `<p>Scan the code in any UPI app, or pay to the UPI ID. The amount and order number are filled in.</p><div class="qr" id="qr" aria-label="UPI QR code"></div><div class="copyrow"><code>${esc(P.upi.vpa)}</code><button type="button" data-copy="${esc(P.upi.vpa)}">Copy UPI ID</button></div><a class="btn pri" href="${esc(upiLink(o))}">Open UPI app</a><p class="note">Check your UPI app shows <b>${esc(P.upi.payeeName || C.brand.name)}</b> and <b>${esc(money(o.t.total))}</b> before you confirm.</p>`;
   else if (o.method === "razorpay" || o.method === "stripe") { const link = o.method === "razorpay" ? P.razorpay.link : P.stripe.link; pay = `<p>On the payment page, enter <b>${esc(money(o.t.total))}</b> and the order number <b>${esc(o.id)}</b>.</p><a class="btn pri" href="${esc(link)}" target="_blank" rel="noopener">Pay on ${o.method === "razorpay" ? "Razorpay" : "Stripe"} ↗</a>`; }
   else if (o.method === "paypal") pay = `<p>PayPal opens with the amount filled in. Add the order number <b>${esc(o.id)}</b> as the note.</p><a class="btn pri" href="https://www.paypal.me/${encodeURIComponent(P.paypal.username)}/${Number(o.t.total)}${esc(C.settings.currency)}" target="_blank" rel="noopener">Pay ${esc(money(o.t.total))} with PayPal ↗</a>`;
@@ -684,7 +697,7 @@ function orderDone(o) {
   else pay = `<p>We'll contact you about payment.</p>`;
   return `<div class="wrap"><div class="done"><p class="eyebrow">Order ${esc(o.id)}</p><h1 class="fit">${ml(K.successTitle)}</h1><p class="soft" style="font-size:17px">${ml(K.successText)}</p>
     <div><span class="lbl">Your order number</span><br><span class="oid">${esc(o.id)}</span></div>
-    <div class="box"><div class="step"><i>${o.utr ? "✓" : "1"}</i><div><h2 style="font-size:22px">${o.utr ? "Payment sent" : `Pay ${esc(money(o.t.total))}`}</h2>${pay}</div></div></div>
+    <div class="box"><div class="step"><i>${o.utr || o.paid ? "✓" : "1"}</i><div><h2 style="font-size:22px">${o.paid ? "Payment received" : o.utr ? "Payment sent" : `Pay ${esc(money(o.t.total))}`}</h2>${pay}</div></div></div>
     <div class="box"><div class="step"><i>${o.saved ? "✓" : "2"}</i><div><h2 style="font-size:22px">${o.saved ? "We have your order" : "Send us the order"}</h2>${o.saved ? `<p class="note">It is saved with us. You can also send a copy:</p>` : ""}<p>This opens ${viaWa && viaMail ? "WhatsApp or your email app" : viaWa ? "WhatsApp" : "your email app"} with the full order written out. Just press send.</p>
       <div class="buy">${invBtn(o.id)}${viaWa ? `<a class="btn pri" href="https://wa.me/${wa}?text=${encodeURIComponent(txt)}" target="_blank" rel="noopener">Send on WhatsApp</a>` : ""}${viaMail ? `<a class="btn${viaWa ? "" : " pri"}" href="mailto:${esc(mail)}?subject=${encodeURIComponent(`Order ${o.id}`)}&body=${encodeURIComponent(txt)}">Send by email</a>` : ""}</div>
       ${!viaWa && !viaMail ? `<p class="note">Copy the order below and send it to ${esc(C.contact.email || "us")}.</p>` : ""}
@@ -820,6 +833,7 @@ function maintGate(again) {
   return true;
 }
 function render() {
+  askCan();
   if (langGate()) return;
   applyTheme(C.theme);
   if (maintGate(render)) return;
@@ -974,23 +988,65 @@ function bindCheckout() {
       items: lines.map((l) => ({ id: l.p.id, name: l.p.name, opt: l.opt, qty: l.qty, price: Number(l.p.price) })), t: totals(lines),
       c: { name: fd.name || "", email: fd.email || "", phone: fd.phone || "", address: fd.address || "", city: fd.city || "", pin: fd.pin || "", state: fd.state || "", notes: fd.notes || "", gstin: String(fd.gstin || "").trim().toUpperCase().slice(0, 15) } };
     store.set("me", { name: o.c.name, email: o.c.email, phone: o.c.phone, address: o.c.address, city: o.c.city, pin: o.c.pin, state: o.c.state });
-    const placeIt = async () => {
-      // A shop hosted on the Studio's database keeps the order under Purchased orders too.
-      if (!PREVIEW && HOST && HOST.api && HOST.site) {
-        try {
-          const r = await fetch(HOST.api + "/enquire/" + encodeURIComponent(HOST.site), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ page: "checkout.html", data: { type: "Order", order_no: o.id, name: o.c.name, phone: o.c.phone, email: o.c.email, mode: "Shop order", address: [o.c.address, o.c.city, o.c.pin, o.c.state].filter(Boolean).join(", "),
-            items: o.items.map((i) => `${i.qty} × ${i.name}${i.opt ? ` (${i.opt})` : ""} = ${money(i.price * i.qty)}`).join("\n"), total: money(o.t.total), payment: o.utr ? "UPI, paid before ordering" : o.methodLabel, utr: o.utr || "", notes: o.c.notes, message: orderText(o) } }) });
-          o.saved = r.ok;
-        } catch (e) { o.saved = false; }
-      }
-      store.set("orders", [o, ...store.get("orders", [])].slice(0, 10));
-      cart = []; saveCart();
-      history.pushState(null, "", `checkout.html?order=${encodeURIComponent(o.id)}`);
-      render(); scrollTo(0, 0);
-    };
+    const placeIt = () => placeOrder(o);
     // Paying by UPI comes first: the order is placed once the customer enters the payment's reference number.
-    if (o.method === "upi") payFirst(o, placeIt); else placeIt();
+    if (o.method === "upi") payFirst(o, placeIt); else if (dbPay(o.method)) payGateway(o, lines, $("#co-err"), $('button[type="submit"]', form)); else placeIt();
   };
+}
+/** What the shop's database keeps for an order (it shows under Purchased orders). */
+const orderData = (o) => ({ type: "Order", order_no: o.id, name: o.c.name, phone: o.c.phone, email: o.c.email, mode: "Shop order", address: [o.c.address, o.c.city, o.c.pin, o.c.state].filter(Boolean).join(", "),
+  items: o.items.map((i) => `${i.qty} × ${i.name}${i.opt ? ` (${i.opt})` : ""} = ${money(i.price * i.qty)}`).join("\n"), total: money(o.t.total), payment: o.utr ? "UPI, paid before ordering" : o.rz || o.pg ? `Paid online (${GWNAME[o.method]})` : o.methodLabel, utr: o.utr || "",
+  ...(o.rz ? { rz_order: o.rz.razorpay_order_id, rz_payment: o.rz.razorpay_payment_id, rz_sig: o.rz.razorpay_signature } : {}), ...(o.pg ? { pay_gw: o.pg.gw, pay_ref: o.pg.ref } : {}), notes: o.c.notes, message: orderText(o) });
+const sendOrder = (o) => fetch(HOST.api + "/enquire/" + encodeURIComponent(HOST.site), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ page: "checkout.html", data: orderData(o) }) });
+async function placeOrder(o) {
+  // A shop hosted on the Studio's database keeps the order under Purchased orders too.
+  if (!PREVIEW && HOST && HOST.api && HOST.site && o.saved == null) {
+    try { const r = await sendOrder(o); o.saved = r.ok; if (r.ok && o.rz) o.paid = true; } catch (e) { o.saved = false; }
+  }
+  store.set("orders", [o, ...store.get("orders", [])].slice(0, 10));
+  cart = []; saveCart();
+  history.pushState(null, "", `checkout.html?order=${encodeURIComponent(o.id)}`);
+  render(); scrollTo(0, 0);
+}
+/** Paying through a gateway the shop's database holds the keys for: the database works out the amount and starts the payment. */
+async function payGateway(o, lines, err, btn) {
+  const g = GWID[o.method], say = (t) => { err.textContent = t; if (btn) { btn.disabled = false; btn.textContent = C.checkout.button || "Place order"; } };
+  if (btn) { btn.disabled = true; btn.textContent = "Opening payment…"; } err.textContent = "";
+  try {
+    const r = await fetch(HOST.api + "/pay/" + g + "/" + encodeURIComponent(HOST.site), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ back: location.origin + location.pathname, order_no: o.id, total: o.t.total, pin: o.c.pin, name: o.c.name, email: o.c.email, phone: o.c.phone, items: lines.map((l) => ({ id: l.p.id, qty: l.qty })) }) });
+    const j = await r.json().catch(() => null);
+    if (!r.ok || !j || !(j.order_id || j.go || j.session)) return say((j && j.error) || "Online payment couldn't start. Please try again, or choose another way to pay.");
+    if (g === "rz") {
+      await loadScript(RZP_JS);
+      new window.Razorpay({ key: j.key, order_id: j.order_id, amount: j.amount, currency: j.currency, name: j.name || C.brand.name, description: "Order " + o.id, prefill: { name: o.c.name, email: o.c.email || undefined, contact: o.c.phone || undefined }, notes: { order_no: o.id }, theme: { color: C.theme.accent },
+        handler: (resp) => { o.rz = resp; placeOrder(o); }, modal: { ondismiss: () => say("The payment wasn't completed, so the order isn't placed yet. You can try again.") } }).open();
+      return;
+    }
+    // The order waits on this device while the customer pays on the gateway's page; it is placed when they come back paid.
+    store.set("pend", { o, ref: j.ref, at: Date.now() });
+    if (g === "cf") { await loadScript("https://sdk.cashfree.com/js/v3/cashfree.js"); window.Cashfree({ mode: j.mode }).checkout({ paymentSessionId: j.session, redirectTarget: "_self" }); }
+    else location.href = j.go;
+  } catch (e) { say("Online payment couldn't open. Check your connection and try again, or choose another way to pay."); }
+}
+/** Back from a gateway's page: the waiting order is sent with the payment's reference, and the database asks the gateway whether it was paid. */
+function cameBack() {
+  if (cameBack.done) return false; cameBack.done = true;
+  let q; try { q = new URLSearchParams(location.search); } catch (e) { return false; }
+  const gw = q.get("paid"), no = q.get("o"), pend = store.get("pend", null); if (!gw || !no) return false;
+  history.replaceState(null, "", "checkout.html");
+  if (!pend || !pend.o || pend.o.id !== no || GWID[pend.o.method] !== gw) return false;
+  const o = pend.o, tell = (t) => { render(); const e = $("#co-err"); if (e) { e.textContent = t; e.scrollIntoView({ block: "center" }); } };
+  if (q.get("x")) { store.set("pend", null); tell("The payment wasn't completed, so the order isn't placed yet. You can try again."); return true; }
+  tell("Confirming your payment…");
+  o.pg = { gw, ref: pend.ref };
+  sendOrder(o).then(async (r) => {
+    const j = await r.json().catch(() => null);
+    if (r.status === 502) return tell((j && j.error) || "We couldn't confirm the payment just now. Reload this page in a moment; your order is kept.");
+    store.set("pend", null);
+    if (!r.ok) return tell((j && j.error) || "The payment wasn't completed, so the order isn't placed yet. You can try again.");
+    o.saved = true; o.paid = true; placeOrder(o);
+  }).catch(() => tell("We couldn't confirm the payment just now. Check your connection and reload this page; your order is kept."));
+  return true;
 }
 /** The UPI step before an order is placed: QR code and app button with the exact amount, then the payment's reference number. */
 function payFirst(o, then) {

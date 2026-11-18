@@ -298,6 +298,14 @@
       "username": "",
       "label": "PayPal"
     },
+    "cashfree": {
+      "enabled": false,
+      "label": "UPI, card or netbanking (Cashfree)"
+    },
+    "phonepe": {
+      "enabled": false,
+      "label": "PhonePe (UPI, card, netbanking)"
+    },
     "cod": {
       "enabled": true,
       "label": "Cash on delivery",

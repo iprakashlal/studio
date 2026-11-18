@@ -16,7 +16,7 @@ create index if not exists approvals_project on approvals (scope, project, creat
 create table if not exists approval_notes (id integer primary key autoincrement, token text not null, who text not null, body text not null, page text not null default '', kind text not null default 'comment', created_at text not null);
 create index if not exists approval_notes_token on approval_notes (token, id);
 `;
-var CFDB_VERSION = 26;
+var CFDB_VERSION = 27;
 var CFDB_WORKER_NAME = "picaffectz-db";
 
 // src/lib/lookdigest.ts
@@ -351,7 +351,7 @@ async function notifyEnquiry(env, site, data, page) {
   let said = wantOwner && !owners.length ? "Not emailed: no address to send to. Fill in \u201CSend to\u201D under Enquiry form." : "";
   const vars = { name: oneLine(data.name || ""), site: name, page: page || "", email: oneLine(data.email || "") };
   const label = (k) => k.replace(/[-_]+/g, " ").replace(/^./, (ch) => ch.toUpperCase());
-  const rows = Object.entries(data).filter(([k]) => k !== "consent" && k !== "okey" && k !== "pay_state" && k !== "rz_order" && k !== "cart" && !(k === "message" && data.order_no) && !k.startsWith("_")).map(([k, v]) => `<tr><td style="padding:6px 14px 6px 0;color:#667;vertical-align:top;white-space:nowrap">${hesc(label(k))}</td><td style="padding:6px 0;white-space:pre-wrap">${hesc(v)}</td></tr>`).join("");
+  const rows = Object.entries(data).filter(([k]) => k !== "consent" && k !== "okey" && k !== "pay_state" && k !== "rz_order" && k !== "pay_gw" && k !== "cart" && !(k === "message" && data.order_no) && !k.startsWith("_")).map(([k, v]) => `<tr><td style="padding:6px 14px 6px 0;color:#667;vertical-align:top;white-space:nowrap">${hesc(label(k))}</td><td style="padding:6px 0;white-space:pre-wrap">${hesc(v)}</td></tr>`).join("");
   const table = `<table style="border-collapse:collapse;margin:0 0 14px">${rows}</table>`;
   const jobs = [];
   if (wantOwner && owners.length) {
@@ -680,7 +680,11 @@ async function ensure(env) {
 var SETTINGS = {
   ai: { secret: ["key"], text: ["base", "model", "vision"], flags: ["on"] },
   wa: { secret: ["token"], text: ["phoneId", "waba", "cc", "lang", "to", "phones", "tplOtp", "tplOrder", "tplEnquiry"], flags: ["on", "login", "orderOtp", "orderAlert", "enquiryAlert"] },
-  rz: { secret: ["secret"], text: ["keyId"], flags: ["on"] }
+  rz: { secret: ["secret"], text: ["keyId"], flags: ["on"] },
+  cf: { secret: ["secret"], text: ["appId"], flags: ["test"] },
+  pe: { secret: ["secret"], text: ["clientId", "version"], flags: ["test"] },
+  st: { secret: ["secret"], text: [], flags: [] },
+  pp: { secret: ["secret"], text: ["clientId"], flags: ["test"] }
 };
 async function aesKey(env) {
   return crypto.subtle.importKey("raw", await crypto.subtle.digest("SHA-256", enc.encode("settings:" + env.SECRET)), "AES-GCM", false, ["encrypt", "decrypt"]);
@@ -904,6 +908,142 @@ function restBill(c, q) {
   const raw = base + tax + del + tip, total = o.roundOff === false ? Math.round(raw * 100) / 100 : Math.round(raw);
   if (mode !== "dinein" && sub < Math.max(0, +o.minOrder || 0)) return { error: "The order is below the minimum." };
   return { total };
+}
+function shopBill(c, q) {
+  const S = c?.settings || {}, P = new Map((Array.isArray(c?.products) ? c.products : []).filter((p) => p && p.id).map((p) => [String(p.id), p]));
+  const lines = Array.isArray(q?.items) ? q.items.slice(0, 100) : [];
+  if (!lines.length) return { error: "The cart is empty." };
+  const max = Math.max(1, Number(S.maxQty) || 10);
+  let sub = 0;
+  for (const l of lines) {
+    const p = P.get(String(l?.id || "")), price = Number(p?.price);
+    if (!p || p.stock === "out" || !isFinite(price) || price < 0) return { error: "Something in the cart is no longer sold. Refresh the page." };
+    sub += price * Math.max(1, Math.min(max, Math.floor(+l.qty || 0)));
+  }
+  const H = c?.shipping || {}, num = (v) => v === "" || v == null || isNaN(Number(v)) ? null : Math.max(0, Number(v));
+  const pin = String(q?.pin || "").replace(/\D/g, "");
+  let fee = null, freeOver = null;
+  if (H.on && pin.length >= 4) {
+    const hit = (list) => String(list || "").split(/[\s,;]+/).filter(Boolean).some((t) => {
+      const r = /^(\d{4,6})-(\d{4,6})$/.exec(t);
+      if (r) return pin.length === r[1].length && +pin >= +r[1] && +pin <= +r[2];
+      return /^\d{2,6}$/.test(t) && (t.length === pin.length ? t === pin : pin.startsWith(t));
+    });
+    const z = (Array.isArray(H.zones) ? H.zones : []).find((x) => x && x.on !== false && hit(x.pins));
+    if (z) {
+      fee = num(z.fee);
+      freeOver = num(z.freeOver);
+    } else if (H.rest === "no") return { error: "We don't deliver to that PIN code." };
+    else fee = num(H.restFee);
+  }
+  const over = freeOver != null ? freeOver : Number(S.freeShippingOver), free = over > 0 && sub >= over;
+  const ship = free ? 0 : fee != null ? fee : Number(S.shippingFee) || 0, pct = Number(S.taxPercent) || 0, taxAdd = pct && !S.taxIncluded ? Math.round(sub * pct) / 100 : 0;
+  return { total: Math.round((sub + ship + taxAdd) * 100) / 100 };
+}
+var PG = { rz: { name: "Razorpay", key: "razorpay", inr: true }, cf: { name: "Cashfree", key: "cashfree", inr: true }, pe: { name: "PhonePe", key: "phonepe", inr: true }, st: { name: "Stripe", key: "stripe" }, pp: { name: "PayPal", key: "paypal" } };
+var PG_CUR = ["INR", "USD", "EUR", "GBP", "AUD", "CAD", "SGD", "AED", "NZD", "CHF"];
+var pgReady = (g, z) => !!z && !!(g === "rz" ? z.on && z.secret && z.keyId : g === "cf" ? z.secret && z.appId : g === "pe" ? z.secret && z.clientId : g === "st" ? z.secret : g === "pp" ? z.secret && z.clientId : false);
+var isRest = (c) => !!(c?.ordering && c?.food);
+var pgOn = (c, g) => !!(isRest(c) ? c.ordering?.pay?.[PG[g].key] : c?.payments?.[PG[g].key]?.enabled);
+function siteCur(c) {
+  if (isRest(c)) {
+    const s = String(c.food.currency || "\u20B9").trim();
+    return { "\u20B9": "INR", Rs: "INR", "Rs.": "INR", $: "USD", "\u20AC": "EUR", "\xA3": "GBP" }[s] || (/^[A-Z]{3}$/.test(s) ? s : "");
+  }
+  return String(c?.settings?.currency || "").toUpperCase();
+}
+var pgMoney = (cur, minor) => (cur === "INR" ? "\u20B9" : cur + " ") + (minor / 100).toFixed(2).replace(/\.00$/, "");
+var PgError = class extends Error {
+  constructor(m, keys = false) {
+    super(m);
+    this.keys = keys;
+  }
+};
+var pgFail = (g, r) => new PgError(r.status === 401 || r.status === 403 ? `${PG[g].name} refused this site's keys. The owner needs to check them.` : `${PG[g].name} couldn't start the payment just now. Please try again, or choose another way to pay.`, r.status === 401 || r.status === 403);
+var cfHost = (z) => z.test ? "https://sandbox.cashfree.com" : "https://api.cashfree.com";
+var cfHead = (z) => ({ "x-client-id": z.appId, "x-client-secret": z.secret, "x-api-version": "2023-08-01", "Content-Type": "application/json", Accept: "application/json" });
+var peHost = (z) => z.test ? "https://api-preprod.phonepe.com/apis/pg-sandbox" : "https://api.phonepe.com/apis/pg";
+async function peToken(z) {
+  const r = await fetch(z.test ? "https://api-preprod.phonepe.com/apis/pg-sandbox/v1/oauth/token" : "https://api.phonepe.com/apis/identity-manager/v1/oauth/token", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ client_id: z.clientId, client_version: String(z.version || "1"), client_secret: z.secret, grant_type: "client_credentials" }).toString() });
+  const j = await r.json().catch(() => null);
+  if (!r.ok || !j?.access_token) throw pgFail("pe", r.ok ? new Response(null, { status: 401 }) : r);
+  return String(j.access_token);
+}
+var ppHost = (z) => z.test ? "https://api-m.sandbox.paypal.com" : "https://api-m.paypal.com";
+async function ppToken(z) {
+  const r = await fetch(ppHost(z) + "/v1/oauth2/token", { method: "POST", headers: { Authorization: "Basic " + btoa(z.clientId + ":" + z.secret), "Content-Type": "application/x-www-form-urlencoded" }, body: "grant_type=client_credentials" });
+  const j = await r.json().catch(() => null);
+  if (!r.ok || !j?.access_token) throw pgFail("pp", r.ok ? new Response(null, { status: 401 }) : r);
+  return String(j.access_token);
+}
+async function pgStart(g, z, o) {
+  const ok = o.back + "&r=", email = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(o.cust.email) ? o.cust.email : "";
+  if (g === "rz") {
+    const r = await fetch("https://api.razorpay.com/v1/orders", { method: "POST", headers: { Authorization: "Basic " + btoa(z.keyId + ":" + z.secret), "Content-Type": "application/json" }, body: JSON.stringify({ amount: o.amount, currency: o.cur, receipt: o.no, notes: { order_no: o.no } }) });
+    const j = await r.json().catch(() => null);
+    if (!r.ok || !j?.id) throw pgFail(g, r);
+    return { ref: String(j.id), out: { key: z.keyId, order_id: j.id } };
+  }
+  if (g === "cf") {
+    const phone = o.cust.phone.replace(/\D/g, "").slice(-10);
+    if (phone.length < 10) throw new PgError("Cashfree needs a 10-digit mobile number. Add it and try again.");
+    const r = await fetch(cfHost(z) + "/pg/orders", { method: "POST", headers: cfHead(z), body: JSON.stringify({ order_id: o.id, order_amount: +(o.amount / 100).toFixed(2), order_currency: o.cur, customer_details: { customer_id: "c" + phone, customer_phone: phone, ...o.cust.name ? { customer_name: o.cust.name.slice(0, 100) } : {}, ...email ? { customer_email: email } : {} }, order_meta: { return_url: ok + "cf:" + o.id }, order_note: "Order " + o.no }) });
+    const j = await r.json().catch(() => null);
+    if (!r.ok || !j?.payment_session_id) throw pgFail(g, r);
+    return { ref: "cf:" + o.id, out: { session: String(j.payment_session_id), mode: z.test ? "sandbox" : "production" } };
+  }
+  if (g === "pe") {
+    const t = await peToken(z);
+    const r = await fetch(peHost(z) + "/checkout/v2/pay", { method: "POST", headers: { Authorization: "O-Bearer " + t, "Content-Type": "application/json" }, body: JSON.stringify({ merchantOrderId: o.id, amount: o.amount, paymentFlow: { type: "PG_CHECKOUT", message: "Order " + o.no, merchantUrls: { redirectUrl: ok + "pe:" + o.id } } }) });
+    const j = await r.json().catch(() => null);
+    if (!r.ok || !/^https:\/\//.test(String(j?.redirectUrl || ""))) throw pgFail(g, r);
+    return { ref: "pe:" + o.id, out: { go: String(j.redirectUrl) } };
+  }
+  if (g === "st") {
+    const f = new URLSearchParams({ mode: "payment", success_url: o.back, cancel_url: o.back + "&x=1", client_reference_id: o.no, "line_items[0][quantity]": "1", "line_items[0][price_data][currency]": o.cur.toLowerCase(), "line_items[0][price_data][unit_amount]": String(o.amount), "line_items[0][price_data][product_data][name]": `Order ${o.no}, ${o.name}`.slice(0, 200), ...email ? { customer_email: email } : {} });
+    const r = await fetch("https://api.stripe.com/v1/checkout/sessions", { method: "POST", headers: { Authorization: "Bearer " + z.secret, "Content-Type": "application/x-www-form-urlencoded" }, body: f.toString() });
+    const j = await r.json().catch(() => null);
+    if (!r.ok || !j?.id || !/^https:\/\//.test(String(j.url || ""))) throw pgFail(g, r);
+    return { ref: "st:" + j.id, out: { go: String(j.url) } };
+  }
+  if (g === "pp") {
+    const t = await ppToken(z);
+    const r = await fetch(ppHost(z) + "/v2/checkout/orders", { method: "POST", headers: { Authorization: "Bearer " + t, "Content-Type": "application/json" }, body: JSON.stringify({ intent: "CAPTURE", purchase_units: [{ reference_id: o.no, description: ("Order " + o.no).slice(0, 120), amount: { currency_code: o.cur, value: (o.amount / 100).toFixed(2) } }], payment_source: { paypal: { experience_context: { brand_name: o.name.slice(0, 120), user_action: "PAY_NOW", shipping_preference: "NO_SHIPPING", return_url: o.back, cancel_url: o.back + "&x=1" } } } }) });
+    const j = await r.json().catch(() => null), go = String((j?.links || []).find((l) => l && (l.rel === "payer-action" || l.rel === "approve"))?.href || "");
+    if (!r.ok || !j?.id || !/^https:\/\//.test(go)) throw pgFail(g, r);
+    return { ref: "pp:" + j.id, out: { go } };
+  }
+  throw new PgError("Unknown way to pay.");
+}
+async function pgCheck(g, z, id, amount, cur) {
+  const near = (v) => Math.abs(Math.round(Number(v)) - amount) <= 1;
+  if (g === "cf") {
+    const r = await fetch(cfHost(z) + "/pg/orders/" + encodeURIComponent(id), { headers: cfHead(z) }), j = await r.json().catch(() => null);
+    if (!r.ok || !j) throw new Error("cf " + r.status);
+    return { paid: j.order_status === "PAID" && near(Number(j.order_amount) * 100) && String(j.order_currency || cur) === cur, id: String(j.cf_order_id || id) };
+  }
+  if (g === "pe") {
+    const r = await fetch(peHost(z) + "/checkout/v2/order/" + encodeURIComponent(id) + "/status", { headers: { Authorization: "O-Bearer " + await peToken(z), "Content-Type": "application/json" } }), j = await r.json().catch(() => null);
+    if (!r.ok || !j) throw new Error("pe " + r.status);
+    return { paid: j.state === "COMPLETED" && near(j.amount), id: String(j.orderId || id) };
+  }
+  if (g === "st") {
+    const r = await fetch("https://api.stripe.com/v1/checkout/sessions/" + encodeURIComponent(id), { headers: { Authorization: "Bearer " + z.secret } }), j = await r.json().catch(() => null);
+    if (!r.ok || !j) throw new Error("st " + r.status);
+    return { paid: j.payment_status === "paid" && near(j.amount_total) && String(j.currency || "").toUpperCase() === cur, id: String(j.payment_intent || id) };
+  }
+  if (g === "pp") {
+    const t = await ppToken(z), h = { Authorization: "Bearer " + t, "Content-Type": "application/json" };
+    let r = await fetch(ppHost(z) + "/v2/checkout/orders/" + encodeURIComponent(id) + "/capture", { method: "POST", headers: h, body: "{}" }), j = await r.json().catch(() => null);
+    if (!r.ok) {
+      r = await fetch(ppHost(z) + "/v2/checkout/orders/" + encodeURIComponent(id), { headers: h });
+      j = await r.json().catch(() => null);
+      if (!r.ok || !j) throw new Error("pp " + r.status);
+    }
+    const cap = j?.purchase_units?.[0]?.payments?.captures?.[0];
+    return { paid: j.status === "COMPLETED" && !!cap && cap.status === "COMPLETED" && near(Number(cap.amount?.value) * 100) && String(cap.amount?.currency_code) === cur, id: String(cap?.id || id) };
+  }
+  return { paid: false, id };
 }
 function picturesOf(html, base) {
   const out = [], seen = /* @__PURE__ */ new Set();
@@ -1193,7 +1333,9 @@ var db_worker_default = {
       }
       if (/^\/site\/[a-z0-9][a-z0-9-]{0,59}\/can$/.test(p) && req.method === "GET") {
         const site = p.split("/")[2], w = await getSetting(env, "site:" + site, "wa").catch(() => null), z = await getSetting(env, "site:" + site, "rz").catch(() => null);
-        return json({ otp: !!(waReady(w) && w.orderOtp && String(w.tplOtp || "").trim()), rz: z?.on && z.secret && z.keyId ? String(z.keyId) : "" });
+        const pg = [];
+        for (const g of ["cf", "pe", "st", "pp"]) if (pgReady(g, await getSetting(env, "site:" + site, g).catch(() => null))) pg.push(g);
+        return json({ otp: !!(waReady(w) && w.orderOtp && String(w.tplOtp || "").trim()), rz: z?.on && z.secret && z.keyId ? String(z.keyId) : "", pg });
       }
       if (/^\/otp\/(send|check)\/[a-z0-9][a-z0-9-]{0,59}$/.test(p) && req.method === "POST") {
         const site = p.split("/")[3], b = await req.json(), w = await getSetting(env, "site:" + site, "wa");
@@ -1226,23 +1368,40 @@ var db_worker_default = {
         const exp = now + 45 * 6e4;
         return json({ ok: true, token: exp + "." + b64u(await hmac(env.SECRET, "otp:" + site + ":" + num + ":" + exp)) });
       }
-      if (/^\/pay\/rz\/[a-z0-9][a-z0-9-]{0,59}$/.test(p) && req.method === "POST") {
-        const site = p.split("/")[3], z = await getSetting(env, "site:" + site, "rz");
-        if (!(z?.on && z.secret && z.keyId)) return err(404, "Online payment isn't set up for this site.");
+      if (/^\/pay\/(rz|cf|pe|st|pp)\/[a-z0-9][a-z0-9-]{0,59}$/.test(p) && req.method === "POST") {
+        const g = p.split("/")[2], site = p.split("/")[3], z = await getSetting(env, "site:" + site, g);
+        if (!pgReady(g, z)) return err(404, "Online payment isn't set up for this site.");
         const q = await req.json(), no = String(q.order_no || "");
         if (!/^[A-Z0-9][A-Z0-9-]{3,29}$/.test(no)) return err(400, "Which order?");
-        const c = await siteContent(env, site), bill = restBill(c, q);
+        const c = await siteContent(env, site), rest = isRest(c);
+        if (g !== "rz" && !pgOn(c, g)) return err(404, "That way to pay isn't switched on for this site.");
+        const bill = rest ? restBill(c, q) : Array.isArray(c?.products) ? shopBill(c, q) : { error: "This site doesn't take orders." };
         if ("error" in bill) return err(409, bill.error);
-        if (Math.abs(bill.total - (+q.total || 0)) > 0.5) return err(409, "The menu or its prices changed while you were ordering. Refresh the page and check your cart.");
+        if (Math.abs(bill.total - (+q.total || 0)) > 0.5) return err(409, rest ? "The menu or its prices changed while you were ordering. Refresh the page and check your cart." : "Prices or delivery charges changed while you were ordering. Refresh the page and check your cart.");
         const n = await env.DB.prepare("select count(*) n from payments where site = ? and created_at > ?").bind(site, new Date(Date.now() - 36e5).toISOString()).first();
         if ((n?.n || 0) >= 200) return err(429, "Too many payments were started. Please try again in a while.");
-        const amount = Math.round(bill.total * 100), cur = String(c?.food?.currency || "\u20B9") === "\u20B9" ? "INR" : "";
-        if (!cur || amount < 100) return err(400, "Online payment works for totals in rupees of \u20B91 or more.");
-        const r = await fetch("https://api.razorpay.com/v1/orders", { method: "POST", headers: { Authorization: "Basic " + btoa(z.keyId + ":" + z.secret), "Content-Type": "application/json" }, body: JSON.stringify({ amount, currency: cur, receipt: no, notes: { site, order_no: no } }) });
-        const j = await r.json().catch(() => null);
-        if (!r.ok || !j?.id) return err(502, r.status === 401 ? "Razorpay refused this site's keys. The owner needs to check them." : "Razorpay couldn't start the payment just now. Please try again, or choose another way to pay.");
-        await env.DB.prepare("insert into payments (rz_order, site, order_no, amount, status, created_at) values (?, ?, ?, ?, 'created', ?)").bind(String(j.id), site, no, amount, (/* @__PURE__ */ new Date()).toISOString()).run();
-        return json({ key: z.keyId, order_id: j.id, amount, currency: cur, name: siteName(c, site) });
+        const amount = Math.round(bill.total * 100), cur = siteCur(c);
+        if (PG[g].inr ? cur !== "INR" || amount < 100 : !PG_CUR.includes(cur) || amount < 100) return err(400, PG[g].inr ? `${PG[g].name} works for totals in rupees of \u20B91 or more.` : `${PG[g].name} can't take this site's currency here.`);
+        let back = "";
+        if (g !== "rz") {
+          let b = null;
+          try {
+            b = new URL(String(q.back || ""));
+          } catch {
+          }
+          if (!b || !/^https?:$/.test(b.protocol)) return err(400, "Where should the payment come back to?");
+          back = b.origin + b.pathname + "?paid=" + g + "&o=" + encodeURIComponent(no);
+        }
+        const cust = { name: oneLine(String(q.name || "")).slice(0, 100), email: String(q.email || "").trim().slice(0, 200), phone: String(q.phone || "").slice(0, 30) };
+        const id = no + "-" + Array.from(crypto.getRandomValues(new Uint8Array(5)), (x) => x.toString(16).padStart(2, "0")).join("");
+        let made;
+        try {
+          made = await pgStart(g, z, { no, id, amount, cur, back, name: siteName(c, site), cust });
+        } catch (e) {
+          return err(e instanceof PgError && !e.keys && /needs a/.test(e.message) ? 400 : 502, e instanceof PgError ? e.message : `${PG[g].name} couldn't start the payment just now. Please try again, or choose another way to pay.`);
+        }
+        await env.DB.prepare("insert into payments (rz_order, site, order_no, amount, status, created_at) values (?, ?, ?, ?, 'created', ?)").bind(made.ref, site, no, amount, (/* @__PURE__ */ new Date()).toISOString()).run();
+        return json({ ...made.out, ref: made.ref, amount, currency: cur, name: siteName(c, site) });
       }
       if (p.startsWith("/order/") && req.method === "GET") {
         const [, , site, no] = p.split("/"), k = u.searchParams.get("k") || "";
@@ -1291,6 +1450,25 @@ var db_worker_default = {
             data._paid = "yes";
             data._paid_by = `Razorpay, \u20B9${(row.amount / 100).toFixed(2).replace(/\.00$/, "")}, ${String(data.rz_payment).slice(0, 40)}`;
             delete data.rz_sig;
+          }
+          if (data.pay_gw || data.pay_ref) {
+            const g = String(data.pay_gw || ""), ref = String(data.pay_ref || ""), z = PG[g] && g !== "rz" && ref.startsWith(g + ":") ? await getSetting(env, "site:" + site, g).catch(() => null) : null;
+            const row = pgReady(g, z) ? await env.DB.prepare("select order_no, amount, status from payments where rz_order = ? and site = ?").bind(ref, site).first() : null;
+            if (!row || row.order_no !== data.order_no) return err(400, "The payment couldn't be confirmed. If money left your account, contact us with your order number.");
+            if (row.status === "paid") return json({ ok: true, again: true });
+            const cur = siteCur(await siteContent(env, site));
+            let got;
+            try {
+              got = await pgCheck(g, z, ref.slice(3), row.amount, cur);
+            } catch {
+              return err(502, `We couldn't reach ${PG[g].name} to confirm the payment. Please try again in a moment.`);
+            }
+            if (!got.paid) return err(402, "The payment wasn't completed, so the order isn't placed yet. You can try again.");
+            await env.DB.prepare("update payments set status = 'paid' where rz_order = ?").bind(ref).run();
+            data._paid = "yes";
+            data._paid_by = `${PG[g].name}, ${pgMoney(cur, row.amount)}, ${got.id.slice(0, 60)}`;
+            data.pay_gw = PG[g].name;
+            delete data.pay_ref;
           }
         }
         const made = await env.DB.prepare("insert into enquiries (site, data, page, created_at) values (?, ?, ?, ?) returning id").bind(site, JSON.stringify(data), String(q.page || "").slice(0, 200), (/* @__PURE__ */ new Date()).toISOString()).first();
@@ -1867,5 +2045,6 @@ export {
   copiedBits,
   db_worker_default as default,
   outlineOf,
-  restBill
+  restBill,
+  shopBill
 };

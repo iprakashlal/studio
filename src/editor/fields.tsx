@@ -11,7 +11,7 @@ import { themeCode } from "../themes/codes";
 import type { Field as F, TemplateDef } from "../schema/types";
 import { getP, setP, clone, vpaOk, paypalOk, httpsOk, hostIs, emailOk, phoneOk } from "../lib/util";
 import { Field, ProgressBar, Toggle, useConfirm, useToast } from "../ui/kit";
-import { RazorpayForm, WhatsAppForm } from "../pages/Connections";
+import { GatewayForm, WhatsAppForm } from "../pages/Connections";
 import { cfSession } from "../lib/cfdb";
 
 export type EditorCtx = {
@@ -367,10 +367,10 @@ function FontFileField({ id, label, hint, value, onChange }: { id: string; label
   );
 }
 /** A connection's own form (its keys go to the site's database, never into the site's content). */
-function ConnectionField({ kind }: { kind: "rz" | "wa" }) {
+function ConnectionField({ kind }: { kind: "rz" | "wa" | "cf" | "pe" | "st" | "pp" }) {
   const { cf } = useCtx();
   const where = cf && cfSession.load(cf.api) ? { api: cf.api, scope: "site:" + cf.site } : null;
-  return kind === "rz" ? <RazorpayForm where={where} plain /> : <WhatsAppForm where={where} kind="site" />;
+  return kind === "wa" ? <WhatsAppForm where={where} kind="site" /> : <GatewayForm where={where} gw={kind} />;
 }
 function VideoFileField({ id, label, hint, value, onChange }: { id: string; label: string; hint?: string; value: any; onChange: (v: any) => void }) {
   const { img, upload } = useCtx();

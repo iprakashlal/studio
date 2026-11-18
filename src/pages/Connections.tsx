@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { cfCall, cfSession, signedInApi } from "../lib/cfdb";
 import { Field, Toggle, useToast } from "../ui/kit";
 
-type Kind = "ai" | "wa" | "rz";
+type Kind = "ai" | "wa" | "rz" | "cf" | "pe" | "st" | "pp";
 type Saved = Record<Kind, Record<string, any> | null>;
 export type Where = { api: string; scope: string };
 
@@ -176,36 +176,49 @@ export function WhatsAppForm({ where, kind }: { where: Where | null | undefined;
 
 /** Razorpay for a restaurant's Order now page: paid orders are confirmed by Razorpay's signature, with no checking.
     `plain`: inside the Payments section, under its own switch: just the keys (saving them turns the connection on). */
-export function RazorpayForm({ where, plain }: { where: Where | null | undefined; plain?: boolean }) {
-  const toast = useToast(), { saved, err, save } = useSaved(where || null);
-  const [f, setF] = useState({ on: false, keyId: "", secret: "" }), [busy, setBusy] = useState(false);
-  useEffect(() => { const z = saved?.rz; setF(z ? { on: !!z.on, keyId: txt(z.keyId), secret: "" } : { on: false, keyId: "", secret: "" }); }, [saved]);
-  const lead = <>Take UPI, cards and netbanking on the Order now page. Razorpay tells your database when the money has arrived, so the order is placed and marked Paid by itself. Razorpay charges its usual fee per payment.</>;
-  const Box = ({ children, on }: { children: React.ReactNode; on?: boolean }) => plain
-    ? <div className="flex flex-col gap-3 rounded-lg border border-ink-600 p-3" aria-label="Razorpay keys"><b className="flex items-center gap-2 text-ink-100">Your Razorpay keys{on != null && <span className={`chip ${on ? "border-emerald-400/50 text-emerald-200" : "border-ink-600 text-ink-400"}`}>{on ? "Saved" : "Not saved yet"}</span>}</b>{children}</div>
-    : <Shell title="Razorpay" on={on} lead={lead}>{children}</Shell>;
+export type Gateway = "rz" | "cf" | "pe" | "st" | "pp";
+type GwDef = { name: string; takes: string; text: { k: string; id: string; label: string; hint?: string; ph?: string; ok?: RegExp; opt?: boolean }[]; secret: string; secretOk?: RegExp; test?: boolean; url: string; where: string; note?: string };
+/** The gateways a site's database can charge through, and the keys each one needs. */
+export const GATEWAYS: Record<Gateway, GwDef> = {
+  rz: { name: "Razorpay", takes: "UPI, cards and netbanking", text: [{ k: "keyId", id: "rz-id", label: "Key ID", hint: "Starts with rzp_test_ or rzp_live_.", ph: "rzp_live_…", ok: /^rzp_(test|live)_\w+$/ }], secret: "Key secret", url: "https://dashboard.razorpay.com/app/website-app-settings/api-keys", where: "Razorpay Dashboard → Account & Settings → API Keys", note: "Razorpay shows the secret once; paste it here straight away." },
+  cf: { name: "Cashfree", takes: "UPI, cards and netbanking", text: [{ k: "appId", id: "cf-id", label: "App ID", hint: "Also called x-client-id." }], secret: "Secret key", test: true, url: "https://merchant.cashfree.com/merchants/pg/developers/api-keys", where: "Cashfree Dashboard → Developers → API Keys" },
+  pe: { name: "PhonePe", takes: "UPI, cards and netbanking", text: [{ k: "clientId", id: "pe-id", label: "Client ID" }, { k: "version", id: "pe-version", label: "Client version", hint: "The number PhonePe shows next to the client ID. Usually 1.", ph: "1", ok: /^\d{1,4}$/, opt: true }], secret: "Client secret", test: true, url: "https://business.phonepe.com/", where: "PhonePe Business dashboard → Developer Settings" },
+  st: { name: "Stripe", takes: "cards from any country", text: [], secret: "Secret key", secretOk: /^(sk|rk)_(test|live)_\w+$/, url: "https://dashboard.stripe.com/apikeys", where: "Stripe Dashboard → Developers → API keys", note: "It starts with sk_live_ (or sk_test_ to try it with no real money)." },
+  pp: { name: "PayPal", takes: "PayPal balances and cards", text: [{ k: "clientId", id: "pp-id", label: "Client ID" }], secret: "Secret", test: true, url: "https://developer.paypal.com/dashboard/applications/live", where: "PayPal Developer Dashboard → Apps & Credentials → your app" },
+};
+/** A gateway's keys, inside its card under Payments. They go to the site's own database, encrypted, and never into the site. */
+export function GatewayForm({ where, gw }: { where: Where | null | undefined; gw: Gateway }) {
+  const G = GATEWAYS[gw], toast = useToast(), { saved, err, save } = useSaved(where || null);
+  const blank = () => ({ ...Object.fromEntries(G.text.map((t) => [t.k, ""])), secret: "", test: false }) as Record<string, any>;
+  const [f, setF] = useState<Record<string, any>>(blank), [busy, setBusy] = useState(false);
+  const z: any = (saved as any)?.[gw];
+  useEffect(() => { setF(z ? { ...blank(), ...Object.fromEntries(G.text.map((t) => [t.k, txt(z[t.k])])), test: !!z.test } : blank()); }, [saved]); // eslint-disable-line react-hooks/exhaustive-deps
+  const Box = ({ children, on }: { children: React.ReactNode; on?: boolean }) => <div className="flex flex-col gap-3 rounded-lg border border-ink-600 p-3" aria-label={`${G.name} keys`}><b className="flex items-center gap-2 text-ink-100">Your {G.name} keys{on != null && <span className={`chip ${on ? "border-emerald-400/50 text-emerald-200" : "border-ink-600 text-ink-400"}`}>{on ? "Saved" : "Not saved yet"}</span>}</b>{children}</div>;
   if (where === undefined) return Box({ children: <Missing why="Checking your database…" /> });
-  if (!where) return Box({ children: <Missing why="Razorpay keys are kept on the site's own Cloudflare database. Host this site on Cloudflare (Host to External Services), and sign in to it on this device as its owner; the two boxes for the keys then show here." /> });
+  if (!where) return Box({ children: <Missing why={`${G.name} keys are kept on the site's own Cloudflare database. Host this site on Cloudflare (Host to External Services), and sign in to it on this device as its owner; the boxes for the keys then show here.`} /> });
   if (err) return Box({ children: <Missing why={err} /> });
-  const z = saved?.rz, on = plain ? true : f.on, ok = !on || (/^rzp_(test|live)_\w+$/.test(f.keyId.trim()) && (!!f.secret.trim() || !!z?.secret));
-  return Box({ on: !!(z?.on && z.secret), children: <>
-      {!plain && <Toggle id="rz-on" checked={f.on} onChange={(v: boolean) => setF({ ...f, on: v })} label="Take online payments with Razorpay" />}
-      {on && <div className="grid gap-3 sm:grid-cols-2">
-        <Field label="Key ID" htmlFor="rz-id" hint="Starts with rzp_test_ or rzp_live_."><input id="rz-id" className="input font-mono" placeholder="rzp_live_…" value={f.keyId} onChange={(e) => setF({ ...f, keyId: e.target.value })} /></Field>
-        <Secret id="rz-secret" label="Key secret" saved={!!z?.secret} value={f.secret} onChange={(v) => setF({ ...f, secret: v })} />
-      </div>}
-      {on && <p className="text-[12.5px] text-ink-400">Get them from <a className="text-brand-300 underline" href="https://dashboard.razorpay.com/app/website-app-settings/api-keys" target="_blank" rel="noopener noreferrer">Razorpay Dashboard → Account &amp; Settings → API Keys ↗</a>. Razorpay shows the secret once; paste it here straight away. The keys go to your own database, stored encrypted, and are never put in the site.{plain ? "" : " Then switch on Razorpay under Payments and publish."}</p>}
-      <div className="flex gap-2"><button type="button" className="btn btn-sm btn-pri" disabled={!ok || busy} onClick={async () => { setBusy(true); try { await save("rz", { on, keyId: f.keyId.trim(), secret: f.secret.trim() }); setF((x) => ({ ...x, secret: "" })); toast(on ? "Razorpay keys saved." : "Saved. Razorpay is off."); } catch (e: any) { toast(e?.message || "Couldn't save that.", "bad"); } setBusy(false); }}>{busy ? "Saving…" : plain ? "Save the keys" : "Save"}</button>
-        {z && <button type="button" className="btn btn-sm btn-danger ml-auto" disabled={busy} onClick={async () => { setBusy(true); try { await save("rz", null); toast("Razorpay keys removed."); } catch (e: any) { toast(e?.message || "Couldn't remove them.", "bad"); } setBusy(false); }}>Remove</button>}</div>
+  if (saved && !(gw in (saved as any))) return Box({ children: <Missing why={`This site's database is an older version that doesn't know ${G.name} yet. Update the database once (Settings → Hostings → Update the database), then come back here.`} /> });
+  const ok = G.text.every((t) => (t.opt && !String(f[t.k]).trim()) || (String(f[t.k]).trim() && (!t.ok || t.ok.test(String(f[t.k]).trim())))) && (f.secret.trim() ? !G.secretOk || G.secretOk.test(f.secret.trim()) : !!z?.secret);
+  return Box({ on: !!z?.secret, children: <>
+      <div className="grid gap-3 sm:grid-cols-2">
+        {G.text.map((t) => <Field key={t.k} label={t.label} htmlFor={t.id} hint={t.hint}><input id={t.id} className="input font-mono" placeholder={t.ph} autoComplete="off" value={f[t.k]} onChange={(e) => setF({ ...f, [t.k]: e.target.value })} /></Field>)}
+        <Secret id={`${gw}-secret`} label={G.secret} saved={!!z?.secret} value={f.secret} onChange={(v) => setF({ ...f, secret: v })} />
+      </div>
+      {G.test && <Toggle id={`${gw}-test`} checked={!!f.test} onChange={(v: boolean) => setF({ ...f, test: v })} label="These are test (sandbox) keys: no real money moves" />}
+      <p className="text-[12.5px] text-ink-400">Get them from <a className="text-brand-300 underline" href={G.url} target="_blank" rel="noopener noreferrer">{G.where} ↗</a>. {G.note ? G.note + " " : ""}The keys go to your own database, stored encrypted, and are never put in the site.</p>
+      <div className="flex gap-2"><button type="button" className="btn btn-sm btn-pri" disabled={!ok || busy} onClick={async () => { setBusy(true); try { await save(gw, { ...Object.fromEntries(G.text.map((t) => [t.k, String(f[t.k]).trim()])), secret: f.secret.trim(), ...(G.test ? { test: !!f.test } : {}), ...(gw === "rz" ? { on: true } : {}) }); setF((x) => ({ ...x, secret: "" })); toast(`${G.name} keys saved.`); } catch (e: any) { toast(e?.message || "Couldn't save that.", "bad"); } setBusy(false); }}>{busy ? "Saving…" : "Save the keys"}</button>
+        {z && <button type="button" className="btn btn-sm btn-danger ml-auto" disabled={busy} onClick={async () => { setBusy(true); try { await save(gw, null); toast(`${G.name} keys removed.`); } catch (e: any) { toast(e?.message || "Couldn't remove them.", "bad"); } setBusy(false); }}>Remove</button>}</div>
     </> });
 }
+/** Kept for the places that ask for Razorpay by name. */
+export function RazorpayForm({ where }: { where: Where | null | undefined; plain?: boolean }) { return <GatewayForm where={where} gw="rz" />; }
 
 /** A site's "Payments & WhatsApp" section (site admin and the Studio's editor). */
 export function SiteConnections({ cf, template }: { cf?: { api: string; site: string } | null; template: string }) {
   const where = cf && cfSession.load(cf.api) ? { api: cf.api, scope: "site:" + cf.site } : null;
   return <div className="flex max-w-3xl flex-col gap-4">
-    {template === "restaurant" && <section className="card flex flex-col gap-2 p-5"><h3 className="text-[15px] font-extrabold">Restaurant backend</h3><p className="text-sm text-ink-300">Orders, payments and messages run on the site's own Cloudflare database: it saves each order under Purchased orders, works out what an order costs from your menu, confirms Razorpay payments, and sends WhatsApp messages. Keys you enter here stay on that database, encrypted. The ways to pay are switched on under Payments.</p></section>}
-    {template === "restaurant" && <RazorpayForm where={where} plain />}<WhatsAppForm where={where} kind="site" /></div>;
+    {template === "restaurant" && <section className="card flex flex-col gap-2 p-5"><h3 className="text-[15px] font-extrabold">Restaurant backend</h3><p className="text-sm text-ink-300">Orders, payments and messages run on the site's own Cloudflare database: it saves each order under Purchased orders, works out what an order costs from your menu, confirms online payments with the gateway you connect (Razorpay, Cashfree, PhonePe, Stripe or PayPal), and sends WhatsApp messages. Keys you enter here stay on that database, encrypted. The ways to pay are switched on under Payments.</p></section>}
+    {template === "restaurant" && (Object.keys(GATEWAYS) as Gateway[]).map((g) => <section key={g} className="card flex flex-col gap-3 p-5"><h3 className="text-[15px] font-extrabold">{GATEWAYS[g].name}</h3><GatewayForm where={where} gw={g} /></section>)}<WhatsAppForm where={where} kind="site" /></div>;
 }
 /** The Studio's own database, looked up once. */
 export function useStudioWhere() { const [w, setW] = useState<Where | null | undefined>(undefined); useEffect(() => { let on = true; studioWhere().then((x) => on && setW(x)); return () => { on = false; }; }, []); return w; }

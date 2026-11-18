@@ -351,3 +351,4 @@ html.hs-top-light:not([data-nav=float]) .nav:not(.scrolled) .burger{border-color
 .stars{color:#F5A623;letter-spacing:2px;font-size:17px;line-height:1}.stars .off{color:color-mix(in srgb,currentColor 25%,var(--line))}
 .quote .stars{display:block;margin-bottom:10px}
 .g-sum{margin:-8px 0 26px}.g-sum a{display:inline-flex;align-items:center;gap:8px;color:var(--soft);text-decoration:none;font-size:15px}.g-sum a:hover{color:var(--text)}.g-sum b{color:var(--text)}
+.solo-top{padding:clamp(18px,3vw,34px) 0 0}.solo-top .crumbs{margin:0}.solo-top+section{padding-top:clamp(28px,4vw,56px)}

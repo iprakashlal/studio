@@ -38,12 +38,12 @@ export const AXES: Record<string, Axis> = {
 };
 /** Interaction effects (assets/fx.js). The first option of each is "off". */
 export const FX_AXES: Record<string, Axis> = {
-  cursor: { key: "cursor", label: "Cursor", options: [["none", "Normal cursor"], ["dot", "Dot + trailing ring"], ["blend", "Inverting blob"], ["spotlight", "Spotlight glow"], ["trail", "Light trail"], ["ring", "Large ring + dot"]] },
-  loader: { key: "loader", label: "Intro & page transition", options: [["none", "None"], ["curtain", "Curtain lift"], ["counter", "0–100 counter"], ["split", "Split reveal"], ["wipe", "Diagonal wipe"], ["iris", "Iris close"]] },
-  textfx: { key: "textfx", label: "Heading reveal", options: [["none", "None"], ["lines", "Line-by-line mask"], ["letters", "Letter cascade"], ["scramble", "Decode / scramble"], ["words", "Words blur in"]] },
-  hoverfx: { key: "hoverfx", label: "Hover", options: [["none", "Theme default"], ["lift", "Lift + glow edge"], ["magnetic", "Magnetic buttons"], ["tilt", "3D tilt + glare"], ["shine", "Light sweep"]] },
-  scrollfx: { key: "scrollfx", label: "Scrolling", options: [["none", "Normal (the browser's own)"], ["progress", "Normal + progress bar"], ["smooth", "Smooth (eased)"], ["skew", "Smooth + velocity skew"]] },
-  overlay: { key: "overlay", label: "Screen texture", options: [["none", "None"], ["grain", "Film grain"], ["scanlines", "Scanlines"], ["vignette", "Vignette"], ["paper", "Paper texture"], ["halftone", "Halftone corner"]] },
+  cursor: { key: "cursor", label: "Cursor", options: [["none", "Normal cursor"], ["dot", "Dot + trailing ring"], ["blend", "Inverting blob"], ["spotlight", "Spotlight glow"], ["trail", "Light trail"], ["ring", "Large ring + dot"], ["glow", "Soft glow that follows"], ["cross", "Crosshair with coordinates"], ["square", "Square frame, turns on links"]] },
+  loader: { key: "loader", label: "Intro & page transition", options: [["none", "None"], ["curtain", "Curtain lift"], ["counter", "0–100 counter"], ["split", "Split reveal"], ["wipe", "Diagonal wipe"], ["iris", "Iris close"], ["columns", "Staggered columns"], ["fade", "Soft fade + zoom"], ["portal", "Portal opens from the centre"]] },
+  textfx: { key: "textfx", label: "Heading reveal", options: [["none", "None"], ["lines", "Line-by-line mask"], ["letters", "Letter cascade"], ["scramble", "Decode / scramble"], ["words", "Words blur in"], ["flip", "Words flip up (3D)"], ["wave", "Bouncy letter wave"], ["wipe", "Wipe in, word by word"]] },
+  hoverfx: { key: "hoverfx", label: "Hover", options: [["none", "Theme default"], ["lift", "Lift + glow edge"], ["magnetic", "Magnetic buttons"], ["tilt", "3D tilt + glare"], ["shine", "Light sweep"], ["spot", "Glow under the pointer"], ["zoom", "Picture zoom"], ["offset", "Offset shadow (pop-out)"]] },
+  scrollfx: { key: "scrollfx", label: "Scrolling", options: [["none", "Normal (the browser's own)"], ["progress", "Normal + progress bar"], ["smooth", "Smooth (eased)"], ["skew", "Smooth + velocity skew"], ["reveal", "Sections fade up"], ["ring", "Progress ring + back to top"], ["dots", "Section dots at the side"]] },
+  overlay: { key: "overlay", label: "Screen texture", options: [["none", "None"], ["grain", "Film grain"], ["scanlines", "Scanlines"], ["vignette", "Vignette"], ["paper", "Paper texture"], ["halftone", "Halftone corner"], ["aurora", "Aurora glow"], ["grid", "Blueprint grid"], ["frame", "Inset page frame"]] },
 };
 /** How strongly "Smooth" scrolling eases. Trackpads and touch screens always scroll natively. */
 export const SCROLL_EASE_AXIS: Axis = { key: "scrollEase", label: "Smooth scrolling strength", options: [["light", "Light (snappy)"], ["medium", "Medium"], ["heavy", "Heavy (floaty)"]] };

@@ -4,14 +4,14 @@
 
    Each template sets these attributes on <html> from content.theme and calls SiteFX.init()
    after every render:
-     data-cursor    none | dot | blend | spotlight | trail | ring
-     data-loader    none | curtain | counter | split | wipe | iris   (also animates page-to-page links)
-     data-textfx    none | lines | letters | scramble | words
-     data-hoverfx   none | lift | magnetic | tilt | shine
-     data-scrollfx  none | progress | smooth | skew
+     data-cursor    none | dot | blend | spotlight | trail | ring | glow | cross | square
+     data-loader    none | curtain | counter | split | wipe | iris | columns | fade | portal   (also animates page-to-page links)
+     data-textfx    none | lines | letters | scramble | words | flip | wave | wipe
+     data-hoverfx   none | lift | magnetic | tilt | shine | spot | zoom | offset
+     data-scrollfx  none | progress | smooth | skew | reveal | ring | dots
      data-scrollease light | medium | heavy  (how strongly smooth scrolling eases; mouse wheels only)
    Intro screen colours come from --intro-bg / --intro-fg (falling back to --deep / --on-deep).
-     data-overlay   none | grain | scanlines | vignette | paper | halftone
+     data-overlay   none | grain | scanlines | vignette | paper | halftone | aurora | grid | frame
    Visitors who ask for reduced motion get a still page (only static overlays stay). */
 (function () {
   "use strict";
@@ -84,6 +84,11 @@
     "html.fx-dark[data-overlay=paper] .fx-ov{mix-blend-mode:soft-light;opacity:.45}",
     "html[data-overlay=halftone] .fx-ov{inset:0;background-image:radial-gradient(rgba(0,0,0,.16) 1px,transparent 1.4px);background-size:5px 5px;-webkit-mask-image:linear-gradient(160deg,#000,transparent 55%);mask-image:linear-gradient(160deg,#000,transparent 55%)}",
     "html.fx-dark[data-overlay=halftone] .fx-ov{background-image:radial-gradient(rgba(255,255,255,.12) 1px,transparent 1.4px)}",
+    "html[data-overlay=aurora] .fx-ov{inset:-20%;background:radial-gradient(38% 42% at 22% 28%,color-mix(in srgb,var(--fxa) 46%,transparent),transparent 70%),radial-gradient(34% 40% at 78% 22%,color-mix(in srgb,var(--c2,var(--fxa)) 40%,transparent),transparent 70%),radial-gradient(44% 46% at 60% 82%,color-mix(in srgb,var(--fxa) 30%,transparent),transparent 72%);filter:blur(60px);opacity:.34;mix-blend-mode:multiply;animation:fxaurora 22s ease-in-out infinite alternate}",
+    "html.fx-dark[data-overlay=aurora] .fx-ov{mix-blend-mode:screen;opacity:.3}",
+    "html[data-overlay=grid] .fx-ov{background-image:linear-gradient(color-mix(in srgb,var(--fxi) 9%,transparent) 1px,transparent 1px),linear-gradient(90deg,color-mix(in srgb,var(--fxi) 9%,transparent) 1px,transparent 1px);background-size:56px 56px;background-position:center top;-webkit-mask-image:radial-gradient(ellipse at 50% 40%,#000 20%,transparent 78%);mask-image:radial-gradient(ellipse at 50% 40%,#000 20%,transparent 78%)}",
+    "html[data-overlay=frame] .fx-ov{inset:clamp(8px,1.2vw,16px);border:1px solid color-mix(in srgb,var(--fxi) 38%,transparent);border-radius:clamp(10px,1.6vw,22px)}",
+    "@keyframes fxaurora{0%{transform:translate3d(-4%,-3%,0) rotate(0deg) scale(1)}50%{transform:translate3d(5%,4%,0) rotate(8deg) scale(1.12)}100%{transform:translate3d(-3%,6%,0) rotate(-6deg) scale(1.05)}}",
     "@keyframes fxgrain{0%{transform:translate(0,0)}20%{transform:translate(-6%,4%)}40%{transform:translate(5%,-3%)}60%{transform:translate(-3%,-6%)}80%{transform:translate(6%,5%)}100%{transform:translate(0,0)}}",
     /* cursor */
     "html.fx-nocur,html.fx-nocur *{cursor:none!important}",
@@ -111,6 +116,15 @@
     "html[data-cursor=ring] .fx-ring.is-link i{transform:translate(-50%,-50%) scale(.55);background:color-mix(in srgb,var(--fxa) 25%,transparent);border-color:transparent}",
     "html[data-cursor=ring] .fx-ring.is-card i{transform:translate(-50%,-50%) scale(1.7);background:color-mix(in srgb,var(--fxa) 14%,transparent);border-color:var(--fxa)}",
     "html[data-cursor=ring] .fx-ring b{color:var(--fxi)}",
+    "html[data-cursor=square] .fx-dot i{width:5px;height:5px;border-radius:1px}",
+    "html[data-cursor=square] .fx-ring i{width:34px;height:34px;border-radius:9px;border:1.5px solid var(--fxa);transition:transform .5s var(--fxe),background .3s,border-radius .4s var(--fxe)}",
+    "html[data-cursor=square] .fx-ring.is-link i{transform:translate(-50%,-50%) rotate(45deg) scale(1.25);background:color-mix(in srgb,var(--fxa) 18%,transparent)}",
+    "html[data-cursor=square] .fx-ring.is-card i{transform:translate(-50%,-50%) scale(2.5);border-radius:16px;background:var(--fxa)}",
+    ".fx-glow{position:fixed;left:0;top:0;width:260px;height:260px;margin:-130px 0 0 -130px;border-radius:50%;pointer-events:none;z-index:99960;opacity:0;transition:opacity .5s;background:radial-gradient(circle,color-mix(in srgb,var(--fxa) 55%,transparent),transparent 68%);filter:blur(28px);mix-blend-mode:multiply;will-change:transform}",
+    "html.fx-dark .fx-glow{mix-blend-mode:screen}html.fx-seen .fx-glow{opacity:.75}",
+    ".fx-cross{position:fixed;inset:0;pointer-events:none;z-index:99960;opacity:0;transition:opacity .4s}html.fx-seen .fx-cross{opacity:1}",
+    ".fx-cross i{position:absolute;background:color-mix(in srgb,var(--fxi) 22%,transparent)}.fx-cross i:first-child{left:0;right:0;top:var(--my,50%);height:1px}.fx-cross i:nth-child(2){top:0;bottom:0;left:var(--mx,50%);width:1px}",
+    ".fx-cross b{position:absolute;left:var(--mx,50%);top:var(--my,50%);margin:12px 0 0 12px;font:600 10px/1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.06em;color:color-mix(in srgb,var(--fxi) 60%,transparent);white-space:nowrap}",
     ".fx-spot{position:fixed;inset:0;pointer-events:none;z-index:99960;opacity:0;transition:opacity .5s;background:radial-gradient(560px circle at var(--mx,50%) var(--my,50%),color-mix(in srgb,var(--fxa) 22%,transparent),transparent 62%);mix-blend-mode:multiply}",
     "html.fx-dark .fx-spot{mix-blend-mode:screen}",
     "html.fx-seen .fx-spot{opacity:1}",
@@ -133,6 +147,14 @@
     ".fx-load--split .fx-pb{bottom:0;height:50.5%;transition:transform 1s var(--fxe)}",
     ".fx-load--split.out .fx-pt{transform:translateY(-101%)}",
     ".fx-load--split.out .fx-pb{transform:translateY(101%)}",
+    ".fx-load--columns .fx-p{top:0;bottom:0;right:auto;width:20.3%;left:calc(var(--n)*20%);transition:transform .9s var(--fxe);transition-delay:calc(var(--n)*70ms)}",
+    ".fx-load--columns.out .fx-p{transform:translateY(-101%)}",
+    ".fx-load--columns.out .fx-p:nth-child(even){transform:translateY(101%)}",
+    ".fx-load--fade .fx-p{top:0;bottom:0;transition:opacity .9s ease}.fx-load--fade.out .fx-p{opacity:0}",
+    ".fx-load--fade .fx-brand{transition:opacity .5s,transform 1.4s var(--fxe),letter-spacing 1.2s var(--fxe)}.fx-load--fade.out .fx-brand{transform:translate(-50%,-50%) scale(1.25)}",
+    "@property --fxr{syntax:'<length-percentage>';inherits:false;initial-value:0%}",
+    ".fx-load--portal .fx-p{top:0;bottom:0;--fxr:0%;-webkit-mask-image:radial-gradient(circle at 50% 50%,transparent var(--fxr),#000 calc(var(--fxr) + 1px));mask-image:radial-gradient(circle at 50% 50%,transparent var(--fxr),#000 calc(var(--fxr) + 1px));transition:--fxr 1.1s var(--fxe),opacity .2s 1s}",
+    ".fx-load--portal.out .fx-p{--fxr:120%;opacity:0}",
     ".fx-brand{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-size:clamp(28px,6vw,76px);font-weight:800;letter-spacing:.32em;text-transform:uppercase;white-space:nowrap;padding-left:.32em;transition:opacity .4s,letter-spacing 1.2s var(--fxe)}",
     ".fx-brand span{display:inline-block;opacity:0;transform:translateY(60%)}",
     ".fx-load.ready .fx-brand span{animation:fxup .7s var(--fxe) forwards}",
@@ -162,6 +184,14 @@
     "html[data-textfx=words] .fx-in .fx-wi{opacity:1;filter:none;transform:none}",
     "html[data-textfx=words] .h-name .ln>span{animation:none!important}",
     "html[data-textfx=letters] .h-name .ln>span{animation:none!important}",
+    "html[data-textfx=flip] [data-fx-split] .fx-w{perspective:600px}",
+    "html[data-textfx=flip] [data-fx-split] .fx-wi{display:inline-block;opacity:0;transform:rotateX(-88deg) translateY(.2em);transform-origin:50% 100%;transition:transform 1s var(--fxe),opacity .5s;transition-delay:calc(var(--k,0)*70ms)}",
+    "html[data-textfx=flip] .fx-in .fx-wi{opacity:1;transform:none}",
+    "html[data-textfx=wave] [data-fx-split] .fx-c{display:inline-block;opacity:0;transform:translateY(.9em) scale(.6);transition:transform .8s cubic-bezier(.2,1.7,.35,1),opacity .35s;transition-delay:calc(var(--i,0)*32ms)}",
+    "html[data-textfx=wave] .fx-in .fx-c{opacity:1;transform:none}",
+    "html[data-textfx=wipe] [data-fx-split] .fx-wi{display:inline-block;clip-path:inset(-10% 100% -15% 0);transform:translateX(-.18em);transition:clip-path 1s var(--fxe),transform 1s var(--fxe);transition-delay:calc(var(--k,0)*80ms)}",
+    "html[data-textfx=wipe] .fx-in .fx-wi{clip-path:inset(-10% -5% -15% 0);transform:none}",
+    "html:is([data-textfx=flip],[data-textfx=wave],[data-textfx=wipe]) .h-name .ln>span{animation:none!important}",
     ".fx-now,.fx-now *{transition:none!important}",
     /* hover */
     ".fx-card{transition:transform .5s var(--fxe),box-shadow .5s var(--fxe),border-color .3s}",
@@ -171,10 +201,29 @@
     "html[data-hoverfx=shine] .fx-card:not(.cat):not(.contact-box)::after{content:'';position:absolute;inset:0;pointer-events:none;z-index:4;border-radius:inherit;background:linear-gradient(110deg,transparent 35%,rgba(255,255,255,.26) 50%,transparent 65%);transform:translateX(-130%)}",
     "html[data-hoverfx=shine] .fx-card:hover{transform:translateY(-4px)}",
     "html[data-hoverfx=shine] .fx-card:hover::after{transform:translateX(130%);transition:transform 1.05s var(--fxe)}",
+    "html[data-hoverfx=spot] .fx-card:hover{translate:0 -3px;border-color:color-mix(in srgb,var(--fxa) 55%,transparent)}",
+    "html[data-hoverfx=spot] .fx-card>.fx-glare{background:radial-gradient(340px circle at var(--gx,50%) var(--gy,50%),color-mix(in srgb,var(--fxa) 30%,transparent),transparent 60%);mix-blend-mode:normal}",
+    "html[data-hoverfx=spot] .fx-card:hover>.fx-glare{opacity:1}",
+    "html[data-hoverfx=zoom] .fx-card :is(img,video){transition:transform .9s var(--fxe),filter .6s}",
+    "html[data-hoverfx=zoom] .fx-card :has(>:is(img,video)){overflow:hidden}",
+    "html[data-hoverfx=zoom] .fx-card:hover :is(img,video){transform:scale(1.07)}",
+    "html[data-hoverfx=zoom] .fx-card:hover{translate:0 -3px}",
+    "html:is([data-hoverfx=offset],[data-hoverfx=spot],[data-hoverfx=zoom]) .fx-card{transition:transform .5s var(--fxe),translate .3s var(--fxe),box-shadow .3s var(--fxe),border-color .3s}",
+    "html[data-hoverfx=offset] .fx-card:hover{translate:-4px -4px;box-shadow:6px 6px 0 var(--fxa)!important;border-color:var(--fxi)}",
     ".fx-glare{position:absolute;inset:0;border-radius:inherit;pointer-events:none;opacity:0;transition:opacity .4s;background:radial-gradient(420px circle at var(--gx,50%) var(--gy,50%),rgba(255,255,255,.28),transparent 45%);mix-blend-mode:overlay;z-index:3}",
     ".fx-tilt:hover>.fx-glare{opacity:1}",
     /* scroll */
     ".fx-prog{position:fixed;left:0;top:0;height:3px;width:100%;z-index:99980;background:var(--fxa);transform-origin:0 50%;transform:scaleX(0);pointer-events:none}",
+    ".fx-rv{opacity:0;transform:translateY(34px);transition:opacity .9s var(--fxe),transform 1s var(--fxe)}.fx-rv.fx-rv-in{opacity:1;transform:none}",
+    ".fx-top{position:fixed;left:max(14px,env(safe-area-inset-left,0px));bottom:max(14px,env(safe-area-inset-bottom,0px));z-index:99979;width:46px;height:46px;border:0;border-radius:50%;padding:0;cursor:pointer;background:color-mix(in srgb,var(--surface,var(--bg,#fff)) 92%,transparent);color:var(--fxi);box-shadow:0 8px 24px -10px rgba(0,0,0,.45);opacity:0;transform:translateY(10px) scale(.9);pointer-events:none;transition:opacity .35s,transform .45s var(--fxe)}",
+    ".fx-top.on{opacity:1;transform:none;pointer-events:auto}.fx-top svg{position:absolute;inset:0;width:100%;height:100%;transform:rotate(-90deg)}",
+    ".fx-top circle{fill:none;stroke-width:2.5}.fx-top circle:first-child{stroke:color-mix(in srgb,var(--fxi) 14%,transparent)}.fx-top circle:last-child{stroke:var(--fxa);stroke-linecap:round;stroke-dasharray:125.7;stroke-dashoffset:125.7}",
+    ".fx-top span{position:relative;font:700 15px/1 system-ui,sans-serif}",
+    ".fx-dots{position:fixed;right:max(10px,env(safe-area-inset-right,0px));top:50%;transform:translateY(-50%);z-index:99979;display:flex;flex-direction:column;gap:4px}",
+    ".fx-dots button{width:22px;height:18px;border:0;padding:0;background:transparent;cursor:pointer;display:grid;place-items:center}",
+    ".fx-dots button i{width:6px;height:6px;border-radius:99px;background:color-mix(in srgb,var(--fxi) 34%,transparent);transition:height .4s var(--fxe),background .3s}",
+    ".fx-dots button:hover i{background:var(--fxi)}.fx-dots button.on i{height:18px;background:var(--fxa)}",
+    "@media (max-width:760px){.fx-dots{display:none}}@media print{.fx-top,.fx-dots,.fx-ov,.fx-glow,.fx-cross{display:none}}",
   ].join("\n");
 
   function ensureStyle() {
@@ -225,7 +274,7 @@
   function playLoader(kind, brand) {
     var c = colors();
     var letters = chars(String(brand || "")).slice(0, 24).map(function (ch, i) { return '<span style="--i:' + i + '">' + (ch === " " ? "&nbsp;" : escHtml(ch)) + "</span>"; }).join("");
-    var html = kind === "split" ? '<div class="fx-p fx-pt"></div><div class="fx-p fx-pb"></div>' : '<div class="fx-p"></div>';
+    var html = kind === "split" ? '<div class="fx-p fx-pt"></div><div class="fx-p fx-pb"></div>' : kind === "columns" ? [0, 1, 2, 3, 4].map(function (n) { return '<div class="fx-p" style="--n:' + n + '"></div>'; }).join("") : '<div class="fx-p"></div>';
     if (kind !== "counter" && letters) html += '<div class="fx-brand">' + letters + "</div>";
     if (kind === "counter") html += '<div class="fx-num">0<small>%</small></div><div class="fx-bar"></div>';
     var box = el("div", "fx-load fx-load--" + kind, html);
@@ -240,7 +289,7 @@
     }
     document.body.appendChild(box);
     var hold = kind === "counter" ? 1200 : 1050, done = false, started = false;
-    function out() { if (done) return; done = true; box.classList.add("out"); setTimeout(function () { box.remove(); }, 1100); }
+    function out() { if (done) return; done = true; box.classList.add("out"); setTimeout(function () { box.remove(); }, kind === "columns" ? 1400 : 1100); }
     // Start once the font is ready (at most 800 ms), so the name never appears in a fallback font and then jumps.
     function start() {
       if (started) return; started = true;
@@ -338,7 +387,7 @@
     if (c.text === "none" || RM) return;
     var targets = $$(TEXT, root).filter(function (n) { return !n.closest("nav,header,form,.fx-skip,.nav"); });
     if (c.text === "lines") targets = targets.filter(function (n) { return !n.classList.contains("h-name"); });
-    if (c.text !== "scramble") targets.forEach(function (n) { splitText(n, c.text); });
+    if (c.text !== "scramble") targets.forEach(function (n) { splitText(n, c.text === "wave" ? "letters" : c.text); });
     if (!animate) { targets.forEach(function (n) { n.classList.add("fx-in", "fx-now"); }); setTimeout(function () { targets.forEach(function (n) { n.classList.remove("fx-now"); }); }, 50); return; }
     if (!("IntersectionObserver" in window)) { targets.forEach(function (n) { n.classList.add("fx-in"); }); return; }
     st.io = new IntersectionObserver(function (es) {
@@ -356,11 +405,13 @@
   /* ---------------------------------------------------------------- cursor */
   var trail = { pts: [], ctx: null, run: false };
   function setupCursor(c) {
-    var custom = FINE && !RM && (c.cursor === "dot" || c.cursor === "blend" || c.cursor === "ring");
+    var custom = FINE && !RM && (c.cursor === "dot" || c.cursor === "blend" || c.cursor === "ring" || c.cursor === "square");
     doc.classList.toggle("fx-nocur", custom);
     layer("dot", custom, function () { return el("div", "fx-dot", "<i></i>"); });
     layer("ring", custom, function () { return el("div", "fx-ring", "<i></i><b>View</b>"); });
     layer("spot", FINE && !RM && c.cursor === "spotlight", function () { return el("div", "fx-spot"); });
+    layer("glow", FINE && !RM && c.cursor === "glow", function () { return el("div", "fx-glow"); });
+    layer("cross", FINE && !RM && c.cursor === "cross", function () { return el("div", "fx-cross", "<i></i><i></i><b></b>"); });
     var tc = layer("trail", FINE && !RM && c.cursor === "trail", function () { return el("canvas", "fx-trail"); });
     if (tc) { trail.ctx = tc.getContext("2d"); sizeTrail(); }
   }
@@ -390,6 +441,7 @@
       L.ring.style.transform = "translate3d(" + st.rx + "px," + st.ry + "px,0)";
       L.dot.style.transform = "translate3d(" + st.x + "px," + st.y + "px,0)";
     }
+    if (L.glow) { st.gx = (st.gx == null ? st.x : st.gx) + (st.x - (st.gx == null ? st.x : st.gx)) * 0.09; st.gy = (st.gy == null ? st.y : st.gy) + (st.y - (st.gy == null ? st.y : st.gy)) * 0.09; L.glow.style.transform = "translate3d(" + st.gx + "px," + st.gy + "px,0)"; }
     requestAnimationFrame(cursorLoop);
   }
 
@@ -415,6 +467,7 @@
     st.x = e.clientX; st.y = e.clientY;
     if (!st.seen) { st.seen = true; st.rx = st.x; st.ry = st.y; doc.classList.add("fx-seen"); }
     if (L.spot) { L.spot.style.setProperty("--mx", e.clientX + "px"); L.spot.style.setProperty("--my", e.clientY + "px"); }
+    if (L.cross) { L.cross.style.setProperty("--mx", e.clientX + "px"); L.cross.style.setProperty("--my", e.clientY + "px"); L.cross.lastChild.textContent = Math.round(e.clientX) + " · " + Math.round(e.clientY); }
     if (L.trail) { trail.pts.push({ x: e.clientX, y: e.clientY, t: performance.now() }); if (!trail.run) { trail.run = true; requestAnimationFrame(drawTrail); } }
     var t = e.target && e.target.closest ? e.target : null;
     if (L.ring && t) {
@@ -437,6 +490,13 @@
         m.style.transition = "transform .25s var(--fxe)"; m.style.transform = "translate3d(" + dx.toFixed(1) + "px," + dy.toFixed(1) + "px,0)";
       }
     } else if (mag) releaseMag();
+    if (c.hover === "spot") {
+      var sc = t && t.closest(".fx-card");
+      if (sc) {
+        if (!sc.__fxg) { sc.__fxg = true; if (getComputedStyle(sc).position === "static") sc.style.position = "relative"; sc.appendChild(el("i", "fx-glare")); }
+        var sr = sc.getBoundingClientRect(); sc.style.setProperty("--gx", (e.clientX - sr.left).toFixed(0) + "px"); sc.style.setProperty("--gy", (e.clientY - sr.top).toFixed(0) + "px");
+      }
+    }
     if (c.hover === "tilt") {
       var tl = t && t.closest(".fx-tilt");
       if (tl !== tiltEl) releaseTilt();
@@ -485,7 +545,33 @@
     st.skewEls.forEach(function (n) { n.style.transform = still ? "" : "skewY(" + s.toFixed(3) + "deg)"; });
     if (!still || Math.abs(dv) > 0) requestAnimationFrame(skewStep); else sk.run = false;
   }
+  /** The page's sections, for "reveal" and the side dots: the direct children of <main> that take real room. */
+  function sections(root) { return $$("main > *", root).filter(function (n) { return n.offsetHeight > 120 && getComputedStyle(n).position !== "fixed"; }); }
+  function setupScrollExtras(root, c) {
+    // reveal: each section fades up as it comes into view (what is already on screen stays as it is)
+    if (st.rio) { st.rio.disconnect(); st.rio = null; }
+    $$(".fx-rv", root).forEach(function (n) { if (c.scroll !== "reveal") n.classList.remove("fx-rv", "fx-rv-in"); });
+    if (c.scroll === "reveal" && !RM && "IntersectionObserver" in window) {
+      st.rio = new IntersectionObserver(function (es) { es.forEach(function (e) { if (e.isIntersecting) { e.target.classList.add("fx-rv-in"); st.rio.unobserve(e.target); } }); }, { threshold: 0.08, rootMargin: "0px 0px -8% 0px" });
+      sections(root).forEach(function (n) { if (n.classList.contains("fx-rv")) return; if (n.getBoundingClientRect().top < innerHeight * 0.92) return; n.classList.add("fx-rv"); st.rio.observe(n); });
+    }
+    // ring: how far down the page, as a ring around a "back to top" button
+    var top = layer("top", c.scroll === "ring", function () { var b = el("button", "fx-top", '<svg viewBox="0 0 46 46" aria-hidden="true"><circle cx="23" cy="23" r="20"/><circle cx="23" cy="23" r="20"/></svg><span aria-hidden="true">↑</span>'); b.type = "button"; b.setAttribute("aria-label", "Back to the top"); b.addEventListener("click", function () { scrollTo({ top: 0, behavior: RM ? "auto" : "smooth" }); }); return b; });
+    if (top) top.setAttribute("data-fx-skip", "");
+    // dots: one per section down the side; the one in view is marked
+    if (L.dots) { L.dots.remove(); L.dots = null; } st.dotEls = [];
+    if (c.scroll === "dots") {
+      var secs = sections(root).slice(0, 14);
+      if (secs.length > 1) {
+        var nav = el("nav", "fx-dots"); nav.setAttribute("aria-label", "Sections of this page");
+        secs.forEach(function (sec, i) { var h = sec.querySelector("h1,h2,h3"), name = (h && h.textContent.replace(/\s+/g, " ").trim().slice(0, 60)) || "Section " + (i + 1); var b = el("button", "", "<i></i>"); b.type = "button"; b.title = name; b.setAttribute("aria-label", "Go to: " + name); b.addEventListener("click", function () { scrollTo({ top: sec.getBoundingClientRect().top + scrollY - 70, behavior: RM ? "auto" : "smooth" }); }); nav.appendChild(b); });
+        document.body.appendChild(nav); L.dots = nav; st.dotEls = secs;
+      }
+    }
+  }
   function onScroll() {
+    if (L.top) { var mx = doc.scrollHeight - innerHeight, pr = mx > 0 ? Math.min(1, scrollY / mx) : 0; L.top.classList.toggle("on", scrollY > 240); L.top.querySelector("circle:last-child").style.strokeDashoffset = (125.7 * (1 - pr)).toFixed(1); }
+    if (L.dots && st.dotEls) { var mid = innerHeight * 0.4, at = 0; st.dotEls.forEach(function (n, i) { if (n.getBoundingClientRect().top <= mid) at = i; }); for (var di = 0; di < L.dots.children.length; di++) L.dots.children[di].classList.toggle("on", di === at); }
     if (L.prog) { var max = doc.scrollHeight - innerHeight; L.prog.style.transform = "scaleX(" + (max > 0 ? Math.min(1, scrollY / max) : 0) + ")"; }
     if (st.skewEls.length && !RM && !sk.run) { sk.run = true; sk.last = scrollY - 1; requestAnimationFrame(skewStep); }
   }
@@ -600,6 +686,7 @@
     }
     st.loader = c.loader;
     setupText(root, c, animate, delay);
+    setupScrollExtras(root, c);
     onScroll();
   }
 

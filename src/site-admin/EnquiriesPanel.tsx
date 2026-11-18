@@ -1,6 +1,6 @@
 // Enquiries from the business template's contact form, kept in Supabase (site_enquiries). Shown in the site's
 // own admin page and in the Studio. Only emails listed in site_admins for the site can read them.
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, createContext, useContext, useEffect, useMemo, useState } from "react";
 import { enquiriesSql, isAdmin, sbClient, sendCode, setupSql, signedInEmail, verifyCode, type SbCfg } from "../lib/supa";
 import { Field, Spinner, useConfirm, useToast, SkelRows } from "../ui/kit";
 import { inboxCall, type InboxEnquiry } from "../lib/inbox";
@@ -22,7 +22,7 @@ export const orderNext = (d: any, status: string): [string, string] | null => {
 };
 const pill = (s: string) => ({ new: "border-brand-400/60 text-brand-200", read: "border-ink-500 text-ink-300", replied: "border-emerald-400/50 text-emerald-200", archived: "border-ink-600 text-ink-500", accepted: "border-emerald-400/50 text-emerald-200", preparing: "border-amber-400/50 text-amber-200", ready: "border-sky-400/50 text-sky-200", out: "border-sky-400/50 text-sky-200", done: "border-ink-500 text-ink-300", cancelled: "border-rose-400/50 text-rose-200" } as Record<string, string>)[s] || "border-ink-500 text-ink-300";
 const LABELS: Record<string, string> = { name: "Name", email: "Email", phone: "Phone", company: "Company", service: "Interested in", budget: "Budget", message: "Message", consent: "Agreed to be contacted", type: "Request", date: "Date", time: "Time", guests: "Guests", occasion: "Occasion", order_no: "Order number", mode: "Order type", when: "For", address: "Address", table: "Table", items: "Items", total: "To pay", payment: "Payment" };
-const HIDE = new Set(["okey"]);
+const HIDE = new Set(["okey", "pay_state"]);
 /** A booking request in one line: "Fri 20 Nov · 20:00 · 6 guests · Anniversary" (empty for an ordinary enquiry). */
 export const bookingLine = (d: any): string => {
   if (!d || !(d.date || d.time || d.guests)) return "";
@@ -47,7 +47,13 @@ function mailSaid(m: string): string {
   return m;
 }
 
-export function EnquiriesPanel({ cfg, cf, account, hosted, email: contactEmail, form, ghToken, inStudio }: { cfg: SbCfg | null; cf?: CfSiteCfg; account?: string; hosted?: boolean; email?: string; form?: any; ghToken?: string; inStudio?: boolean }) {
+/** `only`: "orders" lists what was bought (Purchased orders); "enquiries" leaves orders out of the inbox. */
+type Only = "orders" | "enquiries" | undefined;
+const OnlyCtx = createContext<Only>(undefined);
+export function EnquiriesPanel(props: { cfg: SbCfg | null; cf?: CfSiteCfg; account?: string; hosted?: boolean; email?: string; form?: any; ghToken?: string; inStudio?: boolean; only?: Only }) {
+  return <OnlyCtx.Provider value={props.only}><EnquiriesPanelIn {...props} /></OnlyCtx.Provider>;
+}
+function EnquiriesPanelIn({ cfg, cf, account, hosted, email: contactEmail, form, ghToken, inStudio }: { cfg: SbCfg | null; cf?: CfSiteCfg; account?: string; hosted?: boolean; email?: string; form?: any; ghToken?: string; inStudio?: boolean }) {
   if (cf && form?.saveTo !== "file") return <CfInbox key={cf.api + cf.site} cf={cf} account={account} />;
   if (form?.saveTo === "file") {
     if (!/^https:\/\//.test(form.fileUrl || "")) return (
@@ -160,17 +166,19 @@ function SignIn({ cfg, onIn }: { cfg: SbCfg; onIn: (email: string) => void }) {
 type Row = { id: string | number; data: Record<string, string>; page?: string; status: string; created_at: string };
 
 /** The list of enquiries with filters, search, status, reply, delete and CSV, for either store. */
-function EnquiryList<R extends Row>({ rows, setStatus, remove, load, name, who, orders }: { rows: R[]; setStatus: (r: R, s: string) => void; remove: (r: R) => void; load: () => void; name: string; who: React.ReactNode; /** This inbox keeps an order's steps (the Cloudflare database does). */ orders?: boolean }) {
+function EnquiryList<R extends Row>({ rows: every, setStatus, remove, load, name, who, orders, setPaid }: { rows: R[]; setStatus: (r: R, s: string) => void; remove: (r: R) => void; load: () => void; name: string; who: React.ReactNode; /** This inbox keeps an order's steps (the Cloudflare database does). */ orders?: boolean; setPaid?: (r: R, paid: boolean) => void }) {
+  const only = useContext(OnlyCtx);
+  const rows = useMemo(() => (only === "orders" ? every.filter((r) => isOrder(r.data)) : only === "enquiries" ? every.filter((r) => !isOrder(r.data)) : every), [every, only]);
   const [filter, setFilter] = useState("open");
   const [q, setQ] = useState("");
   const [open, setOpen] = useState<string | number | null>(null);
   const list = useMemo(() => rows.filter((r) => (filter === "open" ? r.status !== "archived" : filter === "orders" ? isOrder(r.data) && !["done", "cancelled", "archived"].includes(r.status) : filter === "all" ? true : r.status === filter) && (!q || JSON.stringify(r.data).toLowerCase().includes(q.toLowerCase()))), [rows, filter, q]);
   const counts = useMemo(() => ({ new: rows.filter((r) => r.status === "new").length, orders: rows.filter((r) => isOrder(r.data) && !["done", "cancelled", "archived"].includes(r.status)).length, anyOrder: rows.some((r) => isOrder(r.data)) }), [rows]);
   const csv = () => {
-    const keys = ["created_at", "status", "name", "email", "phone", "company", "service", "budget", "message"];
+    const keys = only === "orders" ? ["created_at", "status", "order_no", "name", "phone", "email", "mode", "when", "address", "items", "total", "payment", "utr", "_paid"] : ["created_at", "status", "name", "email", "phone", "company", "service", "budget", "message"];
     const cell = (v: any) => `"${String(v ?? "").replace(/"/g, '""')}"`;
     const text = [keys.join(","), ...list.map((r) => keys.map((k) => cell(k === "created_at" || k === "status" ? (r as any)[k] : r.data[k])).join(","))].join("\n");
-    const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([text], { type: "text/csv" })); a.download = `enquiries-${name}.csv`; a.click();
+    const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([text], { type: "text/csv" })); a.download = `${only === "orders" ? "orders" : "enquiries"}-${name}.csv`; a.click();
   };
   return (
     <div className="flex flex-col gap-3">
@@ -184,7 +192,7 @@ function EnquiryList<R extends Row>({ rows, setStatus, remove, load, name, who, 
         <span className="ml-auto flex gap-2"><button className="btn btn-sm" onClick={load}>↻ Refresh</button><button className="btn btn-sm" disabled={!list.length} onClick={csv}>Download CSV</button></span>
       </div>
       <p className="text-[13px] text-ink-400">{who}</p>
-      {!list.length && <p className="card p-5 text-sm text-ink-400">{rows.length ? "Nothing here with this filter." : "No enquiries yet. When someone sends the form on your site, it appears here."}</p>}
+      {!list.length && <p className="card p-5 text-sm text-ink-400">{rows.length ? "Nothing here with this filter." : only === "orders" ? "No orders yet. When a customer places an order on your site, it appears here." : "No enquiries yet. When someone sends the form on your site, it appears here."}</p>}
       {/^Not emailed/.test(String(rows[0]?.data?._mail || "")) && <p role="status" className="rounded-lg border border-amber-400/40 bg-amber-400/5 px-3 py-2 text-[13px] text-amber-100"><b>The latest enquiry wasn't emailed to you.</b> {mailSaid(rows[0].data._mail)} It is saved here all the same.</p>}
       <ul className="flex flex-col gap-2" aria-label="Enquiries">
         {list.map((r) => {
@@ -196,6 +204,7 @@ function EnquiryList<R extends Row>({ rows, setStatus, remove, load, name, who, 
                 <b className="text-sm">{d.name || "No name"}</b>
                 <span className="text-[13px] text-ink-400">{[d.company, d.service, d.type && bookingLine(d) ? d.type : ""].filter(Boolean).join(" · ")}</span>
                 {bookingLine(d) && <span className="chip border-brand-400/50 text-brand-200" data-booking>{bookingLine(d)}</span>}
+                {ord && d.utr && <span className={`chip ${d._paid ? "border-emerald-400/50 text-emerald-200" : "border-amber-400/60 text-amber-200"}`} data-pay>{d._paid ? "Paid" : "Payment to check"}</span>}
                 {ord && <span className="chip border-brand-400/50 text-brand-200" data-order>{[`Order ${d.order_no}`, d.mode, d.when, d.total].filter(Boolean).join(" · ")}</span>}
                 <span className="ml-auto text-xs text-ink-500">{when(r.created_at)}</span>
                 <span className={`chip ${pill(r.status)}`}>{(ord ? ORDER_STATUS : STATUS).find(([k]) => k === r.status)?.[1] || r.status}</span>
@@ -209,6 +218,10 @@ function EnquiryList<R extends Row>({ rows, setStatus, remove, load, name, who, 
                     {r.page && <><dt className="text-ink-400">Sent from</dt><dd className="font-mono text-xs text-ink-400">{r.page}</dd></>}
                     {d._mail && <><dt className="text-ink-400">Email to you</dt><dd className={/^Not emailed/.test(d._mail) ? "text-amber-200" : "text-ink-300"}>{mailSaid(d._mail)}</dd></>}
                   </dl>
+                  {ord && d.utr && <p className={`rounded-lg border px-3 py-2 text-[13px] ${d._paid ? "border-emerald-400/40 text-emerald-100" : "border-amber-400/40 bg-amber-400/5 text-amber-100"}`} data-payline>
+                    {d._paid ? <><b>Payment received.</b> UPI reference {d.utr}.</> : <><b>The guest says they paid {d.total} by UPI, reference {d.utr}.</b> Find that reference and amount in your UPI app or bank statement before you send the order out.</>}
+                    {setPaid && <button type="button" className={`btn btn-sm ml-2 ${d._paid ? "" : "btn-pri"}`} onClick={() => setPaid(r, !d._paid)}>{d._paid ? "Not received after all" : "Payment received"}</button>}
+                  </p>}
                   <div className="flex flex-wrap items-center gap-2">
                     {nx && <button type="button" className="btn btn-sm btn-pri" onClick={() => setStatus(r, nx[0])}>{nx[1]}</button>}
                     {d.email && !ord && <a className="btn btn-sm btn-pri" href={`mailto:${d.email}?subject=${encodeURIComponent("Re: your enquiry")}`} onClick={() => setStatus(r, "replied")}>Reply by email</a>}
@@ -276,5 +289,9 @@ function CfInbox({ cf, account }: { cf: CfSiteCfg; account?: string }) {
   };
   if (err) return <section className="card flex max-w-xl flex-col gap-3 p-5"><p className="text-sm text-red-300">{err}</p><button className="btn self-start" onClick={load}>Try again</button></section>;
   if (!rows) return <SkelRows n={5} label="Loading enquiries" />;
-  return <EnquiryList rows={rows} setStatus={setStatus} remove={remove} load={load} orders name={cf.site} who={<>Signed in as {who} · {rows.length} enquir{rows.length === 1 ? "y" : "ies"} for <b className="text-ink-200">{cf.site}</b></>} />;
+  const setPaid = async (r: Row, paid: boolean) => {
+    setRows((x) => (x || []).map((y) => (y.id === r.id ? { ...y, data: { ...y.data, _paid: paid ? "yes" : "" } } : y)));
+    try { await (await siteEnquiries(cf, account)).paid(Number(r.id), paid); toast(paid ? "Marked as paid. The guest's order page shows it." : "Marked as not received."); } catch (e: any) { toast(e?.message || "Couldn't update it.", "bad"); load(); }
+  };
+  return <EnquiryList rows={rows} setStatus={setStatus} setPaid={setPaid} remove={remove} load={load} orders name={cf.site} who={<>Signed in as {who} · {rows.length} enquir{rows.length === 1 ? "y" : "ies"} for <b className="text-ink-200">{cf.site}</b></>} />;
 }

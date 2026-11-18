@@ -207,7 +207,7 @@
       <div class="od-box" id="od-bill"><span class="od-l">Bill details</span>${billRows(b)}</div>
       ${b.short ? `<p class="od-bad" role="alert">Add ${fmt(b.short)} more to reach the minimum order of ${fmt(b.min)}.</p>` : ""}`;
   }
-  const pays = () => { const o = O(), p = o.pay || {}, m = mode(), out = []; if (p.cod !== false) out.push({ id: "cod", label: m === "delivery" ? p.codLabel || "Pay on delivery (cash or UPI)" : m === "pickup" ? "Pay at the counter" : "Pay at the table" }); if (p.upi && /^[\w.\-]{2,}@[a-zA-Z]{2,}$/.test(String(p.upiId || "").trim()) && (C.food.currency || "₹") === "₹") out.push({ id: "upi", label: "Pay now by UPI", note: "A QR code and a button for your UPI app, with the amount filled in." }); return out; };
+  const pays = () => { const o = O(), p = o.pay || {}, m = mode(), out = []; if (p.cod !== false) out.push({ id: "cod", label: m === "delivery" ? p.codLabel || "Pay on delivery (cash or UPI)" : m === "pickup" ? "Pay at the counter" : "Pay at the table" }); if (p.upi && /^[\w.\-]{2,}@[a-zA-Z]{2,}$/.test(String(p.upiId || "").trim()) && (C.food.currency || "₹") === "₹") out.push({ id: "upi", label: "Pay now by UPI", note: "Scan a QR code or open your UPI app. The order is placed once you've paid." }); return out; };
   const inp = (k, label, a = "") => `<div class="of"><label for="of-${k}">${label}</label><input id="of-${k}" data-f="${k}" value="${esc(ui.form[k] || "")}" ${a}></div>`;
   function checkoutHTML() {
     const b = bill(), o = O(), m = mode(), f = ui.form, sl = slots(), ps = pays();
@@ -237,7 +237,8 @@
     if (o.mode === "delivery") L.push(`Delivery: ${b.del ? txt(b.del) : "Free"}`);
     if (b.tax) L.push(`${o.taxLabel || "Tax"} ${b.pct}%: ${txt(b.tax)}`);
     if (b.tip) L.push(`Tip: ${txt(b.tip)}`);
-    L.push(`To pay: ${txt(b.total)} (${o.payLabel})`, "", o.c.name, o.c.phone);
+    L.push(`To pay: ${txt(b.total)} (${o.payLabel})`); if (o.utr) L.push(`UPI reference: ${o.utr} (please check it in your UPI app)`);
+    L.push("", o.c.name, o.c.phone);
     if (o.c.email) L.push(o.c.email);
     if (o.mode === "delivery") L.push(o.c.address);
     if (o.mode === "dinein") L.push(`Table ${o.c.table}`);
@@ -253,9 +254,21 @@
       ${o.preview ? `<p class="od-ok">Preview: nothing was sent. On the live site the order reaches ${A.backend() ? "your Enquiries inbox" : wa ? "you on WhatsApp" : "you once a WhatsApp number or the enquiry inbox is set up"}.</p>` : ""}
       ${!o.sent && !o.preview ? `<div class="od-box"><p>${wa ? "Tap the button to open WhatsApp with your order written out, then press send. We'll confirm it there." : `Please call us to confirm this order${C.contact.phone ? ` on <a href="${esc(A.tel(C.contact.phone))}">${esc(C.contact.phone)}</a>` : ""}.`}</p>${sendWa}</div>` : ""}
       ${o.sent && !cancelled ? `<ol class="od-track" aria-label="Order status">${steps.map((s, i) => `<li class="${i < at ? "was" : i === at ? "now" : ""}"${i === at ? ' aria-current="step"' : ""}><i aria-hidden="true"></i><span>${s}</span></li>`).join("")}</ol>${o.live ? `<p class="od-live">This page updates as the kitchen works on your order.</p>` : `<p class="od-live">We'll call or message you on ${esc(o.c.phone)} if we need anything.</p>`}` : ""}
-      ${o.pay === "upi" && !cancelled ? `<div class="od-box od-upi"><span class="od-l">Pay ${fmt(o.bill.total)} by UPI</span><div class="od-qr" id="od-qr" aria-label="UPI QR code"></div><p><code>${esc(o.upiId)}</code></p><a class="btn pri" href="${esc(upiLink(o))}">Open your UPI app</a><p class="od-live">The amount and order number are filled in. Keep the payment screen until we confirm.</p></div>` : ""}
+      ${o.pay === "upi" && !cancelled ? `<div class="od-box"><span class="od-l">Payment</span>${o.paid ? `<p class="od-ok">Payment of ${fmt(o.bill.total)} received. Thank you.</p>` : `<p><b>${fmt(o.bill.total)} by UPI</b>, reference <code>${esc(o.utr || "")}</code>.</p><p class="od-live">${o.live ? "The restaurant is checking it in their UPI app. This page shows it as soon as they confirm." : "The restaurant checks it in their UPI app and confirms with you."}</p>`}</div>` : ""}
       <div class="od-box"><span class="od-l">Your order</span><ul class="od-sum">${o.items.map((l) => `<li><span>${l.qty} × ${esc(l.name)}${lineText(l) ? ` <small>(${esc(lineText(l))})</small>` : ""}</span><b>${fmt(l.unit * l.qty)}</b></li>`).join("")}</ul>${billRows(o.bill, o)}</div>
       <div class="od-acts">${o.sent ? sendWa : ""}${C.contact.phone ? `<a class="btn sec" href="${esc(A.tel(C.contact.phone))}">Call the restaurant</a>` : ""}<button type="button" class="btn sec" data-act="again" data-id="${esc(o.id)}">Order again</button></div></div>`;
+  }
+  /** Paying comes first: the QR code and the UPI app button carry the exact amount and the order number. The order is
+      placed when the guest enters the reference number their UPI app shows after paying. */
+  function payHTML() {
+    const o = ui.paying; if (!o) return "";
+    return `<div class="od-pay"><p class="od-no">Order <b>${esc(o.id)}</b> · ${esc(MODES[o.mode])}</p><p class="od-amt">${fmt(o.bill.total)}</p>
+      <ol class="od-steps"><li><b>Pay ${fmt(o.bill.total)}</b> by scanning this code in any UPI app, or with the button under it.</li></ol>
+      <div class="od-qr" id="od-qr" aria-label="UPI QR code for ${esc(txt(o.bill.total))}"></div><p><code>${esc(o.upiId)}</code></p><a class="btn sec" href="${esc(upiLink(o))}">Open your UPI app</a>
+      <ol class="od-steps" start="2"><li><b>Enter the reference number</b> your UPI app shows after paying (UTR or UPI transaction ID, 12 digits).</li></ol>
+      <div class="of"><label for="of-utr">UPI reference number</label><input id="of-utr" inputmode="numeric" autocomplete="off" maxlength="22" placeholder="12-digit number" value="${esc(ui.utr || "")}"></div>
+      <p class="od-bad" id="od-err" role="alert"${ui.err ? "" : " hidden"}>${esc(ui.err)}</p>
+      <p class="od-live">Your order is sent to the kitchen only after this step. Nothing is charged by this page: you pay in your own UPI app.</p></div>`;
   }
   function ordersHTML() {
     const L = st.get("orders", []);
@@ -268,11 +281,12 @@
   function overHTML() {
     if (ui.sheet) return sheetHTML();
     if (!ui.drawer) return "";
-    const T = { cart: "Your cart", checkout: "Checkout", done: "Your order", orders: "Your orders", cats: "Categories" }[ui.drawer], b = bill(), blocked = ui.drawer === "checkout" && (!slots().length || !pays().length || (mode() === "delivery" && !b.area.ok && !!(ui.form.pin || ui.form.area)));
-    const body = ui.drawer === "cart" ? cartHTML() : ui.drawer === "checkout" ? checkoutHTML() : ui.drawer === "done" ? doneHTML(ui.done) : ui.drawer === "orders" ? ordersHTML() : catsHTML();
+    const T = { cart: "Your cart", checkout: "Checkout", pay: "Pay to place your order", done: "Your order", orders: "Your orders", cats: "Categories" }[ui.drawer], b = bill(), blocked = ui.drawer === "checkout" && (!slots().length || !pays().length || (mode() === "delivery" && !b.area.ok && !!(ui.form.pin || ui.form.area)));
+    const body = ui.drawer === "cart" ? cartHTML() : ui.drawer === "checkout" ? checkoutHTML() : ui.drawer === "pay" ? payHTML() : ui.drawer === "done" ? doneHTML(ui.done) : ui.drawer === "orders" ? ordersHTML() : catsHTML();
     const foot = ui.drawer === "cart" && cart.length ? `<div class="od-foot"><div><b>${fmt(b.total)}</b><small>${count()} item${count() === 1 ? "" : "s"} · ${MODES[mode()]}</small></div><button type="button" class="btn pri" data-act="checkout"${b.short ? " disabled" : ""}>Checkout</button></div>`
-      : ui.drawer === "checkout" ? `<div class="od-foot"><div><b>${fmt(b.total)}</b><small>To pay</small></div><button type="button" class="btn pri" data-act="place"${blocked || ui.busy ? " disabled" : ""}>${ui.busy ? "Placing…" : "Place order"}</button></div>` : "";
-    return `<div class="ord-shade" data-act="close"></div><aside class="ord-drawer${ui.drawer === "cats" ? " small" : ""}" role="dialog" aria-modal="true" aria-label="${T}"><header><${ui.drawer === "checkout" ? 'button type="button" class="od-back" data-act="cart" aria-label="Back to the cart">←</button><h2' : "h2"}>${T}</h2><button type="button" class="ord-x" data-act="close" aria-label="Close">${SV.x}</button></header><div class="od-body">${body}</div>${foot}</aside>`;
+      : ui.drawer === "checkout" ? `<div class="od-foot"><div><b>${fmt(b.total)}</b><small>To pay</small></div><button type="button" class="btn pri" data-act="place"${blocked || ui.busy ? " disabled" : ""}>${ui.busy ? "Placing…" : ui.form.pay === "upi" ? "Continue to pay" : "Place order"}</button></div>`
+      : ui.drawer === "pay" ? `<div class="od-foot"><div><b>${fmt(ui.paying.bill.total)}</b><small>Pay first, then place</small></div><button type="button" class="btn pri" data-act="paid"${ui.busy ? " disabled" : ""}>${ui.busy ? "Placing…" : "I've paid: place the order"}</button></div>` : "";
+    return `<div class="ord-shade" data-act="close"></div><aside class="ord-drawer${ui.drawer === "cats" ? " small" : ""}" role="dialog" aria-modal="true" aria-label="${T}"><header><${ui.drawer === "checkout" ? 'button type="button" class="od-back" data-act="cart" aria-label="Back to the cart">←</button><h2' : ui.drawer === "pay" ? 'button type="button" class="od-back" data-act="unpay" aria-label="Back to checkout">←</button><h2' : "h2"}>${T}</h2><button type="button" class="ord-x" data-act="close" aria-label="Close">${SV.x}</button></header><div class="od-body">${body}</div>${foot}</aside>`;
   }
   function fabHTML() { const n = count(); return n && !ui.drawer && !ui.sheet ? `<button type="button" class="ord-fab" data-act="cart" aria-label="View your cart: ${n} item${n === 1 ? "" : "s"}">${SV.bag}<span><b>${n} item${n === 1 ? "" : "s"}</b> · ${fmt(bill().sub)}</span><em>View cart</em></button>` : ""; }
 
@@ -285,7 +299,7 @@
     const open = !!(ui.sheet || ui.drawer); document.documentElement.classList.toggle("ord-lock", open); document.documentElement.classList.toggle("ord-cart", !open && count() > 0);
     const b = $(".od-body, .osh-body", el); if (b && sc) b.scrollTop = sc;
     if (open && !keep) { const f = $(".ord-x", el); f && f.focus({ preventScroll: true }); }
-    if (ui.drawer === "done") qr();
+    if (ui.drawer === "pay") qr();
   }
   /** The address changed: the delivery fee, the area message and the Place order button follow, without redrawing the form. */
   function rebill() {
@@ -336,18 +350,25 @@
     if (!sl.some((s) => s.v === f.when)) return bad("when", "Please choose a time.");
     if (b.short) return bad("name", `The minimum order is ${txt(b.min)}.`);
     const ps = pays(), pay = ps.find((p) => p.id === f.pay); if (!pay) return bad("name", "Please choose how you'll pay.");
-    ui.err = ""; ui.busy = true; over(true); remember();
+    ui.err = ""; remember();
     const key = Array.from(crypto.getRandomValues(new Uint8Array(12)), (x) => x.toString(16).padStart(2, "0")).join("");
     const od = { id: newId(), k: key, at: Date.now(), mode: m, when: f.when, whenLabel: whenLabel(f.when, sl), items: cart.map((l) => ({ ...l })), bill: b, taxLabel: o.taxLabel || "Tax", pay: pay.id, payLabel: pay.label, upiId: String((o.pay || {}).upiId || "").trim(), payee: (o.pay || {}).payee || "", notes: String(f.notes || "").trim(), cutlery: !!f.cutlery, intro: o.intro || "", wa: o.whatsapp || C.contact.whatsapp || "",
       c: { name: String(f.name).trim(), phone: String(f.phone).trim(), email: String(f.email || "").trim(), table: String(f.table || "").trim(), address: m === "delivery" ? [f.line1, f.area, f.landmark ? "Near " + f.landmark : "", f.pin].map((x) => String(x || "").trim()).filter(Boolean).join(", ") + ` (${f.label})` : "" }, status: "new", sent: false, live: false };
+    // Paying by UPI comes before the order is placed.
+    if (pay.id === "upi") { ui.paying = od; ui.utr = ""; ui.drawer = "pay"; over(); return; }
+    finish(od);
+  }
+  async function finish(od) {
+    const m = od.mode, b = od.bill, pay = { label: od.payLabel };
+    ui.busy = true; over(true);
     if (A.PREVIEW) od.preview = true;
     else {
       try {
-        const data = { type: "Order", order_no: od.id, okey: key, name: od.c.name, phone: od.c.phone, email: od.c.email, mode: MODES[m], when: od.whenLabel, address: od.c.address, table: od.c.table, items: od.items.map((l) => `${l.qty} × ${l.name}${lineText(l) ? ` (${lineText(l)})` : ""}${l.note ? ` [${l.note}]` : ""} = ${txt(l.unit * l.qty)}`).join("\n"), total: txt(b.total), payment: pay.label, message: orderText(od) };
+        const data = { type: "Order", order_no: od.id, okey: od.k, name: od.c.name, phone: od.c.phone, email: od.c.email, mode: MODES[m], when: od.whenLabel, address: od.c.address, table: od.c.table, items: od.items.map((l) => `${l.qty} × ${l.name}${lineText(l) ? ` (${lineText(l)})` : ""}${l.note ? ` [${l.note}]` : ""} = ${txt(l.unit * l.qty)}`).join("\n"), total: txt(b.total), payment: od.utr ? "UPI, paid before ordering" : pay.label, utr: od.utr || "", message: orderText(od) };
         const how = await A.postEnquiry(data, "order.html"); od.sent = !!how; od.live = how === "cf";
       } catch (e) { od.sent = false; }
     }
-    cart = []; save(); ui.coupon = ""; st.set("coupon", ""); ui.tip = 0; ui.form.notes = "";
+    cart = []; save(); ui.coupon = ""; st.set("coupon", ""); ui.tip = 0; ui.form.notes = ""; ui.paying = null; ui.utr = "";
     st.set("orders", [od, ...st.get("orders", [])].slice(0, 20));
     ui.busy = false; ui.done = od; ui.drawer = "done";
     // The whole page is drawn again, so “Your orders” shows in the toolbar.
@@ -355,7 +376,7 @@
   }
   let qrP, pollT;
   function qr() {
-    const el = $("#od-qr", root), o = ui.done; if (!el || !o || o.pay !== "upi" || el.firstChild) return;
+    const el = $("#od-qr", root), o = ui.paying; if (!el || !o || el.firstChild) return;
     (qrP = qrP || new Promise((ok, no) => { if (window.QRCode) return ok(); const s = document.createElement("script"); s.src = "https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"; s.onload = ok; s.onerror = no; document.head.appendChild(s); }))
       .then(() => { const e = $("#od-qr", root); if (e && !e.firstChild && window.QRCode) new window.QRCode(e, { text: upiLink(o), width: 180, height: 180, correctLevel: window.QRCode.CorrectLevel.M }); }).catch(() => { qrP = null; });
   }
@@ -364,7 +385,8 @@
     clearTimeout(pollT); const be = A.backend();
     if (!o || !o.live || !be || !be.cf || A.PREVIEW || ["done", "cancelled"].includes(o.status)) return;
     const ask = () => fetch(be.cf + "/order/" + encodeURIComponent(be.site) + "/" + encodeURIComponent(o.id) + "?k=" + encodeURIComponent(o.k), { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((j) => {
-      if (j && j.status && j.status !== o.status) { o.status = j.status; st.set("orders", st.get("orders", []).map((x) => (x.id === o.id ? { ...x, status: j.status } : x))); if (ui.drawer === "done" && ui.done === o) over(true); }
+      const paid = !!(j && j.paid);
+      if (j && j.status && (j.status !== o.status || paid !== !!o.paid)) { o.status = j.status; o.paid = paid; st.set("orders", st.get("orders", []).map((x) => (x.id === o.id ? { ...x, status: j.status, paid } : x))); if (ui.drawer === "done" && ui.done === o) over(true); }
     }).catch(() => {}).then(() => { if (ui.drawer === "done" && ui.done === o && !["done", "cancelled"].includes(o.status)) pollT = setTimeout(ask, 20000); });
     ask();
   }
@@ -398,6 +420,12 @@
     else if (a === "label") { sync(); ui.form.label = id; over(true); }
     else if (a === "checkout") { const c = $("#od-cutlery", root); if (c) ui.form.cutlery = c.checked; ui.err = ""; ui.drawer = "checkout"; over(); }
     else if (a === "place") place();
+    else if (a === "unpay") { ui.err = ""; ui.drawer = "checkout"; over(); }
+    else if (a === "paid") {
+      const v = String(($("#of-utr", root) || {}).value || "").replace(/[\s-]/g, ""); ui.utr = v;
+      if (!/^\d{12}$/.test(v) && !/^[A-Za-z0-9]{12,22}$/.test(v)) { ui.err = "Enter the 12-digit reference number from your UPI app. It is shown on the payment's receipt as UTR or UPI transaction ID."; over(true); const e2 = $("#of-utr", root); e2 && e2.focus(); return; }
+      ui.err = ""; ui.paying.utr = v; finish(ui.paying);
+    }
     else if (a === "view") { const o = st.get("orders", []).find((x) => x.id === id); if (o) { ui.done = o; ui.drawer = "done"; over(); track(o); } }
     else if (a === "again") again(id);
   }
@@ -414,7 +442,7 @@
       if (t.name === "osh-v") { ui.sheet.v = +t.value; const n = $("#osh-note", root); if (n) ui.sheet.note = n.value; over(true); }
       else if (t.dataset && t.dataset.g != null && ui.sheet) { const gi = +t.dataset.g, cur = new Set(ui.sheet.g[gi] || []); t.checked ? cur.add(+t.value) : cur.delete(+t.value); ui.sheet.g[gi] = [...cur]; const n = $("#osh-note", root); if (n) ui.sheet.note = n.value; over(true); }
       else if (t.id === "od-cutlery") ui.form.cutlery = t.checked;
-      else if (t.name === "of-pay") ui.form.pay = t.value;
+      else if (t.name === "of-pay") { ui.form.pay = t.value; const pl = $('[data-act="place"]', root); if (pl && !ui.busy) pl.textContent = t.value === "upi" ? "Continue to pay" : "Place order"; }
       else if (t.dataset && (t.dataset.f === "pin" || t.dataset.f === "area")) { sync(); rebill(); }
     });
     root.addEventListener("submit", (e) => { e.preventDefault(); place(); });

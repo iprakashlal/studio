@@ -126,7 +126,7 @@ async function notifyEnquiry(env: Env, site: string, data: Record<string, string
   let said = wantOwner && !owners.length ? "Not emailed: no address to send to. Fill in “Send to” under Enquiry form." : "";
   const vars = { name: oneLine(data.name || ""), site: name, page: page || "", email: oneLine(data.email || "") };
   const label = (k: string) => k.replace(/[-_]+/g, " ").replace(/^./, (ch) => ch.toUpperCase());
-  const rows = Object.entries(data).filter(([k]) => k !== "consent" && k !== "okey" && !(k === "message" && data.order_no) && !k.startsWith("_")).map(([k, v]) => `<tr><td style="padding:6px 14px 6px 0;color:#667;vertical-align:top;white-space:nowrap">${hesc(label(k))}</td><td style="padding:6px 0;white-space:pre-wrap">${hesc(v)}</td></tr>`).join("");
+  const rows = Object.entries(data).filter(([k]) => k !== "consent" && k !== "okey" && k !== "pay_state" && !(k === "message" && data.order_no) && !k.startsWith("_")).map(([k, v]) => `<tr><td style="padding:6px 14px 6px 0;color:#667;vertical-align:top;white-space:nowrap">${hesc(label(k))}</td><td style="padding:6px 0;white-space:pre-wrap">${hesc(v)}</td></tr>`).join("");
   const table = `<table style="border-collapse:collapse;margin:0 0 14px">${rows}</table>`;
   const jobs: Promise<unknown>[] = [];
   if (wantOwner && owners.length) {
@@ -367,6 +367,27 @@ async function translateTexts(env: Env, q: any): Promise<any> {
   return { t: all.map((i) => done.get(i) ?? null) };
 }
 /** A public https address (not this machine, a bare IP or an internal name). */
+/** The pictures a page shows: <img> (with lazy-loading and srcset variants), <source>, CSS background images in style attributes and the share image. */
+function picturesOf(html: string, base: URL): { url: string; alt: string }[] {
+  const out: { url: string; alt: string }[] = [], seen = new Set<string>();
+  const add = (raw: string, alt = "") => {
+    const v = raw.replace(/&amp;/g, "&").trim(); if (!v || /^data:/i.test(v)) return;
+    let u: URL; try { u = new URL(v, base); } catch { return; }
+    if (u.protocol !== "https:" || !publicUrl(u.href) || /\.(svg|ico)(\?|$)/i.test(u.pathname) || /(sprite|pixel|spacer|blank|1x1|tracking|favicon)/i.test(u.pathname)) return;
+    const key = u.origin + u.pathname; if (seen.has(key) || out.length >= 60) return; seen.add(key);
+    out.push({ url: u.href, alt: alt.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim().slice(0, 120) });
+  };
+  const attr = (tag: string, name: string) => { const m = new RegExp("\\s" + name + "\\s*=\\s*(?:\"([^\"]*)\"|'([^']*)'|([^\\s>]+))", "i").exec(tag); return m ? m[1] ?? m[2] ?? m[3] ?? "" : ""; };
+  const biggest = (srcset: string) => srcset.split(",").map((x) => x.trim().split(/\s+/)).filter((x) => x[0]).sort((a, b) => (parseFloat(b[1]) || 0) - (parseFloat(a[1]) || 0))[0]?.[0] || "";
+  const og = /<meta[^>]+property=["']og:image["'][^>]*>/i.exec(html); if (og) add(attr(og[0], "content"), "Share image");
+  for (const m of html.matchAll(/<(img|source)\b[^>]*>/gi)) {
+    const t = m[0], alt = attr(t, "alt");
+    const set = attr(t, "data-srcset") || attr(t, "srcset");
+    add((set && biggest(set)) || attr(t, "data-src") || attr(t, "data-lazy-src") || attr(t, "data-original") || attr(t, "src"), alt);
+  }
+  for (const m of html.matchAll(/style\s*=\s*["'][^"']*background(?:-image)?\s*:[^"']*url\(\s*(?:&quot;|["'])?([^"')&]+)/gi)) add(m[1]);
+  return out;
+}
 function publicUrl(url: string): URL | null {
   if (!/^https:\/\/[^\s/]+\.[^\s]+$/i.test(url)) return null;
   let u: URL; try { u = new URL(url); } catch { return null; }
@@ -424,7 +445,7 @@ export default {
     if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
     const u = new URL(req.url), p = u.pathname.replace(/\/+$/, "") || "/";
     try {
-      if (p === "/") return json({ ok: true, service: "site-studio-db", v: V, mail: !!(env.RESEND_API_KEY && env.MAIL_FROM), ...(env.CF_TOKEN && env.CF_ACCOUNT ? { deploy: true, account: env.CF_ACCOUNT } : {}), ...(env.GH_TOKEN ? { gh: true } : {}), ...(env.AI ? { ai: true, pamphlet: 2 } : {}), reviews: true, look: 1, outline: 1, translate: 4, approvals: 1, accounts: 2, cfx: 4, studioPages: 1, del: 1, enqMail: 3, ...(otherAccounts(env).length ? { more: otherAccounts(env).length } : {}) });
+      if (p === "/") return json({ ok: true, service: "site-studio-db", v: V, mail: !!(env.RESEND_API_KEY && env.MAIL_FROM), ...(env.CF_TOKEN && env.CF_ACCOUNT ? { deploy: true, account: env.CF_ACCOUNT } : {}), ...(env.GH_TOKEN ? { gh: true } : {}), ...(env.AI ? { ai: true, pamphlet: 2 } : {}), reviews: true, look: 1, outline: 1, pictures: 1, translate: 4, approvals: 1, accounts: 2, cfx: 4, studioPages: 1, del: 1, enqMail: 3, ...(otherAccounts(env).length ? { more: otherAccounts(env).length } : {}) });
 
       // ---- sign in with an emailed code (members only)
       if (p === "/auth/code" && req.method === "POST") {
@@ -551,7 +572,9 @@ export default {
         if (!/^[a-z0-9][a-z0-9-]{0,59}$/.test(site || "") || !/^[A-Z0-9][A-Z0-9-]{3,29}$/.test(no || "") || !/^[a-f0-9]{16,64}$/.test(k)) return err(404, "Not found.");
         const rows = ((await env.DB.prepare("select status, data from enquiries where site = ? and data like ? order by id desc limit 5").bind(site, `%"order_no":"${no}"%`).all()).results || []) as any[];
         const hit = rows.find((r) => { try { const d = JSON.parse(r.data); return d.order_no === no && d.okey === k; } catch { return false; } });
-        return hit ? json({ status: hit.status }) : err(404, "Not found.");
+        if (!hit) return err(404, "Not found.");
+        let paid = ""; try { paid = String(JSON.parse(hit.data)._paid || ""); } catch { /* none */ }
+        return json({ status: hit.status, paid });
       }
       if (p.startsWith("/enquire/") && req.method === "POST") {
         const site = p.split("/")[2]; if (!/^[a-z0-9][a-z0-9-]{0,59}$/.test(site)) return err(404, "Not found.");
@@ -604,6 +627,22 @@ export default {
         let r2: Response; try { r2 = await fetch(u2.href, { headers: { "User-Agent": "Mozilla/5.0 (site-studio reference reader)", Accept: "text/html" }, redirect: "follow" }); } catch { return json({ error: "Couldn't open that address." }); }
         if (!r2.ok) return json({ error: `That site answered ${r2.status}.` });
         return json({ text: outlineOf((await r2.text()).slice(0, 3_000_000)).slice(0, 20000) });
+      }
+      // The pictures on a reference page (no AI): the list, and one picture's bytes so the Studio can keep a copy the owner chose.
+      if ((p === "/ai/pictures" || p === "/ai/picture") && req.method === "POST") {
+        const email = await who(env, req); if (!email) return err(401, "Sign in first.");
+        if (!(await env.DB.prepare("select 1 from members where email = ? and role in ('owner', 'partner') limit 1").bind(email).first())) return err(403, "Only owners can use this.");
+        const q = (await req.json()) as any, u2 = publicUrl(String(q?.url || "").trim());
+        if (!u2) return json({ error: "Enter the site's public address (https://…)." });
+        let r2: Response; try { r2 = await fetch(u2.href, { headers: { "User-Agent": "Mozilla/5.0 (site-studio reference reader)", Accept: p === "/ai/picture" ? "image/*" : "text/html" }, redirect: "follow" }); } catch { return json({ error: "Couldn't open that address." }); }
+        if (!r2.ok) return json({ error: `That site answered ${r2.status}.` });
+        if (p === "/ai/picture") {
+          const type = (r2.headers.get("content-type") || "").split(";")[0].trim().toLowerCase();
+          if (!/^image\/(jpeg|png|webp|gif|avif)$/.test(type)) return json({ error: "That address isn't a picture the site can use (JPG, PNG, WebP, GIF or AVIF)." });
+          const buf = await r2.arrayBuffer(); if (buf.byteLength > 6 * 1024 * 1024) return json({ error: "That picture is over 6 MB." });
+          return new Response(buf, { headers: { ...cors, "Content-Type": type, "Cache-Control": "no-store" } });
+        }
+        return json({ pictures: picturesOf((await r2.text()).slice(0, 3_000_000), u2) });
       }
       if (p === "/ai/write" && req.method === "POST") {
         const email = await who(env, req); if (!email) return err(401, "Sign in first.");
@@ -754,7 +793,8 @@ export default {
               const sub = String(b.sub || "list");
               if (sub === "list") return json({ db: dbId, rows: (await q("select id, site, data, page, status, created_at from enquiries where site = ? order by created_at desc limit 500", [site])).map((r: any) => { let d = {}; try { d = JSON.parse(r.data); } catch { /* kept as is */ } return { ...r, data: d }; }) });
               const id = Number(b.id); if (!Number.isInteger(id)) return err(400, "Which enquiry?");
-              if (sub === "status") { const st = String(b.status || ""); if (!["new", "read", "replied", "archived"].includes(st)) return err(400, "Unknown status."); await q("update enquiries set status = ? where id = ? and site = ?", [st, id, site]); return json({ db: dbId, ok: true }); }
+              if (sub === "paid") { const rw = (await q("select data from enquiries where id = ? and site = ?", [id, site]))[0] as any; if (!rw) return err(404, "Not found."); const d = JSON.parse(rw.data); if (!d.order_no) return err(400, "That isn't an order."); if (b.paid) d._paid = "yes"; else delete d._paid; await q("update enquiries set data = ? where id = ? and site = ?", [JSON.stringify(d), id, site]); return json({ db: dbId, ok: true }); }
+              if (sub === "status") { const st = String(b.status || ""); if (!["new", "read", "replied", "archived", "accepted", "preparing", "ready", "out", "done", "cancelled"].includes(st)) return err(400, "Unknown status."); await q("update enquiries set status = ? where id = ? and site = ?", [st, id, site]); return json({ db: dbId, ok: true }); }
               if (sub === "delete") { await q("delete from enquiries where id = ? and site = ?", [id, site]); return json({ db: dbId, ok: true }); }
               return err(400, "Unknown operation.");
             }
@@ -929,6 +969,15 @@ export default {
         const site = scope.replace(/^site:/, "");
         const rows = (await env.DB.prepare("select id, site, data, page, status, created_at from enquiries where site = ? order by created_at desc limit 500").bind(site).all()).results || [];
         return json(rows.map((r: any) => ({ ...r, data: JSON.parse(r.data) })));
+      }
+      // The owner has seen an order's payment in their UPI app (or takes it back). Kept on the order as _paid.
+      if (p === "/e/paid" && req.method === "POST") {
+        const b = (await req.json()) as any, site = scope.replace(/^site:/, "");
+        const row: any = await env.DB.prepare("select data from enquiries where id = ? and site = ?").bind(b.id, site).first(); if (!row) return err(404, "Not found.");
+        const d = JSON.parse(row.data); if (!d.order_no) return err(400, "That isn't an order.");
+        if (b.paid) d._paid = "yes"; else delete d._paid;
+        await env.DB.prepare("update enquiries set data = ? where id = ? and site = ?").bind(JSON.stringify(d), b.id, site).run();
+        return json({ ok: true });
       }
       if ((p === "/e/status" || p === "/e/delete") && req.method === "POST") {
         const b = (await req.json()) as any; const site = scope.replace(/^site:/, "");

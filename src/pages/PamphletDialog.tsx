@@ -90,7 +90,9 @@ export function PamphletDialog({ session, project, draft, upload, onApply, onClo
           if (old) { if (!String(old.price || "").trim() && p.price) old.price = price(p.price); if (!String(old.desc || "").trim() && p.summary) old.desc = p.summary; n++; continue; }
           const name = (p.category || "").trim() || "Menu";
           let k = cats.find((x) => same(String(x?.name || ""), name)); if (!k) { k = { name, note: "", image: null, items: [] }; cats.push(k); }
-          (k.items ||= []).push({ name: p.name.trim(), desc: p.summary || "", price: price(p.price), diet: "", spice: "0", tag: "", allergens: "", image: null, variants: [], soldOut: false }); n++;
+          // "89 / 109 / 119" with a name for each (Oil, Butter, Cheese) becomes the dish's sizes.
+          const sizes = /\//.test(p.price || "") && (p.specs || []).length >= 2 && p.specs.every((x) => /\d/.test(x.value)) ? p.specs.map((x) => ({ label: x.label, price: price(x.value) })) : [];
+          (k.items ||= []).push({ name: p.name.trim(), desc: p.summary || "", price: sizes.length ? "" : price(p.price), diet: "", spice: "0", tag: "", allergens: "", image: null, variants: sizes, addons: [], soldOut: false }); n++;
         }
         const sec = (c.sections || []).find((s: any) => s.id === "food"); if (sec) sec.show = true;
         mergeSocial(c, [...socialFromText((doc.current?.pages || []).map((x) => x.text).join("\n")), ...social.current]);

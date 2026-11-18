@@ -16,7 +16,7 @@ create index if not exists approvals_project on approvals (scope, project, creat
 create table if not exists approval_notes (id integer primary key autoincrement, token text not null, who text not null, body text not null, page text not null default '', kind text not null default 'comment', created_at text not null);
 create index if not exists approval_notes_token on approval_notes (token, id);
 `;
-var CFDB_VERSION = 22;
+var CFDB_VERSION = 23;
 var CFDB_WORKER_NAME = "picaffectz-db";
 
 // src/lib/lookdigest.ts
@@ -351,7 +351,7 @@ async function notifyEnquiry(env, site, data, page) {
   let said = wantOwner && !owners.length ? "Not emailed: no address to send to. Fill in \u201CSend to\u201D under Enquiry form." : "";
   const vars = { name: oneLine(data.name || ""), site: name, page: page || "", email: oneLine(data.email || "") };
   const label = (k) => k.replace(/[-_]+/g, " ").replace(/^./, (ch) => ch.toUpperCase());
-  const rows = Object.entries(data).filter(([k]) => k !== "consent" && k !== "okey" && !(k === "message" && data.order_no) && !k.startsWith("_")).map(([k, v]) => `<tr><td style="padding:6px 14px 6px 0;color:#667;vertical-align:top;white-space:nowrap">${hesc(label(k))}</td><td style="padding:6px 0;white-space:pre-wrap">${hesc(v)}</td></tr>`).join("");
+  const rows = Object.entries(data).filter(([k]) => k !== "consent" && k !== "okey" && k !== "pay_state" && !(k === "message" && data.order_no) && !k.startsWith("_")).map(([k, v]) => `<tr><td style="padding:6px 14px 6px 0;color:#667;vertical-align:top;white-space:nowrap">${hesc(label(k))}</td><td style="padding:6px 0;white-space:pre-wrap">${hesc(v)}</td></tr>`).join("");
   const table = `<table style="border-collapse:collapse;margin:0 0 14px">${rows}</table>`;
   const jobs = [];
   if (wantOwner && owners.length) {
@@ -667,6 +667,38 @@ async function translateTexts(env, q) {
   if (!done.size && failed) return { error: /neuron|quota|limit|429|capacity/i.test(failed) ? "Today's free AI allowance on this Cloudflare account is used up. Press Translate again after it resets (midnight UTC), or type translations in." : "The translator didn't answer (" + failed.slice(0, 120) + ")." };
   return { t: all.map((i) => done.get(i) ?? null) };
 }
+function picturesOf(html, base) {
+  const out = [], seen = /* @__PURE__ */ new Set();
+  const add = (raw, alt = "") => {
+    const v = raw.replace(/&amp;/g, "&").trim();
+    if (!v || /^data:/i.test(v)) return;
+    let u;
+    try {
+      u = new URL(v, base);
+    } catch {
+      return;
+    }
+    if (u.protocol !== "https:" || !publicUrl(u.href) || /\.(svg|ico)(\?|$)/i.test(u.pathname) || /(sprite|pixel|spacer|blank|1x1|tracking|favicon)/i.test(u.pathname)) return;
+    const key = u.origin + u.pathname;
+    if (seen.has(key) || out.length >= 60) return;
+    seen.add(key);
+    out.push({ url: u.href, alt: alt.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim().slice(0, 120) });
+  };
+  const attr = (tag, name) => {
+    const m = new RegExp("\\s" + name + `\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))`, "i").exec(tag);
+    return m ? m[1] ?? m[2] ?? m[3] ?? "" : "";
+  };
+  const biggest = (srcset) => srcset.split(",").map((x) => x.trim().split(/\s+/)).filter((x) => x[0]).sort((a, b) => (parseFloat(b[1]) || 0) - (parseFloat(a[1]) || 0))[0]?.[0] || "";
+  const og = /<meta[^>]+property=["']og:image["'][^>]*>/i.exec(html);
+  if (og) add(attr(og[0], "content"), "Share image");
+  for (const m of html.matchAll(/<(img|source)\b[^>]*>/gi)) {
+    const t = m[0], alt = attr(t, "alt");
+    const set = attr(t, "data-srcset") || attr(t, "srcset");
+    add(set && biggest(set) || attr(t, "data-src") || attr(t, "data-lazy-src") || attr(t, "data-original") || attr(t, "src"), alt);
+  }
+  for (const m of html.matchAll(/style\s*=\s*["'][^"']*background(?:-image)?\s*:[^"']*url\(\s*(?:&quot;|["'])?([^"')&]+)/gi)) add(m[1]);
+  return out;
+}
 function publicUrl(url) {
   if (!/^https:\/\/[^\s/]+\.[^\s]+$/i.test(url)) return null;
   let u;
@@ -766,7 +798,7 @@ var db_worker_default = {
     if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
     const u = new URL(req.url), p = u.pathname.replace(/\/+$/, "") || "/";
     try {
-      if (p === "/") return json({ ok: true, service: "site-studio-db", v: V, mail: !!(env.RESEND_API_KEY && env.MAIL_FROM), ...env.CF_TOKEN && env.CF_ACCOUNT ? { deploy: true, account: env.CF_ACCOUNT } : {}, ...env.GH_TOKEN ? { gh: true } : {}, ...env.AI ? { ai: true, pamphlet: 2 } : {}, reviews: true, look: 1, outline: 1, translate: 4, approvals: 1, accounts: 2, cfx: 4, studioPages: 1, del: 1, enqMail: 3, ...otherAccounts(env).length ? { more: otherAccounts(env).length } : {} });
+      if (p === "/") return json({ ok: true, service: "site-studio-db", v: V, mail: !!(env.RESEND_API_KEY && env.MAIL_FROM), ...env.CF_TOKEN && env.CF_ACCOUNT ? { deploy: true, account: env.CF_ACCOUNT } : {}, ...env.GH_TOKEN ? { gh: true } : {}, ...env.AI ? { ai: true, pamphlet: 2 } : {}, reviews: true, look: 1, outline: 1, pictures: 1, translate: 4, approvals: 1, accounts: 2, cfx: 4, studioPages: 1, del: 1, enqMail: 3, ...otherAccounts(env).length ? { more: otherAccounts(env).length } : {} });
       if (p === "/auth/code" && req.method === "POST") {
         const { email: raw, site: forSite, studio: forStudio } = await req.json();
         const email2 = String(raw || "").trim().toLowerCase();
@@ -914,7 +946,13 @@ var db_worker_default = {
             return false;
           }
         });
-        return hit ? json({ status: hit.status }) : err(404, "Not found.");
+        if (!hit) return err(404, "Not found.");
+        let paid = "";
+        try {
+          paid = String(JSON.parse(hit.data)._paid || "");
+        } catch {
+        }
+        return json({ status: hit.status, paid });
       }
       if (p.startsWith("/enquire/") && req.method === "POST") {
         const site = p.split("/")[2];
@@ -974,6 +1012,28 @@ var db_worker_default = {
         }
         if (!r2.ok) return json({ error: `That site answered ${r2.status}.` });
         return json({ text: outlineOf((await r2.text()).slice(0, 3e6)).slice(0, 2e4) });
+      }
+      if ((p === "/ai/pictures" || p === "/ai/picture") && req.method === "POST") {
+        const email2 = await who(env, req);
+        if (!email2) return err(401, "Sign in first.");
+        if (!await env.DB.prepare("select 1 from members where email = ? and role in ('owner', 'partner') limit 1").bind(email2).first()) return err(403, "Only owners can use this.");
+        const q = await req.json(), u2 = publicUrl(String(q?.url || "").trim());
+        if (!u2) return json({ error: "Enter the site's public address (https://\u2026)." });
+        let r2;
+        try {
+          r2 = await fetch(u2.href, { headers: { "User-Agent": "Mozilla/5.0 (site-studio reference reader)", Accept: p === "/ai/picture" ? "image/*" : "text/html" }, redirect: "follow" });
+        } catch {
+          return json({ error: "Couldn't open that address." });
+        }
+        if (!r2.ok) return json({ error: `That site answered ${r2.status}.` });
+        if (p === "/ai/picture") {
+          const type = (r2.headers.get("content-type") || "").split(";")[0].trim().toLowerCase();
+          if (!/^image\/(jpeg|png|webp|gif|avif)$/.test(type)) return json({ error: "That address isn't a picture the site can use (JPG, PNG, WebP, GIF or AVIF)." });
+          const buf = await r2.arrayBuffer();
+          if (buf.byteLength > 6 * 1024 * 1024) return json({ error: "That picture is over 6 MB." });
+          return new Response(buf, { headers: { ...cors, "Content-Type": type, "Cache-Control": "no-store" } });
+        }
+        return json({ pictures: picturesOf((await r2.text()).slice(0, 3e6), u2) });
       }
       if (p === "/ai/write" && req.method === "POST") {
         const email2 = await who(env, req);
@@ -1158,9 +1218,19 @@ var db_worker_default = {
               }) });
               const id = Number(b.id);
               if (!Number.isInteger(id)) return err(400, "Which enquiry?");
+              if (sub === "paid") {
+                const rw = (await q("select data from enquiries where id = ? and site = ?", [id, site]))[0];
+                if (!rw) return err(404, "Not found.");
+                const d = JSON.parse(rw.data);
+                if (!d.order_no) return err(400, "That isn't an order.");
+                if (b.paid) d._paid = "yes";
+                else delete d._paid;
+                await q("update enquiries set data = ? where id = ? and site = ?", [JSON.stringify(d), id, site]);
+                return json({ db: dbId, ok: true });
+              }
               if (sub === "status") {
                 const st = String(b.status || "");
-                if (!["new", "read", "replied", "archived"].includes(st)) return err(400, "Unknown status.");
+                if (!["new", "read", "replied", "archived", "accepted", "preparing", "ready", "out", "done", "cancelled"].includes(st)) return err(400, "Unknown status.");
                 await q("update enquiries set status = ? where id = ? and site = ?", [st, id, site]);
                 return json({ db: dbId, ok: true });
               }
@@ -1368,6 +1438,17 @@ var db_worker_default = {
         const site = scope.replace(/^site:/, "");
         const rows = (await env.DB.prepare("select id, site, data, page, status, created_at from enquiries where site = ? order by created_at desc limit 500").bind(site).all()).results || [];
         return json(rows.map((r) => ({ ...r, data: JSON.parse(r.data) })));
+      }
+      if (p === "/e/paid" && req.method === "POST") {
+        const b = await req.json(), site = scope.replace(/^site:/, "");
+        const row = await env.DB.prepare("select data from enquiries where id = ? and site = ?").bind(b.id, site).first();
+        if (!row) return err(404, "Not found.");
+        const d = JSON.parse(row.data);
+        if (!d.order_no) return err(400, "That isn't an order.");
+        if (b.paid) d._paid = "yes";
+        else delete d._paid;
+        await env.DB.prepare("update enquiries set data = ? where id = ? and site = ?").bind(JSON.stringify(d), b.id, site).run();
+        return json({ ok: true });
       }
       if ((p === "/e/status" || p === "/e/delete") && req.method === "POST") {
         const b = await req.json();

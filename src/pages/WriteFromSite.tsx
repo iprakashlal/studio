@@ -4,18 +4,20 @@
 import { useState } from "react";
 import type { Session } from "../lib/auth";
 import type { ProjectMeta } from "../lib/studio";
-import { cfOutline, cfWrite, type Brief } from "../lib/cfdb";
+import { cfOutline, cfPicture, cfPictures, cfWrite, type Brief, type SitePicture } from "../lib/cfdb";
+import { pictureSlots, placePicture } from "../lib/pictureSlots";
 import { EnginePick } from "./AiEngine";
 import { aiEngine, allowanceGone, type AiEngine } from "../lib/ai";
 import { enoughText, systemWrite } from "../lib/syswrite";
 import { applyBrief, dropFlagged, groupsOf, type Contact } from "../lib/writeMap";
 import { readPamphlet } from "../lib/pamphlet";
-import { Field, Modal } from "../ui/kit";
+import { Field, Modal, useToast } from "../ui/kit";
 import { useAiDb } from "./AiGate";
 
-export function WriteFromSiteDialog({ session, project, draft, onApply, onClose }: { session: Session; project: ProjectMeta; draft: any; onApply: (c: any) => void; onClose: () => void }) {
+export function WriteFromSiteDialog({ session, project, draft, upload, onApply, onClose }: { session: Session; project: ProjectMeta; draft: any; upload?: (f: File) => Promise<{ path: string }>; onApply: (c: any) => void; onClose: () => void }) {
   const kind = project.template === "store" ? "store" : project.template === "business" ? "business" : project.template === "restaurant" ? "restaurant" : "portfolio";
   const db = useAiDb(session, project), api = db.api;
+  const toast = useToast();
   const [url, setUrl] = useState(""), [text, setText] = useState("");
   // Where the text comes from: a site, a PDF (a brochure or profile), or pasted text.
   const [src, setSrc] = useState<"link" | "pdf" | "text" | "none">("link");
@@ -69,13 +71,40 @@ export function WriteFromSiteDialog({ session, project, draft, onApply, onClose 
     setRes({ brief: b, flagged: r.flagged || [] }); setPick(new Set(groupsOf(kind, b, contact()).map((g) => g.id)));
   });
   const contact = (): Contact => ({ email: email.trim(), phone: phone.trim(), brand: brandName.trim() });
-  const apply = () => { onApply(applyBrief(kind, draft, res!.brief, brandName.trim(), pick, contact())); onClose(); };
+  // Pictures from the reference site: only for a site the owner has the rights to (their own old site, a client's).
+  const slots = pictureSlots(kind);
+  const [pics, setPics] = useState<SitePicture[] | null>(null), [use, setUse] = useState<Record<string, string>>({}), [mine, setMine] = useState(false), [picErr, setPicErr] = useState("");
+  const link = () => (/^https?:\/\//.test(url.trim()) ? url.trim() : "https://" + url.trim());
+  const findPics = run("Looking for pictures", async () => {
+    setPicErr("");
+    try {
+      const list = await cfPictures(api!, link()); setPics(list);
+      // A first guess the owner can change: the first picture as the hero, the next as the about picture, the rest in the gallery (where there is one).
+      const g: Record<string, string> = {}, many = slots.find((x) => x.many), one = slots.filter((x) => !x.many && x.id !== "logo");
+      list.forEach((p, i) => { const sl = one[i] || many; if (sl && i < 14) g[p.url] = sl.id; });
+      setUse(g);
+    } catch (e: any) { setPicErr(e?.message || "Couldn't read the site's pictures."); }
+  });
+  const chosen = (pics || []).filter((p) => use[p.url]);
+  const apply = async () => {
+    const next = applyBrief(kind, draft, res!.brief, brandName.trim(), pick, contact());
+    if (chosen.length && mine && upload) {
+      setBusy("Copying pictures"); let n = 0, missed = 0;
+      for (const p of chosen.slice(0, 20)) {
+        try { const f = await cfPicture(api!, p.url); if (f.size > 6 * 1024 * 1024) throw new Error("big"); placePicture(kind, next, use[p.url], await upload(f), p.alt); n++; setBusy(`Copying pictures (${n} of ${chosen.length})`); } catch { missed++; }
+      }
+      setBusy("");
+      // Said after the editor's own "new text" note, so it isn't covered by it.
+      if (missed) setTimeout(() => toast(`${n} picture${n === 1 ? "" : "s"} copied. ${missed} picture${missed > 1 ? "s" : ""} couldn't be copied (the site refused, or the file was too large).`, "bad"), 600);
+    }
+    onApply(next); onClose();
+  };
 
   const emailOk = !email.trim() || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
   const canWrite = !!brandName.trim() && emailOk && (src === "none" ? sys : src === "pdf" ? !!pdf : showText ? sys ? enoughText(text) : text.trim().split(/\s+/).length >= 40 : /^https?:\/\/\S+\.\S+/.test(url.trim()) || /^[\w-]+(\.[\w-]+)+/.test(url.trim()));
   const groups = res ? groupsOf(kind, res.brief, contact()) : [];
   const footer = res
-    ? <><button className="btn" onClick={() => setRes(null)}>Back</button>{sys && <button className="btn" disabled={!!busy} onClick={run("Writing", async () => { const n = again + 1; setAgain(n); await writeSys(n); })}>Another version</button>}<button className="btn btn-pri" disabled={!pick.size} onClick={apply}>Put in the editor</button></>
+    ? <><button className="btn" onClick={() => setRes(null)}>Back</button>{sys && <button className="btn" disabled={!!busy} onClick={run("Writing", async () => { const n = again + 1; setAgain(n); await writeSys(n); })}>Another version</button>}<button className="btn btn-pri" disabled={!pick.size || !!busy || (chosen.length > 0 && !mine)} onClick={apply}>{busy && /Copying/.test(busy) ? busy + "…" : chosen.length && mine ? `Put in the editor with ${chosen.length} picture${chosen.length > 1 ? "s" : ""}` : "Put in the editor"}</button></>
     : <><button className="btn" onClick={onClose}>Cancel</button>{canUse && <button className="btn btn-pri" disabled={!canWrite || !!busy} onClick={write}>{busy ? busy + "…" : "Write new text"}</button>}</>;
 
   return (
@@ -120,6 +149,29 @@ export function WriteFromSiteDialog({ session, project, draft, onApply, onClose 
             </label>
           ))}
         </>}
+        {res && src === "link" && upload && db.ready && api && (
+          <section className="flex flex-col gap-2 rounded-lg border border-ink-600 p-3" aria-label="Pictures from the site">
+            <b className="text-ink-100">Pictures from the site</b>
+            <p className="text-[13px] text-ink-300">Moving your own site, or a client's? The Studio can copy its pictures into this project and put them in place. Only take pictures you own or have written permission to use: pictures on someone else's site are theirs.</p>
+            {!pics && <button type="button" className="btn btn-sm self-start" disabled={!!busy} onClick={findPics}>{busy && /pictures/.test(busy) ? busy + "…" : "Find the pictures on that page"}</button>}
+            {picErr && <p role="alert" className="text-red-300">{picErr}</p>}
+            {pics && !pics.length && <p className="text-[13px] text-ink-300">No pictures found on that page (it may draw them with JavaScript).</p>}
+            {pics && pics.length > 0 && <>
+              <ul className="grid max-h-[320px] grid-cols-2 gap-2 overflow-auto sm:grid-cols-4" aria-label="Pictures found">
+                {pics.map((p) => (
+                  <li key={p.url} className={`flex flex-col gap-1.5 rounded-lg border p-1.5 ${use[p.url] ? "border-brand-500/60" : "border-ink-700"}`}>
+                    <img src={p.url} alt={p.alt} loading="lazy" referrerPolicy="no-referrer" className="h-24 w-full rounded-md bg-ink-950 object-cover" />
+                    <select aria-label={`Use ${p.alt || "this picture"} as`} className="input px-2 py-1 text-[12.5px]" value={use[p.url] || ""} onChange={(e) => setUse((u) => { const n = { ...u }, v = e.target.value; if (!v) delete n[p.url]; else { const sl = slots.find((x) => x.id === v); if (sl && !sl.many) for (const k of Object.keys(n)) if (n[k] === v) delete n[k]; n[p.url] = v; } return n; })}>
+                      <option value="">Don't take</option>{slots.map((sl) => <option key={sl.id} value={sl.id}>{sl.label}</option>)}
+                    </select>
+                  </li>
+                ))}
+              </ul>
+              <label className="flex items-start gap-2.5 text-[13px] text-ink-200"><input type="checkbox" className="mt-0.5" checked={mine} onChange={(e) => setMine(e.target.checked)} /><span>These pictures are mine, or I have the owner's permission to use them on this site.</span></label>
+              <p className="text-[12.5px] text-ink-400">{chosen.length} of {pics.length} chosen. They are copied into this project when you press Put in the editor; nothing is saved until you press Save.</p>
+            </>}
+          </section>
+        )}
         {err && <p role="alert" className="text-red-300">{err}</p>}
         {err && !sys && allowanceGone(err) && !res && <button type="button" className="btn btn-sm btn-pri self-start" onClick={() => setEng("system")}>Use the Picaffectz system instead (no allowance)</button>}
       </div>

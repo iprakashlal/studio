@@ -266,6 +266,21 @@ export async function cfWrite(api: string, o: { url?: string; text?: string; bra
 }
 
 /** A public page's text outline, read by the database without any AI (for the Picaffectz system's writer). */
+export type SitePicture = { url: string; alt: string };
+/** The pictures a page shows (no AI). */
+export async function cfPictures(api: string, url: string): Promise<SitePicture[]> {
+  let j: any; try { j = await cfCall<any>(api, "/ai/pictures", { method: "POST", body: JSON.stringify({ url }) }); } catch (e: any) { if (e?.status === 404) throw new Error("Taking pictures from a site needs the database updated once (Settings → Hostings → Update the database)."); throw e; }
+  if (j?.error) throw new Error(j.error);
+  return Array.isArray(j?.pictures) ? j.pictures : [];
+}
+/** One of those pictures, as a file to keep with the site. */
+export async function cfPicture(api: string, url: string): Promise<File> {
+  const r = await cfCall<Response>(api, "/ai/picture", { method: "POST", body: JSON.stringify({ url }), raw: true });
+  const type = (r.headers.get("content-type") || "").split(";")[0];
+  if (!/^image\//.test(type)) { const j = await r.json().catch(() => null); throw new Error(j?.error || "Couldn't fetch that picture."); }
+  const name = (decodeURIComponent(new URL(url).pathname.split("/").pop() || "picture").replace(/\.[a-z0-9]+$/i, "").replace(/[^\w-]+/g, "-").slice(0, 40) || "picture") + "." + type.split("/")[1].replace("jpeg", "jpg");
+  return new File([await r.blob()], name, { type });
+}
 export async function cfOutline(api: string, url: string): Promise<string> {
   let j: any; try { j = await cfCall<any>(api, "/ai/outline", { method: "POST", body: JSON.stringify({ url }) }); } catch { j = null; }
   if (j?.error) throw new Error(j.error);
@@ -334,6 +349,8 @@ export async function siteEnquiries(cf: { api: string; site: string }, account?:
     bridged: !!br,
     list: async (): Promise<any[]> => (br ? (await br({ sub: "list" })).rows : await cfCall<any[]>(cf.api, "/e/list?" + scope)),
     status: async (id: number, status: string) => { br ? await br({ sub: "status", id, status }) : await cfCall(cf.api, "/e/status?" + scope, { method: "POST", body: JSON.stringify({ id, status }) }); },
+    /** The owner has seen (or not) an order's payment arrive. */
+    paid: async (id: number, paid: boolean) => { br ? await br({ sub: "paid", id, paid }) : await cfCall(cf.api, "/e/paid?" + scope, { method: "POST", body: JSON.stringify({ id, paid }) }); },
     remove: async (id: number) => { br ? await br({ sub: "delete", id }) : await cfCall(cf.api, "/e/delete?" + scope, { method: "POST", body: JSON.stringify({ id }) }); },
   };
 }

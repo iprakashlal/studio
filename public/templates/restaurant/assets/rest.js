@@ -848,6 +848,8 @@ function bind() {
   bindMenu(); bindZoom();
   $$(".of-code").forEach((c) => c.addEventListener("click", () => { const t = c.dataset.copy; (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(() => toast("Code copied: <b>" + esc(t) + "</b>"), () => toast("Code: <b>" + esc(t) + "</b>")); }));
   const mp = $(".map-b"); if (mp) mp.onclick = () => { const h = mp.parentNode, fr = document.createElement("iframe"); fr.title = "Map"; fr.loading = "lazy"; fr.referrerPolicy = "no-referrer-when-downgrade"; fr.src = "https://www.google.com/maps?q=" + encodeURIComponent(h.dataset.q) + "&output=embed"; h.innerHTML = ""; h.appendChild(fr); };
+  // The map shows by itself (it loads when it is scrolled near); with “wait for a tap” on, nothing goes to Google before the tap.
+  if (mp && !C.contact.mapTap) mp.onclick();
 }
 /** The booking form: no dates in the past, and "Plan an event" picks the kind of request. */
 function bindForm(f) {

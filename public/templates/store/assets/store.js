@@ -676,15 +676,16 @@ function orderDone(o) {
   const wa = digits(O.whatsapp), mail = O.email;
   const viaWa = wa && O.sendVia !== "email", viaMail = mail && O.sendVia !== "whatsapp";
   let pay = "";
-  if (o.method === "upi") pay = `<p>Scan the code in any UPI app, or pay to the UPI ID. The amount and order number are filled in.</p><div class="qr" id="qr" aria-label="UPI QR code"></div><div class="copyrow"><code>${esc(P.upi.vpa)}</code><button type="button" data-copy="${esc(P.upi.vpa)}">Copy UPI ID</button></div><a class="btn pri" href="${esc(upiLink(o))}">Open UPI app</a><p class="note">Check your UPI app shows <b>${esc(P.upi.payeeName || C.brand.name)}</b> and <b>${esc(money(o.t.total))}</b> before you confirm.</p>`;
+  if (o.method === "upi" && o.utr) pay = `<p><b>${esc(money(o.t.total))} paid by UPI</b>, reference <code>${esc(o.utr)}</code>.</p><p class="note">We check it in our UPI app and confirm your order${o.saved ? "" : " once you send it to us below"}.</p>`;
+  else if (o.method === "upi") pay = `<p>Scan the code in any UPI app, or pay to the UPI ID. The amount and order number are filled in.</p><div class="qr" id="qr" aria-label="UPI QR code"></div><div class="copyrow"><code>${esc(P.upi.vpa)}</code><button type="button" data-copy="${esc(P.upi.vpa)}">Copy UPI ID</button></div><a class="btn pri" href="${esc(upiLink(o))}">Open UPI app</a><p class="note">Check your UPI app shows <b>${esc(P.upi.payeeName || C.brand.name)}</b> and <b>${esc(money(o.t.total))}</b> before you confirm.</p>`;
   else if (o.method === "razorpay" || o.method === "stripe") { const link = o.method === "razorpay" ? P.razorpay.link : P.stripe.link; pay = `<p>On the payment page, enter <b>${esc(money(o.t.total))}</b> and the order number <b>${esc(o.id)}</b>.</p><a class="btn pri" href="${esc(link)}" target="_blank" rel="noopener">Pay on ${o.method === "razorpay" ? "Razorpay" : "Stripe"} ↗</a>`; }
   else if (o.method === "paypal") pay = `<p>PayPal opens with the amount filled in. Add the order number <b>${esc(o.id)}</b> as the note.</p><a class="btn pri" href="https://www.paypal.me/${encodeURIComponent(P.paypal.username)}/${Number(o.t.total)}${esc(C.settings.currency)}" target="_blank" rel="noopener">Pay ${esc(money(o.t.total))} with PayPal ↗</a>`;
   else if (o.method === "cod") pay = `<p>${esc(P.cod.note || "Pay when your order arrives.")} Keep <b>${esc(money(o.t.total))}</b> ready.</p>`;
   else pay = `<p>We'll contact you about payment.</p>`;
   return `<div class="wrap"><div class="done"><p class="eyebrow">Order ${esc(o.id)}</p><h1 class="fit">${ml(K.successTitle)}</h1><p class="soft" style="font-size:17px">${ml(K.successText)}</p>
     <div><span class="lbl">Your order number</span><br><span class="oid">${esc(o.id)}</span></div>
-    <div class="box"><div class="step"><i>1</i><div><h2 style="font-size:22px">Pay ${esc(money(o.t.total))}</h2>${pay}</div></div></div>
-    <div class="box"><div class="step"><i>2</i><div><h2 style="font-size:22px">Send us the order</h2><p>This opens ${viaWa && viaMail ? "WhatsApp or your email app" : viaWa ? "WhatsApp" : "your email app"} with the full order written out. Just press send.</p>
+    <div class="box"><div class="step"><i>${o.utr ? "✓" : "1"}</i><div><h2 style="font-size:22px">${o.utr ? "Payment sent" : `Pay ${esc(money(o.t.total))}`}</h2>${pay}</div></div></div>
+    <div class="box"><div class="step"><i>${o.saved ? "✓" : "2"}</i><div><h2 style="font-size:22px">${o.saved ? "We have your order" : "Send us the order"}</h2>${o.saved ? `<p class="note">It is saved with us. You can also send a copy:</p>` : ""}<p>This opens ${viaWa && viaMail ? "WhatsApp or your email app" : viaWa ? "WhatsApp" : "your email app"} with the full order written out. Just press send.</p>
       <div class="buy">${invBtn(o.id)}${viaWa ? `<a class="btn pri" href="https://wa.me/${wa}?text=${encodeURIComponent(txt)}" target="_blank" rel="noopener">Send on WhatsApp</a>` : ""}${viaMail ? `<a class="btn${viaWa ? "" : " pri"}" href="mailto:${esc(mail)}?subject=${encodeURIComponent(`Order ${o.id}`)}&body=${encodeURIComponent(txt)}">Send by email</a>` : ""}</div>
       ${!viaWa && !viaMail ? `<p class="note">Copy the order below and send it to ${esc(C.contact.email || "us")}.</p>` : ""}
       <pre class="msg" id="msg">${esc(txt)}</pre><button class="btn" type="button" data-copy-msg>Copy order details</button></div></div></div>
@@ -973,11 +974,48 @@ function bindCheckout() {
       items: lines.map((l) => ({ id: l.p.id, name: l.p.name, opt: l.opt, qty: l.qty, price: Number(l.p.price) })), t: totals(lines),
       c: { name: fd.name || "", email: fd.email || "", phone: fd.phone || "", address: fd.address || "", city: fd.city || "", pin: fd.pin || "", state: fd.state || "", notes: fd.notes || "", gstin: String(fd.gstin || "").trim().toUpperCase().slice(0, 15) } };
     store.set("me", { name: o.c.name, email: o.c.email, phone: o.c.phone, address: o.c.address, city: o.c.city, pin: o.c.pin, state: o.c.state });
-    store.set("orders", [o, ...store.get("orders", [])].slice(0, 10));
-    cart = []; saveCart();
-    history.pushState(null, "", `checkout.html?order=${encodeURIComponent(o.id)}`);
-    render(); scrollTo(0, 0);
+    const placeIt = async () => {
+      // A shop hosted on the Studio's database keeps the order under Purchased orders too.
+      if (!PREVIEW && HOST && HOST.api && HOST.site) {
+        try {
+          const r = await fetch(HOST.api + "/enquire/" + encodeURIComponent(HOST.site), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ page: "checkout.html", data: { type: "Order", order_no: o.id, name: o.c.name, phone: o.c.phone, email: o.c.email, mode: "Shop order", address: [o.c.address, o.c.city, o.c.pin, o.c.state].filter(Boolean).join(", "),
+            items: o.items.map((i) => `${i.qty} × ${i.name}${i.opt ? ` (${i.opt})` : ""} = ${money(i.price * i.qty)}`).join("\n"), total: money(o.t.total), payment: o.utr ? "UPI, paid before ordering" : o.methodLabel, utr: o.utr || "", notes: o.c.notes, message: orderText(o) } }) });
+          o.saved = r.ok;
+        } catch (e) { o.saved = false; }
+      }
+      store.set("orders", [o, ...store.get("orders", [])].slice(0, 10));
+      cart = []; saveCart();
+      history.pushState(null, "", `checkout.html?order=${encodeURIComponent(o.id)}`);
+      render(); scrollTo(0, 0);
+    };
+    // Paying by UPI comes first: the order is placed once the customer enters the payment's reference number.
+    if (o.method === "upi") payFirst(o, placeIt); else placeIt();
   };
+}
+/** The UPI step before an order is placed: QR code and app button with the exact amount, then the payment's reference number. */
+function payFirst(o, then) {
+  const old = $("#payfirst"); if (old) old.remove();
+  const d = document.createElement("div"); d.id = "payfirst"; d.setAttribute("role", "dialog"); d.setAttribute("aria-modal", "true"); d.setAttribute("aria-label", "Pay to place your order");
+  d.style.cssText = "position:fixed;inset:0;z-index:300;background:rgba(10,10,12,.6);display:grid;place-items:center;padding:16px;overflow:auto";
+  d.innerHTML = `<div style="background:var(--bg);color:var(--text);border-radius:calc(var(--r) + 6px);padding:24px;width:min(440px,100%);display:grid;gap:12px;text-align:center;box-shadow:0 30px 80px -20px rgba(0,0,0,.6)">
+      <h2 style="font-size:22px;margin:0">Pay to place your order</h2><p class="soft" style="margin:0">Order <b>${esc(o.id)}</b></p><p style="margin:0;font-size:32px;font-weight:800">${esc(money(o.t.total))}</p>
+      <p style="margin:0;text-align:left"><b>1.</b> Pay by scanning this code in any UPI app, or with the button under it.</p>
+      <div class="qr" id="pf-qr" aria-label="UPI QR code" style="justify-self:center"></div><div class="copyrow" style="justify-content:center"><code>${esc(C.payments.upi.vpa)}</code><button type="button" data-copy="${esc(C.payments.upi.vpa)}">Copy UPI ID</button></div>
+      <a class="btn" href="${esc(upiLink(o))}">Open UPI app</a>
+      <p style="margin:0;text-align:left"><b>2.</b> Enter the reference number your UPI app shows after paying (UTR or UPI transaction ID, 12 digits).</p>
+      <div class="f" style="text-align:left"><label for="pf-utr">UPI reference number</label><input class="in" id="pf-utr" inputmode="numeric" autocomplete="off" maxlength="22" placeholder="12-digit number"><span class="err" id="pf-e" role="alert"></span></div>
+      <button class="btn pri" type="button" id="pf-ok">I've paid: place the order</button><button class="link" type="button" id="pf-x">Back to checkout</button>
+      <p class="note" style="margin:0">Your order is placed only after this step. You pay in your own UPI app; this page takes no card or bank details.</p></div>`;
+  document.body.appendChild(d);
+  const qr = $("#pf-qr", d); if (window.QRCode) { try { new window.QRCode(qr, { text: upiLink(o), width: 200, height: 200, correctLevel: window.QRCode.CorrectLevel.M }); } catch (e) { qr.outerHTML = `<p class="note">The QR code couldn't load. Use the UPI ID instead.</p>`; } } else qr.outerHTML = `<p class="note">The QR code couldn't load. Use the UPI ID or the button.</p>`;
+  const cp = $("[data-copy]", d); if (cp) cp.onclick = () => copy(cp.dataset.copy, "UPI ID copied");
+  $("#pf-x", d).onclick = () => d.remove();
+  $("#pf-ok", d).onclick = () => {
+    const v = $("#pf-utr", d).value.replace(/[\s-]/g, "");
+    if (!/^[A-Za-z0-9]{12,22}$/.test(v)) { $("#pf-e", d).textContent = "Enter the 12-digit reference number from your UPI app (shown on the receipt as UTR or UPI transaction ID)."; $("#pf-utr", d).focus(); return; }
+    o.utr = v; o.methodLabel = (o.methodLabel || "UPI") + ", reference " + v; d.remove(); then();
+  };
+  $("#pf-utr", d).focus();
 }
 async function placeServerOrder(form, fd, lines, m) {
   const btn = $('button[type="submit"]', form), err = $("#co-err");

@@ -212,7 +212,7 @@ const schema: Category[] = [
       { title: "Payment", fields: [g2({ t: "toggle", path: "ordering.pay.cod", label: "Pay on delivery, at the counter or at the table" }, { t: "text", path: "ordering.pay.codLabel", label: "Its name for delivery orders", ph: "Pay on delivery (cash or UPI)" }),
         { t: "toggle", path: "ordering.pay.upi", label: "Pay now by UPI (prices in ₹ only)" },
         { t: "when", path: "ordering.pay.upi", is: "true", fields: [g2({ t: "text", path: "ordering.pay.upiId", label: "UPI ID", ph: "name@bank", check: "vpa" }, { t: "text", path: "ordering.pay.payee", label: "Payee name (as your bank shows it)" }),
-          { t: "note", text: "After ordering, the guest sees a QR code and a button for their UPI app with the exact total and the order number filled in. Check the payment in your UPI app before you send the order out: the site can't confirm a UPI payment by itself." }] }] },
+          { t: "note", text: "The guest pays first: checkout shows a QR code and a button for their UPI app with the exact total and the order number, and the order is placed only when they enter the payment's 12-digit reference number (UTR). Under Purchased orders the order is marked “Payment to check” with that reference; find it in your UPI app and press Payment received, and the guest's order page shows it. A UPI ID alone can't tell a website that money arrived (only a payment gateway such as Razorpay can), so this one check stays with you." }] }] },
       { title: "Where orders reach you", fields: [
         { t: "note", text: "With the booking inbox set up (Booking form → where requests are saved), every order lands in Enquiries on the admin page and is emailed to you like a booking. There you move it through Confirmed, Being prepared, Out for delivery and Delivered, and on a site hosted on your Cloudflare database the guest's order page follows along. Without an inbox, the guest sends the order to you on WhatsApp with one tap." },
         g2({ t: "text", path: "ordering.whatsapp", label: "WhatsApp number for orders (empty uses the one under Address & contact)", ph: "+91 98xxxxxxxx", check: "phone" }, { t: "text", path: "ordering.intro", label: "First words of the order message", ph: "New order" }),
@@ -252,7 +252,8 @@ const schema: Category[] = [
         g2({ t: "text", path: "contact.phone", label: "Phone", check: "phone" }, { t: "text", path: "contact.email", label: "Email", check: "email" }, { t: "text", path: "contact.whatsapp", label: "WhatsApp number (optional)", check: "phone" }, { t: "text", path: "contact.parking", label: "Parking (optional)", ph: "Valet parking in the evening" })] },
       { title: "Map", fields: [{ t: "toggle", path: "contact.mapEmbed", label: "Show a map of the address" },
         { t: "text", path: "contact.mapUrl", label: "Your Google Maps link (optional)", check: "https", hint: "Used by Get directions. Without it, directions search for the address above." },
-        { t: "note", text: "The map loads only when a visitor presses “Show the map”, so nothing is sent to Google before that." }] },
+        { t: "toggle", path: "contact.mapTap", label: "Wait for a tap before loading the map (privacy)" },
+        { t: "note", text: "The map shows by itself as soon as there is an address. With “wait for a tap” on, visitors see a “Show the map” button first, and nothing is sent to Google before they press it." }] },
     ],
   },
   {

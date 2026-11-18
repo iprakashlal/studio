@@ -20,7 +20,7 @@ const DEFAULT = {
   },
   cms: { adminPage: "admin" },
   poweredBy: { show: true },
-  brand: { name: "Copper Pot Kitchen", tagline: "Slow-cooked food, served warm", logo: null, showName: true },
+  brand: { name: "Picaffectz", tagline: "Slow-cooked food, served warm", logo: null, showName: true },
   site: { multiPage: false, mobileBar: true, pageLabels: { home: "Home", menu: "Menu", about: "Our story", gallery: "Gallery", contact: "Visit & book" } },
   nav: { cta: "Book a table", ctaTarget: "reserve" },
   notice: { on: false, text: "", label: "", target: "offers" },
@@ -61,7 +61,7 @@ const DEFAULT = {
   },
   about: {
     eyebrow: "Our story", title: "A family kitchen that grew",
-    body: "Copper Pot began in 2014 with six tables and one handed-down recipe book. The curries are still cooked the slow way, in heavy copper pots, for as long as they need.\n\nToday the kitchen is bigger, but the idea is the same: a short menu, cooked with care, at a fair price.",
+    body: "Picaffectz began in 2014 with six tables and one handed-down recipe book. The curries are still cooked the slow way, in heavy copper pots, for as long as they need.\n\nToday the kitchen is bigger, but the idea is the same: a short menu, cooked with care, at a fair price.",
     image: null, signature: "Meera & Arjun, founders",
     facts: [{ value: "2014", label: "Cooking since" }, { value: "42", label: "Seats" }, { value: "4.7★", label: "Guest rating" }],
   },
@@ -166,7 +166,7 @@ const DEFAULT = {
   },
   contact: {
     eyebrow: "Visit us", title: "Find us", lede: "",
-    email: "hello@copperpot.example", phone: "+91 20 4000 1234", whatsapp: "", address: "14 Lane 6, Koregaon Park\nPune 411001", mapUrl: "", mapEmbed: true, parking: "Valet parking in the evening",
+    email: "hello@picaffectz.example", phone: "+91 20 4000 1234", whatsapp: "", address: "14 Lane 6, Koregaon Park\nPune 411001", mapUrl: "", mapEmbed: true, parking: "Valet parking in the evening",
     form: {
       enabled: true, title: "Request a table", askEmail: true, askGuests: true, maxGuests: 10, askDate: true, askTime: true, slots: ["12:00", "12:30", "13:00", "13:30", "14:00", "19:00", "19:30", "20:00", "20:30", "21:00", "21:30"],
       askOccasion: true, occasions: ["Birthday", "Anniversary", "Business meal", "Date night"], askType: true, types: ["Table booking", "Private event", "Catering", "Something else"],
@@ -185,8 +185,8 @@ const DEFAULT = {
     ],
   },
   cta: { title: "Hungry yet?", body: "Book a table for tonight, or call us and we'll have it ready to take away.", button: "Book a table", target: "reserve" },
-  footer: { text: "Slow-cooked food, served warm. Lunch and dinner, every day.", legal: "© {year} Copper Pot Kitchen. All rights reserved.", links: [{ label: "Privacy", url: "" }, { label: "Terms", url: "" }] },
-  seo: { title: "Copper Pot Kitchen · Modern Indian restaurant in Pune", description: "Copper-pot curries, clay-oven breads and a seasonal menu. Book a table or order online.", titlePattern: "{page} · {site}", keywords: "", author: "", image: null, siteUrl: "", themeColor: "", noindex: false, googleVerification: "", meta: [], cuisine: "Indian", priceRange: "₹₹" },
+  footer: { text: "Slow-cooked food, served warm. Lunch and dinner, every day.", legal: "© {year} Picaffectz. All rights reserved.", links: [{ label: "Privacy", url: "" }, { label: "Terms", url: "" }] },
+  seo: { title: "Picaffectz · Modern Indian restaurant in Pune", description: "Copper-pot curries, clay-oven breads and a seasonal menu. Book a table or order online.", titlePattern: "{page} · {site}", keywords: "", author: "", image: null, siteUrl: "", themeColor: "", noindex: false, googleVerification: "", meta: [], cuisine: "Indian", priceRange: "₹₹" },
 };
 
 const FONTS = {

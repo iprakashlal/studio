@@ -411,7 +411,7 @@ export const restaurantTemplate: TemplateDef = {
     if (F.enabled && F.saveTo !== "file" && !K.email) w.push("The booking form has no email to fall back on. Add one under Address & contact.");
     if (F.enabled && (F.sbUrl || F.sbKey) && !(F.sbUrl && F.sbKey && F.site)) w.push("The booking form's Supabase settings are incomplete (Project URL, public key and Site ID are all needed).");
     if (c?.events?.button && c?.events?.type && F.askType !== false && !(F.types || []).includes(c.events.type)) w.push(`The events button picks “${c.events.type}” in the booking form, but that isn't one of the form's choices.`);
-    if (/copper pot/i.test(JSON.stringify(c?.brand || {}))) w.push("The restaurant name is still the sample (Copper Pot Kitchen).");
+    if (/^picaffectz$/i.test(String(c?.brand?.name || "").trim()) && c?.brand?.tagline === "Slow-cooked food, served warm") w.push("The restaurant name and tagline are still the sample (Picaffectz).");
     return w;
   },
 };

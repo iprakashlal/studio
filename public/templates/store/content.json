@@ -38,14 +38,14 @@
     "lineBreaks": "typed"
   },
   "brand": {
-    "name": "Picaffectz Studio",
+    "name": "Picaffectz",
     "tagline": "Small-batch goods for slow mornings",
     "logo": null,
     "announcement": "Free shipping on orders over ₹1,999",
     "showAnnouncement": true
   },
   "seo": {
-    "title": "Picaffectz Studio",
+    "title": "Picaffectz",
     "description": "Small-batch ceramics, linen and paper goods.",
     "titlePattern": "{page} · {site}",
     "keywords": "",

@@ -18,7 +18,7 @@ const DEFAULT = {
   },
   cms: { adminPage: "admin" },
   poweredBy: { show: true },
-  brand: { name: "Northbeam Partners", tagline: "Strategy, design and engineering for growing companies", logo: null, showName: true },
+  brand: { name: "Picaffectz", tagline: "Strategy, design and engineering for growing companies", logo: null, showName: true },
   site: { multiPage: false, pageLabels: { home: "Home", services: "Services", products: "Products", work: "Work", about: "About", contact: "Contact" } },
   nav: { cta: "Book a call", ctaTarget: "contact" },
   sections: [
@@ -40,7 +40,7 @@ const DEFAULT = {
   hero: {
     eyebrow: "Consulting · Design · Engineering",
     title: "We help growing companies\nbuild what's next.",
-    lede: "Northbeam is an independent team of strategists, designers and engineers. We plan, design and ship digital products for banks, insurers and healthcare companies.",
+    lede: "Picaffectz is an independent team of strategists, designers and engineers. We plan, design and ship digital products for banks, insurers and healthcare companies.",
     ctaPrimary: "Book a consultation", ctaPrimaryTarget: "contact", ctaSecondary: "See our work", ctaSecondaryTarget: "work",
     image: null, badges: ["ISO 27001 certified", "120+ projects delivered", "Offices in Mumbai & London"],
     slides: { enabled: false, items: [], effect: "fade", interval: 6, speed: 1.2, overlay: 45, overlayColor: "#0E1B2C", overlayStyle: "left", textColor: "light", height: "tall", dots: true, arrows: false, pause: true, hideArt: true, artOpacity: 100 },
@@ -61,7 +61,7 @@ const DEFAULT = {
   },
   about: {
     eyebrow: "About us", title: "Independent, senior and accountable",
-    body: "We started Northbeam in 2014 with a simple idea: small senior teams deliver better work than large junior ones.\n\nToday we're 45 people across Mumbai and London. We work with a handful of clients at a time, so every engagement gets our full attention.",
+    body: "We started Picaffectz in 2014 with a simple idea: small senior teams deliver better work than large junior ones.\n\nToday we're 45 people across Mumbai and London. We work with a handful of clients at a time, so every engagement gets our full attention.",
     image: null, mission: "Help organisations make better products with less risk.", vision: "Be the partner companies call first when the work really matters.",
     values: [{ title: "Clarity", body: "Plain language, honest estimates, no surprises." }, { title: "Craft", body: "We sweat the details our clients' customers notice." }, { title: "Ownership", body: "One lead, accountable from kickoff to launch." }, { title: "Care", body: "For the people we work with and the people they serve." }],
   },
@@ -95,7 +95,7 @@ const DEFAULT = {
   testimonials: {
     eyebrow: "Client stories", title: "What clients say",
     items: [
-      { quote: "Northbeam took a project three vendors had failed at and shipped it in six months. They're the first team I call now.", name: "Priya Nair", role: "Chief Digital Officer", company: "Arcadia Bank" },
+      { quote: "Picaffectz took a project three vendors had failed at and shipped it in six months. They're the first team I call now.", name: "Priya Nair", role: "Chief Digital Officer", company: "Arcadia Bank" },
       { quote: "Senior people, honest estimates and no surprises. Exactly what a regulated business needs from a partner.", name: "James Whitfield", role: "COO", company: "Orbit Insurance" },
     ],
   },
@@ -120,7 +120,7 @@ const DEFAULT = {
   cta: { title: "Have a project in mind?", body: "Tell us where you are and where you want to be. We'll reply within one working day.", button: "Start a conversation", target: "contact" },
   contact: {
     eyebrow: "Contact", title: "Let's talk about your project", lede: "Send a few details and we'll set up a 30-minute call. No obligation.",
-    email: "hello@northbeam.example", phone: "+91 22 4000 1234", whatsapp: "", address: "Level 9, One BKC\nBandra Kurla Complex, Mumbai 400051", hours: "Mon–Fri, 9:30 am – 6:30 pm IST", mapUrl: "", linkedin: "https://www.linkedin.com/",
+    email: "hello@picaffectz.example", phone: "+91 22 4000 1234", whatsapp: "", address: "Level 9, One BKC\nBandra Kurla Complex, Mumbai 400051", hours: "Mon–Fri, 9:30 am – 6:30 pm IST", mapUrl: "", linkedin: "https://www.linkedin.com/",
     form: {
       enabled: true, title: "Tell us about your project", askPhone: true, askCompany: true, askService: true, askBudget: true,
       budgets: ["Under ₹5L", "₹5L – ₹25L", "₹25L – ₹1Cr", "Above ₹1Cr"], submit: "Send enquiry",
@@ -132,8 +132,8 @@ const DEFAULT = {
     label: "Serial or invoice number", placeholder: "", verify: "none", verifyLabel: "", button: "Check status", notFound: "We couldn't find that number. Check it and try again.", help: "Need help? Contact us and we'll look it up.",
     showWarranty: true, showHistory: true, showCustomer: false,
     statuses: [{ id: "registered", label: "Registered", tone: "info" }, { id: "received", label: "Received for service", tone: "progress" }, { id: "in-repair", label: "In repair", tone: "progress" }, { id: "ready", label: "Ready for pickup", tone: "ok" }, { id: "delivered", label: "Delivered", tone: "ok" }, { id: "not-covered", label: "Not covered", tone: "bad" }] },
-  footer: { text: "Strategy, design and engineering for growing companies.", legal: "© {year} Northbeam Partners LLP. All rights reserved.", links: [{ label: "Privacy", url: "" }, { label: "Terms", url: "" }] },
-  seo: { title: "Northbeam Partners · Strategy, design and engineering", description: "Independent consultancy helping banks, insurers and healthcare companies plan, design and ship digital products.", titlePattern: "{page} · {site}", keywords: "", author: "", image: null, siteUrl: "", themeColor: "", noindex: false, googleVerification: "", meta: [] },
+  footer: { text: "Strategy, design and engineering for growing companies.", legal: "© {year} Picaffectz. All rights reserved.", links: [{ label: "Privacy", url: "" }, { label: "Terms", url: "" }] },
+  seo: { title: "Picaffectz · Strategy, design and engineering", description: "Independent consultancy helping banks, insurers and healthcare companies plan, design and ship digital products.", titlePattern: "{page} · {site}", keywords: "", author: "", image: null, siteUrl: "", themeColor: "", noindex: false, googleVerification: "", meta: [] },
 };
 
 const FONTS = {

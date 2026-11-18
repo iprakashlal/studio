@@ -9,8 +9,20 @@ import type { CfSiteCfg } from "../lib/supa";
 
 type Enquiry = { id: number; site: string; data: Record<string, string>; page: string; status: string; created_at: string };
 const STATUS: [string, string][] = [["new", "New"], ["read", "Read"], ["replied", "Replied"], ["archived", "Archived"]];
-const pill = (s: string) => ({ new: "border-brand-400/60 text-brand-200", read: "border-ink-500 text-ink-300", replied: "border-emerald-400/50 text-emerald-200", archived: "border-ink-600 text-ink-500" } as Record<string, string>)[s] || "border-ink-500 text-ink-300";
-const LABELS: Record<string, string> = { name: "Name", email: "Email", phone: "Phone", company: "Company", service: "Interested in", budget: "Budget", message: "Message", consent: "Agreed to be contacted", type: "Request", date: "Date", time: "Time", guests: "Guests", occasion: "Occasion"};
+/** An order from the Order now page moves through its own steps; the guest's order page follows them. */
+const ORDER_STATUS: [string, string][] = [["new", "New"], ["read", "Seen"], ["accepted", "Confirmed"], ["preparing", "Being prepared"], ["ready", "Ready for pickup"], ["out", "Out for delivery"], ["done", "Completed"], ["cancelled", "Cancelled"], ["archived", "Archived"]];
+const isOrder = (d: any) => !!(d && d.order_no);
+/** The next step of an order, for the one-tap button. */
+export const orderNext = (d: any, status: string): [string, string] | null => {
+  const m = String(d?.mode || "").toLowerCase(), last = /pick/.test(m) ? "ready" : /deliver/.test(m) ? "out" : "";
+  const flow = ["accepted", "preparing", ...(last ? [last] : []), "done"], i = flow.indexOf(status);
+  if (status === "cancelled" || status === "archived" || status === "done") return null;
+  const nx = flow[i + 1] || flow[0], l = ORDER_STATUS.find(([k]) => k === nx)![1];
+  return [nx, i < 0 ? "Confirm the order" : "Mark: " + l];
+};
+const pill = (s: string) => ({ new: "border-brand-400/60 text-brand-200", read: "border-ink-500 text-ink-300", replied: "border-emerald-400/50 text-emerald-200", archived: "border-ink-600 text-ink-500", accepted: "border-emerald-400/50 text-emerald-200", preparing: "border-amber-400/50 text-amber-200", ready: "border-sky-400/50 text-sky-200", out: "border-sky-400/50 text-sky-200", done: "border-ink-500 text-ink-300", cancelled: "border-rose-400/50 text-rose-200" } as Record<string, string>)[s] || "border-ink-500 text-ink-300";
+const LABELS: Record<string, string> = { name: "Name", email: "Email", phone: "Phone", company: "Company", service: "Interested in", budget: "Budget", message: "Message", consent: "Agreed to be contacted", type: "Request", date: "Date", time: "Time", guests: "Guests", occasion: "Occasion", order_no: "Order number", mode: "Order type", when: "For", address: "Address", table: "Table", items: "Items", total: "To pay", payment: "Payment" };
+const HIDE = new Set(["okey"]);
 /** A booking request in one line: "Fri 20 Nov · 20:00 · 6 guests · Anniversary" (empty for an ordinary enquiry). */
 export const bookingLine = (d: any): string => {
   if (!d || !(d.date || d.time || d.guests)) return "";
@@ -148,12 +160,12 @@ function SignIn({ cfg, onIn }: { cfg: SbCfg; onIn: (email: string) => void }) {
 type Row = { id: string | number; data: Record<string, string>; page?: string; status: string; created_at: string };
 
 /** The list of enquiries with filters, search, status, reply, delete and CSV, for either store. */
-function EnquiryList<R extends Row>({ rows, setStatus, remove, load, name, who }: { rows: R[]; setStatus: (r: R, s: string) => void; remove: (r: R) => void; load: () => void; name: string; who: React.ReactNode }) {
+function EnquiryList<R extends Row>({ rows, setStatus, remove, load, name, who, orders }: { rows: R[]; setStatus: (r: R, s: string) => void; remove: (r: R) => void; load: () => void; name: string; who: React.ReactNode; /** This inbox keeps an order's steps (the Cloudflare database does). */ orders?: boolean }) {
   const [filter, setFilter] = useState("open");
   const [q, setQ] = useState("");
   const [open, setOpen] = useState<string | number | null>(null);
-  const list = useMemo(() => rows.filter((r) => (filter === "open" ? r.status !== "archived" : filter === "all" ? true : r.status === filter) && (!q || JSON.stringify(r.data).toLowerCase().includes(q.toLowerCase()))), [rows, filter, q]);
-  const counts = useMemo(() => ({ new: rows.filter((r) => r.status === "new").length }), [rows]);
+  const list = useMemo(() => rows.filter((r) => (filter === "open" ? r.status !== "archived" : filter === "orders" ? isOrder(r.data) && !["done", "cancelled", "archived"].includes(r.status) : filter === "all" ? true : r.status === filter) && (!q || JSON.stringify(r.data).toLowerCase().includes(q.toLowerCase()))), [rows, filter, q]);
+  const counts = useMemo(() => ({ new: rows.filter((r) => r.status === "new").length, orders: rows.filter((r) => isOrder(r.data) && !["done", "cancelled", "archived"].includes(r.status)).length, anyOrder: rows.some((r) => isOrder(r.data)) }), [rows]);
   const csv = () => {
     const keys = ["created_at", "status", "name", "email", "phone", "company", "service", "budget", "message"];
     const cell = (v: any) => `"${String(v ?? "").replace(/"/g, '""')}"`;
@@ -164,7 +176,7 @@ function EnquiryList<R extends Row>({ rows, setStatus, remove, load, name, who }
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">
         <div className="flex rounded-lg border border-ink-600" role="group" aria-label="Show">
-          {[["open", "Inbox"], ["new", `New${counts.new ? ` (${counts.new})` : ""}`], ["replied", "Replied"], ["archived", "Archived"], ["all", "All"]].map(([k, l]) => (
+          {[["open", "Inbox"], ["new", `New${counts.new ? ` (${counts.new})` : ""}`], ...(counts.anyOrder ? [["orders", `Orders to do${counts.orders ? ` (${counts.orders})` : ""}`]] : []), ["replied", "Replied"], ["archived", "Archived"], ["all", "All"]].map(([k, l]) => (
             <button key={k} type="button" aria-pressed={filter === k} onClick={() => setFilter(k)} className={`btn btn-sm border-0 ${filter === k ? "bg-ink-700" : "bg-transparent"}`}>{l}</button>
           ))}
         </div>
@@ -176,7 +188,7 @@ function EnquiryList<R extends Row>({ rows, setStatus, remove, load, name, who }
       {/^Not emailed/.test(String(rows[0]?.data?._mail || "")) && <p role="status" className="rounded-lg border border-amber-400/40 bg-amber-400/5 px-3 py-2 text-[13px] text-amber-100"><b>The latest enquiry wasn't emailed to you.</b> {mailSaid(rows[0].data._mail)} It is saved here all the same.</p>}
       <ul className="flex flex-col gap-2" aria-label="Enquiries">
         {list.map((r) => {
-          const d = r.data || {}, isOpen = open === r.id;
+          const d = r.data || {}, isOpen = open === r.id, ord = isOrder(d), SL = ord && orders ? ORDER_STATUS : STATUS, nx = ord && orders ? orderNext(d, r.status) : null;
           return (
             <li key={r.id} className={`overflow-hidden rounded-xl border bg-ink-950 ${r.status === "new" ? "border-brand-500/50" : "border-ink-600"}`}>
               <button type="button" aria-expanded={isOpen} onClick={() => { setOpen(isOpen ? null : r.id); if (!isOpen && r.status === "new") setStatus(r, "read"); }} className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 text-left">
@@ -184,23 +196,26 @@ function EnquiryList<R extends Row>({ rows, setStatus, remove, load, name, who }
                 <b className="text-sm">{d.name || "No name"}</b>
                 <span className="text-[13px] text-ink-400">{[d.company, d.service, d.type && bookingLine(d) ? d.type : ""].filter(Boolean).join(" · ")}</span>
                 {bookingLine(d) && <span className="chip border-brand-400/50 text-brand-200" data-booking>{bookingLine(d)}</span>}
+                {ord && <span className="chip border-brand-400/50 text-brand-200" data-order>{[`Order ${d.order_no}`, d.mode, d.when, d.total].filter(Boolean).join(" · ")}</span>}
                 <span className="ml-auto text-xs text-ink-500">{when(r.created_at)}</span>
-                <span className={`chip ${pill(r.status)}`}>{STATUS.find(([k]) => k === r.status)?.[1] || r.status}</span>
-                <span className="w-full truncate text-[13px] text-ink-300">{d.message}</span>
+                <span className={`chip ${pill(r.status)}`}>{(ord ? ORDER_STATUS : STATUS).find(([k]) => k === r.status)?.[1] || r.status}</span>
+                <span className="w-full truncate text-[13px] text-ink-300">{ord ? String(d.items || "").replace(/\n/g, " · ") : d.message}</span>
               </button>
               {isOpen && (
                 <div className="flex flex-col gap-3 border-t border-ink-700 px-4 py-3">
                   <dl className="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-[auto_1fr]">
-                    {Object.keys(LABELS).filter((k) => d[k]).map((k) => (<Fragment key={k}><dt className="text-ink-400">{LABELS[k]}</dt><dd className="whitespace-pre-wrap text-ink-100">{k === "email" ? <a className="text-brand-300 underline" href={`mailto:${d.email}`}>{d.email}</a> : k === "phone" ? <a className="text-brand-300 underline" href={`tel:${d.phone}`}>{d.phone}</a> : k === "consent" ? "Yes" : d[k]}</dd></Fragment>))}
-                    {Object.keys(d).filter((k) => !LABELS[k] && d[k] && !k.startsWith("_")).map((k) => (<Fragment key={k}><dt className="text-ink-400">{k}</dt><dd className="whitespace-pre-wrap">{d[k]}</dd></Fragment>))}
+                    {Object.keys(LABELS).filter((k) => d[k] && !(ord && k === "message")).map((k) => (<Fragment key={k}><dt className="text-ink-400">{LABELS[k]}</dt><dd className="whitespace-pre-wrap text-ink-100">{k === "email" ? <a className="text-brand-300 underline" href={`mailto:${d.email}`}>{d.email}</a> : k === "phone" ? <a className="text-brand-300 underline" href={`tel:${d.phone}`}>{d.phone}</a> : k === "consent" ? "Yes" : d[k]}</dd></Fragment>))}
+                    {Object.keys(d).filter((k) => !LABELS[k] && d[k] && !k.startsWith("_") && !HIDE.has(k)).map((k) => (<Fragment key={k}><dt className="text-ink-400">{k}</dt><dd className="whitespace-pre-wrap">{d[k]}</dd></Fragment>))}
                     {r.page && <><dt className="text-ink-400">Sent from</dt><dd className="font-mono text-xs text-ink-400">{r.page}</dd></>}
                     {d._mail && <><dt className="text-ink-400">Email to you</dt><dd className={/^Not emailed/.test(d._mail) ? "text-amber-200" : "text-ink-300"}>{mailSaid(d._mail)}</dd></>}
                   </dl>
                   <div className="flex flex-wrap items-center gap-2">
-                    {d.email && <a className="btn btn-sm btn-pri" href={`mailto:${d.email}?subject=${encodeURIComponent("Re: your enquiry")}`} onClick={() => setStatus(r, "replied")}>Reply by email</a>}
-                    {d.phone && <a className={`btn btn-sm ${d.email ? "" : "btn-pri"}`} href={`tel:${String(d.phone).replace(/[^\d+]/g, "")}`}>Call</a>}
+                    {nx && <button type="button" className="btn btn-sm btn-pri" onClick={() => setStatus(r, nx[0])}>{nx[1]}</button>}
+                    {d.email && !ord && <a className="btn btn-sm btn-pri" href={`mailto:${d.email}?subject=${encodeURIComponent("Re: your enquiry")}`} onClick={() => setStatus(r, "replied")}>Reply by email</a>}
+                    {d.phone && <a className={`btn btn-sm ${d.email || nx ? "" : "btn-pri"}`} href={`tel:${String(d.phone).replace(/[^\d+]/g, "")}`}>Call</a>}
                     {d.phone && <a className="btn btn-sm" href={`https://wa.me/${d.phone.replace(/\D/g, "")}`} target="_blank" rel="noopener">WhatsApp</a>}
-                    <select aria-label="Status" className="input w-auto py-1.5 text-sm" value={r.status} onChange={(e) => setStatus(r, e.target.value)}>{STATUS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
+                    <select aria-label="Status" className="input w-auto py-1.5 text-sm" value={r.status} onChange={(e) => setStatus(r, e.target.value)}>{SL.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
+                    {nx && r.status !== "cancelled" && <button type="button" className="btn btn-sm" onClick={() => setStatus(r, "cancelled")}>Cancel the order</button>}
                     <button className="btn btn-sm btn-danger ml-auto" onClick={() => remove(r)}>Delete</button>
                   </div>
                 </div>
@@ -261,5 +276,5 @@ function CfInbox({ cf, account }: { cf: CfSiteCfg; account?: string }) {
   };
   if (err) return <section className="card flex max-w-xl flex-col gap-3 p-5"><p className="text-sm text-red-300">{err}</p><button className="btn self-start" onClick={load}>Try again</button></section>;
   if (!rows) return <SkelRows n={5} label="Loading enquiries" />;
-  return <EnquiryList rows={rows} setStatus={setStatus} remove={remove} load={load} name={cf.site} who={<>Signed in as {who} · {rows.length} enquir{rows.length === 1 ? "y" : "ies"} for <b className="text-ink-200">{cf.site}</b></>} />;
+  return <EnquiryList rows={rows} setStatus={setStatus} remove={remove} load={load} orders name={cf.site} who={<>Signed in as {who} · {rows.length} enquir{rows.length === 1 ? "y" : "ies"} for <b className="text-ink-200">{cf.site}</b></>} />;
 }

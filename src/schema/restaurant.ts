@@ -12,7 +12,7 @@ type Card = Category["cards"][number];
 export const REST_SECTIONS: [string, string][] = [["hero", "Home"], ["highlights", "Highlights"], ["about", "Our story"], ["specials", "Signature dishes"], ["food", "Menu"], ["offers", "Offers"], ["gallery", "Gallery"], ["chef", "Our team"], ["events", "Events & catering"],
   ["press", "Featured in"], ["testimonials", "Reviews"], ["order", "Order online"], ["reserve", "Book a table"], ["contact", "Visit us"], ["faq", "FAQ"], ["cta", "Call to action"]];
 const IN_NAV = ["about", "food", "gallery", "events", "contact"];
-const TARGETS = REST_SECTIONS.filter(([id]) => id !== "hero").map(([value, label]) => ({ value, label }));
+const TARGETS = [...REST_SECTIONS.filter(([id]) => id !== "hero").map(([value, label]) => ({ value, label })), { value: "ordering", label: "Order now page (when online ordering is on)" }];
 const ICONS: [string, string][] = [["cutlery", "Fork and knife"], ["flame", "Flame"], ["leaf", "Leaf"], ["bowl", "Steaming bowl"], ["people", "People"], ["cup", "Cup"], ["glass", "Glass"], ["cake", "Cake"], ["pizza", "Pizza slice"], ["fish", "Fish"], ["hat", "Chef's hat"], ["truck", "Delivery van"],
   ["bag", "Takeaway bag"], ["calendar", "Calendar"], ["clock", "Clock"], ["pin", "Map pin"], ["phone", "Phone"], ["star", "Star"], ["heart", "Heart"], ["music", "Music"], ["wifi", "Wi-Fi"], ["car", "Parking"], ["sun", "Outdoor seating"], ["paw", "Pet friendly"], ["gift", "Gift"], ["shield", "Hygiene"], ["spark", "Spark"]];
 const ICON_OPTS = ICONS.map(([value, label]) => ({ value, label }));
@@ -20,7 +20,7 @@ const DIETS = [{ value: "", label: "Not marked" }, { value: "veg", label: "Veget
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const head = (k: string, title = "Section heading"): Card => ({ title, fields: [g2({ t: "text", path: k + ".eyebrow", label: "Small label above" }, { t: "text", path: k + ".title", label: "Heading", ml: true }), { t: "textarea", path: k + ".lede", label: "Intro line", rows: 2 }] });
 const head2 = (k: string): Card => ({ title: "Heading", fields: [g2({ t: "text", path: k + ".eyebrow", label: "Small label above" }, { t: "text", path: k + ".title", label: "Heading", ml: true })] });
-export const newDish = () => ({ name: "New dish", desc: "", price: "", diet: "", spice: "0", tag: "", allergens: "", image: null, variants: [], soldOut: false });
+export const newDish = () => ({ name: "New dish", desc: "", price: "", diet: "", spice: "0", tag: "", allergens: "", image: null, variants: [], addons: [], soldOut: false });
 
 const schema: Category[] = [
   {
@@ -110,6 +110,10 @@ const schema: Category[] = [
               g3({ t: "select", path: "diet", label: "Diet", options: DIETS }, { t: "select", path: "spice", label: "Spice", options: [{ value: "0", label: "Not shown" }, { value: "1", label: "Mild" }, { value: "2", label: "Medium" }, { value: "3", label: "Hot" }] }, { t: "text", path: "tag", label: "Tag (optional)", ph: "Bestseller, New" }),
               g2({ t: "text", path: "allergens", label: "Contains (allergens)", ph: "dairy, nuts" }, { t: "toggle", path: "soldOut", label: "Sold out today" }),
               { t: "image", path: "image", label: "Photo (optional)" },
+              g2({ t: "toggle", path: "bestseller", label: "Best seller (shown first on the Order now page)" }, { t: "toggle", path: "noOrder", label: "Dine-in only: leave it off the Order now page" }),
+              { t: "list", path: "addons", label: "Extras guests can add when ordering (optional)", max: 6, title: (it) => `${it.title || "Extras"} · ${(it.options || []).length} choice${(it.options || []).length === 1 ? "" : "s"}`, add: () => ({ title: "Extras", max: 3, required: false, options: [] }),
+                item: [g3({ t: "text", path: "title", label: "Group name", ph: "Extras" }, { t: "number", path: "max", label: "Most a guest can pick (0 = any)", min: 0, step: 1 }, { t: "toggle", path: "required", label: "Must pick at least one" }),
+                  { t: "strings", path: "options", label: "Choices, one per line. Add the price after “=” (leave it out for free).", addLabel: "Add a choice" }] },
               { t: "list", path: "variants", label: "Sizes with their own prices (optional)", max: 6, title: (it) => `${it.label || "Size"}${it.price ? " · " + it.price : ""}`, add: () => ({ label: "", price: "" }), item: [g2({ t: "text", path: "label", label: "Size", ph: "Half" }, { t: "text", path: "price", label: "Price", ph: "180" })] }] }] }] },
     ],
   },
@@ -175,6 +179,46 @@ const schema: Category[] = [
       { t: "note", text: "A link shows once it has an address: paste your page on the delivery app, or your own ordering page." },
       g2({ t: "toggle", path: "order.call", label: "Add “Call to order” (uses the phone number)" }, { t: "toggle", path: "order.whatsapp", label: "Add “Order on WhatsApp” (uses the WhatsApp number)" }),
       { t: "when", path: "order.whatsapp", is: "true", fields: [{ t: "text", path: "order.whatsappText", label: "Message the chat starts with" }] }] }],
+  },
+  {
+    id: "ordering", label: "Online ordering", group: "Pages", desc: "An Order now page of your own: guests pick dishes, add extras, and order for delivery, pickup or their table. No commission and no ordering app.",
+    cards: [
+      { title: "Order now page", fields: [{ t: "toggle", path: "ordering.on", label: "Take orders on the site (adds the Order now page)" },
+        { t: "note", text: "The page lists every dish on your Menu that has a price. Guests search, filter by diet, save favourites, choose sizes and extras, and check out with their name, mobile number and address. It opens at order.html, a good address for a table QR code (order.html?table=7 fills in table 7)." },
+        g2({ t: "text", path: "ordering.label", label: "Name in the menu bar and on buttons" }, { t: "toggle", path: "ordering.inNav", label: "Show it in the menu bar" }),
+        g2({ t: "text", path: "ordering.title", label: "Page heading", ml: true }, { t: "text", path: "ordering.bestTitle", label: "Heading of the best sellers" }),
+        { t: "textarea", path: "ordering.lede", label: "Line under the heading", rows: 2 },
+        { t: "toggle", path: "ordering.tiles", label: "Show the menu's sections as tiles at the top" },
+        { t: "note", text: "Mark best sellers, add extras (for example “Extra cheese = 30”) and keep a dish dine-in only under Menu → each dish. “Sold out today” there also stops it being ordered." }] },
+      { title: "Ways to order and timing", fields: [g3({ t: "toggle", path: "ordering.modes.delivery", label: "Delivery" }, { t: "toggle", path: "ordering.modes.pickup", label: "Pick up" }, { t: "toggle", path: "ordering.modes.dinein", label: "At the table (dine-in)" }),
+        g3({ t: "number", path: "ordering.deliveryMins", label: "Delivery takes about (minutes)", min: 0, step: 5 }, { t: "number", path: "ordering.pickupMins", label: "Pickup is ready in (minutes)", min: 0, step: 5 }, { t: "number", path: "ordering.dineMins", label: "Served at the table in (minutes)", min: 0, step: 5 }),
+        { t: "toggle", path: "ordering.schedule", label: "Let guests order ahead for a later time" },
+        { t: "when", path: "ordering.schedule", is: "true", fields: [g2({ t: "number", path: "ordering.slotMins", label: "Time slots every (minutes)", min: 10, step: 5 }, { t: "number", path: "ordering.daysAhead", label: "How many days ahead (0 = today only)", min: 0, step: 1 })] },
+        { t: "note", text: "Times follow your Opening hours. While you're closed, guests can only order ahead (or not at all, if ordering ahead is off)." }] },
+      { title: "Delivery area and charges", fields: [g3({ t: "number", path: "ordering.minOrder", label: "Minimum order", min: 0, step: 10 }, { t: "number", path: "ordering.deliveryFee", label: "Delivery fee", min: 0, step: 5 }, { t: "number", path: "ordering.freeAbove", label: "Free delivery above (0 = never)", min: 0, step: 50 }),
+        { t: "textarea", path: "ordering.areas", label: "Where you deliver: one PIN code or area per line (empty = anywhere)", rows: 4 },
+        { t: "note", text: "Add “= fee” for an area with its own delivery fee, for example “411001 = 30” or “Koregaon Park = 0”. An address outside the list can't be ordered to; the guest is offered pickup." },
+        g2({ t: "text", path: "ordering.areaNote", label: "Message for an address you don't deliver to", ph: "Sorry, we don't deliver there yet. Choose Pick up, or call us." }, { t: "toggle", path: "ordering.askPin", label: "Ask for the PIN code" }),
+        g3({ t: "number", path: "ordering.packing", label: "Packing charge per order", min: 0, step: 5 }, { t: "number", path: "ordering.taxPercent", label: "Tax (%)", min: 0, step: 0.5 }, { t: "text", path: "ordering.taxLabel", label: "Tax name", ph: "GST" }),
+        g2({ t: "toggle", path: "ordering.taxIncluded", label: "Menu prices already include tax" }, { t: "toggle", path: "ordering.roundOff", label: "Round the total to a whole number" })] },
+      { title: "Offers and coupons", fields: [{ t: "list", path: "ordering.coupons", max: 12, title: (it) => `${String(it.code || "CODE").toUpperCase()} · ${it.kind === "flat" ? "" : ""}${it.value || 0}${it.kind === "flat" ? " off" : "% off"}${it.on === false ? " (off)" : ""}`, add: () => ({ on: true, code: "", kind: "percent", value: 10, min: 0, max: 0, note: "" }),
+        item: [g3({ t: "text", path: "code", label: "Code", ph: "WELCOME10" }, { t: "select", path: "kind", label: "Kind", options: [{ value: "percent", label: "Percent off" }, { value: "flat", label: "Amount off" }] }, { t: "number", path: "value", label: "Value", min: 0, step: 1 }),
+          g3({ t: "number", path: "min", label: "Only on orders above", min: 0, step: 10 }, { t: "number", path: "max", label: "Most it takes off (percent; 0 = no limit)", min: 0, step: 10 }, { t: "toggle", path: "on", label: "Active" }),
+          { t: "text", path: "note", label: "Line shown to guests (optional)", ph: "10% off your first order" }] },
+        { t: "note", text: "Active codes are listed in the cart so guests can tap one. A code is checked on the guest's device, so treat it as a public offer, not a secret." }] },
+      { title: "Cart extras", fields: [g2({ t: "toggle", path: "ordering.tips", label: "Offer a tip for the team" }, { t: "text", path: "ordering.tipOptions", label: "Tip amounts", ph: "10, 20, 30" }),
+        g3({ t: "toggle", path: "ordering.cutlery", label: "Ask whether to send cutlery" }, { t: "toggle", path: "ordering.dishNotes", label: "Special instructions per dish" }, { t: "toggle", path: "ordering.notes", label: "A note for the kitchen" }),
+        { t: "toggle", path: "ordering.askEmail", label: "Ask for an email address (optional for the guest)" }] },
+      { title: "Payment", fields: [g2({ t: "toggle", path: "ordering.pay.cod", label: "Pay on delivery, at the counter or at the table" }, { t: "text", path: "ordering.pay.codLabel", label: "Its name for delivery orders", ph: "Pay on delivery (cash or UPI)" }),
+        { t: "toggle", path: "ordering.pay.upi", label: "Pay now by UPI (prices in ₹ only)" },
+        { t: "when", path: "ordering.pay.upi", is: "true", fields: [g2({ t: "text", path: "ordering.pay.upiId", label: "UPI ID", ph: "name@bank", check: "vpa" }, { t: "text", path: "ordering.pay.payee", label: "Payee name (as your bank shows it)" }),
+          { t: "note", text: "After ordering, the guest sees a QR code and a button for their UPI app with the exact total and the order number filled in. Check the payment in your UPI app before you send the order out: the site can't confirm a UPI payment by itself." }] }] },
+      { title: "Where orders reach you", fields: [
+        { t: "note", text: "With the booking inbox set up (Booking form → where requests are saved), every order lands in Enquiries on the admin page and is emailed to you like a booking. There you move it through Confirmed, Being prepared, Out for delivery and Delivered, and on a site hosted on your Cloudflare database the guest's order page follows along. Without an inbox, the guest sends the order to you on WhatsApp with one tap." },
+        g2({ t: "text", path: "ordering.whatsapp", label: "WhatsApp number for orders (empty uses the one under Address & contact)", ph: "+91 98xxxxxxxx", check: "phone" }, { t: "text", path: "ordering.intro", label: "First words of the order message", ph: "New order" }),
+        g2({ t: "text", path: "ordering.prefix", label: "Order numbers start with", ph: "ORD" }, { t: "text", path: "ordering.success", label: "Message after ordering" }),
+        { t: "note", text: "Guests aren't asked to sign in or wait for a code by SMS: their details, favourites and past orders are remembered on their own phone, and “Order again” refills the cart.", tone: "info" }] },
+    ],
   },
   {
     id: "faq", label: "FAQ", group: "Pages", sub: "Sections", desc: "Questions guests often ask.",
@@ -265,11 +309,18 @@ function prepareRestaurant(c: any) {
   prepareSlides(c.hero, c.theme?.deep || "#2A1710"); prepareMaintenance(c);
   c.food = { eyebrow: "", title: "Menu", lede: "", currency: "₹", dietMarks: true, filters: true, search: true, photos: true, homeCount: 3, all: "See the full menu", pdfUrl: "", pdfLabel: "Download the menu (PDF)", note: "", ...(c.food && typeof c.food === "object" ? c.food : {}) };
   c.food.categories = (Array.isArray(c.food.categories) ? c.food.categories : []).filter((k: any) => k && typeof k === "object");
-  for (const k of c.food.categories) { k.items = (Array.isArray(k.items) ? k.items : []).filter((d: any) => d && typeof d === "object"); for (const d of k.items) { if (!Array.isArray(d.variants)) d.variants = []; d.spice = String(Math.max(0, Math.min(3, +d.spice || 0))); } }
+  for (const k of c.food.categories) { k.items = (Array.isArray(k.items) ? k.items : []).filter((d: any) => d && typeof d === "object"); for (const d of k.items) { if (!Array.isArray(d.variants)) d.variants = []; d.addons = (Array.isArray(d.addons) ? d.addons : []).filter((g: any) => g && typeof g === "object"); for (const g of d.addons) g.options = (Array.isArray(g.options) ? g.options : []).map((o: any) => String(o ?? "")); d.spice = String(Math.max(0, Math.min(3, +d.spice || 0))); } }
   c.hours = { title: "Opening hours", format: "12", utcOffset: "+05:30", showStatus: true, note: "", openLabel: "Open now", closedLabel: "Closed now", ...(c.hours && typeof c.hours === "object" ? c.hours : {}) };
   const have: any[] = Array.isArray(c.hours.days) ? c.hours.days.filter((d: any) => d && typeof d === "object") : [];
   c.hours.days = DAYS.map((day, i) => ({ day, closed: false, open: "", close: "", open2: "", close2: "", ...(have[i] || {}) }));
   for (const k of ["highlights", "specials", "offers", "gallery", "chef", "events", "press", "testimonials", "order", "reserve", "faq", "about", "cta", "footer"]) c[k] = c[k] && typeof c[k] === "object" ? c[k] : {};
+  {
+    const o = c.ordering && typeof c.ordering === "object" ? c.ordering : {};
+    c.ordering = { on: false, label: "Order now", title: "Order online", lede: "Fresh from our kitchen, for delivery or pickup.", bestTitle: "Best sellers", tiles: true, inNav: true, deliveryMins: 40, pickupMins: 20, dineMins: 15, minOrder: 200, deliveryFee: 40, freeAbove: 0, areas: "", areaNote: "", askPin: true, packing: 0, taxPercent: 5, taxLabel: "GST", taxIncluded: false, roundOff: true,
+      tips: true, tipOptions: "10, 20, 30", cutlery: true, notes: true, dishNotes: true, askEmail: false, schedule: true, slotMins: 30, daysAhead: 1, whatsapp: "", intro: "New order", prefix: "ORD", success: "Thank you! Your order is placed.", ...o,
+      modes: { delivery: true, pickup: true, dinein: false, ...(o.modes && typeof o.modes === "object" ? o.modes : {}) }, pay: { cod: true, codLabel: "", upi: false, upiId: "", payee: "", ...(o.pay && typeof o.pay === "object" ? o.pay : {}) },
+      coupons: (Array.isArray(o.coupons) ? o.coupons : []).filter((x: any) => x && typeof x === "object") };
+  }
   for (const [k, list] of [["highlights", "items"], ["specials", "items"], ["offers", "items"], ["gallery", "items"], ["chef", "members"], ["events", "items"], ["press", "logos"], ["testimonials", "items"], ["order", "links"], ["faq", "items"], ["about", "facts"]] as const) if (!Array.isArray(c[k][list])) c[k][list] = [];
   c.contact ||= {}; c.contact.form = c.contact.form && typeof c.contact.form === "object" ? c.contact.form : { enabled: true };
   { const F = c.contact.form; if (F.saveTo !== "file") F.saveTo = "auto"; if (F.notifyAsk !== 1) { F.notify = true; F.notifyAsk = 1; } else F.notify = F.notify === true; F.notifyTo ??= ""; F.notifySubject ??= "";
@@ -299,6 +350,7 @@ export const restaurantTemplate: TemplateDef = {
     { file: "about.html", label: "Our story" },
     { file: "gallery.html", label: "Gallery" },
     { file: "contact.html", label: "Visit & book" },
+    { file: "order.html", label: "Order now" },
   ],
   schema,
   colorKeys: [{ key: "c1", label: "Primary" }, { key: "c2", label: "Secondary" }, { key: "c3", label: "Highlight" }, { key: "text", label: "Text" }, { key: "surface", label: "Cards" }, { key: "deep", label: "Dark" }],

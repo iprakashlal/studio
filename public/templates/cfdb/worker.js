@@ -16,7 +16,7 @@ create index if not exists approvals_project on approvals (scope, project, creat
 create table if not exists approval_notes (id integer primary key autoincrement, token text not null, who text not null, body text not null, page text not null default '', kind text not null default 'comment', created_at text not null);
 create index if not exists approval_notes_token on approval_notes (token, id);
 `;
-var CFDB_VERSION = 21;
+var CFDB_VERSION = 22;
 var CFDB_WORKER_NAME = "picaffectz-db";
 
 // src/lib/lookdigest.ts
@@ -351,11 +351,11 @@ async function notifyEnquiry(env, site, data, page) {
   let said = wantOwner && !owners.length ? "Not emailed: no address to send to. Fill in \u201CSend to\u201D under Enquiry form." : "";
   const vars = { name: oneLine(data.name || ""), site: name, page: page || "", email: oneLine(data.email || "") };
   const label = (k) => k.replace(/[-_]+/g, " ").replace(/^./, (ch) => ch.toUpperCase());
-  const rows = Object.entries(data).filter(([k]) => k !== "consent" && !k.startsWith("_")).map(([k, v]) => `<tr><td style="padding:6px 14px 6px 0;color:#667;vertical-align:top;white-space:nowrap">${hesc(label(k))}</td><td style="padding:6px 0;white-space:pre-wrap">${hesc(v)}</td></tr>`).join("");
+  const rows = Object.entries(data).filter(([k]) => k !== "consent" && k !== "okey" && !(k === "message" && data.order_no) && !k.startsWith("_")).map(([k, v]) => `<tr><td style="padding:6px 14px 6px 0;color:#667;vertical-align:top;white-space:nowrap">${hesc(label(k))}</td><td style="padding:6px 0;white-space:pre-wrap">${hesc(v)}</td></tr>`).join("");
   const table = `<table style="border-collapse:collapse;margin:0 0 14px">${rows}</table>`;
   const jobs = [];
   if (wantOwner && owners.length) {
-    const subject = oneLine(fill(String(F.notifySubject || "New enquiry from {name}"), { ...vars, name: vars.name || "your website" })).slice(0, 150) || "New enquiry";
+    const subject = data.order_no ? oneLine(`New order ${data.order_no}${data.total ? " (" + data.total + ")" : ""} from ${vars.name || "your website"}`).slice(0, 150) : oneLine(fill(String(F.notifySubject || "New enquiry from {name}"), { ...vars, name: vars.name || "your website" })).slice(0, 150) || "New enquiry";
     const intro = fill(String(E.enquiry?.intro || "New enquiry from the {site} website."), vars);
     const foot = fill(String(E.enquiry?.footer || "It is also saved under Enquiries in the site's admin page."), vars) + (EMAIL_RE.test(data.email || "") ? " Reply to this email to answer the visitor." : "");
     jobs.push(sendMail(env, owners, subject, WRAP(paras(intro) + table + paras(foot, "margin:0 0 8px;color:#667;font-size:13px")), EMAIL_RE.test(data.email || "") ? data.email : void 0).then(() => {
@@ -902,6 +902,20 @@ var db_worker_default = {
         }
         return err(404, "Not found.");
       }
+      if (p.startsWith("/order/") && req.method === "GET") {
+        const [, , site, no] = p.split("/"), k = u.searchParams.get("k") || "";
+        if (!/^[a-z0-9][a-z0-9-]{0,59}$/.test(site || "") || !/^[A-Z0-9][A-Z0-9-]{3,29}$/.test(no || "") || !/^[a-f0-9]{16,64}$/.test(k)) return err(404, "Not found.");
+        const rows = (await env.DB.prepare("select status, data from enquiries where site = ? and data like ? order by id desc limit 5").bind(site, `%"order_no":"${no}"%`).all()).results || [];
+        const hit = rows.find((r) => {
+          try {
+            const d = JSON.parse(r.data);
+            return d.order_no === no && d.okey === k;
+          } catch {
+            return false;
+          }
+        });
+        return hit ? json({ status: hit.status }) : err(404, "Not found.");
+      }
       if (p.startsWith("/enquire/") && req.method === "POST") {
         const site = p.split("/")[2];
         if (!/^[a-z0-9][a-z0-9-]{0,59}$/.test(site)) return err(404, "Not found.");
@@ -1359,7 +1373,7 @@ var db_worker_default = {
         const b = await req.json();
         const site = scope.replace(/^site:/, "");
         if (p === "/e/status") {
-          if (!["new", "read", "replied", "archived"].includes(b.status)) return err(400, "Unknown status.");
+          if (!["new", "read", "replied", "archived", "accepted", "preparing", "ready", "out", "done", "cancelled"].includes(b.status)) return err(400, "Unknown status.");
           await env.DB.prepare("update enquiries set status = ? where id = ? and site = ?").bind(b.status, b.id, site).run();
         } else await env.DB.prepare("delete from enquiries where id = ? and site = ?").bind(b.id, site).run();
         return json({ ok: true });

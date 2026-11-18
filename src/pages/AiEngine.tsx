@@ -5,6 +5,7 @@ import { AI_ENGINES, aiEngine, onAiEngine, setAiEngine, type AiEngine } from "..
 import type { Studio, StudioIndex } from "../lib/studio";
 import { browserCan, browserHasTranslator, PHRASES } from "../lib/systranslate";
 import { useToast } from "../ui/kit";
+import { AiApiForm, WhatsAppForm, useStudioWhere } from "./Connections";
 
 export const useAiEngine = () => useSyncExternalStore(onAiEngine, aiEngine);
 
@@ -26,6 +27,7 @@ const TRY: [string, string][] = [["hi", "Hindi"], ["mr", "Marathi"], ["bn", "Ben
 export function AiEngineCard({ studio, index, onIndex }: { studio: Studio; index: StudioIndex; onIndex: (i: StudioIndex) => void }) {
   const toast = useToast(), cur = useAiEngine();
   const [busy, setBusy] = useState(false);
+  const where = useStudioWhere();
   const [langs, setLangs] = useState<string[] | null>(null);
   useEffect(() => { let on = true; (async () => { const can = browserHasTranslator() ? await Promise.all(TRY.map(([c]) => browserCan("en", c))) : []; if (on) setLangs(TRY.filter((_, i) => can[i] && can[i] !== "no").map(([, n]) => n)); })(); return () => { on = false; }; }, []);
   const choose = async (e: AiEngine) => {
@@ -41,8 +43,8 @@ export function AiEngineCard({ studio, index, onIndex }: { studio: Studio; index
   return (
     <section className="card flex flex-col gap-3 p-5" aria-label="AI engine">
       <h3 className="text-[15px] font-extrabold">AI engine</h3>
-      <p className="text-sm text-ink-300">Translating, reading a pamphlet or menu, and writing text can run on Cloudflare's AI or on the Studio's own built-in system. Choose the one the Studio uses; each helper also lets you switch for a single use.</p>
-      <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label="AI engine choice">
+      <p className="text-sm text-ink-300">Translating, reading a pamphlet or menu, and writing text can run on Cloudflare's AI, on the Studio's own built-in system, or on an AI API of your own. Choose the one the Studio uses; each helper also lets you switch for a single use.</p>
+      <div className="grid gap-2 sm:grid-cols-3" role="radiogroup" aria-label="AI engine choice">
         {AI_ENGINES.map((e) => (
           <button key={e.id} type="button" role="radio" aria-checked={cur === e.id} disabled={busy} onClick={() => choose(e.id)} className={`flex flex-col gap-1 rounded-xl border p-4 text-left ${cur === e.id ? "border-brand-500 bg-brand-500/10" : "border-ink-600 bg-ink-950 hover:border-ink-400"}`}>
             <b className="flex items-center gap-2 text-ink-100">{e.name}{cur === e.id && <span className="chip border-brand-400/60 text-brand-200">In use</span>}</b>
@@ -50,6 +52,7 @@ export function AiEngineCard({ studio, index, onIndex }: { studio: Studio; index
           </button>
         ))}
       </div>
+      {(cur === "custom" || where) && <AiApiForm where={where} />}
       <div className="overflow-x-auto">
         <table className="w-full min-w-[520px] text-left text-[13px]">
           <thead><tr className="text-ink-400"><th className="py-1.5 pr-3 font-semibold">Helper</th><th className="py-1.5 pr-3 font-semibold">Cloudflare AI</th><th className="py-1.5 font-semibold">Picaffectz system</th></tr></thead>
@@ -65,3 +68,6 @@ export function AiEngineCard({ studio, index, onIndex }: { studio: Studio; index
     </section>
   );
 }
+
+/** Settings → General: WhatsApp for the Studio's own sign-in codes (optional). */
+export function StudioWhatsAppCard() { const where = useStudioWhere(); return <WhatsAppForm where={where} kind="studio" />; }

@@ -126,7 +126,7 @@ async function notifyEnquiry(env: Env, site: string, data: Record<string, string
   let said = wantOwner && !owners.length ? "Not emailed: no address to send to. Fill in “Send to” under Enquiry form." : "";
   const vars = { name: oneLine(data.name || ""), site: name, page: page || "", email: oneLine(data.email || "") };
   const label = (k: string) => k.replace(/[-_]+/g, " ").replace(/^./, (ch) => ch.toUpperCase());
-  const rows = Object.entries(data).filter(([k]) => k !== "consent" && k !== "okey" && k !== "pay_state" && !(k === "message" && data.order_no) && !k.startsWith("_")).map(([k, v]) => `<tr><td style="padding:6px 14px 6px 0;color:#667;vertical-align:top;white-space:nowrap">${hesc(label(k))}</td><td style="padding:6px 0;white-space:pre-wrap">${hesc(v)}</td></tr>`).join("");
+  const rows = Object.entries(data).filter(([k]) => k !== "consent" && k !== "okey" && k !== "pay_state" && k !== "rz_order" && k !== "cart" && !(k === "message" && data.order_no) && !k.startsWith("_")).map(([k, v]) => `<tr><td style="padding:6px 14px 6px 0;color:#667;vertical-align:top;white-space:nowrap">${hesc(label(k))}</td><td style="padding:6px 0;white-space:pre-wrap">${hesc(v)}</td></tr>`).join("");
   const table = `<table style="border-collapse:collapse;margin:0 0 14px">${rows}</table>`;
   const jobs: Promise<unknown>[] = [];
   if (wantOwner && owners.length) {
@@ -367,6 +367,137 @@ async function translateTexts(env: Env, q: any): Promise<any> {
   return { t: all.map((i) => done.get(i) ?? null) };
 }
 /** A public https address (not this machine, a bare IP or an internal name). */
+/* ============================================================
+   Connections an owner can switch on: their own AI API, WhatsApp (Meta's Cloud API) and Razorpay.
+   Their keys are kept in this database encrypted with the Worker's own secret, are never sent back to
+   a browser, and each is used only when it is switched on.
+   ============================================================ */
+let ensured = false;
+async function ensure(env: Env) {
+  if (ensured) return;
+  await env.DB.batch([
+    env.DB.prepare("create table if not exists settings (scope text not null, name text not null, value text not null, updated_at text not null, primary key (scope, name))"),
+    env.DB.prepare("create table if not exists otps (k text primary key, hash text not null, expires integer not null, tries integer not null default 0, sent integer not null default 0)"),
+    env.DB.prepare("create table if not exists payments (rz_order text primary key, site text not null, order_no text not null, amount integer not null, status text not null default 'created', created_at text not null)"),
+  ]);
+  ensured = true;
+}
+const SETTINGS: Record<string, { secret: string[]; text: string[]; flags: string[] }> = {
+  ai: { secret: ["key"], text: ["base", "model", "vision"], flags: ["on"] },
+  wa: { secret: ["token"], text: ["phoneId", "cc", "lang", "to", "phones", "tplOtp", "tplOrder", "tplEnquiry"], flags: ["on", "login", "orderOtp", "orderAlert", "enquiryAlert"] },
+  rz: { secret: ["secret"], text: ["keyId"], flags: ["on"] },
+};
+async function aesKey(env: Env) { return crypto.subtle.importKey("raw", await crypto.subtle.digest("SHA-256", enc.encode("settings:" + env.SECRET)), "AES-GCM", false, ["encrypt", "decrypt"]); }
+async function getSetting(env: Env, scope: string, name: string): Promise<any | null> {
+  await ensure(env);
+  const r: any = await env.DB.prepare("select value from settings where scope = ? and name = ?").bind(scope, name).first(); if (!r) return null;
+  try { const b = unb64u(r.value); return JSON.parse(new TextDecoder().decode(await crypto.subtle.decrypt({ name: "AES-GCM", iv: b.slice(0, 12) }, await aesKey(env), b.slice(12)))); } catch { return null; }
+}
+async function putSetting(env: Env, scope: string, name: string, value: any | null) {
+  await ensure(env);
+  if (value == null) { await env.DB.prepare("delete from settings where scope = ? and name = ?").bind(scope, name).run(); return; }
+  const iv = crypto.getRandomValues(new Uint8Array(12)), ct = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv }, await aesKey(env), enc.encode(JSON.stringify(value))));
+  const all = new Uint8Array(12 + ct.length); all.set(iv); all.set(ct, 12);
+  let s = ""; for (let i = 0; i < all.length; i += 8000) s += String.fromCharCode(...all.subarray(i, i + 8000));
+  await env.DB.prepare("insert into settings (scope, name, value, updated_at) values (?, ?, ?, ?) on conflict (scope, name) do update set value = excluded.value, updated_at = excluded.updated_at")
+    .bind(scope, name, btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""), new Date().toISOString()).run();
+}
+/** What a browser may see of a setting: everything but the secrets (those only say whether one is saved). */
+function maskSetting(name: string, v: any) {
+  const S = SETTINGS[name], o: any = {}; if (!v) return null;
+  for (const k of S.text) o[k] = String(v[k] ?? ""); for (const k of S.flags) o[k] = !!v[k]; for (const k of S.secret) o[k] = !!v[k];
+  return o;
+}
+/** The newest saved setting of a kind in this database (the Studio's own AI API serves every site on it). */
+async function anySetting(env: Env, name: string): Promise<any | null> {
+  await ensure(env);
+  const r: any = await env.DB.prepare("select scope from settings where name = ? order by updated_at desc limit 1").bind(name).first();
+  return r ? getSetting(env, r.scope, name) : null;
+}
+
+/** An OpenAI-compatible chat API in the place of Workers AI: same call, same answer shape. */
+function customAI(c: any) {
+  const base = String(c.base || "").trim().replace(/\/+$/, "").replace(/\/chat\/completions$/, "");
+  return {
+    run: async (_model: string, o: any) => {
+      if (!o?.messages) return { response: "" };
+      const vision = o.messages.some((m: any) => Array.isArray(m.content));
+      const send = (fmt: boolean) => fetch(base + "/chat/completions", { method: "POST", headers: { Authorization: "Bearer " + c.key, "Content-Type": "application/json" },
+        body: JSON.stringify({ model: (vision && c.vision) || c.model, messages: o.messages, ...(o.max_tokens ? { max_tokens: Math.min(o.max_tokens, 8000) } : {}), ...(o.temperature != null ? { temperature: o.temperature } : {}), ...(fmt && o.response_format ? { response_format: o.response_format } : {}) }) });
+      let r = await send(true);
+      // Not every API knows the JSON switch: asked again without it (the prompts already ask for JSON).
+      if (r.status === 400 && o.response_format) r = await send(false);
+      if (!r.ok) { const t = (await r.text()).replace(/\s+/g, " ").slice(0, 240); throw new Error(r.status === 401 || r.status === 403 ? `Your AI API refused the key (${r.status}). Check it under Settings → AI engine.` : r.status === 429 ? "Your AI API says its limit is reached (429)." : `Your AI API answered ${r.status}: ${t}`); }
+      const j: any = await r.json().catch(() => null), m = j?.choices?.[0]?.message?.content;
+      return { response: typeof m === "string" ? m : Array.isArray(m) ? m.map((x: any) => x?.text || "").join("") : "" };
+    },
+  };
+}
+
+/* ---- WhatsApp (Meta's WhatsApp Business Cloud API). Messages a business starts must use templates it has had approved. ---- */
+const waNum = (v: unknown, cc = "91") => { let d = String(v ?? "").replace(/\D/g, ""); if (d.length === 10) d = (String(cc || "91").replace(/\D/g, "") || "91") + d; return d.length >= 11 && d.length <= 15 ? d : ""; };
+/** A template's variable can't hold line breaks, tabs or long runs of spaces. */
+const waText = (s: unknown, n = 300) => String(s ?? "").replace(/[\r\n\t]+/g, " ").replace(/ {4,}/g, "   ").trim().slice(0, n) || "-";
+async function waSend(c: any, to: string, tpl: string, params: string[], otp?: string) {
+  const comps: any[] = [{ type: "body", parameters: params.map((t) => ({ type: "text", text: waText(t) })) }];
+  // An authentication template carries the code in its copy-code button as well.
+  if (otp) comps.push({ type: "button", sub_type: "url", index: "0", parameters: [{ type: "text", text: otp }] });
+  const r = await fetch(`https://graph.facebook.com/v21.0/${encodeURIComponent(String(c.phoneId).trim())}/messages`, { method: "POST", headers: { Authorization: "Bearer " + c.token, "Content-Type": "application/json" },
+    body: JSON.stringify({ messaging_product: "whatsapp", to, type: "template", template: { name: String(tpl).trim(), language: { code: String(c.lang || "en").trim() || "en" }, components: comps } }) });
+  if (!r.ok) throw new Error(`WhatsApp didn't accept the message (${r.status}): ` + (await r.text()).replace(/\s+/g, " ").slice(0, 200));
+}
+const waReady = (c: any) => !!(c && c.on && c.token && String(c.phoneId || "").trim());
+/** "name@site.com = +91 98…" lines: the WhatsApp number of each person who signs in. */
+const waPhoneOf = (lines: unknown, email: string) => { for (const l of String(lines || "").split(/\n/)) { const i = l.indexOf("="); if (i > 0 && l.slice(0, i).trim().toLowerCase() === email) return l.slice(i + 1).trim(); } return ""; };
+/** Tells the owner on WhatsApp about a new order or enquiry, when they switched that on. Says what happened. */
+async function waAlert(env: Env, site: string, data: Record<string, string>): Promise<string> {
+  const c = await getSetting(env, "site:" + site, "wa"); if (!waReady(c)) return "";
+  const order = !!data.order_no, tpl = String((order ? c.orderAlert && c.tplOrder : c.enquiryAlert && c.tplEnquiry) || "").trim(); if (!tpl) return "";
+  const to = [...new Set(String(c.to || "").split(/[,;\n]+/).map((x) => waNum(x, c.cc)).filter(Boolean))].slice(0, 3); if (!to.length) return "Not sent on WhatsApp: no number to send to.";
+  const since = new Date(Date.now() - 3600_000).toISOString(), n: any = await env.DB.prepare("select count(*) n from enquiries where site = ? and created_at > ?").bind(site, since).first();
+  if ((n?.n || 0) > 60) return "Not sent on WhatsApp: more than 60 in an hour, so messages are paused.";
+  const params = order ? [data.order_no, data.name || "-", data.total || "-", [data.mode, data.when].filter(Boolean).join(", ") || "-"] : [data.name || "-", data.phone || data.email || "-", data.message || [data.type, data.date, data.time, data.guests && data.guests + " guests"].filter(Boolean).join(", ") || "-"];
+  try { for (const t of to) await waSend(c, t, tpl, params); return "Sent on WhatsApp."; } catch (e: any) { return "Not sent on WhatsApp: " + String(e?.message || e).slice(0, 240); }
+}
+
+/* ---- Razorpay for a restaurant's Order now page: the amount is worked out here from the site's own menu, never taken from the browser. ---- */
+const rslug = (s: unknown) => String(s || "").toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60) || "item";
+const rnum = (p: unknown) => { const n = parseFloat(String(p ?? "").replace(/[^\d.]/g, "")); return isFinite(n) ? n : NaN; };
+/** The bill of a restaurant order, by the same rules as the site's Order now page (assets/order.js). */
+export function restBill(c: any, q: any): { total: number } | { error: string } {
+  const o = c?.ordering || {}; if (!o.on) return { error: "Online ordering is switched off." };
+  const mode = String(q?.mode || ""), modes = o.modes || {}; if (!["delivery", "pickup", "dinein"].includes(mode) || !modes[mode]) return { error: "That way of ordering isn't offered." };
+  const dishes = new Map<string, any>();
+  for (const k of c?.food?.categories || []) { if (!k || !String(k.name || "").trim()) continue; for (const d of k.items || []) if (d && String(d.name || "").trim() && !d.noOrder && !d.soldOut) dishes.set(rslug(k.name) + "/" + rslug(d.name), d); }
+  let sub = 0; const lines = Array.isArray(q?.items) ? q.items.slice(0, 60) : []; if (!lines.length) return { error: "The cart is empty." };
+  for (const l of lines) {
+    const d = dishes.get(String(l?.id || "")); if (!d) return { error: "A dish in the cart is no longer on the menu. Refresh the page." };
+    const V = (d.variants || []).filter((v: any) => v && v.label && !isNaN(rnum(v.price))), qty = Math.max(1, Math.min(50, Math.floor(+l.qty || 0)));
+    let unit = V.length ? rnum((V.find((v: any) => String(v.label) === String(l.variant)) || {}).price) : rnum(d.price);
+    if (isNaN(unit)) return { error: "A dish in the cart changed. Refresh the page." };
+    const opts = new Map<string, number>(); for (const g of d.addons || []) for (const s of (g && g.options) || []) { const t = String(s || ""), i = t.lastIndexOf("="), label = (i > 0 ? t.slice(0, i) : t).trim(), pr = i > 0 ? rnum(t.slice(i + 1)) : 0; if (label) opts.set(label, isNaN(pr) ? 0 : pr); }
+    for (const a of Array.isArray(l.addons) ? l.addons.slice(0, 20) : []) { if (!opts.has(String(a))) return { error: "An extra in the cart changed. Refresh the page." }; unit += opts.get(String(a))!; }
+    sub += unit * qty;
+  }
+  const cp = (o.coupons || []).find((x: any) => x && x.on !== false && +x.value > 0 && String(x.code || "").trim().toUpperCase() === String(q.coupon || "").trim().toUpperCase() && String(q.coupon || "").trim());
+  let disc = 0; if (cp && sub >= (+cp.min || 0)) disc = Math.min(sub, cp.kind === "flat" ? +cp.value : Math.min((sub * +cp.value) / 100, +cp.max > 0 ? +cp.max : Infinity));
+  disc = Math.round(disc * 100) / 100;
+  const pack = mode === "dinein" ? 0 : Math.max(0, +o.packing || 0);
+  let fee: number | null = null, okArea = true;
+  if (mode === "delivery") {
+    const L = String(o.areas || "").split(/\n/).map((x) => x.trim()).filter(Boolean);
+    if (L.length) { okArea = false; const pin = String(q.pin || "").replace(/\D/g, ""), area = String(q.area || "").trim().toLowerCase();
+      for (const l of L) { const i = l.lastIndexOf("="), key = (i > 0 ? l.slice(0, i) : l).trim().toLowerCase(), f = i > 0 ? rnum(l.slice(i + 1)) : NaN; if (!key) continue; if (/^\d{4,}$/.test(key) ? key === pin : !!area && (area.includes(key) || key.includes(area))) { okArea = true; fee = isNaN(f) ? null : f; break; } } }
+  }
+  if (!okArea) return { error: "We don't deliver to that address." };
+  const free = +o.freeAbove > 0 && sub - disc >= +o.freeAbove, del = mode !== "delivery" ? 0 : free ? 0 : Math.max(0, fee != null ? fee : +o.deliveryFee || 0);
+  const base = sub - disc + pack, pct = Math.max(0, +o.taxPercent || 0), tax = o.taxIncluded || !pct ? 0 : Math.round(base * pct) / 100;
+  const tip = o.tips !== false && mode !== "pickup" ? Math.max(0, Math.min(5000, +q.tip || 0)) : 0;
+  const raw = base + tax + del + tip, total = o.roundOff === false ? Math.round(raw * 100) / 100 : Math.round(raw);
+  if (mode !== "dinein" && sub < Math.max(0, +o.minOrder || 0)) return { error: "The order is below the minimum." };
+  return { total };
+}
+
 /** The pictures a page shows: <img> (with lazy-loading and srcset variants), <source>, CSS background images in style attributes and the share image. */
 function picturesOf(html: string, base: URL): { url: string; alt: string }[] {
   const out: { url: string; alt: string }[] = [], seen = new Set<string>();
@@ -445,7 +576,14 @@ export default {
     if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
     const u = new URL(req.url), p = u.pathname.replace(/\/+$/, "") || "/";
     try {
-      if (p === "/") return json({ ok: true, service: "site-studio-db", v: V, mail: !!(env.RESEND_API_KEY && env.MAIL_FROM), ...(env.CF_TOKEN && env.CF_ACCOUNT ? { deploy: true, account: env.CF_ACCOUNT } : {}), ...(env.GH_TOKEN ? { gh: true } : {}), ...(env.AI ? { ai: true, pamphlet: 2 } : {}), reviews: true, look: 1, outline: 1, pictures: 1, translate: 4, approvals: 1, accounts: 2, cfx: 4, studioPages: 1, del: 1, enqMail: 3, ...(otherAccounts(env).length ? { more: otherAccounts(env).length } : {}) });
+      if (p === "/") return json({ ok: true, service: "site-studio-db", v: V, mail: !!(env.RESEND_API_KEY && env.MAIL_FROM), ...(env.CF_TOKEN && env.CF_ACCOUNT ? { deploy: true, account: env.CF_ACCOUNT } : {}), ...(env.GH_TOKEN ? { gh: true } : {}), ...(env.AI ? { ai: true, pamphlet: 2 } : {}), reviews: true, look: 1, outline: 1, pictures: 1, connect: 1, translate: 4, approvals: 1, accounts: 2, cfx: 4, studioPages: 1, del: 1, enqMail: 3, ...(otherAccounts(env).length ? { more: otherAccounts(env).length } : {}) });
+
+      // The owner's own AI API in the place of Workers AI, when a request asks for it.
+      if (p.startsWith("/ai/") && u.searchParams.get("engine") === "custom") {
+        const c = await anySetting(env, "ai");
+        if (!c?.on || !c.key || !c.model || !publicUrl(String(c.base || "").trim())) return json({ error: "Your own AI API isn't set up yet. Fill it in under Settings → AI engine." });
+        env = { ...env, AI: customAI(c) };
+      }
 
       // ---- sign in with an emailed code (members only)
       if (p === "/auth/code" && req.method === "POST") {
@@ -480,8 +618,16 @@ export default {
             if (T.footer) footer = fill(String(T.footer), vars);
           }
         }
-        await sendMail(env, email, subject, WRAP(`<h2 style="margin:0 0 12px;font-size:20px">${hesc(heading)}</h2>${paras(intro)}<p style="font-size:28px;font-weight:700;letter-spacing:6px;margin:0 0 14px">${code}</p>${paras(footer, "margin:0 0 8px;color:#667;font-size:13px")}`));
-        return json({ ok: true });
+        // The same code on WhatsApp too, when the Studio or the site has that switched on and knows this person's number.
+        let onWa = false;
+        const waScope = typeof forSite === "string" && /^[a-z0-9][a-z0-9-]{0,59}$/.test(forSite) ? "site:" + forSite : typeof forStudio === "string" && /^[a-z0-9][a-z0-9-]{0,59}$/.test(forStudio) ? "studio:" + forStudio : "";
+        if (waScope && (await env.DB.prepare("select 1 from members where email = ? and scope = ? limit 1").bind(email, waScope).first())) {
+          const w = await getSetting(env, waScope, "wa").catch(() => null), num = waReady(w) && w.login && String(w.tplOtp || "").trim() ? waNum(waPhoneOf(w.phones, email), w.cc) : "";
+          if (num) try { await waSend(w, num, w.tplOtp, [code], code); onWa = true; } catch { /* the email still goes */ }
+        }
+        try { await sendMail(env, email, subject, WRAP(`<h2 style="margin:0 0 12px;font-size:20px">${hesc(heading)}</h2>${paras(intro)}<p style="font-size:28px;font-weight:700;letter-spacing:6px;margin:0 0 14px">${code}</p>${paras(footer, "margin:0 0 8px;color:#667;font-size:13px")}`)); }
+        catch (e) { if (!onWa) throw e; }
+        return json({ ok: true, ...(onWa ? { whatsapp: true } : {}) });
       }
       if (p === "/auth/verify" && req.method === "POST") {
         const b = (await req.json()) as any; const email = String(b.email || "").trim().toLowerCase(), code = String(b.code || "").trim();
@@ -566,6 +712,54 @@ export default {
         return err(404, "Not found.");
       }
       // ---- enquiries from a hosted site's form (public): POST /enquire/<site>; members read them with /e/*
+      // ---- what a site's Order now page may use: a code on WhatsApp for the guest's number, and online payment
+      if (/^\/site\/[a-z0-9][a-z0-9-]{0,59}\/can$/.test(p) && req.method === "GET") {
+        const site = p.split("/")[2], w = await getSetting(env, "site:" + site, "wa").catch(() => null), z = await getSetting(env, "site:" + site, "rz").catch(() => null);
+        return json({ otp: !!(waReady(w) && w.orderOtp && String(w.tplOtp || "").trim()), rz: z?.on && z.secret && z.keyId ? String(z.keyId) : "" });
+      }
+      if (/^\/otp\/(send|check)\/[a-z0-9][a-z0-9-]{0,59}$/.test(p) && req.method === "POST") {
+        const site = p.split("/")[3], b = (await req.json()) as any, w = await getSetting(env, "site:" + site, "wa");
+        if (!(waReady(w) && w.orderOtp && String(w.tplOtp || "").trim())) return err(404, "Not found.");
+        const num = waNum(b.phone, w.cc); if (!num) return err(400, "Enter your mobile number with its country code.");
+        const k = "o:" + site + ":" + num, now = Date.now();
+        if (p.startsWith("/otp/send/")) {
+          const prev: any = await env.DB.prepare("select sent from otps where k = ?").bind(k).first();
+          if (prev && now - prev.sent < 45_000) return err(429, "A code was just sent. Wait a minute before asking for another.");
+          // No more than 80 codes an hour for a site: each one is a paid message for its owner.
+          const n: any = await env.DB.prepare("select count(*) n from otps where k like ? and sent > ?").bind("o:" + site + ":%", now - 3600_000).first();
+          if ((n?.n || 0) >= 80) return err(429, "Too many codes were asked for. Please try again later, or call us.");
+          const code = String(100000 + (crypto.getRandomValues(new Uint32Array(1))[0] % 900000));
+          await env.DB.prepare("insert into otps (k, hash, expires, tries, sent) values (?, ?, ?, 0, ?) on conflict (k) do update set hash = excluded.hash, expires = excluded.expires, tries = 0, sent = excluded.sent").bind(k, b64u(await hmac(env.SECRET, k + ":" + code)), now + 10 * 60_000, now).run();
+          try { await waSend(w, num, w.tplOtp, [code], code); } catch { return err(502, "We couldn't send the code on WhatsApp just now. Check the number, or call us to order."); }
+          return json({ ok: true });
+        }
+        const c: any = await env.DB.prepare("select hash, expires, tries from otps where k = ?").bind(k).first();
+        if (!c || c.expires < now) return err(403, "The code has expired. Ask for a new one.");
+        if (c.tries >= 5) return err(429, "Too many tries. Ask for a new code.");
+        if (c.hash !== b64u(await hmac(env.SECRET, k + ":" + String(b.code || "").trim()))) { await env.DB.prepare("update otps set tries = tries + 1 where k = ?").bind(k).run(); return err(403, "That code isn't right."); }
+        await env.DB.prepare("update otps set expires = 0 where k = ?").bind(k).run();
+        const exp = now + 45 * 60_000;
+        return json({ ok: true, token: exp + "." + b64u(await hmac(env.SECRET, "otp:" + site + ":" + num + ":" + exp)) });
+      }
+      // ---- an online payment for a restaurant order: the amount comes from the site's own menu, worked out here
+      if (/^\/pay\/rz\/[a-z0-9][a-z0-9-]{0,59}$/.test(p) && req.method === "POST") {
+        const site = p.split("/")[3], z = await getSetting(env, "site:" + site, "rz");
+        if (!(z?.on && z.secret && z.keyId)) return err(404, "Online payment isn't set up for this site.");
+        const q = (await req.json()) as any, no = String(q.order_no || "");
+        if (!/^[A-Z0-9][A-Z0-9-]{3,29}$/.test(no)) return err(400, "Which order?");
+        const c = await siteContent(env, site), bill = restBill(c, q);
+        if ("error" in bill) return err(409, bill.error);
+        if (Math.abs(bill.total - (+q.total || 0)) > 0.5) return err(409, "The menu or its prices changed while you were ordering. Refresh the page and check your cart.");
+        const n: any = await env.DB.prepare("select count(*) n from payments where site = ? and created_at > ?").bind(site, new Date(Date.now() - 3600_000).toISOString()).first();
+        if ((n?.n || 0) >= 200) return err(429, "Too many payments were started. Please try again in a while.");
+        const amount = Math.round(bill.total * 100), cur = String(c?.food?.currency || "₹") === "₹" ? "INR" : "";
+        if (!cur || amount < 100) return err(400, "Online payment works for totals in rupees of ₹1 or more.");
+        const r = await fetch("https://api.razorpay.com/v1/orders", { method: "POST", headers: { Authorization: "Basic " + btoa(z.keyId + ":" + z.secret), "Content-Type": "application/json" }, body: JSON.stringify({ amount, currency: cur, receipt: no, notes: { site, order_no: no } }) });
+        const j: any = await r.json().catch(() => null);
+        if (!r.ok || !j?.id) return err(502, r.status === 401 ? "Razorpay refused this site's keys. The owner needs to check them." : "Razorpay couldn't start the payment just now. Please try again, or choose another way to pay.");
+        await env.DB.prepare("insert into payments (rz_order, site, order_no, amount, status, created_at) values (?, ?, ?, ?, 'created', ?)").bind(String(j.id), site, no, amount, new Date().toISOString()).run();
+        return json({ key: z.keyId, order_id: j.id, amount, currency: cur, name: siteName(c, site) });
+      }
       // ---- how an order from a site's Order now page is doing, for the guest who placed it (the order's own key opens it)
       if (p.startsWith("/order/") && req.method === "GET") {
         const [, , site, no] = p.split("/"), k = u.searchParams.get("k") || "";
@@ -583,12 +777,32 @@ export default {
         const data: Record<string, string> = {};
         for (const [k, v] of Object.entries(q.data || {}).slice(0, 25)) if (/^[a-z0-9][\w-]{0,39}$/i.test(k) && v != null && String(v).trim()) data[k] = String(v).slice(0, 5000);
         if (!Object.keys(data).length) return err(400, "The form was empty.");
+        if (data.order_no) {
+          // The guest's mobile number, proved with a code on WhatsApp, when the site asks for that.
+          const w = await getSetting(env, "site:" + site, "wa").catch(() => null);
+          if (waReady(w) && w.orderOtp && String(w.tplOtp || "").trim()) {
+            const num = waNum(data.phone, w.cc), [exp, sig] = String(data.otp_token || "").split(".");
+            if (!num || !(+exp > Date.now()) || sig !== b64u(await hmac(env.SECRET, "otp:" + site + ":" + num + ":" + exp))) return err(403, "Please verify your mobile number first.");
+            data._phone = "Verified on WhatsApp";
+          }
+          delete data.otp_token;
+          // An online payment is accepted only with Razorpay's own signature for the payment this database started.
+          if (data.rz_order || data.rz_payment || data.rz_sig) {
+            const z = await getSetting(env, "site:" + site, "rz").catch(() => null);
+            const row: any = z?.secret ? await env.DB.prepare("select order_no, amount from payments where rz_order = ? and site = ?").bind(String(data.rz_order || ""), site).first() : null;
+            const want = row ? hex((await hmac(z.secret, data.rz_order + "|" + data.rz_payment)).buffer as ArrayBuffer) : "";
+            if (!row || row.order_no !== data.order_no || !want || want !== String(data.rz_sig || "")) return err(400, "The payment couldn't be confirmed. If money left your account, contact us with your order number.");
+            await env.DB.prepare("update payments set status = 'paid' where rz_order = ?").bind(data.rz_order).run();
+            data._paid = "yes"; data._paid_by = `Razorpay, ₹${(row.amount / 100).toFixed(2).replace(/\.00$/, "")}, ${String(data.rz_payment).slice(0, 40)}`;
+            delete data.rz_sig;
+          }
+        }
         const made: any = await env.DB.prepare("insert into enquiries (site, data, page, created_at) values (?, ?, ?, ?) returning id").bind(site, JSON.stringify(data), String(q.page || "").slice(0, 200), new Date().toISOString()).first();
         // The enquiry is saved either way; the email is a copy, so a mail failure never fails the form. What happened
         // to the email is noted on the enquiry (_mail: keys starting with "_" never come from the visitor).
         const rowId = made?.id;
-        const mail = notifyEnquiry(env, site, data, String(q.page || "").slice(0, 200)).catch((e: any) => "Not emailed: " + String(e?.message || e).slice(0, 300))
-          .then((said) => (said && rowId ? env.DB.prepare("update enquiries set data = ? where id = ? and site = ?").bind(JSON.stringify({ ...data, _mail: said }), rowId, site).run() : null)).catch(() => {});
+        const mail = Promise.all([notifyEnquiry(env, site, data, String(q.page || "").slice(0, 200)).catch((e: any) => "Not emailed: " + String(e?.message || e).slice(0, 300)), waAlert(env, site, data).catch(() => "")])
+          .then(([said, wa]) => ((said || wa) && rowId ? env.DB.prepare("update enquiries set data = ? where id = ? and site = ?").bind(JSON.stringify({ ...data, ...(said ? { _mail: said } : {}), ...(wa ? { _wa: wa } : {}) }), rowId, site).run() : null)).catch(() => {});
         if (ctx?.waitUntil) ctx.waitUntil(mail); else await mail;
         return json({ ok: true });
       }
@@ -658,6 +872,27 @@ export default {
       const role = await roleOf(env, scope, email);
       if (!role) return err(403, `${email} isn't a member of this ${scope.startsWith("site:") ? "site" : "Studio"}.`);
 
+      // ---- connections (the owner's own AI API, WhatsApp, Razorpay): owners set them; the keys are never sent back
+      if (p === "/set" || p === "/set/test") {
+        if (role !== "owner") return err(403, "Only an owner can change connections.");
+        if (p === "/set" && req.method === "GET") { const o: any = {}; for (const n of Object.keys(SETTINGS)) o[n] = maskSetting(n, await getSetting(env, scope, n)); return json(o); }
+        const b = (await req.json()) as any, name = String(b.name || ""), S = SETTINGS[name]; if (!S) return err(400, "Unknown connection.");
+        if (p === "/set/test") {
+          if (name !== "ai") return err(400, "Nothing to test.");
+          const c = await getSetting(env, scope, "ai"); if (!c?.key || !c.model || !publicUrl(String(c.base || "").trim())) return json({ error: "Fill in the address, the model and the key first." });
+          try { const r: any = await customAI(c).run("", { messages: [{ role: "user", content: "Reply with the single word: ready" }], max_tokens: 20, temperature: 0 }); return json({ ok: true, said: String(r.response || "").trim().slice(0, 80) }); }
+          catch (e: any) { return json({ error: String(e?.message || e).slice(0, 300) }); }
+        }
+        if (b.value == null) { await putSetting(env, scope, name, null); return json({ ok: true }); }
+        const old = (await getSetting(env, scope, name)) || {}, v: any = {};
+        for (const k of S.text) v[k] = String(b.value[k] ?? old[k] ?? "").slice(0, 3000).trim();
+        for (const k of S.flags) v[k] = b.value[k] == null ? !!old[k] : !!b.value[k];
+        // A secret left empty keeps the one already saved.
+        for (const k of S.secret) v[k] = String(b.value[k] || "").trim().slice(0, 600) || old[k] || "";
+        if (name === "ai" && v.base && !publicUrl(v.base)) return err(400, "The API address must be a public https:// address.");
+        await putSetting(env, scope, name, v);
+        return json({ ok: true, value: maskSetting(name, v) });
+      }
       if (p === "/f/list") {
         const pre = u.searchParams.get("prefix") || "";
         const rows = (await env.DB.prepare("select path from files where scope = ? and substr(path, 1, ?) = ? order by path").bind(scope, pre.length, pre).all()).results || [];

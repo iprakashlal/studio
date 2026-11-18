@@ -232,8 +232,8 @@ export async function registerWorkers(cf: Cloudflare, s: CfDbSetup, list: { work
 
 // ---------------------------------------------------------------- translating a site's text (Languages)
 /** Up to 30 texts into `to` (a language's English name) by Workers AI on the database. null entries failed. */
-export async function cfTranslate(api: string, o: { to: string; from: string; texts: string[] }): Promise<(string | null)[]> {
-  const j = await cfCall<any>(api, "/ai/translate", { method: "POST", body: JSON.stringify(o) });
+export async function cfTranslate(api: string, o: { to: string; from: string; texts: string[]; engine?: string }): Promise<(string | null)[]> {
+  const j = await cfCall<any>(api, "/ai/translate" + ((o as any).engine === "custom" ? "?engine=custom" : ""), { method: "POST", body: JSON.stringify(o) });
   if (j?.error) throw new Error(j.error);
   if (!Array.isArray(j?.t)) throw new Error("Translating needs the database updated once (Settings → Hostings → Update the database).");
   return j.t;
@@ -259,8 +259,8 @@ export async function cfLook(api: string, url: string): Promise<import("./lookdi
 // ---------------------------------------------------------------- writing site text from a reference site
 export type Brief = Partial<Record<"brand_tagline" | "hero_eyebrow" | "hero_title" | "hero_text" | "hero_cta" | "about_title" | "about_text" | "mission" | "vision" | "services_title" | "services_intro" | "banner_title" | "banner_text" | "cta_title" | "cta_text" | "seo_title" | "seo_description" | "footer_text", string>> & { values?: { title: string; text: string }[]; services?: { title: string; text: string }[]; process?: { title: string; text: string }[]; faq?: { q: string; a: string }[] };
 /** Reads the reference (link or pasted text) and writes new text for `brand` with Workers AI on the database. */
-export async function cfWrite(api: string, o: { url?: string; text?: string; brand: string; notes?: string; kind: string }): Promise<{ brief: Brief; flagged: string[] }> {
-  const j = await cfCall<any>(api, "/ai/write", { method: "POST", body: JSON.stringify(o) });
+export async function cfWrite(api: string, o: { url?: string; text?: string; brand: string; notes?: string; kind: string; engine?: string }): Promise<{ brief: Brief; flagged: string[] }> {
+  const j = await cfCall<any>(api, "/ai/write" + ((o as any).engine === "custom" ? "?engine=custom" : ""), { method: "POST", body: JSON.stringify(o) });
   if (j?.error) { const e: any = new Error(j.error); e.thin = !!j.thin; throw e; }
   return j;
 }
@@ -291,8 +291,8 @@ export async function cfOutline(api: string, url: string): Promise<string> {
 // ---------------------------------------------------------------- reading a product pamphlet
 export type PamphletProduct = { name: string; category: string; summary: string; price: string; features: string[]; details: string; specs: { label: string; value: string }[]; page: number };
 /** Turns a pamphlet's text (and pictures of pages without text) into catalogue entries, with Workers AI on the database. */
-export async function cfProducts(api: string, o: { text?: string; images?: { page: number; data: string }[]; hint?: string }): Promise<PamphletProduct[] & { guessed?: boolean; social?: { kind: string; url: string; label: string }[] }> {
-  const j = await cfCall<any>(api, "/ai/products", { method: "POST", body: JSON.stringify(o) });
+export async function cfProducts(api: string, o: { text?: string; images?: { page: number; data: string }[]; hint?: string; engine?: string }): Promise<PamphletProduct[] & { guessed?: boolean; social?: { kind: string; url: string; label: string }[] }> {
+  const j = await cfCall<any>(api, "/ai/products" + ((o as any).engine === "custom" ? "?engine=custom" : ""), { method: "POST", body: JSON.stringify(o) });
   if (j?.error) throw new Error(j.error);
   return Object.assign(j.products || [], { guessed: !!j.guessed, social: Array.isArray(j.social) ? j.social.filter((x: any) => x && typeof x.kind === "string" && /^https:\/\//.test(x.url || "")).slice(0, 16).map((x: any) => ({ kind: x.kind, url: String(x.url), label: "" })) : [] });
 }

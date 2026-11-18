@@ -24,7 +24,7 @@ export function WriteFromSiteDialog({ session, project, draft, upload, onApply, 
   // Which engine writes: the Studio's choice to begin with. The Picaffectz system writes on this device.
   const [eng, setEngRaw] = useState<AiEngine>(aiEngine());
   const sys = eng === "system", canUse = sys || db.ready;
-  const setEng = (e: AiEngine) => { setEngRaw(e); setErr(""); if (e === "cloudflare" && src === "none") setSrc("link"); };
+  const setEng = (e: AiEngine) => { setEngRaw(e); setErr(""); if (e !== "system" && src === "none") setSrc("link"); };
   const [again, setAgain] = useState(0), [made, setMade] = useState("");
   const showText = src === "text";
   const setShowText = (v: boolean) => setSrc(v ? "text" : "link");
@@ -66,7 +66,7 @@ export function WriteFromSiteDialog({ session, project, draft, upload, onApply, 
   const write = run("Reading and writing", async () => {
     if (sys) return writeSys(again);
     const body = src === "pdf" ? { text: pdf!.text } : showText && text.trim() ? { text: text.trim() } : { url: url.trim() };
-    const r = await cfWrite(api!, { ...body, brand: brandName.trim(), notes: notes.trim(), kind: kind === "restaurant" ? "business" : kind });
+    const r = await cfWrite(api!, { ...body, engine: eng, brand: brandName.trim(), notes: notes.trim(), kind: kind === "restaurant" ? "business" : kind });
     const b = dropFlagged(r.brief, r.flagged || []);
     setRes({ brief: b, flagged: r.flagged || [] }); setPick(new Set(groupsOf(kind, b, contact()).map((g) => g.id)));
   });

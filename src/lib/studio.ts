@@ -19,6 +19,8 @@ export type PublishTarget = { owner: string; repo: string; branch: string };
 export type WorkerCfg = { account: string; name: string; url: string; dataRepo: string; mailFrom: string; build?: string; deployedAt?: string };
 export type ProjectMeta = {
   id: string;
+  /** Tools pinned to this project's top bar (Settings → Publish & tools). Its own choice; other projects keep theirs. */
+  pinned?: string[];
   name: string;
   template: string;
   category: string;
@@ -251,8 +253,9 @@ export class Studio {
     }, "Update the admin menu");
   }
 
-  async savePinned(list: string[]): Promise<StudioIndex> {
-    return this.updateIndex((i) => { i.pinned = [...new Set(list)]; }, "Update the pinned project tools");
+  /** Pinned tools are each project's own choice. */
+  async savePinned(id: string, list: string[]): Promise<StudioIndex> {
+    return this.updateIndex((i) => { const m = i.projects.find((x) => x.id === id); if (m) m.pinned = [...new Set(list)]; }, "Update a project's pinned tools");
   }
 
   async saveBadge(b: BadgeCfg): Promise<StudioIndex> {

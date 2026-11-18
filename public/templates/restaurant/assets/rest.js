@@ -147,6 +147,17 @@ const DEFAULT = {
     links: [{ label: "Order for pickup", url: "", note: "Ready in 25 minutes" }, { label: "Order for delivery", url: "", note: "Within 6 km" }],
     call: true, whatsapp: true, whatsappText: "Hello, I'd like to place an order.",
   },
+  // The Order now page (order.html): its own cart and checkout. Off until the owner switches it on.
+  ordering: {
+    on: false, label: "Order now", title: "Order online", lede: "Fresh from our kitchen, for delivery or pickup.", bestTitle: "Best sellers", tiles: true,
+    modes: { delivery: true, pickup: true, dinein: false }, deliveryMins: 40, pickupMins: 20, dineMins: 15,
+    minOrder: 200, deliveryFee: 40, freeAbove: 0, areas: "", areaNote: "", askPin: true, packing: 0, taxPercent: 5, taxLabel: "GST", taxIncluded: false, roundOff: true,
+    tips: true, tipOptions: "10, 20, 30", cutlery: true, notes: true, dishNotes: true, askEmail: false,
+    schedule: true, slotMins: 30, daysAhead: 1,
+    coupons: [],
+    pay: { cod: true, codLabel: "", upi: false, upiId: "", payee: "" },
+    whatsapp: "", intro: "New order", prefix: "ORD", success: "Thank you! Your order is placed.",
+  },
   reserve: { eyebrow: "Reservations", title: "Book a table", lede: "Tell us when you'd like to come. We'll confirm by phone or message.", note: "For groups of more than 10, please call us." },
   hours: {
     title: "Opening hours", format: "12", utcOffset: "+05:30", showStatus: true, note: "Kitchen closes 30 minutes before closing time.",
@@ -271,7 +282,7 @@ const imgUrl = (img) => (!img ? "" : img.path ? ASSETS[img.path] || hostPhoto(im
 let C = merge(DEFAULT, {});
 const PAGE = document.body.dataset.page || "home";
 const PREVIEW = window.name === "cms-preview" && window.parent !== window;
-const PAGES = { home: "index.html", menu: "menu.html", about: "about.html", gallery: "gallery.html", contact: "contact.html", page: "page.html" };
+const PAGES = { home: "index.html", menu: "menu.html", about: "about.html", gallery: "gallery.html", contact: "contact.html", page: "page.html", order: "order.html" };
 /* Static pages (privacy, terms…): content.staticPages, shown by assets/pages.js at page.html?p=<name>. */
 const spSlug = (p) => String(p.slug || p.title || "").toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60) || p.id || "";
 const spList = () => (C.staticPages || []).filter((p) => p && p.show !== false && String(p.title || "").trim() && spSlug(p));
@@ -288,6 +299,8 @@ const PAGE_SECTIONS = {
 /** The page a section lives on in several-page mode. */
 const HOME_OF = { food: "menu", order: "menu", about: "about", chef: "about", events: "about", gallery: "gallery", reserve: "contact", contact: "contact", faq: "contact" };
 const multi = () => !!C.site.multiPage;
+/** The Order now page is on, and there is a menu to order from. */
+const orderOn = () => !!(C.ordering && C.ordering.on) && cats().some((c) => c.items.some((d) => !d.noOrder));
 /** On one-page sites, section links from other pages go back to the home page. */
 const AT = PAGE === "home" ? "" : PAGES.home;
 const shown = (id) => { const s = C.sections.find((x) => x.id === id); return !s || s.show !== false; };
@@ -297,6 +310,7 @@ function href(id) {
   // Without the booking form, "Book a table" links go to the address and phone instead.
   if (id === "reserve" && !(C.contact.form.enabled && shown("reserve"))) id = "contact";
   if (/^(https?:|mailto:|tel:)/i.test(id)) return id;
+  if (id === "ordering") return orderOn() ? PAGES.order : href("food");
   if (!multi()) return (PAGE === "home" ? "" : PAGES.home) + "#" + id;
   if (id === "hero" || id === "home") return PAGES.home;
   const pg = HOME_OF[id] || "home", own = { menu: "food", about: "about", gallery: "gallery" }[pg] === id;
@@ -333,7 +347,7 @@ function applyTheme(t) {
 }
 function setTitle() {
   const one = (x) => String(x || "").replace(/\s*\n\s*/g, " ").trim();
-  const label = PAGE === "page" ? ((window.SitePages && window.SitePages.find(C, spCur(), PREVIEW)) || {}).title || "" : PAGE === "home" || !multi() ? "" : (C.site.pageLabels || {})[PAGE] || "";
+  const label = PAGE === "page" ? ((window.SitePages && window.SitePages.find(C, spCur(), PREVIEW)) || {}).title || "" : PAGE === "order" ? (C.ordering || {}).label || "Order now" : PAGE === "home" || !multi() ? "" : (C.site.pageLabels || {})[PAGE] || "";
   document.title = !label ? one(C.seo.title || C.brand.name) : one((C.seo.titlePattern || "{page} · {site}").replace(/\{page\}/g, label).replace(/\{site\}/g, one(C.brand.name)));
 }
 
@@ -491,6 +505,7 @@ function foodHTML() {
   const tools = full ? `<div class="mtools">
       ${F.search !== false && all.reduce((n, c) => n + c.items.length, 0) > 8 ? `<label class="msearch"><span class="vh">Search the menu</span>${icon("search", "ms-ic")}<input type="search" id="menu-q" placeholder="Search the menu" autocomplete="off"></label>` : ""}
       ${F.filters !== false && diets.length > 1 ? `<div class="chips mdiet" role="group" aria-label="Filter by diet"><button type="button" class="chip" aria-pressed="true" data-diet="">All</button>${["veg", "vegan", "egg", "nonveg"].filter((d) => diets.includes(d)).map((d) => `<button type="button" class="chip" aria-pressed="false" data-diet="${d}"><span class="diet ${d}" aria-hidden="true"></span>${DIET[d]}</button>`).join("")}</div>` : ""}
+      ${orderOn() ? `<a class="btn pri morder" href="${PAGES.order}">${icon("bag", "ic")}${esc(C.ordering.label || "Order now")}</a>` : ""}
       ${safeUrl(F.pdfUrl) ? `<a class="link mpdf" href="${esc(safeUrl(F.pdfUrl))}" target="_blank" rel="noopener">${esc(F.pdfLabel || "Download the menu")} ${arrow}</a>` : ""}</div>` : "";
   const jump = L.length > 1 ? `<nav class="mcats" aria-label="Menu sections"><div class="mcats-in">${L.map((c, i) => `<a href="#${c.id}" data-cat="${c.id}"${i === 0 ? ' class="on"' : ""}>${esc(c.name)}</a>`).join("")}</div></nav>` : "";
   return `<section class="food band" id="food"><div class="wrap">${head(F)}${tools}${jump}<div class="mbody">${L.map((c, i) => { const im = imgUrl(c.image); return `<section class="mcat${i === 0 ? " on" : ""}${im ? " has-img" : ""}" id="${c.id}" aria-label="${esc(c.name)}">
@@ -544,8 +559,10 @@ const waUrl = (text) => "https://wa.me/" + String(C.contact.whatsapp || "").repl
 function orderHTML() {
   const O = C.order, K = C.contact, L = (O.links || []).filter((l) => l && l.label && safeUrl(l.url));
   const call = O.call !== false && K.phone, wa = O.whatsapp !== false && K.whatsapp;
-  if (!L.length && !call && !wa) return "";
+  const own = orderOn();
+  if (!L.length && !call && !wa && !own) return "";
   return `<section class="order" id="order"><div class="wrap"><div class="order-box">${head(O, "left")}<div class="order-acts">
+      ${own ? `<a class="order-a own" href="${PAGES.order}">${icon("bag", "oa-ic")}<span><b>${esc(C.ordering.label || "Order now")}</b><small>${esc([C.ordering.modes.delivery ? "Delivery" : "", C.ordering.modes.pickup ? "Pickup" : "", C.ordering.modes.dinein ? "At the table" : ""].filter(Boolean).join(" · ") || "Order from our own menu")}</small></span>${arrow}</a>` : ""}
       ${L.map((l) => `<a class="order-a" href="${esc(safeUrl(l.url))}" target="_blank" rel="noopener">${icon("bag", "oa-ic")}<span><b>${esc(l.label)}</b>${l.note ? `<small>${esc(l.note)}</small>` : ""}</span>${arrow}</a>`).join("")}
       ${call ? `<a class="order-a" href="${esc(tel(K.phone))}">${icon("phone", "oa-ic")}<span><b>Call to order</b><small>${esc(K.phone)}</small></span>${arrow}</a>` : ""}
       ${wa ? `<a class="order-a" href="${esc(waUrl(O.whatsappText))}" target="_blank" rel="noopener">${icon("mail", "oa-ic")}<span><b>Order on WhatsApp</b><small>Send us your order</small></span>${arrow}</a>` : ""}</div></div></div></section>`;
@@ -620,6 +637,7 @@ function navHTML() {
   const items = multi()
     ? mpages().map((p) => ({ label: C.site.pageLabels[p] || p, url: PAGES[p], on: PAGE === p }))
     : C.sections.filter((s) => s.show !== false && s.inNav && RENDER[s.id]).map((s) => ({ label: s.label, url: AT + "#" + s.id }));
+  if (orderOn() && C.ordering.inNav !== false) items.push({ label: C.ordering.label || "Order now", url: PAGES.order, on: PAGE === "order" });
   spList().filter((p) => p.inNav).forEach((p) => items.push({ label: p.navLabel || p.title, url: spHref(p), on: PAGE === "page" && spSlug(p) === spSlug({ slug: spCur() }) }));
   const half = Math.ceil(items.length / 2), a = (i) => `<a href="${esc(i.url)}"${i.on ? ' aria-current="page"' : ""}>${esc(i.label)}</a>`;
   return `<header class="nav" id="top"><div class="wrap nav-in">
@@ -654,11 +672,17 @@ function footerHTML() {
 /** Phones: Call, Directions, Menu and Book stay within the thumb's reach. */
 function mobileBar() {
   const K = C.contact, addr = String(K.address || "").trim();
-  if (C.site.mobileBar === false) return "";
+  if (C.site.mobileBar === false || PAGE === "order") return "";
   const dir = safeUrl(K.mapUrl) || (addr ? "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(addr.replace(/\n/g, ", ")) : "");
   const b = [K.phone ? `<a href="${esc(tel(K.phone))}">${icon("phone")}<span>Call</span></a>` : "", dir ? `<a href="${esc(dir)}" target="_blank" rel="noopener">${icon("pin")}<span>Directions</span></a>` : "",
-    shown("food") && cats().length ? `<a href="${esc(href("food"))}">${icon("cutlery")}<span>Menu</span></a>` : "", shown("reserve") && C.contact.form.enabled ? `<a class="pri" href="${esc(href("reserve"))}">${icon("calendar")}<span>Book</span></a>` : ""].filter(Boolean);
+    shown("food") && cats().length ? `<a href="${esc(href("food"))}">${icon("cutlery")}<span>Menu</span></a>` : "", orderOn() ? `<a class="pri" href="${PAGES.order}">${icon("bag")}<span>Order</span></a>` : "", shown("reserve") && C.contact.form.enabled ? `<a${orderOn() ? "" : ' class="pri"'} href="${esc(href("reserve"))}">${icon("calendar")}<span>Book</span></a>` : ""].filter(Boolean).slice(-4);
   return b.length > 1 ? `<nav class="mbar" aria-label="Quick actions">${b.join("")}</nav>` : "";
+}
+/** What the Order now page (assets/order.js) needs from this file. */
+const ORDER_API = { C: () => C, PAGES, DIET, PREVIEW, esc, rich, money, imgUrl, icon, toast, cats, dietMark, slug, ph, tel, clock, periods, openState, fmtTime, hhmm, statusChip, backend: () => backend(), postEnquiry: (d, pg) => postEnquiry(d, pg) };
+function orderPage() {
+  if (!orderOn()) return `<section class="phead"><div class="wrap"><h1 class="h1">${esc((C.ordering || {}).label || "Order now")}</h1><p class="hero-lede">${PREVIEW ? "Online ordering is switched off. Turn it on under Online ordering to see this page." : "Online ordering isn't available right now."}</p></div></section>`;
+  return window.RestOrder ? window.RestOrder.page(ORDER_API) : "";
 }
 function staticPage() {
   const S = window.SitePages; if (!S) return "";
@@ -788,17 +812,19 @@ function maintGate(again) {
 }
 function render() {
   // A several-page link opened while the site is one page goes to that section.
-  if (!PREVIEW && !multi() && !["home", "page"].includes(PAGE)) { location.replace(PAGES.home + "#" + ({ menu: "food", contact: "reserve" }[PAGE] || PAGE)); return; }
+  if (PAGE === "order" && !PREVIEW && !orderOn()) { location.replace(PAGES.home); return; }
+  if (!PREVIEW && !multi() && !["home", "page", "order"].includes(PAGE)) { location.replace(PAGES.home + "#" + ({ menu: "food", contact: "reserve" }[PAGE] || PAGE)); return; }
   if (langGate()) return;
   applyTheme(C.theme); setTitle(); setIcon();
   if (maintGate(render)) return;
-  const special = { page: staticPage }[PAGE];
+  const special = { page: staticPage, order: orderPage }[PAGE];
   const ids = special ? [] : multi() ? (PAGE === "home" ? C.sections.map((s) => s.id).filter((id) => PAGE_SECTIONS.home.includes(id)) : PAGE_SECTIONS[PAGE] || []) : C.sections.map((s) => s.id);
   const body = special ? special() : ids.filter((id) => RENDER[id] && shown(id)).map((id) => RENDER[id]()).join("");
   const bar = mobileBar();
   document.documentElement.classList.toggle("has-mbar", !!bar);
   $("#app").innerHTML = `<a class="skip" href="#main">Skip to content</a>${noticeHTML()}${navHTML()}<main id="main">${multi() && !special && PAGE !== "home" ? pageHead() : ""}${body}</main>${footerHTML()}${bar}`;
   bind();
+  if (PAGE === "order" && window.RestOrder && orderOn()) window.RestOrder.bind(ORDER_API);
   if (PAGE === "page" && window.SitePages) window.SitePages.after(window.SitePages.find(C, spCur(), PREVIEW));
   jsonLd(); slides(); heroLogo(); video(); social(); menu(); lang(); consent(); addons(); festival();
   if (window.SiteFX) try { window.SiteFX.init({ root: $("#app"), brand: C.theme.introTitle || C.brand.name, badge: C.poweredBy }); } catch (e) {}
@@ -895,6 +921,15 @@ function backend() {
   if (HOST && HOST.db && HOST.key && HOST.site) return { url: HOST.db, key: HOST.key, site: HOST.site };
   if (/^https:\/\//.test(F.sbUrl || "") && F.sbKey && F.site) return { url: String(F.sbUrl).replace(/\/+$/, ""), key: F.sbKey, site: F.site };
   return null;
+}
+/** Saves a request in the site's enquiry inbox. Says how it went: "cf", "db", "file", or "" when the site has no inbox. */
+async function postEnquiry(data, page) {
+  const cfg = backend(); if (!cfg) return "";
+  const pg = page || location.pathname;
+  if (cfg.file) { const r = await fetch(cfg.file, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "submit", data, page: pg }) }); if (!r.ok) throw new Error("save " + r.status); return "file"; }
+  if (cfg.cf) { const r = await fetch(cfg.cf + "/enquire/" + encodeURIComponent(cfg.site), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ data, page: pg }) }); if (!r.ok) throw new Error("save " + r.status); return "cf"; }
+  const r = await fetch(cfg.url + "/rest/v1/site_enquiries", { method: "POST", headers: { apikey: cfg.key, ...(/^sb_/.test(cfg.key) ? {} : { Authorization: "Bearer " + cfg.key }), "Content-Type": "application/json", Prefer: "return=minimal" }, body: JSON.stringify({ site: cfg.site, data, page: pg }) });
+  if (!r.ok) throw new Error("save " + r.status); return "db";
 }
 async function submit(e) {
   e.preventDefault();

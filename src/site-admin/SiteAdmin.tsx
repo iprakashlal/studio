@@ -356,10 +356,10 @@ function Workspace({ info, onInfo, repo, account, onSignOut, hosted, ghToken }: 
       { id: "enquiries", label: "Enquiries", group: "Forms & records", desc: tpl.id === "restaurant" ? "Table-booking and event requests sent through your website's form." : "Messages sent through your website's enquiry form.", render: () => <EnquiriesPanel cfg={hosted && "api" in hosted ? null : enquiriesCfg(saved, hosted)} cf={hosted && "api" in hosted ? hosted : undefined} hosted={!!hosted} email={saved?.contact?.email} form={saved?.contact?.form} ghToken={ghToken} only="enquiries" /> },
     ] : []),
     ...(tpl.id !== "portfolio" ? [
-      { id: "connections", label: "Payments & WhatsApp", group: "Forms & records", desc: tpl.id === "restaurant" ? "Optional: online payment with Razorpay on the Order now page, and WhatsApp for alerts and codes." : "Optional: WhatsApp alerts when an enquiry or order arrives, and sign-in codes on WhatsApp.", render: () => <SiteConnections cf={hosted && "api" in hosted ? hosted : null} template={tpl.id} /> },
+      { id: "connections", label: tpl.id === "restaurant" ? "Restaurant backend" : "WhatsApp", group: tpl.id === "restaurant" ? "Selling" : "Forms & records", desc: tpl.id === "restaurant" ? "What runs the Order now page behind the scenes, on your own Cloudflare database: your Razorpay keys, and WhatsApp for alerts and codes." : "Optional: WhatsApp alerts when an enquiry or order arrives, and sign-in codes on WhatsApp.", render: () => <SiteConnections cf={hosted && "api" in hosted ? hosted : null} template={tpl.id} /> },
     ] : []),
     ...((tpl.id === "restaurant" || tpl.id === "store") && !(tpl.id === "store" && saved?.backend?.enabled) ? [
-      { id: "purchased", label: "Purchased orders", group: "Forms & records", desc: "Every order placed on your website: what was bought, by whom, how it is paid, and where it has got to.", render: () => <EnquiriesPanel only="orders" cfg={hosted && "api" in hosted ? null : enquiriesCfg(saved, hosted)} cf={hosted && "api" in hosted ? hosted : undefined} hosted={!!hosted} email={saved?.contact?.email} form={saved?.contact?.form} ghToken={ghToken} /> },
+      { id: "purchased", label: "Purchased orders", group: tpl.id === "restaurant" ? "Selling" : "Forms & records", desc: "Every order placed on your website: what was bought, by whom, how it is paid, and where it has got to.", render: () => <EnquiriesPanel only="orders" cfg={hosted && "api" in hosted ? null : enquiriesCfg(saved, hosted)} cf={hosted && "api" in hosted ? hosted : undefined} hosted={!!hosted} email={saved?.contact?.email} form={saved?.contact?.form} ghToken={ghToken} /> },
     ] : []),
     ...(tpl.id === "store" || tpl.id === "business" ? [
       { id: "warranty-records", label: "Warranty records", group: "Forms & records", desc: "Products' numbers, warranty and service status, for the site's warranty & status check.", render: () => <WarrantyPanel repo={repo} cfg={draft?.warranty} /> },
@@ -411,7 +411,7 @@ function Workspace({ info, onInfo, repo, account, onSignOut, hosted, ghToken }: 
       )}
       <div className="flex min-h-0 flex-1">
         <div className={`min-h-0 min-w-0 flex-1 flex-col lg:flex ${pane === "edit" || wide ? "flex" : "hidden"}`}>
-          <Editor site menu={cleanMenu(info.menu)} tpl={tpl} draft={draft} version={v} onChange={bump} upload={upload} img={img} extras={extras} onCategory={setCat} />
+          <Editor site menu={cleanMenu(info.menu)} tpl={tpl} draft={draft} version={v} onChange={bump} upload={upload} img={img} cf={hosted && "api" in hosted ? hosted : null} extras={extras} onCategory={setCat} />
         </div>
         <div className={`min-h-0 flex-col border-l border-ink-700 lg:w-[46%] ${wide ? "lg:hidden" : "lg:flex"} ${pane === "preview" && !wide ? "flex flex-1" : "hidden"}`}>
           <Preview tpl={tpl} base="" content={draft} version={v} assets={assets} />

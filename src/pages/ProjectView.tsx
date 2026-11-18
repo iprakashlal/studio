@@ -176,11 +176,11 @@ export function ProjectView({ studio, index, project, session, onIndex }: { stud
       render: () => <EnquiriesPanel cfg={project.host?.cf ? null : enquiriesCfg(draft, project.host?.sb)} cf={project.host?.cf} account={project.host?.account} hosted={!!project.host} email={draft?.contact?.email} form={draft?.contact?.form} ghToken={ghPublish.token(session.token)} inStudio only="enquiries" />,
     }] : []),
     ...(project.template === "store" || project.template === "restaurant" ? [{
-      id: "purchased", label: "Purchased orders", group: "Forms & records", desc: "Every order placed on the website: what was bought, by whom, how it is paid, and where it has got to.",
+      id: "purchased", label: "Purchased orders", group: project.template === "restaurant" ? "Selling" : "Forms & records", desc: "Every order placed on the website: what was bought, by whom, how it is paid, and where it has got to.",
       render: () => <EnquiriesPanel only="orders" cfg={project.host?.cf ? null : enquiriesCfg(draft, project.host?.sb)} cf={project.host?.cf} account={project.host?.account} hosted={!!project.host} email={draft?.contact?.email} form={draft?.contact?.form} ghToken={ghPublish.token(session.token)} inStudio />,
     }] : []),
     ...(project.template !== "portfolio" ? [{
-      id: "connections", label: "Payments & WhatsApp", group: "Forms & records", desc: project.template === "restaurant" ? "Optional: online payment with Razorpay on the Order now page, and WhatsApp for alerts and codes. Their keys stay on your own Cloudflare database." : "Optional: WhatsApp alerts when an enquiry or order arrives, and sign-in codes on WhatsApp. The keys stay on your own Cloudflare database.",
+      id: "connections", label: project.template === "restaurant" ? "Restaurant backend" : "WhatsApp", group: project.template === "restaurant" ? "Selling" : "Forms & records", desc: project.template === "restaurant" ? "What runs the Order now page behind the scenes, on your own Cloudflare database: your Razorpay keys, and WhatsApp for alerts and codes." : "Optional: WhatsApp alerts when an enquiry or order arrives, and sign-in codes on WhatsApp. The keys stay on your own Cloudflare database.",
       render: () => <SiteConnections cf={project.host?.cf} template={project.template} />,
     }] : []),
     ...(project.template === "store" || project.template === "business" ? [{
@@ -253,7 +253,7 @@ export function ProjectView({ studio, index, project, session, onIndex }: { stud
       )}
       <div className="flex min-h-0 flex-1">
         <div className={`min-h-0 min-w-0 flex-1 flex-col lg:flex ${pane === "edit" ? "flex" : "hidden"}`}>
-          <Editor tpl={tpl} draft={draft} version={v} onChange={bump} upload={upload} img={img} extras={extras} menu={index.menus?.[tpl.id]?.studio ? index.menus[tpl.id] : undefined} />
+          <Editor tpl={tpl} draft={draft} version={v} onChange={bump} upload={upload} img={img} cf={project.host?.cf} extras={extras} menu={index.menus?.[tpl.id]?.studio ? index.menus[tpl.id] : undefined} />
         </div>
         <div className={`min-h-0 flex-col border-l border-ink-700 lg:flex lg:w-[46%] ${pane === "preview" ? "flex flex-1" : "hidden"}`}>
           <Preview tpl={tpl} base={`templates/${tpl.id}/`} content={previewContent} version={v} assets={assets.map} />

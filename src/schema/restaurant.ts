@@ -181,7 +181,7 @@ const schema: Category[] = [
       { t: "when", path: "order.whatsapp", is: "true", fields: [{ t: "text", path: "order.whatsappText", label: "Message the chat starts with" }] }] }],
   },
   {
-    id: "ordering", label: "Online ordering", group: "Pages", desc: "An Order now page of your own: guests pick dishes, add extras, and order for delivery, pickup or their table. No commission and no ordering app.",
+    id: "ordering", label: "Online ordering", group: "Selling", desc: "An Order now page of your own: guests pick dishes, add extras, and order for delivery, pickup or their table. No commission and no ordering app.",
     cards: [
       { title: "Order now page", fields: [{ t: "toggle", path: "ordering.on", label: "Take orders on the site (adds the Order now page)" },
         { t: "note", text: "The page lists every dish on your Menu that has a price. Guests search, filter by diet, save favourites, choose sizes and extras, and check out with their name, mobile number and address. It opens at order.html, a good address for a table QR code (order.html?table=7 fills in table 7)." },
@@ -195,26 +195,51 @@ const schema: Category[] = [
         { t: "toggle", path: "ordering.schedule", label: "Let guests order ahead for a later time" },
         { t: "when", path: "ordering.schedule", is: "true", fields: [g2({ t: "number", path: "ordering.slotMins", label: "Time slots every (minutes)", min: 10, step: 5 }, { t: "number", path: "ordering.daysAhead", label: "How many days ahead (0 = today only)", min: 0, step: 1 })] },
         { t: "note", text: "Times follow your Opening hours. While you're closed, guests can only order ahead (or not at all, if ordering ahead is off)." }] },
+    ],
+  },
+  {
+    id: "delivery", label: "Delivery & charges", group: "Selling", desc: "Where you deliver, what it costs, the minimum order, packing and tax used in the cart and at checkout.",
+    cards: [
       { title: "Delivery area and charges", fields: [g3({ t: "number", path: "ordering.minOrder", label: "Minimum order", min: 0, step: 10 }, { t: "number", path: "ordering.deliveryFee", label: "Delivery fee", min: 0, step: 5 }, { t: "number", path: "ordering.freeAbove", label: "Free delivery above (0 = never)", min: 0, step: 50 }),
         { t: "textarea", path: "ordering.areas", label: "Where you deliver: one PIN code or area per line (empty = anywhere)", rows: 4 },
         { t: "note", text: "Add “= fee” for an area with its own delivery fee, for example “411001 = 30” or “Koregaon Park = 0”. An address outside the list can't be ordered to; the guest is offered pickup." },
         g2({ t: "text", path: "ordering.areaNote", label: "Message for an address you don't deliver to", ph: "Sorry, we don't deliver there yet. Choose Pick up, or call us." }, { t: "toggle", path: "ordering.askPin", label: "Ask for the PIN code" }),
         g3({ t: "number", path: "ordering.packing", label: "Packing charge per order", min: 0, step: 5 }, { t: "number", path: "ordering.taxPercent", label: "Tax (%)", min: 0, step: 0.5 }, { t: "text", path: "ordering.taxLabel", label: "Tax name", ph: "GST" }),
         g2({ t: "toggle", path: "ordering.taxIncluded", label: "Menu prices already include tax" }, { t: "toggle", path: "ordering.roundOff", label: "Round the total to a whole number" })] },
+    ],
+  },
+  {
+    id: "coupons", label: "Offers & coupons", group: "Selling", desc: "Codes guests can use in the cart.",
+    cards: [
       { title: "Offers and coupons", fields: [{ t: "list", path: "ordering.coupons", max: 12, title: (it) => `${String(it.code || "CODE").toUpperCase()} · ${it.kind === "flat" ? "" : ""}${it.value || 0}${it.kind === "flat" ? " off" : "% off"}${it.on === false ? " (off)" : ""}`, add: () => ({ on: true, code: "", kind: "percent", value: 10, min: 0, max: 0, note: "" }),
         item: [g3({ t: "text", path: "code", label: "Code", ph: "WELCOME10" }, { t: "select", path: "kind", label: "Kind", options: [{ value: "percent", label: "Percent off" }, { value: "flat", label: "Amount off" }] }, { t: "number", path: "value", label: "Value", min: 0, step: 1 }),
           g3({ t: "number", path: "min", label: "Only on orders above", min: 0, step: 10 }, { t: "number", path: "max", label: "Most it takes off (percent; 0 = no limit)", min: 0, step: 10 }, { t: "toggle", path: "on", label: "Active" }),
           { t: "text", path: "note", label: "Line shown to guests (optional)", ph: "10% off your first order" }] },
         { t: "note", text: "Active codes are listed in the cart so guests can tap one. A code is checked on the guest's device, so treat it as a public offer, not a secret." }] },
+    ],
+  },
+  {
+    id: "checkout", label: "Checkout", group: "Selling", desc: "What guests are asked in the cart and at checkout.",
+    cards: [
       { title: "Cart extras", fields: [g2({ t: "toggle", path: "ordering.tips", label: "Offer a tip for the team" }, { t: "text", path: "ordering.tipOptions", label: "Tip amounts", ph: "10, 20, 30" }),
         g3({ t: "toggle", path: "ordering.cutlery", label: "Ask whether to send cutlery" }, { t: "toggle", path: "ordering.dishNotes", label: "Special instructions per dish" }, { t: "toggle", path: "ordering.notes", label: "A note for the kitchen" }),
         { t: "toggle", path: "ordering.askEmail", label: "Ask for an email address (optional for the guest)" }] },
-      { title: "Payment", fields: [g2({ t: "toggle", path: "ordering.pay.cod", label: "Pay on delivery, at the counter or at the table" }, { t: "text", path: "ordering.pay.codLabel", label: "Its name for delivery orders", ph: "Pay on delivery (cash or UPI)" }),
-        { t: "toggle", path: "ordering.pay.razorpay", label: "Pay online with Razorpay (UPI, cards, netbanking): confirmed automatically" },
-        { t: "note", text: "Razorpay tells the site by itself that the money arrived, so the order is placed and marked Paid with no checking by you. It needs the site hosted on your Cloudflare database and your Razorpay keys saved once under Payments & WhatsApp. The amount is worked out by your database from the menu, not by the guest's phone. Razorpay charges its usual fee per payment." },
-        { t: "toggle", path: "ordering.pay.upi", label: "Pay now by UPI (prices in ₹ only)" },
-        { t: "when", path: "ordering.pay.upi", is: "true", fields: [g2({ t: "text", path: "ordering.pay.upiId", label: "UPI ID", ph: "name@bank", check: "vpa" }, { t: "text", path: "ordering.pay.payee", label: "Payee name (as your bank shows it)" }),
-          { t: "note", text: "The guest pays first: checkout shows a QR code and a button for their UPI app with the exact total and the order number, and the order is placed only when they enter the payment's 12-digit reference number (UTR). Under Purchased orders the order is marked “Payment to check” with that reference; find it in your UPI app and press Payment received, and the guest's order page shows it. A UPI ID alone can't tell a website that money arrived (only a payment gateway such as Razorpay can), so this one check stays with you." }] }] },
+    ],
+  },
+  {
+    id: "payments", label: "Payments", group: "Selling", desc: "Turn on the ways guests can pay. A method only shows once its details are valid.",
+    cards: [
+      { title: "UPI", fields: [{ t: "toggle", path: "ordering.pay.upi", label: "Accept UPI (prices in ₹ only)" }, g2({ t: "text", path: "ordering.pay.upiId", label: "UPI ID", ph: "name@bank", check: "vpa" }, { t: "text", path: "ordering.pay.payee", label: "Payee name (as your bank shows it)" }),
+        { t: "note", text: "The guest pays first: checkout shows a QR code and a button for their UPI app with the exact total and the order number, and the order is placed only when they enter the payment's 12-digit reference number (UTR). Under Purchased orders the order is marked “Payment to check” with that reference; find it in your UPI app and press Payment received, and the guest's order page shows it. A UPI ID alone can't tell a website that money arrived. For confirmation with no checking, turn on Razorpay, which includes UPI." }] },
+      { title: "Razorpay", fields: [{ t: "toggle", path: "ordering.pay.razorpay", label: "Accept Razorpay (UPI, cards, netbanking): confirmed automatically" },
+        { t: "connection", kind: "rz" },
+        { t: "note", text: "Razorpay tells your database by itself that the money arrived, so the order is placed and marked Paid with no checking by you. The amount is worked out by your database from the menu, not by the guest's phone. Razorpay charges its usual fee per payment. Try it with a rzp_test_ key first: test mode takes no real money." }] },
+      { title: "Cash on delivery", fields: [{ t: "toggle", path: "ordering.pay.cod", label: "Offer pay on delivery, at the counter or at the table" }, { t: "text", path: "ordering.pay.codLabel", label: "Label at checkout for delivery orders", ph: "Pay on delivery (cash or UPI)" }] },
+    ],
+  },
+  {
+    id: "orderdelivery", label: "Order delivery", group: "Selling", desc: "Where new orders reach you.",
+    cards: [
       { title: "Where orders reach you", fields: [
         { t: "note", text: "With the booking inbox set up (Booking form → where requests are saved), every order lands in Enquiries on the admin page and is emailed to you like a booking. There you move it through Confirmed, Being prepared, Out for delivery and Delivered, and on a site hosted on your Cloudflare database the guest's order page follows along. Without an inbox, the guest sends the order to you on WhatsApp with one tap." },
         g2({ t: "text", path: "ordering.whatsapp", label: "WhatsApp number for orders (empty uses the one under Address & contact)", ph: "+91 98xxxxxxxx", check: "phone" }, { t: "text", path: "ordering.intro", label: "First words of the order message", ph: "New order" }),

@@ -174,34 +174,38 @@ export function WhatsAppForm({ where, kind }: { where: Where | null | undefined;
   );
 }
 
-/** Razorpay for a restaurant's Order now page: paid orders are confirmed by Razorpay's signature, with no checking. */
-export function RazorpayForm({ where }: { where: Where | null | undefined }) {
+/** Razorpay for a restaurant's Order now page: paid orders are confirmed by Razorpay's signature, with no checking.
+    `plain`: inside the Payments section, under its own switch: just the keys (saving them turns the connection on). */
+export function RazorpayForm({ where, plain }: { where: Where | null | undefined; plain?: boolean }) {
   const toast = useToast(), { saved, err, save } = useSaved(where || null);
   const [f, setF] = useState({ on: false, keyId: "", secret: "" }), [busy, setBusy] = useState(false);
   useEffect(() => { const z = saved?.rz; setF(z ? { on: !!z.on, keyId: txt(z.keyId), secret: "" } : { on: false, keyId: "", secret: "" }); }, [saved]);
   const lead = <>Take UPI, cards and netbanking on the Order now page. Razorpay tells your database when the money has arrived, so the order is placed and marked Paid by itself. Razorpay charges its usual fee per payment.</>;
-  if (where === undefined) return <Shell title="Razorpay" lead={lead}><Missing why="Checking your database…" /></Shell>;
-  if (!where) return <Shell title="Razorpay" lead={lead}><Missing why="Razorpay needs this site hosted on your Cloudflare database, and you signed in to it on this device as its owner." /></Shell>;
-  if (err) return <Shell title="Razorpay" lead={lead}><Missing why={err} /></Shell>;
-  const z = saved?.rz, ok = !f.on || (/^rzp_(test|live)_\w+$/.test(f.keyId.trim()) && (!!f.secret.trim() || !!z?.secret));
-  return (
-    <Shell title="Razorpay" on={!!(z?.on && z.secret)} lead={lead}>
-      <Toggle id="rz-on" checked={f.on} onChange={(v: boolean) => setF({ ...f, on: v })} label="Take online payments with Razorpay" />
-      {f.on && <div className="grid gap-3 sm:grid-cols-2">
-        <Field label="Key ID" htmlFor="rz-id" hint="Razorpay Dashboard → Account & Settings → API Keys. Starts with rzp_test_ or rzp_live_."><input id="rz-id" className="input font-mono" placeholder="rzp_live_…" value={f.keyId} onChange={(e) => setF({ ...f, keyId: e.target.value })} /></Field>
+  const Box = ({ children, on }: { children: React.ReactNode; on?: boolean }) => plain
+    ? <div className="flex flex-col gap-3 rounded-lg border border-ink-600 p-3" aria-label="Razorpay keys"><b className="flex items-center gap-2 text-ink-100">Your Razorpay keys{on != null && <span className={`chip ${on ? "border-emerald-400/50 text-emerald-200" : "border-ink-600 text-ink-400"}`}>{on ? "Saved" : "Not saved yet"}</span>}</b>{children}</div>
+    : <Shell title="Razorpay" on={on} lead={lead}>{children}</Shell>;
+  if (where === undefined) return Box({ children: <Missing why="Checking your database…" /> });
+  if (!where) return Box({ children: <Missing why="Razorpay keys are kept on the site's own Cloudflare database. Host this site on Cloudflare (Host to External Services), and sign in to it on this device as its owner; the two boxes for the keys then show here." /> });
+  if (err) return Box({ children: <Missing why={err} /> });
+  const z = saved?.rz, on = plain ? true : f.on, ok = !on || (/^rzp_(test|live)_\w+$/.test(f.keyId.trim()) && (!!f.secret.trim() || !!z?.secret));
+  return Box({ on: !!(z?.on && z.secret), children: <>
+      {!plain && <Toggle id="rz-on" checked={f.on} onChange={(v: boolean) => setF({ ...f, on: v })} label="Take online payments with Razorpay" />}
+      {on && <div className="grid gap-3 sm:grid-cols-2">
+        <Field label="Key ID" htmlFor="rz-id" hint="Starts with rzp_test_ or rzp_live_."><input id="rz-id" className="input font-mono" placeholder="rzp_live_…" value={f.keyId} onChange={(e) => setF({ ...f, keyId: e.target.value })} /></Field>
         <Secret id="rz-secret" label="Key secret" saved={!!z?.secret} value={f.secret} onChange={(v) => setF({ ...f, secret: v })} />
       </div>}
-      {f.on && <p className="text-[12.5px] text-ink-400">Then switch on “Pay online with Razorpay” under Online ordering → Payment and publish. Try it with a rzp_test_ key first: Razorpay's test mode takes no real money. The amount of each payment is worked out by your database from your menu, not by the guest's phone.</p>}
-      <div className="flex gap-2"><button type="button" className="btn btn-sm btn-pri" disabled={!ok || busy} onClick={async () => { setBusy(true); try { await save("rz", { on: f.on, keyId: f.keyId.trim(), secret: f.secret.trim() }); setF((x) => ({ ...x, secret: "" })); toast(f.on ? "Razorpay is saved and on." : "Saved. Razorpay is off."); } catch (e: any) { toast(e?.message || "Couldn't save that.", "bad"); } setBusy(false); }}>{busy ? "Saving…" : "Save"}</button>
-        {z && <button type="button" className="btn btn-sm btn-danger ml-auto" disabled={busy} onClick={async () => { setBusy(true); try { await save("rz", null); toast("Razorpay removed."); } catch (e: any) { toast(e?.message || "Couldn't remove it.", "bad"); } setBusy(false); }}>Remove</button>}</div>
-    </Shell>
-  );
+      {on && <p className="text-[12.5px] text-ink-400">Get them from <a className="text-brand-300 underline" href="https://dashboard.razorpay.com/app/website-app-settings/api-keys" target="_blank" rel="noopener noreferrer">Razorpay Dashboard → Account &amp; Settings → API Keys ↗</a>. Razorpay shows the secret once; paste it here straight away. The keys go to your own database, stored encrypted, and are never put in the site.{plain ? "" : " Then switch on Razorpay under Payments and publish."}</p>}
+      <div className="flex gap-2"><button type="button" className="btn btn-sm btn-pri" disabled={!ok || busy} onClick={async () => { setBusy(true); try { await save("rz", { on, keyId: f.keyId.trim(), secret: f.secret.trim() }); setF((x) => ({ ...x, secret: "" })); toast(on ? "Razorpay keys saved." : "Saved. Razorpay is off."); } catch (e: any) { toast(e?.message || "Couldn't save that.", "bad"); } setBusy(false); }}>{busy ? "Saving…" : plain ? "Save the keys" : "Save"}</button>
+        {z && <button type="button" className="btn btn-sm btn-danger ml-auto" disabled={busy} onClick={async () => { setBusy(true); try { await save("rz", null); toast("Razorpay keys removed."); } catch (e: any) { toast(e?.message || "Couldn't remove them.", "bad"); } setBusy(false); }}>Remove</button>}</div>
+    </> });
 }
 
 /** A site's "Payments & WhatsApp" section (site admin and the Studio's editor). */
 export function SiteConnections({ cf, template }: { cf?: { api: string; site: string } | null; template: string }) {
   const where = cf && cfSession.load(cf.api) ? { api: cf.api, scope: "site:" + cf.site } : null;
-  return <div className="flex max-w-3xl flex-col gap-4">{template === "restaurant" && <RazorpayForm where={where} />}<WhatsAppForm where={where} kind="site" /></div>;
+  return <div className="flex max-w-3xl flex-col gap-4">
+    {template === "restaurant" && <section className="card flex flex-col gap-2 p-5"><h3 className="text-[15px] font-extrabold">Restaurant backend</h3><p className="text-sm text-ink-300">Orders, payments and messages run on the site's own Cloudflare database: it saves each order under Purchased orders, works out what an order costs from your menu, confirms Razorpay payments, and sends WhatsApp messages. Keys you enter here stay on that database, encrypted. The ways to pay are switched on under Payments.</p></section>}
+    {template === "restaurant" && <RazorpayForm where={where} plain />}<WhatsAppForm where={where} kind="site" /></div>;
 }
 /** The Studio's own database, looked up once. */
 export function useStudioWhere() { const [w, setW] = useState<Where | null | undefined>(undefined); useEffect(() => { let on = true; studioWhere().then((x) => on && setW(x)); return () => { on = false; }; }, []); return w; }

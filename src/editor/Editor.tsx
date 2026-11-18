@@ -11,7 +11,7 @@ export const GOTO_EVENT = "studio:goto";
 export type ExtraPanel = { id: string; label: string; group: string; desc: string; render: () => ReactNode };
 
 /** Category navigation + the cards of the selected category. Mutates `draft` and calls `onChange`. */
-export function Editor({ tpl, draft, version, onChange, upload, img, extras = [], onCategory, site = false, menu }: {
+export function Editor({ tpl, draft, version, onChange, upload, img, extras = [], onCategory, site = false, menu, cf }: {
   tpl: TemplateDef;
   draft: any;
   version: number;
@@ -24,6 +24,8 @@ export function Editor({ tpl, draft, version, onChange, upload, img, extras = []
   site?: boolean;
   /** Renamed, reordered, regrouped or combined sections (Settings → Customize → Admin menus). */
   menu?: MenuCfg;
+  /** The site's own Cloudflare database, when it is hosted on one. */
+  cf?: EditorCtx["cf"];
 }) {
   tpl.prepare?.(draft);
   const [cat, setCat] = useState(tpl.schema[0].id);
@@ -89,7 +91,35 @@ export function Editor({ tpl, draft, version, onChange, upload, img, extras = []
     const at = (g: string) => { const i = ORDER.indexOf(g); return i < 0 ? ORDER.length : i; };
     groups.sort((a, b) => at(a.group) - at(b.group));
   }
-  const ctx = useMemo<EditorCtx>(() => ({ tpl, root: draft, bump: onChange, upload, img, site }), [tpl, draft, onChange, upload, img, version, site]);
+  const ctx = useMemo<EditorCtx>(() => ({ tpl, root: draft, bump: onChange, upload, img, site, cf }), [tpl, draft, onChange, upload, img, version, site, cf?.api, cf?.site]);
+  // Search the menu: section names, what each is for, card titles and the labels of the settings inside.
+  const [q, setQ] = useState("");
+  const index = useMemo(() => {
+    const rows: { id: string; label: string; group: string; where: string; text: string; path?: string }[] = [];
+    const walk = (fields: any[], add: (label: string, path?: string) => void, top = true) => { for (const f of fields || []) {
+      if (!f) continue;
+      if (f.t === "grid" || f.t === "when") walk(f.fields, add, top);
+      else if (f.t === "list") { if (f.label) add(f.label, top ? f.path : undefined); walk(f.item, (l) => add(l, top ? f.path : undefined), false); }
+      else if (f.t === "note") continue;
+      else if (f.label) add(f.label, top ? f.path : undefined);
+    } };
+    for (const e of nav) {
+      rows.push({ id: e.id, label: e.label, group: e.group, where: "", text: (e.label + " " + ((e as any).desc || "")).toLowerCase() });
+      for (const cid of e.from) { const c = shown.find((x) => x.id === cid); if (!c) continue;
+        if (c.desc) rows.push({ id: e.id, label: e.label, group: e.group, where: "", text: c.desc.toLowerCase() });
+        for (const card of c.cards) { rows.push({ id: e.id, label: e.label, group: e.group, where: card.title, text: card.title.toLowerCase() }); walk(card.fields, (l, path) => rows.push({ id: e.id, label: e.label, group: e.group, where: `${card.title} → ${l}`, text: l.toLowerCase(), path })); } }
+      const x = extras.find((y) => y.id === e.id); if (x?.desc) rows.push({ id: e.id, label: e.label, group: e.group, where: "", text: x.desc.toLowerCase() });
+    }
+    return rows;
+  }, [tpl, nav.map((c) => c.id + ":" + c.label).join(), site]);
+  const found = useMemo(() => {
+    const words = q.toLowerCase().split(/\s+/).filter(Boolean); if (!words.length) return null;
+    const out: typeof index = [], seen = new Set<string>();
+    // A section's own name first, then the settings inside sections.
+    for (const pass of [0, 1]) for (const r of index) { if ((pass === 0) !== !r.where) continue; if (!words.every((w) => r.text.includes(w))) continue; const k = r.id + "|" + r.where; if (seen.has(k) || (pass === 0 && seen.has(r.id + "|"))) continue; seen.add(k); out.push(r); if (out.length >= 14) return out; }
+    return out;
+  }, [q, index]);
+  const pick = (r: { id: string; path?: string }) => { setQ(""); if (r.path) dispatchEvent(new CustomEvent(GOTO_EVENT, { detail: { path: r.path } })); else { setCat(r.id); onCategory?.(r.id); } };
   const entry = entryOf(cat) || nav[0];
   const curId = entry?.id;
   const extra = entry?.extra ? extras.find((e) => e.id === entry.id) : undefined;
@@ -98,7 +128,21 @@ export function Editor({ tpl, draft, version, onChange, upload, img, extras = []
     <Ctx.Provider value={ctx}>
       <div className="flex min-h-0 flex-1 flex-col md:flex-row">
         <nav aria-label="Content categories" className="scroll-thin flex flex-none gap-1 overflow-x-auto border-b border-ink-700 bg-ink-900 p-2 md:w-52 md:flex-col md:overflow-y-auto md:border-b-0 md:border-r md:p-3">
-          {groups.map((g) => { const shut = folded.includes(g.group); return (
+          <div className="flex-none md:sticky md:-top-3 md:z-10 md:-mx-3 md:-mt-3 md:bg-ink-900 md:px-3 md:pb-1 md:pt-3">
+            <label className="sr-only" htmlFor="menu-search">Search the settings</label>
+            <input id="menu-search" type="search" className="input w-40 py-1.5 text-[13px] md:w-full" placeholder="Search settings" autoComplete="off" value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === "Escape") setQ(""); if (e.key === "Enter" && found?.length) pick(found[0]); }} />
+          </div>
+          {found && (
+            <ul className="flex gap-1 md:flex-col" aria-label="Search results">
+              {found.map((r, i) => (
+                <li key={i} className="flex-none"><button type="button" onClick={() => pick(r)} className="flex w-full flex-col rounded-lg px-2.5 py-2 text-left text-[13.5px] font-semibold text-ink-200 hover:bg-ink-800 hover:text-ink-100">
+                  <span>{r.label}</span>{r.where ? <span className="whitespace-normal text-[11.5px] font-normal text-ink-400">{r.where}</span> : <span className="text-[11px] font-normal uppercase tracking-wide text-ink-500">{r.group}</span>}
+                </button></li>
+              ))}
+              {!found.length && <li className="px-2.5 py-2 text-[13px] text-ink-400">Nothing matches “{q}”.</li>}
+            </ul>
+          )}
+          {!found && groups.map((g) => { const shut = folded.includes(g.group); return (
             <div key={g.group} className="flex gap-1 md:flex-col">
               <button type="button" onClick={() => foldGroup(g.group)} aria-expanded={!shut} className="hidden items-center px-2.5 pb-1 pt-3 text-left text-[10.5px] font-bold uppercase tracking-widest text-ink-500 hover:text-ink-300 md:flex">
                 <span className="flex-1">{g.group}</span><span aria-hidden className={`inline-block text-[9px] transition-transform ${shut ? "-rotate-90" : ""}`}>▾</span>

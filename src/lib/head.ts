@@ -84,7 +84,7 @@ export function bakeHead(html: string, c: any, opts: { file: string; label?: str
     if (!/^[a-z0-9:._-]{1,60}$/i.test(n)) continue;
     meta(/^(og|fb|article|product):/i.test(n) ? "property" : "name", n, m.content);
   }
-  if (/^#[0-9a-f]{3,8}$/i.test(opts.bg || "")) tags.push(`<style id="site-boot">html{background:${opts.bg}}</style>`);
+  if (/^#[0-9a-f]{3,8}$/i.test(opts.bg || "")) tags.push(`<style id="site-boot">html{background:${opts.bg};--bg:${opts.bg}}</style>`);
 
   let out = html.replace(MARK, "").replace(/<style id="site-boot">[^<]*<\/style>\n?/g, "").replace(/<meta name="description"[^>]*>\n?/gi, "");
   out = out.replace(/<title>[^<]*<\/title>/i, `<title>${esc(title)}</title>\n<!-- site-meta -->\n${tags.join("\n")}\n<!-- /site-meta -->`);

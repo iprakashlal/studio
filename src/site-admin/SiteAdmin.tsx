@@ -348,11 +348,14 @@ function Workspace({ info, onInfo, repo, account, onSignOut, hosted, ghToken }: 
 
   const extras = useMemo(() => [
     ...(tpl.id === "store" ? [
-      { id: "shop-orders", label: "Orders", group: "Shop", desc: "Every order from checkout. Update status, confirm UPI payments and message customers.", render: () => <OrdersPanel content={saved} /> },
+      { id: "shop-orders", label: "Purchased orders", group: "Shop", desc: "Every order from checkout. Update status, confirm UPI payments and message customers.", render: () => <OrdersPanel content={saved} /> },
       { id: "shop-customers", label: "Customers", group: "Shop", desc: "Signed-up customers by account number and email, with their orders.", render: () => <CustomersPanel content={saved} /> },
     ] : []),
     ...(tpl.id === "business" || tpl.id === "restaurant" ? [
-      { id: "enquiries", label: "Enquiries", group: "Forms & records", desc: tpl.id === "restaurant" ? "Table-booking and event requests sent through your website's form." : "Messages sent through your website's enquiry form.", render: () => <EnquiriesPanel cfg={hosted && "api" in hosted ? null : enquiriesCfg(saved, hosted)} cf={hosted && "api" in hosted ? hosted : undefined} hosted={!!hosted} email={saved?.contact?.email} form={saved?.contact?.form} ghToken={ghToken} /> },
+      { id: "enquiries", label: "Enquiries", group: "Forms & records", desc: tpl.id === "restaurant" ? "Table-booking and event requests sent through your website's form." : "Messages sent through your website's enquiry form.", render: () => <EnquiriesPanel cfg={hosted && "api" in hosted ? null : enquiriesCfg(saved, hosted)} cf={hosted && "api" in hosted ? hosted : undefined} hosted={!!hosted} email={saved?.contact?.email} form={saved?.contact?.form} ghToken={ghToken} only="enquiries" /> },
+    ] : []),
+    ...((tpl.id === "restaurant" || tpl.id === "store") && !(tpl.id === "store" && saved?.backend?.enabled) ? [
+      { id: "purchased", label: "Purchased orders", group: "Forms & records", desc: "Every order placed on your website: what was bought, by whom, how it is paid, and where it has got to.", render: () => <EnquiriesPanel only="orders" cfg={hosted && "api" in hosted ? null : enquiriesCfg(saved, hosted)} cf={hosted && "api" in hosted ? hosted : undefined} hosted={!!hosted} email={saved?.contact?.email} form={saved?.contact?.form} ghToken={ghToken} /> },
     ] : []),
     ...(tpl.id === "store" || tpl.id === "business" ? [
       { id: "warranty-records", label: "Warranty records", group: "Forms & records", desc: "Products' numbers, warranty and service status, for the site's warranty & status check.", render: () => <WarrantyPanel repo={repo} cfg={draft?.warranty} /> },

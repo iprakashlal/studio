@@ -8,7 +8,7 @@ import { parseCsv } from "./warranty";
 import { findProducts } from "./saliency";
 
 const load = new Function("u", "return import(u)") as (u: string) => Promise<any>;
-export type PamphletPage = { n: number; text: string; image?: string };
+export type PamphletPage = { n: number; text: string; image?: string; /** The photo as it was chosen (full size), for the on-device reader. */ full?: Blob };
 /** A picture that may show a product: its page (or spreadsheet row) and where it sits, top to bottom. */
 export type PamphletPic = { page: number; blob: Blob; y: number; x: number; /** already cut out (see-through background) */ cut?: boolean };
 export type Pamphlet = { kind: "pdf" | "sheet" | "photos"; pages: PamphletPage[]; pics: PamphletPic[]; photo(n: number): Promise<Blob | null>; close(): void };
@@ -35,7 +35,7 @@ export async function readPamphlet(files: File[], pdfBase: string, o: { find?: b
   const imgs = files.filter((f) => /^image\/(jpeg|png|webp)$/.test(f.type) || /\.(jpe?g|png|webp)$/i.test(f.name)).slice(0, 8);
   if (!imgs.length) throw new Error("Choose a PDF, an Excel (.xlsx) or CSV file, or photos (JPG, PNG or WebP) of the pamphlet.");
   const small = await Promise.all(imgs.map((f) => shrink(f)));
-  const pages = await Promise.all(small.map(async (b, i) => ({ n: i + 1, text: "", image: await blobUri(b) })));
+  const pages = await Promise.all(small.map(async (b, i) => ({ n: i + 1, text: "", image: await blobUri(b), full: imgs[i] })));
   const pics: PamphletPic[] = [];
   for (const [i, b] of small.entries()) {
     // A photo of a designed pamphlet: find the product photos in it. A plain product photo: use it whole.

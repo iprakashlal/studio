@@ -10,9 +10,17 @@ const clean = (s: string) => s.replace(/[•●■‣◦•●■◦]/g, " ").re
 const CUR = "(?:₹|Rs\\.?|INR|Rs|rs\\.?|\\$|€|£)";
 const NUM = "\\d{1,3}(?:,\\d{2,3})*(?:\\.\\d{1,2})?|\\d{2,6}(?:\\.\\d{1,2})?";
 const ONE = `(?:${CUR}\\s?)?(?:${NUM})(?:\\s?\\/-)?`;
+/** "Packaged water *MRP": sold at the printed price. */
+const AT_MRP = /^(.{3,60}?)\s+[*'‘’"]?\s?(MRP|M\.R\.P\.?)$/;
+/** What a scan puts in front of a name: bullets, arrows, and the scraps a small icon is read as ("fw)", "=", "»"). */
+const lead = (t: string) => t.replace(/^(?:[^\p{L}\p{N}(\[₹$€£]+|[a-z]{1,3}\)\s+|[|\\/]+\s*)+/u, "").replace(/\s+(?:[A-Za-z]?[)\]|}>]+|[|\\/({\[]+)$/, "").trim();
+/** A scanned "500g" often reads as "5008": inside brackets with other weights, the 8 is a g. */
+const grams = (t: string) => t.replace(/[(\[][^()\[\]]*[)\]]/g, (b) => (/\d\s?(g|gm|kg|ml|pc)\b/i.test(b) ? b.replace(/(\d{2,3})8(?=[\/)\]])/g, "$1g") : b));
+/** Looks like words, not the scraps an ornament or a border is read as. */
+const wordy = (t0: string) => { const t = t0.replace(/[(\[][^()\[\]]*[)\]]/g, " "); const w = t.match(/\p{L}{3,}/gu) || []; return (w.some((x) => x.length >= 4) || w.length >= 2) && letters(t) >= t.replace(/\s/g, "").length * 0.55; };
 /** "Paneer tikka ........ ₹320", "Tandoori chicken 360 / 620", "Dal - Rs. 240/-". */
-const PRICED = new RegExp(`^(.{2,90}?)[\\s.\\-–—·…:_|]*?\\s((?:${ONE})(?:\\s*[\\/|,]\\s*(?:${ONE})){0,3})\\s*$`);
-const ONLY_PRICE = new RegExp(`^(?:${ONE})(?:\\s*[\\/|]\\s*(?:${ONE})){0,3}$`);
+const PRICED = new RegExp(`^(.{2,90}?)[\\s.\\-–—·…:_|]*?\\s((?:${ONE})(?:\\s*[\\/|,]\\s*(?:${ONE})){0,5})\\s*$`);
+const ONLY_PRICE = new RegExp(`^(?:${ONE})(?:\\s*[\\/|]\\s*(?:${ONE})){0,5}$`);
 const NOT_A_NAME = /(@|www\.|https?:|\+91|phone|mobile|\bcall\b|\d{3,}[\s-]\d{3,}|gstin|fssai|pin ?code|page \d|est\.?\s*\d{4}|since \d{4}|\bno\.\s*\d)/i;
 const titleCase = (s: string) => (s === s.toUpperCase() && /[A-Z]/.test(s) ? s.toLowerCase().replace(/(^|[\s&/-])([a-z])/g, (_, a, b) => a + b.toUpperCase()).replace(/\b(And|Or|Of|The|With|In|On)\b/g, (w, i) => (i ? w.toLowerCase() : w)) : s);
 const tidyPrice = (p: string) => clean(p).replace(/\s?\/-/g, "").replace(/\s*[\/|]\s*/g, " / ").replace(/(^|\/ )(Rs|rs|INR)\.?\s?/g, "$1₹").replace(/₹\s+/g, "₹");
@@ -25,14 +33,14 @@ const linesOf = (text: string): Line[] => {
   const out: Line[] = []; let page = 1;
   for (const raw of text.replace(/\r\n?/g, "\n").split("\n")) {
     const m = /^--- PAGE (\d+) ---$/.exec(raw.trim()); if (m) { page = +m[1]; continue; }
-    const t = clean(raw.replace(/^[-–*#>\s]+/, "").replace(/\*\*/g, "")); if (t) out.push({ t, page });
+    const t = grams(lead(clean(raw.replace(/^[-–*#>\s]+/, "").replace(/\*\*/g, "")))); if (t) out.push({ t, page });
   }
   return out;
 };
 const priced = (t: string): { name: string; price: string } | null => {
   const m = PRICED.exec(t); if (!m) return null;
   const name = clean(m[1].replace(/[\s.\-–—·…:_|]+$/, ""));
-  if (letters(name) < 2 || NOT_A_NAME.test(t) || /^\d/.test(name) && letters(name) < 4) return null;
+  if (letters(name) < 2 || NOT_A_NAME.test(t) || /^\d/.test(name) && letters(name) < 4 || !wordy(name)) return null;
   // A bare number of six digits or more is a phone number or a code, not a price.
   if (/\d{6,}/.test(m[2].replace(/,/g, ""))) return null;
   // Without a currency sign or a dotted line to it, a small number or a line about timings or an address isn't a price.
@@ -43,7 +51,10 @@ const priced = (t: string): { name: string; price: string } | null => {
 /** A short line that names a group of the lines after it: "STARTERS", "Main Course:", "From the Tandoor". */
 const heading = (L: Line[], i: number): boolean => {
   const t = L[i].t;
-  if (t.length > 44 || t.split(" ").length > 6 || /\d/.test(t) || letters(t) < 3 || NOT_A_NAME.test(t) || /[.!?]$/.test(t)) return false;
+  if (t.length > 44 || t.split(" ").length > 6 || /\d/.test(t) || letters(t) < 3 || NOT_A_NAME.test(t) || /[.!?,;'’]$/.test(t) || !wordy(t)) return false;
+  // The last words of a sentence that ran over the line ("…and fried green / Chillies") are not a heading.
+  const prev = i > 0 ? L[i - 1].t : "";
+  if (prev.length > 40 && /[a-z,\-–]$/.test(prev) && !priced(prev) && letters(prev) > prev.length * 0.6 && t.split(" ").length <= 3 && t !== t.toUpperCase() && !/:$/.test(t)) return false;
   const shout = t === t.toUpperCase(), colon = /:$/.test(t), title = t.split(" ").every((w) => /^[A-Z&]/.test(w) || /^(and|or|of|the|with|in|on|from|&)$/i.test(w));
   if (!shout && !colon && !title) return false;
   // A name with its price on the next line is an item, not a heading.
@@ -54,19 +65,40 @@ const heading = (L: Line[], i: number): boolean => {
 };
 const blank = (name: string, page: number): PamphletProduct => ({ name, category: "", summary: "", price: "", features: [], details: "", specs: [], page });
 
+/** "Surti Locho (Oil/Butter/Cheese)" at "89 / 109 / 119": the bracket names each price. Returns the plain name and the pairs. */
+function sized(name: string, price: string, next?: string): { name: string; specs: { label: string; value: string }[]; used: boolean } {
+  const ps = price.split(" / "); if (ps.length < 2) return { name, specs: [], used: false };
+  const pick = (txt: string) => { const m = /[(\[]([^()\[\]]*\/[^()\[\]]*)[)\]]/.exec(txt); const ls = m ? m[1].split("/").map((x) => x.trim()).filter(Boolean) : []; return m && ls.length === ps.length ? { m, ls } : null; };
+  const own = pick(name), nx = !own && next ? pick(next) : null, hit = own || nx;
+  if (!hit) return { name, specs: [], used: false };
+  return { name: own ? clean(name.replace(own.m[0], " ")) : name, specs: hit.ls.map((l, k) => ({ label: l.slice(0, 40), value: ps[k] })), used: !!nx };
+}
 /** A menu or price list: one entry for each priced line, under the heading it is printed below. */
 export function readList(text: string): PamphletProduct[] {
   const L = linesOf(text), out: PamphletProduct[] = [];
-  let cat = "", last: PamphletProduct | null = null, waiting: Line | null = null;
+  let cat = "", waiting: Line | null = null, more = false;
+  const S: { last: PamphletProduct | null } = { last: null };
+  const add = (name: string, price: string, page: number, i: number) => {
+    // "Thepla Pickle Roll - Two thepla rolled with pickle. 39": the words after the dash describe it.
+    const d = /^(.{3,60}?)\s+[-–—]\s+(.{12,})$/.exec(name), z = sized(d ? d[1] : name, price, L[i + 1]?.t);
+    S.last = { ...blank(z.name.slice(0, 120), page), category: cat, price, summary: d ? d[2].slice(0, 400) : "", specs: z.specs }; out.push(S.last); waiting = null; more = !d;
+    return z.used;
+  };
   for (let i = 0; i < L.length; i++) {
-    const { t, page } = L[i], p = priced(t);
-    if (p) { last = { ...blank(p.name.slice(0, 120), page), category: cat, price: p.price }; out.push(last); waiting = null; continue; }
+    const { t, page } = L[i], p = priced(t), mrp = !p && AT_MRP.exec(t);
+    if (p) { if (add(p.name, p.price, page, i)) i++; continue; }
+    if (mrp && wordy(mrp[1]) && !NOT_A_NAME.test(t)) { add(mrp[1], "MRP", page, i); continue; }
     // The price printed on its own line, under or beside the name (two columns read as two lines).
-    if (ONLY_PRICE.test(t) && waiting && !/\d{6,}/.test(t)) { last = { ...blank(waiting.t.slice(0, 120), waiting.page), category: cat, price: tidyPrice(t) }; out.push(last); waiting = null; continue; }
-    if (heading(L, i)) { cat = /^(price list|rate card|rate list|menu|our menu|catalogue|products?)$/i.test(t.replace(/:$/, "")) ? "" : titleCase(t.replace(/:$/, "")).slice(0, 60); last = null; waiting = null; continue; }
-    // A sentence right under a dish is its description.
-    if (last && !last.summary && t.length >= 12 && /[a-z]/.test(t) && !NOT_A_NAME.test(t) && letters(t) > t.length * 0.6) { last.summary = t.slice(0, 400); waiting = null; continue; }
-    waiting = letters(t) >= 3 && t.length <= 70 && !NOT_A_NAME.test(t) ? L[i] : null;
+    if (ONLY_PRICE.test(t) && waiting && !/\d{6,}/.test(t)) { add(waiting.t, tidyPrice(t), waiting.page, i); continue; }
+    if (heading(L, i)) { cat = /^(price list|rate card|rate list|menu|our menu|catalogue|products?)$/i.test(t.replace(/:$/, "")) ? "" : titleCase(t.replace(/:$/, "")).slice(0, 60); S.last = null; waiting = null; more = false; continue; }
+    // A note printed at the foot of a page is not about the dish above it.
+    if (/^(prices?\b.*\b(exclusive|inclusive|gst|tax|charges?)|all prices|\*?\s?taxes? (as|extra)|gst (extra|as))/i.test(t)) { more = false; waiting = null; continue; }
+    // Sentences right under a dish are its description (as far as they run on).
+    const last = S.last;
+    if (last && more && t.length >= 12 && /[a-z]/.test(t) && !NOT_A_NAME.test(t) && letters(t) > t.length * 0.6 && wordy(t) && (last.summary + t).length < 420) { last.summary = (last.summary ? last.summary + " " : "") + t; waiting = null; continue; }
+    if (last && more && last.summary && t.length < 12 && /^[A-Za-z][a-z' ]+[.!']?$/.test(t)) { last.summary += " " + t; continue; }
+    more = false;
+    waiting = letters(t) >= 3 && t.length <= 70 && !NOT_A_NAME.test(t) && wordy(t) ? L[i] : null;
   }
   return out;
 }
@@ -151,7 +183,7 @@ export async function systemProducts(doc: Pamphlet, o: { menu?: boolean; step?: 
   const pics = doc.pages.filter((x) => x.image); let sure = 0;
   for (const [i, pg] of pics.entries()) {
     o.step?.(`Reading page picture ${i + 1} of ${pics.length} on this device`);
-    const r = await readPicture(pg.image!, (s) => o.step?.(pics.length > 1 ? `Picture ${i + 1} of ${pics.length}: ${s}` : s));
+    const r = await readPicture(pg.full || pg.image!, (s) => o.step?.(pics.length > 1 ? `Picture ${i + 1} of ${pics.length}: ${s}` : s));
     sure += r.sure; if (r.text) text += `\n\n--- PAGE ${pg.n} ---\n${r.text}`;
   }
   if (letters(text) < 20) throw new Error(pics.length ? "The on-device reader couldn't find readable text in those pictures. Use a sharper, straighter photo or the original PDF, or switch to Cloudflare AI for this file." : "Couldn't find any text in that file.");

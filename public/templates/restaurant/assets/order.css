@@ -125,3 +125,9 @@ html.ord-lock{overflow:hidden}
 @media (prefers-reduced-motion:reduce){.oc-pic img,.ord-tiles a{transition:none}}
 .ord-tiles .ph b{font-size:22px}.oc-pic .ph{border-radius:50%}.oc-pic .ph b{font-size:26px}
 html.ord-lock .fx-badge{display:none!important}html.ord-cart .fx-badge{bottom:84px!important}
+.ord-tiles{grid-template-columns:repeat(auto-fill,minmax(min(132px,100%),1fr))}.ord-tiles a{min-width:0;grid-template-columns:minmax(0,1fr)}.ord-tiles a span{min-width:0;max-width:100%;overflow-wrap:anywhere;hyphens:auto}
+.oc-t h3 span,.oc-t h2 span,.odl-n b,.ord-st span,.od-cats span,.osh-o span{min-width:0;overflow-wrap:anywhere}
+@media (max-width:760px){.ord-tiles{grid-template-columns:repeat(3,minmax(0,1fr))}}
+.od-pay{display:grid;gap:12px;justify-items:center;text-align:center}.od-pay>*{width:100%;box-sizing:border-box}.od-pay .od-qr{width:auto}.od-pay .of{text-align:left}
+.od-amt{margin:0;font:800 34px/1 var(--fb);color:var(--text)}.od-steps{margin:6px 0 0;padding-left:20px;text-align:left;font-size:14.5px}.od-pay code,.od-done code{font:600 14px/1 ui-monospace,Menlo,monospace;background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:4px 8px}
+.od-pay .btn{justify-self:center;width:auto}

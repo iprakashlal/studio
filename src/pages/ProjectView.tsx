@@ -172,7 +172,11 @@ export function ProjectView({ studio, index, project, session, onIndex }: { stud
   const extras = useMemo(() => [
     ...(project.template === "business" || project.template === "restaurant" ? [{
       id: "enquiries", label: "Enquiries", group: "Forms & records", desc: project.template === "restaurant" ? "Table-booking and event requests sent through the website's form." : "Messages sent through the website's enquiry form.",
-      render: () => <EnquiriesPanel cfg={project.host?.cf ? null : enquiriesCfg(draft, project.host?.sb)} cf={project.host?.cf} account={project.host?.account} hosted={!!project.host} email={draft?.contact?.email} form={draft?.contact?.form} ghToken={ghPublish.token(session.token)} inStudio />,
+      render: () => <EnquiriesPanel cfg={project.host?.cf ? null : enquiriesCfg(draft, project.host?.sb)} cf={project.host?.cf} account={project.host?.account} hosted={!!project.host} email={draft?.contact?.email} form={draft?.contact?.form} ghToken={ghPublish.token(session.token)} inStudio only="enquiries" />,
+    }] : []),
+    ...(project.template === "store" || project.template === "restaurant" ? [{
+      id: "purchased", label: "Purchased orders", group: "Forms & records", desc: "Every order placed on the website: what was bought, by whom, how it is paid, and where it has got to.",
+      render: () => <EnquiriesPanel only="orders" cfg={project.host?.cf ? null : enquiriesCfg(draft, project.host?.sb)} cf={project.host?.cf} account={project.host?.account} hosted={!!project.host} email={draft?.contact?.email} form={draft?.contact?.form} ghToken={ghPublish.token(session.token)} inStudio />,
     }] : []),
     ...(project.template === "store" || project.template === "business" ? [{
       id: "warranty-records", label: "Warranty records", group: "Forms & records", desc: "Products' numbers, warranty and service status, for the site's warranty & status check. Saved straight to the live site.",
@@ -268,7 +272,7 @@ export function ProjectView({ studio, index, project, session, onIndex }: { stud
       {modal === "approve" && draft && <ApprovalDialog project={project} draft={draft} dirty={dirty} me={session.username || ""} onClose={() => setModal("")} />}
       {modal === "kit" && draft && <BrandKitDialog project={project} draft={draft} img={img} onClose={() => setModal("")} />}
       {modal === "pamphlet" && <PamphletDialog {...{ session, project, draft, upload }} onApply={(c, n) => { replaceDraft(c); toast(project.template === "restaurant" ? `${n} dish${n === 1 ? "" : "es"} filled in. Check them, then Save.` : `${n} product${n === 1 ? "" : "s"} filled in. Check them, then Save.`); }} onClose={() => setModal("")} />}
-      {modal === "write" && <WriteFromSiteDialog {...{ session, project, draft }} onApply={(c) => { replaceDraft(c); toast("New text is in the editor. Check it, then Save."); }} onClose={() => setModal("")} />}
+      {modal === "write" && <WriteFromSiteDialog {...{ session, project, draft, upload }} onApply={(c) => { replaceDraft(c); toast("New text is in the editor. Check it, then Save."); }} onClose={() => setModal("")} />}
       {modal === "history" && <HistoryDialog {...{ studio, project, tpl, getBlob }} onLoad={(c) => { replaceDraft(c); setModal(""); toast("Loaded into the editor. Save to keep it."); }} onClose={() => setModal("")} />}
       {modal === "details" && <DetailsDialog {...{ studio, index, project, session, onIndex }} onImported={(c) => { replaceDraft(c); setSavedV(v + 1); }} onClose={() => setModal("")} />}
     </div>

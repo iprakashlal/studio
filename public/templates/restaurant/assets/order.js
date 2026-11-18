@@ -22,7 +22,9 @@
   try { const t = new URLSearchParams(location.search).get("table"); if (t) { ui.form.table = t.slice(0, 12); ui.table = true; } } catch (e) {}
 
   /** What the site's database offers this page: a WhatsApp code for the guest's number, and online payment (its public key id). */
-  let can = { otp: false, rz: "" }, canAsked = false;
+  let can = { otp: false, rz: "", pg: [] }, canAsked = false;
+  /** Gateways other than Razorpay: the guest pays on the gateway's own page and comes back here. */
+  const GW = { cf: { key: "cashfree", name: "Cashfree", label: "Pay online with Cashfree (UPI, card, netbanking)" }, pe: { key: "phonepe", name: "PhonePe", label: "Pay with PhonePe (UPI, card, netbanking)" }, st: { key: "stripe", name: "Stripe", label: "Pay by card (Stripe)" }, pp: { key: "paypal", name: "PayPal", label: "Pay with PayPal" } };
   const digits = (v) => String(v || "").replace(/\D/g, "").slice(-10);
   const verified = () => !!(ui.otp && ui.otp.token && ui.otp.phone === digits(ui.form.phone) && +ui.otp.token.split(".")[0] > Date.now() + 60000);
   const esc = (s) => A.esc(s);
@@ -211,7 +213,7 @@
       <div class="od-box" id="od-bill"><span class="od-l">Bill details</span>${billRows(b)}</div>
       ${b.short ? `<p class="od-bad" role="alert">Add ${fmt(b.short)} more to reach the minimum order of ${fmt(b.min)}.</p>` : ""}`;
   }
-  const pays = () => { const o = O(), p = o.pay || {}, m = mode(), out = []; if (p.razorpay && can.rz) out.push({ id: "rz", label: "Pay online (UPI, card, netbanking)", note: "Secure payment by Razorpay. The order is placed as soon as you've paid." }); if (p.cod !== false) out.push({ id: "cod", label: m === "delivery" ? p.codLabel || "Pay on delivery (cash or UPI)" : m === "pickup" ? "Pay at the counter" : "Pay at the table" }); if (p.upi && /^[\w.\-]{2,}@[a-zA-Z]{2,}$/.test(String(p.upiId || "").trim()) && (C.food.currency || "₹") === "₹") out.push({ id: "upi", label: "Pay now by UPI", note: "Scan a QR code or open your UPI app. The order is placed once you've paid." }); return out; };
+  const pays = () => { const o = O(), p = o.pay || {}, m = mode(), out = []; if (p.razorpay && can.rz) out.push({ id: "rz", label: "Pay online (UPI, card, netbanking)", note: "Secure payment by Razorpay. The order is placed as soon as you've paid." }); for (const g of Object.keys(GW)) if (p[GW[g].key] && (can.pg || []).includes(g)) out.push({ id: g, label: GW[g].label, note: `You pay on ${GW[g].name}'s secure page and come back here. The order is placed as soon as you've paid.` }); if (p.cod !== false) out.push({ id: "cod", label: m === "delivery" ? p.codLabel || "Pay on delivery (cash or UPI)" : m === "pickup" ? "Pay at the counter" : "Pay at the table" }); if (p.upi && /^[\w.\-]{2,}@[a-zA-Z]{2,}$/.test(String(p.upiId || "").trim()) && (C.food.currency || "₹") === "₹") out.push({ id: "upi", label: "Pay now by UPI", note: "Scan a QR code or open your UPI app. The order is placed once you've paid." }); return out; };
   const inp = (k, label, a = "") => `<div class="of"><label for="of-${k}">${label}</label><input id="of-${k}" data-f="${k}" value="${esc(ui.form[k] || "")}" ${a}></div>`;
   function checkoutHTML() {
     const b = bill(), o = O(), m = mode(), f = ui.form, sl = slots(), ps = pays();
@@ -259,6 +261,7 @@
       ${o.preview ? `<p class="od-ok">Preview: nothing was sent. On the live site the order reaches ${A.backend() ? "your Enquiries inbox" : wa ? "you on WhatsApp" : "you once a WhatsApp number or the enquiry inbox is set up"}.</p>` : ""}
       ${!o.sent && !o.preview ? `<div class="od-box"><p>${wa ? "Tap the button to open WhatsApp with your order written out, then press send. We'll confirm it there." : `Please call us to confirm this order${C.contact.phone ? ` on <a href="${esc(A.tel(C.contact.phone))}">${esc(C.contact.phone)}</a>` : ""}.`}</p>${sendWa}</div>` : ""}
       ${o.sent && !cancelled ? `<ol class="od-track" aria-label="Order status">${steps.map((s, i) => `<li class="${i < at ? "was" : i === at ? "now" : ""}"${i === at ? ' aria-current="step"' : ""}><i aria-hidden="true"></i><span>${s}</span></li>`).join("")}</ol>${o.live ? `<p class="od-live">This page updates as the kitchen works on your order.</p>` : `<p class="od-live">We'll call or message you on ${esc(o.c.phone)} if we need anything.</p>`}` : ""}
+      ${GW[o.pay] && o.pg && !cancelled ? `<div class="od-box"><span class="od-l">Payment</span><p class="od-ok">Payment of ${fmt(o.bill.total)} received through ${GW[o.pay].name}. Thank you.</p></div>` : ""}
       ${o.pay === "rz" && !cancelled ? `<div class="od-box"><span class="od-l">Payment</span><p class="od-ok">${o.sent ? `Payment of ${fmt(o.bill.total)} received. Thank you.` : `You paid ${fmt(o.bill.total)} online (payment ${esc((o.rz || {}).razorpay_payment_id || "")}).`}</p></div>` : ""}
       ${o.pay === "upi" && !cancelled ? `<div class="od-box"><span class="od-l">Payment</span>${o.paid ? `<p class="od-ok">Payment of ${fmt(o.bill.total)} received. Thank you.</p>` : `<p><b>${fmt(o.bill.total)} by UPI</b>, reference <code>${esc(o.utr || "")}</code>.</p><p class="od-live">${o.live ? "The restaurant is checking it in their UPI app. This page shows it as soon as they confirm." : "The restaurant checks it in their UPI app and confirms with you."}</p>`}</div>` : ""}
       <div class="od-box"><span class="od-l">Your order</span><ul class="od-sum">${o.items.map((l) => `<li><span>${l.qty} × ${esc(l.name)}${lineText(l) ? ` <small>(${esc(lineText(l))})</small>` : ""}</span><b>${fmt(l.unit * l.qty)}</b></li>`).join("")}</ul>${billRows(o.bill, o)}</div>
@@ -363,7 +366,7 @@
       c: { name: String(f.name).trim(), phone: String(f.phone).trim(), email: String(f.email || "").trim(), table: String(f.table || "").trim(), address: m === "delivery" ? [f.line1, f.area, f.landmark ? "Near " + f.landmark : "", f.pin].map((x) => String(x || "").trim()).filter(Boolean).join(", ") + ` (${f.label})` : "" }, status: "new", sent: false, live: false };
     // Paying by UPI comes before the order is placed.
     if (pay.id === "upi") { ui.paying = od; ui.utr = ""; ui.drawer = "pay"; over(); return; }
-    if (pay.id === "rz" && !A.PREVIEW) return payOnline(od);
+    if ((pay.id === "rz" || GW[pay.id]) && !A.PREVIEW) return payOnline(od);
     finish(od);
   }
   /** Online payment: the database works out the amount from the menu and starts the payment; Razorpay's own window takes it. */
@@ -372,13 +375,45 @@
     const be = A.backend(), f = ui.form, stop = (t) => { ui.busy = false; ui.err = t; over(true); };
     ui.busy = true; over(true);
     try {
-      const r = await fetch(be.cf + "/pay/rz/" + encodeURIComponent(be.site), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ order_no: od.id, mode: od.mode, pin: f.pin, area: f.area, coupon: od.bill.code, tip: od.bill.tip, total: od.bill.total, items: od.items.map((l) => ({ id: l.id, qty: l.qty, variant: l.variant, addons: (l.addons || []).map((a) => a.label) })) }) });
-      const j = await r.json().catch(() => null); if (!r.ok || !j || !j.order_id) return stop((j && j.error) || "Online payment couldn't start. Please try again, or choose another way to pay.");
+      const g = od.pay;
+      const r = await fetch(be.cf + "/pay/" + g + "/" + encodeURIComponent(be.site), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ back: location.origin + location.pathname, name: od.c.name, phone: od.c.phone, email: od.c.email, order_no: od.id, mode: od.mode, pin: f.pin, area: f.area, coupon: od.bill.code, tip: od.bill.tip, total: od.bill.total, items: od.items.map((l) => ({ id: l.id, qty: l.qty, variant: l.variant, addons: (l.addons || []).map((a) => a.label) })) }) });
+      const j = await r.json().catch(() => null); if (!r.ok || !j || !(j.order_id || j.go || j.session)) return stop((j && j.error) || "Online payment couldn't start. Please try again, or choose another way to pay.");
+      if (GW[g]) {
+        // The order waits on this device while the guest pays on the gateway's page; it is placed when they come back paid.
+        st.set("pend", { od, ref: j.ref, otp: can.otp && ui.otp ? ui.otp.token : "", at: Date.now() });
+        if (g === "cf") { await new Promise((ok, no) => { if (window.Cashfree) return ok(); const s = document.createElement("script"); s.src = "https://sdk.cashfree.com/js/v3/cashfree.js"; s.onload = ok; s.onerror = no; document.head.appendChild(s); }); window.Cashfree({ mode: j.mode }).checkout({ paymentSessionId: j.session, redirectTarget: "_self" }); }
+        else location.href = j.go;
+        return;
+      }
       await (rzP = rzP || new Promise((ok, no) => { if (window.Razorpay) return ok(); const s = document.createElement("script"); s.src = "https://checkout.razorpay.com/v1/checkout.js"; s.onload = ok; s.onerror = no; document.head.appendChild(s); })).catch(() => { rzP = null; throw new Error("x"); });
       new window.Razorpay({ key: j.key, order_id: j.order_id, amount: j.amount, currency: j.currency, name: j.name || C.brand.name, description: "Order " + od.id, prefill: { name: od.c.name, contact: od.c.phone, email: od.c.email || undefined }, notes: { order_no: od.id }, theme: { color: C.theme.c1 },
         handler: (resp) => { od.rz = resp; od.payLabel = "Paid online"; finish(od); },
         modal: { ondismiss: () => stop("The payment wasn't completed, so the order isn't placed yet. You can try again.") } }).open();
     } catch (e) { stop("Online payment couldn't open. Check your connection and try again, or choose another way to pay."); }
+  }
+  /** Back from a gateway's page: the order that was waiting is sent with the payment's reference; the database asks the gateway whether it was paid. */
+  async function cameBack() {
+    let q; try { q = new URLSearchParams(location.search); } catch (e) { return; }
+    const g = q.get("paid"), no = q.get("o"); if (!g || !GW[g] || !no) return;
+    const be0 = A.backend(); if (A.PREVIEW || !be0 || !be0.cf) return;
+    const pend = st.get("pend", null), keep = new URLSearchParams(); if (q.get("table")) keep.set("table", q.get("table"));
+    history.replaceState(null, "", location.pathname + (keep.toString() ? "?" + keep : ""));
+    if (!pend || !pend.od || pend.od.id !== no || pend.od.pay !== g) return;
+    // A number already verified on WhatsApp stays verified when the guest comes back to try again.
+    if (pend.otp) ui.otp = { phone: digits(pend.od.c.phone), token: pend.otp };
+    const od = pend.od, again = (t) => { ui.busy = false; ui.err = t; ui.drawer = "checkout"; over(); };
+    if (q.get("x")) { st.set("pend", null); return again("The payment wasn't completed, so the order isn't placed yet. You can try again."); }
+    ui.busy = true; ui.drawer = "checkout"; ui.err = "Confirming your payment…"; over();
+    const be = A.backend();
+    try {
+      od.pg = { gw: g, ref: pend.ref, otp: pend.otp }; od.payLabel = "Paid online";
+      const r = await fetch(be.cf + "/enquire/" + encodeURIComponent(be.site), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ page: "order.html", data: orderData(od) }) });
+      const j = await r.json().catch(() => null);
+      if (r.status === 502) return again((j && j.error) || "We couldn't confirm the payment just now. Reload this page in a moment; your order is kept.");
+      st.set("pend", null);
+      if (!r.ok) return again((j && j.error) || "The payment wasn't completed, so the order isn't placed yet. You can try again.");
+      od.sent = true; od.live = true; od.paid = true; delete od.pg.otp; shown(od);
+    } catch (e) { again("We couldn't confirm the payment just now. Check your connection and reload this page; your order is kept."); }
   }
   async function finish(od) {
     const m = od.mode, b = od.bill, pay = { label: od.payLabel };
@@ -386,11 +421,17 @@
     if (A.PREVIEW) od.preview = true;
     else {
       try {
-        const data = { type: "Order", order_no: od.id, okey: od.k, name: od.c.name, phone: od.c.phone, email: od.c.email, mode: MODES[m], when: od.whenLabel, address: od.c.address, table: od.c.table, items: od.items.map((l) => `${l.qty} × ${l.name}${lineText(l) ? ` (${lineText(l)})` : ""}${l.note ? ` [${l.note}]` : ""} = ${txt(l.unit * l.qty)}`).join("\n"), total: txt(b.total), payment: od.utr ? "UPI, paid before ordering" : od.rz ? "Paid online (Razorpay)" : pay.label, utr: od.utr || "", ...(od.rz ? { rz_order: od.rz.razorpay_order_id, rz_payment: od.rz.razorpay_payment_id, rz_sig: od.rz.razorpay_signature } : {}), ...(can.otp && ui.otp ? { otp_token: ui.otp.token } : {}), message: orderText(od) };
-        const how = await A.postEnquiry(data, "order.html"); od.sent = !!how; od.live = how === "cf"; if (od.rz && od.sent) od.paid = true;
+        const data = orderData(od);
+        const how = await A.postEnquiry(data, "order.html"); od.sent = !!how; od.live = how === "cf"; if ((od.rz || od.pg) && od.sent) od.paid = true;
       } catch (e) { od.sent = false; }
     }
-    cart = []; save(); ui.coupon = ""; st.set("coupon", ""); ui.tip = 0; ui.form.notes = ""; ui.paying = null; ui.utr = "";
+    shown(od);
+  }
+  /** What is saved for an order (it goes to the site's database under Purchased orders). */
+  function orderData(od) { const m = od.mode, b = od.bill, pay = { label: od.payLabel }; return { type: "Order", order_no: od.id, okey: od.k, name: od.c.name, phone: od.c.phone, email: od.c.email, mode: MODES[m], when: od.whenLabel, address: od.c.address, table: od.c.table, items: od.items.map((l) => `${l.qty} × ${l.name}${lineText(l) ? ` (${lineText(l)})` : ""}${l.note ? ` [${l.note}]` : ""} = ${txt(l.unit * l.qty)}`).join("\n"), total: txt(b.total), payment: od.utr ? "UPI, paid before ordering" : od.rz ? "Paid online (Razorpay)" : od.pg ? `Paid online (${GW[od.pg.gw].name})` : pay.label, utr: od.utr || "", ...(od.pg ? { pay_gw: od.pg.gw, pay_ref: od.pg.ref, otp_token: od.pg.otp || undefined } : {}), ...(od.rz ? { rz_order: od.rz.razorpay_order_id, rz_payment: od.rz.razorpay_payment_id, rz_sig: od.rz.razorpay_signature } : {}), ...(can.otp && ui.otp ? { otp_token: ui.otp.token } : {}), message: orderText(od) }; }
+  /** The order is placed: the cart empties and the page shows it. */
+  function shown(od) {
+    cart = []; save(); ui.coupon = ""; st.set("coupon", ""); ui.tip = 0; ui.form.notes = ""; ui.paying = null; ui.utr = ""; ui.err = "";
     st.set("orders", [od, ...st.get("orders", [])].slice(0, 20));
     ui.busy = false; ui.done = od; ui.drawer = "done";
     // The whole page is drawn again, so “Your orders” shows in the toolbar.
@@ -489,7 +530,8 @@
     filter(); over(true);
     if (ui.drawer === "done" && ui.done) track(ui.done);
     const be = A.backend();
-    if (!canAsked && !A.PREVIEW && be && be.cf) { canAsked = true; fetch(be.cf + "/site/" + encodeURIComponent(be.site) + "/can", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((j) => { if (j) { can = { otp: !!j.otp, rz: String(j.rz || "") }; if (ui.drawer === "checkout") { sync(); over(true); } } }).catch(() => {}); }
+    if (!bind.back) { bind.back = true; cameBack(); }
+    if (!canAsked && !A.PREVIEW && be && be.cf) { canAsked = true; fetch(be.cf + "/site/" + encodeURIComponent(be.site) + "/can", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((j) => { if (j) { can = { otp: !!j.otp, rz: String(j.rz || ""), pg: Array.isArray(j.pg) ? j.pg : [] }; if (ui.drawer === "checkout") { sync(); over(true); } } }).catch(() => {}); }
   }
   window.RestOrder = { page, bind };
 })();

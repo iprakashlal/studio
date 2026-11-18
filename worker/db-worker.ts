@@ -126,7 +126,7 @@ async function notifyEnquiry(env: Env, site: string, data: Record<string, string
   let said = wantOwner && !owners.length ? "Not emailed: no address to send to. Fill in “Send to” under Enquiry form." : "";
   const vars = { name: oneLine(data.name || ""), site: name, page: page || "", email: oneLine(data.email || "") };
   const label = (k: string) => k.replace(/[-_]+/g, " ").replace(/^./, (ch) => ch.toUpperCase());
-  const rows = Object.entries(data).filter(([k]) => k !== "consent" && k !== "okey" && k !== "pay_state" && k !== "rz_order" && k !== "cart" && !(k === "message" && data.order_no) && !k.startsWith("_")).map(([k, v]) => `<tr><td style="padding:6px 14px 6px 0;color:#667;vertical-align:top;white-space:nowrap">${hesc(label(k))}</td><td style="padding:6px 0;white-space:pre-wrap">${hesc(v)}</td></tr>`).join("");
+  const rows = Object.entries(data).filter(([k]) => k !== "consent" && k !== "okey" && k !== "pay_state" && k !== "rz_order" && k !== "pay_gw" && k !== "cart" && !(k === "message" && data.order_no) && !k.startsWith("_")).map(([k, v]) => `<tr><td style="padding:6px 14px 6px 0;color:#667;vertical-align:top;white-space:nowrap">${hesc(label(k))}</td><td style="padding:6px 0;white-space:pre-wrap">${hesc(v)}</td></tr>`).join("");
   const table = `<table style="border-collapse:collapse;margin:0 0 14px">${rows}</table>`;
   const jobs: Promise<unknown>[] = [];
   if (wantOwner && owners.length) {
@@ -368,7 +368,7 @@ async function translateTexts(env: Env, q: any): Promise<any> {
 }
 /** A public https address (not this machine, a bare IP or an internal name). */
 /* ============================================================
-   Connections an owner can switch on: their own AI API, WhatsApp (Meta's Cloud API) and Razorpay.
+   Connections an owner can switch on: their own AI API, WhatsApp (Meta's Cloud API) and payment gateways.
    Their keys are kept in this database encrypted with the Worker's own secret, are never sent back to
    a browser, and each is used only when it is switched on.
    ============================================================ */
@@ -386,6 +386,10 @@ const SETTINGS: Record<string, { secret: string[]; text: string[]; flags: string
   ai: { secret: ["key"], text: ["base", "model", "vision"], flags: ["on"] },
   wa: { secret: ["token"], text: ["phoneId", "waba", "cc", "lang", "to", "phones", "tplOtp", "tplOrder", "tplEnquiry"], flags: ["on", "login", "orderOtp", "orderAlert", "enquiryAlert"] },
   rz: { secret: ["secret"], text: ["keyId"], flags: ["on"] },
+  cf: { secret: ["secret"], text: ["appId"], flags: ["test"] },
+  pe: { secret: ["secret"], text: ["clientId", "version"], flags: ["test"] },
+  st: { secret: ["secret"], text: [], flags: [] },
+  pp: { secret: ["secret"], text: ["clientId"], flags: ["test"] },
 };
 async function aesKey(env: Env) { return crypto.subtle.importKey("raw", await crypto.subtle.digest("SHA-256", enc.encode("settings:" + env.SECRET)), "AES-GCM", false, ["encrypt", "decrypt"]); }
 async function getSetting(env: Env, scope: string, name: string): Promise<any | null> {
@@ -543,6 +547,116 @@ export function restBill(c: any, q: any): { total: number } | { error: string } 
   const raw = base + tax + del + tip, total = o.roundOff === false ? Math.round(raw * 100) / 100 : Math.round(raw);
   if (mode !== "dinein" && sub < Math.max(0, +o.minOrder || 0)) return { error: "The order is below the minimum." };
   return { total };
+}
+
+/* ---- A shop's bill, by the same rules as the shop's own checkout (assets/store.js): prices come from the site's content. ---- */
+export function shopBill(c: any, q: any): { total: number } | { error: string } {
+  const S = c?.settings || {}, P = new Map<string, any>((Array.isArray(c?.products) ? c.products : []).filter((p: any) => p && p.id).map((p: any) => [String(p.id), p]));
+  const lines = Array.isArray(q?.items) ? q.items.slice(0, 100) : []; if (!lines.length) return { error: "The cart is empty." };
+  const max = Math.max(1, Number(S.maxQty) || 10); let sub = 0;
+  for (const l of lines) {
+    const p = P.get(String(l?.id || "")), price = Number(p?.price);
+    if (!p || p.stock === "out" || !isFinite(price) || price < 0) return { error: "Something in the cart is no longer sold. Refresh the page." };
+    sub += price * Math.max(1, Math.min(max, Math.floor(+l.qty || 0)));
+  }
+  const H = c?.shipping || {}, num = (v: any) => (v === "" || v == null || isNaN(Number(v)) ? null : Math.max(0, Number(v)));
+  const pin = String(q?.pin || "").replace(/\D/g, ""); let fee: number | null = null, freeOver: number | null = null;
+  if (H.on && pin.length >= 4) {
+    const hit = (list: any) => String(list || "").split(/[\s,;]+/).filter(Boolean).some((t) => { const r = /^(\d{4,6})-(\d{4,6})$/.exec(t); if (r) return pin.length === r[1].length && +pin >= +r[1] && +pin <= +r[2]; return /^\d{2,6}$/.test(t) && (t.length === pin.length ? t === pin : pin.startsWith(t)); });
+    const z = (Array.isArray(H.zones) ? H.zones : []).find((x: any) => x && x.on !== false && hit(x.pins));
+    if (z) { fee = num(z.fee); freeOver = num(z.freeOver); } else if (H.rest === "no") return { error: "We don't deliver to that PIN code." }; else fee = num(H.restFee);
+  }
+  const over = freeOver != null ? freeOver : Number(S.freeShippingOver), free = over > 0 && sub >= over;
+  const ship = free ? 0 : fee != null ? fee : Number(S.shippingFee) || 0, pct = Number(S.taxPercent) || 0, taxAdd = pct && !S.taxIncluded ? Math.round(sub * pct) / 100 : 0;
+  return { total: Math.round((sub + ship + taxAdd) * 100) / 100 };
+}
+
+/* ---- Payment gateways a site's owner can connect with their own keys. The amount is always worked out here, the gateway is
+   asked by this database whether the money arrived, and an order is saved as paid only then. ---- */
+const PG: Record<string, { name: string; key: string; inr?: boolean }> = { rz: { name: "Razorpay", key: "razorpay", inr: true }, cf: { name: "Cashfree", key: "cashfree", inr: true }, pe: { name: "PhonePe", key: "phonepe", inr: true }, st: { name: "Stripe", key: "stripe" }, pp: { name: "PayPal", key: "paypal" } };
+const PG_CUR = ["INR", "USD", "EUR", "GBP", "AUD", "CAD", "SGD", "AED", "NZD", "CHF"];
+const pgReady = (g: string, z: any) => !!z && !!(g === "rz" ? z.on && z.secret && z.keyId : g === "cf" ? z.secret && z.appId : g === "pe" ? z.secret && z.clientId : g === "st" ? z.secret : g === "pp" ? z.secret && z.clientId : false);
+const isRest = (c: any) => !!(c?.ordering && c?.food);
+/** Whether the site's published content has this way to pay switched on. */
+const pgOn = (c: any, g: string) => !!(isRest(c) ? c.ordering?.pay?.[PG[g].key] : c?.payments?.[PG[g].key]?.enabled);
+function siteCur(c: any): string {
+  if (isRest(c)) { const s = String(c.food.currency || "₹").trim(); return ({ "₹": "INR", Rs: "INR", "Rs.": "INR", $: "USD", "€": "EUR", "£": "GBP" } as Record<string, string>)[s] || (/^[A-Z]{3}$/.test(s) ? s : ""); }
+  return String(c?.settings?.currency || "").toUpperCase();
+}
+const pgMoney = (cur: string, minor: number) => (cur === "INR" ? "₹" : cur + " ") + (minor / 100).toFixed(2).replace(/\.00$/, "");
+class PgError extends Error { constructor(m: string, public keys = false) { super(m); } }
+const pgFail = (g: string, r: Response) => new PgError(r.status === 401 || r.status === 403 ? `${PG[g].name} refused this site's keys. The owner needs to check them.` : `${PG[g].name} couldn't start the payment just now. Please try again, or choose another way to pay.`, r.status === 401 || r.status === 403);
+const cfHost = (z: any) => (z.test ? "https://sandbox.cashfree.com" : "https://api.cashfree.com"), cfHead = (z: any) => ({ "x-client-id": z.appId, "x-client-secret": z.secret, "x-api-version": "2023-08-01", "Content-Type": "application/json", Accept: "application/json" });
+const peHost = (z: any) => (z.test ? "https://api-preprod.phonepe.com/apis/pg-sandbox" : "https://api.phonepe.com/apis/pg");
+async function peToken(z: any) {
+  const r = await fetch(z.test ? "https://api-preprod.phonepe.com/apis/pg-sandbox/v1/oauth/token" : "https://api.phonepe.com/apis/identity-manager/v1/oauth/token", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ client_id: z.clientId, client_version: String(z.version || "1"), client_secret: z.secret, grant_type: "client_credentials" }).toString() });
+  const j: any = await r.json().catch(() => null); if (!r.ok || !j?.access_token) throw pgFail("pe", r.ok ? new Response(null, { status: 401 }) : r); return String(j.access_token);
+}
+const ppHost = (z: any) => (z.test ? "https://api-m.sandbox.paypal.com" : "https://api-m.paypal.com");
+async function ppToken(z: any) {
+  const r = await fetch(ppHost(z) + "/v1/oauth2/token", { method: "POST", headers: { Authorization: "Basic " + btoa(z.clientId + ":" + z.secret), "Content-Type": "application/x-www-form-urlencoded" }, body: "grant_type=client_credentials" });
+  const j: any = await r.json().catch(() => null); if (!r.ok || !j?.access_token) throw pgFail("pp", r.ok ? new Response(null, { status: 401 }) : r); return String(j.access_token);
+}
+type PgOrder = { no: string; id: string; amount: number; cur: string; back: string; name: string; cust: { name: string; email: string; phone: string } };
+/** Starts a payment at the gateway. Gives back the reference this database keeps, and what the page needs to open the gateway. */
+async function pgStart(g: string, z: any, o: PgOrder): Promise<{ ref: string; out: any }> {
+  const ok = o.back + "&r=", email = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(o.cust.email) ? o.cust.email : "";
+  if (g === "rz") {
+    const r = await fetch("https://api.razorpay.com/v1/orders", { method: "POST", headers: { Authorization: "Basic " + btoa(z.keyId + ":" + z.secret), "Content-Type": "application/json" }, body: JSON.stringify({ amount: o.amount, currency: o.cur, receipt: o.no, notes: { order_no: o.no } }) });
+    const j: any = await r.json().catch(() => null); if (!r.ok || !j?.id) throw pgFail(g, r);
+    return { ref: String(j.id), out: { key: z.keyId, order_id: j.id } };
+  }
+  if (g === "cf") {
+    const phone = o.cust.phone.replace(/\D/g, "").slice(-10); if (phone.length < 10) throw new PgError("Cashfree needs a 10-digit mobile number. Add it and try again.");
+    const r = await fetch(cfHost(z) + "/pg/orders", { method: "POST", headers: cfHead(z), body: JSON.stringify({ order_id: o.id, order_amount: +(o.amount / 100).toFixed(2), order_currency: o.cur, customer_details: { customer_id: "c" + phone, customer_phone: phone, ...(o.cust.name ? { customer_name: o.cust.name.slice(0, 100) } : {}), ...(email ? { customer_email: email } : {}) }, order_meta: { return_url: ok + "cf:" + o.id }, order_note: "Order " + o.no }) });
+    const j: any = await r.json().catch(() => null); if (!r.ok || !j?.payment_session_id) throw pgFail(g, r);
+    return { ref: "cf:" + o.id, out: { session: String(j.payment_session_id), mode: z.test ? "sandbox" : "production" } };
+  }
+  if (g === "pe") {
+    const t = await peToken(z);
+    const r = await fetch(peHost(z) + "/checkout/v2/pay", { method: "POST", headers: { Authorization: "O-Bearer " + t, "Content-Type": "application/json" }, body: JSON.stringify({ merchantOrderId: o.id, amount: o.amount, paymentFlow: { type: "PG_CHECKOUT", message: "Order " + o.no, merchantUrls: { redirectUrl: ok + "pe:" + o.id } } }) });
+    const j: any = await r.json().catch(() => null); if (!r.ok || !/^https:\/\//.test(String(j?.redirectUrl || ""))) throw pgFail(g, r);
+    return { ref: "pe:" + o.id, out: { go: String(j.redirectUrl) } };
+  }
+  if (g === "st") {
+    const f = new URLSearchParams({ mode: "payment", success_url: o.back, cancel_url: o.back + "&x=1", client_reference_id: o.no, "line_items[0][quantity]": "1", "line_items[0][price_data][currency]": o.cur.toLowerCase(), "line_items[0][price_data][unit_amount]": String(o.amount), "line_items[0][price_data][product_data][name]": `Order ${o.no}, ${o.name}`.slice(0, 200), ...(email ? { customer_email: email } : {}) });
+    const r = await fetch("https://api.stripe.com/v1/checkout/sessions", { method: "POST", headers: { Authorization: "Bearer " + z.secret, "Content-Type": "application/x-www-form-urlencoded" }, body: f.toString() });
+    const j: any = await r.json().catch(() => null); if (!r.ok || !j?.id || !/^https:\/\//.test(String(j.url || ""))) throw pgFail(g, r);
+    return { ref: "st:" + j.id, out: { go: String(j.url) } };
+  }
+  if (g === "pp") {
+    const t = await ppToken(z);
+    const r = await fetch(ppHost(z) + "/v2/checkout/orders", { method: "POST", headers: { Authorization: "Bearer " + t, "Content-Type": "application/json" }, body: JSON.stringify({ intent: "CAPTURE", purchase_units: [{ reference_id: o.no, description: ("Order " + o.no).slice(0, 120), amount: { currency_code: o.cur, value: (o.amount / 100).toFixed(2) } }], payment_source: { paypal: { experience_context: { brand_name: o.name.slice(0, 120), user_action: "PAY_NOW", shipping_preference: "NO_SHIPPING", return_url: o.back, cancel_url: o.back + "&x=1" } } } }) });
+    const j: any = await r.json().catch(() => null), go = String((j?.links || []).find((l: any) => l && (l.rel === "payer-action" || l.rel === "approve"))?.href || "");
+    if (!r.ok || !j?.id || !/^https:\/\//.test(go)) throw pgFail(g, r);
+    return { ref: "pp:" + j.id, out: { go } };
+  }
+  throw new PgError("Unknown way to pay.");
+}
+/** Asks the gateway itself whether a payment this database started was paid, in full. */
+async function pgCheck(g: string, z: any, id: string, amount: number, cur: string): Promise<{ paid: boolean; id: string }> {
+  const near = (v: unknown) => Math.abs(Math.round(Number(v)) - amount) <= 1;
+  if (g === "cf") {
+    const r = await fetch(cfHost(z) + "/pg/orders/" + encodeURIComponent(id), { headers: cfHead(z) }), j: any = await r.json().catch(() => null); if (!r.ok || !j) throw new Error("cf " + r.status);
+    return { paid: j.order_status === "PAID" && near(Number(j.order_amount) * 100) && String(j.order_currency || cur) === cur, id: String(j.cf_order_id || id) };
+  }
+  if (g === "pe") {
+    const r = await fetch(peHost(z) + "/checkout/v2/order/" + encodeURIComponent(id) + "/status", { headers: { Authorization: "O-Bearer " + (await peToken(z)), "Content-Type": "application/json" } }), j: any = await r.json().catch(() => null); if (!r.ok || !j) throw new Error("pe " + r.status);
+    return { paid: j.state === "COMPLETED" && near(j.amount), id: String(j.orderId || id) };
+  }
+  if (g === "st") {
+    const r = await fetch("https://api.stripe.com/v1/checkout/sessions/" + encodeURIComponent(id), { headers: { Authorization: "Bearer " + z.secret } }), j: any = await r.json().catch(() => null); if (!r.ok || !j) throw new Error("st " + r.status);
+    return { paid: j.payment_status === "paid" && near(j.amount_total) && String(j.currency || "").toUpperCase() === cur, id: String(j.payment_intent || id) };
+  }
+  if (g === "pp") {
+    const t = await ppToken(z), h = { Authorization: "Bearer " + t, "Content-Type": "application/json" };
+    let r = await fetch(ppHost(z) + "/v2/checkout/orders/" + encodeURIComponent(id) + "/capture", { method: "POST", headers: h, body: "{}" }), j: any = await r.json().catch(() => null);
+    // Already captured (the page was opened twice), or not approved by the payer: the order itself says which.
+    if (!r.ok) { r = await fetch(ppHost(z) + "/v2/checkout/orders/" + encodeURIComponent(id), { headers: h }); j = await r.json().catch(() => null); if (!r.ok || !j) throw new Error("pp " + r.status); }
+    const cap = j?.purchase_units?.[0]?.payments?.captures?.[0];
+    return { paid: j.status === "COMPLETED" && !!cap && cap.status === "COMPLETED" && near(Number(cap.amount?.value) * 100) && String(cap.amount?.currency_code) === cur, id: String(cap?.id || id) };
+  }
+  return { paid: false, id };
 }
 
 /** The pictures a page shows: <img> (with lazy-loading and srcset variants), <source>, CSS background images in style attributes and the share image. */
@@ -762,7 +876,8 @@ export default {
       // ---- what a site's Order now page may use: a code on WhatsApp for the guest's number, and online payment
       if (/^\/site\/[a-z0-9][a-z0-9-]{0,59}\/can$/.test(p) && req.method === "GET") {
         const site = p.split("/")[2], w = await getSetting(env, "site:" + site, "wa").catch(() => null), z = await getSetting(env, "site:" + site, "rz").catch(() => null);
-        return json({ otp: !!(waReady(w) && w.orderOtp && String(w.tplOtp || "").trim()), rz: z?.on && z.secret && z.keyId ? String(z.keyId) : "" });
+        const pg: string[] = []; for (const g of ["cf", "pe", "st", "pp"]) if (pgReady(g, await getSetting(env, "site:" + site, g).catch(() => null))) pg.push(g);
+        return json({ otp: !!(waReady(w) && w.orderOtp && String(w.tplOtp || "").trim()), rz: z?.on && z.secret && z.keyId ? String(z.keyId) : "", pg });
       }
       if (/^\/otp\/(send|check)\/[a-z0-9][a-z0-9-]{0,59}$/.test(p) && req.method === "POST") {
         const site = p.split("/")[3], b = (await req.json()) as any, w = await getSetting(env, "site:" + site, "wa");
@@ -788,24 +903,28 @@ export default {
         const exp = now + 45 * 60_000;
         return json({ ok: true, token: exp + "." + b64u(await hmac(env.SECRET, "otp:" + site + ":" + num + ":" + exp)) });
       }
-      // ---- an online payment for a restaurant order: the amount comes from the site's own menu, worked out here
-      if (/^\/pay\/rz\/[a-z0-9][a-z0-9-]{0,59}$/.test(p) && req.method === "POST") {
-        const site = p.split("/")[3], z = await getSetting(env, "site:" + site, "rz");
-        if (!(z?.on && z.secret && z.keyId)) return err(404, "Online payment isn't set up for this site.");
+      // ---- an online payment for an order (restaurant or shop): the amount comes from the site's own content, worked out here
+      if (/^\/pay\/(rz|cf|pe|st|pp)\/[a-z0-9][a-z0-9-]{0,59}$/.test(p) && req.method === "POST") {
+        const g = p.split("/")[2], site = p.split("/")[3], z = await getSetting(env, "site:" + site, g);
+        if (!pgReady(g, z)) return err(404, "Online payment isn't set up for this site.");
         const q = (await req.json()) as any, no = String(q.order_no || "");
         if (!/^[A-Z0-9][A-Z0-9-]{3,29}$/.test(no)) return err(400, "Which order?");
-        const c = await siteContent(env, site), bill = restBill(c, q);
+        const c = await siteContent(env, site), rest = isRest(c);
+        if (g !== "rz" && !pgOn(c, g)) return err(404, "That way to pay isn't switched on for this site.");
+        const bill = rest ? restBill(c, q) : Array.isArray(c?.products) ? shopBill(c, q) : { error: "This site doesn't take orders." };
         if ("error" in bill) return err(409, bill.error);
-        if (Math.abs(bill.total - (+q.total || 0)) > 0.5) return err(409, "The menu or its prices changed while you were ordering. Refresh the page and check your cart.");
+        if (Math.abs(bill.total - (+q.total || 0)) > 0.5) return err(409, rest ? "The menu or its prices changed while you were ordering. Refresh the page and check your cart." : "Prices or delivery charges changed while you were ordering. Refresh the page and check your cart.");
         const n: any = await env.DB.prepare("select count(*) n from payments where site = ? and created_at > ?").bind(site, new Date(Date.now() - 3600_000).toISOString()).first();
         if ((n?.n || 0) >= 200) return err(429, "Too many payments were started. Please try again in a while.");
-        const amount = Math.round(bill.total * 100), cur = String(c?.food?.currency || "₹") === "₹" ? "INR" : "";
-        if (!cur || amount < 100) return err(400, "Online payment works for totals in rupees of ₹1 or more.");
-        const r = await fetch("https://api.razorpay.com/v1/orders", { method: "POST", headers: { Authorization: "Basic " + btoa(z.keyId + ":" + z.secret), "Content-Type": "application/json" }, body: JSON.stringify({ amount, currency: cur, receipt: no, notes: { site, order_no: no } }) });
-        const j: any = await r.json().catch(() => null);
-        if (!r.ok || !j?.id) return err(502, r.status === 401 ? "Razorpay refused this site's keys. The owner needs to check them." : "Razorpay couldn't start the payment just now. Please try again, or choose another way to pay.");
-        await env.DB.prepare("insert into payments (rz_order, site, order_no, amount, status, created_at) values (?, ?, ?, ?, 'created', ?)").bind(String(j.id), site, no, amount, new Date().toISOString()).run();
-        return json({ key: z.keyId, order_id: j.id, amount, currency: cur, name: siteName(c, site) });
+        const amount = Math.round(bill.total * 100), cur = siteCur(c);
+        if (PG[g].inr ? cur !== "INR" || amount < 100 : !PG_CUR.includes(cur) || amount < 100) return err(400, PG[g].inr ? `${PG[g].name} works for totals in rupees of ₹1 or more.` : `${PG[g].name} can't take this site's currency here.`);
+        let back = ""; if (g !== "rz") { let b: URL | null = null; try { b = new URL(String(q.back || "")); } catch { /* none */ } if (!b || !/^https?:$/.test(b.protocol)) return err(400, "Where should the payment come back to?"); back = b.origin + b.pathname + "?paid=" + g + "&o=" + encodeURIComponent(no); }
+        const cust = { name: oneLine(String(q.name || "")).slice(0, 100), email: String(q.email || "").trim().slice(0, 200), phone: String(q.phone || "").slice(0, 30) };
+        const id = no + "-" + Array.from(crypto.getRandomValues(new Uint8Array(5)), (x) => x.toString(16).padStart(2, "0")).join("");
+        let made: { ref: string; out: any };
+        try { made = await pgStart(g, z, { no, id, amount, cur, back, name: siteName(c, site), cust }); } catch (e: any) { return err(e instanceof PgError && !e.keys && /needs a/.test(e.message) ? 400 : 502, e instanceof PgError ? e.message : `${PG[g].name} couldn't start the payment just now. Please try again, or choose another way to pay.`); }
+        await env.DB.prepare("insert into payments (rz_order, site, order_no, amount, status, created_at) values (?, ?, ?, ?, 'created', ?)").bind(made.ref, site, no, amount, new Date().toISOString()).run();
+        return json({ ...made.out, ref: made.ref, amount, currency: cur, name: siteName(c, site) });
       }
       // ---- how an order from a site's Order now page is doing, for the guest who placed it (the order's own key opens it)
       if (p.startsWith("/order/") && req.method === "GET") {
@@ -842,6 +961,19 @@ export default {
             await env.DB.prepare("update payments set status = 'paid' where rz_order = ?").bind(data.rz_order).run();
             data._paid = "yes"; data._paid_by = `Razorpay, ₹${(row.amount / 100).toFixed(2).replace(/\.00$/, "")}, ${String(data.rz_payment).slice(0, 40)}`;
             delete data.rz_sig;
+          }
+          // Any other gateway: this database asks the gateway itself whether the payment it started was paid in full.
+          if (data.pay_gw || data.pay_ref) {
+            const g = String(data.pay_gw || ""), ref = String(data.pay_ref || ""), z = PG[g] && g !== "rz" && ref.startsWith(g + ":") ? await getSetting(env, "site:" + site, g).catch(() => null) : null;
+            const row: any = pgReady(g, z) ? await env.DB.prepare("select order_no, amount, status from payments where rz_order = ? and site = ?").bind(ref, site).first() : null;
+            if (!row || row.order_no !== data.order_no) return err(400, "The payment couldn't be confirmed. If money left your account, contact us with your order number.");
+            // The same paid order sent twice (the page was opened again) is kept once.
+            if (row.status === "paid") return json({ ok: true, again: true });
+            const cur = siteCur(await siteContent(env, site)); let got: { paid: boolean; id: string };
+            try { got = await pgCheck(g, z, ref.slice(3), row.amount, cur); } catch { return err(502, `We couldn't reach ${PG[g].name} to confirm the payment. Please try again in a moment.`); }
+            if (!got.paid) return err(402, "The payment wasn't completed, so the order isn't placed yet. You can try again.");
+            await env.DB.prepare("update payments set status = 'paid' where rz_order = ?").bind(ref).run();
+            data._paid = "yes"; data._paid_by = `${PG[g].name}, ${pgMoney(cur, row.amount)}, ${got.id.slice(0, 60)}`; data.pay_gw = PG[g].name; delete data.pay_ref;
           }
         }
         const made: any = await env.DB.prepare("insert into enquiries (site, data, page, created_at) values (?, ?, ?, ?) returning id").bind(site, JSON.stringify(data), String(q.page || "").slice(0, 200), new Date().toISOString()).first();

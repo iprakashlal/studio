@@ -234,6 +234,18 @@ const schema: Category[] = [
       { title: "Razorpay", fields: [{ t: "toggle", path: "ordering.pay.razorpay", label: "Accept Razorpay (UPI, cards, netbanking): confirmed automatically" },
         { t: "connection", kind: "rz" },
         { t: "note", text: "Razorpay tells your database by itself that the money arrived, so the order is placed and marked Paid with no checking by you. The amount is worked out by your database from the menu, not by the guest's phone. Razorpay charges its usual fee per payment. Try it with a rzp_test_ key first: test mode takes no real money." }] },
+      { title: "Cashfree", fields: [{ t: "toggle", path: "ordering.pay.cashfree", label: "Accept Cashfree (UPI, cards, netbanking): confirmed automatically" },
+        { t: "connection", kind: "cf" },
+        { t: "note", text: "The guest pays on Cashfree's page and comes back to your site; your database then asks Cashfree whether the money arrived, and only then places the order, marked Paid. Needs the guest's 10-digit mobile number. Prices in ₹ only. Tick the test switch with sandbox keys to try it with no real money." }] },
+      { title: "PhonePe", fields: [{ t: "toggle", path: "ordering.pay.phonepe", label: "Accept PhonePe (UPI, cards, netbanking): confirmed automatically" },
+        { t: "connection", kind: "pe" },
+        { t: "note", text: "The guest pays on PhonePe's page and comes back to your site; your database then asks PhonePe whether the money arrived, and only then places the order, marked Paid. Prices in ₹ only. Use the Client ID, version and secret of PhonePe's Standard Checkout." }] },
+      { title: "Stripe", fields: [{ t: "toggle", path: "ordering.pay.stripe", label: "Accept Stripe (cards from any country): confirmed automatically" },
+        { t: "connection", kind: "st" },
+        { t: "note", text: "The guest pays on Stripe's page and comes back to your site; your database then asks Stripe whether the money arrived, and only then places the order, marked Paid. Works for prices in ₹, $, € or £." }] },
+      { title: "PayPal", fields: [{ t: "toggle", path: "ordering.pay.paypal", label: "Accept PayPal: confirmed automatically" },
+        { t: "connection", kind: "pp" },
+        { t: "note", text: "The guest pays on PayPal's page and comes back to your site; your database then collects the payment and only then places the order, marked Paid. PayPal doesn't take ₹: use it for prices in $, € or £." }] },
       { title: "Cash on delivery", fields: [{ t: "toggle", path: "ordering.pay.cod", label: "Offer pay on delivery, at the counter or at the table" }, { t: "text", path: "ordering.pay.codLabel", label: "Label at checkout for delivery orders", ph: "Pay on delivery (cash or UPI)" }] },
     ],
   },
@@ -346,7 +358,7 @@ function prepareRestaurant(c: any) {
     const o = c.ordering && typeof c.ordering === "object" ? c.ordering : {};
     c.ordering = { on: false, label: "Order now", title: "Order online", lede: "Fresh from our kitchen, for delivery or pickup.", bestTitle: "Best sellers", tiles: true, inNav: true, deliveryMins: 40, pickupMins: 20, dineMins: 15, minOrder: 200, deliveryFee: 40, freeAbove: 0, areas: "", areaNote: "", askPin: true, packing: 0, taxPercent: 5, taxLabel: "GST", taxIncluded: false, roundOff: true,
       tips: true, tipOptions: "10, 20, 30", cutlery: true, notes: true, dishNotes: true, askEmail: false, schedule: true, slotMins: 30, daysAhead: 1, whatsapp: "", intro: "New order", prefix: "ORD", success: "Thank you! Your order is placed.", ...o,
-      modes: { delivery: true, pickup: true, dinein: false, ...(o.modes && typeof o.modes === "object" ? o.modes : {}) }, pay: { cod: true, codLabel: "", upi: false, upiId: "", payee: "", razorpay: false, ...(o.pay && typeof o.pay === "object" ? o.pay : {}) },
+      modes: { delivery: true, pickup: true, dinein: false, ...(o.modes && typeof o.modes === "object" ? o.modes : {}) }, pay: { cod: true, codLabel: "", upi: false, upiId: "", payee: "", razorpay: false, cashfree: false, phonepe: false, stripe: false, paypal: false, ...(o.pay && typeof o.pay === "object" ? o.pay : {}) },
       coupons: (Array.isArray(o.coupons) ? o.coupons : []).filter((x: any) => x && typeof x === "object") };
   }
   for (const [k, list] of [["highlights", "items"], ["specials", "items"], ["offers", "items"], ["gallery", "items"], ["chef", "members"], ["events", "items"], ["press", "logos"], ["testimonials", "items"], ["order", "links"], ["faq", "items"], ["about", "facts"]] as const) if (!Array.isArray(c[k][list])) c[k][list] = [];

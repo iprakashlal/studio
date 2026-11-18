@@ -117,7 +117,7 @@ const schema: Category[] = [
       ] },
     ],
   },
-  menuCategory({ where: "the sections under Menu & order", note: "Four page layouts have no ordinary menu to replace (Horizontal reel, Terminal, Drag canvas and Cinema scenes): they keep their own navigation. Every other layout, and the classic page, uses your menu. A link to a section with “Open in a new tab” switched on gives that section a page of its own: the link opens it in a new tab, and the section no longer shows on the main page.", targets: [{ value: "top", label: "Top of the page" }, ...Object.entries(SECTION_NAMES).map(([value, label]) => ({ value, label: `Section: ${label}` }))] }),
+  menuCategory({ where: "the sections under Menu & order", note: "Four page layouts have no ordinary menu to replace (Horizontal reel, Terminal, Drag canvas and Cinema scenes): they keep their own navigation. Every other layout, and the classic page, uses your menu. A link to a section with “Open in a new tab” switched on gives that section a page of its own, opened in the same tab like any page of a site with several pages, and the section no longer shows on the main page.", targets: [{ value: "top", label: "Top of the page" }, ...Object.entries(SECTION_NAMES).map(([value, label]) => ({ value, label: `Section: ${label}` }))] }),
   {
     id: "linkedin", label: "Import from LinkedIn", group: "Pages", desc: "Fill your portfolio from your LinkedIn profile: name, headline, about, experience, education, skills and links.",
     cards: [{ title: "LinkedIn profile", fields: [{ t: "linkedin" }] }],

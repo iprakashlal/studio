@@ -800,6 +800,7 @@ function menuGo(it) {
   if (t === "url") { const u = String(it.url || "").trim(); return { url: safeUrl(u) || (/^(#|\/|\.\/|[\w-]+\.html)/.test(u) ? u : "") }; }
   if (t === "page") { const p = spList().find((x) => x.id === it.page); return p ? { url: spHref(p), on: PAGE === "page" && spSlug(p) === spSlug({ slug: spCur() }) } : { url: "" }; }
   const url = href(t === "home" ? "hero" : t);
+  if (!multi() && soloSections().has(t)) return { url, on: PAGE === "section" && soloCur() === t, self: true };
   return { url: t === "home" && !multi() ? AT + "#top" : url, on: (multi() && url === PAGES[PAGE]) || (PAGE === "section" && soloCur() === t) };
 }
 function menu() {

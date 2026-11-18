@@ -57,7 +57,7 @@ const schema: Category[] = [
       { title: "Menu button", fields: [g2({ t: "text", path: "nav.cta", label: "Button label (empty hides it)" }, { t: "select", path: "nav.ctaTarget", label: "Goes to", options: TARGETS })] },
     ],
   },
-  menuCategory({ note: "On a one-page site (“Use several pages” off), a link to a section with “Open in a new tab” switched on gives that section a page of its own: the link opens it in a new tab, and the section no longer shows on the main page. Buttons that point to that section open its page too.", where: "the sections marked “In the menu” (or the site's pages when it has several)", targets: [{ value: "home", label: "Home (top of the site)" }, ...TARGETS.map((t) => ({ value: t.value, label: `Section: ${t.label}` })), { value: "warranty", label: "Warranty & status check" }] }),
+  menuCategory({ note: "On a one-page site (“Use several pages” off), a link to a section with “Open in a new tab” switched on gives that section a page of its own, opened in the same tab like any page of a site with several pages, and the section no longer shows on the main page. Buttons that point to that section open its page too.", where: "the sections marked “In the menu” (or the site's pages when it has several)", targets: [{ value: "home", label: "Home (top of the site)" }, ...TARGETS.map((t) => ({ value: t.value, label: `Section: ${t.label}` })), { value: "warranty", label: "Warranty & status check" }] }),
   {
     id: "hero", label: "Hero", group: "Pages", sub: "Sections", desc: "The first screen: headline, intro, buttons, trust badges and image.",
     cards: [

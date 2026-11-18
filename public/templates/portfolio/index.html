@@ -1531,7 +1531,7 @@ function menu(c){
     if(t==="url"){const u=String(it.url||"").trim();return{url:/^(https?:|mailto:|tel:|#|\/|\.\/|\?)/i.test(u)?u:""}}
     if(t==="page"){const S=window.SitePages,p=S&&S.list(c).find(x=>x.id===it.page);return{url:p?"./?p="+encodeURIComponent(S.slug(p)):""}}
     if(t==="top")return{url:SOLO.cur?"./":"#top"};
-    if(SOLO.set.has(t))return{url:"./?s="+encodeURIComponent(t),on:SOLO.cur===t};
+    if(SOLO.set.has(t))return{url:"./?s="+encodeURIComponent(t),on:SOLO.cur===t,self:true};
     return{url:SOLO.vis.has(t)?(SOLO.cur?"./#":"#")+t:""}};
   (mnP||(mnP=new Promise((ok,no)=>{if(window.SiteMenu)return ok();const s=document.createElement("script");s.src="assets/menu.js";s.onload=()=>ok();s.onerror=no;document.head.appendChild(s)})))
     .then(()=>{SiteMenu.mount(c,{navs:MENU_NAVS,resolve:go,onPick:()=>{const b=document.getElementById("vxMbtn");if(b&&b.getAttribute("aria-expanded")==="true")b.click()}});done()}).catch(done)}

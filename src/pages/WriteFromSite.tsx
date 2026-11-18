@@ -4,7 +4,10 @@
 import { useState } from "react";
 import type { Session } from "../lib/auth";
 import type { ProjectMeta } from "../lib/studio";
-import { cfWrite, type Brief } from "../lib/cfdb";
+import { cfOutline, cfWrite, type Brief } from "../lib/cfdb";
+import { EnginePick } from "./AiEngine";
+import { aiEngine, allowanceGone, type AiEngine } from "../lib/ai";
+import { enoughText, systemWrite } from "../lib/syswrite";
 import { applyBrief, dropFlagged, groupsOf, type Contact } from "../lib/writeMap";
 import { readPamphlet } from "../lib/pamphlet";
 import { Field, Modal } from "../ui/kit";
@@ -15,7 +18,12 @@ export function WriteFromSiteDialog({ session, project, draft, onApply, onClose 
   const db = useAiDb(session, project), api = db.api;
   const [url, setUrl] = useState(""), [text, setText] = useState("");
   // Where the text comes from: a site, a PDF (a brochure or profile), or pasted text.
-  const [src, setSrc] = useState<"link" | "pdf" | "text">("link");
+  const [src, setSrc] = useState<"link" | "pdf" | "text" | "none">("link");
+  // Which engine writes: the Studio's choice to begin with. The Picaffectz system writes on this device.
+  const [eng, setEngRaw] = useState<AiEngine>(aiEngine());
+  const sys = eng === "system", canUse = sys || db.ready;
+  const setEng = (e: AiEngine) => { setEngRaw(e); setErr(""); if (e === "cloudflare" && src === "none") setSrc("link"); };
+  const [again, setAgain] = useState(0), [made, setMade] = useState("");
   const showText = src === "text";
   const setShowText = (v: boolean) => setSrc(v ? "text" : "link");
   const [pdf, setPdf] = useState<{ name: string; text: string } | null>(null);
@@ -43,7 +51,18 @@ export function WriteFromSiteDialog({ session, project, draft, onApply, onClose 
   const [res, setRes] = useState<{ brief: Brief; flagged: string[] } | null>(null);
   const [pick, setPick] = useState<Set<string>>(new Set());
   const run = (label: string, f: () => Promise<void>) => async () => { setErr(""); setBusy(label); try { await f(); } catch (e: any) { setErr(e?.message || "Something went wrong."); if (e?.thin) setShowText(true); } setBusy(""); };
+  const writeSys = async (n: number) => {
+    let ref = src === "pdf" ? pdf!.text : src === "text" ? text.trim() : "";
+    if (src === "link") {
+      if (!db.ready || !api) throw new Error("Reading a link is done by your Cloudflare database (no AI, so it costs nothing from the allowance), and this device isn't signed in to one. Choose A PDF, Pasted text or No reference: those work on this device alone.");
+      ref = await cfOutline(api, /^https?:\/\//.test(url.trim()) ? url.trim() : "https://" + url.trim());
+      if (!enoughText(ref)) { const e: any = new Error("That page has almost no text to read (it may build its text with JavaScript). Paste the page's text into the box instead."); e.thin = true; throw e; }
+    }
+    const r = systemWrite({ brand: brandName.trim(), notes: notes.trim(), kind, text: ref, again: n });
+    setMade(r.label); setRes({ brief: r.brief, flagged: [] }); setPick(new Set(groupsOf(kind, r.brief, contact()).map((g) => g.id)));
+  };
   const write = run("Reading and writing", async () => {
+    if (sys) return writeSys(again);
     const body = src === "pdf" ? { text: pdf!.text } : showText && text.trim() ? { text: text.trim() } : { url: url.trim() };
     const r = await cfWrite(api!, { ...body, brand: brandName.trim(), notes: notes.trim(), kind: kind === "restaurant" ? "business" : kind });
     const b = dropFlagged(r.brief, r.flagged || []);
@@ -53,30 +72,32 @@ export function WriteFromSiteDialog({ session, project, draft, onApply, onClose 
   const apply = () => { onApply(applyBrief(kind, draft, res!.brief, brandName.trim(), pick, contact())); onClose(); };
 
   const emailOk = !email.trim() || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
-  const canWrite = !!brandName.trim() && emailOk && (src === "pdf" ? !!pdf : showText ? text.trim().split(/\s+/).length >= 40 : /^https?:\/\/\S+\.\S+/.test(url.trim()) || /^[\w-]+(\.[\w-]+)+/.test(url.trim()));
+  const canWrite = !!brandName.trim() && emailOk && (src === "none" ? sys : src === "pdf" ? !!pdf : showText ? sys ? enoughText(text) : text.trim().split(/\s+/).length >= 40 : /^https?:\/\/\S+\.\S+/.test(url.trim()) || /^[\w-]+(\.[\w-]+)+/.test(url.trim()));
   const groups = res ? groupsOf(kind, res.brief, contact()) : [];
   const footer = res
-    ? <><button className="btn" onClick={() => setRes(null)}>Back</button><button className="btn btn-pri" disabled={!pick.size} onClick={apply}>Put in the editor</button></>
-    : <><button className="btn" onClick={onClose}>Cancel</button>{db.ready && <button className="btn btn-pri" disabled={!canWrite || !!busy} onClick={write}>{busy ? busy + "…" : "Write new text"}</button>}</>;
+    ? <><button className="btn" onClick={() => setRes(null)}>Back</button>{sys && <button className="btn" disabled={!!busy} onClick={run("Writing", async () => { const n = again + 1; setAgain(n); await writeSys(n); })}>Another version</button>}<button className="btn btn-pri" disabled={!pick.size} onClick={apply}>Put in the editor</button></>
+    : <><button className="btn" onClick={onClose}>Cancel</button>{canUse && <button className="btn btn-pri" disabled={!canWrite || !!busy} onClick={write}>{busy ? busy + "…" : "Write new text"}</button>}</>;
 
   return (
     <Modal title="Write text from a site or PDF" onClose={onClose} wide footer={footer}>
       <div className="flex flex-col gap-3 text-sm">
         {!res && <p className="text-ink-300">Give a site in the same line of business, or a PDF such as your brochure or company profile. The Studio reads what it covers and writes <b>new text of its own</b> for your brand, section by section: nothing is copied, and anything too close to the original is left out. Testimonials, numbers, team, clients, prices and products aren't written, so fill those in yourself.</p>}
-        {db.ui}
-        {db.ready && !res && <>
+        {!res && <EnginePick label="Write with" value={eng} onChange={setEng} note={sys ? "On this device: the Studio composes the text from its own phrase bank for your kind of business and your notes. The reference only tells it what kind of business this is. No facts are invented." : undefined} />}
+        {!sys && db.ui}
+        {canUse && !res && <>
           <Field label="Your brand name" htmlFor="wf-brand" hint="Used in the new text and set as the site's name.">
             <input id="wf-brand" className="input" value={brandName} onChange={(e) => setBrandName(e.target.value)} />
           </Field>
           <div role="radiogroup" aria-label="Read from" className="flex flex-wrap gap-2">
-            {([["link", "A website"], ["pdf", "A PDF"], ["text", "Pasted text"]] as const).map(([v, l]) => <button key={v} type="button" role="radio" aria-checked={src === v} className={`btn btn-sm ${src === v ? "btn-pri" : ""}`} onClick={() => setSrc(v)}>{l}</button>)}
+            {([["link", "A website"], ["pdf", "A PDF"], ["text", "Pasted text"], ...(sys ? [["none", "No reference"]] : [])] as [typeof src, string][]).map(([v, l]) => <button key={v} type="button" role="radio" aria-checked={src === v} className={`btn btn-sm ${src === v ? "btn-pri" : ""}`} onClick={() => setSrc(v)}>{l}</button>)}
           </div>
           {src === "link" && <Field label="Reference site" htmlFor="wf-url" hint="A page that shows what the business offers, for example its home or about page.">
             <input id="wf-url" className="input" placeholder="https://example.com" value={url} onChange={(e) => setUrl(e.target.value)} /></Field>}
           {src === "pdf" && <Field label="PDF" htmlFor="wf-pdf" hint={pdf ? `Read ${pdf.text.split(/\s+/).length} words from ${pdf.name}.` : "A brochure, company profile or menu, up to 12 pages."}>
             <input id="wf-pdf" className="input" type="file" accept=".pdf,application/pdf" onChange={(e) => readPdf(e.target.files?.[0])} /></Field>}
-          {src === "text" && <Field label="The page's text" htmlFor="wf-text" hint="Some sites can't be read from here. Copy the page's text and paste it (at least 40 words).">
+          {src === "text" && <Field label="The page's text" htmlFor="wf-text" hint={sys ? "Paste text that shows what the business does (at least 20 words). It is only read to tell the kind of business." : "Some sites can't be read from here. Copy the page's text and paste it (at least 40 words)."}>
             <textarea id="wf-text" className="input min-h-[140px]" value={text} onChange={(e) => setText(e.target.value)} /></Field>}
+          {src === "none" && <p className="rounded-lg border border-ink-700 px-3 py-2 text-[13px] text-ink-300">The text is written from the site's type and what you write under About your business below. Mention what you do there (“a family restaurant in Nashik”, “a dental clinic”), and it picks the right wording.</p>}
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label="Contact email on the site" htmlFor="wf-email" hint={emailOk ? "Goes in the contact section and footer. Use your own address." : "That doesn't look like an email address."}>
               <input id="wf-email" className="input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} /></Field>
@@ -90,6 +111,7 @@ export function WriteFromSiteDialog({ session, project, draft, onApply, onClose 
           </Field>
         </>}
         {res && <>
+          {sys && made && <p role="status" className="rounded-lg border border-ink-600 px-3 py-2 text-[12.5px] text-ink-300">Written on this device by the Picaffectz system, as a <b className="text-ink-100">{made.toLowerCase()}</b>. Not quite right? Press Another version, or go Back and say more under About your business.</p>}
           <p className="text-ink-300">Tick the sections to put in the editor. Nothing is saved until you press Save, and History keeps the earlier version.{res.flagged.length ? ` ${res.flagged.length} line${res.flagged.length > 1 ? "s were" : " was"} too close to the reference and left out.` : ""}</p>
           {groups.map((g) => (
             <label key={g.id} className="flex gap-3 rounded-lg border border-ink-700 p-3">
@@ -99,6 +121,7 @@ export function WriteFromSiteDialog({ session, project, draft, onApply, onClose 
           ))}
         </>}
         {err && <p role="alert" className="text-red-300">{err}</p>}
+        {err && !sys && allowanceGone(err) && !res && <button type="button" className="btn btn-sm btn-pri self-start" onClick={() => setEng("system")}>Use the Picaffectz system instead (no allowance)</button>}
       </div>
     </Modal>
   );

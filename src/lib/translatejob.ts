@@ -4,6 +4,8 @@
 // pause in between, and if the translator can't be reached at all the job stops and says why, leaving those texts
 // "Not translated" (never silently in the site's own language).
 import { cfTranslate, signedInApi } from "./cfdb";
+import { aiEngine, allowanceGone, type AiEngine } from "./ai";
+import { systemTranslate } from "./systranslate";
 
 export type JobState = {
   running: boolean; lang: string; name: string;
@@ -35,16 +37,33 @@ export function pending(root: any, lang: string, texts: string[], again: boolean
 }
 const fatal = (m: string) => /updated once|Sign in|Only members|Workers AI|allowance|isn't signed in/i.test(m);
 
+/** The engine a site's translations use: its own choice (Languages → Translate with), else the Studio's. */
+export const engineFor = (root: any): AiEngine => (root?.i18n?.engine === "system" || root?.i18n?.engine === "cloudflare" ? root.i18n.engine : aiEngine());
+/** The Picaffectz system: the phrase book and the browser's own translator, on this device. `lead` opens the closing line. */
+async function runSystem(a: JobAsk, todo: string[], say: (ok: boolean, text: string) => void, already = 0, lead = "") {
+  const d: Record<string, string> = (((a.root.i18n ||= {}).t ||= {})[a.lang] ||= {});
+  const total = todo.length + already;
+  set({ total, done: already, phase: `Translating into ${a.name} on this device` });
+  const r = await systemTranslate({ from: a.root.i18n?.base?.code || "en", to: a.lang, name: a.name, texts: todo, step: (s) => set({ phase: s }), done: (n) => { set({ done: already + n, phase: `Translating into ${a.name} on this device` }); if (n % 8 === 0) a.bump(); } });
+  let n = 0; todo.forEach((s, i) => { const v = r.t[i]; if (v && v.trim()) { d[s] = v; n++; } });
+  a.bump();
+  const how = [r.browser ? `${r.browser} by this browser's translator` : "", r.book ? `${r.book} from the phrase book` : ""].filter(Boolean).join(", ");
+  const left = todo.length - n;
+  if (!left) say(true, `${lead}${n} text${n === 1 ? "" : "s"} translated into ${a.name} on this device by the Picaffectz system (${how}). Read them through: a machine translation is a first draft.`);
+  else say(false, `${lead}${n ? `${n} of ${todo.length} texts translated into ${a.name} on this device${how ? ` (${how})` : ""}. ` : ""}${left} could not be done on this device. ${r.why} They are listed under “Not translated”: type them in, or switch Translate with to Cloudflare AI.`);
+}
 async function run(a: JobAsk) {
   const say = (ok: boolean, text: string) => set({ last: { ...state.last, [a.lang]: { ok, text } } });
   set({ running: true, lang: a.lang, name: a.name, total: 0, done: 0, phase: "Getting ready" });
+  let done = 0;
   try {
-    const api = await signedInApi();
-    if (!api) throw new Error("Translating is done by your Cloudflare database, and this device isn't signed in to one. You can still type each translation in.");
     const d: Record<string, string> = (((a.root.i18n ||= {}).t ||= {})[a.lang] ||= {});
     let todo = pending(a.root, a.lang, a.texts(), a.again);
     if (!todo.length) { say(true, `Everything is already translated into ${a.name}.`); return; }
-    const total = todo.length; let done = 0, lastErr = ""; const sameTwice = new Map<string, number>();
+    if (engineFor(a.root) === "system") { await runSystem(a, todo, say); return; }
+    const api = await signedInApi();
+    if (!api) throw new Error("Translating with Cloudflare AI is done by your Cloudflare database, and this device isn't signed in to one. Choose the Picaffectz system under Translate with to translate on this device, or type each translation in.");
+    const total = todo.length; let lastErr = ""; const sameTwice = new Map<string, number>();
     set({ total, done: 0, phase: `Translating into ${a.name}` });
     // Rounds: big batches first, then smaller ones for whatever is left; a pause before a round that follows failures.
     const ROUNDS: [size: number, lanes: number, wait: number][] = [[10, 4, 0], [5, 3, 1500], [2, 3, 4000], [1, 2, 8000], [1, 1, 15000], [1, 1, 30000]];
@@ -80,6 +99,8 @@ async function run(a: JobAsk) {
     else say(false, `${done} of ${total} texts translated into ${a.name}. ${todo.length} could not be translated${lastErr ? ` (${lastErr.replace(/\.$/, "")})` : ""}. They are listed under “Not translated”: press Translate what's missing to try again, or type them in.`);
   } catch (e: any) {
     const m = String(e?.message || e);
+    // Cloudflare's free allowance ran out part-way: the Picaffectz system carries on with what is left, on this device.
+    if (allowanceGone(m)) { try { const rest = pending(a.root, a.lang, a.texts(), false); await runSystem(a, rest, say, done, "Cloudflare's free AI allowance for today is used up, so the Picaffectz system carried on. "); return; } catch { /* say what Cloudflare said */ } }
     say(false, /Unknown scope|Not found/i.test(m) ? "Translating needs the database updated once (Settings → Hostings → Update the database). You can still type each translation in." : m || "Translating didn't work. Try again.");
   } finally { a.bump(); }
 }

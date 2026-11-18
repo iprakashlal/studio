@@ -12,12 +12,19 @@ import { cutOut, shot, SHOT_STYLES, type ShotStyle } from "../lib/productShots";
 import { clone } from "../lib/util";
 import { Modal } from "../ui/kit";
 import { useAiDb } from "./AiGate";
+import { EnginePick } from "./AiEngine";
+import { aiEngine, allowanceGone, type AiEngine } from "../lib/ai";
+import { systemProducts } from "../lib/sysread";
 
 const pdfBase = () => new URL("runtime/", location.href).href;
 const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
 
 export function PamphletDialog({ session, project, draft, upload, onApply, onClose }: { session: Session; project: ProjectMeta; draft: any; upload: (f: File) => Promise<{ path: string }>; onApply: (c: any, n: number) => void; onClose: () => void }) {
   const db = useAiDb(session, project, "pamphlet");
+  // Which engine reads the file: the Studio's choice to begin with; the Picaffectz system needs no database.
+  const [eng, setEng] = useState<AiEngine>(aiEngine());
+  const sys = eng === "system", canRead = sys || db.ready;
+  const [bySystem, setBySystem] = useState<{ pictures: number; sure: number } | null>(null);
   const [files, setFiles] = useState<File[]>([]);
   const [hint, setHint] = useState("");
   // Product photos: cut out and restyled (three looks), used as they are, the whole page, or none.
@@ -60,8 +67,9 @@ export function PamphletDialog({ session, project, draft, upload, onApply, onClo
       const pics = doc.current.pages.filter((p) => p.image).length;
       setBusy(pics ? `Reading ${pics} page picture${pics > 1 ? "s" : ""} and finding the products` : "Finding the products");
       const inp = pamphletInput(doc.current);
-      const list = await cfProducts(db.api!, { ...inp, hint: [inp.hint, menu ? "This is a restaurant's menu. List every dish and drink as one entry: name = the dish, category = the menu section it is printed under (Starters, Mains, Desserts…), price = its price as printed, summary = its description if one is printed. Do not invent descriptions." : "", hint.trim()].filter(Boolean).join("\n") });
+      const list: Awaited<ReturnType<typeof cfProducts>> = sys ? await systemProducts(doc.current, { menu, step: setBusy }) : await cfProducts(db.api!, { ...inp, hint: [inp.hint, menu ? "This is a restaurant's menu. List every dish and drink as one entry: name = the dish, category = the menu section it is printed under (Starters, Mains, Desserts…), price = its price as printed, summary = its description if one is printed. Do not invent descriptions." : "", hint.trim()].filter(Boolean).join("\n") });
       social.current = list.social || [];
+      setBySystem(sys ? { pictures: (list as any).pictures || 0, sure: (list as any).sure || 0 } : null);
       setFound(list); setGuessed(!!list.guessed); setPick(new Set(list.map((_, i) => i))); setPicOf(guessPics(list, doc.current.pics));
       if (!doc.current.pics.length && photos === "styled") setPhotos(doc.current.kind === "pdf" ? "page" : "none");
     } catch (e: any) { setErr(e?.message || "Couldn't read the pamphlet."); }
@@ -154,15 +162,16 @@ export function PamphletDialog({ session, project, draft, upload, onApply, onClo
 
   const footer = found
     ? <><button className="btn" onClick={() => setFound(null)}>Back</button><button className="btn btn-pri" disabled={!pick.size || !!busy} onClick={apply}>{busy ? busy + "…" : `Add ${pick.size} to the ${W.where}`}</button></>
-    : <><button className="btn" onClick={onClose}>Cancel</button>{db.ready && <button className="btn btn-pri" disabled={!files.length || !!busy} onClick={read}>{busy ? busy + "…" : menu ? "Read the menu" : "Read the pamphlet"}</button>}</>;
+    : <><button className="btn" onClick={onClose}>Cancel</button>{canRead && <button className="btn btn-pri" disabled={!files.length || !!busy} onClick={read}>{busy ? busy + "…" : menu ? "Read the menu" : "Read the pamphlet"}</button>}</>;
 
   return (
     <Modal title={menu ? "Fill in the menu from a photo or PDF" : "Fill in products from a pamphlet"} onClose={onClose} wide footer={footer}>
       <div className="flex flex-col gap-3 text-sm">
         {!found && menu && <p className="text-ink-300">Upload your menu (a PDF, a sheet, or photos of the printed menu or menu board). The Studio reads it and fills in each section and dish with its price and description. Only what the menu says is used. You review everything before it goes in, and nothing is saved until you press Save. Diet marks, spice and photos are yours to add afterwards.</p>}
         {!found && !menu && <p className="text-ink-300">Upload your product pamphlet or brochure (a PDF, or photos of its pages). The Studio reads it and fills in each product: name, category, price, short description, features, full description and specifications. Only what the pamphlet says is used. You review everything before it goes in, and nothing is saved until you press Save.</p>}
-        {db.ui}
-        {db.ready && !found && <>
+        {!found && <EnginePick label="Read with" value={eng} onChange={(e) => { setEng(e); setErr(""); }} note={sys ? (menu ? "On this device, by rules: every line with a price becomes a dish, under the heading printed above it. Photos are read here too (clear English print reads best)." : "On this device, by rules. Sheets, price lists and one-product pages read best; photos are read here too (clear English print).") : undefined} />}
+        {!sys && db.ui}
+        {canRead && !found && <>
           <label className={`flex cursor-pointer flex-col items-center gap-1 rounded-xl border-2 border-dashed px-4 py-7 text-center ${drag ? "border-brand-400 bg-brand-500/10" : "border-ink-600"}`}
             onDragOver={(e) => { e.preventDefault(); setDrag(true); }} onDragLeave={() => setDrag(false)} onDrop={(e) => { e.preventDefault(); setDrag(false); choose(e.dataTransfer.files); }}>
             <input type="file" className="sr-only" aria-label="Pamphlet file" accept=".pdf,application/pdf,.xlsx,.csv,text/csv,image/jpeg,image/png,image/webp" multiple onChange={(e) => choose(e.target.files)} />
@@ -176,6 +185,7 @@ export function PamphletDialog({ session, project, draft, upload, onApply, onClo
         </>}
         {found && <>
           <p className="text-ink-300">Found {found.length} {found.length === 1 ? W.one : W.many}. Untick any you don't want. {menu ? "Dishes already on your menu" : "Products already in your catalogue"} with the same name only get what they're missing.</p>
+          {bySystem && <p role="status" className="rounded-lg border border-ink-600 px-3 py-2 text-[12.5px] text-ink-300">Read on this device by the Picaffectz system{bySystem.pictures ? `, including ${bySystem.pictures} page picture${bySystem.pictures > 1 ? "s" : ""}${bySystem.sure < 70 ? " (the print was hard to read: check names and prices closely)" : ""}` : ""}. It copies what is printed and doesn't fill in what isn't there.</p>}
           {guessed && <p role="status" className="rounded-lg border border-amber-400/30 bg-amber-400/5 px-3 py-2 text-[12.5px] text-amber-100">The AI didn't return the products this time, so they were read straight from the pamphlet's text. Check the name, type and details before adding.</p>}
           {!menu && <PhotoChoice photos={photos} setPhotos={setPhotos} styles={styles} setStyles={setStyles} hasPics={!!doc.current?.pics.length} />}
           <div className="flex flex-col gap-2" aria-label={menu ? "Dishes found" : "Products found"}>
@@ -204,6 +214,7 @@ export function PamphletDialog({ session, project, draft, upload, onApply, onClo
           </div>
         </>}
         {err && <p role="alert" className="text-red-300">{err}</p>}
+        {err && !sys && allowanceGone(err) && !found && <button type="button" className="btn btn-sm btn-pri self-start" disabled={!files.length || !!busy} onClick={() => { setEng("system"); setErr(""); }}>Use the Picaffectz system instead (no allowance)</button>}
       </div>
     </Modal>
   );

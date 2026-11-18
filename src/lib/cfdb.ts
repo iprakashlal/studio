@@ -265,6 +265,14 @@ export async function cfWrite(api: string, o: { url?: string; text?: string; bra
   return j;
 }
 
+/** A public page's text outline, read by the database without any AI (for the Picaffectz system's writer). */
+export async function cfOutline(api: string, url: string): Promise<string> {
+  let j: any; try { j = await cfCall<any>(api, "/ai/outline", { method: "POST", body: JSON.stringify({ url }) }); } catch { j = null; }
+  if (j?.error) throw new Error(j.error);
+  if (typeof j?.text !== "string") throw new Error("Reading a link needs the database updated once (Settings → Hostings → Update the database). A PDF, pasted text or no reference work without it.");
+  return j.text;
+}
+
 // ---------------------------------------------------------------- reading a product pamphlet
 export type PamphletProduct = { name: string; category: string; summary: string; price: string; features: string[]; details: string; specs: { label: string; value: string }[]; page: number };
 /** Turns a pamphlet's text (and pictures of pages without text) into catalogue entries, with Workers AI on the database. */

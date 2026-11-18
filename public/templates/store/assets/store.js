@@ -18,8 +18,8 @@ const DEFAULT = {
     statuses: [{ id: "registered", label: "Registered", tone: "info" }, { id: "received", label: "Received for service", tone: "progress" }, { id: "in-repair", label: "In repair", tone: "progress" }, { id: "ready", label: "Ready for pickup", tone: "ok" }, { id: "delivered", label: "Delivered", tone: "ok" }, { id: "not-covered", label: "Not covered", tone: "bad" }] },
   labels: { allProducts: "All products", viewAll: "View all", help: "Help", contact: "Contact" },
   cms: { adminPage: "admin" },
-  brand: { name: "Picaffectz Studio", tagline: "Small-batch goods for slow mornings", logo: null, announcement: "Free shipping on orders over ₹1,999", showAnnouncement: true },
-  seo: { title: "Picaffectz Studio", description: "Small-batch ceramics, linen and paper goods.", titlePattern: "{page} · {site}", keywords: "", author: "", image: null, siteUrl: "", themeColor: "", noindex: false, googleVerification: "", meta: [] },
+  brand: { name: "Picaffectz", tagline: "Small-batch goods for slow mornings", logo: null, announcement: "Free shipping on orders over ₹1,999", showAnnouncement: true },
+  seo: { title: "Picaffectz", description: "Small-batch ceramics, linen and paper goods.", titlePattern: "{page} · {site}", keywords: "", author: "", image: null, siteUrl: "", themeColor: "", noindex: false, googleVerification: "", meta: [] },
   nav: { home: "Home", shop: "Shop", portfolio: "Our story", cart: "Cart", account: "Account", showPortfolio: true },
   home: {
     hero: { eyebrow: "New collection", title: "Objects for\nslow mornings", text: "Hand-made ceramics, linen and paper goods, made in small batches and shipped with care.", cta: "Shop the collection", image: null },

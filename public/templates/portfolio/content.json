@@ -42,7 +42,7 @@
     "overlay": "none"
   },
   "brand": {
-    "logoText": "Your Name",
+    "logoText": "Picaffectz",
     "contactLabel": "Contact"
   },
   "hero": {
@@ -372,11 +372,11 @@
         "url": "mailto:hello@example.com"
       }
     ],
-    "footerLeft": "© 2026 Your Name",
+    "footerLeft": "© 2026 Picaffectz",
     "footerRight": "Circle · Square · Triangle"
   },
   "seo": {
-    "title": "Your Name · Portfolio",
+    "title": "Picaffectz · Portfolio",
     "description": "Portfolio of Your Name: strategy, design and front-end.",
     "titlePattern": "{page} · {site}",
     "keywords": "",

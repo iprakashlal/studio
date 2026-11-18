@@ -272,7 +272,7 @@ export const businessTemplate: TemplateDef = {
     if (F.enabled && F.saveTo === "file" && !/^https:\/\//.test(F.fileUrl || "")) w.push("Enquiries are set to save as JSON files, but the inbox isn't set up. Press Enquiry inbox at the top of the project.");
     if (F.enabled && F.saveTo !== "file" && !c?.contact?.email) w.push("The enquiry form has no email to fall back on. Add one under Contact & form → Details.");
     if (F.enabled && F.saveTo !== "email" && (F.sbUrl || F.sbKey) && !(F.sbUrl && F.sbKey && F.site)) w.push("The enquiry form's Supabase settings are incomplete (Project URL, public key and Site ID are all needed).");
-    if (/northbeam/i.test(JSON.stringify(c?.brand || {}))) w.push("The company name is still the sample (Northbeam Partners).");
+    if (/^picaffectz$/i.test(String(c?.brand?.name || "").trim()) && c?.brand?.tagline === "Strategy, design and engineering for growing companies") w.push("The company name and tagline are still the sample (Picaffectz).");
     return w;
   },
 };

@@ -4,17 +4,17 @@
 import { type Axis, type Theme, FX_KEYS, onColor } from "./catalog";
 
 export const BIZ_AXES: Record<string, Axis> = {
-  layout: { key: "layout", label: "Hero layout", options: [["split", "Text left, picture right"], ["center", "Centred, picture below"], ["editorial", "Editorial: big headline, wide picture"], ["panel", "Dark panel"], ["full", "Full-width photo behind the text"]] },
-  heroArt: { key: "heroArt", label: "Hero picture frame", options: [["default", "Plain"], ["frame", "Thin frame"], ["offset", "Offset shadow"], ["arch", "Arch"]] },
-  nav: { key: "nav", label: "Menu", options: [["bar", "Clean bar"], ["float", "Floating panel"], ["line", "Underlined bar"], ["dark", "Dark bar"], ["center", "Links in the centre"]] },
+  layout: { key: "layout", label: "Hero layout", options: [["split", "Text left, picture right"], ["center", "Centred, picture below"], ["editorial", "Editorial: big headline, wide picture"], ["panel", "Dark panel"], ["full", "Full-width photo behind the text"], ["pile", "Words on top, wide picture below"], ["flip", "Picture left, words right"], ["overlap", "Words on a card over the picture"], ["colour", "Solid colour band"], ["aurora", "Aurora glow, centred"], ["typeonly", "Big type only"], ["centretype", "Big type only, centred"], ["cinema", "Wide picture first, words below in two columns"], ["tall", "Tall picture, rounded"], ["boxed", "Hero in a soft box"], ["duo", "Half words, half picture to the edge"]] },
+  heroArt: { key: "heroArt", label: "Hero picture frame", options: [["default", "Plain"], ["frame", "Thin frame"], ["offset", "Offset shadow"], ["arch", "Arch"], ["disc", "Circle"], ["organic", "Soft blob"], ["askew", "Tilted print"], ["round", "Extra-round corners"], ["polaroid", "Instant photo"], ["double", "Double frame"], ["cut", "Cut corners"], ["leaf", "Leaf"], ["glow", "Accent glow"], ["layers", "Stacked sheets"], ["window", "Browser window"], ["hex", "Hexagon"], ["coupon", "Dashed border"]] },
+  nav: { key: "nav", label: "Menu", options: [["bar", "Clean bar"], ["float", "Floating panel"], ["line", "Underlined bar"], ["dark", "Dark bar"], ["center", "Links in the centre"], ["pills", "Pill links"], ["glass", "Frosted glass"], ["raised", "Raised bar with shadow"], ["topline", "Accent line on top"], ["caps", "Small capitals"], ["accent", "Accent-colour bar"], ["boxed", "Boxed links"], ["island", "Links in a floating island"], ["tabs", "Tabs"], ["dots", "Dot under the link"]] },
   cards: { key: "cards", label: "Cards", options: [["outline", "Outlined"], ["flat", "Flat"], ["elevated", "Soft shadow"], ["glass", "Glass"], ["lined", "Editorial rule"], ["accent", "Accent top edge"]] },
   buttons: { key: "buttons", label: "Buttons", options: [["rounded", "Rounded"], ["pill", "Pill"], ["sharp", "Square"], ["outline", "Outline"], ["underline", "Underlined text"]] },
   heading: { key: "heading", label: "Headings", options: [["normal", "Bold"], ["upper", "CAPITALS"], ["serif", "Light serif, italic highlights"], ["light", "Light"]] },
   shead: { key: "shead", label: "Section titles", options: [["label", "Small label"], ["line", "Label with a rule"], ["number", "Numbered"], ["center", "Centred"], ["bar", "Accent bar"]] },
   pattern: { key: "pattern", label: "Background", options: [["none", "Plain"], ["grid", "Fine grid"], ["dots", "Dots"], ["lines", "Column lines"], ["mesh", "Soft colour glow in the hero"]] },
-  bands: { key: "bands", label: "Section bands", options: [["soft", "Alternate soft bands"], ["deep", "Alternate dark bands"], ["lines", "Divider lines"], ["none", "None"]] },
+  bands: { key: "bands", label: "Section bands", options: [["soft", "Alternate soft bands"], ["deep", "Alternate dark bands"], ["lines", "Divider lines"], ["none", "None"], ["tint", "Accent tint"], ["gradient", "Fading gradient"], ["glow", "Corner glow"], ["dots", "Dotted paper"], ["grid", "Grid paper"], ["stripe", "Accent stripe on top"], ["sheet", "Rounded sheets"], ["slant", "Slanted edges"], ["panel", "Floating panels"], ["outline", "Outlined panels"]] },
   motionStyle: { key: "motionStyle", label: "Reveal animation", options: [["rise", "Rise in"], ["fade", "Fade in"], ["none", "None"]] },
-  width: { key: "width", label: "Page width", options: [["normal", "Standard"], ["wide", "Wide"]] },
+  width: { key: "width", label: "Page width", options: [["normal", "Standard"], ["wide", "Wide"], ["narrow", "Narrow"], ["xwide", "Extra wide"], ["full", "Full, edge to edge"]] },
 };
 
 export const BIZ_TAGS = ["Corporate", "Finance", "Legal", "Consulting", "Tech", "Health", "Creative", "Industry", "Property", "Hospitality", "Light", "Dark", "Classy", "Modern", "Bold", "Minimal", "Warm", "Calm", "Nature", "Luxury"];
@@ -109,7 +109,7 @@ export function businessThemeValues(t: Theme): Record<string, unknown> {
     bg: c.bg, surface: c.surface, deep: c.deep, text: c.text, soft: c.soft, line: c.line, c1: c.c1, c2: c.c2, c3: c.c3,
     fontDisplay: t.display, fontBody: t.body, radius: t.radius, preset: t.id,
     layout: BIZ_AXES.layout.options.some(([v]) => v === s.layout) ? s.layout : "split",
-    heroArt: s.heroArt || "default", nav: BIZ_AXES.nav.options.some(([v]) => v === s.nav) ? s.nav : "bar",
+    heroArt: ["default", "frame", "offset", "arch"].includes(String(s.heroArt)) ? s.heroArt : "default", nav: BIZ_AXES.nav.options.some(([v]) => v === s.nav) ? s.nav : "bar",
     cards: BIZ_AXES.cards.options.some(([v]) => v === s.cards) ? s.cards : "outline",
     buttons: BIZ_AXES.buttons.options.some(([v]) => v === s.buttons) ? s.buttons : "rounded",
     heading: BIZ_AXES.heading.options.some(([v]) => v === s.heading) ? s.heading : "normal",

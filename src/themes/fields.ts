@@ -11,6 +11,15 @@ export const NAV_MODE_FIELD: Field = { t: "select", path: "theme.navMode", label
 /** The same choice for phones alone, shown just under it. "" follows "Menu when scrolling". */
 export const NAV_MODE_MOB_FIELD: Field = { t: "select", path: "theme.navModeMob", label: "Menu when scrolling, on phones", options: [
   { value: "", label: "Same as on larger screens" }, { value: "fixed", label: "Fixed at the top" }, { value: "scroll", label: "Not fixed: scrolls away with the page" }] };
+const g2i = (...fields: Field[]): Field => ({ t: "grid", cols: 2, fields });
+/** The intro screen's own settings (the panel of "Intro & page transition"). */
+export const INTRO_CARD: Card = { title: "Intro screen", fields: [
+      { t: "note", text: "The full-screen panel that shows your name while the site opens (Intro & page transition above, or a signature theme's own preloader). It also slides across when visitors move between pages. Picking a theme resets these colours to match it." },
+      { t: "text", path: "theme.introTitle", label: "Text on the intro screen", hint: "Leave empty to show your site name." },
+      g2i({ t: "color", path: "theme.introBg", label: "Intro background" }, { t: "color", path: "theme.introFg", label: "Intro text colour" }),
+      g2i({ t: "select", path: "theme.introFont", label: "Intro font", options: [{ value: "display", label: "Same as the headline (headings font)" }, { value: "body", label: "Body text font" }] },
+        { t: "select", path: "theme.introCase", label: "Intro letters", options: [{ value: "upper", label: "CAPITALS" }, { value: "asis", label: "As typed" }] }),
+    ] };
 export const NAV_MODE_NOTE = "Theme default: most themes keep the menu fixed at the top; Velocity hides it while you scroll down. Your choice stays when you switch themes. On phones the menu bar is smaller, and can be fixed or not by its own setting.";
 
 export function themeCards(extra: Axis[], note: string, layout: Axis = AXES.layout): Card[] {
@@ -30,12 +39,6 @@ export function themeCards(extra: Axis[], note: string, layout: Axis = AXES.layo
       { t: "when", path: "theme.scrollfx", is: "skew", fields: [sel(SCROLL_EASE_AXIS)] },
       { t: "note", text: "Scrolling feels heavy? Pick Light, or set Scrolling to Normal. Smooth scrolling only changes mouse wheels: trackpads and phones always scroll the normal way." },
     ] },
-    { title: "Intro screen", fields: [
-      { t: "note", text: "The full-screen panel that shows your name while the site opens (Intro & page transition above, or a signature theme's own preloader). It also slides across when visitors move between pages. Picking a theme resets these colours to match it." },
-      { t: "text", path: "theme.introTitle", label: "Text on the intro screen", hint: "Leave empty to show your site name." },
-      g({ t: "color", path: "theme.introBg", label: "Intro background" }, { t: "color", path: "theme.introFg", label: "Intro text colour" }),
-      g({ t: "select", path: "theme.introFont", label: "Intro font", options: [{ value: "display", label: "Same as the headline (headings font)" }, { value: "body", label: "Body text font" }] },
-        { t: "select", path: "theme.introCase", label: "Intro letters", options: [{ value: "upper", label: "CAPITALS" }, { value: "asis", label: "As typed" }] }),
-    ] },
+    INTRO_CARD,
   ];
 }

@@ -365,7 +365,7 @@ function applyTheme(t) {
   MOTIF = window.SiteMotifs ? SiteMotifs.resolve(t, "cafe") : "geometric";
   const d = document.documentElement.dataset; d.motif = moOn() ? MOTIF : "geometric";
   for (const k of ["layout", "heroArt", "nav", "cards", "buttons", "motionStyle", "pattern", "ornament", "heading", "shead", "width", "grid", "product", "cursor", "loader", "textfx", "hoverfx", "scrollfx", "overlay"]) d[k] = String(t[k] || "");
-  d.scrollease = t.scrollEase || "light"; d.linebreaks = t.lineBreaks || "typed"; d.menu = String(t.navMode || "");
+  d.scrollease = t.scrollEase || "light"; d.linebreaks = t.lineBreaks || "typed"; d.menu = String(t.navMode || ""); d.menumob = String(t.navModeMob || "");
   d.introfont = t.introFont || "display"; d.introcase = t.introCase || "upper";
   r.setProperty("--r", (+t.radius || 0) + "px");
   r.setProperty("--fd", `"${t.fontDisplay}",Georgia,serif`); r.setProperty("--fb", `"${t.fontBody}","Helvetica Neue",Arial,sans-serif`);
@@ -1229,7 +1229,7 @@ addEventListener("hashchange", () => { if (PAGE === "account") render(); });
 // Menu when scrolling (theme.navMode): "" theme default, fixed, hide (hide on scroll down, show on scroll up), scroll (scrolls away)
 (function(){let lastY=scrollY;const de=document.documentElement,SEL=".nav,.hdr,.vx-hdr,.ks-top,.kk-top,.kg-top,.kv-top,.kp-top";
   addEventListener("scroll",()=>{const y=scrollY,d=y-lastY;
-    if(de.dataset.menu!=="hide"||de.classList.contains("vx-menu-open")||document.querySelector(".hdr [aria-expanded=true],.nav [aria-expanded=true]")){de.classList.remove("menu-away");lastY=y;return}
+    if(((matchMedia("(max-width:760px)").matches&&de.dataset.menumob)||de.dataset.menu)!=="hide"||de.classList.contains("vx-menu-open")||document.querySelector(".hdr [aria-expanded=true],.nav [aria-expanded=true]")){de.classList.remove("menu-away");lastY=y;return}
     if(Math.abs(d)<6)return;de.classList.toggle("menu-away",d>0&&y>140);lastY=y},{passive:true});
   document.addEventListener("focusin",e=>{if(e.target.closest&&e.target.closest(SEL))de.classList.remove("menu-away")});
 })();

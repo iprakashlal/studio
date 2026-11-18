@@ -355,3 +355,16 @@ html.hs-top-light:not([data-nav=float]) .nav:not(.scrolled) .burger{border-color
 .quote .stars{display:block;margin-bottom:10px}
 .g-sum{margin:-8px 0 26px}.g-sum a{display:inline-flex;align-items:center;gap:8px;color:var(--soft);text-decoration:none;font-size:15px}.g-sum a:hover{color:var(--text)}.g-sum b{color:var(--text)}
 .solo-top{padding:clamp(18px,3vw,34px) 0 0}.solo-top .crumbs{margin:0}.solo-top+section{padding-top:clamp(28px,4vw,56px)}
+
+/* Menu when scrolling (theme.navMode), and on phones a smaller menu bar with its own "fixed or not" choice (theme.navModeMob) */
+html[data-menu=scroll] .nav{position:relative}
+html[data-menu=hide] .nav{transition:background .25s,box-shadow .25s,transform .45s cubic-bezier(.2,.8,.2,1)}
+html[data-menu=hide].menu-away .nav{transform:translateY(-115%)}
+
+@media (max-width:760px){
+  .nav-in{min-height:54px;gap:12px}.nav .brand{zoom:.86}
+  html[data-nav=float] .nav{padding-top:8px}html[data-nav=float] .nav-in{min-height:50px;padding:0 6px 0 12px}
+  .burger{width:38px;height:38px;border-radius:9px;gap:4px}
+  html[data-menumob=scroll] .nav{position:relative}
+  html[data-menumob=fixed][data-menu=scroll] .nav{position:sticky}
+}

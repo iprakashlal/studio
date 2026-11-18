@@ -40,7 +40,8 @@ const schema: Category[] = [
     id: "nav", label: "Menu & pages", group: "Design", desc: "Menu labels and which pages appear.",
     cards: [
       { title: "Menu titles", fields: [g2({ t: "text", path: "nav.home", label: "Home" }, { t: "text", path: "nav.shop", label: "Shop" }, { t: "text", path: "nav.portfolio", label: "Story / portfolio page" }, { t: "text", path: "nav.cart", label: "Cart" }, { t: "text", path: "nav.account", label: "Account (when sign-in is on)" }),
-        { t: "toggle", path: "nav.showPortfolio", label: "Show the story / portfolio page in the menu" }] },
+        { t: "toggle", path: "nav.showPortfolio", label: "Show the story / portfolio page in the menu" },
+        { t: "toggle", path: "nav.crumbs", label: "Show the page trail (Shop / Category / Product, Home / Page name) at the top of pages" }] },
       { title: "Menu when scrolling", fields: [NAV_MODE_FIELD, NAV_MODE_MOB_FIELD, { t: "note", text: "Theme default keeps the menu at the top of the screen while shoppers scroll. The same setting is under Theme & layout." }] },
       { title: "Footer titles & links", fields: [g2({ t: "text", path: "labels.allProducts", label: "“All products” link" }, { t: "text", path: "labels.viewAll", label: "“View all” link on the home page" },
         { t: "text", path: "labels.help", label: "Footer column: help & policies" }, { t: "text", path: "labels.contact", label: "Footer column: contact" })] },

@@ -49,6 +49,7 @@
     "showName": true
   },
   "site": {
+    "crumbs": true,
     "multiPage": false,
     "pageLabels": {
       "home": "Home",

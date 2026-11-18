@@ -211,10 +211,10 @@ const schema: Category[] = [
   warrantyCategory("popup-or-page"),
   emailsCategory(true),
   featuresCategory(),
-  consentCategory(),
   festivalCategory(),
   i18nCategory(),
   seoCategory(true),
+  consentCategory(),
   adminCategory(),
 ];
 

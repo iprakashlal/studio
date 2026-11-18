@@ -265,7 +265,7 @@ export function prepareConsent(c: any) {
   c.consent = { ...d, ...k, india: { ...d.india, ...obj(k.india) }, intl: { ...d.intl, ...obj(k.intl) }, months: String(k.months ?? d.months),
     categories: d.categories.map((x) => ({ ...x, ...(have.find((h) => h.id === x.id) || {}), id: x.id, ...(x.id === "necessary" ? { on: true } : {}) })) };
 }
-/** Features → Cookie consent: the banner that asks visitors before analytics, marketing and other optional code
+/** Settings → Cookie consent: the banner that asks visitors before analytics, marketing and other optional code
  *  runs (assets/consent.js), with one wording for visitors in India and one for everyone else. */
 export function consentCategory(): Category {
   const g2 = (...fields: Field[]): Field => ({ t: "grid", cols: 2, fields });
@@ -277,7 +277,7 @@ export function consentCategory(): Category {
     { t: "textarea", path: `consent.${r}.extra`, label: "Extra line (optional)", rows: 3, hint: r === "india" ? "For example your Grievance Officer's name and email, as the DPDP Act expects." : "For example who the data controller is and how to reach them." },
   ];
   return {
-    id: "consent", label: "Cookie consent", group: "Features",
+    id: "consent", label: "Cookie consent", group: "Settings",
     desc: "A banner that asks visitors before analytics, marketing and other optional code runs, with Accept and Decline buttons, a choice by category, and separate wording for visitors in India and for international visitors.",
     cards: [
       { title: "Consent banner", fields: [
@@ -526,7 +526,7 @@ export function featuresCategory(): Category {
               { t: "select", path: "where", label: "Where it goes", options: [{ value: "body", label: "End of the page (most widgets)" }, { value: "head", label: "The page's head (analytics, verification tags)" }] },
               { t: "select", path: "pages", label: "Pages", options: [{ value: "all", label: "Every page" }, { value: "home", label: "The home page only" }] }),
             { t: "select", path: "consent", label: "Needs the visitor's consent for", options: [{ value: "", label: "Nothing: it always runs (only for code the site can't work without)" }, { value: "analytics", label: "Analytics" }, { value: "marketing", label: "Marketing" }, { value: "preferences", label: "Preferences (chat boxes, videos, other extras)" }], },
-            { t: "note", text: "This only matters while the consent banner is on (Features → Cookie consent): the code then waits until the visitor allows that category." },
+            { t: "note", text: "This only matters while the consent banner is on (Settings → Cookie consent): the code then waits until the visitor allows that category." },
             { t: "textarea", path: "code", label: "Code", rows: 6, hint: "HTML with <script>, <link>, <meta> or <style> tags, exactly as the service gives it." },
           ] },
       ] },

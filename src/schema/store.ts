@@ -265,10 +265,10 @@ const schema: Category[] = [
   warrantyCategory("page"),
   emailsCategory(false),
   featuresCategory(),
-  consentCategory(),
   festivalCategory(),
   i18nCategory(),
   seoCategory(true),
+  consentCategory(),
   adminCategory(),
 ];
 

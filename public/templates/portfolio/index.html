@@ -4,7 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="description" content="">
-<style>body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+<style>body{margin:0}img{max-width:100%}[hidden]{display:none!important}html.solo #hero{display:none!important}
+#soloBack{position:fixed;left:16px;bottom:16px;z-index:60;padding:10px 16px;border-radius:999px;background:var(--surface);color:var(--text);border:1px solid var(--line);font:600 13.5px/1 var(--fb);text-decoration:none;box-shadow:0 10px 30px -12px rgba(0,0,0,.5)}
+</style>
 <title>Portfolio</title>
 <script>try{var b=localStorage.getItem("site-bg:"+location.pathname.replace(/[^/]*$/,""));if(b)document.documentElement.style.background=b;var x=sessionStorage.getItem("fx-exit");if(x){var c=x.charAt(0)=="{"?JSON.parse(x).bg:x;if(/^(#[0-9a-f]{3,8}|rgba?\([0-9., %]+\))$/i.test(c)){var s=document.createElement("style");s.id="fx-pre";s.textContent="html{background:"+c+"!important}body>*{visibility:hidden}";document.head.appendChild(s);setTimeout(function(){s.remove()},3500)}}}catch(e){}</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -1459,8 +1461,22 @@ function vxThree(c,stage,my,motion){const t=c.theme,T=window.THREE;
    ============================================================ */
 let gen=0, fx={};
 function teardown(){gen++;document.documentElement.classList.remove("vx-lock","vx-menu-open");if(fx.three){try{fx.three.dispose();fx.three.domElement.remove()}catch(e){}}if(fx.kitAbort)fx.kitAbort.abort();if(fx.kitStop)try{fx.kitStop()}catch(e){}fx={}}
+/* A section whose link in the owner's own menu has "Open in a new tab" on gets a page of its own (./?s=<id>) and
+   leaves the main page. SOLO: which sections, the one this page shows, and which sections the site has at all. */
+let SOLO={set:new Set(),cur:"",vis:new Set()};
+function soloView(c){
+  const M=c.menu||{},out=new Set(),vis=new Set(c.sections.filter(s=>s.visible).map(s=>s.id));
+  if(M.custom){const walk=L=>(L||[]).forEach(i=>{if(!i||i.show===false)return;if(i.newTab&&vis.has(i.to))out.add(i.to);walk(i.children)});walk(M.items)}
+  let cur="";try{cur=new URLSearchParams(location.search).get("s")||""}catch(e){}
+  if(cur&&!out.has(cur)){if(!PREVIEW){location.replace("./"+(vis.has(cur)?"#"+cur:""));return null}cur=""}
+  SOLO={set:out,cur,vis};
+  document.documentElement.classList.toggle("solo",!!cur);
+  if(!out.size)return c;
+  return {...c,sections:c.sections.map(s=>cur?{...s,visible:s.id===cur}:out.has(s.id)?{...s,visible:false}:s)};
+}
 function renderSite(c){
   if(langGate(c))return;
+  c=soloView(c);if(!c)return;
   teardown();applyTheme(c.theme);
   {const one=x=>String(x||"").replace(/\s*\n\s*/g," ").trim();document.title=one(c.seo.title||c.brand.logoText);
    if(!PREVIEW){const set=(a,k,v)=>{let m=document.head.querySelector(`meta[${a}="${k}"]`);if(!v){if(m)m.remove();return}if(!m){m=document.createElement("meta");m.setAttribute(a,k);document.head.appendChild(m)}m.setAttribute("content",v)};
@@ -1474,6 +1490,12 @@ function renderSite(c){
   heroSlides(c);heroLogo(c);video(c);social(c);spLinks(c);menu(c);lang(c);consent(c);addons(c);festival(c);
   if(window.SiteFX)try{window.SiteFX.init({root:$("#siteInner"),brand:c.theme.introTitle||c.brand.logoText,badge:c.poweredBy})}catch(e){}
   setIcon(c);fitLines();
+  // Links inside the page follow the sections: to a section's own page, or back to the main page from one.
+  if(SOLO.set.size)document.querySelectorAll('#siteRoot a[href^="#"]').forEach(a=>{const id=a.getAttribute("href").slice(1);if(SOLO.set.has(id)&&id!==SOLO.cur)a.setAttribute("href","./?s="+encodeURIComponent(id));else if(SOLO.cur&&id!==SOLO.cur&&(SOLO.vis.has(id)||id==="top"))a.setAttribute("href",id==="top"?"./":"./#"+id)});
+  // A section's own page: its name in the tab, and a way back to the whole site.
+  {const old=document.getElementById("soloBack");if(old)old.remove();
+   if(SOLO.cur){const sec=c.sections.find(x=>x.id===SOLO.cur);if(sec&&sec.navLabel)document.title=sec.navLabel+" · "+document.title;
+    const a=document.createElement("a");a.id="soloBack";a.href="./";a.textContent="← "+(c.brand.logoText||"Home");document.body.appendChild(a)}}
 }
 /* Features (assets/addons.js): chat button, badge, custom code and the custom API for form entries. */
 let adP;
@@ -1508,8 +1530,9 @@ function menu(c){
     if(t==="none")return{url:""};
     if(t==="url"){const u=String(it.url||"").trim();return{url:/^(https?:|mailto:|tel:|#|\/|\.\/|\?)/i.test(u)?u:""}}
     if(t==="page"){const S=window.SitePages,p=S&&S.list(c).find(x=>x.id===it.page);return{url:p?"./?p="+encodeURIComponent(S.slug(p)):""}}
-    if(t==="top")return{url:"#top"};
-    const s=c.sections.find(x=>x.id===t);return{url:s&&s.visible?"#"+t:""}};
+    if(t==="top")return{url:SOLO.cur?"./":"#top"};
+    if(SOLO.set.has(t))return{url:"./?s="+encodeURIComponent(t),on:SOLO.cur===t};
+    return{url:SOLO.vis.has(t)?(SOLO.cur?"./#":"#")+t:""}};
   (mnP||(mnP=new Promise((ok,no)=>{if(window.SiteMenu)return ok();const s=document.createElement("script");s.src="assets/menu.js";s.onload=()=>ok();s.onerror=no;document.head.appendChild(s)})))
     .then(()=>{SiteMenu.mount(c,{navs:MENU_NAVS,resolve:go,onPick:()=>{const b=document.getElementById("vxMbtn");if(b&&b.getAttribute("aria-expanded")==="true")b.click()}});done()}).catch(done)}
 /* Festival overlay (assets/festival.js): greetings on India's festivals, when the Studio offered it to this site. */

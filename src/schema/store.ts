@@ -1,7 +1,7 @@
 import type { Category, Field, TemplateDef } from "./types";
 import { uid, vpaOk, paypalOk, httpsOk } from "../lib/util";
 import { BODY_FONTS, DISPLAY_FONTS, LINE_BREAKS_AXIS, STORE_AXES, THEMES, onColor, storeThemeValues } from "../themes/catalog";
-import { adminCategory, videoCategory, socialCategory, logoFields, consentCategory, emailsCategory, i18nCategory, prepareI18n, featuresCategory, festivalCategory, menuCategory, menuItem, prepareMenu, staticPagesCategory, heroSlidesCard, prepareSlides, prepareMaintenance, seoCategory, warrantyCategory } from "./common";
+import { adminCategory, videoCategory, socialCategory, logoFields, consentCategory, emailsCategory, i18nCategory, prepareI18n, featuresCategory, festivalCategory, menuCategory, menuItem, prepareMenu, staticPagesCategory, heroSlidesCard, prepareSlides, prepareMaintenance, seoCategory, warrantyCategory, customFontsCard } from "./common";
 import { NAV_MODE_FIELD, themeCards } from "../themes/fields";
 
 const CURRENCIES = ["INR", "USD", "EUR", "GBP", "AED", "SGD", "AUD", "CAD"];
@@ -33,6 +33,7 @@ const schema: Category[] = [
         { t: "range", path: "theme.radius", label: "Corner radius", min: 0, max: 28, step: 1, unit: "px" },
         { t: "select", path: "theme.lineBreaks", label: LINE_BREAKS_AXIS.label, options: LINE_BREAKS_AXIS.options.map(([value, label]) => ({ value, label })) },
         { t: "note", text: "Headings and titles break where you press Enter. With “As typed”, a heading you typed on one line stays on one line (it shrinks a little to fit, and only wraps on screens too narrow for it)." }] },
+      customFontsCard(),
     ],
   },
   {

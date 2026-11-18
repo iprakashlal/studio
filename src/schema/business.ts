@@ -2,7 +2,7 @@ import type { Category, Field, TemplateDef } from "./types";
 import { BODY_FONTS, DISPLAY_FONTS, FX_AXES, LINE_BREAKS_AXIS, type Axis } from "../themes/catalog";
 import { BIZ_AXES, BIZ_TAGS, BIZ_THEMES, businessThemeValues } from "../themes/business";
 import { NAV_MODE_FIELD } from "../themes/fields";
-import { adminCategory, videoCategory, socialCategory, logoFields, consentCategory, emailsCategory, i18nCategory, prepareI18n, featuresCategory, festivalCategory, menuCategory, menuItem, prepareMenu, staticPagesCategory, heroSlidesCard, prepareSlides, prepareMaintenance, seoCategory, warrantyCategory } from "./common";
+import { adminCategory, videoCategory, socialCategory, logoFields, consentCategory, emailsCategory, i18nCategory, prepareI18n, featuresCategory, festivalCategory, menuCategory, menuItem, prepareMenu, staticPagesCategory, heroSlidesCard, prepareSlides, prepareMaintenance, seoCategory, warrantyCategory, customFontsCard } from "./common";
 
 const g2 = (...fields: Field[]): Field => ({ t: "grid", cols: 2, fields });
 const g3 = (...fields: Field[]): Field => ({ t: "grid", cols: 3, fields });
@@ -41,6 +41,7 @@ const schema: Category[] = [
       { title: "Typography & corners", fields: [g2({ t: "select", path: "theme.fontDisplay", label: "Headings font", options: DISPLAY_FONTS }, { t: "select", path: "theme.fontBody", label: "Body font", options: BODY_FONTS }),
         { t: "select", path: "theme.lineBreaks", label: LINE_BREAKS_AXIS.label, options: LINE_BREAKS_AXIS.options.map(([value, label]) => ({ value, label })) },
         { t: "range", path: "theme.radius", label: "Corner radius", min: 0, max: 28, step: 1, unit: "px" }] },
+      customFontsCard(),
     ],
   },
   {

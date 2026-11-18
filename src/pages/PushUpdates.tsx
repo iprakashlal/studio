@@ -1,6 +1,6 @@
-// Projects → "Push updates to live sites": one place to put this Studio build (template, theme and CMS code)
+// Settings → Updates → "Push Studio updates to live sites": one place to put this Studio build (template, theme and CMS code)
 // on every published site, without touching any site's content.
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useSyncExternalStore } from "react";
 import { pagesForHost, type Pages } from "../lib/pages";
 import { explain } from "../lib/repo";
 import { checkTarget, liveTargets, pushTarget, type LiveTarget, type TargetState } from "../lib/pushupdates";
@@ -35,38 +35,53 @@ const BADGE: Record<TargetState["s"], [string, string]> = {
   skipped: ["Skipped", "border-ink-500 text-ink-300"],
 };
 
-export function PushUpdatesDialog({ studio, index, token, onClose }: { studio: Studio; index: StudioIndex; token: string; onClose: () => void }) {
-  const toast = useToast();
-  const targets = useMemo(() => liveTargets(index.projects, token), [index, token]);
-  const [st, setSt] = useState<Record<string, TargetState>>({});
-  const [pick, setPick] = useState<Record<string, boolean>>({});
-  const [have, setHave] = useState<Record<string, boolean>>({});
+/* ---- The job lives outside the screens: it carries on while you work elsewhere in the Studio, with the window minimised. ---- */
+type Job = { open: boolean; min: boolean; st: Record<string, TargetState>; pick: Record<string, boolean>; have: Record<string, boolean>; running: boolean; finished: boolean; page: number; order: LiveTarget[] };
+let job: Job = { open: false, min: false, st: {}, pick: {}, have: {}, running: false, finished: false, page: 0, order: [] };
+const subs = new Set<() => void>();
+const put = (f: (j: Job) => Partial<Job>) => { job = { ...job, ...f(job) }; subs.forEach((x) => x()); };
+const useJob = () => useSyncExternalStore((f) => { subs.add(f); return () => subs.delete(f); }, () => job);
+/** Opens the window (Settings → Updates). A run in hand, or one just finished, is shown as it is. */
+export function openPushUpdates() { put((j) => (j.running || (j.finished && j.open) ? { open: true, min: false } : { open: true, min: false, st: {}, pick: {}, have: {}, finished: false, page: 0, order: [] })); }
+/** How many sites a page of the list shows. */
+export const PUSH_PAGE = 5;
+
+/** Mounted once for the whole Studio: the window, or its minimised strip while an update runs. */
+export function PushUpdatesHost({ studio, index, token }: { studio: Studio; index: StudioIndex | null; token: string }) {
+  const j = useJob(), toast = useToast();
+  const targets = useMemo(() => (index ? liveTargets(index.projects, token) : []), [index, token]);
   const pageCache = useMemo(() => new Map<string, Promise<Pages | null>>(), [token]);
-  const [running, setRunning] = useState(false);
-  const [finished, setFinished] = useState(false);
-  const set = (k: string, v: TargetState) => setSt((m) => ({ ...m, [k]: v }));
-
+  const pagesFor = (h: NonNullable<LiveTarget["project"]["host"]>) => { const k = h.kind + ":" + (h.account || "") + ":" + (h.cf ? h.cf.api + "|" + h.cf.site : ""); if (!pageCache.has(k)) pageCache.set(k, pagesForHost(h, token)); return pageCache.get(k)!; };
+  const set = (k: string, v: TargetState) => put((x) => ({ st: { ...x.st, [k]: v } }));
+  // The list is the one the window was opened with while a run is in hand (the projects list changes as sites are updated).
+  const list = j.order.length ? j.order : targets;
+  const fresh = j.open && !j.running && !j.finished && !j.order.length;
   useEffect(() => {
+    if (!fresh || !targets.length) return;
+    put(() => ({ order: targets, st: Object.fromEntries(targets.map((t) => [t.key, { s: "checking" } as TargetState])) }));
     // Each hosted site: this device's own account, or (Cloudflare) publishing through the Studio's database.
-    Promise.all(targets.filter((t) => t.kind === "hosted").map(async (t) => [t.key, !!(await pagesFor(t.project.host!))] as const)).then((l) => setHave(Object.fromEntries(l)));
-    targets.forEach((t) => set(t.key, { s: "checking" }));
-    Promise.all(targets.map(async (t) => {
-      const v = await checkTarget(t);
-      set(t.key, v);
-      setPick((m) => ({ ...m, [t.key]: v.s === "old" }));
-    }));
-  }, [targets]);
+    Promise.all(targets.filter((t) => t.kind === "hosted").map(async (t) => [t.key, !!(await pagesFor(t.project.host!))] as const)).then((l) => put(() => ({ have: Object.fromEntries(l) })));
+    targets.forEach(async (t) => { const v = await checkTarget(t); put((x) => ({ st: { ...x.st, [t.key]: v }, pick: { ...x.pick, [t.key]: v.s === "old" } })); });
+  }, [fresh, targets]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Leaving the Studio itself would stop the run: the browser asks first.
+  useEffect(() => { if (!j.running) return; const f = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ""; }; addEventListener("beforeunload", f); return () => removeEventListener("beforeunload", f); }, [j.running]);
+  if (!j.open) return null;
 
-  const chosen = targets.filter((t) => pick[t.key]);
+  const st = j.st, pick = j.pick, have = j.have, running = j.running, finished = j.finished;
+  const chosen = list.filter((t) => pick[t.key]);
   const missingT = chosen.filter((t) => t.kind === "hosted" && have[t.key] === false);
   const missing = [...new Set(missingT.map((t) => t.label))];
-  const pagesFor = (h: NonNullable<LiveTarget["project"]["host"]>) => { const k = h.kind + ":" + (h.account || "") + ":" + (h.cf ? h.cf.api + "|" + h.cf.site : ""); if (!pageCache.has(k)) pageCache.set(k, pagesForHost(h, token)); return pageCache.get(k)!; };
+  const pages = Math.max(1, Math.ceil(list.length / PUSH_PAGE)), page = Math.min(j.page, pages - 1), shown = list.slice(page * PUSH_PAGE, page * PUSH_PAGE + PUSH_PAGE);
+  const close = () => put(() => ({ open: false, min: false, st: {}, pick: {}, have: {}, finished: false, page: 0, order: [] }));
 
   const run = async () => {
-    setRunning(true);
+    const todo = chosen, haveNow = have;
+    put(() => ({ running: true }));
     let ok = 0, bad = 0;
-    for (const t of chosen) {
-      if (t.kind === "hosted" && have[t.key] === false) { set(t.key, { s: "skipped", msg: `${t.label} isn't connected on this device (Settings → Hostings → Hosting accounts).` }); continue; }
+    for (const t of todo) {
+      // The list turns to the page of the site in hand.
+      put(() => ({ page: Math.floor(list.indexOf(t) / PUSH_PAGE) }));
+      if (t.kind === "hosted" && haveNow[t.key] === false) { set(t.key, { s: "skipped", msg: `${t.label} isn't connected on this device (Settings → Hostings → Hosting accounts).` }); continue; }
       set(t.key, { s: "pushing" });
       try {
         let pct = 4;
@@ -74,47 +89,78 @@ export function PushUpdatesDialog({ studio, index, token, onClose }: { studio: S
         set(t.key, { s: "done" }); ok++;
       } catch (e) { set(t.key, { s: "failed", msg: explain(e) }); bad++; }
     }
-    setRunning(false); setFinished(true);
+    put(() => ({ running: false, finished: true }));
     toast(bad ? `${ok} site(s) updated, ${bad} failed` : `${ok} site(s) updated`, bad ? "bad" : "ok");
   };
 
   // The whole run: finished sites count in full, the one in hand by how far it is.
   const ran = chosen.filter((t) => ["done", "failed", "skipped"].includes(st[t.key]?.s)), now = chosen.find((t) => st[t.key]?.s === "pushing"), nowV = now && st[now.key];
   const overall = chosen.length ? ((ran.length + (nowV && nowV.s === "pushing" ? (nowV.pct || 0) / 100 : 0)) / chosen.length) * 100 : 0;
-  const failedN = chosen.filter((t) => st[t.key]?.s === "failed").length;
-  const allOld = targets.filter((t) => st[t.key]?.s === "old" || st[t.key]?.s === "current");
+  const failedN = chosen.filter((t) => st[t.key]?.s === "failed").length, skippedN = chosen.filter((t) => st[t.key]?.s === "skipped").length;
+  const allOld = list.filter((t) => st[t.key]?.s === "old" || st[t.key]?.s === "current");
+  const overallBar = <ProgressBar value={finished ? 100 : overall} tone={finished ? (failedN ? "bad" : "ok") : "run"} label="All chosen sites"
+    detail={finished ? `${ran.length - failedN - skippedN} of ${chosen.length} updated${failedN ? ` · ${failedN} failed` : ""}` : now ? `Site ${ran.length + 1} of ${chosen.length} · ${now.project.name}` : "Starting…"} />;
+
+  // Minimised: a small strip in the corner of every Studio screen.
+  if (j.min) return (
+    <div role="status" aria-label="Updating live sites" className="fixed bottom-4 right-4 z-[150] w-[min(340px,calc(100vw-32px))] rounded-xl border border-brand-500/40 bg-ink-900 p-3 shadow-2xl">
+      <div className="mb-2 flex items-center gap-2"><b className="min-w-0 flex-1 truncate text-[13px] text-ink-100">{finished ? "Live sites updated" : "Updating live sites…"}</b>
+        <button type="button" className="btn btn-sm" onClick={() => put(() => ({ min: false }))}>Open</button>
+        {finished && <button type="button" className="icon-btn" aria-label="Dismiss" onClick={close}>✕</button>}</div>
+      {overallBar}
+      {!finished && <p className="mt-1.5 text-[11.5px] text-ink-400">Carry on working in the Studio. Keep this tab open until it finishes.</p>}
+    </div>
+  );
+
   const footer = finished
-    ? <button className="btn btn-pri" onClick={onClose}>Done</button>
-    : <><button className="btn" onClick={onClose} disabled={running}>Cancel</button>
-        <button className="btn btn-pri" disabled={running || !chosen.length || studio.repo.demo} onClick={run}>{running ? "Updating…" : `Push to ${chosen.length} site${chosen.length === 1 ? "" : "s"}`}</button></>;
+    ? <button className="btn btn-pri" onClick={close}>Done</button>
+    : running ? <><span className="mr-auto text-[12.5px] text-ink-400">You can minimise this and keep working.</span><button className="btn btn-pri" onClick={() => put(() => ({ min: true }))}>Minimise</button></>
+    : <><button className="btn" onClick={close}>Cancel</button>
+        <button className="btn btn-pri" disabled={!chosen.length || studio.repo.demo} onClick={run}>{`Push to ${chosen.length} site${chosen.length === 1 ? "" : "s"}`}</button></>;
 
   return (
-    <Modal title="Push Studio updates to live sites" wide onClose={() => !running && onClose()} footer={footer}>
+    <Modal title="Push Studio updates to live sites" wide onClose={() => (running ? put(() => ({ min: true })) : close())} footer={footer}>
       <p className="text-sm text-ink-300">Rebuilds the chosen sites with this Studio build: template and theme code, effects and the site's admin page. <b className="text-ink-100">Each site keeps its own content and photos</b>, including edits made in its admin page.</p>
       <p className="text-[13px] text-ink-400">This Studio: build <code className="font-mono text-xs">{STUDIO_BUILD.id}</code>{STUDIO_BUILD.at && <> from {fmtDate(STUDIO_BUILD.at)}</>}.</p>
       {studio.repo.demo && <p className="rounded-lg border border-amber-400/40 bg-amber-400/5 px-3 py-2.5 text-[13px] text-amber-100">The demo has no live sites. Sign in with your repository to push updates.</p>}
-      {!targets.length && !studio.repo.demo && <p className="rounded-lg border border-ink-700 px-3 py-2.5 text-sm text-ink-300">No project is published yet. Publish a project to GitHub or Netlify first.</p>}
-      {targets.length > 0 && (
+      {!list.length && !studio.repo.demo && <p className="rounded-lg border border-ink-700 px-3 py-2.5 text-sm text-ink-300">No project is published yet. Publish a project to GitHub or Netlify first.</p>}
+      {list.length > 0 && (
         <div className="flex flex-col gap-2">
           {!running && !finished && allOld.length > 1 && (
             <div className="flex gap-3 text-[13px]">
-              <button type="button" className="text-brand-300 underline" onClick={() => setPick(Object.fromEntries(allOld.map((t) => [t.key, true])))}>Select all</button>
-              <button type="button" className="text-brand-300 underline" onClick={() => setPick({})}>Select none</button>
+              <button type="button" className="text-brand-300 underline" onClick={() => put(() => ({ pick: Object.fromEntries(allOld.map((t) => [t.key, true])) }))}>Select all{pages > 1 ? ` ${allOld.length}` : ""}</button>
+              <button type="button" className="text-brand-300 underline" onClick={() => put(() => ({ pick: {} }))}>Select none</button>
+              {pages > 1 && <span className="ml-auto text-ink-400">{chosen.length} of {list.length} selected</span>}
             </div>
           )}
-          {(running || finished) && chosen.length > 0 && <div className="rounded-xl border border-ink-700 px-3 py-2.5" aria-label="Overall progress">
-            <ProgressBar value={finished ? 100 : overall} tone={finished ? (failedN ? "bad" : "ok") : "run"} label="All chosen sites"
-              detail={finished ? `${ran.length - failedN - chosen.filter((t) => st[t.key]?.s === "skipped").length} of ${chosen.length} updated${failedN ? ` · ${failedN} failed` : ""}` : now ? `Site ${ran.length + 1} of ${chosen.length} · ${now.project.name}` : "Starting…"} />
-          </div>}
+          {(running || finished) && chosen.length > 0 && <div className="rounded-xl border border-ink-700 px-3 py-2.5" aria-label="Overall progress">{overallBar}</div>}
           <ul className="flex flex-col divide-y divide-ink-700 rounded-xl border border-ink-700" aria-label="Live sites">
-            {targets.map((t) => <Row key={t.key} t={t} v={st[t.key] || { s: "checking" }} on={!!pick[t.key]} lock={running || finished} onPick={(b) => setPick((m) => ({ ...m, [t.key]: b }))} />)}
+            {shown.map((t) => <Row key={t.key} t={t} v={st[t.key] || { s: "checking" }} on={!!pick[t.key]} lock={running || finished} onPick={(b) => put((x) => ({ pick: { ...x.pick, [t.key]: b } }))} />)}
           </ul>
+          {pages > 1 && <nav className="flex items-center justify-between gap-3 text-[13px]" aria-label="Pages of sites">
+            <button type="button" className="btn btn-sm" disabled={page === 0} onClick={() => put(() => ({ page: page - 1 }))}>← Previous</button>
+            <span className="text-ink-400">Page {page + 1} of {pages} · sites {page * PUSH_PAGE + 1}–{Math.min(list.length, (page + 1) * PUSH_PAGE)} of {list.length}</span>
+            <button type="button" className="btn btn-sm" disabled={page >= pages - 1} onClick={() => put(() => ({ page: page + 1 }))}>Next →</button>
+          </nav>}
         </div>
       )}
       {missing.length > 0 && !running && !finished && <p className="rounded-lg border border-amber-400/40 bg-amber-400/5 px-3 py-2.5 text-[13px] text-amber-100">{missing.join(" and ")} isn't connected on this device, so {missingT.length === 1 ? "that site" : "those sites"} will be skipped.{missingT.some((t) => t.project.host?.cf) ? " For Cloudflare sites: sign in to the site's database on this device (its hosting window), and turn on “Publish from any device” once in Settings → Hostings → Hosting accounts on a device that has the Cloudflare token." : " Connect it in Settings → Hostings → Hosting accounts."}</p>}
       {chosen.some((t) => t.kind === "hosted" && t.project.host!.kind === "netlify") && <p className="hint">Netlify allows 3 deploys a minute; with more sites the Studio waits and carries on by itself.</p>}
       {finished && <p className="hint">GitHub Pages sites show the update about a minute after it's pushed; Netlify and Cloudflare sites at once.</p>}
     </Modal>
+  );
+}
+
+/** Settings → Updates: where pushing this Studio build to live sites starts. */
+export function PushUpdatesCard({ index, demo }: { index: StudioIndex; demo?: boolean }) {
+  const j = useJob(), n = index.projects.filter((p) => p.publish || p.host).length;
+  return (
+    <section className="card flex flex-col gap-3 p-5" aria-label="Live sites">
+      <h2 className="text-lg font-extrabold">Live sites</h2>
+      <p className="text-sm text-ink-300">Put this Studio build (templates, themes, effects and each site's admin page) on your published sites. Each site keeps its own content and photos. You can minimise the window and keep working while it runs.</p>
+      <p className="text-[13px] text-ink-400">This Studio: build <code className="font-mono text-xs">{STUDIO_BUILD.id}</code>{STUDIO_BUILD.at && <> from {fmtDate(STUDIO_BUILD.at)}</>}. {n ? `${n} published project${n === 1 ? "" : "s"}.` : "No project is published yet."}</p>
+      <div><button type="button" className="btn btn-pri" disabled={!n || demo} onClick={openPushUpdates}>{j.running ? "↻ Show the update in progress" : "↻ Push Studio updates to live sites"}</button></div>
+    </section>
   );
 }
 

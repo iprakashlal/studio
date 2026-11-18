@@ -27,6 +27,7 @@ import { BADGE_DEFAULT, cleanBadge, setCurrentBadge, type BadgeCfg } from "../li
 import { MARK_URI } from "../ui/logo";
 import { FoldAll, FoldCards } from "../ui/fold";
 import { BrandMark, DEFAULT_NAME, brand as currentBrand, setBrand, shrinkImage, useBrand } from "../lib/brand";
+import { PushUpdatesCard, PushUpdatesHost } from "./PushUpdates";
 import { Dashboard } from "./Dashboard";
 import { ProjectView } from "./ProjectView";
 import { NS } from "./App";
@@ -99,7 +100,9 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
   const projectId = route.startsWith("p/") ? route.slice(2) : null;
   const project = projectId && index ? index.projects.find((p) => p.id === projectId) : null;
 
-  const updBanner = updating ? <div role="status" className="fixed bottom-4 left-4 z-50 max-w-sm rounded-lg border border-brand-500/40 bg-ink-900 px-4 py-2.5 text-[13px] text-ink-100 shadow-xl">Updating the Studio to the latest version: {updating}…<br /><span className="text-ink-400">Your projects aren't touched.</span></div> : null;
+  const updNote = updating ? <div role="status" className="fixed bottom-4 left-4 z-50 max-w-sm rounded-lg border border-brand-500/40 bg-ink-900 px-4 py-2.5 text-[13px] text-ink-100 shadow-xl">Updating the Studio to the latest version: {updating}…<br /><span className="text-ink-400">Your projects aren't touched.</span></div> : null;
+  // The live-sites update is mounted once here, so it carries on (minimised) on every Studio screen.
+  const updBanner = <>{updNote}<PushUpdatesHost studio={studio} index={index} token={session.token} /></>;
   const header = (<>{updBanner}
     <header className="sticky top-0 z-40 border-b border-ink-700 bg-ink-950/90 pt-[env(safe-area-inset-top)] backdrop-blur">
       <div className="mx-auto flex max-w-[1400px] flex-wrap items-center gap-3 px-4 py-3 sm:px-6">
@@ -136,7 +139,7 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
     const showCustomize = ["brand", "badge", "pages", "menus"].some((k) => !hid(k)), showHostings = !hid("hosting");
     const want = route.split("/")[1] || "general";
     const tab = (want === "customize" && !showCustomize) || (want === "hostings" && !showHostings) ? "general" : want;
-    const tabList = [["general", "General"], ...(showCustomize ? [["customize", "Customize"]] : []), ...(showHostings ? [["hostings", "Hostings"]] : []), ...(isHosted(session) && !client ? [["update", "Update"]] : []), ...(client ? [] : [["migration", "Migration"]])] as [string, string][];
+    const tabList = [["general", "General"], ...(showCustomize ? [["customize", "Customize"]] : []), ...(showHostings ? [["hostings", "Hostings"]] : []), ["update", "Updates"], ...(client ? [] : [["migration", "Migration"]])] as [string, string][];
     const tabs = <>
       {/* Phones: one dropdown, so the tabs never wrap onto a second row. */}
       <label className="flex flex-col gap-1.5 sm:hidden"><span className="label">Settings section</span>
@@ -146,7 +149,9 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
       {tabList.map(([k, l]) => <a key={k} href={`#/settings${k === "general" ? "" : "/" + k}`} role="tab" aria-selected={tab === k} className={`-mb-px border-b-2 px-3 py-2 text-sm font-semibold ${tab === k ? "border-brand-400 text-ink-100" : "border-transparent text-ink-400 hover:text-ink-100"}`}>{l}</a>)}
     </div></>;
     if (client === undefined && tab !== "general") return <>{header}<main className="mx-auto flex max-w-3xl flex-col gap-4 px-4 py-8 sm:px-6"><h1 className="font-display text-3xl font-extrabold">Settings</h1>{tabs}<SkelRows n={3} label="Loading settings" /></main></>;
-    if ((tab === "migration" && !client) || (tab === "update" && isHosted(session) && !client)) return <>{header}<main className="mx-auto flex max-w-3xl flex-col gap-4 px-4 py-8 sm:px-6"><h1 className="font-display text-3xl font-extrabold">Settings</h1>{tabs}<FoldAll /><FoldCards scope={tab}><MigrationTab key={tab} studio={studio} index={index} session={session} onIndex={setIndex} mode={tab === "update" ? "update" : "move"} /></FoldCards></main></>;
+    // Updates: this Studio build onto live sites, and (a hosted Studio) the Studio's own update.
+    if (tab === "update" && !(isHosted(session) && !client)) return <>{header}<main className="mx-auto flex max-w-3xl flex-col gap-4 px-4 py-8 sm:px-6"><h1 className="font-display text-3xl font-extrabold">Settings</h1>{tabs}<PushUpdatesCard index={index} demo={repo.demo} /></main></>;
+    if ((tab === "migration" && !client) || tab === "update") return <>{header}<main className="mx-auto flex max-w-3xl flex-col gap-4 px-4 py-8 sm:px-6"><h1 className="font-display text-3xl font-extrabold">Settings</h1>{tabs}{tab === "update" && <PushUpdatesCard index={index} demo={repo.demo} />}<FoldAll /><FoldCards scope={tab}><MigrationTab key={tab} studio={studio} index={index} session={session} onIndex={setIndex} mode={tab === "update" ? "update" : "move"} /></FoldCards></main></>;
     return (
       <>{header}
         <main className="mx-auto flex max-w-3xl flex-col gap-4 px-4 py-8 sm:px-6">
@@ -307,7 +312,7 @@ function BadgeCard({ studio, saved, onIndex }: { studio: Studio; saved?: BadgeCf
   const save = async () => {
     if (!/^https?:\/\//i.test(b.url)) return toast("The link must start with https://", "bad");
     setBusy(true);
-    try { onIndex(await studio.saveBadge(b)); toast("Saved. Publish a site or use Push updates to live sites to show it there."); }
+    try { onIndex(await studio.saveBadge(b)); toast("Saved. Publish a site or use Settings → Updates → Push Studio updates to live sites to show it there."); }
     catch (e) { toast(explain(e), "bad"); }
     setBusy(false);
   };

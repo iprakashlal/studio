@@ -12,7 +12,6 @@ import { loadManifest, loadStarter, type Manifest } from "../lib/exporter";
 import { slugify, timeAgo } from "../lib/util";
 import { Empty, Field, Logo, Modal, useConfirm, useToast } from "../ui/kit";
 import { BrandMark } from "../lib/brand";
-import { PushUpdatesDialog } from "./PushUpdates";
 import { PayNote } from "./PayNote";
 import { loadHostConfig } from "../lib/studiohost";
 import { rvSummary, type RvSummary } from "../lib/approvals";
@@ -59,7 +58,6 @@ export function Dashboard({ studio, index, onIndex, token, hid = () => false, ma
   const canNew = !hid("new") && offered.length > 0;
   const toast = useToast();
   const [live, setLive] = useState<Record<string, "checking" | "pulled" | "conflict">>({});
-  const [pushing, setPushing] = useState(false);
   // What clients said on their review links (a Studio on Cloudflare keeps those), for the cards.
   const [fb, setFb] = useState<Record<string, RvSummary>>({});
   const ids = index.projects.map((p) => p.id).join(",");
@@ -179,12 +177,10 @@ export function Dashboard({ studio, index, onIndex, token, hid = () => false, ma
           <p className="mt-1 text-sm text-ink-400">Create, preview, export and re-edit websites. Every site ships with its own CMS.</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          {index.projects.some((p) => p.publish || p.host) && <button className="btn" onClick={() => setPushing(true)} title="Put the latest templates, themes and admin page on every published site">↻ Push updates to live sites</button>}
           {canNew && <button className="btn btn-pri" onClick={() => setCreating(true)}>+ New project</button>}
         </div>
       </div>
       {full.length > 0 && !hid("new") && <p className="rounded-lg border border-amber-400/40 bg-amber-400/5 px-3 py-2 text-[13px] text-amber-100" role="status">This Studio has reached its limit for {full.map((t) => `${t.name.toLowerCase()} sites (${max[t.id]})`).join(" and ")}. Ask your Studio Partner for more.</p>}
-      {pushing && <PushUpdatesDialog studio={studio} index={index} token={token} onClose={() => setPushing(false)} />}
 
       {only && <a href="#/" className="btn btn-ghost btn-sm self-start text-ink-400">← All projects</a>}
       {!only && stats.length > 0 && <div className="grid grid-cols-2 overflow-hidden rounded-2xl border border-ink-700 bg-ink-900 sm:grid-cols-3 lg:grid-cols-4" aria-label="Studio numbers">

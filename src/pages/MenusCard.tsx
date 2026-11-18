@@ -28,7 +28,7 @@ export function MenusCard({ studio, menus, onIndex }: { studio: Studio; menus: M
   return (
     <section className="card flex flex-col gap-4 p-5" aria-label="Admin menus">
       <h3 className="text-[15px] font-extrabold">Admin menus</h3>
-      <p className="text-sm text-ink-300">Rename the sections in the editor's menu, change their order and headings, or combine sections into one page. Set it per site type. Sites' admin pages use it from their next publish or <b className="text-ink-100">Push updates to live sites</b>; the Studio's own editor too if you switch that on.</p>
+      <p className="text-sm text-ink-300">Rename the sections in the editor's menu, change their order and headings, or combine sections into one page. Set it per site type. Sites' admin pages use it from their next publish or <b className="text-ink-100">Settings → Updates → Push Studio updates to live sites</b>; the Studio's own editor too if you switch that on.</p>
       <div className="flex flex-wrap rounded-lg border border-ink-600 self-start" role="tablist" aria-label="Site type">
         {TEMPLATE_LIST.map((t) => <button key={t.id} type="button" role="tab" aria-selected={tid === t.id} onClick={() => setTid(t.id)} className={`btn btn-sm border-0 ${tid === t.id ? "bg-ink-700" : "bg-transparent"}`}>{t.name}{menus[t.id] ? " •" : ""}</button>)}
       </div>
@@ -62,7 +62,7 @@ function MenuEditor({ tid, saved, studio, onIndex }: { tid: string; saved?: Menu
 
   const save = async (reset = false) => {
     setBusy(true);
-    try { onIndex(await studio.saveMenu(tid, reset || isDefault ? null : cfg)); toast(reset ? "Back to the template's menu." : "Saved. Publish a site or use Push updates to live sites to use it there."); }
+    try { onIndex(await studio.saveMenu(tid, reset || isDefault ? null : cfg)); toast(reset ? "Back to the template's menu." : "Saved. Publish a site or use Settings → Updates → Push Studio updates to live sites to use it there."); }
     catch (e) { toast(explain(e), "bad"); }
     setBusy(false);
   };

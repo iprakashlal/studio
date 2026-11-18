@@ -384,7 +384,7 @@ async function ensure(env: Env) {
 }
 const SETTINGS: Record<string, { secret: string[]; text: string[]; flags: string[] }> = {
   ai: { secret: ["key"], text: ["base", "model", "vision"], flags: ["on"] },
-  wa: { secret: ["token"], text: ["phoneId", "cc", "lang", "to", "phones", "tplOtp", "tplOrder", "tplEnquiry"], flags: ["on", "login", "orderOtp", "orderAlert", "enquiryAlert"] },
+  wa: { secret: ["token"], text: ["phoneId", "waba", "cc", "lang", "to", "phones", "tplOtp", "tplOrder", "tplEnquiry"], flags: ["on", "login", "orderOtp", "orderAlert", "enquiryAlert"] },
   rz: { secret: ["secret"], text: ["keyId"], flags: ["on"] },
 };
 async function aesKey(env: Env) { return crypto.subtle.importKey("raw", await crypto.subtle.digest("SHA-256", enc.encode("settings:" + env.SECRET)), "AES-GCM", false, ["encrypt", "decrypt"]); }
@@ -446,6 +446,34 @@ async function waSend(c: any, to: string, tpl: string, params: string[], otp?: s
     body: JSON.stringify({ messaging_product: "whatsapp", to, type: "template", template: { name: String(tpl).trim(), language: { code: String(c.lang || "en").trim() || "en" }, components: comps } }) });
   if (!r.ok) throw new Error(`WhatsApp didn't accept the message (${r.status}): ` + (await r.text()).replace(/\s+/g, " ").slice(0, 200));
 }
+/* Setting WhatsApp up from the token alone: Meta is asked which WhatsApp account, numbers and templates the token can use. */
+const GRAPH = "https://graph.facebook.com/v21.0";
+async function graph(token: string, path: string, init?: { method?: string; body?: any }): Promise<any> {
+  const r = await fetch(GRAPH + path, { method: init?.method || "GET", headers: { Authorization: "Bearer " + token, ...(init?.body ? { "Content-Type": "application/json" } : {}) }, ...(init?.body ? { body: JSON.stringify(init.body) } : {}) });
+  const j: any = await r.json().catch(() => null);
+  if (!r.ok) { const e: any = new Error(String(j?.error?.error_user_msg || j?.error?.message || `Meta answered ${r.status}.`).slice(0, 300)); e.status = r.status; e.code = j?.error?.code; throw e; }
+  return j;
+}
+/** The WhatsApp accounts a token reaches, each with its numbers and templates. `hint`: an account ID typed by the owner. */
+async function waFind(token: string, hint = ""): Promise<{ wabas: any[]; why?: string }> {
+  const ids = new Set<string>(); let why = "";
+  if (/^\d{6,20}$/.test(hint)) ids.add(hint);
+  try { const d = await graph(token, "/debug_token?input_token=" + encodeURIComponent(token)); for (const g of d?.data?.granular_scopes || []) if (/^whatsapp_business_(management|messaging)$/.test(g?.scope)) for (const t of g.target_ids || []) ids.add(String(t)); if (d?.data?.is_valid === false) why = "Meta says this token isn't valid (it may have expired)."; }
+  catch (e: any) { why = e?.status === 401 || e?.code === 190 ? "Meta refused the token. Check that you copied all of it and that it hasn't expired." : ""; }
+  const wabas: any[] = [];
+  for (const id of [...ids].slice(0, 3)) {
+    try {
+      const ph = await graph(token, `/${id}/phone_numbers?fields=id,display_phone_number,verified_name&limit=20`), tp = await graph(token, `/${id}/message_templates?fields=name,status,category,language&limit=200`).catch(() => ({ data: [] }));
+      wabas.push({ id, phones: (ph?.data || []).map((x: any) => ({ id: String(x.id), number: String(x.display_phone_number || ""), name: String(x.verified_name || "") })), templates: (tp?.data || []).map((x: any) => ({ name: String(x.name), status: String(x.status || ""), category: String(x.category || ""), language: String(x.language || "") })) });
+    } catch (e: any) { why = why || String(e?.message || e); }
+  }
+  return { wabas, ...(wabas.length ? {} : { why: why || "Couldn't tell which WhatsApp account this token belongs to. Paste the WhatsApp Business Account ID too (Meta shows it on the API Setup page, under the phone number)." }) };
+}
+const WA_TPL: Record<string, (lang: string) => any> = {
+  otp: (language) => ({ name: "signin_code", language, category: "authentication", components: [{ type: "body", add_security_recommendation: true }, { type: "footer", code_expiration_minutes: 10 }, { type: "buttons", buttons: [{ type: "otp", otp_type: "copy_code" }] }] }),
+  order: (language) => ({ name: "order_alert", language, category: "utility", components: [{ type: "body", text: "New order {{1}} from {{2}}. To pay {{3}}. {{4}}", example: { body_text: [["ORD-1118-1234", "Asha Rao", "Rs 376", "Delivery, today 7:30 pm"]] } }] }),
+  enquiry: (language) => ({ name: "enquiry_alert", language, category: "utility", components: [{ type: "body", text: "New enquiry from {{1}} ({{2}}): {{3}}", example: { body_text: [["Asha Rao", "9876543210", "Do you take group bookings on Sunday?"]] } }] }),
+};
 const waReady = (c: any) => !!(c && c.on && c.token && String(c.phoneId || "").trim());
 /** "name@site.com = +91 98…" lines: the WhatsApp number of each person who signs in. */
 const waPhoneOf = (lines: unknown, email: string) => { for (const l of String(lines || "").split(/\n/)) { const i = l.indexOf("="); if (i > 0 && l.slice(0, i).trim().toLowerCase() === email) return l.slice(i + 1).trim(); } return ""; };
@@ -576,7 +604,7 @@ export default {
     if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
     const u = new URL(req.url), p = u.pathname.replace(/\/+$/, "") || "/";
     try {
-      if (p === "/") return json({ ok: true, service: "site-studio-db", v: V, mail: !!(env.RESEND_API_KEY && env.MAIL_FROM), ...(env.CF_TOKEN && env.CF_ACCOUNT ? { deploy: true, account: env.CF_ACCOUNT } : {}), ...(env.GH_TOKEN ? { gh: true } : {}), ...(env.AI ? { ai: true, pamphlet: 2 } : {}), reviews: true, look: 1, outline: 1, pictures: 1, connect: 1, translate: 4, approvals: 1, accounts: 2, cfx: 4, studioPages: 1, del: 1, enqMail: 3, ...(otherAccounts(env).length ? { more: otherAccounts(env).length } : {}) });
+      if (p === "/") return json({ ok: true, service: "site-studio-db", v: V, mail: !!(env.RESEND_API_KEY && env.MAIL_FROM), ...(env.CF_TOKEN && env.CF_ACCOUNT ? { deploy: true, account: env.CF_ACCOUNT } : {}), ...(env.GH_TOKEN ? { gh: true } : {}), ...(env.AI ? { ai: true, pamphlet: 2 } : {}), reviews: true, look: 1, outline: 1, pictures: 1, connect: 2, translate: 4, approvals: 1, accounts: 2, cfx: 4, studioPages: 1, del: 1, enqMail: 3, ...(otherAccounts(env).length ? { more: otherAccounts(env).length } : {}) });
 
       // The owner's own AI API in the place of Workers AI, when a request asks for it.
       if (p.startsWith("/ai/") && u.searchParams.get("engine") === "custom") {
@@ -873,8 +901,35 @@ export default {
       if (!role) return err(403, `${email} isn't a member of this ${scope.startsWith("site:") ? "site" : "Studio"}.`);
 
       // ---- connections (the owner's own AI API, WhatsApp, Razorpay): owners set them; the keys are never sent back
-      if (p === "/set" || p === "/set/test") {
+      if (p === "/set" || p === "/set/test" || p === "/set/wa") {
         if (role !== "owner") return err(403, "Only an owner can change connections.");
+        // WhatsApp set up from the token: find the account, make the templates, send a test code.
+        if (p === "/set/wa" && req.method === "POST") {
+          const b = (await req.json()) as any, old = (await getSetting(env, scope, "wa")) || {}, token = String(b.token || "").trim() || String(old.token || "");
+          if (!token) return json({ error: "Paste the access token first." });
+          if (b.do === "find") {
+            const f = await waFind(token, String(b.waba || old.waba || "").trim());
+            // A token that works is kept at once, so the next steps need nothing typed again.
+            if (f.wabas.length && String(b.token || "").trim()) await putSetting(env, scope, "wa", { ...old, token });
+            return json(f);
+          }
+          if (b.do === "templates") {
+            const waba = String(b.waba || old.waba || "").trim(); if (!/^\d{6,20}$/.test(waba)) return json({ error: "Which WhatsApp account? Press Connect first." });
+            const lang = String(b.lang || old.lang || "en").trim() || "en", out: any[] = [];
+            for (const k of (Array.isArray(b.make) ? b.make : []).filter((x: string) => WA_TPL[x]).slice(0, 3)) {
+              const t = WA_TPL[k](lang);
+              try { const r = await graph(token, `/${waba}/message_templates`, { method: "POST", body: t }); out.push({ kind: k, name: t.name, status: String(r?.status || "PENDING") }); }
+              catch (e: any) { out.push({ kind: k, name: t.name, ...(/already exists|2388024/i.test(String(e?.message) + e?.code) ? { status: "EXISTS" } : { error: String(e?.message || e).slice(0, 240) }) }); }
+            }
+            return json({ made: out });
+          }
+          if (b.do === "test") {
+            const to = waNum(b.to, old.cc), tpl = String(b.tpl || old.tplOtp || "").trim(), phoneId = String(b.phoneId || old.phoneId || "").trim();
+            if (!to) return json({ error: "Enter the WhatsApp number to send the test to." }); if (!tpl || !phoneId) return json({ error: "Choose the number to send from and the template for codes first." });
+            try { await waSend({ token, phoneId, lang: b.lang || old.lang }, to, tpl, ["123456"], "123456"); return json({ ok: true }); } catch (e: any) { return json({ error: String(e?.message || e).slice(0, 300) }); }
+          }
+          return err(400, "Unknown step.");
+        }
         if (p === "/set" && req.method === "GET") { const o: any = {}; for (const n of Object.keys(SETTINGS)) o[n] = maskSetting(n, await getSetting(env, scope, n)); return json(o); }
         const b = (await req.json()) as any, name = String(b.name || ""), S = SETTINGS[name]; if (!S) return err(400, "Unknown connection.");
         if (p === "/set/test") {

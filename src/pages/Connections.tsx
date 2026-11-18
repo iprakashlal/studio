@@ -1,7 +1,7 @@
 // Connections an owner can switch on, kept on their own Cloudflare database (encrypted there, never sent back):
 // their own AI API, WhatsApp (Meta's WhatsApp Business Cloud API) and Razorpay.
 // Each form shows what is saved (a key only as "saved"), and a key box left empty keeps the saved key.
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { cfCall, cfSession, signedInApi } from "../lib/cfdb";
 import { Field, Toggle, useToast } from "../ui/kit";
 
@@ -23,7 +23,9 @@ function useSaved(w: Where | null) {
   };
   useEffect(() => { setSaved(null); load(); }, [w?.api, w?.scope]);
   const save = async (name: Kind, value: Record<string, any> | null) => { const r = await cfCall<any>(w!.api, "/set?scope=" + encodeURIComponent(w!.scope), { method: "POST", body: JSON.stringify({ name, value }) }); setSaved((s) => ({ ...(s as Saved), [name]: value ? r.value : null })); };
-  return { saved, err, save, load };
+  /** Notes on this device that a secret is now saved, without loading everything again. */
+  const mark = (name: Kind, patch: Record<string, any>) => setSaved((s) => (s ? { ...s, [name]: { ...(s[name] || {}), ...patch } } : s));
+  return { saved, err, save, load, mark };
 }
 const txt = (v: any) => String(v ?? "");
 function Secret({ id, label, saved, value, onChange, hint }: { id: string; label: string; saved: boolean; value: string; onChange: (v: string) => void; hint?: string }) {
@@ -69,44 +71,105 @@ const WA_FLAGS: Record<string, [string, string][]> = {
   studio: [["login", "Send Studio sign-in codes on WhatsApp too"]],
   site: [["login", "Send this site's admin sign-in codes on WhatsApp too"], ["enquiryAlert", "Message me when an enquiry or booking arrives"], ["orderAlert", "Message me when an order is placed"], ["orderOtp", "Ask guests to verify their mobile number with a WhatsApp code before ordering (restaurant Order now page)"]],
 };
-/** WhatsApp through Meta's Cloud API. `kind`: the Studio's own sign-in, or a site (sign-in, alerts, a guest's code). */
+type WaFound = { id: string; phones: { id: string; number: string; name: string }[]; templates: { name: string; status: string; category: string; language: string }[] };
+const WA_LINKS: [string, string, string][] = [
+  ["1. Get the access token", "https://business.facebook.com/settings/system-users", "Meta Business settings → System users → Add → Generate token, with whatsapp_business_messaging and whatsapp_business_management ticked and “Never” for expiry."],
+  ["API Setup (your number)", "https://developers.facebook.com/apps/", "Meta for Developers → your app → WhatsApp → API Setup. No app yet? Create one there with the WhatsApp product."],
+  ["Message templates", "https://business.facebook.com/wa/manage/message-templates/", "WhatsApp Manager, where templates and their approval show."],
+];
+/** WhatsApp through Meta's Cloud API. `kind`: the Studio's own sign-in, or a site (sign-in, alerts, a guest's code).
+    Set up from the token alone: Connect asks Meta for the account, its numbers and its templates, and fills the form in. */
 export function WhatsAppForm({ where, kind }: { where: Where | null | undefined; kind: "studio" | "site" }) {
-  const toast = useToast(), { saved, err, save } = useSaved(where || null);
-  const blank = { on: false, phoneId: "", token: "", cc: "91", lang: "en", to: "", phones: "", tplOtp: "", tplOrder: "", tplEnquiry: "", login: false, orderOtp: false, orderAlert: false, enquiryAlert: false };
-  const [f, setF] = useState<Record<string, any>>(blank), [busy, setBusy] = useState(false);
-  useEffect(() => { const w = saved?.wa; setF(w ? { ...blank, ...w, token: "" } : blank); }, [saved]);
+  const toast = useToast(), { saved, err, save, mark } = useSaved(where || null), keep = useRef(false);
+  const blank = { on: false, phoneId: "", waba: "", token: "", cc: "91", lang: "en", to: "", phones: "", tplOtp: "", tplOrder: "", tplEnquiry: "", login: false, orderOtp: false, orderAlert: false, enquiryAlert: false };
+  const [f, setF] = useState<Record<string, any>>(blank), [busy, setBusy] = useState(""), [found, setFound] = useState<WaFound[] | null>(null), [note, setNote] = useState(""), [testTo, setTestTo] = useState(""), [hand, setHand] = useState(false);
+  useEffect(() => { if (keep.current) { keep.current = false; return; } const w = saved?.wa; setF(w ? { ...blank, ...w, token: "" } : blank); }, [saved]);
   const lead = <>Optional. Messages go through your own WhatsApp Business account (Meta's WhatsApp Business Cloud API), and Meta charges you per message. Nothing is sent on WhatsApp unless this is switched on and the matching box below is ticked; email keeps working as before.</>;
   if (where === undefined) return <Shell title="WhatsApp" lead={lead}><Missing why="Checking your database…" /></Shell>;
   if (!where) return <Shell title="WhatsApp" lead={lead}><Missing why={kind === "studio" ? "WhatsApp is kept on the Studio's Cloudflare database. Host the Studio on Cloudflare (Settings → Hostings) and sign in there as its owner." : "WhatsApp needs this site hosted on your Cloudflare database, and you signed in to it on this device as its owner."} /></Shell>;
   if (err) return <Shell title="WhatsApp" lead={lead}><Missing why={err} /></Shell>;
   const w = saved?.wa, set = (k: string) => (e: any) => setF({ ...f, [k]: e.target.value });
-  const needOtp = f.login || f.orderOtp, ok = !f.on || (!!f.phoneId.trim() && (!!f.token.trim() || !!w?.token));
-  const doSave = async () => { setBusy(true); try { await save("wa", { ...f, token: f.token.trim() }); setF((x) => ({ ...x, token: "" })); toast(f.on ? "WhatsApp is saved and on." : "Saved. WhatsApp is off."); } catch (e: any) { toast(e?.message || "Couldn't save that.", "bad"); } setBusy(false); };
+  const call = (body: any) => cfCall<any>(where.api, "/set/wa?scope=" + encodeURIComponent(where.scope), { method: "POST", body: JSON.stringify(body) });
+  const acct = found?.find((a) => a.id === f.waba) || found?.[0] || null;
+  const tpls = (cat: string) => (acct?.templates || []).filter((t) => t.category.toUpperCase() === cat && t.status.toUpperCase() === "APPROVED");
+  const waiting = (acct?.templates || []).filter((t) => /PENDING|IN_APPEAL/i.test(t.status)).map((t) => t.name);
+  const needOtp = f.login || f.orderOtp, wantAlerts = kind === "site" && (f.orderAlert || f.enquiryAlert);
+  // A phone number typed where the ID belongs is the usual slip: the ID is longer and isn't the number.
+  const idLooksLikePhone = /^\+?\d{10,12}$/.test(String(f.phoneId).replace(/\s/g, "")) && String(f.phoneId).replace(/\D/g, "").length <= 12;
+  const ok = !f.on || (!!String(f.phoneId).trim() && !idLooksLikePhone && (!!f.token.trim() || !!w?.token));
+  const fill = (list: WaFound[], cur: Record<string, any>) => {
+    const a = list.find((x) => x.id === cur.waba) || list[0], n: Record<string, any> = { ...cur, waba: a.id, token: "" };
+    const ap = (cat: string) => a.templates.filter((t) => t.category.toUpperCase() === cat && t.status.toUpperCase() === "APPROVED");
+    if (!a.phones.some((p) => p.id === n.phoneId)) n.phoneId = a.phones[0]?.id || "";
+    const pick = (now: string, cat: string, like: RegExp) => (ap(cat).some((t) => t.name === now) ? now : (ap(cat).find((t) => like.test(t.name)) || (cat === "AUTHENTICATION" ? ap(cat)[0] : undefined))?.name || "");
+    n.tplOtp = pick(n.tplOtp, "AUTHENTICATION", /code|otp|login|sign/i); n.tplOrder = pick(n.tplOrder, "UTILITY", /order/i); n.tplEnquiry = pick(n.tplEnquiry, "UTILITY", /enquir|inquir|lead|booking/i);
+    const used = a.templates.find((t) => t.name === n.tplOtp) || a.templates.find((t) => t.status.toUpperCase() === "APPROVED"); if (used?.language) n.lang = used.language;
+    n.on = true; if (kind === "studio") n.login = true;
+    return n;
+  };
+  const connect = async () => {
+    setBusy("Connecting"); setNote("");
+    try {
+      const r = await call({ do: "find", token: f.token.trim(), waba: String(f.waba).trim() });
+      if (r?.error) throw new Error(r.error);
+      if (!r.wabas?.length) { setFound(null); setHand(true); setNote(r.why || "Couldn't find your WhatsApp account from that token."); }
+      else { setFound(r.wabas); if (f.token.trim()) { keep.current = true; mark("wa", { token: true }); } setF((x) => fill(r.wabas, x)); const a = r.wabas[0]; setNote(`Connected: ${a.phones.length} number${a.phones.length === 1 ? "" : "s"} and ${a.templates.length} template${a.templates.length === 1 ? "" : "s"} found. Check the boxes below and press Save.`); }
+    } catch (e: any) { setNote(e?.status === 404 ? "This needs the database updated once (Settings → Hostings → Update the database)." : e?.message || "Couldn't reach Meta."); }
+    setBusy("");
+  };
+  const missing = [needOtp && !tpls("AUTHENTICATION").length ? "otp" : "", kind === "site" && f.orderAlert && !tpls("UTILITY").some((t) => t.name === f.tplOrder) ? "order" : "", kind === "site" && f.enquiryAlert && !tpls("UTILITY").some((t) => t.name === f.tplEnquiry) ? "enquiry" : ""].filter(Boolean);
+  const makeTemplates = async () => {
+    setBusy("Creating"); setNote("");
+    try { const r = await call({ do: "templates", waba: f.waba, lang: f.lang, make: missing }); if (r?.error) throw new Error(r.error);
+      const bad = (r.made || []).filter((m: any) => m.error), done = (r.made || []).filter((m: any) => !m.error).map((m: any) => m.name);
+      setNote((done.length ? `Sent to Meta for approval: ${done.join(", ")}. Approval usually takes a few minutes; press Connect again to pick them up. ` : "") + bad.map((m: any) => `${m.name}: ${m.error}`).join(" "));
+    } catch (e: any) { setNote(e?.message || "Couldn't create the templates."); }
+    setBusy("");
+  };
+  const doSave = async () => { setBusy("Saving"); try { await save("wa", { ...f, token: f.token.trim() }); setF((x) => ({ ...x, token: "" })); toast(f.on ? "WhatsApp is saved and on." : "Saved. WhatsApp is off."); } catch (e: any) { toast(e?.message || "Couldn't save that.", "bad"); } setBusy(""); };
+  const test = async () => { setBusy("Testing"); try { const r = await call({ do: "test", to: testTo, tpl: f.tplOtp, phoneId: f.phoneId, lang: f.lang }); if (r?.error) throw new Error(r.error); toast("Sent. A test code (123456) should arrive on WhatsApp in a moment."); } catch (e: any) { toast(e?.message || "The test wasn't sent.", "bad"); } setBusy(""); };
+  const tplField = (id: string, label: string, k: string, cat: string, hint: string) => (
+    <Field label={label} htmlFor={id} hint={hint}>{acct ? <select id={id} className="input" value={f[k]} onChange={set(k)}><option value="">{tpls(cat).length ? "Choose a template" : "No approved template yet"}</option>{tpls(cat).map((t) => <option key={t.name + t.language} value={t.name}>{t.name} ({t.language})</option>)}{f[k] && !tpls(cat).some((t) => t.name === f[k]) && <option value={f[k]}>{f[k]} (not approved yet)</option>}</select> : <input id={id} className="input" value={f[k]} onChange={set(k)} />}</Field>);
   return (
     <Shell title="WhatsApp" on={!!(w?.on && w.token)} lead={lead}>
       <Toggle id="wa-on" checked={!!f.on} onChange={(v: boolean) => setF({ ...f, on: v })} label="Use WhatsApp" />
       {f.on && <>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Phone number ID" htmlFor="wa-id" hint="Meta for Developers → your app → WhatsApp → API Setup. A long number, not the phone number itself."><input id="wa-id" className="input" inputMode="numeric" value={f.phoneId} onChange={set("phoneId")} /></Field>
-          <Secret id="wa-token" label="Access token" saved={!!w?.token} value={f.token} onChange={(v) => setF({ ...f, token: v })} hint={w?.token ? undefined : "A permanent token of a System User with the whatsapp_business_messaging permission. Typed here, it goes straight to your database and is stored encrypted."} />
-          <Field label="Country code for 10-digit numbers" htmlFor="wa-cc"><input id="wa-cc" className="input" inputMode="numeric" value={f.cc} onChange={set("cc")} /></Field>
-          <Field label="Template language" htmlFor="wa-lang" hint="The language code your templates were approved in, for example en or en_US."><input id="wa-lang" className="input" value={f.lang} onChange={set("lang")} /></Field>
+        <div className="flex flex-col gap-2 rounded-lg border border-ink-600 p-3" aria-label="Connect WhatsApp">
+          <b className="text-ink-100">Connect with your access token</b>
+          <p className="text-[13px] text-ink-300">Paste the token and press Connect: the Studio asks Meta for your WhatsApp account, your number and your templates, and fills in the rest.</p>
+          <div className="flex flex-wrap gap-2">{WA_LINKS.map(([l, u, t]) => <a key={u} className="btn btn-sm" href={u} target="_blank" rel="noopener noreferrer" title={t}>{l} ↗</a>)}</div>
+          <p className="text-[12.5px] text-ink-400">{WA_LINKS[0][2]}</p>
+          <div className="flex flex-wrap items-end gap-2">
+            <div className="min-w-[240px] flex-1"><Secret id="wa-token" label="Access token" saved={!!w?.token} value={f.token} onChange={(v) => setF({ ...f, token: v })} hint={w?.token ? "A token is saved. Paste a new one only to replace it." : "It goes straight to your database and is stored encrypted. It is never shown again."} /></div>
+            <button type="button" className="btn btn-pri" disabled={!!busy || (!f.token.trim() && !w?.token)} onClick={connect}>{busy === "Connecting" ? "Connecting…" : found ? "Connect again" : "Connect"}</button>
+          </div>
+          {note && <p role="status" className="rounded-lg border border-ink-600 px-3 py-2 text-[13px] text-ink-200">{note}</p>}
+          {!found && <button type="button" className="self-start text-[12.5px] text-ink-400 underline" onClick={() => setHand(!hand)}>{hand ? "Hide the boxes for filling in by hand" : "Fill in by hand instead"}</button>}
         </div>
+        {(found || hand || w?.phoneId) && <div className="grid gap-3 sm:grid-cols-2">
+          <Field label={acct ? "Send from" : "Phone number ID"} htmlFor="wa-id" hint={acct ? "The WhatsApp number messages go out from." : "On the API Setup page: a number of about 15 digits labelled “Phone number ID”. It is not the phone number itself."} warn={idLooksLikePhone ? "That looks like the phone number. The Phone number ID is a different, longer number shown under it on the API Setup page. Press Connect and it is filled in for you." : undefined}>
+            {acct ? <select id="wa-id" className="input" value={f.phoneId} onChange={set("phoneId")}>{acct.phones.map((p) => <option key={p.id} value={p.id}>{p.number}{p.name ? ` · ${p.name}` : ""}</option>)}{!acct.phones.length && <option value="">No number on this account yet</option>}</select> : <input id="wa-id" className="input" inputMode="numeric" value={f.phoneId} onChange={set("phoneId")} />}</Field>
+          {!acct && <Field label="WhatsApp Business Account ID (optional)" htmlFor="wa-waba" hint="Shown on the API Setup page. With it, Connect can find your numbers and templates."><input id="wa-waba" className="input" inputMode="numeric" value={f.waba} onChange={set("waba")} /></Field>}
+          <Field label="Country code for 10-digit numbers" htmlFor="wa-cc"><input id="wa-cc" className="input" inputMode="numeric" value={f.cc} onChange={set("cc")} /></Field>
+          {!acct && <Field label="Template language" htmlFor="wa-lang" hint="The language code your templates were approved in, for example en or en_US."><input id="wa-lang" className="input" value={f.lang} onChange={set("lang")} /></Field>}
+        </div>}
         <fieldset className="flex flex-col gap-2 rounded-lg border border-ink-700 p-3"><legend className="label px-1">Use it for</legend>
           {WA_FLAGS[kind].map(([k, l]) => <label key={k} className="flex items-start gap-2.5 text-sm"><input type="checkbox" className="mt-0.5" checked={!!f[k]} onChange={(e) => setF({ ...f, [k]: e.target.checked })} /><span>{l}</span></label>)}
         </fieldset>
-        {needOtp && <Field label="Template for codes (an Authentication template)" htmlFor="wa-otp" hint="WhatsApp Manager → Message templates → Create → Authentication → Copy code. Type its name here exactly."><input id="wa-otp" className="input" placeholder="login_code" value={f.tplOtp} onChange={set("tplOtp")} /></Field>}
+        {acct && missing.length > 0 && <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-400/40 bg-amber-400/5 px-3 py-2 text-[13px] text-amber-100" role="status"><span>{waiting.length ? `Waiting for Meta to approve: ${waiting.join(", ")}.` : `Your account has no approved template yet for ${missing.map((m) => (m === "otp" ? "codes" : m === "order" ? "order alerts" : "enquiry alerts")).join(", ")}.`}</span>{!waiting.length && <button type="button" className="btn btn-sm btn-pri" disabled={!!busy} onClick={makeTemplates}>{busy === "Creating" ? "Creating…" : "Create the templates for me"}</button>}</div>}
+        {needOtp && tplField("wa-otp", "Template for codes (Authentication)", "tplOtp", "AUTHENTICATION", acct ? "An approved Authentication template with a copy-code button." : "WhatsApp Manager → Message templates → Create → Authentication → Copy code. Type its name here exactly.")}
         {f.login && <Field label="Who gets sign-in codes on WhatsApp" htmlFor="wa-phones" hint="One per line: the email they sign in with, an equals sign, their WhatsApp number. Anyone not listed gets the email only."><textarea id="wa-phones" className="input min-h-[70px] font-mono text-[13px]" placeholder={"owner@example.com = +91 98xxxxxxxx"} value={f.phones} onChange={set("phones")} /></Field>}
-        {kind === "site" && (f.orderAlert || f.enquiryAlert) && <>
+        {wantAlerts && <>
           <Field label="Send alerts to (up to 3 numbers)" htmlFor="wa-to"><input id="wa-to" className="input" placeholder="+91 98xxxxxxxx, +91 97xxxxxxxx" value={f.to} onChange={set("to")} /></Field>
           <div className="grid gap-3 sm:grid-cols-2">
-            {f.orderAlert && <Field label="Template for a new order (Utility)" htmlFor="wa-ord" hint="Body with four variables, for example: New order {{1}} from {{2}}. To pay {{3}}. {{4}}"><input id="wa-ord" className="input" placeholder="order_alert" value={f.tplOrder} onChange={set("tplOrder")} /></Field>}
-            {f.enquiryAlert && <Field label="Template for a new enquiry (Utility)" htmlFor="wa-enq" hint="Body with three variables, for example: New enquiry from {{1}} ({{2}}): {{3}}"><input id="wa-enq" className="input" placeholder="enquiry_alert" value={f.tplEnquiry} onChange={set("tplEnquiry")} /></Field>}
+            {f.orderAlert && tplField("wa-ord", "Template for a new order (Utility)", "tplOrder", "UTILITY", "Body with four variables, for example: New order {{1}} from {{2}}. To pay {{3}}. {{4}}")}
+            {f.enquiryAlert && tplField("wa-enq", "Template for a new enquiry (Utility)", "tplEnquiry", "UTILITY", "Body with three variables, for example: New enquiry from {{1}} ({{2}}): {{3}}")}
           </div>
         </>}
-        <p className="text-[12.5px] text-ink-400">WhatsApp only lets a business start a conversation with a template Meta has approved, so each use above needs its template created in WhatsApp Manager first. If WhatsApp refuses a message, the enquiry or order is still saved and emailed, and says why under “WhatsApp”.</p>
+        {needOtp && f.tplOtp && String(f.phoneId).trim() && !idLooksLikePhone && <div className="flex flex-wrap items-end gap-2"><div className="min-w-[200px] flex-1"><Field label="Try it: send a test code to" htmlFor="wa-test"><input id="wa-test" className="input" inputMode="tel" placeholder="+91 98xxxxxxxx" value={testTo} onChange={(e) => setTestTo(e.target.value)} /></Field></div><button type="button" className="btn" disabled={!!busy || !testTo.trim()} onClick={test}>{busy === "Testing" ? "Sending…" : "Send a test code"}</button></div>}
+        <p className="text-[12.5px] text-ink-400">WhatsApp only lets a business start a conversation with a template Meta has approved. If WhatsApp refuses a message, the enquiry or order is still saved and emailed, and says why under “WhatsApp”.</p>
       </>}
-      <div className="flex gap-2"><button type="button" className="btn btn-sm btn-pri" disabled={!ok || busy} onClick={doSave}>{busy ? "Saving…" : "Save"}</button>{w && <button type="button" className="btn btn-sm btn-danger ml-auto" disabled={busy} onClick={async () => { setBusy(true); try { await save("wa", null); toast("WhatsApp removed."); } catch (e: any) { toast(e?.message || "Couldn't remove it.", "bad"); } setBusy(false); }}>Remove</button>}</div>
+      <div className="flex gap-2"><button type="button" className="btn btn-sm btn-pri" disabled={!ok || !!busy} onClick={doSave}>{busy === "Saving" ? "Saving…" : "Save"}</button>{w && <button type="button" className="btn btn-sm btn-danger ml-auto" disabled={!!busy} onClick={async () => { setBusy("Removing"); try { await save("wa", null); setFound(null); setNote(""); toast("WhatsApp removed."); } catch (e: any) { toast(e?.message || "Couldn't remove it.", "bad"); } setBusy(""); }}>Remove</button>}</div>
     </Shell>
   );
 }

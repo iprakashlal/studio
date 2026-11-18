@@ -60,6 +60,7 @@ const schema: Category[] = [
     id: "pages", label: "Sections & order", group: "Pages", desc: "One page or several, which sections show, their order, the announcement bar and the phone's quick buttons.",
     cards: [
       { title: "Pages", fields: [{ t: "toggle", path: "site.multiPage", label: "Use several pages (Home, Menu, Our story, Gallery, Visit & book)" },
+        { t: "toggle", path: "site.crumbs", label: "Show the page trail (Home / Page name) at the top of inner pages" },
         { t: "note", text: "Off: one page with every section, and the menu bar scrolls to them. On: Home shows the highlights (hero, story, signature dishes, the first menu sections, offers, a few photos, reviews) and the menu bar opens the Menu, Our story, Gallery and Visit & book pages. The Menu page (menu.html) is a good address for a table QR code." },
         { t: "when", path: "site.multiPage", is: "true", fields: [g3({ t: "text", path: "site.pageLabels.home", label: "Home page name" }, { t: "text", path: "site.pageLabels.menu", label: "Menu page name" }, { t: "text", path: "site.pageLabels.about", label: "Story page name" },
           { t: "text", path: "site.pageLabels.gallery", label: "Gallery page name" }, { t: "text", path: "site.pageLabels.contact", label: "Visit & book page name" })] }] },

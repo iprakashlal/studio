@@ -467,3 +467,6 @@ html[data-bands=slant] .band{background:color-mix(in srgb,var(--surface) 55%,var
 html:is([data-bands=panel],[data-bands=outline]) .band>.wrap{box-sizing:border-box;border-radius:calc(var(--r) + 16px);padding:clamp(30px,4.6vw,68px) clamp(18px,3.6vw,52px)}
 html[data-bands=panel] .band>.wrap{background:var(--surface);box-shadow:0 34px 84px -56px rgba(16,24,40,.5)}
 html[data-bands=outline] .band>.wrap{border:1px solid var(--line)}
+
+/* The page trail (Home / Page name) can be switched off: Sections & order → Pages */
+html[data-crumbs=off] :is(.crumbs,.sp-crumbs,.solo-top){display:none}

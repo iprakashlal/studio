@@ -618,3 +618,6 @@ html[data-hero-art=none] .hero:not(.hx) .wrap{grid-template-columns:1fr}
   html[data-menumob=scroll] .hdr{position:relative}
   html[data-menumob=fixed][data-menu=scroll] .hdr{position:sticky}
 }
+
+/* The page trail (Home / Page name) can be switched off: Sections & order → Pages */
+html[data-crumbs=off] :is(.crumbs,.sp-crumbs,.solo-top){display:none}

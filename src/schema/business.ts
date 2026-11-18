@@ -49,6 +49,7 @@ const schema: Category[] = [
     id: "pages", label: "Sections & order", group: "Pages", desc: "One page or several, which sections show, their order and the menu.",
     cards: [
       { title: "Pages", fields: [{ t: "toggle", path: "site.multiPage", label: "Use several pages (Home, Services, Products, Work, About, Contact)" },
+        { t: "toggle", path: "site.crumbs", label: "Show the page trail (Home / Page name) at the top of inner pages" },
         { t: "note", text: "Off: one page with every section, and the menu scrolls to them. On: Home shows the highlights (hero, clients, a few services, numbers, a few case studies, testimonials) and the menu opens Services, Work, About and Contact pages." },
         { t: "when", path: "site.multiPage", is: "true", fields: [g3({ t: "text", path: "site.pageLabels.home", label: "Home page name" }, { t: "text", path: "site.pageLabels.services", label: "Services page name" }, { t: "text", path: "site.pageLabels.products", label: "Products page name" }, { t: "text", path: "site.pageLabels.work", label: "Work page name" },
           { t: "text", path: "site.pageLabels.about", label: "About page name" }, { t: "text", path: "site.pageLabels.contact", label: "Contact page name" })] }] },

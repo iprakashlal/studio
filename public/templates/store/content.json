@@ -58,6 +58,7 @@
     "meta": []
   },
   "nav": {
+    "crumbs": true,
     "home": "Home",
     "shop": "Shop",
     "portfolio": "Our story",

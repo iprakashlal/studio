@@ -19,7 +19,7 @@ const DEFAULT = {
   cms: { adminPage: "admin" },
   poweredBy: { show: true },
   brand: { name: "Picaffectz", tagline: "Strategy, design and engineering for growing companies", logo: null, showName: true },
-  site: { multiPage: false, pageLabels: { home: "Home", services: "Services", products: "Products", work: "Work", about: "About", contact: "Contact" } },
+  site: { multiPage: false, crumbs: true, pageLabels: { home: "Home", services: "Services", products: "Products", work: "Work", about: "About", contact: "Contact" } },
   nav: { cta: "Book a call", ctaTarget: "contact" },
   sections: [
     { id: "hero", label: "Home", show: true, inNav: false },
@@ -258,7 +258,7 @@ function applyTheme(t) {
   const d = document.documentElement.dataset;
   for (const k of ["layout", "heroArt", "nav", "cards", "buttons", "motionStyle", "pattern", "heading", "shead", "width", "bands", "cursor", "loader", "textfx", "hoverfx", "scrollfx", "overlay"]) d[k] = String(t[k] || "");
   d.scrollease = t.scrollEase || "light"; d.linebreaks = t.lineBreaks || "typed"; d.menu = String(t.navMode || ""); d.menumob = String(t.navModeMob || "");
-  d.introfont = t.introFont || "display"; d.introcase = t.introCase || "upper"; d.dark = String(onColor(t.bg) === "#FFFFFF");
+  d.crumbs = (C.site || {}).crumbs === false ? "off" : "on"; d.introfont = t.introFont || "display"; d.introcase = t.introCase || "upper"; d.dark = String(onColor(t.bg) === "#FFFFFF");
   [[FONTS[t.fontDisplay], "fontlink"], [FONTS[t.fontBody], "fontlink2"]].forEach(([f, id]) => {
     let l = document.getElementById(id); if (!l) { l = document.createElement("link"); l.id = id; l.rel = "stylesheet"; document.head.appendChild(l); }
     const h = f ? "https://fonts.googleapis.com/css2?family=" + f + "&display=swap" : ""; if (h && l.getAttribute("href") !== h) l.setAttribute("href", h);

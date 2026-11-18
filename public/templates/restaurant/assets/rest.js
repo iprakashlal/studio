@@ -21,7 +21,7 @@ const DEFAULT = {
   cms: { adminPage: "admin" },
   poweredBy: { show: true },
   brand: { name: "Picaffectz", tagline: "Slow-cooked food, served warm", logo: null, showName: true },
-  site: { multiPage: false, mobileBar: true, pageLabels: { home: "Home", menu: "Menu", about: "Our story", gallery: "Gallery", contact: "Visit & book" } },
+  site: { multiPage: false, crumbs: true, mobileBar: true, pageLabels: { home: "Home", menu: "Menu", about: "Our story", gallery: "Gallery", contact: "Visit & book" } },
   nav: { cta: "Book a table", ctaTarget: "reserve" },
   notice: { on: false, text: "", label: "", target: "offers" },
   sections: [
@@ -348,7 +348,7 @@ function applyTheme(t) {
   const d = document.documentElement.dataset;
   for (const k of ["layout", "heroArt", "nav", "cards", "buttons", "motionStyle", "pattern", "heading", "shead", "width", "bands", "menuStyle", "divider", "ornament", "gallery", "cursor", "loader", "textfx", "hoverfx", "scrollfx", "overlay"]) d[k] = String(t[k] || "");
   d.scrollease = t.scrollEase || "light"; d.linebreaks = t.lineBreaks || "typed"; d.menu = String(t.navMode || ""); d.menumob = String(t.navModeMob || "");
-  d.introfont = t.introFont || "display"; d.introcase = t.introCase || "upper"; d.dark = String(onColor(t.bg) === "#FFFFFF");
+  d.crumbs = (C.site || {}).crumbs === false ? "off" : "on"; d.introfont = t.introFont || "display"; d.introcase = t.introCase || "upper"; d.dark = String(onColor(t.bg) === "#FFFFFF");
   [[FONTS[t.fontDisplay], "fontlink"], [FONTS[t.fontBody], "fontlink2"]].forEach(([f, id]) => {
     let l = document.getElementById(id); if (!l) { l = document.createElement("link"); l.id = id; l.rel = "stylesheet"; document.head.appendChild(l); }
     const h = f ? "https://fonts.googleapis.com/css2?family=" + f + "&display=swap" : ""; if (h && l.getAttribute("href") !== h) l.setAttribute("href", h);

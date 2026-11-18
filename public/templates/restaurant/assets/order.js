@@ -363,6 +363,7 @@
     ui.err = ""; remember();
     const key = Array.from(crypto.getRandomValues(new Uint8Array(12)), (x) => x.toString(16).padStart(2, "0")).join("");
     const od = { id: newId(), k: key, at: Date.now(), mode: m, when: f.when, whenLabel: whenLabel(f.when, sl), items: cart.map((l) => ({ ...l })), bill: b, taxLabel: o.taxLabel || "Tax", pay: pay.id, payLabel: pay.label, upiId: String((o.pay || {}).upiId || "").trim(), payee: (o.pay || {}).payee || "", notes: String(f.notes || "").trim(), cutlery: !!f.cutlery, intro: o.intro || "", wa: o.whatsapp || C.contact.whatsapp || "",
+      pin: String(f.pin || "").trim(), area: String(f.area || "").trim(),
       c: { name: String(f.name).trim(), phone: String(f.phone).trim(), email: String(f.email || "").trim(), table: String(f.table || "").trim(), address: m === "delivery" ? [f.line1, f.area, f.landmark ? "Near " + f.landmark : "", f.pin].map((x) => String(x || "").trim()).filter(Boolean).join(", ") + ` (${f.label})` : "" }, status: "new", sent: false, live: false };
     // Paying by UPI comes before the order is placed.
     if (pay.id === "upi") { ui.paying = od; ui.utr = ""; ui.drawer = "pay"; over(); return; }
@@ -407,7 +408,7 @@
     const be = A.backend();
     try {
       od.pg = { gw: g, ref: pend.ref, otp: pend.otp }; od.payLabel = "Paid online";
-      const r = await fetch(be.cf + "/enquire/" + encodeURIComponent(be.site), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ page: "order.html", data: orderData(od) }) });
+      const r = await fetch(be.cf + "/enquire/" + encodeURIComponent(be.site), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ page: "order.html", data: orderData(od), cart: cartOf(od) }) });
       const j = await r.json().catch(() => null);
       if (r.status === 502) return again((j && j.error) || "We couldn't confirm the payment just now. Reload this page in a moment; your order is kept.");
       st.set("pend", null);
@@ -422,11 +423,13 @@
     else {
       try {
         const data = orderData(od);
-        const how = await A.postEnquiry(data, "order.html"); od.sent = !!how; od.live = how === "cf"; if ((od.rz || od.pg) && od.sent) od.paid = true;
+        const how = await A.postEnquiry(data, "order.html", cartOf(od)); od.sent = !!how; od.live = how === "cf"; if ((od.rz || od.pg) && od.sent) od.paid = true;
       } catch (e) { od.sent = false; }
     }
     shown(od);
   }
+  /** The cart as the database reads it (to hand the order to the restaurant's billing system when one is connected). */
+  function cartOf(od) { return { mode: od.mode, pin: od.pin || "", area: od.area || "", coupon: od.bill.code || "", tip: od.bill.tip || 0, items: od.items.map((l) => ({ id: l.id, qty: l.qty, variant: l.variant, addons: (l.addons || []).map((a) => a.label) })) }; }
   /** What is saved for an order (it goes to the site's database under Purchased orders). */
   function orderData(od) { const m = od.mode, b = od.bill, pay = { label: od.payLabel }; return { type: "Order", order_no: od.id, okey: od.k, name: od.c.name, phone: od.c.phone, email: od.c.email, mode: MODES[m], when: od.whenLabel, address: od.c.address, table: od.c.table, items: od.items.map((l) => `${l.qty} × ${l.name}${lineText(l) ? ` (${lineText(l)})` : ""}${l.note ? ` [${l.note}]` : ""} = ${txt(l.unit * l.qty)}`).join("\n"), total: txt(b.total), payment: od.utr ? "UPI, paid before ordering" : od.rz ? "Paid online (Razorpay)" : od.pg ? `Paid online (${GW[od.pg.gw].name})` : pay.label, utr: od.utr || "", ...(od.pg ? { pay_gw: od.pg.gw, pay_ref: od.pg.ref, otp_token: od.pg.otp || undefined } : {}), ...(od.rz ? { rz_order: od.rz.razorpay_order_id, rz_payment: od.rz.razorpay_payment_id, rz_sig: od.rz.razorpay_signature } : {}), ...(can.otp && ui.otp ? { otp_token: ui.otp.token } : {}), message: orderText(od) }; }
   /** The order is placed: the cart empties and the page shows it. */

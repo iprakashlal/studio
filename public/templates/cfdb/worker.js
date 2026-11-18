@@ -16,7 +16,7 @@ create index if not exists approvals_project on approvals (scope, project, creat
 create table if not exists approval_notes (id integer primary key autoincrement, token text not null, who text not null, body text not null, page text not null default '', kind text not null default 'comment', created_at text not null);
 create index if not exists approval_notes_token on approval_notes (token, id);
 `;
-var CFDB_VERSION = 27;
+var CFDB_VERSION = 28;
 var CFDB_WORKER_NAME = "picaffectz-db";
 
 // src/lib/lookdigest.ts
@@ -684,7 +684,9 @@ var SETTINGS = {
   cf: { secret: ["secret"], text: ["appId"], flags: ["test"] },
   pe: { secret: ["secret"], text: ["clientId", "version"], flags: ["test"] },
   st: { secret: ["secret"], text: [], flags: [] },
-  pp: { secret: ["secret"], text: ["clientId"], flags: ["test"] }
+  pp: { secret: ["secret"], text: ["clientId"], flags: ["test"] },
+  // Petpooja (the restaurant's billing system): orders placed on the site go to it, and it sends back each order's status.
+  pos: { secret: ["secret", "token"], text: ["appKey", "restId", "url"], flags: ["on"] }
 };
 async function aesKey(env) {
   return crypto.subtle.importKey("raw", await crypto.subtle.digest("SHA-256", enc.encode("settings:" + env.SECRET)), "AES-GCM", false, ["encrypt", "decrypt"]);
@@ -909,6 +911,98 @@ function restBill(c, q) {
   if (mode !== "dinein" && sub < Math.max(0, +o.minOrder || 0)) return { error: "The order is below the minimum." };
   return { total };
 }
+var POS_URL = "https://pponlineordercb.petpooja.com/save_order";
+var posReady = (z) => !!(z && z.on && z.secret && z.token && z.appKey && z.restId);
+function posItems(c, q) {
+  const dishes = /* @__PURE__ */ new Map();
+  for (const k of c?.food?.categories || []) {
+    if (!k || !String(k.name || "").trim()) continue;
+    for (const d of k.items || []) if (d && String(d.name || "").trim()) dishes.set(rslug(k.name) + "/" + rslug(d.name), d);
+  }
+  const items = [];
+  let sub = 0;
+  for (const l of Array.isArray(q?.items) ? q.items.slice(0, 60) : []) {
+    const d = dishes.get(String(l?.id || ""));
+    if (!d) return { error: "a dish that is no longer on the menu" };
+    const V2 = (d.variants || []).filter((v2) => v2 && v2.label && !isNaN(rnum(v2.price))), v = V2.length ? V2.find((x) => String(x.label) === String(l.variant)) : null, qty = Math.max(1, Math.min(50, Math.floor(+l.qty || 0)));
+    const id = String(d.posId || "").trim(), vid = v ? String(v.posId || "").trim() : "";
+    if (!id) return { error: `\u201C${String(d.name).slice(0, 60)}\u201D has no Petpooja item ID` };
+    let unit = v ? rnum(v.price) : rnum(d.price);
+    if (isNaN(unit)) return { error: "a dish whose price changed" };
+    const opts = /* @__PURE__ */ new Map();
+    for (const g of d.addons || []) for (const o of g && g.options || []) {
+      const t = String(o || ""), i = t.lastIndexOf("="), label = (i > 0 ? t.slice(0, i) : t).trim(), pr = i > 0 ? rnum(t.slice(i + 1)) : 0;
+      if (label) opts.set(label, isNaN(pr) ? 0 : pr);
+    }
+    const extras = (Array.isArray(l.addons) ? l.addons.slice(0, 20) : []).map(String).filter((a) => opts.has(a));
+    for (const a of extras) unit += opts.get(a);
+    sub += unit * qty;
+    items.push({ id, name: String(d.name).slice(0, 120), gst_liability: "restaurant", item_tax: [], item_discount: "", price: unit.toFixed(2), final_price: unit.toFixed(2), quantity: String(qty), description: extras.length ? "Extras: " + extras.join(", ") : "", variation_name: v ? String(v.label) : "", variation_id: vid, AddonItem: { details: [] } });
+  }
+  return items.length ? { items, sub } : { error: "an empty cart" };
+}
+async function posSend(env, site, z, c, q, data, origin) {
+  const it = posItems(c, q);
+  if ("error" in it) return "Not sent to Petpooja: " + it.error + ".";
+  const bill = restBill(c, q);
+  if ("error" in bill) return "Not sent to Petpooja: " + bill.error;
+  const o = c.ordering || {}, mode = String(q.mode), now = new Date(Date.now() + 330 * 6e4).toISOString().replace("T", " ").slice(0, 19);
+  const cp = (o.coupons || []).find((x) => x && x.on !== false && +x.value > 0 && String(x.code || "").trim().toUpperCase() === String(q.coupon || "").trim().toUpperCase() && String(q.coupon || "").trim());
+  let disc = 0;
+  if (cp && it.sub >= (+cp.min || 0)) disc = Math.min(it.sub, cp.kind === "flat" ? +cp.value : Math.min(it.sub * +cp.value / 100, +cp.max > 0 ? +cp.max : Infinity));
+  disc = Math.round(disc * 100) / 100;
+  const pack = mode === "dinein" ? 0 : Math.max(0, +o.packing || 0), pct = Math.max(0, +o.taxPercent || 0), tax = o.taxIncluded || !pct ? 0 : Math.round((it.sub - disc + pack) * pct) / 100;
+  const tip = o.tips !== false && mode !== "pickup" ? Math.max(0, Math.min(5e3, +q.tip || 0)) : 0, del = Math.max(0, Math.round((bill.total - (it.sub - disc + pack + tax + tip)) * 100) / 100);
+  const paid = data._paid === "yes", key = b64u(await hmac(env.SECRET, "pos:" + site)).slice(0, 32);
+  const body = { app_key: z.appKey, app_secret: z.secret, access_token: z.token, orderinfo: { OrderInfo: {
+    Restaurant: { details: { res_name: siteName(c, site), address: oneLine(String(c?.contact?.address || "")).slice(0, 300), contact_information: String(c?.contact?.phone || "").slice(0, 40), restID: z.restId } },
+    Customer: { details: { email: String(data.email || ""), name: String(data.name || "Guest").slice(0, 100), address: String(data.address || "").slice(0, 400), phone: String(data.phone || "").replace(/[^\d+]/g, "").slice(0, 16), latitude: "", longitude: "" } },
+    Order: { details: {
+      orderID: data.order_no,
+      preorder_date: now.slice(0, 10),
+      preorder_time: now.slice(11),
+      service_charge: "0",
+      sc_tax_amount: "0",
+      delivery_charges: String(del),
+      dc_tax_amount: "0",
+      dc_gst_details: [],
+      packing_charges: String(pack),
+      pc_tax_amount: "0",
+      pc_gst_details: [],
+      order_type: mode === "delivery" ? "H" : mode === "pickup" ? "P" : "D",
+      ondc_bap: "",
+      advanced_order: "N",
+      urgent_order: false,
+      urgent_time: 20,
+      payment_type: paid ? "ONLINE" : "COD",
+      table_no: String(data.table || ""),
+      no_of_persons: "0",
+      discount_total: String(disc),
+      tax_total: String(tax),
+      discount_type: "F",
+      total: String(bill.total),
+      description: oneLine(String(data.notes || "")).slice(0, 300) + (tip ? ` (tip ${tip})` : ""),
+      created_on: now,
+      enable_delivery: 1,
+      min_prep_time: Math.max(0, Math.round(+o.prepMinutes || 20)),
+      callback_url: origin + "/hook/pos/" + site + "?k=" + key,
+      collect_cash: paid ? "0" : String(bill.total),
+      otp: ""
+    } },
+    OrderItem: { details: it.items },
+    Tax: { details: tax ? [{ id: String(o.posTaxId || ""), title: "GST", type: "P", price: String(pct), tax: String(tax), restaurant_liable_amt: String(tax) }] : [] },
+    Discount: { details: disc ? [{ id: "", title: cp ? String(cp.code) : "Discount", type: "F", price: String(disc) }] : [] }
+  }, udid: "", device_type: "Web" } };
+  try {
+    const u = /^https:\/\/[\w.-]+\.petpooja\.com\//.test(String(z.url || "")) ? String(z.url) : POS_URL;
+    const r = await fetch(u, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }), j = await r.json().catch(() => null);
+    if (r.ok && j && String(j.success) === "1") return "Sent to Petpooja" + (j.orderID ? " (its order " + String(j.orderID).slice(0, 40) + ")" : "") + ".";
+    return "Not sent to Petpooja: " + oneLine(String(j && (j.message || j.error) || "it answered " + r.status)).slice(0, 200);
+  } catch {
+    return "Not sent to Petpooja: it couldn't be reached.";
+  }
+}
+var POS_STATUS = { "-1": "cancelled", "1": "accepted", "2": "accepted", "3": "accepted", "4": "out", "5": "ready", "10": "done" };
 function shopBill(c, q) {
   const S = c?.settings || {}, P = new Map((Array.isArray(c?.products) ? c.products : []).filter((p) => p && p.id).map((p) => [String(p.id), p]));
   const lines = Array.isArray(q?.items) ? q.items.slice(0, 100) : [];
@@ -1368,6 +1462,28 @@ var db_worker_default = {
         const exp = now + 45 * 6e4;
         return json({ ok: true, token: exp + "." + b64u(await hmac(env.SECRET, "otp:" + site + ":" + num + ":" + exp)) });
       }
+      if (/^\/hook\/pos\/[a-z0-9][a-z0-9-]{0,59}$/.test(p) && req.method === "POST") {
+        const site = p.split("/")[3], key = b64u(await hmac(env.SECRET, "pos:" + site)).slice(0, 32);
+        if (u.searchParams.get("k") !== key) return err(403, "Not allowed.");
+        const z = await getSetting(env, "site:" + site, "pos").catch(() => null);
+        if (!posReady(z)) return err(404, "Not set up.");
+        const b = await req.json().catch(() => ({})), no = String(b.orderID || b.clientOrderID || ""), st = POS_STATUS[String(b.status)];
+        if (String(b.restID || "") !== String(z.restId) || !/^[A-Z0-9][A-Z0-9-]{3,29}$/.test(no) || !st) return json({ success: false, message: "Unknown order or status." }, 400);
+        const rows = (await env.DB.prepare("select id, data, status from enquiries where site = ? and data like ? order by id desc limit 5").bind(site, `%"order_no":"${no}"%`).all()).results || [];
+        const row = rows.find((r) => {
+          try {
+            return JSON.parse(r.data).order_no === no;
+          } catch {
+            return false;
+          }
+        });
+        if (!row) return json({ success: false, message: "Order not found." }, 404);
+        const d = JSON.parse(row.data);
+        d._pos = "Petpooja: " + { accepted: "accepted", ready: "food ready", out: "dispatched", done: "delivered", cancelled: "cancelled" }[st] + (b.cancel_reason ? " (" + oneLine(String(b.cancel_reason)).slice(0, 120) + ")" : "") + (b.rider_name ? `, rider ${oneLine(String(b.rider_name)).slice(0, 60)} ${String(b.rider_phone_number || "").replace(/[^\d+ ]/g, "").slice(0, 20)}` : "");
+        if (+b.minimum_prep_time > 0) d._pos_prep = String(Math.round(+b.minimum_prep_time));
+        await env.DB.prepare("update enquiries set status = ?, data = ? where id = ?").bind(st, JSON.stringify(d), row.id).run();
+        return json({ success: true, message: "Order status updated." });
+      }
       if (/^\/pay\/(rz|cf|pe|st|pp)\/[a-z0-9][a-z0-9-]{0,59}$/.test(p) && req.method === "POST") {
         const g = p.split("/")[2], site = p.split("/")[3], z = await getSetting(env, "site:" + site, g);
         if (!pgReady(g, z)) return err(404, "Online payment isn't set up for this site.");
@@ -1469,6 +1585,13 @@ var db_worker_default = {
             data._paid_by = `${PG[g].name}, ${pgMoney(cur, row.amount)}, ${got.id.slice(0, 60)}`;
             data.pay_gw = PG[g].name;
             delete data.pay_ref;
+          }
+        }
+        if (data.order_no && q.cart && typeof q.cart === "object") {
+          const pz = await getSetting(env, "site:" + site, "pos").catch(() => null);
+          if (posReady(pz)) {
+            const pc = await siteContent(env, site);
+            if (isRest(pc)) data._pos = await posSend(env, site, pz, pc, q.cart, data, u.origin);
           }
         }
         const made = await env.DB.prepare("insert into enquiries (site, data, page, created_at) values (?, ?, ?, ?) returning id").bind(site, JSON.stringify(data), String(q.page || "").slice(0, 200), (/* @__PURE__ */ new Date()).toISOString()).first();
@@ -2045,6 +2168,7 @@ export {
   copiedBits,
   db_worker_default as default,
   outlineOf,
+  posItems,
   restBill,
   shopBill
 };

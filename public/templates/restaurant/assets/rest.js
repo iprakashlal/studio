@@ -689,7 +689,7 @@ function mobileBar() {
   return b.length > 1 ? `<nav class="mbar" aria-label="Quick actions">${b.join("")}</nav>` : "";
 }
 /** What the Order now page (assets/order.js) needs from this file. */
-const ORDER_API = { C: () => C, PAGES, DIET, PREVIEW, esc, rich, money, imgUrl, icon, toast, cats, dietMark, slug, ph, tel, clock, periods, openState, fmtTime, hhmm, statusChip, backend: () => backend(), postEnquiry: (d, pg) => postEnquiry(d, pg) };
+const ORDER_API = { C: () => C, PAGES, DIET, PREVIEW, esc, rich, money, imgUrl, icon, toast, cats, dietMark, slug, ph, tel, clock, periods, openState, fmtTime, hhmm, statusChip, backend: () => backend(), postEnquiry: (d, pg, cart) => postEnquiry(d, pg, cart) };
 function orderPage() {
   if (!orderOn()) return `<section class="phead"><div class="wrap"><h1 class="h1">${esc((C.ordering || {}).label || "Order now")}</h1><p class="hero-lede">${PREVIEW ? "Online ordering is switched off. Turn it on under Online ordering to see this page." : "Online ordering isn't available right now."}</p></div></section>`;
   return window.RestOrder ? window.RestOrder.page(ORDER_API) : "";
@@ -946,11 +946,11 @@ function backend() {
   return null;
 }
 /** Saves a request in the site's enquiry inbox. Says how it went: "cf", "db", "file", or "" when the site has no inbox. */
-async function postEnquiry(data, page) {
+async function postEnquiry(data, page, cart) {
   const cfg = backend(); if (!cfg) return "";
   const pg = page || location.pathname;
   if (cfg.file) { const r = await fetch(cfg.file, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "submit", data, page: pg }) }); if (!r.ok) throw new Error("save " + r.status); return "file"; }
-  if (cfg.cf) { const r = await fetch(cfg.cf + "/enquire/" + encodeURIComponent(cfg.site), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ data, page: pg }) }); if (!r.ok) throw new Error("save " + r.status); return "cf"; }
+  if (cfg.cf) { const r = await fetch(cfg.cf + "/enquire/" + encodeURIComponent(cfg.site), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ data, page: pg, ...(cart ? { cart } : {}) }) }); if (!r.ok) throw new Error("save " + r.status); return "cf"; }
   const r = await fetch(cfg.url + "/rest/v1/site_enquiries", { method: "POST", headers: { apikey: cfg.key, ...(/^sb_/.test(cfg.key) ? {} : { Authorization: "Bearer " + cfg.key }), "Content-Type": "application/json", Prefer: "return=minimal" }, body: JSON.stringify({ site: cfg.site, data, page: pg }) });
   if (!r.ok) throw new Error("save " + r.status); return "db";
 }

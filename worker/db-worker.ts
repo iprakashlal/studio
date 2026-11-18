@@ -390,6 +390,8 @@ const SETTINGS: Record<string, { secret: string[]; text: string[]; flags: string
   pe: { secret: ["secret"], text: ["clientId", "version"], flags: ["test"] },
   st: { secret: ["secret"], text: [], flags: [] },
   pp: { secret: ["secret"], text: ["clientId"], flags: ["test"] },
+  // Petpooja (the restaurant's billing system): orders placed on the site go to it, and it sends back each order's status.
+  pos: { secret: ["secret", "token"], text: ["appKey", "restId", "url"], flags: ["on"] },
 };
 async function aesKey(env: Env) { return crypto.subtle.importKey("raw", await crypto.subtle.digest("SHA-256", enc.encode("settings:" + env.SECRET)), "AES-GCM", false, ["encrypt", "decrypt"]); }
 async function getSetting(env: Env, scope: string, name: string): Promise<any | null> {
@@ -548,6 +550,56 @@ export function restBill(c: any, q: any): { total: number } | { error: string } 
   if (mode !== "dinein" && sub < Math.max(0, +o.minOrder || 0)) return { error: "The order is below the minimum." };
   return { total };
 }
+
+/* ---- Petpooja: an order placed on the site is handed to the restaurant's Petpooja, which then reports its status. ---- */
+const POS_URL = "https://pponlineordercb.petpooja.com/save_order";
+const posReady = (z: any) => !!(z && z.on && z.secret && z.token && z.appKey && z.restId);
+/** The cart as Petpooja items. Every dish (or the chosen size) needs the item's ID from Petpooja; without one the order can't be sent. */
+export function posItems(c: any, q: any): { items: any[]; sub: number } | { error: string } {
+  const dishes = new Map<string, any>();
+  for (const k of c?.food?.categories || []) { if (!k || !String(k.name || "").trim()) continue; for (const d of k.items || []) if (d && String(d.name || "").trim()) dishes.set(rslug(k.name) + "/" + rslug(d.name), d); }
+  const items: any[] = []; let sub = 0;
+  for (const l of Array.isArray(q?.items) ? q.items.slice(0, 60) : []) {
+    const d = dishes.get(String(l?.id || "")); if (!d) return { error: "a dish that is no longer on the menu" };
+    const V = (d.variants || []).filter((v: any) => v && v.label && !isNaN(rnum(v.price))), v = V.length ? V.find((x: any) => String(x.label) === String(l.variant)) : null, qty = Math.max(1, Math.min(50, Math.floor(+l.qty || 0)));
+    const id = String(d.posId || "").trim(), vid = v ? String(v.posId || "").trim() : "";
+    if (!id) return { error: `“${String(d.name).slice(0, 60)}” has no Petpooja item ID` };
+    let unit = v ? rnum(v.price) : rnum(d.price); if (isNaN(unit)) return { error: "a dish whose price changed" };
+    const opts = new Map<string, number>(); for (const g of d.addons || []) for (const o of (g && g.options) || []) { const t = String(o || ""), i = t.lastIndexOf("="), label = (i > 0 ? t.slice(0, i) : t).trim(), pr = i > 0 ? rnum(t.slice(i + 1)) : 0; if (label) opts.set(label, isNaN(pr) ? 0 : pr); }
+    const extras = (Array.isArray(l.addons) ? l.addons.slice(0, 20) : []).map(String).filter((a: string) => opts.has(a)); for (const a of extras) unit += opts.get(a)!;
+    sub += unit * qty;
+    items.push({ id, name: String(d.name).slice(0, 120), gst_liability: "restaurant", item_tax: [], item_discount: "", price: unit.toFixed(2), final_price: unit.toFixed(2), quantity: String(qty), description: extras.length ? "Extras: " + extras.join(", ") : "", variation_name: v ? String(v.label) : "", variation_id: vid, AddonItem: { details: [] } });
+  }
+  return items.length ? { items, sub } : { error: "an empty cart" };
+}
+/** Sends one saved order to Petpooja. Gives back a short line for the order's record. */
+async function posSend(env: Env, site: string, z: any, c: any, q: any, data: Record<string, string>, origin: string): Promise<string> {
+  const it = posItems(c, q); if ("error" in it) return "Not sent to Petpooja: " + it.error + ".";
+  const bill = restBill(c, q); if ("error" in bill) return "Not sent to Petpooja: " + bill.error;
+  const o = c.ordering || {}, mode = String(q.mode), now = new Date(Date.now() + 330 * 60000).toISOString().replace("T", " ").slice(0, 19);
+  const cp = (o.coupons || []).find((x: any) => x && x.on !== false && +x.value > 0 && String(x.code || "").trim().toUpperCase() === String(q.coupon || "").trim().toUpperCase() && String(q.coupon || "").trim());
+  let disc = 0; if (cp && it.sub >= (+cp.min || 0)) disc = Math.min(it.sub, cp.kind === "flat" ? +cp.value : Math.min((it.sub * +cp.value) / 100, +cp.max > 0 ? +cp.max : Infinity)); disc = Math.round(disc * 100) / 100;
+  const pack = mode === "dinein" ? 0 : Math.max(0, +o.packing || 0), pct = Math.max(0, +o.taxPercent || 0), tax = o.taxIncluded || !pct ? 0 : Math.round((it.sub - disc + pack) * pct) / 100;
+  const tip = o.tips !== false && mode !== "pickup" ? Math.max(0, Math.min(5000, +q.tip || 0)) : 0, del = Math.max(0, Math.round((bill.total - (it.sub - disc + pack + tax + tip)) * 100) / 100);
+  const paid = data._paid === "yes", key = b64u(await hmac(env.SECRET, "pos:" + site)).slice(0, 32);
+  const body = { app_key: z.appKey, app_secret: z.secret, access_token: z.token, orderinfo: { OrderInfo: {
+    Restaurant: { details: { res_name: siteName(c, site), address: oneLine(String(c?.contact?.address || "")).slice(0, 300), contact_information: String(c?.contact?.phone || "").slice(0, 40), restID: z.restId } },
+    Customer: { details: { email: String(data.email || ""), name: String(data.name || "Guest").slice(0, 100), address: String(data.address || "").slice(0, 400), phone: String(data.phone || "").replace(/[^\d+]/g, "").slice(0, 16), latitude: "", longitude: "" } },
+    Order: { details: { orderID: data.order_no, preorder_date: now.slice(0, 10), preorder_time: now.slice(11), service_charge: "0", sc_tax_amount: "0", delivery_charges: String(del), dc_tax_amount: "0", dc_gst_details: [], packing_charges: String(pack), pc_tax_amount: "0", pc_gst_details: [],
+      order_type: mode === "delivery" ? "H" : mode === "pickup" ? "P" : "D", ondc_bap: "", advanced_order: "N", urgent_order: false, urgent_time: 20, payment_type: paid ? "ONLINE" : "COD", table_no: String(data.table || ""), no_of_persons: "0",
+      discount_total: String(disc), tax_total: String(tax), discount_type: "F", total: String(bill.total), description: oneLine(String(data.notes || "")).slice(0, 300) + (tip ? ` (tip ${tip})` : ""), created_on: now, enable_delivery: 1, min_prep_time: Math.max(0, Math.round(+o.prepMinutes || 20)),
+      callback_url: origin + "/hook/pos/" + site + "?k=" + key, collect_cash: paid ? "0" : String(bill.total), otp: "" } },
+    OrderItem: { details: it.items },
+    Tax: { details: tax ? [{ id: String(o.posTaxId || ""), title: "GST", type: "P", price: String(pct), tax: String(tax), restaurant_liable_amt: String(tax) }] : [] },
+    Discount: { details: disc ? [{ id: "", title: cp ? String(cp.code) : "Discount", type: "F", price: String(disc) }] : [] } }, udid: "", device_type: "Web" } };
+  try {
+    const u = /^https:\/\/[\w.-]+\.petpooja\.com\//.test(String(z.url || "")) ? String(z.url) : POS_URL;
+    const r = await fetch(u, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }), j: any = await r.json().catch(() => null);
+    if (r.ok && j && String(j.success) === "1") return "Sent to Petpooja" + (j.orderID ? " (its order " + String(j.orderID).slice(0, 40) + ")" : "") + ".";
+    return "Not sent to Petpooja: " + oneLine(String((j && (j.message || j.error)) || "it answered " + r.status)).slice(0, 200);
+  } catch { return "Not sent to Petpooja: it couldn't be reached."; }
+}
+const POS_STATUS: Record<string, string> = { "-1": "cancelled", "1": "accepted", "2": "accepted", "3": "accepted", "4": "out", "5": "ready", "10": "done" };
 
 /* ---- A shop's bill, by the same rules as the shop's own checkout (assets/store.js): prices come from the site's content. ---- */
 export function shopBill(c: any, q: any): { total: number } | { error: string } {
@@ -903,6 +955,21 @@ export default {
         const exp = now + 45 * 60_000;
         return json({ ok: true, token: exp + "." + b64u(await hmac(env.SECRET, "otp:" + site + ":" + num + ":" + exp)) });
       }
+      // ---- Petpooja reports an order's status (accepted, ready, dispatched, delivered, cancelled). The address carries a key only this database can make.
+      if (/^\/hook\/pos\/[a-z0-9][a-z0-9-]{0,59}$/.test(p) && req.method === "POST") {
+        const site = p.split("/")[3], key = b64u(await hmac(env.SECRET, "pos:" + site)).slice(0, 32);
+        if (u.searchParams.get("k") !== key) return err(403, "Not allowed.");
+        const z = await getSetting(env, "site:" + site, "pos").catch(() => null); if (!posReady(z)) return err(404, "Not set up.");
+        const b = (await req.json().catch(() => ({}))) as any, no = String(b.orderID || b.clientOrderID || ""), st = POS_STATUS[String(b.status)];
+        if (String(b.restID || "") !== String(z.restId) || !/^[A-Z0-9][A-Z0-9-]{3,29}$/.test(no) || !st) return json({ success: false, message: "Unknown order or status." }, 400);
+        const rows = ((await env.DB.prepare("select id, data, status from enquiries where site = ? and data like ? order by id desc limit 5").bind(site, `%"order_no":"${no}"%`).all()).results || []) as any[];
+        const row = rows.find((r) => { try { return JSON.parse(r.data).order_no === no; } catch { return false; } });
+        if (!row) return json({ success: false, message: "Order not found." }, 404);
+        const d = JSON.parse(row.data); d._pos = "Petpooja: " + ({ accepted: "accepted", ready: "food ready", out: "dispatched", done: "delivered", cancelled: "cancelled" } as Record<string, string>)[st] + (b.cancel_reason ? " (" + oneLine(String(b.cancel_reason)).slice(0, 120) + ")" : "") + (b.rider_name ? `, rider ${oneLine(String(b.rider_name)).slice(0, 60)} ${String(b.rider_phone_number || "").replace(/[^\d+ ]/g, "").slice(0, 20)}` : "");
+        if (+b.minimum_prep_time > 0) d._pos_prep = String(Math.round(+b.minimum_prep_time));
+        await env.DB.prepare("update enquiries set status = ?, data = ? where id = ?").bind(st, JSON.stringify(d), row.id).run();
+        return json({ success: true, message: "Order status updated." });
+      }
       // ---- an online payment for an order (restaurant or shop): the amount comes from the site's own content, worked out here
       if (/^\/pay\/(rz|cf|pe|st|pp)\/[a-z0-9][a-z0-9-]{0,59}$/.test(p) && req.method === "POST") {
         const g = p.split("/")[2], site = p.split("/")[3], z = await getSetting(env, "site:" + site, g);
@@ -975,6 +1042,11 @@ export default {
             await env.DB.prepare("update payments set status = 'paid' where rz_order = ?").bind(ref).run();
             data._paid = "yes"; data._paid_by = `${PG[g].name}, ${pgMoney(cur, row.amount)}, ${got.id.slice(0, 60)}`; data.pay_gw = PG[g].name; delete data.pay_ref;
           }
+        }
+        // A restaurant that uses Petpooja: the order is handed to it now, and its answer is kept with the order.
+        if (data.order_no && q.cart && typeof q.cart === "object") {
+          const pz = await getSetting(env, "site:" + site, "pos").catch(() => null);
+          if (posReady(pz)) { const pc = await siteContent(env, site); if (isRest(pc)) data._pos = await posSend(env, site, pz, pc, q.cart, data, u.origin); }
         }
         const made: any = await env.DB.prepare("insert into enquiries (site, data, page, created_at) values (?, ?, ?, ?) returning id").bind(site, JSON.stringify(data), String(q.page || "").slice(0, 200), new Date().toISOString()).first();
         // The enquiry is saved either way; the email is a copy, so a mail failure never fails the form. What happened

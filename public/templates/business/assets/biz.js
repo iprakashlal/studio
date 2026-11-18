@@ -257,7 +257,7 @@ function applyTheme(t) {
   if (window.SiteFonts) { const cd = SiteFonts.use(t, "display", imgUrl), cb = SiteFonts.use(t, "body", imgUrl); if (cd) r.setProperty("--fd", `"${cd}","${t.fontDisplay}",Georgia,serif`); if (cb) r.setProperty("--fb", `"${cb}","${t.fontBody}","Helvetica Neue",Arial,sans-serif`); }
   const d = document.documentElement.dataset;
   for (const k of ["layout", "heroArt", "nav", "cards", "buttons", "motionStyle", "pattern", "heading", "shead", "width", "bands", "cursor", "loader", "textfx", "hoverfx", "scrollfx", "overlay"]) d[k] = String(t[k] || "");
-  d.scrollease = t.scrollEase || "light"; d.linebreaks = t.lineBreaks || "typed"; d.menu = String(t.navMode || "");
+  d.scrollease = t.scrollEase || "light"; d.linebreaks = t.lineBreaks || "typed"; d.menu = String(t.navMode || ""); d.menumob = String(t.navModeMob || "");
   d.introfont = t.introFont || "display"; d.introcase = t.introCase || "upper"; d.dark = String(onColor(t.bg) === "#FFFFFF");
   [[FONTS[t.fontDisplay], "fontlink"], [FONTS[t.fontBody], "fontlink2"]].forEach(([f, id]) => {
     let l = document.getElementById(id); if (!l) { l = document.createElement("link"); l.id = id; l.rel = "stylesheet"; document.head.appendChild(l); }
@@ -799,4 +799,12 @@ if (PREVIEW) {
     C = merge(DEFAULT, JSON.parse(txt)); render();
   }).catch(() => { clearTimeout(giveUp); if (!shownTxt) render(); });
 }
+})();
+
+// Menu when scrolling (theme.navMode; theme.navModeMob for phones): "" theme default, fixed, hide (hide on scroll down, show on scroll up), scroll (scrolls away)
+(function(){let lastY=scrollY;const de=document.documentElement;
+  addEventListener("scroll",()=>{const y=scrollY,d=y-lastY;
+    if(((matchMedia("(max-width:760px)").matches&&de.dataset.menumob)||de.dataset.menu)!=="hide"||document.querySelector(".nav [aria-expanded=true]")){de.classList.remove("menu-away");lastY=y;return}
+    if(Math.abs(d)<6)return;de.classList.toggle("menu-away",d>0&&y>140);lastY=y},{passive:true});
+  document.addEventListener("focusin",e=>{if(e.target.closest&&e.target.closest(".nav"))de.classList.remove("menu-away")});
 })();

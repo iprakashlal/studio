@@ -808,3 +808,4 @@ html[data-layout=center] .hero-media.none{aspect-ratio:auto}html[data-layout=cen
   html[data-layout=full] .hero.no-img .emb,html[data-layout=poster] .hero-media.none .emb{width:min(60%,170px)}
   html[data-layout=editorial] .hero-media.none{justify-items:center}
 }
+.solo-top{padding:clamp(18px,3vw,34px) 0 0}.solo-top .crumbs{margin:0}.solo-top+section{padding-top:clamp(28px,4vw,56px)}

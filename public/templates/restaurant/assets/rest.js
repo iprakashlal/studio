@@ -282,7 +282,7 @@ const imgUrl = (img) => (!img ? "" : img.path ? ASSETS[img.path] || hostPhoto(im
 let C = merge(DEFAULT, {});
 const PAGE = document.body.dataset.page || "home";
 const PREVIEW = window.name === "cms-preview" && window.parent !== window;
-const PAGES = { home: "index.html", menu: "menu.html", about: "about.html", gallery: "gallery.html", contact: "contact.html", page: "page.html", order: "order.html" };
+const PAGES = { home: "index.html", menu: "menu.html", about: "about.html", gallery: "gallery.html", contact: "contact.html", page: "page.html", order: "order.html", section: "section.html" };
 /* Static pages (privacy, terms…): content.staticPages, shown by assets/pages.js at page.html?p=<name>. */
 const spSlug = (p) => String(p.slug || p.title || "").toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60) || p.id || "";
 const spList = () => (C.staticPages || []).filter((p) => p && p.show !== false && String(p.title || "").trim() && spSlug(p));
@@ -299,6 +299,15 @@ const PAGE_SECTIONS = {
 /** The page a section lives on in several-page mode. */
 const HOME_OF = { food: "menu", order: "menu", about: "about", chef: "about", events: "about", gallery: "gallery", reserve: "contact", contact: "contact", faq: "contact" };
 const multi = () => !!C.site.multiPage;
+/** On a one-page site, a section whose link in the owner's own menu has "Open in a new tab" on gets a page of its own
+    (section.html?s=<id>) and leaves the main page. */
+function soloSections() {
+  const out = new Set(); if (multi() || !(C.menu && C.menu.custom)) return out;
+  const walk = (L) => (L || []).forEach((i) => { if (!i || i.show === false) return; if (i.newTab && i.to && i.to !== "hero" && RENDER[i.to] && shown(i.to)) out.add(i.to); walk(i.children); });
+  walk(C.menu.items); return out;
+}
+const soloCur = () => { try { return new URLSearchParams(location.search).get("s") || ""; } catch (e) { return ""; } };
+const soloHref = (id) => PAGES.section + "?s=" + encodeURIComponent(id);
 /** The Order now page is on, and there is a menu to order from. */
 const orderOn = () => !!(C.ordering && C.ordering.on) && cats().some((c) => c.items.some((d) => !d.noOrder));
 /** On one-page sites, section links from other pages go back to the home page. */
@@ -311,6 +320,7 @@ function href(id) {
   if (id === "reserve" && !(C.contact.form.enabled && shown("reserve"))) id = "contact";
   if (/^(https?:|mailto:|tel:)/i.test(id)) return id;
   if (id === "ordering") return orderOn() ? PAGES.order : href("food");
+  if (!multi() && soloSections().has(id)) return soloHref(id);
   if (!multi()) return (PAGE === "home" ? "" : PAGES.home) + "#" + id;
   if (id === "hero" || id === "home") return PAGES.home;
   const pg = HOME_OF[id] || "home", own = { menu: "food", about: "about", gallery: "gallery" }[pg] === id;
@@ -347,7 +357,7 @@ function applyTheme(t) {
 }
 function setTitle() {
   const one = (x) => String(x || "").replace(/\s*\n\s*/g, " ").trim();
-  const label = PAGE === "page" ? ((window.SitePages && window.SitePages.find(C, spCur(), PREVIEW)) || {}).title || "" : PAGE === "order" ? (C.ordering || {}).label || "Order now" : PAGE === "home" || !multi() ? "" : (C.site.pageLabels || {})[PAGE] || "";
+  const label = PAGE === "page" ? ((window.SitePages && window.SitePages.find(C, spCur(), PREVIEW)) || {}).title || "" : PAGE === "order" ? (C.ordering || {}).label || "Order now" : PAGE === "section" ? (C.sections.find((x) => x.id === soloCur()) || {}).label || "" : PAGE === "home" || !multi() ? "" : (C.site.pageLabels || {})[PAGE] || "";
   document.title = !label ? one(C.seo.title || C.brand.name) : one((C.seo.titlePattern || "{page} · {site}").replace(/\{page\}/g, label).replace(/\{site\}/g, one(C.brand.name)));
 }
 
@@ -684,6 +694,13 @@ function orderPage() {
   if (!orderOn()) return `<section class="phead"><div class="wrap"><h1 class="h1">${esc((C.ordering || {}).label || "Order now")}</h1><p class="hero-lede">${PREVIEW ? "Online ordering is switched off. Turn it on under Online ordering to see this page." : "Online ordering isn't available right now."}</p></div></section>`;
   return window.RestOrder ? window.RestOrder.page(ORDER_API) : "";
 }
+/** One section on a page of its own (see soloSections). */
+function sectionPage() {
+  const id = soloCur(), sec = C.sections.find((x) => x.id === id), body = sec && RENDER[id] && id !== "hero" && shown(id) ? RENDER[id]() : "";
+  const crumbs = `<p class="crumbs"><a href="${PAGES.home}">${esc((C.site.pageLabels || {}).home || "Home")}</a> / ${esc((sec && sec.label) || "")}</p>`;
+  if (!body) return `<section class="phead"><div class="wrap">${crumbs}<h1 class="h1">${esc((sec && sec.label) || "Page")}</h1><p class="hero-lede">${PREVIEW ? "This section is hidden or has nothing to show yet." : "There is nothing here right now."}</p></div></section>`;
+  return `<div class="solo-top"><div class="wrap">${crumbs}</div></div>${body}`;
+}
 function staticPage() {
   const S = window.SitePages; if (!S) return "";
   const p = S.find(C, spCur(), PREVIEW), o = { home: PAGES.home, homeLabel: C.site.pageLabels.home || "Home", preview: PREVIEW };
@@ -783,7 +800,7 @@ function menuGo(it) {
   if (t === "url") { const u = String(it.url || "").trim(); return { url: safeUrl(u) || (/^(#|\/|\.\/|[\w-]+\.html)/.test(u) ? u : "") }; }
   if (t === "page") { const p = spList().find((x) => x.id === it.page); return p ? { url: spHref(p), on: PAGE === "page" && spSlug(p) === spSlug({ slug: spCur() }) } : { url: "" }; }
   const url = href(t === "home" ? "hero" : t);
-  return { url: t === "home" && !multi() ? AT + "#top" : url, on: multi() && url === PAGES[PAGE] };
+  return { url: t === "home" && !multi() ? AT + "#top" : url, on: (multi() && url === PAGES[PAGE]) || (PAGE === "section" && soloCur() === t) };
 }
 function menu() {
   if (!menuOn()) return;
@@ -813,12 +830,15 @@ function maintGate(again) {
 function render() {
   // A several-page link opened while the site is one page goes to that section.
   if (PAGE === "order" && !PREVIEW && !orderOn()) { location.replace(PAGES.home); return; }
-  if (!PREVIEW && !multi() && !["home", "page", "order"].includes(PAGE)) { location.replace(PAGES.home + "#" + ({ menu: "food", contact: "reserve" }[PAGE] || PAGE)); return; }
+  // A section's own page: only while its link still says so; otherwise the visitor goes to that section on the main page.
+  if (PAGE === "section" && !PREVIEW && !soloSections().has(soloCur())) { location.replace(multi() ? href(soloCur()) : PAGES.home + (RENDER[soloCur()] ? "#" + soloCur() : "")); return; }
+  if (!PREVIEW && !multi() && !["home", "page", "order", "section"].includes(PAGE)) { location.replace(PAGES.home + "#" + ({ menu: "food", contact: "reserve" }[PAGE] || PAGE)); return; }
   if (langGate()) return;
   applyTheme(C.theme); setTitle(); setIcon();
   if (maintGate(render)) return;
-  const special = { page: staticPage, order: orderPage }[PAGE];
-  const ids = special ? [] : multi() ? (PAGE === "home" ? C.sections.map((s) => s.id).filter((id) => PAGE_SECTIONS.home.includes(id)) : PAGE_SECTIONS[PAGE] || []) : C.sections.map((s) => s.id);
+  const special = { page: staticPage, order: orderPage, section: sectionPage }[PAGE];
+  const solo = soloSections();
+  const ids = special ? [] : multi() ? (PAGE === "home" ? C.sections.map((s) => s.id).filter((id) => PAGE_SECTIONS.home.includes(id)) : PAGE_SECTIONS[PAGE] || []) : C.sections.map((s) => s.id).filter((id) => !solo.has(id));
   const body = special ? special() : ids.filter((id) => RENDER[id] && shown(id)).map((id) => RENDER[id]()).join("");
   const bar = mobileBar();
   document.documentElement.classList.toggle("has-mbar", !!bar);

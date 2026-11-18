@@ -11,6 +11,8 @@ import { themeCode } from "../themes/codes";
 import type { Field as F, TemplateDef } from "../schema/types";
 import { getP, setP, clone, vpaOk, paypalOk, httpsOk, hostIs, emailOk, phoneOk } from "../lib/util";
 import { Field, ProgressBar, Toggle, useConfirm, useToast } from "../ui/kit";
+import { RazorpayForm, WhatsAppForm } from "../pages/Connections";
+import { cfSession } from "../lib/cfdb";
 
 export type EditorCtx = {
   tpl: TemplateDef;
@@ -20,6 +22,8 @@ export type EditorCtx = {
   img: (v: any) => string;
   /** True in the site's own admin page. */
   site?: boolean;
+  /** The site's own Cloudflare database, when it is hosted on one (for keys kept there). */
+  cf?: { api: string; site: string } | null;
 };
 /** Asks the project view to open "Fill in from a pamphlet". */
 export const PAMPHLET_EVENT = "studio:pamphlet";
@@ -187,6 +191,8 @@ export function FieldView({ f, obj, base }: { f: F; obj: any; base: string }) {
       return <ImageField id={id} label={f.label} hint={f.hint} value={val} onChange={set} />;
     case "videoFile":
       return <VideoFileField id={id} label={f.label} hint={f.hint} value={val} onChange={set} />;
+    case "connection":
+      return <ConnectionField kind={f.kind} />;
     case "fontFile":
       return <FontFileField id={id} label={f.label} hint={f.hint} value={val} onChange={set} />;
     case "images":
@@ -359,6 +365,12 @@ function FontFileField({ id, label, hint, value, onChange }: { id: string; label
       <span className="hint">{hint || "WOFF2, WOFF, TTF or OTF, up to 3 MB. WOFF2 loads fastest."}</span>
     </div>
   );
+}
+/** A connection's own form (its keys go to the site's database, never into the site's content). */
+function ConnectionField({ kind }: { kind: "rz" | "wa" }) {
+  const { cf } = useCtx();
+  const where = cf && cfSession.load(cf.api) ? { api: cf.api, scope: "site:" + cf.site } : null;
+  return kind === "rz" ? <RazorpayForm where={where} plain /> : <WhatsAppForm where={where} kind="site" />;
 }
 function VideoFileField({ id, label, hint, value, onChange }: { id: string; label: string; hint?: string; value: any; onChange: (v: any) => void }) {
   const { img, upload } = useCtx();

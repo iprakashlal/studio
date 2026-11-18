@@ -454,20 +454,39 @@ async function graph(token: string, path: string, init?: { method?: string; body
   if (!r.ok) { const e: any = new Error(String(j?.error?.error_user_msg || j?.error?.message || `Meta answered ${r.status}.`).slice(0, 300)); e.status = r.status; e.code = j?.error?.code; throw e; }
   return j;
 }
-/** The WhatsApp accounts a token reaches, each with its numbers and templates. `hint`: an account ID typed by the owner. */
+/** The WhatsApp accounts a token reaches, each with its numbers and templates. `hint`: an ID typed by the owner.
+    Meta lists the token's targets without saying what each is, so every ID is tried as a WhatsApp account, then as a
+    business that owns WhatsApp accounts, then as a single phone number. */
 async function waFind(token: string, hint = ""): Promise<{ wabas: any[]; why?: string }> {
-  const ids = new Set<string>(); let why = "";
+  const ids = new Set<string>(); let why = "", refused = false;
   if (/^\d{6,20}$/.test(hint)) ids.add(hint);
-  try { const d = await graph(token, "/debug_token?input_token=" + encodeURIComponent(token)); for (const g of d?.data?.granular_scopes || []) if (/^whatsapp_business_(management|messaging)$/.test(g?.scope)) for (const t of g.target_ids || []) ids.add(String(t)); if (d?.data?.is_valid === false) why = "Meta says this token isn't valid (it may have expired)."; }
-  catch (e: any) { why = e?.status === 401 || e?.code === 190 ? "Meta refused the token. Check that you copied all of it and that it hasn't expired." : ""; }
-  const wabas: any[] = [];
-  for (const id of [...ids].slice(0, 3)) {
-    try {
-      const ph = await graph(token, `/${id}/phone_numbers?fields=id,display_phone_number,verified_name&limit=20`), tp = await graph(token, `/${id}/message_templates?fields=name,status,category,language&limit=200`).catch(() => ({ data: [] }));
-      wabas.push({ id, phones: (ph?.data || []).map((x: any) => ({ id: String(x.id), number: String(x.display_phone_number || ""), name: String(x.verified_name || "") })), templates: (tp?.data || []).map((x: any) => ({ name: String(x.name), status: String(x.status || ""), category: String(x.category || ""), language: String(x.language || "") })) });
-    } catch (e: any) { why = why || String(e?.message || e); }
+  try { const d = await graph(token, "/debug_token?input_token=" + encodeURIComponent(token)); for (const g of d?.data?.granular_scopes || []) if (/^(whatsapp_business_(management|messaging)|business_management)$/.test(g?.scope)) for (const t of g.target_ids || []) ids.add(String(t)); if (d?.data?.is_valid === false) why = "Meta says this token isn't valid (it may have expired)."; }
+  catch (e: any) { if (e?.status === 401 || e?.code === 190) { refused = true; why = "Meta refused the token. Check that you copied all of it and that it hasn't expired."; } }
+  const wabas: any[] = [], seen = new Set<string>();
+  const account = async (id: string): Promise<boolean> => {
+    if (seen.has(id)) return true;
+    const ph = await graph(token, `/${id}/phone_numbers?fields=id,display_phone_number,verified_name&limit=20`), tp = await graph(token, `/${id}/message_templates?fields=name,status,category,language&limit=200`).catch(() => ({ data: [] }));
+    seen.add(id);
+    wabas.push({ id, phones: (ph?.data || []).map((x: any) => ({ id: String(x.id), number: String(x.display_phone_number || ""), name: String(x.verified_name || "") })), templates: (tp?.data || []).map((x: any) => ({ name: String(x.name), status: String(x.status || ""), category: String(x.category || ""), language: String(x.language || "") })) });
+    return true;
+  };
+  const lone: any[] = [];
+  for (const id of refused ? [] : [...ids].slice(0, 6)) {
+    if (await account(id).catch(() => false)) continue;
+    // Not a WhatsApp account: a business portfolio that owns some?
+    let got = false;
+    for (const edge of ["owned_whatsapp_business_accounts", "client_whatsapp_business_accounts"]) {
+      const r = await graph(token, `/${id}/${edge}?fields=id&limit=5`).catch(() => null);
+      for (const w of r?.data || []) if (await account(String(w.id)).catch(() => false)) got = true;
+    }
+    if (got) continue;
+    // Or one phone number's own ID.
+    const one = await graph(token, `/${id}?fields=id,display_phone_number,verified_name`).catch(() => null);
+    if (one?.display_phone_number) lone.push({ id: String(one.id || id), number: String(one.display_phone_number), name: String(one.verified_name || "") });
   }
-  return { wabas, ...(wabas.length ? {} : { why: why || "Couldn't tell which WhatsApp account this token belongs to. Paste the WhatsApp Business Account ID too (Meta shows it on the API Setup page, under the phone number)." }) };
+  // Only a number was found: enough to send from; its templates can't be listed without the account's ID.
+  if (!wabas.length && lone.length) wabas.push({ id: "", phones: lone, templates: [] });
+  return { wabas, ...(wabas.length ? {} : { why: why || "The token works, but Meta didn't show a WhatsApp account for it. Give the system user Full control of your WhatsApp account (Business settings → System users → Assign assets → WhatsApp accounts), generate a new token, and press Connect again. Or paste the WhatsApp Business Account ID below (it is on the app's WhatsApp → API Setup page)." }) };
 }
 const WA_TPL: Record<string, (lang: string) => any> = {
   otp: (language) => ({ name: "signin_code", language, category: "authentication", components: [{ type: "body", add_security_recommendation: true }, { type: "footer", code_expiration_minutes: 10 }, { type: "buttons", buttons: [{ type: "otp", otp_type: "copy_code" }] }] }),

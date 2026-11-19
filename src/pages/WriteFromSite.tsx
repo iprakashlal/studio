@@ -5,7 +5,7 @@ import { useState } from "react";
 import type { Session } from "../lib/auth";
 import type { ProjectMeta } from "../lib/studio";
 import { cfOutline, cfPicture, cfPictures, cfWrite, type Brief, type SitePicture } from "../lib/cfdb";
-import { pictureSlots, placePicture } from "../lib/pictureSlots";
+import { itemSlots, pictureSlots, placePicture } from "../lib/pictureSlots";
 import { EnginePick } from "./AiEngine";
 import { aiEngine, allowanceGone, type AiEngine } from "../lib/ai";
 import { enoughText, systemWrite } from "../lib/syswrite";
@@ -72,7 +72,11 @@ export function WriteFromSiteDialog({ session, project, draft, upload, onApply, 
   });
   const contact = (): Contact => ({ email: email.trim(), phone: phone.trim(), brand: brandName.trim() });
   // Pictures from the reference site: only for a site the owner has the rights to (their own old site, a client's).
-  const slots = pictureSlots(kind);
+  const baseSlots = pictureSlots(kind), items = itemSlots(kind, draft), slots = [...baseSlots, ...items];
+  const [ticked, setTicked] = useState<Set<string>>(new Set()), [bulk, setBulk] = useState("");
+  /** Gives a picture its place; a place that holds one picture is taken from the picture that had it. */
+  const assign = (n: Record<string, string>, url: string, v: string) => { if (!v) { delete n[url]; return; } const sl = slots.find((x) => x.id === v); if (sl && !sl.many) for (const k of Object.keys(n)) if (n[k] === v) delete n[k]; n[url] = v; };
+  const slotOptions = <>{baseSlots.map((sl) => <option key={sl.id} value={sl.id}>{sl.label}</option>)}{items.length > 0 && <optgroup label={items[0].group}>{items.map((sl) => <option key={sl.id} value={sl.id}>{sl.label}</option>)}</optgroup>}</>;
   const [pics, setPics] = useState<SitePicture[] | null>(null), [use, setUse] = useState<Record<string, string>>({}), [mine, setMine] = useState(false), [picErr, setPicErr] = useState("");
   const link = () => (/^https?:\/\//.test(url.trim()) ? url.trim() : "https://" + url.trim());
   const findPics = run("Looking for pictures", async () => {
@@ -80,7 +84,7 @@ export function WriteFromSiteDialog({ session, project, draft, upload, onApply, 
     try {
       const list = await cfPictures(api!, link()); setPics(list);
       // A first guess the owner can change: the first picture as the hero, the next as the about picture, the rest in the gallery (where there is one).
-      const g: Record<string, string> = {}, many = slots.find((x) => x.many), one = slots.filter((x) => !x.many && x.id !== "logo");
+      const g: Record<string, string> = {}, many = baseSlots.find((x) => x.many), one = baseSlots.filter((x) => !x.many && x.id !== "logo");
       list.forEach((p, i) => { const sl = one[i] || many; if (sl && i < 14) g[p.url] = sl.id; });
       setUse(g);
     } catch (e: any) { setPicErr(e?.message || "Couldn't read the site's pictures."); }
@@ -90,7 +94,7 @@ export function WriteFromSiteDialog({ session, project, draft, upload, onApply, 
     const next = applyBrief(kind, draft, res!.brief, brandName.trim(), pick, contact());
     if (chosen.length && mine && upload) {
       setBusy("Copying pictures"); let n = 0, missed = 0;
-      for (const p of chosen.slice(0, 20)) {
+      for (const p of chosen.slice(0, 60)) {
         try { const f = await cfPicture(api!, p.url); if (f.size > 6 * 1024 * 1024) throw new Error("big"); placePicture(kind, next, use[p.url], await upload(f), p.alt); n++; setBusy(`Copying pictures (${n} of ${chosen.length})`); } catch { missed++; }
       }
       setBusy("");
@@ -157,18 +161,26 @@ export function WriteFromSiteDialog({ session, project, draft, upload, onApply, 
             {picErr && <p role="alert" className="text-red-300">{picErr}</p>}
             {pics && !pics.length && <p className="text-[13px] text-ink-300">No pictures found on that page (it may draw them with JavaScript).</p>}
             {pics && pics.length > 0 && <>
-              {(() => { const many = slots.find((x) => x.many), taken = pics.filter((p) => use[p.url]).length; return (
+              {(() => { const many = baseSlots.find((x) => x.many), taken = pics.filter((p) => use[p.url]).length; return (
                 <div className="flex flex-wrap items-center gap-2 text-[13px]">
                   {many && <button type="button" className="btn btn-sm" disabled={taken === pics.length} onClick={() => setUse((u) => { const n = { ...u }; for (const p of pics) if (!n[p.url]) n[p.url] = many.id; return n; })}>Take all</button>}
                   <button type="button" className="btn btn-sm" disabled={!taken} onClick={() => setUse({})}>Take none</button>
                   <span className="text-ink-400" role="status">{taken} of {pics.length} taken{many ? `. “Take all” puts the ones not yet placed in ${many.label}; change any of them below.` : ""}</span>
                 </div>); })()}
+              <div className="flex flex-wrap items-center gap-2 rounded-lg border border-ink-700 px-2.5 py-2 text-[13px]" aria-label="Place the ticked pictures together">
+                <button type="button" className="btn btn-sm" onClick={() => setTicked(ticked.size === pics.length ? new Set() : new Set(pics.map((p) => p.url)))}>{ticked.size === pics.length ? "Untick all" : "Tick all"}</button>
+                <label className="flex items-center gap-2"><span className="text-ink-300">Put the {ticked.size || ""} ticked picture{ticked.size === 1 ? "" : "s"} in</span>
+                  <select aria-label="Place for the ticked pictures" className="input px-2 py-1 text-[12.5px]" value={bulk} onChange={(e) => setBulk(e.target.value)}><option value="">Choose a place</option><option value="-">Don't take</option>{slotOptions}</select></label>
+                <button type="button" className="btn btn-sm btn-pri" disabled={!ticked.size || !bulk} onClick={() => { setUse((u) => { const n = { ...u }, sl = slots.find((x) => x.id === bulk), urls = pics.filter((p) => ticked.has(p.url)).map((p) => p.url); for (const url of (sl && !sl.many ? urls.slice(0, 1) : urls)) assign(n, url, bulk === "-" ? "" : bulk); return n; }); setTicked(new Set()); }}>Apply</button>
+                {(() => { const sl = slots.find((x) => x.id === bulk); return sl && !sl.many && ticked.size > 1 ? <span className="text-amber-200">{sl.label} holds one picture: only the first ticked one goes there.</span> : null; })()}
+              </div>
               <ul className="grid max-h-[320px] grid-cols-2 gap-2 overflow-auto sm:grid-cols-4" aria-label="Pictures found">
                 {pics.map((p) => (
                   <li key={p.url} className={`flex flex-col gap-1.5 rounded-lg border p-1.5 ${use[p.url] ? "border-brand-500/60" : "border-ink-700"}`}>
-                    <img src={p.url} alt={p.alt} loading="lazy" referrerPolicy="no-referrer" className="h-24 w-full rounded-md bg-ink-950 object-cover" />
-                    <select aria-label={`Use ${p.alt || "this picture"} as`} className="input px-2 py-1 text-[12.5px]" value={use[p.url] || ""} onChange={(e) => setUse((u) => { const n = { ...u }, v = e.target.value; if (!v) delete n[p.url]; else { const sl = slots.find((x) => x.id === v); if (sl && !sl.many) for (const k of Object.keys(n)) if (n[k] === v) delete n[k]; n[p.url] = v; } return n; })}>
-                      <option value="">Don't take</option>{slots.map((sl) => <option key={sl.id} value={sl.id}>{sl.label}</option>)}
+                    <label className="relative block cursor-pointer"><input type="checkbox" aria-label={`Tick ${p.alt || "this picture"}`} className="absolute left-1.5 top-1.5 z-10 h-4 w-4 accent-brand-500" checked={ticked.has(p.url)} onChange={(e) => setTicked((t) => { const n = new Set(t); e.target.checked ? n.add(p.url) : n.delete(p.url); return n; })} />
+                      <img src={p.url} alt={p.alt} loading="lazy" referrerPolicy="no-referrer" className={`h-24 w-full rounded-md bg-ink-950 object-cover ${ticked.has(p.url) ? "ring-2 ring-brand-400" : ""}`} /></label>
+                    <select aria-label={`Use ${p.alt || "this picture"} as`} className="input px-2 py-1 text-[12.5px]" value={use[p.url] || ""} onChange={(e) => setUse((u) => { const n = { ...u }; assign(n, p.url, e.target.value); return n; })}>
+                      <option value="">Don't take</option>{slotOptions}
                     </select>
                   </li>
                 ))}

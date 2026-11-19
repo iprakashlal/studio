@@ -157,6 +157,12 @@ export function WriteFromSiteDialog({ session, project, draft, upload, onApply, 
             {picErr && <p role="alert" className="text-red-300">{picErr}</p>}
             {pics && !pics.length && <p className="text-[13px] text-ink-300">No pictures found on that page (it may draw them with JavaScript).</p>}
             {pics && pics.length > 0 && <>
+              {(() => { const many = slots.find((x) => x.many), taken = pics.filter((p) => use[p.url]).length; return (
+                <div className="flex flex-wrap items-center gap-2 text-[13px]">
+                  {many && <button type="button" className="btn btn-sm" disabled={taken === pics.length} onClick={() => setUse((u) => { const n = { ...u }; for (const p of pics) if (!n[p.url]) n[p.url] = many.id; return n; })}>Take all</button>}
+                  <button type="button" className="btn btn-sm" disabled={!taken} onClick={() => setUse({})}>Take none</button>
+                  <span className="text-ink-400" role="status">{taken} of {pics.length} taken{many ? `. “Take all” puts the ones not yet placed in ${many.label}; change any of them below.` : ""}</span>
+                </div>); })()}
               <ul className="grid max-h-[320px] grid-cols-2 gap-2 overflow-auto sm:grid-cols-4" aria-label="Pictures found">
                 {pics.map((p) => (
                   <li key={p.url} className={`flex flex-col gap-1.5 rounded-lg border p-1.5 ${use[p.url] ? "border-brand-500/60" : "border-ink-700"}`}>

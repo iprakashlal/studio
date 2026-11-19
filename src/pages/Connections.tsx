@@ -84,6 +84,15 @@ export function WhatsAppForm({ where, kind }: { where: Where | null | undefined;
   const blank = { on: false, phoneId: "", waba: "", token: "", cc: "91", lang: "en", to: "", phones: "", tplOtp: "", tplOrder: "", tplEnquiry: "", login: false, orderOtp: false, orderAlert: false, enquiryAlert: false };
   const [f, setF] = useState<Record<string, any>>(blank), [busy, setBusy] = useState(""), [found, setFound] = useState<WaFound[] | null>(null), [note, setNote] = useState(""), [testTo, setTestTo] = useState(""), [hand, setHand] = useState(false);
   useEffect(() => { if (keep.current) { keep.current = false; return; } const w = saved?.wa; setF(w ? { ...blank, ...w, token: "" } : blank); }, [saved]);
+  // A saved connection is looked up with Meta once when the card opens, so the numbers and templates show by name
+  // (as right after Connect) and not as bare IDs. Quietly: if Meta can't be asked just now, the saved IDs stay as they are.
+  const looked = useRef("");
+  useEffect(() => {
+    const w: any = saved?.wa, key = where && w?.token && (w.waba || w.phoneId) ? where.api + "|" + where.scope + "|" + (w.waba || w.phoneId) : "";
+    if (!key || looked.current === key) return; looked.current = key;
+    cfCall<any>(where!.api, "/set/wa?scope=" + encodeURIComponent(where!.scope), { method: "POST", body: JSON.stringify({ do: "find", token: "", waba: String(w.waba || w.phoneId || "") }) })
+      .then((r) => { if (Array.isArray(r?.wabas) && r.wabas.length && r.wabas.some((a: any) => a.id)) setFound((cur) => cur || r.wabas); }).catch(() => {});
+  }, [saved, where?.api, where?.scope]);
   const lead = <>Optional. Messages go through your own WhatsApp Business account (Meta's WhatsApp Business Cloud API), and Meta charges you per message. Nothing is sent on WhatsApp unless this is switched on and the matching box below is ticked; email keeps working as before.</>;
   if (where === undefined) return <Shell title="WhatsApp" lead={lead}><Missing why="Checking your database…" /></Shell>;
   if (!where) return <Shell title="WhatsApp" lead={lead}><Missing why={kind === "studio" ? "WhatsApp is kept on the Studio's Cloudflare database. Host the Studio on Cloudflare (Settings → Hostings) and sign in there as its owner." : "WhatsApp needs this site hosted on your Cloudflare database, and you signed in to it on this device as its owner."} /></Shell>;
@@ -98,7 +107,8 @@ export function WhatsAppForm({ where, kind }: { where: Where | null | undefined;
   const idLooksLikePhone = /^\+?\d{10,12}$/.test(String(f.phoneId).replace(/\s/g, "")) && String(f.phoneId).replace(/\D/g, "").length <= 12;
   const ok = !f.on || (!!String(f.phoneId).trim() && !idLooksLikePhone && (!!f.token.trim() || !!w?.token));
   const fill = (list: WaFound[], cur: Record<string, any>) => {
-    const a = list.find((x) => x.id === cur.waba) || list[0], n: Record<string, any> = { ...cur, waba: a.id, token: "" };
+    // The account asked for; else the one that holds the number in use; else one of your own before Meta's "Test Number" account.
+    const a = list.find((x) => x.id && x.id === cur.waba) || list.find((x) => x.phones.some((p) => p.id === cur.phoneId)) || list.find((x) => x.phones.some((p) => !/^test number$/i.test(p.name))) || list[0], n: Record<string, any> = { ...cur, waba: a.id, token: "" };
     const ap = (cat: string) => a.templates.filter((t) => t.category.toUpperCase() === cat && t.status.toUpperCase() === "APPROVED");
     if (!a.phones.some((p) => p.id === n.phoneId)) n.phoneId = a.phones[0]?.id || "";
     const pick = (now: string, cat: string, like: RegExp) => (ap(cat).some((t) => t.name === now) ? now : (ap(cat).find((t) => like.test(t.name)) || (cat === "AUTHENTICATION" ? ap(cat)[0] : undefined))?.name || "");
@@ -148,8 +158,8 @@ export function WhatsAppForm({ where, kind }: { where: Where | null | undefined;
         </div>
         {(found || hand || w?.phoneId) && <div className="grid gap-3 sm:grid-cols-2">
           <Field label={acct ? "Send from" : "Phone number ID"} htmlFor="wa-id" hint={acct ? "The WhatsApp number messages go out from." : "On the API Setup page: a number of about 15 digits labelled “Phone number ID”. It is not the phone number itself."} warn={idLooksLikePhone ? "That looks like the phone number. The Phone number ID is a different, longer number shown under it on the API Setup page. Press Connect and it is filled in for you." : undefined}>
-            {acct ? <select id="wa-id" className="input" value={f.phoneId} onChange={set("phoneId")}>{acct.phones.map((p) => <option key={p.id} value={p.id}>{p.number}{p.name ? ` · ${p.name}` : ""}</option>)}{!acct.phones.length && <option value="">No number on this account yet</option>}</select> : <input id="wa-id" className="input" inputMode="numeric" value={f.phoneId} onChange={set("phoneId")} />}</Field>
-          {(!acct || !acct.id) && <Field label="WhatsApp Business Account ID, or Phone number ID (optional)" htmlFor="wa-waba" hint="Both are on the app's WhatsApp → API Setup page. With the account ID, Connect finds your numbers and templates; with the phone number ID it finds that one number."><input id="wa-waba" className="input" inputMode="numeric" value={f.waba} onChange={set("waba")} /></Field>}
+            {acct ? <select id="wa-id" className="input" value={f.phoneId} onChange={(e) => { const id = e.target.value, own = (found || []).find((x) => x.phones.some((p) => p.id === id)); if (own && found && own !== acct) setF((x) => fill(found, { ...x, phoneId: id, waba: own.id })); else setF((x) => ({ ...x, phoneId: id })); }}>{((found && found.length > 1 ? found : [acct]).flatMap((a) => a.phones)).map((p) => <option key={p.id} value={p.id}>{p.number}{p.name ? ` · ${p.name}` : ""}</option>)}{!acct.phones.length && <option value="">No number on this account yet</option>}</select> : <input id="wa-id" className="input" inputMode="numeric" value={f.phoneId} onChange={set("phoneId")} />}</Field>
+          {<Field label="WhatsApp Business Account ID, or Phone number ID (optional)" htmlFor="wa-waba" hint="Both are on the app's WhatsApp → API Setup page. With the account ID, Connect finds your numbers and templates; with the phone number ID it finds that one number."><input id="wa-waba" className="input" inputMode="numeric" value={f.waba} onChange={set("waba")} /></Field>}
           <Field label="Country code for 10-digit numbers" htmlFor="wa-cc"><input id="wa-cc" className="input" inputMode="numeric" value={f.cc} onChange={set("cc")} /></Field>
           {(!acct || !acct.id) && <Field label="Template language" htmlFor="wa-lang" hint="The language code your templates were approved in, for example en or en_US."><input id="wa-lang" className="input" value={f.lang} onChange={set("lang")} /></Field>}
         </div>}

@@ -28,6 +28,13 @@ export function SitesHostingCard({ session, studio, index, onIndex }: { session:
   const [db, setDb] = useState<{ api: string; studio: string } | null | undefined>(undefined);
   const [info, setInfo] = useState<{ /** The database runs this build's version. */ cur: boolean; cfx: boolean; imp: boolean; pages: boolean; del: boolean; mail: boolean; main: string | null; accounts: Acc[]; signed: boolean; gh: boolean; workers: string[] | null } | null>(null);
   const [mainName, setMainName] = useState("");
+  /** Databases that sites keep on their own Cloudflare accounts (not the Studio's database): each is updated by itself. */
+  const [siteDbs, setSiteDbs] = useState<{ api: string; account: string; cur: boolean; sites: string[] }[]>([]);
+  const loadSiteDbs = async (studioApi: string) => {
+    const by = new Map<string, { account: string; sites: string[] }>();
+    for (const p of index.projects) { const a = p.host?.cf?.api?.replace(/\/+$/, ""); if (!a || a === studioApi.replace(/\/+$/, "")) continue; const e = by.get(a) || { account: p.host?.account || "", sites: [] }; e.sites.push(p.name); if (!e.account && p.host?.account) e.account = p.host.account; by.set(a, e); }
+    setSiteDbs(await Promise.all([...by].map(async ([api, e]) => ({ api, account: e.account, sites: e.sites, cur: ((await cfDeployInfo(api)).v || 0) >= CFDB_VERSION }))));
+  };
   const [busy, setBusy] = useState(""), [err, setErr] = useState("");
   const [tear, setTear] = useState<ProjectMeta | null>(null);
   const [addTok, setAddTok] = useState(""), [replaceFor, setReplaceFor] = useState<string | null>(null);
@@ -37,6 +44,7 @@ export function SitesHostingCard({ session, studio, index, onIndex }: { session:
     const hc = await loadHostConfig().catch(() => null), v = await cfAccountVault.load(session.token).catch(() => null);
     const api = hc?.kind === "cloudflare" ? hc.api : v?.setup?.api || "";
     const sid = hc?.kind === "cloudflare" ? hc.studio : session.cfg.owner === "cloudflare" ? session.cfg.repo : "";
+    loadSiteDbs(api).catch(() => {});
     if (!api || !sid) { setDb(null); return; }
     setDb({ api, studio: sid });
     const d = await cfDeployInfo(api), signed = !!(await cfSignedIn(api));
@@ -131,6 +139,17 @@ export function SitesHostingCard({ session, studio, index, onIndex }: { session:
   useEffect(() => { netlifyToken.load(session.token).then((t) => setNf(t ? new Netlify(t.token) : null)).catch(() => setNf(null)); }, [session.token]);
   const cfAcc = useCfAccount(session.token, nf, true, true);
   const dbHost = db ? db.api.replace(/^https:\/\//, "").replace(/\/+$/, "") : "";
+  const updateSiteDb = (d: { api: string; account: string }) => run("sitedb:" + d.api, async () => {
+    const say = (x: string) => setBusy("sitedb:" + d.api + "|" + x), host = d.api.replace(/^https:\/\//, "");
+    const { relay, cf, account, token } = await cfAcc.clientFor(d.account || undefined, say);
+    // Only the account that runs that database (its workers.dev name is in the database's address).
+    const sub = await cf.subdomainOf(account.id);
+    if (!sub || `picaffectz-db.${sub}.workers.dev` !== host) throw new Error(`The Cloudflare token on this device is for ${account.name}, but that database (${host}) is on another Cloudflare account. Add that account's token under Cloudflare accounts below, then press Update again.`);
+    const v = await cfAccountVault.load(session.token), old = (v?.setups || []).find((x) => x.api.replace(/\/+$/, "") === d.api) || null;
+    const setup = await setupCfDb(relay, token, { account, resendKey: "", mailFrom: v?.mailFrom || "", name: "Picaffectz Studio", existing: old, requireMail: false }, say);
+    await cfAccountVault.save({ ...(v || { token: "" }), setups: [...(v?.setups || []).filter((x) => x.account !== account.id), setup] }, session.token);
+    toast("That site's database is up to date."); await loadSiteDbs(db?.api || "");
+  });
   const updateDb = () => run("update", async () => {
     if (!db) return;
     const say = (x: string) => setBusy("update:" + x);
@@ -149,6 +168,14 @@ export function SitesHostingCard({ session, studio, index, onIndex }: { session:
     <section className="card flex flex-col gap-3 p-5" aria-label="Sites and hosting accounts">
       <h3 className="text-[15px] font-extrabold">Sites and hosting accounts</h3>
       <p className="text-sm text-ink-300">Every live site and where it's hosted, in one place. Cloudflare accounts are kept on your Studio's database (tokens as secrets on your own Cloudflare, never shown again), and each site's choice is saved with the project, so any device signed in to the Studio uses the same setup.</p>
+      {siteDbs.length > 0 && <div className="flex flex-col gap-2 rounded-lg border border-ink-700 p-3 text-[13px]" aria-label="Site databases">
+            <div className="flex flex-wrap items-baseline gap-x-2"><b className="text-sm">Site databases</b><span className="text-ink-400">Sites hosted on their own Cloudflare account keep their own database there. Each is updated by itself, apart from your Studio's.</span></div>
+            {siteDbs.map((d) => <div key={d.api} className="flex flex-wrap items-center gap-2 border-t border-ink-700 pt-2">
+              <span className="min-w-0 flex-1"><span className="break-all font-mono text-[12px]">{d.api.replace(/^https:\/\//, "")}</span><span className="block text-ink-400">{d.sites.join(", ")}</span></span>
+              {d.cur ? <span className="chip border-emerald-400/50 text-emerald-200">Up to date</span>
+                : <><span className="chip border-amber-400/50 text-amber-200">Older build</span><button type="button" className="btn btn-pri btn-sm" disabled={!!busy} onClick={() => updateSiteDb(d)}>{busy.startsWith("sitedb:" + d.api) ? (busy.split("|")[1] || "Updating") + "…" : "Update this database"}</button></>}
+            </div>)}
+          </div>}
       {!db ? <p className="text-sm text-amber-200">This needs your Studio's database on Cloudflare. Set it up from Publish to Cloudflare on a project, or move the Studio there (Migration).</p>
         : !info ? <SkelRows n={3} label="Loading your sites and hosting accounts" />
         : !info.signed ? <p className="text-sm text-amber-200">Sign in to your Studio's database on this device to manage its hosting accounts.</p>

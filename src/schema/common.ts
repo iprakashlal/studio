@@ -554,9 +554,16 @@ export function sectionBgCard(key: string, title = "Background & text of this se
       { t: "grid", cols: 2, fields: [{ t: "range", path: p + "dim", label: "Strength of the backdrop", min: 0, max: 90, step: 5, unit: "%" }, { t: "select", path: p + "text", label: "Text colour", options: [{ value: "", label: "Automatic" }, { value: "light", label: "Light text (for a dark background)" }, { value: "dark", label: "Dark text (for a light background)" }, { value: "custom", label: "A colour I choose" }] }] },
       { t: "when", path: p + "text", is: "custom", fields: [{ t: "color", path: p + "textColor", label: "Colour of the text" }] },
       { t: "grid", cols: 2, fields: [{ t: "select", path: p + "font", label: "Font", options: [{ value: "", label: "The theme's fonts" }, ...fonts.map((f) => ({ value: f, label: f }))] }, { t: "select", path: p + "fontFor", label: "Use the font for", options: [{ value: "", label: "All the text here" }, { value: "head", label: "The headings only" }] }] },
-      { t: "select", path: p + "align", label: "Alignment", options: [{ value: "", label: "The theme's own" }, { value: "left", label: "Left" }, { value: "center", label: "Centre" }, { value: "right", label: "Right" }] },
       { t: "select", path: p + "fontStyle", label: "Text style", options: [{ value: "", label: "The theme's own" }, { value: "bold", label: "Bold" }, { value: "light", label: "Light" }, { value: "italic", label: "Italic" }, { value: "bolditalic", label: "Bold italic" }, { value: "upper", label: "CAPITALS" }, { value: "spaced", label: "Spaced out letters" }] },
     ] },
+  ] };
+}
+/** A section's alignment (content.sectionBg[key].align): its heading and text outside the cards; it works by itself,
+ *  whether or not the section has a background of its own. */
+export function sectionAlignCard(key: string, title = "Alignment of this section"): Card {
+  return { title, fields: [
+    { t: "select", path: `sectionBg.${key}.align`, label: "Alignment", options: [{ value: "", label: "The theme's own" }, { value: "left", label: "Left" }, { value: "center", label: "Centre" }, { value: "right", label: "Right" }] },
+    { t: "note", text: "Moves the section's heading, its opening text and its buttons. What is inside the cards, lists and forms of the section keeps the theme's alignment." },
   ] };
 }
 /** Adds the background card to every section's category (those under "Sections"), and to the ones named in `more`:
@@ -564,8 +571,8 @@ export function sectionBgCard(key: string, title = "Background & text of this se
 export function withSectionBg(schema: Category[], more: Record<string, [string, string?][]> = {}, fonts: string[] = []): Category[] {
   const list = [...new Set(fonts)].sort((a, b) => a.localeCompare(b));
   for (const c of schema) {
-    if (more[c.id]) for (const [key, title] of more[c.id]) c.cards.push(sectionBgCard(key, title, list));
-    else if (c.sub === "Sections") c.cards.push(sectionBgCard(c.id, undefined, list));
+    if (more[c.id]) for (const [key, title] of more[c.id]) c.cards.push(sectionAlignCard(key, title ? title.replace(/^Background & text/, "Alignment") : undefined), sectionBgCard(key, title, list));
+    else if (c.sub === "Sections") c.cards.push(sectionAlignCard(c.id), sectionBgCard(c.id, undefined, list));
   }
   return schema;
 }

@@ -738,11 +738,11 @@
     [["bold", "font-weight:800"], ["light", "font-weight:300"], ["italic", "font-style:italic"], ["bolditalic", "font-weight:800!important;font-style:italic"], ["upper", "text-transform:uppercase!important;letter-spacing:.04em"], ["spaced", "letter-spacing:.09em"]]
       .map(function (x) { return ".has-sbg[data-sfs=" + x[0] + "] :is(h1,h2,h3,h4,h5,h6,p,li,blockquote,figcaption,summary,dt,dd){" + x[1] + "!important}"; }).join("") +
     // its own alignment: headings, text and the rows of buttons under them
-    [["left", "0", "auto", "flex-start", "start"], ["center", "auto", "auto", "center", "center"], ["right", "auto", "0", "flex-end", "end"]].map(function (x) { var S = ".has-sbg[data-salign=" + x[0] + "] ";
-      return S + ":is(h1,h2,h3,h4,h5,h6,p,li,blockquote,figcaption,summary,dt,dd,small,header){text-align:" + x[0] + "!important}" +
-        S + ":is(h1,h2,h3,h4,h5,h6,p,blockquote,figcaption):not(li *):not(td *){margin-left:" + x[1] + "!important;margin-right:" + x[2] + "!important}" +
-        S + ":is(.sh,.sec-h,.cta-row,.hero-cta,.btns,.actions,.tags,.chips){justify-content:" + x[3] + "!important;justify-items:" + x[4] + "!important}" +
-        S + ":is(.sh,.sec-h){align-items:" + x[3] + "!important}"; }).join("");
+    [["left", "0", "auto", "flex-start", "start"], ["center", "auto", "auto", "center", "center"], ["right", "auto", "0", "flex-end", "end"]].map(function (x) { var S = "[data-salign=" + x[0] + "] ", OUT = ":not(:is(.card,[class*=card],article,li,form,table,details,.box,.tile,.cat,.banner,.loc,.qa-i) *)";
+      return S + ":is(h1,h2,h3,h4,h5,h6,p,blockquote,figcaption,small,header)" + OUT + "{text-align:" + x[0] + "!important}" +
+        S + ":is(h1,h2,h3,h4,h5,h6,p,blockquote,figcaption)" + OUT + "{margin-left:" + x[1] + "!important;margin-right:" + x[2] + "!important}" +
+        S + ":is(.sh,.sec-h,.cta-row,.hero-cta,.btns,.actions)" + OUT + "{justify-content:" + x[3] + "!important;justify-items:" + x[4] + "!important}" +
+        S + ":is(.sh,.sec-h)" + OUT + "{align-items:" + x[3] + "!important}"; }).join("");
   var COLOR_OK = /^(#[0-9a-f]{3,8}|rgba?\([0-9., %]+\))$/i;
   /** A section's own font, text colour and text style. */
   function sectionText(el, k, opts) {
@@ -755,19 +755,20 @@
     var tc = String(k.textColor || "").trim();
     if (k.text === "custom" && COLOR_OK.test(tc)) { el.style.setProperty("--scol", tc); el.setAttribute("data-sbg-text", "custom"); }
     if (/^(bold|light|italic|bolditalic|upper|spaced)$/.test(k.fontStyle || "")) el.setAttribute("data-sfs", k.fontStyle);
-    if (/^(left|center|right)$/.test(k.align || "")) el.setAttribute("data-salign", k.align);
   }
   function sectionBgs(opts, root) {
     var map = opts.bgs; if (!map || typeof map !== "object") return;
     var url = opts.asset || function (v) { return v && (v.url || v.path) || ""; };
-    if (!Object.keys(map).some(function (x) { return map[x] && map[x].on; })) return;
+    if (!Object.keys(map).some(function (x) { return map[x] && (map[x].on || map[x].align); })) return;
     if (!document.getElementById("fx-sbg")) { var st2 = document.createElement("style"); st2.id = "fx-sbg"; st2.textContent = SBG_CSS; document.head.appendChild(st2); }
     Object.keys(map).forEach(function (key) {
-      var k = map[key]; if (!k || !k.on) return;
+      var k = map[key]; if (!k || !(k.on || k.align)) return;
       var el = null; try { el = root.querySelector("#" + (window.CSS && CSS.escape ? CSS.escape(key) : key)) || root.querySelector('[data-sec="' + key + '"]'); } catch (e) { /* odd key */ }
       if (!el && key === "hero") el = root.querySelector("section.hero,.hero");
       if (!el && key === "footer") el = root.querySelector("footer");
       if (!el) return;
+      if (/^(left|center|right)$/.test(k.align || "")) el.setAttribute("data-salign", k.align);
+      if (!k.on) return;
       var pics = k.kind === "slides" && Array.isArray(k.slides) ? k.slides.map(function (x) { return url(x); }).filter(Boolean) : [];
       var kind = k.kind === "image" || k.kind === "video" ? k.kind : pics.length > 1 ? "slides" : "color", src = kind === "image" ? url(k.image) : kind === "video" ? url(k.video) : kind === "slides" ? pics[0] : pics[0] || "";
       if (k.kind === "slides" && pics.length === 1) kind = "image";

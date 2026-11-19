@@ -736,7 +736,13 @@
     ".has-sbg[data-sfont=all],.has-sbg[data-sfont=all] :is(h1,h2,h3,h4,h5,h6,p,li,a,span,b,strong,em,small,button,input,select,textarea,label,td,th,blockquote,figcaption,dt,dd,summary,div){font-family:var(--sfont),system-ui,sans-serif!important}" +
     ".has-sbg[data-sfont=head] :is(h1,h2,h3,h4,h5,h6),.has-sbg[data-sfont=head] :is(h1,h2,h3,h4,h5,h6) *{font-family:var(--sfont),system-ui,sans-serif!important}" +
     [["bold", "font-weight:800"], ["light", "font-weight:300"], ["italic", "font-style:italic"], ["bolditalic", "font-weight:800!important;font-style:italic"], ["upper", "text-transform:uppercase!important;letter-spacing:.04em"], ["spaced", "letter-spacing:.09em"]]
-      .map(function (x) { return ".has-sbg[data-sfs=" + x[0] + "] :is(h1,h2,h3,h4,h5,h6,p,li,blockquote,figcaption,summary,dt,dd){" + x[1] + "!important}"; }).join("");
+      .map(function (x) { return ".has-sbg[data-sfs=" + x[0] + "] :is(h1,h2,h3,h4,h5,h6,p,li,blockquote,figcaption,summary,dt,dd){" + x[1] + "!important}"; }).join("") +
+    // its own alignment: headings, text and the rows of buttons under them
+    [["left", "0", "auto", "flex-start", "start"], ["center", "auto", "auto", "center", "center"], ["right", "auto", "0", "flex-end", "end"]].map(function (x) { var S = ".has-sbg[data-salign=" + x[0] + "] ";
+      return S + ":is(h1,h2,h3,h4,h5,h6,p,li,blockquote,figcaption,summary,dt,dd,small,header){text-align:" + x[0] + "!important}" +
+        S + ":is(h1,h2,h3,h4,h5,h6,p,blockquote,figcaption):not(li *):not(td *){margin-left:" + x[1] + "!important;margin-right:" + x[2] + "!important}" +
+        S + ":is(.sh,.sec-h,.cta-row,.hero-cta,.btns,.actions,.tags,.chips){justify-content:" + x[3] + "!important;justify-items:" + x[4] + "!important}" +
+        S + ":is(.sh,.sec-h){align-items:" + x[3] + "!important}"; }).join("");
   var COLOR_OK = /^(#[0-9a-f]{3,8}|rgba?\([0-9., %]+\))$/i;
   /** A section's own font, text colour and text style. */
   function sectionText(el, k, opts) {
@@ -749,6 +755,7 @@
     var tc = String(k.textColor || "").trim();
     if (k.text === "custom" && COLOR_OK.test(tc)) { el.style.setProperty("--scol", tc); el.setAttribute("data-sbg-text", "custom"); }
     if (/^(bold|light|italic|bolditalic|upper|spaced)$/.test(k.fontStyle || "")) el.setAttribute("data-sfs", k.fontStyle);
+    if (/^(left|center|right)$/.test(k.align || "")) el.setAttribute("data-salign", k.align);
   }
   function sectionBgs(opts, root) {
     var map = opts.bgs; if (!map || typeof map !== "object") return;

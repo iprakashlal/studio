@@ -1498,6 +1498,7 @@ function renderSite(c){
   const K=KIT!=="classic"&&window.SiteLayouts&&SiteLayouts.kits[KIT];
   if(K){renderKit(c,K)}else{
   siteRoot.innerHTML=`<div id="siteInner">${siteHTML(c)}</div>`;
+  if(SC&&SC.drawn)SC.drawn(siteRoot,c);
   initSite(c);}
   heroSlides(c);heroLogo(c);video(c);social(c);spLinks(c);menu(c);lang(c);consent(c);addons(c);festival(c);
   if(window.SiteFX)try{window.SiteFX.init({root:$("#siteInner"),brand:c.theme.introTitle||c.brand.logoText,badge:c.poweredBy})}catch(e){}
@@ -1630,6 +1631,7 @@ function renderKit(c,K){
     photo:(k,w)=>window.SiteMotifs?SiteMotifs.photo(PACK(),k,w):"",pimg,itemImg,
     copy:tx=>{try{navigator.clipboard.writeText(tx).then(()=>toast("Copied: "+tx),()=>toast(tx))}catch(e){toast(tx)}}};
   siteRoot.innerHTML=`<div id="siteInner" class="kit k-${KIT}">${K.render(c,h)}</div>`;
+  if(SC&&SC.drawn)SC.drawn(siteRoot,c);
   try{fx.kitStop=K.init&&K.init($("#siteInner"),c,h)}catch(e){console.error(e)}
 }
 function initSite(c){

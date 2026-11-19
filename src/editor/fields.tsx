@@ -538,7 +538,7 @@ export function adminThemeChoice(root: any, all: Theme[]): { mode: "current" | "
 function ThemesField() {
   const { tpl, root, bump, site } = useCtx();
   const all = limitThemes(tpl.themes || THEMES, root?.theme?.preset, tpl.id);
-  const locked = !!(root?.code?.on && String(root.code.js || "").trim());
+  const locked = !!root?.code?.on;
   const pick = (th: Theme) => {
     if (locked) return;
     // With a shortlist, the theme being left stays on it: the current theme only counts while it's current.
@@ -736,15 +736,43 @@ function RichBar({ id, value, set }: { id: string; value: string; set: (v: strin
   );
 }
 
-/** The files that make up each template's own code. The portfolio keeps all three in index.html (marked main-css, main-js). */
+/** The files that make up each template's own code. The portfolio keeps both in index.html (marked main-css, main-js). */
 const CODE_FILES: Record<string, { css: string; js: string }> = { business: { css: "assets/biz.css", js: "assets/biz.js" }, restaurant: { css: "assets/rest.css", js: "assets/rest.js" }, store: { css: "assets/store.css", js: "assets/store.js" } };
-export async function templateCode(tplId: string, base: string): Promise<{ html: string; css: string; js: string }> {
+export async function templateCode(tplId: string, base: string): Promise<{ css: string; js: string }> {
   const get = async (f: string) => { const r = await fetch(base + f, { cache: "no-store" }); if (!r.ok) throw new Error(`Could not read ${f} (${r.status}).`); return r.text(); };
   const files = CODE_FILES[tplId];
-  if (files) { const [html, css, js] = await Promise.all([get("index.html"), get(files.css), get(files.js)]); return { html, css, js }; }
+  if (files) { const [css, js] = await Promise.all([get(files.css), get(files.js)]); return { css, js }; }
   const page = await get("index.html"), c = /<style id="main-css">([\s\S]*?)<\/style>/.exec(page), j = /<script id="main-js">([\s\S]*?)<\/script>/.exec(page);
   if (!c || !j) throw new Error("This site runs an older build of the template. Update the site first (Settings → Updates in the Studio), then copy its code.");
-  return { html: page.replace(c[0], '<style id="main-css"></style>').replace(j[0], '<script id="main-js"></script>'), css: c[1].replace(/^\n/, ""), js: j[1].replace(/^\n/, "") };
+  return { css: c[1].replace(/^\n/, ""), js: j[1].replace(/^\n/, "") };
+}
+/** A page's markup set out one tag per line, so it can be read and edited. */
+export function prettyHtml(html: string): string {
+  const t = document.createElement("template"); t.innerHTML = html; const out: string[] = [], esc = document.createElement("div");
+  const text = (s: string) => { esc.textContent = s; return esc.innerHTML; };
+  const walk = (n: Node, d: number) => {
+    const pad = "  ".repeat(Math.min(d, 14));
+    if (n.nodeType === 3) { const s = (n.nodeValue || "").replace(/\s+/g, " ").trim(); if (s) out.push(pad + text(s)); return; }
+    if (n.nodeType !== 1) return;
+    const el = n as Element, tag = el.localName, kids = Array.from(el.childNodes).filter((c) => c.nodeType === 1 || (c.nodeType === 3 && (c.nodeValue || "").trim()));
+    if (!kids.length || /^(script|style|pre|textarea|svg|math)$/.test(tag)) { out.push(pad + el.outerHTML.replace(/\s*\n\s*/g, " ")); return; }
+    const open = (el.cloneNode(false) as Element).outerHTML.replace(new RegExp(`</${tag}>$`), "");
+    if (kids.length === 1 && kids[0].nodeType === 3) { out.push(pad + open + text((kids[0].nodeValue || "").replace(/\s+/g, " ").trim()) + `</${tag}>`); return; }
+    out.push(pad + open); kids.forEach((c) => walk(c, d + 1)); out.push(`${pad}</${tag}>`);
+  };
+  t.content.childNodes.forEach((c) => walk(c, 0));
+  return out.join("\n");
+}
+/** Asks the preview for the markup of the page it shows, as the template drew it (before any of your HTML is laid over it). */
+function previewHtml(): Promise<{ key: string; html: string }> {
+  return new Promise((ok, no) => {
+    const fr = document.querySelector<HTMLIFrameElement>('iframe[name="cms-preview"]'), w = fr?.contentWindow;
+    if (!w) { no(new Error("Open the preview first: the page's HTML is copied from it.")); return; }
+    const done = () => { window.clearTimeout(tm); removeEventListener("message", on); };
+    const on = (e: MessageEvent) => { if (e.source !== w || e.origin !== location.origin || e.data?.type !== "cms:snap") return; done(); if (e.data.ok && e.data.html) ok({ key: String(e.data.key), html: String(e.data.html) }); else no(new Error("The preview has not drawn this page yet. Wait a moment and try again.")); };
+    const tm = window.setTimeout(() => { done(); no(new Error("The preview did not answer. If this site runs an older build, update the site first; otherwise open the preview and try again.")); }, 4000);
+    addEventListener("message", on); w.postMessage({ type: "cms:snap" }, location.origin);
+  });
 }
 /** One code box. It keeps its own text while you type and hands it on after a short pause, so a long file stays quick to edit. */
 function CodeBox({ label, hint, value, onSave }: { label: string; hint: string; value: string; onSave: (v: string) => void }) {
@@ -765,23 +793,32 @@ function CodeBox({ label, hint, value, onSave }: { label: string; hint: string; 
 }
 function CodeTemplateField() {
   const { tpl, root, bump, site } = useCtx();
-  const [busy, setBusy] = useState(false), [err, setErr] = useState(""), [ask, setAsk] = useState<"" | "delete" | "again">("");
+  const [busy, setBusy] = useState(false), [err, setErr] = useState(""), [ask, setAsk] = useState<"" | "delete" | "again" | "page">(""), [sel, setSel] = useState("");
   const k = root.code && typeof root.code === "object" ? root.code : null;
-  const has = !!k && !!(String(k.js || "").trim() || String(k.css || "").trim() || String(k.html || "").trim()), on = has && !!k.on;
+  const pages: Record<string, { html: string; base: string }> = k && k.pages && typeof k.pages === "object" ? k.pages : {};
+  const keys = Object.keys(pages), cur = pages[sel] ? sel : keys[0] || "";
+  const has = !!k && !!(String(k.js || "").trim() || String(k.css || "").trim() || keys.length), on = has && !!k.on;
+  const name = (key: string) => { const f = key.split("?")[0] + ".html", p = tpl.pages.find((x) => x.file === f); return (p ? p.label : f) + (key.includes("?") ? " (" + key.split("?").slice(1).join(", ") + ")" : ""); };
+  /** Copies the HTML of the page the preview shows. */
+  const snap = async (code: any) => { const s = await previewHtml(), html = prettyHtml(s.html); code.pages = { ...(code.pages || {}), [s.key]: { html, base: html } }; setSel(s.key); };
   const copy = async (thenOn: boolean) => {
     setBusy(true); setErr(""); setAsk("");
-    try { const c = await templateCode(tpl.id, site ? "" : `templates/${tpl.id}/`); root.code = { on: thenOn, html: c.html, css: c.css, js: c.js }; bump(); }
+    try { const c = await templateCode(tpl.id, site ? "" : `templates/${tpl.id}/`); const code: any = { on: false, css: c.css, js: c.js, pages: {} };
+      try { await snap(code); } catch (e: any) { setErr((e?.message || "The page's HTML could not be copied.") + " The CSS and JavaScript were copied."); }
+      code.on = thenOn; root.code = code; bump(); }
     catch (e: any) { setErr(e?.message || "Could not read the template's code."); }
     setBusy(false);
   };
+  const page = async () => { setBusy(true); setErr(""); setAsk(""); try { const code = { ...(root.code || {}) }; await snap(code); root.code = code; bump(); } catch (e: any) { setErr(e?.message || "The page's HTML could not be copied."); } setBusy(false); };
   const turn = (v: boolean) => { if (busy) return; if (v && !has) { void copy(true); return; } root.code = { ...(k || {}), on: v }; setAsk(""); bump(); };
-  const save = (key: "html" | "css" | "js") => (v: string) => { root.code = { ...(root.code || {}), [key]: v }; bump(); };
-  const one = tpl.id === "portfolio";
+  const save = (key: "css" | "js") => (v: string) => { root.code = { ...(root.code || {}), [key]: v }; bump(); };
+  const saveHtml = (v: string) => { if (!cur) return; root.code = { ...(root.code || {}), pages: { ...pages, [cur]: { ...pages[cur], html: v } } }; bump(); };
+  const edited = !!cur && pages[cur].html !== pages[cur].base;
   return (
     <div className="flex flex-col gap-4" aria-label="Code Update">
-      <p className="rounded-lg border border-amber-400/40 bg-amber-400/5 px-3 py-2.5 text-[13px] text-amber-100">This is a copy of the site's whole template code. Switched on, the site runs this copy in place of the template's own code, and the theme is locked. Your content (texts, pictures, colours) is still read from the other sections. The copy no longer follows Studio updates to the template, and a mistake in it can break the site: switch it off to go back to the template at once.</p>
+      <p className="rounded-lg border border-amber-400/40 bg-amber-400/5 px-3 py-2.5 text-[13px] text-amber-100">This is a copy of the site's code: each page's finished HTML, the whole stylesheet and the whole script. Switched on, the site runs this copy in place of the template's own code, and the theme is locked. What you change in a page's HTML stays as you wrote it; the parts you leave alone keep following your content. The copy no longer follows Studio updates to the template, and a mistake in it can break the site: switch it off to go back to the template at once.</p>
       <Toggle id="f-code-on" label="Use this code on the site" checked={on} onChange={turn} />
-      {busy && <p className="text-[13px] text-ink-300" role="status">Copying the template's code…</p>}
+      {busy && <p className="text-[13px] text-ink-300" role="status">Copying the code…</p>}
       {err && <p className="text-[13px] text-red-300" role="alert">{err}</p>}
       {!has && !busy && <div className="flex flex-wrap items-center gap-2 text-[13px]"><button type="button" className="btn btn-sm" onClick={() => void copy(false)}>Copy the template's code here</button><span className="text-ink-400">Nothing is copied yet. Switching it on copies the code first.</span></div>}
       {has && on && <p className="text-[13px] text-ink-300">The site is running this code. The theme cannot be changed while it is on. Switch it off to change the theme or to delete this code; the code stays saved.</p>}
@@ -794,9 +831,19 @@ function CodeTemplateField() {
         </div>
       </div>}
       {has && <>
-        <CodeBox label="HTML" value={String(k.html || "")} onSave={save("html")} hint={one ? "The page itself. Its styles and script are in the two boxes below; leave the two empty main-css and main-js tags where they are." : "The page's frame, used for every page of the site. The site's sections are drawn into it by the JavaScript below."} />
+        <div className="flex flex-col gap-2 rounded-lg border border-ink-700 p-3">
+          <div className="flex flex-wrap items-end gap-2 text-[13px]">
+            {keys.length > 0 && <label className="flex flex-col gap-1"><span className="font-semibold text-ink-200">Page</span><select className="input py-1.5" aria-label="Page whose HTML is shown" value={cur} onChange={(e) => { setSel(e.target.value); setAsk(""); }}>{keys.map((x) => <option key={x} value={x}>{name(x)}{pages[x].html !== pages[x].base ? " (changed)" : ""}</option>)}</select></label>}
+            {ask === "page" ? <><span className="text-ink-200">Copy the page in the preview again? If it is a page you changed, those changes are lost.</span><button type="button" className="btn btn-sm" onClick={() => void page()}>Yes, copy it</button><button type="button" className="btn btn-sm" onClick={() => setAsk("")}>Cancel</button></>
+              : <button type="button" className="btn btn-sm" disabled={busy} onClick={() => (keys.some((x) => pages[x].html !== pages[x].base) ? setAsk("page") : void page())}>Copy the HTML of the page in the preview</button>}
+            {edited && ask !== "page" && <button type="button" className="btn btn-sm" onClick={() => { root.code = { ...(root.code || {}), pages: { ...pages, [cur]: { html: pages[cur].base, base: pages[cur].base } } }; bump(); }}>Undo my changes to this page</button>}
+          </div>
+          <p className="text-[12.5px] text-ink-400">Each page has its own HTML. To edit another page, open it in the preview, then press “Copy the HTML of the page in the preview”.</p>
+          {cur ? <CodeBox key={cur} label="HTML" value={pages[cur].html} onSave={saveHtml} hint="The finished HTML of this page: menu bar, every section, footer. Change, add, move or remove anything. Your changes show in the preview after a short pause, and stay as you wrote them even if the content changes later; the parts you did not touch keep following your content." />
+            : <p className="text-[13px] text-ink-300">No page's HTML is copied yet.</p>}
+        </div>
         <CodeBox label="CSS" value={String(k.css || "")} onSave={save("css")} hint="The template's whole stylesheet. A change shows in the preview after a short pause. Left empty, the template's own styles are used." />
-        <CodeBox label="JavaScript" value={String(k.js || "")} onSave={save("js")} hint="The template's whole script: it draws every section from your content. The preview reloads after a change. If it cannot start, the template's own code is shown and the preview says why." />
+        <CodeBox label="JavaScript" value={String(k.js || "")} onSave={save("js")} hint="The template's whole script: it draws the pages from your content and makes them work. The preview reloads after a change. If it cannot start, the template's own code is shown and the preview says why." />
       </>}
     </div>
   );

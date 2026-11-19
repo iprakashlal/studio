@@ -855,6 +855,7 @@ function render() {
   const bar = mobileBar();
   document.documentElement.classList.toggle("has-mbar", !!bar);
   $("#app").innerHTML = `<a class="skip" href="#main">Skip to content</a>${noticeHTML()}${navHTML()}<main id="main">${multi() && !special && PAGE !== "home" ? pageHead() : ""}${body}</main>${footerHTML()}${bar}`;
+  if (SC && SC.drawn) SC.drawn($("#app"), C);
   bind();
   if (PAGE === "order" && window.RestOrder && orderOn()) window.RestOrder.bind(ORDER_API);
   if (PAGE === "page" && window.SitePages) window.SitePages.after(window.SitePages.find(C, spCur(), PREVIEW));

@@ -846,6 +846,7 @@ function render() {
   applyMeta();
   const fn = PAGES[PAGE] || PAGES.home;
   $("#app").innerHTML = `<a class="skip" href="#main">Skip to content</a>${header()}<main id="main">${fn()}</main>${footer()}`;
+  if (SC && SC.drawn) SC.drawn($("#app"), C);
   bind();
   reveal();
   slides();

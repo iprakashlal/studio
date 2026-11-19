@@ -1,8 +1,9 @@
+import { legalChecks } from "../lib/legal";
 import type { Category, Field, TemplateDef } from "./types";
 import { FX_AXES, HERO_FX_AXIS, LINE_BREAKS_AXIS, type Axis } from "../themes/catalog";
 import { REST_AXES, REST_BODY_FONTS, REST_DISPLAY_FONTS, REST_TAGS, REST_THEMES, restaurantThemeValues } from "../themes/restaurant";
 import { INTRO_CARD, NAV_MODE_FIELD, NAV_MODE_MOB_FIELD } from "../themes/fields";
-import { adminCategory, codeCategory, withSectionBg, videoCategory, socialCategory, logoFields, consentCategory, emailsCategory, i18nCategory, prepareI18n, featuresCategory, festivalCategory, menuCategory, menuItem, prepareMenu, staticPagesCategory, heroSlidesCard, prepareSlides, prepareMaintenance, seoCategory, customFontsCard } from "./common";
+import { adminCategory, legalCategory, codeCategory, withSectionBg, videoCategory, socialCategory, logoFields, consentCategory, emailsCategory, i18nCategory, prepareI18n, featuresCategory, festivalCategory, menuCategory, menuItem, prepareMenu, staticPagesCategory, heroSlidesCard, prepareSlides, prepareMaintenance, seoCategory, customFontsCard } from "./common";
 
 const g2 = (...fields: Field[]): Field => ({ t: "grid", cols: 2, fields });
 const g3 = (...fields: Field[]): Field => ({ t: "grid", cols: 3, fields });
@@ -362,6 +363,7 @@ const schema: Category[] = [
   (() => { const s = seoCategory(true); s.cards.splice(2, 0, { title: "For search engines: about the restaurant", fields: [g2({ t: "text", path: "seo.cuisine", label: "Cuisine", ph: "Indian, North Indian" }, { t: "text", path: "seo.priceRange", label: "Price range", ph: "₹₹" }),
     { t: "note", text: "Together with your name, address, phone and opening hours, these are written into the home page in the form search engines read for restaurants, which can add your hours and rating to search results." }] }); return s; })(),
   consentCategory(),
+  legalCategory(),
   adminCategory(),
   codeCategory(),
 ];
@@ -444,6 +446,6 @@ export const restaurantTemplate: TemplateDef = {
     if (F.enabled && (F.sbUrl || F.sbKey) && !(F.sbUrl && F.sbKey && F.site)) w.push("The booking form's Supabase settings are incomplete (Project URL, public key and Site ID are all needed).");
     if (c?.events?.button && c?.events?.type && F.askType !== false && !(F.types || []).includes(c.events.type)) w.push(`The events button picks “${c.events.type}” in the booking form, but that isn't one of the form's choices.`);
     if (/^picaffectz$/i.test(String(c?.brand?.name || "").trim()) && c?.brand?.tagline === "Slow-cooked food, served warm") w.push("The restaurant name and tagline are still the sample (Picaffectz).");
-    return w;
+    return [...w, ...legalChecks("restaurant", c)];
   },
 };

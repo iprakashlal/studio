@@ -1,6 +1,7 @@
+import { legalChecks } from "../lib/legal";
 import type { Category, Field, TemplateDef } from "./types";
 import { AXES, BODY_FONTS, DISPLAY_FONTS, KIT_AXIS, LINE_BREAKS_AXIS, PORTFOLIO_AXES, THEMES, onColor, portfolioThemeValues } from "../themes/catalog";
-import { adminCategory, codeCategory, withSectionBg, videoCategory, socialCategory, logoFields, consentCategory, emailsCategory, i18nCategory, prepareI18n, featuresCategory, festivalCategory, menuCategory, menuItem, prepareMenu, staticPagesCategory, heroSlidesCard, prepareSlides, prepareMaintenance, seoCategory, customFontsCard, customFontFields } from "./common";
+import { adminCategory, legalCategory, codeCategory, withSectionBg, videoCategory, socialCategory, logoFields, consentCategory, emailsCategory, i18nCategory, prepareI18n, featuresCategory, festivalCategory, menuCategory, menuItem, prepareMenu, staticPagesCategory, heroSlidesCard, prepareSlides, prepareMaintenance, seoCategory, customFontsCard, customFontFields } from "./common";
 import VELOCITY_DEFAULTS from "./velocity-defaults.json";
 import { NAV_MODE_FIELD, NAV_MODE_MOB_FIELD, NAV_MODE_NOTE, themeCards } from "../themes/fields";
 
@@ -214,6 +215,7 @@ const schema: Category[] = [
   i18nCategory(),
   seoCategory(false),
   consentCategory(),
+  legalCategory(),
   adminCategory(),
   codeCategory(),
 ];
@@ -284,6 +286,6 @@ export const portfolioTemplate: TemplateDef = {
     const w: string[] = [];
     if (!c?.contact?.email) w.push("No contact email is set.");
     if (!c?.seo?.title) w.push("No browser tab title is set.");
-    return w;
+    return [...w, ...legalChecks("portfolio", c)];
   },
 };

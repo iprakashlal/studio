@@ -16,7 +16,7 @@ create index if not exists approvals_project on approvals (scope, project, creat
 create table if not exists approval_notes (id integer primary key autoincrement, token text not null, who text not null, body text not null, page text not null default '', kind text not null default 'comment', created_at text not null);
 create index if not exists approval_notes_token on approval_notes (token, id);
 `;
-var CFDB_VERSION = 28;
+var CFDB_VERSION = 29;
 var CFDB_WORKER_NAME = "picaffectz-db";
 
 // src/lib/lookdigest.ts
@@ -1545,7 +1545,7 @@ var db_worker_default = {
         const raw = await req.text();
         if (raw.length > 2e4) return err(413, "Too long.");
         const q = JSON.parse(raw || "{}");
-        if (q.website) return json({ ok: true });
+        if (q.website || q.took != null && Number(q.took) < 1500 && !(q.data && q.data.order_no)) return json({ ok: true });
         const data = {};
         for (const [k, v] of Object.entries(q.data || {}).slice(0, 25)) if (/^[a-z0-9][\w-]{0,39}$/i.test(k) && v != null && String(v).trim()) data[k] = String(v).slice(0, 5e3);
         if (!Object.keys(data).length) return err(400, "The form was empty.");

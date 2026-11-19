@@ -1,7 +1,8 @@
+import { legalChecks } from "../lib/legal";
 import type { Category, Field, TemplateDef } from "./types";
 import { uid, vpaOk, paypalOk, httpsOk } from "../lib/util";
 import { BODY_FONTS, DISPLAY_FONTS, LINE_BREAKS_AXIS, STORE_AXES, THEMES, onColor, storeThemeValues } from "../themes/catalog";
-import { adminCategory, codeCategory, withSectionBg, videoCategory, socialCategory, logoFields, consentCategory, emailsCategory, i18nCategory, prepareI18n, featuresCategory, festivalCategory, menuCategory, menuItem, prepareMenu, staticPagesCategory, heroSlidesCard, prepareSlides, prepareMaintenance, seoCategory, warrantyCategory, customFontsCard } from "./common";
+import { adminCategory, legalCategory, codeCategory, withSectionBg, videoCategory, socialCategory, logoFields, consentCategory, emailsCategory, i18nCategory, prepareI18n, featuresCategory, festivalCategory, menuCategory, menuItem, prepareMenu, staticPagesCategory, heroSlidesCard, prepareSlides, prepareMaintenance, seoCategory, warrantyCategory, customFontsCard } from "./common";
 import { NAV_MODE_FIELD, NAV_MODE_MOB_FIELD, themeCards } from "../themes/fields";
 
 const CURRENCIES = ["INR", "USD", "EUR", "GBP", "AED", "SGD", "AUD", "CAD"];
@@ -270,6 +271,7 @@ const schema: Category[] = [
   i18nCategory(),
   seoCategory(true),
   consentCategory(),
+  legalCategory(),
   adminCategory(),
   codeCategory(),
 ];
@@ -350,6 +352,6 @@ export const storeTemplate: TemplateDef = {
     if (!(c?.products || []).length) w.push("The shop has no products.");
     const samples = (c?.products || []).filter((x: any) => x.sample).length;
     if (samples) w.push(`${samples} sample product${samples > 1 ? "s are" : " is"} still in the catalogue.`);
-    return w;
+    return [...w, ...legalChecks("store", c)];
   },
 };

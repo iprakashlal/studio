@@ -12,7 +12,7 @@ import type { Repo } from "./repo";
 import { bytesB64 } from "./repo";
 import { blobToBytes, collectAssetPaths, getP, textToBytes } from "./util";
 import { adminFile } from "../schema/common";
-import { bakeHead, pageLabel } from "./head";
+import { siteBase, bakeHead, pageLabel } from "./head";
 import { assetBase, cfAssetBase, cleanUrl, type CfSiteCfg, type SbCfg } from "./supa";
 
 export type SiteFile = { path: string; data: Uint8Array };
@@ -57,6 +57,28 @@ async function fetchBytes(url: string): Promise<Uint8Array> {
 }
 
 
+const slugify = (v: unknown) => String(v ?? "").toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60);
+/** robots.txt, and sitemap.xml when the site's address is known: the template's public pages, custom pages and (for a shop) products. */
+export function siteFiles(template: TemplateDef, c: any, base: string, admin: string, have: Set<string>): { path: string; text: string }[] {
+  const hidden = !!c?.seo?.noindex, xml = (v: string) => v.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  const urls: string[] = [];
+  if (base && !hidden) {
+    const PRIVATE = /^(admin|404|cart|checkout|account|order|page|section|product)\.html$/;
+    const multi = template.id === "store" || !!c?.site?.multiPage;
+    urls.push(base);
+    if (multi) for (const p of template.pages) if (p.file !== "index.html" && !PRIVATE.test(p.file) && have.has(p.file) && !(p.file === "portfolio.html" && c?.nav?.showPortfolio === false)) urls.push(base + p.file);
+    if (template.id === "restaurant" && c?.ordering?.on && have.has("order.html")) urls.push(base + "order.html");
+    const pageFile = template.pageFile === "index.html" ? "" : "page.html";
+    for (const p of (Array.isArray(c?.staticPages) ? c.staticPages : [])) { const slug = p && p.show !== false && !p.noindex && String(p.title || "").trim() ? slugify(p.slug || p.title) || p.id : ""; if (slug) urls.push(base + pageFile + "?p=" + encodeURIComponent(slug)); }
+    if (template.id === "store") for (const p of (Array.isArray(c?.products) ? c.products : [])) { const slug = p && p.hidden !== true ? p.slug || slugify(p.name) || p.id : ""; if (slug) urls.push(base + "product.html?p=" + encodeURIComponent(slug)); }
+  }
+  const day = new Date().toISOString().slice(0, 10), list = [...new Set(urls)].slice(0, 5000);
+  const robots = ["User-agent: *", hidden ? "Disallow: /" : "Allow: /", ...(hidden ? [] : ["Disallow: /" + admin, "Disallow: /cms/"]), ...(list.length ? ["", "Sitemap: " + base + "sitemap.xml"] : []), ""].join("\n");
+  const out = [{ path: "robots.txt", text: robots }];
+  if (list.length) out.push({ path: "sitemap.xml", text: `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${list.map((u) => `  <url><loc>${xml(u)}</loc><lastmod>${day}</lastmod></url>`).join("\n")}\n</urlset>\n` });
+  return out;
+}
+
 export async function buildSite(opts: {
   template: TemplateDef;
   content: any;
@@ -92,6 +114,8 @@ export async function buildSite(opts: {
     let data = await fetchBytes(`templates/${template.id}/${f}`);
     if (f.endsWith(".html") && f !== "admin.html" && f !== "404.html")
       data = textToBytes(bakeHead(new TextDecoder().decode(data), hc, { file: f, label: pageLabel(template.id, f, hc), base: opts.base, bg: hc?.theme?.bg, assets: opts.host ? ("api" in opts.host ? cfAssetBase(opts.host) : assetBase(opts.host)) : undefined }));
+    // Google Fonts held back until consent (Legal & privacy): the pages must not ask for them from their own <head>.
+    if (f.endsWith(".html") && hc0?.privacy?.blockFonts && hc0?.consent?.on) data = textToBytes(new TextDecoder().decode(data).replace(/<link\b[^>]*\bhref="https:\/\/fonts\.(?:googleapis|gstatic)\.com[^"]*"[^>]*>\s*/g, (m) => (/\brel="stylesheet"/.test(m) ? m.replace(/\shref="[^"]*"/, "") : "")));
     if (opts.host && f.endsWith(".html")) data = textToBytes(hostTag(new TextDecoder().decode(data), opts.host));
     if (f.endsWith(".md") && admin !== "admin.html") data = textToBytes(new TextDecoder().decode(data).replace(/\badmin\.html\b/g, admin));
     files.push({ path: f === "admin.html" ? admin : f, data });
@@ -116,6 +140,9 @@ export async function buildSite(opts: {
     path: "cms/site.json",
     data: textToBytes(JSON.stringify({ template: template.id, name: opts.name, version: opts.version, admin, exportedAt: new Date().toISOString(), generator: "Site Studio", studioBuild: STUDIO_BUILD, badge: badgeVersion(opts.badge), ...(currentMenus()[template.id] ? { menu: currentMenus()[template.id] } : {}), menuV: menuVersion(currentMenus()[template.id]), ...(opts.host ? { host: "api" in opts.host ? { kind: "cloudflare", api: opts.host.api, site: opts.host.site } : { kind: "supabase", url: cleanUrl(opts.host.url), key: opts.host.key, site: opts.host.site } } : {}) }, null, 2)),
   });
+  // robots.txt and sitemap.xml, for search engines. The sitemap needs the site's address (SEO → Site address, or the
+  // address it is being published to); without one only robots.txt is written.
+  { const sm = siteFiles(template, hc0, siteBase(hc0, opts.base), admin, new Set([...m.files, ...optional])); for (const f of sm) files.push({ path: f.path, data: textToBytes(f.text) }); }
   if (opts.includeContent) {
     files.push({ path: "content.json", data: textToBytes(JSON.stringify(content, null, 2)) });
     for (const p of collectAssetPaths(content)) {

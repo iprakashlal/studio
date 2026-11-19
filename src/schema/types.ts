@@ -18,7 +18,7 @@ export type Field =
   | { t: "select"; path: string; label: string; options: Opt[] }
   /** A select whose options come from a list elsewhere in the content (e.g. product → category). */
   | { t: "ref"; path: string; label: string; source: string; valueKey: string; labelKey: string; empty?: string }
-  | { t: "toggle"; path: string; label: string }
+  | { t: "toggle"; path: string; label: string; /** Shown as on until the owner switches it off. */ def?: boolean }
   | { t: "range"; path: string; label: string; min: number; max: number; step: number; unit?: string }
   | { t: "color"; path: string; label: string }
   | { t: "colorKey"; path: string; label: string }
@@ -47,6 +47,10 @@ export type Field =
   | { t: "adminSections" }
   /** Code Update: the site's own copy of the template's HTML, CSS and JavaScript (content.code). */
   | { t: "codeTemplate" }
+  /** Legal & privacy: writes the privacy policy and terms pages from the business's details. */
+  | { t: "legalPages" }
+  /** Legal & privacy: checks the page in the preview for accessibility problems. */
+  | { t: "a11yCheck" }
   /** Import name, experience, education and skills from a LinkedIn profile PDF or data export. */
   | { t: "linkedin" }
   /** Studio only: "Fill in from a pamphlet" (business products), opened by the project view. */

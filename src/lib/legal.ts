@@ -29,20 +29,23 @@ export function privacyText(tplId: string, c: any): string {
   const what: string[] = [];
   if (F.form) what.push("- **Enquiries and bookings:** the name, phone number, email address and message you send through a form on this site.");
   if (F.checkout) what.push("- **Orders:** your name, phone number, email address, delivery address, what you ordered and how you chose to pay. Card and UPI details are entered with the payment provider and are not stored by us.");
+  const pts = F.checkout && !!c?.loyalty?.on;
+  if (F.checkout) what.push("- **Customer record:** when you order, we keep a record under your mobile number (or your email address when no number is given): your name, phone number, email address, how many orders you have placed, what you have spent with us and the dates of your first and latest order." + (pts ? " It also holds your reward points: the points earned and spent on each order, and any we add or take off by hand." : ""));
+  if (pts) what.push("- **Phone verification:** if you choose to use your points, we send a one-time code to your mobile number on WhatsApp to confirm the number is yours. The code is kept only until it is used or expires.");
   if (F.accounts) what.push("- **Accounts:** your email address and the details you save in your account, such as addresses and past orders.");
   what.push("- **Technical data:** basic information your browser sends to any website, such as its type and the pages requested. " + (F.consent ? "Optional cookies and similar tools are used only after you allow them in the consent banner." : "This site does not use tracking cookies of its own."));
-  const share = ["- the companies that host this website and its database", ...(F.checkout ? ["- the payment provider you choose at checkout, to take the payment", "- delivery partners, to bring your order to you"] : []), ...(F.maps ? ["- Google Maps, when you open the map on this site"] : []), "- authorities, when the law requires it"];
+  const share = ["- the companies that host this website and its database", ...(F.checkout ? ["- the payment provider you choose at checkout, to take the payment", "- delivery partners, to bring your order to you", "- WhatsApp (Meta), when we send a verification code or a message about your order to your number"] : []), ...(F.maps ? ["- Google Maps, when you open the map on this site"] : []), "- authorities, when the law requires it"];
   return [
     `This policy explains what personal data ${who} collects through this website, why, and the choices you have.`,
     "## Who we are",
     [who, oneLine(I.address), I.phone ? "Phone: " + I.phone : "", I.email ? "Email: " + I.email : "", I.gstin ? "GSTIN: " + I.gstin : "", I.cin ? "CIN: " + I.cin : ""].filter(Boolean).join("\n"),
     "## What we collect", what.join("\n"),
     "## Why we use it",
-    ["- to answer your enquiry or booking request", ...(F.checkout ? ["- to prepare, deliver and bill your order, and to tell you about its progress"] : []), "- to keep the website secure and stop misuse", "- to meet our legal and tax duties"].join("\n"),
+    ["- to answer your enquiry or booking request", ...(F.checkout ? ["- to prepare, deliver and bill your order, and to tell you about its progress", "- to recognise you when you order again" + (pts ? ", and to keep count of your reward points and take them off an order when you ask" : "")] : []), "- to keep the website secure and stop misuse", "- to meet our legal and tax duties"].join("\n"),
     "We use your details only for these purposes. We do not sell personal data.",
     "## Who we share it with", "Only with those who help us run this service:\n" + share.join("\n"),
     "## How long we keep it",
-    `Enquiries are kept for as long as needed to answer them${F.checkout ? ", and order records for as long as tax and consumer law require" : ""}. After that they are deleted.`,
+    `Enquiries are kept for as long as needed to answer them${F.checkout ? ", and order records for as long as tax and consumer law require" : ""}. After that they are deleted.${F.checkout ? ` Your customer record${pts ? " and points" : ""} are kept while you remain a customer; ask us and we will delete them${pts ? " (points that have not been used are lost when the record is deleted)" : ""}.` : ""}`,
     "## Your rights",
     "You can ask us for a copy of your personal data, ask us to correct or delete it, withdraw a consent you gave, and name another person to act for you. In India these rights come from the Digital Personal Data Protection Act, 2023. To use them, or to raise a grievance, write to us using the details above. If you are not satisfied with our answer, you may approach the Data Protection Board of India.",
     "## Children", "This website is not meant for children, and we do not knowingly collect their data without a parent's or guardian's consent.",
@@ -61,6 +64,7 @@ export function termsText(tplId: string, c: any): string {
     "## Orders and prices", `Prices are shown in the currency on the page${I.gstin ? " and taxes are charged as shown at checkout" : ""}. The total you are asked to pay, including delivery and any other charge, is shown before you confirm. An order is accepted when we confirm it; we may decline or cancel an order we cannot fulfil, with a full refund of anything paid.`,
     "## Payment", "Payments are taken by the payment provider you choose at checkout, under that provider's own terms. We do not store card or UPI details.",
     "## Cancellation, returns and refunds", tplId === "restaurant" ? "Food is prepared to order. Please contact us straight away if you need to change or cancel an order, or if something is wrong with it; we will put it right or refund you where that is due." : "Our returns, refund and shipping rules are set out on the policies pages of this site and form part of these terms.");
+  if (F.checkout && c?.loyalty?.on) parts.push("## Reward points", "Points are earned on orders placed through this website and can be used towards later orders, within the limits shown at checkout. To use them you confirm your mobile number with a one-time code. Points have no cash value, cannot be exchanged for money or passed to another person, and are not given back for an order that is cancelled or refunded. We may correct a points balance that is wrong, and may change or end the points scheme; if we end it we will say so on this website first.");
   if (F.form) parts.push("## Enquiries and bookings", "A request sent through a form is not confirmed until we reply to confirm it.");
   parts.push(
     "## Intellectual property", `The text, pictures, logos and design on this site belong to ${who} or are used with permission. Please ask before reusing them.`,
@@ -118,5 +122,7 @@ export function legalChecks(tplId: string, c: any): string[] {
   if (F.checkout && !legalPage(c, "terms")) out.push(`Required: this site takes orders but has no terms page. Create one under ${where} → Legal pages.`);
   if ((F.form || F.checkout) && !(s(c?.legal?.name) && s(c?.legal?.address))) out.push(`Fill in the business's legal name and registered address under ${where} → Business identity${I.name ? "" : " (the site has no name yet)"}.`);
   if ((F.form || F.checkout) && c?.privacy?.formConsent === false) out.push(`Consent on forms is switched off (${where} → Consent on forms): visitors are not asked to agree before sending their details.`);
+  if (F.checkout) { const p = legalPage(c, "privacy"), body = p && !p.external ? Object.values(p).filter((v) => typeof v === "string").join(" ") : "";
+    if (body && c?.loyalty?.on && !/\bpoints\b/i.test(body)) out.push(`This site gives reward points, but its privacy policy doesn't mention them. Write the page again under ${where} → Legal pages, or add a line about customer records and points yourself.`); }
   return [...out, ...a11yChecks(c)];
 }

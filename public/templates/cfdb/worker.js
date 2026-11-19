@@ -16,7 +16,7 @@ create index if not exists approvals_project on approvals (scope, project, creat
 create table if not exists approval_notes (id integer primary key autoincrement, token text not null, who text not null, body text not null, page text not null default '', kind text not null default 'comment', created_at text not null);
 create index if not exists approval_notes_token on approval_notes (token, id);
 `;
-var CFDB_VERSION = 33;
+var CFDB_VERSION = 34;
 var CFDB_WORKER_NAME = "picaffectz-db";
 
 // src/lib/lookdigest.ts
@@ -1007,8 +1007,13 @@ async function custOrder(env, site, c, data, cart) {
         off = b.pointsOff || 0;
       }
     } else if (Array.isArray(c?.products)) {
-      const b = shopBill(c, cart);
-      if (!("error" in b)) net = b.total;
+      const bal = verified ? Math.max(0, +(await env.DB.prepare("select points from customers where site = ? and ckey = ?").bind(site, key).first())?.points || 0) : 0;
+      const b = shopBill(c, { ...cart, _bal: bal });
+      if (!("error" in b)) {
+        net = b.net ?? b.total;
+        used = b.points || 0;
+        off = b.pointsOff || 0;
+      }
     }
   }
   if (isNaN(net)) net = rnum(data.total);
@@ -1125,8 +1130,9 @@ function shopBill(c, q) {
     else fee = num(H.restFee);
   }
   const over = freeOver != null ? freeOver : Number(S.freeShippingOver), free = over > 0 && sub >= over;
-  const ship = free ? 0 : fee != null ? fee : Number(S.shippingFee) || 0, pct = Number(S.taxPercent) || 0, taxAdd = pct && !S.taxIncluded ? Math.round(sub * pct) / 100 : 0;
-  return { total: Math.round((sub + ship + taxAdd) * 100) / 100 };
+  const pt = pointsFor(c, q.points, +q._bal || 0, sub);
+  const ship = free ? 0 : fee != null ? fee : Number(S.shippingFee) || 0, pct = Number(S.taxPercent) || 0, taxAdd = pct && !S.taxIncluded ? Math.round((sub - pt.off) * pct) / 100 : 0;
+  return { total: Math.round((sub - pt.off + ship + taxAdd) * 100) / 100, points: pt.points, pointsOff: pt.off, net: Math.round((sub - pt.off) * 100) / 100 };
 }
 var PG = { rz: { name: "Razorpay", key: "razorpay", inr: true }, cf: { name: "Cashfree", key: "cashfree", inr: true }, pe: { name: "PhonePe", key: "phonepe", inr: true }, st: { name: "Stripe", key: "stripe" }, pp: { name: "PayPal", key: "paypal" } };
 var PG_CUR = ["INR", "USD", "EUR", "GBP", "AUD", "CAD", "SGD", "AED", "NZD", "CHF"];
@@ -1523,7 +1529,8 @@ var db_worker_default = {
         const site = p.split("/")[2], w = await getSetting(env, "site:" + site, "wa").catch(() => null), z = await getSetting(env, "site:" + site, "rz").catch(() => null);
         const pg = [];
         for (const g of ["cf", "pe", "st", "pp"]) if (pgReady(g, await getSetting(env, "site:" + site, g).catch(() => null))) pg.push(g);
-        return json({ otp: !!(waReady(w) && w.orderOtp && String(w.tplOtp || "").trim()), rz: z?.on && z.secret && z.keyId ? String(z.keyId) : "", pg });
+        const canCode = !!(waReady(w) && String(w.tplOtp || "").trim());
+        return json({ otp: canCode && !!w.orderOtp, pts: canCode && loyOf(await siteContent(env, site).catch(() => null)).on, rz: z?.on && z.secret && z.keyId ? String(z.keyId) : "", pg });
       }
       if (/^\/points\/[a-z0-9][a-z0-9-]{0,59}$/.test(p) && req.method === "POST") {
         const site = p.split("/")[2], b = await req.json(), L = loyOf(await siteContent(env, site));
@@ -1534,7 +1541,7 @@ var db_worker_default = {
       }
       if (/^\/otp\/(send|check)\/[a-z0-9][a-z0-9-]{0,59}$/.test(p) && req.method === "POST") {
         const site = p.split("/")[3], b = await req.json(), w = await getSetting(env, "site:" + site, "wa");
-        if (!(waReady(w) && w.orderOtp && String(w.tplOtp || "").trim())) return err(404, "Not found.");
+        if (!(waReady(w) && String(w.tplOtp || "").trim() && (w.orderOtp || loyOf(await siteContent(env, site).catch(() => null)).on))) return err(404, "Not found.");
         const num = waNum(b.phone, w.cc);
         if (!num) return err(400, "Enter your mobile number with its country code.");
         const k = "o:" + site + ":" + num, now = Date.now();
@@ -1592,7 +1599,7 @@ var db_worker_default = {
         if (!/^[A-Z0-9][A-Z0-9-]{3,29}$/.test(no)) return err(400, "Which order?");
         const c = await siteContent(env, site), rest = isRest(c);
         if (g !== "rz" && !pgOn(c, g)) return err(404, "That way to pay isn't switched on for this site.");
-        q._bal = rest && +q.points > 0 ? (await pointsBal(env, site, q.phone, q.otp)).bal : 0;
+        q._bal = +q.points > 0 ? (await pointsBal(env, site, q.phone, q.otp)).bal : 0;
         const bill = rest ? restBill(c, q) : Array.isArray(c?.products) ? shopBill(c, q) : { error: "This site doesn't take orders." };
         if ("error" in bill) return err(409, bill.error);
         if (Math.abs(bill.total - (+q.total || 0)) > 0.5) return err(409, rest ? "The menu or its prices changed while you were ordering. Refresh the page and check your cart." : "Prices or delivery charges changed while you were ordering. Refresh the page and check your cart.");
@@ -1653,10 +1660,11 @@ var db_worker_default = {
         if (!Object.keys(data).length) return err(400, "The form was empty.");
         if (data.order_no) {
           const w = await getSetting(env, "site:" + site, "wa").catch(() => null);
-          if (waReady(w) && w.orderOtp && String(w.tplOtp || "").trim()) {
+          if (waReady(w) && String(w.tplOtp || "").trim()) {
             const num = waNum(data.phone, w.cc), [exp, sig] = String(data.otp_token || "").split(".");
-            if (!num || !(+exp > Date.now()) || sig !== b64u(await hmac(env.SECRET, "otp:" + site + ":" + num + ":" + exp))) return err(403, "Please verify your mobile number first.");
-            data._phone = "Verified on WhatsApp";
+            const proved = !!num && +exp > Date.now() && sig === b64u(await hmac(env.SECRET, "otp:" + site + ":" + num + ":" + exp));
+            if (proved) data._phone = "Verified on WhatsApp";
+            else if (w.orderOtp) return err(403, "Please verify your mobile number first.");
           }
           delete data.otp_token;
           if (data.rz_order || data.rz_payment || data.rz_sig) {

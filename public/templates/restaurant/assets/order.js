@@ -22,7 +22,7 @@
   try { const t = new URLSearchParams(location.search).get("table"); if (t) { ui.form.table = t.slice(0, 12); ui.table = true; } } catch (e) {}
 
   /** What the site's database offers this page: a WhatsApp code for the guest's number, and online payment (its public key id). */
-  let can = { otp: false, rz: "", pg: [] }, canAsked = false;
+  let can = { otp: false, pts: false, rz: "", pg: [] }, canAsked = false;
   /** Gateways other than Razorpay: the guest pays on the gateway's own page and comes back here. */
   const GW = { cf: { key: "cashfree", name: "Cashfree", label: "Pay online with Cashfree (UPI, card, netbanking)" }, pe: { key: "phonepe", name: "PhonePe", label: "Pay with PhonePe (UPI, card, netbanking)" }, st: { key: "stripe", name: "Stripe", label: "Pay by card (Stripe)" }, pp: { key: "paypal", name: "PayPal", label: "Pay with PayPal" } };
   const digits = (v) => String(v || "").replace(/\D/g, "").slice(-10);
@@ -241,7 +241,7 @@
     if (!ps.some((p) => p.id === f.pay)) f.pay = ps.length ? ps[0].id : "";
     return `<form class="od-form" id="od-form" novalidate>
       <fieldset><legend>Your details</legend>${inp("name", "Name", 'autocomplete="name" required')}${inp("phone", "Mobile number", 'type="tel" inputmode="tel" autocomplete="tel" required')}${o.askEmail ? inp("email", "Email (optional)", 'type="email" autocomplete="email"') : ""}
-        ${can.otp ? `<div class="od-otp" id="od-otp">${verified() ? `<p class="od-ok">Mobile number verified on WhatsApp.</p>` : ui.otpSent ? `<div class="of"><label for="of-code">Code we sent you on WhatsApp</label><div class="od-code"><input id="of-code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="6 digits"><button type="button" class="btn sec" data-act="otpcheck">Verify</button></div></div><button type="button" class="link od-more" data-act="otpsend">Send a new code</button>` : `<button type="button" class="btn sec" data-act="otpsend">Verify this number on WhatsApp</button><p class="od-live">We send a 6-digit code to this number on WhatsApp before taking the order.</p>`}${ui.otpMsg ? `<p class="od-bad" role="alert">${esc(ui.otpMsg)}</p>` : ""}</div>` : ""}${ptsBox()}</fieldset>
+        ${can.otp || (can.pts && loy().on) ? `<div class="od-otp" id="od-otp">${verified() ? `<p class="od-ok">Mobile number verified on WhatsApp.</p>` : ui.otpSent ? `<div class="of"><label for="of-code">Code we sent you on WhatsApp</label><div class="od-code"><input id="of-code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="6 digits"><button type="button" class="btn sec" data-act="otpcheck">Verify</button></div></div><button type="button" class="link od-more" data-act="otpsend">Send a new code</button>` : can.otp ? `<button type="button" class="btn sec" data-act="otpsend">Verify this number on WhatsApp</button><p class="od-live">We send a 6-digit code to this number on WhatsApp before taking the order.</p>` : `<button type="button" class="btn sec" data-act="otpsend">Verify this number to use your points</button><p class="od-live">Optional. We send a 6-digit code to this number on WhatsApp, then show the points you can take off this order.</p>`}${ui.otpMsg ? `<p class="od-bad" role="alert">${esc(ui.otpMsg)}</p>` : ""}</div>` : ""}${ptsBox()}</fieldset>
       ${m === "delivery" ? `<fieldset><legend>Delivery address</legend>${inp("line1", "Flat, house or building", 'autocomplete="address-line1" required')}${inp("area", "Street and area", 'autocomplete="address-line2" required')}<div class="of2">${inp("landmark", "Landmark (optional)")}${inp("pin", "PIN code", 'inputmode="numeric" autocomplete="postal-code" maxlength="10"' + (o.askPin !== false ? " required" : ""))}</div>
         <div class="od-tips" role="radiogroup" aria-label="Save this address as">${["Home", "Work", "Other"].map((l) => `<button type="button" class="chip" role="radio" data-act="label" data-id="${l}" aria-checked="${f.label === l}">${l}</button>`).join("")}</div>
         <p class="od-bad" id="od-area" role="alert"${!b.area.ok && (f.pin || f.area) ? "" : " hidden"}>${esc(o.areaNote || "Sorry, we don't deliver to that area yet. Choose Pick up, or call us.")}</p></fieldset>` : ""}
@@ -406,7 +406,7 @@
       const j = await r.json().catch(() => null); if (!r.ok || !j || !(j.order_id || j.go || j.session)) return stop((j && j.error) || "Online payment couldn't start. Please try again, or choose another way to pay.");
       if (GW[g]) {
         // The order waits on this device while the guest pays on the gateway's page; it is placed when they come back paid.
-        st.set("pend", { od, ref: j.ref, otp: can.otp && ui.otp ? ui.otp.token : "", usePts: !!ui.usePts, at: Date.now() });
+        st.set("pend", { od, ref: j.ref, otp: ui.otp ? ui.otp.token : "", usePts: !!ui.usePts, at: Date.now() });
         if (g === "cf") { await new Promise((ok, no) => { if (window.Cashfree) return ok(); const s = document.createElement("script"); s.src = "https://sdk.cashfree.com/js/v3/cashfree.js"; s.onload = ok; s.onerror = no; document.head.appendChild(s); }); window.Cashfree({ mode: j.mode }).checkout({ paymentSessionId: j.session, redirectTarget: "_self" }); }
         else location.href = j.go;
         return;
@@ -456,7 +456,7 @@
   /** The cart as the database reads it (to hand the order to the restaurant's billing system when one is connected). */
   function cartOf(od) { return { mode: od.mode, pin: od.pin || "", area: od.area || "", coupon: od.bill.code || "", tip: od.bill.tip || 0, points: od.bill.pts || 0, items: od.items.map((l) => ({ id: l.id, qty: l.qty, variant: l.variant, addons: (l.addons || []).map((a) => a.label) })) }; }
   /** What is saved for an order (it goes to the site's database under Purchased orders). */
-  function orderData(od) { const m = od.mode, b = od.bill, pay = { label: od.payLabel }; return { ...(od.consent ? { consent: od.consent } : {}), type: "Order", order_no: od.id, okey: od.k, name: od.c.name, phone: od.c.phone, email: od.c.email, mode: MODES[m], when: od.whenLabel, address: od.c.address, table: od.c.table, items: od.items.map((l) => `${l.qty} × ${l.name}${lineText(l) ? ` (${lineText(l)})` : ""}${l.note ? ` [${l.note}]` : ""} = ${txt(l.unit * l.qty)}`).join("\n"), total: txt(b.total), payment: od.utr ? "UPI, paid before ordering" : od.rz ? "Paid online (Razorpay)" : od.pg ? `Paid online (${GW[od.pg.gw].name})` : pay.label, utr: od.utr || "", ...(od.pg ? { pay_gw: od.pg.gw, pay_ref: od.pg.ref, otp_token: od.pg.otp || undefined } : {}), ...(od.rz ? { rz_order: od.rz.razorpay_order_id, rz_payment: od.rz.razorpay_payment_id, rz_sig: od.rz.razorpay_signature } : {}), ...(can.otp && ui.otp ? { otp_token: ui.otp.token } : {}), message: orderText(od) }; }
+  function orderData(od) { const m = od.mode, b = od.bill, pay = { label: od.payLabel }; return { ...(od.consent ? { consent: od.consent } : {}), type: "Order", order_no: od.id, okey: od.k, name: od.c.name, phone: od.c.phone, email: od.c.email, mode: MODES[m], when: od.whenLabel, address: od.c.address, table: od.c.table, items: od.items.map((l) => `${l.qty} × ${l.name}${lineText(l) ? ` (${lineText(l)})` : ""}${l.note ? ` [${l.note}]` : ""} = ${txt(l.unit * l.qty)}`).join("\n"), total: txt(b.total), payment: od.utr ? "UPI, paid before ordering" : od.rz ? "Paid online (Razorpay)" : od.pg ? `Paid online (${GW[od.pg.gw].name})` : pay.label, utr: od.utr || "", ...(od.pg ? { pay_gw: od.pg.gw, pay_ref: od.pg.ref, otp_token: od.pg.otp || undefined } : {}), ...(od.rz ? { rz_order: od.rz.razorpay_order_id, rz_payment: od.rz.razorpay_payment_id, rz_sig: od.rz.razorpay_signature } : {}), ...(ui.otp ? { otp_token: ui.otp.token } : {}), message: orderText(od) }; }
   /** The order is placed: the cart empties and the page shows it. */
   function shown(od) {
     cart = []; save(); ui.usePts = false; ui.pts = null; ui.coupon = ""; st.set("coupon", ""); ui.tip = 0; ui.form.notes = ""; ui.paying = null; ui.utr = ""; ui.err = "";
@@ -561,7 +561,7 @@
     if (ui.drawer === "done" && ui.done) track(ui.done);
     const be = A.backend();
     if (!bind.back) { bind.back = true; cameBack(); }
-    if (!canAsked && !A.PREVIEW && be && be.cf) { canAsked = true; fetch(be.cf + "/site/" + encodeURIComponent(be.site) + "/can", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((j) => { if (j) { can = { otp: !!j.otp, rz: String(j.rz || ""), pg: Array.isArray(j.pg) ? j.pg : [] }; if (ui.drawer === "checkout") { sync(); over(true); } } }).catch(() => {}); }
+    if (!canAsked && !A.PREVIEW && be && be.cf) { canAsked = true; fetch(be.cf + "/site/" + encodeURIComponent(be.site) + "/can", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((j) => { if (j) { can = { otp: !!j.otp, pts: !!j.pts, rz: String(j.rz || ""), pg: Array.isArray(j.pg) ? j.pg : [] }; if (ui.drawer === "checkout") { sync(); over(true); } } }).catch(() => {}); }
   }
   window.RestOrder = { page, bind };
 })();

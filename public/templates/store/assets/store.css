@@ -628,3 +628,6 @@ html[data-crumbs=off] :is(.crumbs,.sp-crumbs,.solo-top){display:none}
 .kindbtns button:hover{border-color:var(--text)}.kindbtns button[aria-pressed=true]{border-color:var(--accent);box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 35%,transparent)}
 .kindbtns button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .buy .btn:disabled{opacity:.55;cursor:not-allowed}
+
+/* Points at checkout */
+.ptsbox{display:grid;gap:8px;margin:12px 0}.ptsbox:empty{display:none}.ptsbox p{margin:0;font-size:13.5px}.ptsrow{display:flex;gap:8px}.ptsrow .in{flex:1;min-width:0}

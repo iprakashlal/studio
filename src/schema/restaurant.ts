@@ -3,7 +3,7 @@ import type { Category, Field, TemplateDef } from "./types";
 import { FX_AXES, HERO_FX_AXIS, LINE_BREAKS_AXIS, type Axis } from "../themes/catalog";
 import { REST_AXES, REST_BODY_FONTS, REST_DISPLAY_FONTS, REST_TAGS, REST_THEMES, restaurantThemeValues } from "../themes/restaurant";
 import { INTRO_CARD, NAV_MODE_FIELD, NAV_MODE_MOB_FIELD } from "../themes/fields";
-import { adminCategory, legalCategory, codeCategory, withSectionBg, videoCategory, socialCategory, logoFields, consentCategory, emailsCategory, i18nCategory, prepareI18n, featuresCategory, festivalCategory, menuCategory, menuItem, prepareMenu, staticPagesCategory, heroSlidesCard, prepareSlides, prepareMaintenance, seoCategory, customFontsCard } from "./common";
+import { adminCategory, loyaltyCard, legalCategory, codeCategory, withSectionBg, videoCategory, socialCategory, logoFields, consentCategory, emailsCategory, i18nCategory, prepareI18n, featuresCategory, festivalCategory, menuCategory, menuItem, prepareMenu, staticPagesCategory, heroSlidesCard, prepareSlides, prepareMaintenance, seoCategory, customFontsCard } from "./common";
 
 const g2 = (...fields: Field[]): Field => ({ t: "grid", cols: 2, fields });
 const g3 = (...fields: Field[]): Field => ({ t: "grid", cols: 3, fields });
@@ -372,6 +372,7 @@ const schema: Category[] = [
   adminCategory(),
   codeCategory(),
 ];
+{ const k = schema.find((c) => c.id === "coupons"); if (k) k.cards.push(loyaltyCard("restaurant")); }
 withSectionBg(schema, { contact: [["contact"]], forms: [["reserve", "Background & text of the booking section"]] }, [...REST_DISPLAY_FONTS, ...REST_BODY_FONTS]);
 
 function prepareRestaurant(c: any) {
@@ -404,6 +405,7 @@ function prepareRestaurant(c: any) {
   { const F = c.contact.form; if (F.saveTo !== "file") F.saveTo = "auto"; if (F.notifyAsk !== 1) { F.notify = true; F.notifyAsk = 1; } else F.notify = F.notify === true; F.notifyTo ??= ""; F.notifySubject ??= "";
     for (const k of ["slots", "occasions", "types"]) if (!Array.isArray(F[k])) F[k] = []; }
   if (typeof c.contact.mapEmbed !== "boolean") c.contact.mapEmbed = true;
+  c.loyalty = { on: false, earn: 5, worth: 1, min: 50, maxPct: 50, ...(c.loyalty && typeof c.loyalty === "object" ? c.loyalty : {}) };
   c.contact.places = (Array.isArray(c.contact.places) ? c.contact.places : []).filter((x: any) => x && typeof x === "object"); if (typeof c.contact.placesFilter !== "boolean") c.contact.placesFilter = true;
   prepareI18n(c, () => schema);
   prepareMenu(c, () => (Array.isArray(c.sections) ? c.sections : []).filter((x: any) => x && x.show !== false && x.inNav).map((x: any) => menuItem(x.label || x.id, x.id)));

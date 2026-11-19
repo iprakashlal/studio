@@ -3,6 +3,7 @@ import { currentBadge } from "../lib/badge";
 import { ShopBackendDialog } from "./ShopBackendDialog";
 import { EnquiryInboxDialog } from "./EnquiryInboxDialog";
 import { EnquiriesPanel, enquiriesCfg } from "../site-admin/EnquiriesPanel";
+import { CustomerPanel } from "../site-admin/CustomerPanel";
 import { SiteConnections } from "./Connections";
 import { WarrantyPanel } from "../site-admin/WarrantyPanel";
 import { GOTO_EVENT } from "../editor/Editor";
@@ -178,6 +179,10 @@ export function ProjectView({ studio, index, project, session, onIndex }: { stud
     ...(project.template === "store" || project.template === "restaurant" ? [{
       id: "purchased", label: "Purchased orders", group: project.template === "restaurant" ? "Selling" : "Forms & records", desc: "Every order placed on the website: what was bought, by whom, how it is paid, and where it has got to.",
       render: () => <EnquiriesPanel only="orders" cfg={project.host?.cf ? null : enquiriesCfg(draft, project.host?.sb)} cf={project.host?.cf} account={project.host?.account} hosted={!!project.host} email={draft?.contact?.email} form={draft?.contact?.form} ghToken={ghPublish.token(session.token)} inStudio />,
+    }] : []),
+    ...(project.template === "store" || project.template === "restaurant" ? [{
+      id: "customer-data", label: "Customer Data", group: project.template === "restaurant" ? "Selling" : "Forms & records", desc: "Everyone who has ordered: their details, orders, what they spent and their points.",
+      render: () => <CustomerPanel cf={project.host?.cf} currency={draft?.food?.currency || draft?.settings?.currency || "₹"} points={!!draft?.loyalty?.on} />,
     }] : []),
     ...(project.template !== "portfolio" ? [{
       id: "connections", label: project.template === "restaurant" ? "Restaurant backend" : "WhatsApp", group: project.template === "restaurant" ? "Selling" : "Forms & records", desc: project.template === "restaurant" ? "What runs the Order now page behind the scenes, on your own Cloudflare database: Petpooja, and WhatsApp for alerts and codes. Payment gateway keys are under Payments." : "Optional: WhatsApp alerts when an enquiry or order arrives, and sign-in codes on WhatsApp. The keys stay on your own Cloudflare database.",

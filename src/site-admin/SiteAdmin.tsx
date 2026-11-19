@@ -4,6 +4,7 @@ import { CfAccount, CfGate } from "./CfGate";
 import { CfRepo, cfSession } from "../lib/cfdb";
 import { cleanMenu } from "../lib/menus";
 import { EnquiriesPanel, enquiriesCfg } from "./EnquiriesPanel";
+import { CustomerPanel } from "./CustomerPanel";
 import { SiteConnections } from "../pages/Connections";
 import { WarrantyPanel } from "./WarrantyPanel";
 import { GOTO_EVENT } from "../editor/Editor";
@@ -364,6 +365,9 @@ function Workspace({ info, onInfo, repo, account, onSignOut, hosted, ghToken }: 
     ] : []),
     ...((tpl.id === "restaurant" || tpl.id === "store") && !(tpl.id === "store" && saved?.backend?.enabled) ? [
       { id: "purchased", label: "Purchased orders", group: tpl.id === "restaurant" ? "Selling" : "Forms & records", desc: "Every order placed on your website: what was bought, by whom, how it is paid, and where it has got to.", render: () => <EnquiriesPanel only="orders" cfg={hosted && "api" in hosted ? null : enquiriesCfg(saved, hosted)} cf={hosted && "api" in hosted ? hosted : undefined} hosted={!!hosted} email={saved?.contact?.email} form={saved?.contact?.form} ghToken={ghToken} /> },
+    ] : []),
+    ...((tpl.id === "restaurant" || tpl.id === "store") && !(tpl.id === "store" && saved?.backend?.enabled) ? [
+      { id: "customer-data", label: "Customer Data", group: tpl.id === "restaurant" ? "Selling" : "Forms & records", desc: "Everyone who has ordered: their details, orders, what they spent and their points.", render: () => <CustomerPanel cf={hosted && "api" in hosted ? hosted : undefined} currency={saved?.food?.currency || saved?.settings?.currency || "₹"} points={!!saved?.loyalty?.on} /> },
     ] : []),
     ...(tpl.id === "store" || tpl.id === "business" ? [
       { id: "warranty-records", label: "Warranty records", group: "Forms & records", desc: "Products' numbers, warranty and service status, for the site's warranty & status check.", render: () => <WarrantyPanel repo={repo} cfg={draft?.warranty} /> },

@@ -4,6 +4,10 @@
    settings), otherwise it opens the visitor's email app addressed to the restaurant. */
 (() => {
 "use strict";
+/* Code Update (content.code): when a site runs its own copy of this code, SiteCode (fx.js) takes the page over before
+   anything is drawn. Inside that copy SiteCode is empty, so the copy never hands over again. */
+const SC = typeof SiteCode === "undefined" || !SiteCode ? null : SiteCode;
+if (SC) SC.track();
 
 /* ============================================================
    DEFAULT CONTENT (also exported as content.json)
@@ -753,7 +757,7 @@ function jsonLd() {
 }
 let adP;
 function addons() {
-  const A = C.addons || {}, any = (A.chat && A.chat.on) || (A.badge && A.badge.on) || (A.api && A.api.on) || (A.code || []).some((x) => x && x.on !== false && x.code) || !!(C.code && C.code.on) || !!document.getElementById("site-code-css") || !!document.getElementById("site-code-html");
+  const A = C.addons || {}, any = (A.chat && A.chat.on) || (A.badge && A.badge.on) || (A.api && A.api.on) || (A.code || []).some((x) => x && x.on !== false && x.code);
   if (!any && !window.SiteAddons) return;
   (adP ||= new Promise((ok, no) => { if (window.SiteAddons) return ok(); const s = document.createElement("script"); s.src = "assets/addons.js"; s.onload = () => ok(); s.onerror = no; document.head.appendChild(s); }))
     .then(() => window.SiteAddons.mount(C, { preview: PREVIEW, home: PAGE === "home", site: C.brand.name })).catch(() => {});
@@ -1007,34 +1011,37 @@ async function submit(e) {
 /* ============================================================
    BOOT
    ============================================================ */
+const SCO = { css: 'link[href*="assets/rest.css"]', js: "assets/rest.js" }; let DREW = false, HAND = false;
 if (PREVIEW) {
   addEventListener("message", (e) => {
     if (e.origin !== location.origin || e.source !== window.parent) return;
     const d = e.data || {};
-    if (d.type === "cms:content" && d.content && typeof d.content === "object") { ASSETS = d.assets || {}; const y = scrollY; C = merge(DEFAULT, d.content); render(); scrollTo(0, y); }
+    if (d.type === "cms:content" && d.content && typeof d.content === "object") { if (SC && SC.take(d.content, { ...SCO, drawn: DREW })) return; DREW = true; ASSETS = d.assets || {}; const y = scrollY; C = merge(DEFAULT, d.content); render(); scrollTo(0, y); }
   });
   window.parent.postMessage({ type: "cms:ready", page: (location.pathname.split("/").pop() || "index.html") + (PAGE === "page" && spCur() ? "?p=" + encodeURIComponent(spCur()) : MNT_Q ? "?maintenance=1" : "") }, location.origin);
-  render();
+  if (!(SC && SC.wait())) { DREW = true; render(); }
 } else {
   const CKEY = "site-content:" + location.pathname.replace(/[^/]*$/, "");
   let shownTxt = "";
-  try { const c = sessionStorage.getItem(CKEY); if (c) { C = merge(DEFAULT, JSON.parse(c)); render(); shownTxt = c; } } catch (e) {}
+  try { const c = sessionStorage.getItem(CKEY); if (c) { const j = JSON.parse(c); if (SC && SC.take(j, SCO)) HAND = true; else { C = merge(DEFAULT, j); render(); shownTxt = c; } } } catch (e) {}
   // A first visit: the page's outline shows while the content is fetched (the first render replaces it).
-  if (!shownTxt && window.SiteSkeleton) window.SiteSkeleton.show($("#app"));
-  const giveUp = setTimeout(() => { if (!shownTxt) { render(); shownTxt = "default"; } }, 6000);
+  if (!shownTxt && !HAND && window.SiteSkeleton) window.SiteSkeleton.show($("#app"));
+  const giveUp = setTimeout(() => { if (!shownTxt && !HAND) { render(); shownTxt = "default"; } }, 6000);
   const fromFile = () => fetch("content.json", { cache: "no-store" }).then((r) => (r.ok ? r.text() : null));
   // Hosted on the Studio's Cloudflare database: content is a public file there.
   const fromCf = () => fetch(HOST.api + "/p/" + encodeURIComponent(HOST.site) + "/content.json", { cache: "no-store" }).then((r) => (r.ok ? r.text() : null)).catch(() => null).then((t) => t || fromFile());
   const fromDb = () => HOST.api ? fromCf() : fetch(HOST.db + "/rest/v1/site_content?select=content&site=eq." + encodeURIComponent(HOST.site), { cache: "no-store", headers: { apikey: HOST.key, ...(/^sb_/.test(HOST.key) ? {} : { Authorization: "Bearer " + HOST.key }) } })
     .then((r) => (r.ok ? r.json() : null)).then((j) => (j && j[0] && j[0].content ? JSON.stringify(j[0].content) : null)).catch(() => null).then((t) => t || fromFile());
-  (HOST ? fromDb() : fromFile()).then((txt) => {
+  if (!HAND) (HOST ? fromDb() : fromFile()).then((txt) => {
     clearTimeout(giveUp);
     if (!txt) { if (!shownTxt) render(); return; }
     try { sessionStorage.setItem(CKEY, txt); } catch (e) {}
     if (txt === shownTxt) return;
-    C = merge(DEFAULT, JSON.parse(txt)); render();
+    const j = JSON.parse(txt); if (SC && SC.take(j, { ...SCO, drawn: !!shownTxt, text: txt })) return;
+    C = merge(DEFAULT, j); render();
   }).catch(() => { clearTimeout(giveUp); if (!shownTxt) render(); });
 }
+if (SC) SC.untrack();
 })();
 
 // Menu when scrolling (theme.navMode; theme.navModeMob for phones): "" theme default, fixed, hide (hide on scroll down, show on scroll up), scroll (scrolls away)

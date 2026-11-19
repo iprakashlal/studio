@@ -215,6 +215,8 @@ export function FieldView({ f, obj, base }: { f: F; obj: any; base: string }) {
       return <AdminThemesField />;
     case "adminSections":
       return <AdminSectionsField />;
+    case "codeTemplate":
+      return <CodeTemplateField />;
     case "googleReviews":
       return (
         <div className="flex flex-wrap items-center gap-3 rounded-lg border border-brand-500/40 bg-brand-500/5 p-3">
@@ -536,7 +538,9 @@ export function adminThemeChoice(root: any, all: Theme[]): { mode: "current" | "
 function ThemesField() {
   const { tpl, root, bump, site } = useCtx();
   const all = limitThemes(tpl.themes || THEMES, root?.theme?.preset, tpl.id);
+  const locked = !!(root?.code?.on && String(root.code.js || "").trim());
   const pick = (th: Theme) => {
+    if (locked) return;
     // With a shortlist, the theme being left stays on it: the current theme only counts while it's current.
     const cfg = root.cms?.themes, prev = root.theme?.preset;
     if (cfg?.mode === "some" && prev && prev !== th.id) { const list: string[] = Array.isArray(cfg.list) ? cfg.list : []; if (!list.includes(prev)) cfg.list = [...list, prev]; }
@@ -548,6 +552,7 @@ function ThemesField() {
   const cur = all.find((t) => t.id === root.theme?.preset);
   const tweaked = !!cur && themeTweaked(root, tpl, cur);
   const reset = tweaked && cur ? <p className="flex flex-wrap items-center gap-2 text-[13px] text-ink-400">Your changes to {cur.name} are kept when you switch themes and come back.<button type="button" className="text-brand-300 underline" onClick={() => { Object.assign(root.theme, tpl.themeValues(cur)); if (root.themeMemory) delete root.themeMemory[cur.id]; bump(); }}>Reset {cur.name} to its defaults</button></p> : null;
+  if (locked) return <p className="rounded-lg border border-amber-400/40 bg-amber-400/5 px-3 py-2.5 text-[13px] text-amber-100" role="note">The theme is locked: this site is running its own code (Code Update). {cur ? <>It stays on <b>{themeCode(cur)} · {cur.name}</b>. </> : null}{site ? "Code Update has to be switched off before the theme can be changed." : "Switch off “Use this code on the site” under Code Update to change the theme."}</p>;
   if (!site) return <>{reset}{fromRef}<ThemeDrawer label={`Show ${all.length} themes`} summary={<>Current: <b className="text-ink-100">{cur ? `${themeCode(cur)} · ${cur.name}` : "the template's own look"}</b> · {all.length} themes to choose from</>}><ThemeGallery dense current={root.theme?.preset} themes={tpl.themes} tags={tpl.themeTags} onPick={pick} /></ThemeDrawer></>;
   const { mode, themes } = adminThemeChoice(root, all);
   const drawer = (list: Theme[], tags: string[]) => {
@@ -731,6 +736,72 @@ function RichBar({ id, value, set }: { id: string; value: string; set: (v: strin
   );
 }
 
+/** The files that make up each template's own code. The portfolio keeps all three in index.html (marked main-css, main-js). */
+const CODE_FILES: Record<string, { css: string; js: string }> = { business: { css: "assets/biz.css", js: "assets/biz.js" }, restaurant: { css: "assets/rest.css", js: "assets/rest.js" }, store: { css: "assets/store.css", js: "assets/store.js" } };
+export async function templateCode(tplId: string, base: string): Promise<{ html: string; css: string; js: string }> {
+  const get = async (f: string) => { const r = await fetch(base + f, { cache: "no-store" }); if (!r.ok) throw new Error(`Could not read ${f} (${r.status}).`); return r.text(); };
+  const files = CODE_FILES[tplId];
+  if (files) { const [html, css, js] = await Promise.all([get("index.html"), get(files.css), get(files.js)]); return { html, css, js }; }
+  const page = await get("index.html"), c = /<style id="main-css">([\s\S]*?)<\/style>/.exec(page), j = /<script id="main-js">([\s\S]*?)<\/script>/.exec(page);
+  if (!c || !j) throw new Error("This site runs an older build of the template. Update the site first (Settings → Updates in the Studio), then copy its code.");
+  return { html: page.replace(c[0], '<style id="main-css"></style>').replace(j[0], '<script id="main-js"></script>'), css: c[1].replace(/^\n/, ""), js: j[1].replace(/^\n/, "") };
+}
+/** One code box. It keeps its own text while you type and hands it on after a short pause, so a long file stays quick to edit. */
+function CodeBox({ label, hint, value, onSave }: { label: string; hint: string; value: string; onSave: (v: string) => void }) {
+  const [txt, setTxt] = useState(value); const t = useRef<number>(0), last = useRef(value), id = "f-code-" + label.replace(/\W/g, "").toLowerCase();
+  useEffect(() => { if (value !== last.current) { last.current = value; setTxt(value); } }, [value]);
+  const push = (v: string) => { window.clearTimeout(t.current); if (v !== last.current) { last.current = v; onSave(v); } };
+  const edit = (v: string) => { setTxt(v); window.clearTimeout(t.current); t.current = window.setTimeout(() => push(v), 500); };
+  useEffect(() => () => window.clearTimeout(t.current), []);
+  return (
+    <div className="flex flex-col gap-1.5">
+      <label htmlFor={id} className="flex flex-wrap items-baseline justify-between gap-2 text-[13px] font-semibold text-ink-200">{label}<span className="font-normal text-ink-400">{txt.split("\n").length.toLocaleString()} lines</span></label>
+      <textarea id={id} className="input min-h-[220px] resize-y whitespace-pre font-mono text-[12.5px] leading-relaxed" rows={16} wrap="off" spellCheck={false} autoCapitalize="off" autoCorrect="off" value={txt} onBlur={() => push(txt)}
+        onKeyDown={(e) => { if (e.key !== "Tab" || e.shiftKey || e.altKey || e.ctrlKey || e.metaKey) return; e.preventDefault(); const el = e.currentTarget, a = el.selectionStart, b = el.selectionEnd; edit(el.value.slice(0, a) + "  " + el.value.slice(b)); requestAnimationFrame(() => { el.selectionStart = el.selectionEnd = a + 2; }); }}
+        onChange={(e) => edit(e.target.value)} />
+      <p className="text-[12.5px] text-ink-400">{hint}</p>
+    </div>
+  );
+}
+function CodeTemplateField() {
+  const { tpl, root, bump, site } = useCtx();
+  const [busy, setBusy] = useState(false), [err, setErr] = useState(""), [ask, setAsk] = useState<"" | "delete" | "again">("");
+  const k = root.code && typeof root.code === "object" ? root.code : null;
+  const has = !!k && !!(String(k.js || "").trim() || String(k.css || "").trim() || String(k.html || "").trim()), on = has && !!k.on;
+  const copy = async (thenOn: boolean) => {
+    setBusy(true); setErr(""); setAsk("");
+    try { const c = await templateCode(tpl.id, site ? "" : `templates/${tpl.id}/`); root.code = { on: thenOn, html: c.html, css: c.css, js: c.js }; bump(); }
+    catch (e: any) { setErr(e?.message || "Could not read the template's code."); }
+    setBusy(false);
+  };
+  const turn = (v: boolean) => { if (busy) return; if (v && !has) { void copy(true); return; } root.code = { ...(k || {}), on: v }; setAsk(""); bump(); };
+  const save = (key: "html" | "css" | "js") => (v: string) => { root.code = { ...(root.code || {}), [key]: v }; bump(); };
+  const one = tpl.id === "portfolio";
+  return (
+    <div className="flex flex-col gap-4" aria-label="Code Update">
+      <p className="rounded-lg border border-amber-400/40 bg-amber-400/5 px-3 py-2.5 text-[13px] text-amber-100">This is a copy of the site's whole template code. Switched on, the site runs this copy in place of the template's own code, and the theme is locked. Your content (texts, pictures, colours) is still read from the other sections. The copy no longer follows Studio updates to the template, and a mistake in it can break the site: switch it off to go back to the template at once.</p>
+      <Toggle id="f-code-on" label="Use this code on the site" checked={on} onChange={turn} />
+      {busy && <p className="text-[13px] text-ink-300" role="status">Copying the template's code…</p>}
+      {err && <p className="text-[13px] text-red-300" role="alert">{err}</p>}
+      {!has && !busy && <div className="flex flex-wrap items-center gap-2 text-[13px]"><button type="button" className="btn btn-sm" onClick={() => void copy(false)}>Copy the template's code here</button><span className="text-ink-400">Nothing is copied yet. Switching it on copies the code first.</span></div>}
+      {has && on && <p className="text-[13px] text-ink-300">The site is running this code. The theme cannot be changed while it is on. Switch it off to change the theme or to delete this code; the code stays saved.</p>}
+      {has && !on && <div className="flex flex-col gap-2 text-[13px]">
+        <p className="text-ink-300">Switched off: the site runs the template's own code. Your copy below is kept.</p>
+        <div className="flex flex-wrap items-center gap-2">
+          {ask === "delete" ? <><span className="text-ink-200">Delete your copy of the code? This cannot be undone.</span><button type="button" className="btn btn-sm border-red-400/50 text-red-200" onClick={() => { delete root.code; setAsk(""); bump(); }}>Yes, delete it</button><button type="button" className="btn btn-sm" onClick={() => setAsk("")}>Keep it</button></>
+            : ask === "again" ? <><span className="text-ink-200">Replace your copy with the template's current code? Your changes are lost.</span><button type="button" className="btn btn-sm" onClick={() => void copy(false)}>Yes, replace it</button><button type="button" className="btn btn-sm" onClick={() => setAsk("")}>Keep mine</button></>
+            : <><button type="button" className="btn btn-sm border-red-400/50 text-red-200" onClick={() => setAsk("delete")}>Delete this code</button><button type="button" className="btn btn-sm" onClick={() => setAsk("again")}>Copy the template's code again</button></>}
+        </div>
+      </div>}
+      {has && <>
+        <CodeBox label="HTML" value={String(k.html || "")} onSave={save("html")} hint={one ? "The page itself. Its styles and script are in the two boxes below; leave the two empty main-css and main-js tags where they are." : "The page's frame, used for every page of the site. The site's sections are drawn into it by the JavaScript below."} />
+        <CodeBox label="CSS" value={String(k.css || "")} onSave={save("css")} hint="The template's whole stylesheet. A change shows in the preview after a short pause. Left empty, the template's own styles are used." />
+        <CodeBox label="JavaScript" value={String(k.js || "")} onSave={save("js")} hint="The template's whole script: it draws every section from your content. The preview reloads after a change. If it cannot start, the template's own code is shown and the preview says why." />
+      </>}
+    </div>
+  );
+}
+
 /** Studio only: tick the sections this site's own admin page shows. Unticked ones are listed in content.cms.hide and
  *  left out of that admin page's menu (the Studio always shows everything). */
 export const ADMIN_EXTRAS: [string, string, string][] = [["enquiries", "Enquiries", "Forms & records"], ["warranty-records", "Warranty records", "Forms & records"], ["orders", "Orders", "Shop"], ["customers", "Customers", "Shop"]];
@@ -760,7 +831,7 @@ function AdminSectionsField() {
         <label className="flex items-start gap-2 text-[13px]"><input type="checkbox" className="mt-0.5 accent-brand-500" checked={allow.includes("customEngine")} onChange={() => { root.cms.allow = allow.includes("customEngine") ? allow.filter((x) => x !== "customEngine") : [...allow, "customEngine"]; bump(); }} />
           <span>Custom engine for translations<span className="block text-ink-400">Lets this site's owner choose “Custom engine” under Languages → Translate with. Without it their admin page offers Cloudflare AI and the Picaffectz system only.</span></span></label>
         <label className="mt-2 flex items-start gap-2 text-[13px]"><input type="checkbox" className="mt-0.5 accent-brand-500" checked={allow.includes("code")} onChange={() => { root.cms.allow = allow.includes("code") ? allow.filter((x) => x !== "code") : [...allow, "code"]; bump(); }} />
-          <span>Code Update<span className="block text-ink-400">Shows the “Code Update” section in this site's admin page, so its owner can add their own CSS, JavaScript and HTML. Without it only the Studio can change that code; what is already saved keeps working either way.</span></span></label>
+          <span>Code Update<span className="block text-ink-400">Shows the “Code Update” section in this site's admin page, so its owner can edit and run their own copy of the site's code. Without it only the Studio can change that code; what is already saved keeps working either way.</span></span></label>
       </fieldset>
       <div className="flex flex-wrap items-center gap-2 text-[13px]"><button type="button" className="btn btn-sm" disabled={!hide.length} onClick={() => set([])}>Show everything</button><span className="text-ink-400">{hide.length ? `${hide.length} hidden` : "Everything is shown"}</span></div>
     </div>

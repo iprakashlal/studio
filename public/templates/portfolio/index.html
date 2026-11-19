@@ -1509,7 +1509,7 @@ function renderSite(c){
 /* Features (assets/addons.js): chat button, badge, custom code and the custom API for form entries. */
 let adP;
 function addons(c){
-  const A=c.addons||{},any=(A.chat&&A.chat.on)||(A.badge&&A.badge.on)||(A.api&&A.api.on)||(A.code||[]).some(x=>x&&x.on!==false&&x.code);
+  const A=c.addons||{},any=(A.chat&&A.chat.on)||(A.badge&&A.badge.on)||(A.api&&A.api.on)||(A.code||[]).some(x=>x&&x.on!==false&&x.code)||!!(c.code&&c.code.on)||!!document.getElementById("site-code-css")||!!document.getElementById("site-code-html");
   if(!any&&!window.SiteAddons)return;
   (adP||(adP=new Promise((ok,no)=>{if(window.SiteAddons)return ok();const s=document.createElement("script");s.src="assets/addons.js";s.onload=()=>ok();s.onerror=no;document.head.appendChild(s)})))
     .then(()=>SiteAddons.mount(c,{preview:PREVIEW,home:!(window.SitePages&&SitePages.here()),site:c.brand.logoText})).catch(()=>{})}

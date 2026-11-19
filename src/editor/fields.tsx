@@ -102,7 +102,9 @@ export function FieldView({ f, obj, base }: { f: F; obj: any; base: string }) {
             if (r.title && (!String(t ?? "").trim() || /^(new page|untitled page)$/i.test(String(t)))) { setP(obj, "title", r.title); bump(); }
           }} />}
           {f.rich && <RichBar id={id} value={String(val ?? "")} set={set} />}
-          <textarea id={id} className={`input min-h-[84px] resize-y leading-relaxed${f.rich ? " font-mono text-[13px]" : ""}`} rows={f.rows || 3} value={val ?? ""} onChange={(e) => set(e.target.value)} />
+          <textarea id={id} className={`input min-h-[84px] resize-y leading-relaxed${f.rich || f.code ? " font-mono text-[13px]" : ""}${f.code ? " whitespace-pre" : ""}`} rows={f.rows || 3} value={val ?? ""} placeholder={f.ph} spellCheck={f.code ? false : undefined} autoCapitalize={f.code ? "off" : undefined} autoCorrect={f.code ? "off" : undefined} wrap={f.code ? "off" : undefined}
+            onKeyDown={f.code ? (e) => { if (e.key !== "Tab" || e.shiftKey || e.altKey || e.ctrlKey || e.metaKey) return; e.preventDefault(); const el = e.currentTarget, a = el.selectionStart, b = el.selectionEnd; set(el.value.slice(0, a) + "  " + el.value.slice(b)); requestAnimationFrame(() => { el.selectionStart = el.selectionEnd = a + 2; }); } : undefined}
+            onChange={(e) => set(e.target.value)} />
         </Field>
       );
     case "number":
@@ -737,7 +739,7 @@ function AdminSectionsField() {
   root.cms = root.cms || {};
   const hide: string[] = Array.isArray(root.cms.hide) ? root.cms.hide : [];
   const allow: string[] = Array.isArray(root.cms.allow) ? root.cms.allow : [];
-  const rows: [string, string, string][] = [...tpl.schema.filter((c) => !c.showIf || c.showIf(root)).map((c) => [c.id, c.site?.label || c.label, c.site?.group || c.group] as [string, string, string]),
+  const rows: [string, string, string][] = [...tpl.schema.filter((c) => (!c.showIf || c.showIf(root)) && !c.siteIf).map((c) => [c.id, c.site?.label || c.label, c.site?.group || c.group] as [string, string, string]),
     ...ADMIN_EXTRAS.filter(([id]) => (id === "orders" || id === "customers" ? tpl.id === "store" : id === "enquiries" ? tpl.id === "business" || tpl.id === "restaurant" : id === "warranty-records" ? tpl.id !== "portfolio" && tpl.id !== "restaurant" : tpl.id !== "portfolio"))];
   const groups = [...new Set(rows.map((r) => r[2]))];
   const set = (next: string[]) => { root.cms.hide = next; bump(); };
@@ -757,6 +759,8 @@ function AdminSectionsField() {
         <legend className="px-1.5 text-[11px] font-bold uppercase tracking-wider text-ink-400">Extras (off unless ticked)</legend>
         <label className="flex items-start gap-2 text-[13px]"><input type="checkbox" className="mt-0.5 accent-brand-500" checked={allow.includes("customEngine")} onChange={() => { root.cms.allow = allow.includes("customEngine") ? allow.filter((x) => x !== "customEngine") : [...allow, "customEngine"]; bump(); }} />
           <span>Custom engine for translations<span className="block text-ink-400">Lets this site's owner choose “Custom engine” under Languages → Translate with. Without it their admin page offers Cloudflare AI and the Picaffectz system only.</span></span></label>
+        <label className="mt-2 flex items-start gap-2 text-[13px]"><input type="checkbox" className="mt-0.5 accent-brand-500" checked={allow.includes("code")} onChange={() => { root.cms.allow = allow.includes("code") ? allow.filter((x) => x !== "code") : [...allow, "code"]; bump(); }} />
+          <span>Code Update<span className="block text-ink-400">Shows the “Code Update” section in this site's admin page, so its owner can add their own CSS, JavaScript and HTML. Without it only the Studio can change that code; what is already saved keeps working either way.</span></span></label>
       </fieldset>
       <div className="flex flex-wrap items-center gap-2 text-[13px]"><button type="button" className="btn btn-sm" disabled={!hide.length} onClick={() => set([])}>Show everything</button><span className="text-ink-400">{hide.length ? `${hide.length} hidden` : "Everything is shown"}</span></div>
     </div>

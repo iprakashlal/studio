@@ -861,15 +861,14 @@
     if (tag === "style") { if (el.textContent !== want) el.textContent = want; } else if (el.getAttribute("href") !== want) el.setAttribute("href", want);
     return fam;
   }
-  // ---- Code Update (content.code = { on, html, css, js }): a site's own copy of the template's code. When it is on, the
-  // template's script hands the page over before it draws anything: its stylesheet is swapped for the copy's CSS, the
-  // page frame for the copy's HTML, and the copy's JavaScript runs in its place. A copy that cannot start (a slip in
-  // the JavaScript) is dropped and the template's own code draws the site, so a mistake never leaves a blank page.
-  var scBody = Array.prototype.slice.call(document.body ? document.body.childNodes : []);
+  // ---- Code Update (content.code = { on, css, js, pages }): a site's own copy of the template's code. When it is on, the
+  // template's script hands the page over before it draws anything: its stylesheet is swapped for the copy's CSS and
+  // the copy's JavaScript runs in its place. A copy that cannot start (a slip in the JavaScript) is dropped and the
+  // template's own code draws the site, so a mistake never leaves a blank page. Your HTML for each page: see scDrawn.
   var scPV = window.name === "cms-preview" && window.parent !== window;
   var sc = { run: null, bad: null, t: 0, ev: [], tm: [], o: {} }, scAdd = EventTarget.prototype.addEventListener, scTO = window.setTimeout, scIV = window.setInterval, scOn = false;
   function scWant(c) { var k = c && c.code; return k && k.on && String(k.js || "").trim() ? k : null; }
-  function scSig(k) { return String(k.js || "") + "\u0000" + String(k.html || ""); }
+  function scSig(k) { return String(k.js || ""); }
   function scFlag(v) { try { if (v) sessionStorage.setItem("site-code-wait", "1"); else sessionStorage.removeItem("site-code-wait"); } catch (e) { /* private mode */ } }
   function scReload() { clearTimeout(sc.t); sc.t = scTO.call(window, function () { location.reload(); }, scPV ? 900 : 0); }
   // While the template's script starts up, note the listeners and timers it sets, so they can be taken off at the hand-over.
@@ -889,34 +888,74 @@
     if (st.textContent !== css) st.textContent = css;
     if (el) el.disabled = true;
   }
-  function scHtml(k, o) {
-    var h = String(k.html || ""); if (!h.trim()) return;
-    var d = new DOMParser().parseFromString(h, "text/html"); if (!d || !d.body) return;
-    var known = function (s) {
-      var src = s.getAttribute("src");
-      var bare = function (u) { return String(u || "").split("?")[0]; };
-      if (src) return bare(src) === o.js || Array.prototype.some.call(document.scripts, function (x) { return bare(x.getAttribute("src")) === bare(src); });
-      var t = s.textContent.trim(); return !t || s.id === "main-js" || Array.prototype.some.call(document.scripts, function (x) { return !x.getAttribute("src") && x.textContent.trim() === t; });
-    };
-    var mk = function (s) { var n = document.createElement("script"); Array.prototype.slice.call(s.attributes).forEach(function (a) { n.setAttribute(a.name, a.value); }); n.text = s.textContent; n.async = false; return n; };
-    Array.prototype.slice.call(d.head.children).forEach(function (n) {
-      var tag = n.tagName;
-      if (tag === "TITLE" || tag === "BASE" || (tag === "META" && (n.hasAttribute("charset") || n.getAttribute("name") === "viewport"))) return;
-      if (tag === "SCRIPT") { if (!known(n)) document.head.appendChild(mk(n)); return; }
-      if (n.id === "main-css" || (o.css && n.matches(o.css))) return;
-      if (tag === "META" && n.getAttribute("name") && Array.prototype.some.call(document.head.querySelectorAll("meta[name]"), function (x) { return x.getAttribute("name") === n.getAttribute("name"); })) return;
-      var html = n.outerHTML; if (Array.prototype.some.call(document.head.children, function (x) { return x.outerHTML === html; })) return;
-      document.head.appendChild(document.importNode(n, true));
-    });
-    Array.prototype.slice.call(d.body.attributes).forEach(function (a) { if (a.name === "data-page") return; if (a.name === "class") a.value.split(/\s+/).forEach(function (c) { if (c) document.body.classList.add(c); }); else document.body.setAttribute(a.name, a.value); });
-    scBody.forEach(function (n) { if (n.parentNode === document.body && !(n.nodeType === 1 && n.tagName === "SCRIPT")) n.parentNode.removeChild(n); });
-    var first = document.body.firstChild, later = [];
-    Array.prototype.slice.call(d.body.childNodes).forEach(function (n) {
-      if (n.nodeType === 1 && n.tagName === "SCRIPT") { if (!known(n)) later.push(mk(n)); return; }
-      document.body.insertBefore(document.importNode(n, true), first);
-    });
-    later.forEach(function (n) { document.body.appendChild(n); });
+  // ---- Your HTML for a page (content.code.pages[key] = { html, base }). "base" is the page's markup as the template drew
+  // it when it was copied, "html" is that markup with your changes. Each time the template writes the page, the parts
+  // you changed are laid over it, before anything is wired up: what you left alone still follows the content.
+  function scKey() {
+    var f = (location.pathname.split("/").pop() || "index").replace(/\.html?$/i, "") || "index", q;
+    try { q = new URLSearchParams(location.search); ["p", "s", "id", "c"].forEach(function (n) { var v = q.get(n); if (v) f += "?" + n + "=" + v; }); } catch (e) { /* old browser */ }
+    return f;
   }
+  function scKids(n) { return Array.prototype.filter.call(n.childNodes, function (c) { return c.nodeType === 1 || (c.nodeType === 3 && c.nodeValue.trim()); }); }
+  function scTxt(n) { return n.nodeValue.replace(/\s+/g, " ").trim(); }
+  function scSame(a, b) {
+    if (a.nodeType !== b.nodeType) return false;
+    if (a.nodeType === 3) return scTxt(a) === scTxt(b);
+    if (a.tagName !== b.tagName || a.attributes.length !== b.attributes.length) return false;
+    for (var i = 0; i < a.attributes.length; i++) if (b.getAttribute(a.attributes[i].name) !== a.attributes[i].value) return false;
+    var x = scKids(a), y = scKids(b); if (x.length !== y.length) return false;
+    for (i = 0; i < x.length; i++) if (!scSame(x[i], y[i])) return false;
+    return true;
+  }
+  function scImp(n) { var c = document.importNode(n, true); if (c.nodeType === 3) c.nodeValue = c.nodeValue.replace(/\s+/g, " "); return c; }
+  function scPatch(live, to, base) {
+    var i, a;
+    for (i = 0; i < to.attributes.length; i++) { a = to.attributes[i]; if (base.getAttribute(a.name) !== a.value) live.setAttribute(a.name, a.value); }
+    for (i = 0; i < base.attributes.length; i++) { a = base.attributes[i]; if (!to.hasAttribute(a.name)) live.removeAttribute(a.name); }
+    var T = scKids(to), B = scKids(base), L = scKids(live), kind = function (n) { return n.nodeType === 3 ? "#" : n.tagName; };
+    var lined = T.length === B.length && L.length === B.length && T.every(function (t, n) { return kind(t) === kind(B[n]); });
+    if (lined) {
+      for (i = 0; i < T.length; i++) {
+        if (scSame(T[i], B[i])) continue;
+        if (T[i].nodeType === 3) { if (L[i].nodeType === 3) L[i].nodeValue = T[i].nodeValue.replace(/\s+/g, " "); else live.replaceChild(scImp(T[i]), L[i]); }
+        else if (L[i].nodeType === 1 && L[i].tagName === T[i].tagName) scPatch(L[i], T[i], B[i]);
+        else live.replaceChild(scImp(T[i]), L[i]);
+      }
+      return;
+    }
+    // Something was added, taken out or moved here: keep the drawn pieces that are still wanted, in your order.
+    var used = [], out = [], fits = L.length === B.length, mark = function (n) { return n.nodeType === 1 ? n.tagName + "#" + (n.getAttribute("id") || "") + "." + (n.getAttribute("class") || "") : ""; };
+    T.forEach(function (t, n) {
+      var j = -1, k;
+      if (fits) { for (k = 0; k < B.length; k++) if (!used[k] && scSame(t, B[k])) { j = k; break; } }
+      if (j >= 0) { used[j] = 1; out[n] = L[j]; }
+    });
+    T.forEach(function (t, n) {
+      if (out[n]) return; var j = -1, k;
+      if (fits && t.nodeType === 1) { for (k = 0; k < B.length; k++) if (!used[k] && B[k].nodeType === 1 && L[k].nodeType === 1 && L[k].tagName === t.tagName && mark(B[k]) === mark(t)) { j = k; break; } }
+      if (j >= 0) { used[j] = 1; scPatch(L[j], t, B[j]); out[n] = L[j]; } else out[n] = scImp(t);
+    });
+    Array.prototype.slice.call(live.childNodes).forEach(function (n) { if (out.indexOf(n) < 0) live.removeChild(n); });
+    out.forEach(function (n) { live.appendChild(n); });
+  }
+  var scMemo = { html: "", base: "", to: null, from: null };
+  function scDom(h) { var t = document.createElement("template"); t.innerHTML = h; var d = document.createElement("div"); d.appendChild(t.content); return d; }
+  /** Called by the template the moment it has written a page's markup. */
+  function scDrawn(root, content) {
+    if (!root) return; var key = scKey();
+    if (scPV) sc.snap = { key: key, html: root.innerHTML };
+    var k = content && content.code, p = k && k.on && k.pages && k.pages[key];
+    if (!p || typeof p.html !== "string" || typeof p.base !== "string" || p.html === p.base) return;
+    try {
+      if (scMemo.html !== p.html || scMemo.base !== p.base) scMemo = { html: p.html, base: p.base, to: scDom(p.html), from: scDom(p.base) };
+      if (!scSame(scMemo.to, scMemo.from)) scPatch(root, scMemo.to, scMemo.from);
+    } catch (e) { try { console.error("Code Update: your HTML for this page could not be laid over it.", e); } catch (x) { /* no console */ } }
+  }
+  // The editor asks its preview for the markup of the page it shows, as the template drew it.
+  if (scPV) addEventListener("message", function (e) {
+    if (e.origin !== location.origin || e.source !== window.parent || !e.data || e.data.type !== "cms:snap") return;
+    window.parent.postMessage({ type: "cms:snap", ok: !!sc.snap, key: sc.snap ? sc.snap.key : scKey(), html: sc.snap ? sc.snap.html : "" }, location.origin);
+  });
   function scBar(msg) {
     var b = document.getElementById("site-code-bar"); if (!msg || !scPV) { if (b) b.remove(); return; }
     if (!b) { b = document.createElement("div"); b.id = "site-code-bar"; b.setAttribute("role", "alert"); b.style.cssText = "position:fixed;left:12px;right:12px;bottom:12px;z-index:2147483000;padding:10px 14px;border-radius:10px;background:#7f1d1d;color:#fff;font:13px/1.45 system-ui,sans-serif;box-shadow:0 6px 24px rgba(0,0,0,.35)"; (document.body || document.documentElement).appendChild(b); }
@@ -930,15 +969,15 @@
   /** Called by the template's script with the content, before it draws. True: the copy has the page, the caller stops. */
   function scTake(content, o) {
     o = o || {}; sc.o = o; var k = scWant(content); scFlag(!!k);
-    if (!k) { clearTimeout(sc.t); if (sc.bad !== null) { sc.bad = null; scBar(""); } return false; }
+    if (!k) { clearTimeout(sc.t); if (sc.bad !== null) { sc.bad = null; scBar(""); } scCss(content && content.code && content.code.on ? content.code : null, o); return false; }
     if (sc.bad !== null) { if (scSig(k) !== sc.bad) scReload(); else clearTimeout(sc.t); return false; }
     if (o.drawn) { scReload(); return !scPV; }
     var fn; try { fn = new Function("SiteCode", "fetch", String(k.js)); } catch (e) { scFail(k, e); return false; }
     scQuiet();
-    try { scCss(k, o); scHtml(k, o); } catch (e) { /* keep the page's own frame */ }
+    try { scCss(k, o); } catch (e) { /* keep the template's styles */ }
     var text = o.text, get = function (u, i) { if (text != null && /content\.json(\?|$)/.test(String(u))) { var x = text; text = null; return Promise.resolve(new Response(x, { status: 200, headers: { "Content-Type": "application/json" } })); } return window.fetch(u, i); };
     sc.run = scSig(k);
-    try { fn(null, get); } catch (e) { scFail(k, e); return false; }
+    try { fn({ drawn: scDrawn, take: function () { return false; }, wait: function () { return false; }, track: function () {}, untrack: function () {} }, get); } catch (e) { scFail(k, e); return false; }
     // In the editor's preview: a change to the CSS shows at once; a change to the HTML or JavaScript reloads the preview.
     if (scPV) scAdd.call(window, "message", function (e) {
       if (e.origin !== location.origin || e.source !== window.parent) return; var d = e.data || {};
@@ -948,7 +987,7 @@
     });
     return true;
   }
-  window.SiteCode = { take: scTake, track: scTrack, untrack: scUntrack, wait: function () { try { return scPV && sessionStorage.getItem("site-code-wait") === "1"; } catch (e) { return false; } } };
+  window.SiteCode = { drawn: scDrawn, take: scTake, track: scTrack, untrack: scUntrack, wait: function () { try { return scPV && sessionStorage.getItem("site-code-wait") === "1"; } catch (e) { return false; } } };
   window.SiteFonts = { use: useFont, link: fontLink };
   window.SiteSkeleton = { show: skeleton };
   window.SiteLogo = { hero: heroLogo };

@@ -914,14 +914,14 @@ function CodeTemplateField() {
 
 /** Studio only: tick the sections this site's own admin page shows. Unticked ones are listed in content.cms.hide and
  *  left out of that admin page's menu (the Studio always shows everything). */
-export const ADMIN_EXTRAS: [string, string, string][] = [["enquiries", "Enquiries", "Forms & records"], ["warranty-records", "Warranty records", "Forms & records"], ["orders", "Orders", "Shop"], ["customers", "Customers", "Shop"]];
+export const ADMIN_EXTRAS: [string, string, string][] = [["enquiries", "Enquiries", "Forms & records"], ["warranty-records", "Warranty records", "Forms & records"], ["orders", "Orders", "Shop"], ["customers", "Customers", "Shop"], ["customer-data", "Customer Data", "Forms & records"]];
 function AdminSectionsField() {
   const { tpl, root, bump } = useCtx();
   root.cms = root.cms || {};
   const hide: string[] = Array.isArray(root.cms.hide) ? root.cms.hide : [];
   const allow: string[] = Array.isArray(root.cms.allow) ? root.cms.allow : [];
   const rows: [string, string, string][] = [...tpl.schema.filter((c) => (!c.showIf || c.showIf(root)) && !c.siteIf).map((c) => [c.id, c.site?.label || c.label, c.site?.group || c.group] as [string, string, string]),
-    ...ADMIN_EXTRAS.filter(([id]) => (id === "orders" || id === "customers" ? tpl.id === "store" : id === "enquiries" ? tpl.id === "business" || tpl.id === "restaurant" : id === "warranty-records" ? tpl.id !== "portfolio" && tpl.id !== "restaurant" : tpl.id !== "portfolio"))];
+    ...ADMIN_EXTRAS.filter(([id]) => (id === "customer-data" ? tpl.id === "store" || tpl.id === "restaurant" : id === "orders" || id === "customers" ? tpl.id === "store" : id === "enquiries" ? tpl.id === "business" || tpl.id === "restaurant" : id === "warranty-records" ? tpl.id !== "portfolio" && tpl.id !== "restaurant" : tpl.id !== "portfolio"))];
   const groups = [...new Set(rows.map((r) => r[2]))];
   const set = (next: string[]) => { root.cms.hide = next; bump(); };
   const toggle = (id: string) => set(hide.includes(id) ? hide.filter((x) => x !== id) : [...hide, id]);

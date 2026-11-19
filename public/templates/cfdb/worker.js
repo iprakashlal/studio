@@ -16,7 +16,7 @@ create index if not exists approvals_project on approvals (scope, project, creat
 create table if not exists approval_notes (id integer primary key autoincrement, token text not null, who text not null, body text not null, page text not null default '', kind text not null default 'comment', created_at text not null);
 create index if not exists approval_notes_token on approval_notes (token, id);
 `;
-var CFDB_VERSION = 32;
+var CFDB_VERSION = 33;
 var CFDB_WORKER_NAME = "picaffectz-db";
 
 // src/lib/lookdigest.ts
@@ -672,6 +672,9 @@ async function ensure(env) {
   if (ensured) return;
   await env.DB.batch([
     env.DB.prepare("create table if not exists settings (scope text not null, name text not null, value text not null, updated_at text not null, primary key (scope, name))"),
+    env.DB.prepare("create table if not exists customers (site text not null, ckey text not null, name text not null default '', phone text not null default '', email text not null default '', verified integer not null default 0, orders integer not null default 0, spent real not null default 0, points integer not null default 0, first_at text not null, last_at text not null, primary key (site, ckey))"),
+    env.DB.prepare("create table if not exists points (id integer primary key autoincrement, site text not null, ckey text not null, delta integer not null, why text not null default '', order_no text not null default '', at text not null)"),
+    env.DB.prepare("create index if not exists points_site_key on points (site, ckey, id)"),
     env.DB.prepare("create table if not exists otps (k text primary key, hash text not null, expires integer not null, tries integer not null default 0, sent integer not null default 0)"),
     env.DB.prepare("create table if not exists payments (rz_order text primary key, site text not null, order_no text not null, amount integer not null, status text not null default 'created', created_at text not null)")
   ]);
@@ -879,6 +882,16 @@ var rnum = (p) => {
   const n = parseFloat(String(p ?? "").replace(/[^\d.]/g, ""));
   return isFinite(n) ? n : NaN;
 };
+var loyOf = (c) => {
+  const L = c?.loyalty || {};
+  return { on: !!L.on, earn: Math.max(0, +L.earn || 0), worth: Math.max(0, +L.worth || 0), min: Math.max(0, Math.floor(+L.min || 0)), maxPct: Math.max(0, Math.min(100, L.maxPct == null || L.maxPct === "" ? 50 : +L.maxPct || 0)) };
+};
+function pointsFor(c, want, bal, amount) {
+  const L = loyOf(c), ask = Math.min(Math.floor(+want || 0), Math.floor(bal || 0));
+  if (!L.on || !(L.worth > 0) || ask <= 0 || ask < L.min || !(amount > 0)) return { points: 0, off: 0 };
+  const points = Math.max(0, Math.min(ask, Math.floor(amount * L.maxPct / 100 / L.worth)));
+  return { points, off: Math.round(points * L.worth * 100) / 100 };
+}
 function restBill(c, q) {
   const o = c?.ordering || {};
   if (!o.on) return { error: "Online ordering is switched off." };
@@ -933,11 +946,12 @@ function restBill(c, q) {
   }
   if (!okArea) return { error: "We don't deliver to that address." };
   const free = +o.freeAbove > 0 && sub - disc >= +o.freeAbove, del = mode !== "delivery" ? 0 : free ? 0 : Math.max(0, fee != null ? fee : +o.deliveryFee || 0);
-  const base = sub - disc + pack, pct = Math.max(0, +o.taxPercent || 0), tax = o.taxIncluded || !pct ? 0 : Math.round(base * pct) / 100;
+  const pt = pointsFor(c, q.points, +q._bal || 0, sub - disc);
+  const base = sub - disc - pt.off + pack, pct = Math.max(0, +o.taxPercent || 0), tax = o.taxIncluded || !pct ? 0 : Math.round(base * pct) / 100;
   const tip = o.tips !== false && mode !== "pickup" ? Math.max(0, Math.min(5e3, +q.tip || 0)) : 0;
   const raw = base + tax + del + tip, total = o.roundOff === false ? Math.round(raw * 100) / 100 : Math.round(raw);
   if (mode !== "dinein" && sub < Math.max(0, +o.minOrder || 0)) return { error: "The order is below the minimum." };
-  return { total };
+  return { total, points: pt.points, pointsOff: pt.off, net: Math.round((sub - disc - pt.off) * 100) / 100 };
 }
 var POS_URL = "https://pponlineordercb.petpooja.com/save_order";
 var posReady = (z) => !!(z && z.on && z.secret && z.token && z.appKey && z.restId);
@@ -970,6 +984,43 @@ function posItems(c, q) {
   }
   return items.length ? { items, sub } : { error: "an empty cart" };
 }
+async function pointsBal(env, site, phone, token) {
+  const w = await getSetting(env, "site:" + site, "wa").catch(() => null), num = waNum(phone, w?.cc), [exp, sig] = String(token || "").split(".");
+  if (!num || !(+exp > Date.now()) || sig !== b64u(await hmac(env.SECRET, "otp:" + site + ":" + num + ":" + exp))) return { key: num, bal: 0, ok: false };
+  const r = await env.DB.prepare("select points from customers where site = ? and ckey = ?").bind(site, num).first();
+  return { key: num, bal: Math.max(0, +r?.points || 0), ok: true };
+}
+async function custOrder(env, site, c, data, cart) {
+  const w = await getSetting(env, "site:" + site, "wa").catch(() => null);
+  const key = waNum(data.phone, w?.cc) || String(data.email || "").trim().toLowerCase().slice(0, 120);
+  if (!key) return "";
+  if (await env.DB.prepare("select 1 from points where site = ? and order_no = ? limit 1").bind(site, data.order_no).first()) return "";
+  const L = loyOf(c), verified = data._phone ? 1 : 0, now = (/* @__PURE__ */ new Date()).toISOString();
+  let net = NaN, used = 0, off = 0;
+  if (cart && typeof cart === "object") {
+    if (isRest(c)) {
+      const bal = verified ? Math.max(0, +(await env.DB.prepare("select points from customers where site = ? and ckey = ?").bind(site, key).first())?.points || 0) : 0;
+      const b = restBill(c, { ...cart, _bal: bal });
+      if (!("error" in b)) {
+        net = b.net ?? b.total;
+        used = b.points || 0;
+        off = b.pointsOff || 0;
+      }
+    } else if (Array.isArray(c?.products)) {
+      const b = shopBill(c, cart);
+      if (!("error" in b)) net = b.total;
+    }
+  }
+  if (isNaN(net)) net = rnum(data.total);
+  const spent = isNaN(net) ? 0 : net, earned = L.on && L.earn > 0 ? Math.floor(spent / 100 * L.earn) : 0;
+  await env.DB.prepare("insert into customers (site, ckey, name, phone, email, verified, orders, spent, points, first_at, last_at) values (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?) on conflict (site, ckey) do update set name = case when excluded.name <> '' then excluded.name else name end, phone = case when excluded.phone <> '' then excluded.phone else phone end, email = case when excluded.email <> '' then excluded.email else email end, verified = max(verified, excluded.verified), orders = orders + 1, spent = spent + excluded.spent, points = max(0, points + excluded.points), last_at = excluded.last_at").bind(site, key, oneLine(String(data.name || "")).slice(0, 100), String(data.phone || "").slice(0, 24), String(data.email || "").trim().slice(0, 120), verified, spent, earned - used, now, now).run();
+  const st = [];
+  if (used) st.push(env.DB.prepare("insert into points (site, ckey, delta, why, order_no, at) values (?, ?, ?, ?, ?, ?)").bind(site, key, -used, "Spent on an order", data.order_no, now));
+  st.push(env.DB.prepare("insert into points (site, ckey, delta, why, order_no, at) values (?, ?, ?, ?, ?, ?)").bind(site, key, earned, "Earned on an order", data.order_no, now));
+  await env.DB.batch(st);
+  const cur = siteCur(c);
+  return L.on ? [used ? `Spent ${used} point${used === 1 ? "" : "s"} (${pgMoney(cur, Math.round(off * 100))} off)` : "", earned ? `Earned ${earned} point${earned === 1 ? "" : "s"}` : ""].filter(Boolean).join(". ") : "";
+}
 async function posSend(env, site, z, c, q, data, origin) {
   const it = posItems(c, q);
   if ("error" in it) return "Not sent to Petpooja: " + it.error + ".";
@@ -980,6 +1031,7 @@ async function posSend(env, site, z, c, q, data, origin) {
   let disc = 0;
   if (cp && it.sub >= (+cp.min || 0)) disc = Math.min(it.sub, cp.kind === "flat" ? +cp.value : Math.min(it.sub * +cp.value / 100, +cp.max > 0 ? +cp.max : Infinity));
   disc = Math.round(disc * 100) / 100;
+  disc = Math.round((disc + (bill.pointsOff || 0)) * 100) / 100;
   const pack = mode === "dinein" ? 0 : Math.max(0, +o.packing || 0), pct = Math.max(0, +o.taxPercent || 0), tax = o.taxIncluded || !pct ? 0 : Math.round((it.sub - disc + pack) * pct) / 100;
   const tip = o.tips !== false && mode !== "pickup" ? Math.max(0, Math.min(5e3, +q.tip || 0)) : 0, del = Math.max(0, Math.round((bill.total - (it.sub - disc + pack + tax + tip)) * 100) / 100);
   const paid = data._paid === "yes", key = b64u(await hmac(env.SECRET, "pos:" + site)).slice(0, 32);
@@ -1473,6 +1525,13 @@ var db_worker_default = {
         for (const g of ["cf", "pe", "st", "pp"]) if (pgReady(g, await getSetting(env, "site:" + site, g).catch(() => null))) pg.push(g);
         return json({ otp: !!(waReady(w) && w.orderOtp && String(w.tplOtp || "").trim()), rz: z?.on && z.secret && z.keyId ? String(z.keyId) : "", pg });
       }
+      if (/^\/points\/[a-z0-9][a-z0-9-]{0,59}$/.test(p) && req.method === "POST") {
+        const site = p.split("/")[2], b = await req.json(), L = loyOf(await siteContent(env, site));
+        if (!L.on) return err(404, "Not found.");
+        const v = await pointsBal(env, site, b.phone, b.otp);
+        if (!v.ok) return err(403, "Verify your mobile number first.");
+        return json({ points: v.bal, worth: L.worth, min: L.min, maxPct: L.maxPct, earn: L.earn });
+      }
       if (/^\/otp\/(send|check)\/[a-z0-9][a-z0-9-]{0,59}$/.test(p) && req.method === "POST") {
         const site = p.split("/")[3], b = await req.json(), w = await getSetting(env, "site:" + site, "wa");
         if (!(waReady(w) && w.orderOtp && String(w.tplOtp || "").trim())) return err(404, "Not found.");
@@ -1533,6 +1592,7 @@ var db_worker_default = {
         if (!/^[A-Z0-9][A-Z0-9-]{3,29}$/.test(no)) return err(400, "Which order?");
         const c = await siteContent(env, site), rest = isRest(c);
         if (g !== "rz" && !pgOn(c, g)) return err(404, "That way to pay isn't switched on for this site.");
+        q._bal = rest && +q.points > 0 ? (await pointsBal(env, site, q.phone, q.otp)).bal : 0;
         const bill = rest ? restBill(c, q) : Array.isArray(c?.products) ? shopBill(c, q) : { error: "This site doesn't take orders." };
         if ("error" in bill) return err(409, bill.error);
         if (Math.abs(bill.total - (+q.total || 0)) > 0.5) return err(409, rest ? "The menu or its prices changed while you were ordering. Refresh the page and check your cart." : "Prices or delivery charges changed while you were ordering. Refresh the page and check your cart.");
@@ -1629,12 +1689,17 @@ var db_worker_default = {
             delete data.pay_ref;
           }
         }
+        if (data.order_no && q.cart && typeof q.cart === "object") q.cart._bal = data._phone && +q.cart.points > 0 ? Math.max(0, +(await env.DB.prepare("select points from customers where site = ? and ckey = ?").bind(site, waNum(data.phone, (await getSetting(env, "site:" + site, "wa").catch(() => null))?.cc)).first())?.points || 0) : 0;
         if (data.order_no && q.cart && typeof q.cart === "object") {
           const pz = await getSetting(env, "site:" + site, "pos").catch(() => null);
           if (posReady(pz)) {
             const pc = await siteContent(env, site);
             if (isRest(pc)) data._pos = await posSend(env, site, pz, pc, q.cart, data, u.origin);
           }
+        }
+        if (data.order_no) {
+          const said = await custOrder(env, site, await siteContent(env, site), data, q.cart).catch(() => "");
+          if (said) data._points = said;
         }
         const made = await env.DB.prepare("insert into enquiries (site, data, page, created_at) values (?, ?, ?, ?) returning id").bind(site, JSON.stringify(data), String(q.page || "").slice(0, 200), (/* @__PURE__ */ new Date()).toISOString()).first();
         const rowId = made?.id;
@@ -2174,6 +2239,32 @@ var db_worker_default = {
         }
         return err(404, "Not found.");
       }
+      if (p === "/c/list") {
+        const site = scope.replace(/^site:/, ""), find = String(u.searchParams.get("q") || "").trim().toLowerCase().slice(0, 60), like = "%" + find.replace(/[%_]/g, "") + "%";
+        const page = Math.max(0, Math.floor(+(u.searchParams.get("page") || 0))), per = Math.max(1, Math.min(5e3, Math.floor(+(u.searchParams.get("per") || 20))));
+        const where = find ? "site = ? and (lower(name) like ? or phone like ? or lower(email) like ? or ckey like ?)" : "site = ?", args = find ? [site, like, like, like, like] : [site];
+        const tot = await env.DB.prepare(`select count(*) n, coalesce(sum(points), 0) pts, coalesce(sum(spent), 0) spent, coalesce(sum(orders), 0) orders from customers where ${where}`).bind(...args).first();
+        const rows = (await env.DB.prepare(`select ckey, name, phone, email, verified, orders, spent, points, first_at, last_at from customers where ${where} order by last_at desc limit ? offset ?`).bind(...args, per, page * per).all()).results || [];
+        return json({ rows, total: tot?.n || 0, points: tot?.pts || 0, spent: tot?.spent || 0, orders: tot?.orders || 0 });
+      }
+      if (p === "/c/points") {
+        const site = scope.replace(/^site:/, ""), key = String(u.searchParams.get("key") || "");
+        return json((await env.DB.prepare("select delta, why, order_no, at from points where site = ? and ckey = ? order by id desc limit 100").bind(site, key).all()).results || []);
+      }
+      if ((p === "/c/adjust" || p === "/c/delete") && req.method === "POST") {
+        const b = await req.json(), site = scope.replace(/^site:/, ""), key = String(b.key || "");
+        const row = await env.DB.prepare("select points from customers where site = ? and ckey = ?").bind(site, key).first();
+        if (!row) return err(404, "That customer isn't here any more.");
+        if (p === "/c/delete") {
+          await env.DB.batch([env.DB.prepare("delete from points where site = ? and ckey = ?").bind(site, key), env.DB.prepare("delete from customers where site = ? and ckey = ?").bind(site, key)]);
+          return json({ ok: true });
+        }
+        const d = Math.round(+b.delta || 0);
+        if (!d || Math.abs(d) > 1e6) return err(400, "How many points?");
+        const next = Math.max(0, (+row.points || 0) + d), real = next - (+row.points || 0);
+        await env.DB.batch([env.DB.prepare("update customers set points = ? where site = ? and ckey = ?").bind(next, site, key), env.DB.prepare("insert into points (site, ckey, delta, why, order_no, at) values (?, ?, ?, ?, '', ?)").bind(site, key, real, oneLine(String(b.why || "Changed by the owner")).slice(0, 120), (/* @__PURE__ */ new Date()).toISOString())]);
+        return json({ ok: true, points: next });
+      }
       if (p === "/e/list") {
         const site = scope.replace(/^site:/, "");
         const rows = (await env.DB.prepare("select id, site, data, page, status, created_at from enquiries where site = ? order by created_at desc limit 500").bind(site).all()).results || [];
@@ -2209,7 +2300,9 @@ export {
   SCHEMA,
   copiedBits,
   db_worker_default as default,
+  loyOf,
   outlineOf,
+  pointsFor,
   posItems,
   restBill,
   shopBill

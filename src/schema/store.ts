@@ -2,7 +2,7 @@ import { legalChecks } from "../lib/legal";
 import type { Category, Field, TemplateDef } from "./types";
 import { uid, vpaOk, paypalOk, httpsOk } from "../lib/util";
 import { BODY_FONTS, DISPLAY_FONTS, LINE_BREAKS_AXIS, STORE_AXES, THEMES, onColor, storeThemeValues } from "../themes/catalog";
-import { adminCategory, legalCategory, codeCategory, withSectionBg, videoCategory, socialCategory, logoFields, consentCategory, emailsCategory, i18nCategory, prepareI18n, featuresCategory, festivalCategory, menuCategory, menuItem, prepareMenu, staticPagesCategory, heroSlidesCard, prepareSlides, prepareMaintenance, seoCategory, warrantyCategory, customFontsCard } from "./common";
+import { adminCategory, loyaltyCard, legalCategory, codeCategory, withSectionBg, videoCategory, socialCategory, logoFields, consentCategory, emailsCategory, i18nCategory, prepareI18n, featuresCategory, festivalCategory, menuCategory, menuItem, prepareMenu, staticPagesCategory, heroSlidesCard, prepareSlides, prepareMaintenance, seoCategory, warrantyCategory, customFontsCard } from "./common";
 import { NAV_MODE_FIELD, NAV_MODE_MOB_FIELD, themeCards } from "../themes/fields";
 
 const CURRENCIES = ["INR", "USD", "EUR", "GBP", "AED", "SGD", "AUD", "CAD"];
@@ -280,6 +280,7 @@ const schema: Category[] = [
   adminCategory(),
   codeCategory(),
 ];
+{ const k = schema.find((c) => c.id === "pricing"); if (k) k.cards.push(loyaltyCard("store")); }
 withSectionBg(schema, { home: [["hero", "Background & text: hero"], ["featured", "Background & text: featured products"], ["categories", "Background & text: categories"], ["banner", "Background & text: banner"], ["reviews", "Background & text: customer reviews"]], contact: [["footer", "Background & text: footer"]] }, [...FONTS_D, ...FONTS_B]);
 
 /** Defaults for settings added after a shop was made. */
@@ -292,6 +293,7 @@ export function prepareStore(c: any) {
     c.gst = { on: false, legalName: "", gstin: "", address: "", state: "", pan: "", prefix: "INV-", defaultHsn: "", askGstin: false, sign: "", notes: "", ...G, defaultRate: String(G.defaultRate ?? "18") };
   }
   if (c && typeof c === "object" && c.home?.hero) prepareSlides(c.home.hero, "#000000");
+  if (c && typeof c === "object") c.loyalty = { on: false, earn: 5, worth: 1, min: 50, maxPct: 50, ...(c.loyalty && typeof c.loyalty === "object" ? c.loyalty : {}) };
   prepareMaintenance(c);
   prepareI18n(c, () => schema);
   prepareMenu(c, () => [menuItem(c.nav?.home || "Home", "home"), { ...menuItem(c.nav?.shop || "Shop", "shop"), children: (Array.isArray(c.categories) ? c.categories : []).slice(0, 12).map((k: any) => menuItem(k.name || "Category", "cat", { cat: k.id })) },

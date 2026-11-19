@@ -587,6 +587,21 @@ export function codeCategory(): Category {
   };
 }
 
+/** Points for returning customers (content.loyalty): earned on every order kept in the site's database; a restaurant's
+ *  guest with a verified mobile number can spend them at checkout. */
+export function loyaltyCard(kind: "restaurant" | "store"): Card {
+  const g2 = (...fields: Field[]): Field => ({ t: "grid", cols: 2, fields });
+  return { title: "Points for returning customers", fields: [
+    { t: "toggle", path: "loyalty.on", label: "Give points on every order" },
+    { t: "when", path: "loyalty.on", is: "true", fields: [
+      g2({ t: "number", path: "loyalty.earn", label: "Points earned for every 100 spent", min: 0, step: 1 }, { t: "number", path: "loyalty.worth", label: "What one point is worth when spent", min: 0, step: 0.05 }),
+      g2({ t: "number", path: "loyalty.min", label: "Fewest points that can be spent at once", min: 0, step: 1 }, { t: "range", path: "loyalty.maxPct", label: "Most of a bill that points can pay", min: 0, max: 100, step: 5, unit: "%" }),
+      { t: "note", text: kind === "restaurant"
+        ? "Points are counted on what a guest pays for the food (after any coupon), for orders placed on the Order now page of a site hosted on Cloudflare. Guests are known by their mobile number. To spend points a guest's number must be verified with a WhatsApp code (Restaurant backend → WhatsApp → “Ask guests to verify their mobile number”); without that, points are still earned and you can see and change them under Customer Data. With Petpooja, points spent are sent as part of the order's discount so both bills match; Petpooja's own loyalty programme is separate and is not changed by these points."
+        : "Points are counted on each order's total, for orders placed on a shop hosted on Cloudflare, and are listed with each customer under Customer Data, where you can also add or take off points. Spending points at the shop's checkout is not available yet: use them for now as a record to reward customers yourself (a coupon, a gift)." }] },
+  ] };
+}
+
 /** Legal & privacy: who runs the site (content.legal), its privacy policy and terms pages, consent on forms, what
  *  waits for consent, spam protection (content.privacy) and an accessibility check. Wording is a starting point, not legal advice. */
 export function legalCategory(): Category {

@@ -100,6 +100,12 @@
     }
     return { ok: false, fee: null };
   }
+  const loy = () => { const L = (C && C.loyalty) || {}; return { on: !!L.on, earn: Math.max(0, +L.earn || 0) }; };
+  /** A verified guest's points, asked from the site's database (it answers only with the proof of the number). */
+  async function loadPts() {
+    const be = A.backend(); if (!loy().on || !be || !be.cf || !verified()) return;
+    try { const r = await fetch(be.cf + "/points/" + encodeURIComponent(be.site), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ phone: ui.form.phone, otp: ui.otp.token }) }); if (r.ok) { ui.pts = await r.json(); over(true); } } catch (e) { /* points are a bonus: ordering carries on */ }
+  }
   function bill() {
     const o = O(), m = mode(), sub = cart.reduce((n, l) => n + l.unit * l.qty, 0);
     const cp = coupons().find((c) => String(c.code).trim().toUpperCase() === String(ui.coupon || "").trim().toUpperCase());
@@ -110,16 +116,21 @@
     const ar = m === "delivery" ? areaFor(ui.form.pin, ui.form.area) : { ok: true, fee: null };
     const free = +o.freeAbove > 0 && sub - disc >= +o.freeAbove;
     const del = m !== "delivery" || !cart.length ? 0 : free ? 0 : Math.max(0, ar.fee != null ? ar.fee : +o.deliveryFee || 0);
-    const base = sub - disc + (cart.length ? pack : 0), pct = Math.max(0, +o.taxPercent || 0);
+    // Points (content.loyalty): a guest whose number is verified can pay part of the bill with theirs; the database works it out the same way.
+    const P = ui.pts, L = loy(); let pts = 0, ptsOff = 0;
+    if (L.on && P && ui.usePts && verified() && P.points >= Math.max(1, P.min || 0) && P.worth > 0 && sub - disc > 0) { pts = Math.max(0, Math.min(Math.floor(P.points), Math.floor(((sub - disc) * P.maxPct) / 100 / P.worth))); ptsOff = Math.round(pts * P.worth * 100) / 100; }
+    const earn = L.on && L.earn > 0 ? Math.floor(((sub - disc - ptsOff) / 100) * L.earn) : 0;
+    const base = sub - disc - ptsOff + (cart.length ? pack : 0), pct = Math.max(0, +o.taxPercent || 0);
     const tax = o.taxIncluded || !pct ? 0 : Math.round(base * pct) / 100;
     const tip = o.tips !== false && m !== "pickup" ? Math.max(0, +ui.tip || 0) : 0;
     const raw = base + tax + del + tip, total = o.roundOff === false ? Math.round(raw * 100) / 100 : Math.round(raw);
     const min = m === "dinein" ? 0 : Math.max(0, +o.minOrder || 0);
-    return { sub, disc, code: cp && disc ? String(cp.code).trim().toUpperCase() : "", cpNote, pack: cart.length ? pack : 0, del, free: m === "delivery" && free, tax, pct, tip, round: Math.round((total - raw) * 100) / 100, total, min, short: Math.max(0, min - sub), area: ar };
+    return { pts, ptsOff, earn, sub, disc, code: cp && disc ? String(cp.code).trim().toUpperCase() : "", cpNote, pack: cart.length ? pack : 0, del, free: m === "delivery" && free, tax, pct, tip, round: Math.round((total - raw) * 100) / 100, total, min, short: Math.max(0, min - sub), area: ar };
   }
   const billRows = (b, o) => {
     const r = [["Item total", fmt(b.sub)]];
     if (b.disc) r.push([`Discount (${esc(b.code)})`, "− " + fmt(b.disc), "good"]);
+    if (b.ptsOff) r.push([`Points used (${b.pts})`, "− " + fmt(b.ptsOff), "good"]);
     if (b.pack) r.push(["Packing", fmt(b.pack)]);
     if ((o ? o.mode : mode()) === "delivery") r.push(["Delivery", b.del ? fmt(b.del) : "Free", b.del ? "" : "good"]);
     if (b.tax) r.push([`${esc((o ? o.taxLabel : O().taxLabel) || "Tax")} ${b.pct}%`, fmt(b.tax)]);
@@ -215,6 +226,14 @@
       ${b.short ? `<p class="od-bad" role="alert">Add ${fmt(b.short)} more to reach the minimum order of ${fmt(b.min)}.</p>` : ""}`;
   }
   const pays = () => { const o = O(), p = o.pay || {}, m = mode(), out = []; if (p.razorpay && can.rz) out.push({ id: "rz", label: "Pay online (UPI, card, netbanking)", note: "Secure payment by Razorpay. The order is placed as soon as you've paid." }); for (const g of Object.keys(GW)) if (p[GW[g].key] && (can.pg || []).includes(g)) out.push({ id: g, label: GW[g].label, note: `You pay on ${GW[g].name}'s secure page and come back here. The order is placed as soon as you've paid.` }); if (p.cod !== false) out.push({ id: "cod", label: m === "delivery" ? p.codLabel || "Pay on delivery (cash or UPI)" : m === "pickup" ? "Pay at the counter" : "Pay at the table" }); if (p.upi && /^[\w.\-]{2,}@[a-zA-Z]{2,}$/.test(String(p.upiId || "").trim()) && (C.food.currency || "₹") === "₹") out.push({ id: "upi", label: "Pay now by UPI", note: "Scan a QR code or open your UPI app. The order is placed once you've paid." }); return out; };
+  /** Points at checkout: what the guest has and a tick box to use them (verified numbers only), and what this order earns. */
+  function ptsBox() {
+    const L = loy(); if (!L.on) return ""; const P = ui.pts, b = bill();
+    const have = P && verified() ? (P.points >= Math.max(1, P.min || 0) && P.worth > 0
+      ? `<label class="od-check"><input type="checkbox" id="od-pts"${ui.usePts ? " checked" : ""}><span>Use my points<small>You have ${P.points} point${P.points === 1 ? "" : "s"}${b.pts ? `: ${b.pts} used here, ${fmt(b.ptsOff)} off` : `, worth up to ${fmt(Math.round(P.points * P.worth * 100) / 100)}`}.</small></span></label>`
+      : `<p class="od-live">You have ${P.points} point${P.points === 1 ? "" : "s"}.${P.min > P.points ? ` Points can be used from ${P.min}.` : ""}</p>`) : "";
+    return `<div class="od-pts" id="od-ptsbox">${have}${b.earn ? `<p class="od-live">This order earns you ${b.earn} point${b.earn === 1 ? "" : "s"}.</p>` : ""}</div>`;
+  }
   const inp = (k, label, a = "") => `<div class="of"><label for="of-${k}">${label}</label><input id="of-${k}" data-f="${k}" value="${esc(ui.form[k] || "")}" ${a}></div>`;
   function checkoutHTML() {
     const b = bill(), o = O(), m = mode(), f = ui.form, sl = slots(), ps = pays();
@@ -222,7 +241,7 @@
     if (!ps.some((p) => p.id === f.pay)) f.pay = ps.length ? ps[0].id : "";
     return `<form class="od-form" id="od-form" novalidate>
       <fieldset><legend>Your details</legend>${inp("name", "Name", 'autocomplete="name" required')}${inp("phone", "Mobile number", 'type="tel" inputmode="tel" autocomplete="tel" required')}${o.askEmail ? inp("email", "Email (optional)", 'type="email" autocomplete="email"') : ""}
-        ${can.otp ? `<div class="od-otp" id="od-otp">${verified() ? `<p class="od-ok">Mobile number verified on WhatsApp.</p>` : ui.otpSent ? `<div class="of"><label for="of-code">Code we sent you on WhatsApp</label><div class="od-code"><input id="of-code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="6 digits"><button type="button" class="btn sec" data-act="otpcheck">Verify</button></div></div><button type="button" class="link od-more" data-act="otpsend">Send a new code</button>` : `<button type="button" class="btn sec" data-act="otpsend">Verify this number on WhatsApp</button><p class="od-live">We send a 6-digit code to this number on WhatsApp before taking the order.</p>`}${ui.otpMsg ? `<p class="od-bad" role="alert">${esc(ui.otpMsg)}</p>` : ""}</div>` : ""}</fieldset>
+        ${can.otp ? `<div class="od-otp" id="od-otp">${verified() ? `<p class="od-ok">Mobile number verified on WhatsApp.</p>` : ui.otpSent ? `<div class="of"><label for="of-code">Code we sent you on WhatsApp</label><div class="od-code"><input id="of-code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="6 digits"><button type="button" class="btn sec" data-act="otpcheck">Verify</button></div></div><button type="button" class="link od-more" data-act="otpsend">Send a new code</button>` : `<button type="button" class="btn sec" data-act="otpsend">Verify this number on WhatsApp</button><p class="od-live">We send a 6-digit code to this number on WhatsApp before taking the order.</p>`}${ui.otpMsg ? `<p class="od-bad" role="alert">${esc(ui.otpMsg)}</p>` : ""}</div>` : ""}${ptsBox()}</fieldset>
       ${m === "delivery" ? `<fieldset><legend>Delivery address</legend>${inp("line1", "Flat, house or building", 'autocomplete="address-line1" required')}${inp("area", "Street and area", 'autocomplete="address-line2" required')}<div class="of2">${inp("landmark", "Landmark (optional)")}${inp("pin", "PIN code", 'inputmode="numeric" autocomplete="postal-code" maxlength="10"' + (o.askPin !== false ? " required" : ""))}</div>
         <div class="od-tips" role="radiogroup" aria-label="Save this address as">${["Home", "Work", "Other"].map((l) => `<button type="button" class="chip" role="radio" data-act="label" data-id="${l}" aria-checked="${f.label === l}">${l}</button>`).join("")}</div>
         <p class="od-bad" id="od-area" role="alert"${!b.area.ok && (f.pin || f.area) ? "" : " hidden"}>${esc(o.areaNote || "Sorry, we don't deliver to that area yet. Choose Pick up, or call us.")}</p></fieldset>` : ""}
@@ -383,11 +402,11 @@
     ui.busy = true; over(true);
     try {
       const g = od.pay;
-      const r = await fetch(be.cf + "/pay/" + g + "/" + encodeURIComponent(be.site), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ back: location.origin + location.pathname, name: od.c.name, phone: od.c.phone, email: od.c.email, order_no: od.id, mode: od.mode, pin: f.pin, area: f.area, coupon: od.bill.code, tip: od.bill.tip, total: od.bill.total, items: od.items.map((l) => ({ id: l.id, qty: l.qty, variant: l.variant, addons: (l.addons || []).map((a) => a.label) })) }) });
+      const r = await fetch(be.cf + "/pay/" + g + "/" + encodeURIComponent(be.site), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ back: location.origin + location.pathname, name: od.c.name, phone: od.c.phone, email: od.c.email, order_no: od.id, mode: od.mode, pin: f.pin, area: f.area, coupon: od.bill.code, tip: od.bill.tip, total: od.bill.total, points: od.bill.pts || 0, otp: ui.otp ? ui.otp.token : "", items: od.items.map((l) => ({ id: l.id, qty: l.qty, variant: l.variant, addons: (l.addons || []).map((a) => a.label) })) }) });
       const j = await r.json().catch(() => null); if (!r.ok || !j || !(j.order_id || j.go || j.session)) return stop((j && j.error) || "Online payment couldn't start. Please try again, or choose another way to pay.");
       if (GW[g]) {
         // The order waits on this device while the guest pays on the gateway's page; it is placed when they come back paid.
-        st.set("pend", { od, ref: j.ref, otp: can.otp && ui.otp ? ui.otp.token : "", at: Date.now() });
+        st.set("pend", { od, ref: j.ref, otp: can.otp && ui.otp ? ui.otp.token : "", usePts: !!ui.usePts, at: Date.now() });
         if (g === "cf") { await new Promise((ok, no) => { if (window.Cashfree) return ok(); const s = document.createElement("script"); s.src = "https://sdk.cashfree.com/js/v3/cashfree.js"; s.onload = ok; s.onerror = no; document.head.appendChild(s); }); window.Cashfree({ mode: j.mode }).checkout({ paymentSessionId: j.session, redirectTarget: "_self" }); }
         else location.href = j.go;
         return;
@@ -407,7 +426,7 @@
     history.replaceState(null, "", location.pathname + (keep.toString() ? "?" + keep : ""));
     if (!pend || !pend.od || pend.od.id !== no || pend.od.pay !== g) return;
     // A number already verified on WhatsApp stays verified when the guest comes back to try again.
-    if (pend.otp) ui.otp = { phone: digits(pend.od.c.phone), token: pend.otp };
+    if (pend.otp) ui.otp = { phone: digits(pend.od.c.phone), token: pend.otp }; if (pend.usePts) ui.usePts = true;
     const od = pend.od, again = (t) => { ui.busy = false; ui.err = t; ui.drawer = "checkout"; over(); };
     if (q.get("x")) { st.set("pend", null); return again("The payment wasn't completed, so the order isn't placed yet. You can try again."); }
     ui.busy = true; ui.drawer = "checkout"; ui.err = "Confirming your payment…"; over();
@@ -435,12 +454,12 @@
     shown(od);
   }
   /** The cart as the database reads it (to hand the order to the restaurant's billing system when one is connected). */
-  function cartOf(od) { return { mode: od.mode, pin: od.pin || "", area: od.area || "", coupon: od.bill.code || "", tip: od.bill.tip || 0, items: od.items.map((l) => ({ id: l.id, qty: l.qty, variant: l.variant, addons: (l.addons || []).map((a) => a.label) })) }; }
+  function cartOf(od) { return { mode: od.mode, pin: od.pin || "", area: od.area || "", coupon: od.bill.code || "", tip: od.bill.tip || 0, points: od.bill.pts || 0, items: od.items.map((l) => ({ id: l.id, qty: l.qty, variant: l.variant, addons: (l.addons || []).map((a) => a.label) })) }; }
   /** What is saved for an order (it goes to the site's database under Purchased orders). */
   function orderData(od) { const m = od.mode, b = od.bill, pay = { label: od.payLabel }; return { ...(od.consent ? { consent: od.consent } : {}), type: "Order", order_no: od.id, okey: od.k, name: od.c.name, phone: od.c.phone, email: od.c.email, mode: MODES[m], when: od.whenLabel, address: od.c.address, table: od.c.table, items: od.items.map((l) => `${l.qty} × ${l.name}${lineText(l) ? ` (${lineText(l)})` : ""}${l.note ? ` [${l.note}]` : ""} = ${txt(l.unit * l.qty)}`).join("\n"), total: txt(b.total), payment: od.utr ? "UPI, paid before ordering" : od.rz ? "Paid online (Razorpay)" : od.pg ? `Paid online (${GW[od.pg.gw].name})` : pay.label, utr: od.utr || "", ...(od.pg ? { pay_gw: od.pg.gw, pay_ref: od.pg.ref, otp_token: od.pg.otp || undefined } : {}), ...(od.rz ? { rz_order: od.rz.razorpay_order_id, rz_payment: od.rz.razorpay_payment_id, rz_sig: od.rz.razorpay_signature } : {}), ...(can.otp && ui.otp ? { otp_token: ui.otp.token } : {}), message: orderText(od) }; }
   /** The order is placed: the cart empties and the page shows it. */
   function shown(od) {
-    cart = []; save(); ui.coupon = ""; st.set("coupon", ""); ui.tip = 0; ui.form.notes = ""; ui.paying = null; ui.utr = ""; ui.err = "";
+    cart = []; save(); ui.usePts = false; ui.pts = null; ui.coupon = ""; st.set("coupon", ""); ui.tip = 0; ui.form.notes = ""; ui.paying = null; ui.utr = ""; ui.err = "";
     st.set("orders", [od, ...st.get("orders", [])].slice(0, 20));
     ui.busy = false; ui.done = od; ui.drawer = "done";
     // The whole page is drawn again, so “Your orders” shows in the toolbar.
@@ -456,7 +475,7 @@
       const r = await fetch(be.cf + "/otp/" + (send ? "send" : "check") + "/" + encodeURIComponent(be.site), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ phone, code }) }), j = await r.json().catch(() => null);
       if (!r.ok) ui.otpMsg = (j && j.error) || "That didn't work. Please try again.";
       else if (send) { ui.otpSent = true; A.toast("Code sent on WhatsApp"); }
-      else { ui.otp = { phone: digits(phone), token: j.token }; ui.otpSent = false; ui.err = ""; }
+      else { ui.otp = { phone: digits(phone), token: j.token }; ui.otpSent = false; ui.err = ""; loadPts(); }
     } catch (e) { ui.otpMsg = "Couldn't reach us just now. Check your connection."; }
     over(true); const c = $("#of-code", root); c && c.focus();
   }
@@ -526,7 +545,8 @@
     });
     root.addEventListener("change", (e) => {
       const t = e.target;
-      if (t.name === "osh-v") { ui.sheet.v = +t.value; const n = $("#osh-note", root); if (n) ui.sheet.note = n.value; over(true); }
+      if (t.id === "od-pts") { sync(); ui.usePts = t.checked; over(true); }
+      else if (t.name === "osh-v") { ui.sheet.v = +t.value; const n = $("#osh-note", root); if (n) ui.sheet.note = n.value; over(true); }
       else if (t.dataset && t.dataset.g != null && ui.sheet) { const gi = +t.dataset.g, cur = new Set(ui.sheet.g[gi] || []); t.checked ? cur.add(+t.value) : cur.delete(+t.value); ui.sheet.g[gi] = [...cur]; const n = $("#osh-note", root); if (n) ui.sheet.note = n.value; over(true); }
       else if (t.id === "od-cutlery") ui.form.cutlery = t.checked;
       else if (t.name === "of-pay") { ui.form.pay = t.value; const pl = $('[data-act="place"]', root); if (pl && !ui.busy) pl.textContent = t.value === "upi" || t.value === "rz" ? "Continue to pay" : "Place order"; }

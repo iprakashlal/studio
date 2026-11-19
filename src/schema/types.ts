@@ -1,7 +1,9 @@
 // The editor is driven by these plain descriptions. The same schemas power the
 // Studio's project editor and the CMS that ships inside every exported site.
 
-export type Opt = string | { value: string; label: string };
+/** A choice in a dropdown. `studio`: offered in the Studio's editor only; with `siteIf`, a site's own admin page offers it too
+ *  once the Studio has allowed it for that site (Settings → Admin page → Features in this site's admin page; content.cms.allow). */
+export type Opt = string | { value: string; label: string; studio?: boolean; siteIf?: string };
 export type Check = "vpa" | "paypal" | "https" | "razorpay" | "stripe" | "email" | "phone";
 
 export type Field =

@@ -39,6 +39,9 @@ export function SitesHostingCard({ session, studio, index, onIndex }: { session:
   const [tear, setTear] = useState<ProjectMeta | null>(null);
   const [addTok, setAddTok] = useState(""), [replaceFor, setReplaceFor] = useState<string | null>(null);
   const [pick, setPick] = useState<Record<string, string>>({});
+  /** Each list of sites (On Cloudflare, On Netlify, On GitHub Pages): what is searched for, and the page shown. */
+  const [find, setFind] = useState<Record<string, string>>({}), [pageOf, setPageOf] = useState<Record<string, number>>({});
+  const PER = 5;
 
   const load = async () => {
     const hc = await loadHostConfig().catch(() => null), v = await cfAccountVault.load(session.token).catch(() => null);
@@ -168,7 +171,8 @@ export function SitesHostingCard({ session, studio, index, onIndex }: { session:
     <section className="card flex flex-col gap-3 p-5" aria-label="Sites and hosting accounts">
       <h3 className="text-[15px] font-extrabold">Sites and hosting accounts</h3>
       <p className="text-sm text-ink-300">Every live site and where it's hosted, in one place. Cloudflare accounts are kept on your Studio's database (tokens as secrets on your own Cloudflare, never shown again), and each site's choice is saved with the project, so any device signed in to the Studio uses the same setup.</p>
-      {siteDbs.length > 0 && <div className="flex flex-col gap-2 rounded-lg border border-ink-700 p-3 text-[13px]" aria-label="Site databases">
+      {/* With the Studio's own database on Cloudflare each site's row below carries its database's state; without it, they are listed here. */}
+      {!db && siteDbs.length > 0 && <div className="flex flex-col gap-2 rounded-lg border border-ink-700 p-3 text-[13px]" aria-label="Site databases">
             <div className="flex flex-wrap items-baseline gap-x-2"><b className="text-sm">Site databases</b><span className="text-ink-400">Sites hosted on their own Cloudflare account keep their own database there. Each is updated by itself, apart from your Studio's.</span></div>
             {siteDbs.map((d) => <div key={d.api} className="flex flex-wrap items-center gap-2 border-t border-ink-700 pt-2">
               <span className="min-w-0 flex-1"><span className="break-all font-mono text-[12px]">{d.api.replace(/^https:\/\//, "")}</span><span className="block text-ink-400">{d.sites.join(", ")}</span></span>
@@ -216,16 +220,25 @@ export function SitesHostingCard({ session, studio, index, onIndex }: { session:
           </div>
           {sites.length === 0 && <p className="rounded-lg border border-ink-700 p-3 text-[13px] text-ink-400">No live sites yet.</p>}
           {([["cloudflare", "On Cloudflare"], ["netlify", "On Netlify"], ["github", "On GitHub Pages"]] as const).map(([kind, heading]) => {
-            const group = sites.filter((p) => (p.host ? p.host.kind === kind || (kind === "netlify" && p.host.kind !== "cloudflare") : kind === "github"));
-            if (!group.length) return null;
+            const all = sites.filter((p) => (p.host ? p.host.kind === kind || (kind === "netlify" && p.host.kind !== "cloudflare") : kind === "github"));
+            if (!all.length) return null;
+            const q = (find[kind] || "").trim().toLowerCase();
+            const hit = q ? all.filter((p) => [p.name, p.host?.url, p.host?.siteName, p.host?.cf?.api, p.publish ? `${p.publish.owner}/${p.publish.repo}` : "", nameOf(p.host?.account), p.client, p.category].some((x) => String(x || "").toLowerCase().includes(q))) : all;
+            const pages = Math.max(1, Math.ceil(hit.length / PER)), page = Math.min(pageOf[kind] || 0, pages - 1), group = hit.slice(page * PER, page * PER + PER);
             return (
               <div key={kind} className="flex flex-col gap-1.5">
-                <h4 className="text-[12px] font-bold uppercase tracking-wide text-ink-400">{heading} · {group.length}</h4>
-                <ul className="flex flex-col divide-y divide-ink-700 rounded-lg border border-ink-700" aria-label={`Hosted sites: ${heading}`}>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h4 className="text-[12px] font-bold uppercase tracking-wide text-ink-400">{heading} · {q ? `${hit.length} of ${all.length}` : all.length}</h4>
+                  {all.length > PER && <input type="search" className="input ml-auto h-8 w-full max-w-[240px] py-1 text-[13px]" placeholder={`Search ${heading.replace(/^On /, "")} sites`} aria-label={`Search sites: ${heading}`} value={find[kind] || ""} onChange={(e) => { setFind({ ...find, [kind]: e.target.value }); setPageOf({ ...pageOf, [kind]: 0 }); }} />}
+                </div>
+                {!hit.length && <p className="rounded-lg border border-ink-700 p-3 text-[13px] text-ink-400">No site matches “{find[kind]}”.</p>}
+                <ul className={`flex-col divide-y divide-ink-700 rounded-lg border border-ink-700 ${hit.length ? "flex" : "hidden"}`} aria-label={`Hosted sites: ${heading}`}>
                   {group.map((p) => {
                     const h = p.host, cf = h?.kind === "cloudflare", chosen = pick[p.id] ?? h?.account ?? "", b = busy.startsWith("site:" + p.id), every = everyDevice(p);
                     const otherDb = cf && h!.cf && db && h!.cf.api.replace(/\/+$/, "") !== db.api.replace(/\/+$/, "");
                     const keptAcc = cf && accounts.some((a) => a.id === h!.account);
+                    // The site's own database (not the Studio's): whether it runs this build, with its own update button.
+                    const sdb = otherDb ? siteDbs.find((d) => d.api === h!.cf!.api.replace(/\/+$/, "")) : undefined;
                     return (
                       <li key={p.id} className="grid gap-x-4 gap-y-2 p-3 text-[13px] sm:grid-cols-[minmax(0,1fr)_auto]" data-site={p.id}>
                         <div className="flex min-w-0 flex-col gap-1.5">
@@ -248,7 +261,11 @@ export function SitesHostingCard({ session, studio, index, onIndex }: { session:
                               ? (keptAcc
                                 ? <>Its own database on {nameOf(h!.account)} (<span className="break-all font-mono text-[12px]">{h!.cf!.api.replace(/^https:\/\//, "")}</span>), reached from every device through your Studio</>
                                 : <span className="text-amber-200">Its own database on another Cloudflare account. Add that account above, so every device reaches it (its data stays where it is).</span>)
-                              : h!.cf ? "Your Studio's database" : "Supabase"}</dd></>}
+                              : h!.cf ? "Your Studio's database" : "Supabase"}
+                              {sdb && <span className="mt-1.5 flex flex-wrap items-center gap-2" data-sitedb={sdb.cur ? "current" : "old"}>
+                                {sdb.cur ? <span className="chip border-emerald-400/50 text-emerald-200">Database up to date</span>
+                                  : <><span className="chip border-amber-400/50 text-amber-200">Database: older build</span><button type="button" className="btn btn-pri btn-sm" disabled={!!busy} onClick={() => updateSiteDb(sdb)}>{busy.startsWith("sitedb:" + sdb.api) ? (busy.split("|")[1] || "Updating") + "…" : "Update this database"}</button></>}
+                              </span>}</dd></>}
                             {h?.kind === "netlify" && <><dt className="text-ink-400">Data</dt><dd>{h.cf ? "Your Studio's database" : "Supabase"}</dd></>}
                           </dl>
                           {cf && (
@@ -269,6 +286,11 @@ export function SitesHostingCard({ session, studio, index, onIndex }: { session:
                     );
                   })}
                 </ul>
+                {pages > 1 && <nav className="flex items-center justify-between gap-3 text-[13px]" aria-label={`Pages of sites: ${heading}`}>
+                  <button type="button" className="btn btn-sm" disabled={page === 0} onClick={() => setPageOf({ ...pageOf, [kind]: page - 1 })}>← Previous</button>
+                  <span className="text-ink-400">Page {page + 1} of {pages} · sites {page * PER + 1}–{Math.min(hit.length, (page + 1) * PER)} of {hit.length}</span>
+                  <button type="button" className="btn btn-sm" disabled={page >= pages - 1} onClick={() => setPageOf({ ...pageOf, [kind]: page + 1 })}>Next →</button>
+                </nav>}
               </div>
             );
           })}

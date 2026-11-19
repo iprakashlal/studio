@@ -177,8 +177,11 @@ export async function setupCfDb(relay: Relay, token: string, o: { account: CfAcc
   const api = `https://${CFDB_WORKER}.${sub}.workers.dev`;
   step("Checking the database answers");
   let last: any = null;
-  for (let i = 0; i < 10; i++) {
-    try { last = await (await fetch(api + "/", { cache: "no-store" })).json(); if (last?.service === "site-studio-db") break; } catch { /* starting */ }
+  // Cloudflare goes on answering with the previous build for a few seconds after an upload: wait for the new one, so
+  // the Studio doesn't read the old version straight afterwards and ask for the update again.
+  for (let i = 0; i < 20; i++) {
+    try { last = await (await fetch(api + "/?t=" + Date.now(), { cache: "no-store" })).json(); if (last?.service === "site-studio-db" && (+last.v || 0) >= CFDB_VERSION) break; } catch { /* starting */ }
+    if (i === 4) step("Waiting for Cloudflare to switch to the new build");
     await new Promise((res) => setTimeout(res, 2000));
   }
   if (last?.service !== "site-studio-db") throw new Error("The database Worker was uploaded but doesn't answer yet. Wait a minute and try again.");

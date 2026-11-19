@@ -30,10 +30,10 @@ export function SitesHostingCard({ session, studio, index, onIndex }: { session:
   const [mainName, setMainName] = useState("");
   /** Databases that sites keep on their own Cloudflare accounts (not the Studio's database): each is updated by itself. */
   const [siteDbs, setSiteDbs] = useState<{ api: string; account: string; cur: boolean; sites: string[] }[]>([]);
-  const loadSiteDbs = async (studioApi: string) => {
+  const loadSiteDbs = async (studioApi: string, justUpdated = "") => {
     const by = new Map<string, { account: string; sites: string[] }>();
     for (const p of index.projects) { const a = p.host?.cf?.api?.replace(/\/+$/, ""); if (!a || a === studioApi.replace(/\/+$/, "")) continue; const e = by.get(a) || { account: p.host?.account || "", sites: [] }; e.sites.push(p.name); if (!e.account && p.host?.account) e.account = p.host.account; by.set(a, e); }
-    setSiteDbs(await Promise.all([...by].map(async ([api, e]) => ({ api, account: e.account, sites: e.sites, cur: ((await cfDeployInfo(api)).v || 0) >= CFDB_VERSION }))));
+    setSiteDbs(await Promise.all([...by].map(async ([api, e]) => ({ api, account: e.account, sites: e.sites, cur: api === justUpdated || ((await cfDeployInfo(api)).v || 0) >= CFDB_VERSION }))));
   };
   const [busy, setBusy] = useState(""), [err, setErr] = useState("");
   const [tear, setTear] = useState<ProjectMeta | null>(null);
@@ -151,7 +151,9 @@ export function SitesHostingCard({ session, studio, index, onIndex }: { session:
     const v = await cfAccountVault.load(session.token), old = (v?.setups || []).find((x) => x.api.replace(/\/+$/, "") === d.api) || null;
     const setup = await setupCfDb(relay, token, { account, resendKey: "", mailFrom: v?.mailFrom || "", name: "Picaffectz Studio", existing: old, requireMail: false }, say);
     await cfAccountVault.save({ ...(v || { token: "" }), setups: [...(v?.setups || []).filter((x) => x.account !== account.id), setup] }, session.token);
-    toast("That site's database is up to date."); await loadSiteDbs(db?.api || "");
+    // Shown as up to date at once (it was just uploaded); the check that follows only confirms it.
+    setSiteDbs((l) => l.map((x) => (x.api === d.api ? { ...x, cur: true } : x)));
+    toast("That site's database is up to date."); await loadSiteDbs(db?.api || "", d.api);
   });
   const updateDb = () => run("update", async () => {
     if (!db) return;

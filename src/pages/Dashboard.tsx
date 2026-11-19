@@ -12,6 +12,7 @@ import { loadManifest, loadStarter, type Manifest } from "../lib/exporter";
 import { slugify, timeAgo } from "../lib/util";
 import { Empty, Field, Logo, Modal, useConfirm, useToast } from "../ui/kit";
 import { BrandMark } from "../lib/brand";
+import { SandIntro } from "../ui/SandIntro";
 import { PayNote } from "./PayNote";
 import { loadHostConfig } from "../lib/studiohost";
 import { rvSummary, type RvSummary } from "../lib/approvals";
@@ -171,6 +172,7 @@ export function Dashboard({ studio, index, onIndex, token, hid = () => false, ma
 
   return (
     <main className="mx-auto flex max-w-[1400px] flex-col gap-6 px-4 py-8 sm:px-6">
+      {!only && <SandIntro />}
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="flex items-center gap-3 font-display text-3xl font-extrabold sm:text-4xl"><BrandMark size={36} fallback={<Logo size={16} />} />Projects</h1>

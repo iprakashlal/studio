@@ -737,12 +737,28 @@
     ".has-sbg[data-sfont=head] :is(h1,h2,h3,h4,h5,h6),.has-sbg[data-sfont=head] :is(h1,h2,h3,h4,h5,h6) *{font-family:var(--sfont),system-ui,sans-serif!important}" +
     [["bold", "font-weight:800"], ["light", "font-weight:300"], ["italic", "font-style:italic"], ["bolditalic", "font-weight:800!important;font-style:italic"], ["upper", "text-transform:uppercase!important;letter-spacing:.04em"], ["spaced", "letter-spacing:.09em"]]
       .map(function (x) { return ".has-sbg[data-sfs=" + x[0] + "] :is(h1,h2,h3,h4,h5,h6,p,li,blockquote,figcaption,summary,dt,dd){" + x[1] + "!important}"; }).join("") +
-    // its own alignment: headings, text and the rows of buttons under them
+    // its own alignment: headings and text outside the cards, and the blocks and rows that hold them (marked by sectionAlign)
+    ":where([data-salign]) :where(.card,[class*=card],article,li,form,table,details,.box,.tile,.cat,.banner,.loc,.qa-i){text-align:start}" +
     [["left", "0", "auto", "flex-start", "start"], ["center", "auto", "auto", "center", "center"], ["right", "auto", "0", "flex-end", "end"]].map(function (x) { var S = "[data-salign=" + x[0] + "] ", OUT = ":not(:is(.card,[class*=card],article,li,form,table,details,.box,.tile,.cat,.banner,.loc,.qa-i) *)";
-      return S + ":is(h1,h2,h3,h4,h5,h6,p,blockquote,figcaption,small,header)" + OUT + "{text-align:" + x[0] + "!important}" +
-        S + ":is(h1,h2,h3,h4,h5,h6,p,blockquote,figcaption)" + OUT + "{margin-left:" + x[1] + "!important;margin-right:" + x[2] + "!important}" +
-        S + ":is(.sh,.sec-h,.cta-row,.hero-cta,.btns,.actions)" + OUT + "{justify-content:" + x[3] + "!important;justify-items:" + x[4] + "!important}" +
-        S + ":is(.sh,.sec-h)" + OUT + "{align-items:" + x[3] + "!important}"; }).join("");
+      return S + ":is(h1,h2,h3,h4,h5,h6,p,blockquote,figcaption,small,header,div,dl,dt,dd)" + OUT + ":not(:is(.card,[class*=card],article,form,table,details,.box,.tile,.cat,.banner,.loc,.qa-i,.sbg)){text-align:" + x[0] + "!important}" +
+        S + ".fx-salm{margin-left:" + x[1] + "!important;margin-right:" + x[2] + "!important}" +
+        S + ":is(.fx-salg,.fx-salf){justify-content:" + x[3] + "!important}" +
+        S + ".fx-salc{align-items:" + x[3] + "!important}"; }).join("");
+  /** Alignment: marks, outside the section's cards, the blocks narrower than their place (so they can be moved as a
+   *  whole) and the rows and grids (so what they hold can be moved), whatever the theme calls them. */
+  function sectionAlign(el) {
+    var CARD = ".card,[class*=card],article,li,form,table,details,.box,.tile,.cat,.banner,.loc,.qa-i";
+    Array.prototype.forEach.call(el.querySelectorAll("*"), function (n) {
+      if (n.classList.contains("sbg") || n.closest(".sbg")) return;
+      var c = n.closest(CARD); if (c && c !== el && el.contains(c)) return;
+      var cs = getComputedStyle(n), d = cs.display;
+      if (d === "grid" || d === "inline-grid") n.classList.add("fx-salg");
+      else if (d === "flex" || d === "inline-flex") n.classList.add(cs.flexDirection.indexOf("column") === 0 ? "fx-salc" : "fx-salf");
+      if (n.parentNode === el || cs.position === "absolute" || cs.position === "fixed") return;   // the section's own wrapper stays where it is
+      var tag = n.tagName.toLowerCase(), block = d === "block" || d === "flex" || d === "grid" || d === "flow-root" || d === "list-item";
+      if (block && (cs.maxWidth !== "none" || tag === "svg" || tag === "img" || tag === "hr")) n.classList.add("fx-salm");
+    });
+  }
   var COLOR_OK = /^(#[0-9a-f]{3,8}|rgba?\([0-9., %]+\))$/i;
   /** A section's own font, text colour and text style. */
   function sectionText(el, k, opts) {
@@ -767,7 +783,7 @@
       if (!el && key === "hero") el = root.querySelector("section.hero,.hero");
       if (!el && key === "footer") el = root.querySelector("footer");
       if (!el) return;
-      if (/^(left|center|right)$/.test(k.align || "")) el.setAttribute("data-salign", k.align);
+      if (/^(left|center|right)$/.test(k.align || "")) { el.setAttribute("data-salign", k.align); try { sectionAlign(el); } catch (e) { /* the text is still aligned */ } }
       if (!k.on) return;
       var pics = k.kind === "slides" && Array.isArray(k.slides) ? k.slides.map(function (x) { return url(x); }).filter(Boolean) : [];
       var kind = k.kind === "image" || k.kind === "video" ? k.kind : pics.length > 1 ? "slides" : "color", src = kind === "image" ? url(k.image) : kind === "video" ? url(k.video) : kind === "slides" ? pics[0] : pics[0] || "";

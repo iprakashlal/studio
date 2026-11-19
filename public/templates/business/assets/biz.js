@@ -13,7 +13,7 @@ const DEFAULT = {
     bg: "#F7F8FA", surface: "#FFFFFF", deep: "#0E1B2C", text: "#0E1B2C", soft: "#5A6678", line: "#DDE2EA", c1: "#1D4ED8", c2: "#0E7490", c3: "#F59E0B",
     fontDisplay: "Plus Jakarta Sans", fontBody: "Inter", radius: 12, preset: "biz-meridian",
     layout: "split", nav: "bar", cards: "outline", buttons: "rounded", heading: "normal", shead: "label", pattern: "none", width: "normal", motionStyle: "rise", bands: "soft", heroArt: "panel",
-    cursor: "none", loader: "none", textfx: "none", hoverfx: "none", scrollfx: "none", overlay: "none",
+    cursor: "none", loader: "none", textfx: "none", hoverfx: "none", scrollfx: "none", overlay: "none", herofx: "none",
     introBg: "", introFg: "", introTitle: "", introFont: "display", introCase: "upper", logoRadius: 22, scrollEase: "light", lineBreaks: "typed",
   },
   cms: { adminPage: "admin" },
@@ -256,7 +256,7 @@ function applyTheme(t) {
   r.setProperty("--fd", `"${t.fontDisplay}",Georgia,serif`); r.setProperty("--fb", `"${t.fontBody}","Helvetica Neue",Arial,sans-serif`);
   if (window.SiteFonts) { const cd = SiteFonts.use(t, "display", imgUrl), cb = SiteFonts.use(t, "body", imgUrl); if (cd) r.setProperty("--fd", `"${cd}","${t.fontDisplay}",Georgia,serif`); if (cb) r.setProperty("--fb", `"${cb}","${t.fontBody}","Helvetica Neue",Arial,sans-serif`); }
   const d = document.documentElement.dataset;
-  for (const k of ["layout", "heroArt", "nav", "cards", "buttons", "motionStyle", "pattern", "heading", "shead", "width", "bands", "cursor", "loader", "textfx", "hoverfx", "scrollfx", "overlay"]) d[k] = String(t[k] || "");
+  for (const k of ["layout", "heroArt", "nav", "cards", "buttons", "motionStyle", "pattern", "heading", "shead", "width", "bands", "cursor", "loader", "textfx", "hoverfx", "scrollfx", "overlay", "herofx"]) d[k] = String(t[k] || "");
   d.scrollease = t.scrollEase || "light"; d.linebreaks = t.lineBreaks || "typed"; d.menu = String(t.navMode || ""); d.menumob = String(t.navModeMob || "");
   d.crumbs = (C.site || {}).crumbs === false ? "off" : "on"; d.introfont = t.introFont || "display"; d.introcase = t.introCase || "upper"; d.dark = String(onColor(t.bg) === "#FFFFFF");
   [[FONTS[t.fontDisplay], "fontlink"], [FONTS[t.fontBody], "fontlink2"]].forEach(([f, id]) => {

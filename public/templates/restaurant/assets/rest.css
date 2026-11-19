@@ -999,3 +999,6 @@ html[data-crumbs=off] :is(.crumbs,.sp-crumbs,.solo-top){display:none}
 }
 .contact[data-map] .loc .map{aspect-ratio:auto}
 @media(prefers-reduced-motion:reduce){.locs-track,.loc{transition:none!important}}
+
+/* ---------- a dish's varieties (dish-k) and, with them, its sizes as price differences (dish-s) ---------- */
+.dish-s{opacity:.85}.dish-s b{font-weight:600}

@@ -250,8 +250,11 @@ async function createOrder(d, body, token) {
     const qty = Math.floor(Number(raw.qty));
     if (!(qty >= 1 && qty <= maxQty)) throw new HttpError(400, `You can order up to ${maxQty} of each item.`);
     const opt = str(raw.opt, 60);
-    if (opt && !(p.options || []).includes(opt)) throw new HttpError(409, `The option \u201C${opt}\u201D for ${p.name} has changed. Please add it to your cart again.`);
-    items.push({ id: p.id, name: str(p.name, 160), opt, qty, price: round2(Number(p.price) || 0) });
+    const kinds = p.kindsOn ? (p.kinds || []).filter((k) => k && String(k.label || "").trim() && Number(k.price) >= 0) : [];
+    const kind = kinds.length ? kinds.find((k) => String(k.label).trim() === opt.split(" \xB7 ")[0].trim()) : null, rest = kinds.length ? opt.split(" \xB7 ").slice(1).join(" \xB7 ") : opt;
+    if (kinds.length && !kind) throw new HttpError(409, `Please choose a variety of ${p.name} again.`);
+    if (rest && !(p.options || []).includes(rest)) throw new HttpError(409, `The option \u201C${rest}\u201D for ${p.name} has changed. Please add it to your cart again.`);
+    items.push({ id: p.id, name: str(p.name, 160), opt, qty, price: round2(Number(kind ? kind.price : p.price) || 0) });
   }
   const quote = shipQuote(c, str(cust.pin, 20));
   if (!quote.ok) throw new HttpError(409, str(c.shipping?.blockMsg, 300) || "Sorry, we don't deliver to that PIN code yet.");

@@ -197,7 +197,7 @@ export function GatewayForm({ where, gw }: { where: Where | null | undefined; gw
   if (where === undefined) return Box({ children: <Missing why="Checking your database…" /> });
   if (!where) return Box({ children: <Missing why={`${G.name} keys are kept on the site's own Cloudflare database. Host this site on Cloudflare (Host to External Services), and sign in to it on this device as its owner; the boxes for the keys then show here.`} /> });
   if (err) return Box({ children: <Missing why={err} /> });
-  if (saved && !(gw in (saved as any))) return Box({ children: <Missing why={`This site's database is an older version that doesn't know ${G.name} yet. Update the database once (Settings → Hostings → Update the database), then come back here.`} /> });
+  if (saved && !(gw in (saved as any))) return Box({ children: <Missing why={`This site's database is an older version that doesn't know ${G.name} yet. Update it once: Settings → Hostings, where the Studio's own database and each site's database have their own Update button. Then come back here.`} /> });
   const ok = G.text.every((t) => (t.opt && !String(f[t.k]).trim()) || (String(f[t.k]).trim() && (!t.ok || t.ok.test(String(f[t.k]).trim())))) && (f.secret.trim() ? !G.secretOk || G.secretOk.test(f.secret.trim()) : !!z?.secret);
   return Box({ on: !!z?.secret, children: <>
       <div className="grid gap-3 sm:grid-cols-2">
@@ -220,7 +220,7 @@ export function PetpoojaForm({ where }: { where: Where | null | undefined }) {
   if (where === undefined) return <Shell title="Petpooja" lead={lead}><Missing why="Checking your database…" /></Shell>;
   if (!where) return <Shell title="Petpooja" lead={lead}><Missing why="Petpooja's keys are kept on the site's own Cloudflare database. Host this site on Cloudflare (Host to External Services), and sign in to it on this device as its owner; the boxes for the keys then show here." /></Shell>;
   if (err) return <Shell title="Petpooja" lead={lead}><Missing why={err} /></Shell>;
-  if (saved && !("pos" in (saved as any))) return <Shell title="Petpooja" lead={lead}><Missing why="This site's database is an older version that doesn't know Petpooja yet. Update the database once (Settings → Hostings → Update the database), then come back here." /></Shell>;
+  if (saved && !("pos" in (saved as any))) return <Shell title="Petpooja" lead={lead}><Missing why="This site's database is an older version that doesn't know Petpooja yet. Update it once: Settings → Hostings, where the Studio's own database and each site's database have their own Update button. Then come back here." /></Shell>;
   const ok = f.appKey.trim() && f.restId.trim() && (f.secret.trim() || z?.secret) && (f.token.trim() || z?.token);
   return (
     <Shell title="Petpooja" lead={lead} on={!!z?.on && !!z?.secret && !!z?.token}>

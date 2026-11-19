@@ -4,7 +4,7 @@
 // pause in between, and if the translator can't be reached at all the job stops and says why, leaving those texts
 // "Not translated" (never silently in the site's own language).
 import { cfTranslate, signedInApi } from "./cfdb";
-import { aiEngine, allowanceGone, type AiEngine } from "./ai";
+import { aiEngine, allowanceGone, inSiteAdmin, type AiEngine } from "./ai";
 import { systemTranslate } from "./systranslate";
 
 export type JobState = {
@@ -38,7 +38,12 @@ export function pending(root: any, lang: string, texts: string[], again: boolean
 const fatal = (m: string) => /updated once|Sign in|Only members|Workers AI|allowance|isn't signed in/i.test(m);
 
 /** The engine a site's translations use: its own choice (Languages → Translate with), else the Studio's. */
-export const engineFor = (root: any): AiEngine => (root?.i18n?.engine === "system" || root?.i18n?.engine === "cloudflare" || root?.i18n?.engine === "custom" ? root.i18n.engine : aiEngine());
+export const engineFor = (root: any): AiEngine => {
+  const e = root?.i18n?.engine;
+  // In a site's own admin page the Custom engine counts only when the Studio allowed it for this site; otherwise Cloudflare AI.
+  if (e === "custom" && inSiteAdmin() && !(Array.isArray(root?.cms?.allow) && root.cms.allow.includes("customEngine"))) return "cloudflare";
+  return e === "system" || e === "cloudflare" || e === "custom" ? e : aiEngine();
+};
 /** The Picaffectz system: the phrase book and the browser's own translator, on this device. `lead` opens the closing line. */
 async function runSystem(a: JobAsk, todo: string[], say: (ok: boolean, text: string) => void, already = 0, lead = "") {
   const d: Record<string, string> = (((a.root.i18n ||= {}).t ||= {})[a.lang] ||= {});

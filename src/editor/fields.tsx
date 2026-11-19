@@ -114,9 +114,15 @@ export function FieldView({ f, obj, base }: { f: F; obj: any; base: string }) {
     case "select":
       return (
         <Field label={f.label} htmlFor={id}>
-          <select id={id} className="input" value={val ?? ""} onChange={(e) => set(e.target.value)}>
-            {f.options.map((o) => (typeof o === "string" ? <option key={o} value={o}>{o[0].toUpperCase() + o.slice(1)}</option> : <option key={o.value} value={o.value}>{o.label}</option>))}
-          </select>
+          {(() => {
+            // Choices kept for the Studio's editor stay out of a site's own admin page, unless the Studio allowed them for this site.
+            const allow: string[] = Array.isArray(ctx.root?.cms?.allow) ? ctx.root.cms.allow : [];
+            const opts = f.options.filter((o) => typeof o === "string" || !ctx.site || !o.studio || (!!o.siteIf && allow.includes(o.siteIf)));
+            const cur = val ?? "", shown = opts.some((o) => (typeof o === "string" ? o : o.value) === cur) ? cur : opts.length ? (typeof opts[0] === "string" ? opts[0] : opts[0].value) : cur;
+            return <select id={id} className="input" value={shown} onChange={(e) => set(e.target.value)}>
+              {opts.map((o) => (typeof o === "string" ? <option key={o} value={o}>{o[0].toUpperCase() + o.slice(1)}</option> : <option key={o.value} value={o.value}>{o.label}</option>))}
+            </select>;
+          })()}
         </Field>
       );
     case "ref": {
@@ -730,6 +736,7 @@ function AdminSectionsField() {
   const { tpl, root, bump } = useCtx();
   root.cms = root.cms || {};
   const hide: string[] = Array.isArray(root.cms.hide) ? root.cms.hide : [];
+  const allow: string[] = Array.isArray(root.cms.allow) ? root.cms.allow : [];
   const rows: [string, string, string][] = [...tpl.schema.filter((c) => !c.showIf || c.showIf(root)).map((c) => [c.id, c.site?.label || c.label, c.site?.group || c.group] as [string, string, string]),
     ...ADMIN_EXTRAS.filter(([id]) => (id === "orders" || id === "customers" ? tpl.id === "store" : id === "enquiries" ? tpl.id === "business" || tpl.id === "restaurant" : id === "warranty-records" ? tpl.id !== "portfolio" && tpl.id !== "restaurant" : tpl.id !== "portfolio"))];
   const groups = [...new Set(rows.map((r) => r[2]))];
@@ -746,6 +753,11 @@ function AdminSectionsField() {
           </div>
         </fieldset>
       ))}
+      <fieldset className="rounded-lg border border-ink-700 p-3" aria-label="Extras for this site's admin page">
+        <legend className="px-1.5 text-[11px] font-bold uppercase tracking-wider text-ink-400">Extras (off unless ticked)</legend>
+        <label className="flex items-start gap-2 text-[13px]"><input type="checkbox" className="mt-0.5 accent-brand-500" checked={allow.includes("customEngine")} onChange={() => { root.cms.allow = allow.includes("customEngine") ? allow.filter((x) => x !== "customEngine") : [...allow, "customEngine"]; bump(); }} />
+          <span>Custom engine for translations<span className="block text-ink-400">Lets this site's owner choose “Custom engine” under Languages → Translate with. Without it their admin page offers Cloudflare AI and the Picaffectz system only.</span></span></label>
+      </fieldset>
       <div className="flex flex-wrap items-center gap-2 text-[13px]"><button type="button" className="btn btn-sm" disabled={!hide.length} onClick={() => set([])}>Show everything</button><span className="text-ink-400">{hide.length ? `${hide.length} hidden` : "Everything is shown"}</span></div>
     </div>
   );

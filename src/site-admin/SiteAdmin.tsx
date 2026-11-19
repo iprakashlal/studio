@@ -92,6 +92,10 @@ function currentAdmin(info: SiteInfo): string {
   return /^[a-z0-9-]+(\.html)?$/i.test(here) && here ? (here.endsWith(".html") ? here : here + ".html") : "admin.html";
 }
 
+import { markSiteAdmin } from "../lib/ai";
+// This bundle is a site's own admin page: engines kept for the Studio are offered here only where the Studio allowed them.
+markSiteAdmin();
+
 export function SiteAdmin() {
   const toast = useToast();
   const [info, setInfo] = useState<SiteInfo | null>(null);

@@ -14,6 +14,10 @@ export const cleanEngine = (v: unknown): AiEngine => (v === "system" || v === "c
 let engine: AiEngine = "cloudflare";
 const subs = new Set<() => void>();
 export const aiEngine = () => engine;
+/** A site's own admin page (not the Studio): some engines are offered there only when the Studio allowed them for the site. */
+let siteAdmin = false;
+export const markSiteAdmin = () => { siteAdmin = true; };
+export const inSiteAdmin = () => siteAdmin;
 export const setAiEngine = (e: unknown) => { const n = cleanEngine(e); if (n !== engine) { engine = n; subs.forEach((f) => f()); } };
 export const onAiEngine = (f: () => void) => { subs.add(f); return () => { subs.delete(f); }; };
 /** Cloudflare's "the free allowance is used up" (and the like): the moment to offer the Picaffectz system. */

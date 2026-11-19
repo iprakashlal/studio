@@ -861,6 +861,94 @@
     if (tag === "style") { if (el.textContent !== want) el.textContent = want; } else if (el.getAttribute("href") !== want) el.setAttribute("href", want);
     return fam;
   }
+  // ---- Code Update (content.code = { on, html, css, js }): a site's own copy of the template's code. When it is on, the
+  // template's script hands the page over before it draws anything: its stylesheet is swapped for the copy's CSS, the
+  // page frame for the copy's HTML, and the copy's JavaScript runs in its place. A copy that cannot start (a slip in
+  // the JavaScript) is dropped and the template's own code draws the site, so a mistake never leaves a blank page.
+  var scBody = Array.prototype.slice.call(document.body ? document.body.childNodes : []);
+  var scPV = window.name === "cms-preview" && window.parent !== window;
+  var sc = { run: null, bad: null, t: 0, ev: [], tm: [], o: {} }, scAdd = EventTarget.prototype.addEventListener, scTO = window.setTimeout, scIV = window.setInterval, scOn = false;
+  function scWant(c) { var k = c && c.code; return k && k.on && String(k.js || "").trim() ? k : null; }
+  function scSig(k) { return String(k.js || "") + "\u0000" + String(k.html || ""); }
+  function scFlag(v) { try { if (v) sessionStorage.setItem("site-code-wait", "1"); else sessionStorage.removeItem("site-code-wait"); } catch (e) { /* private mode */ } }
+  function scReload() { clearTimeout(sc.t); sc.t = scTO.call(window, function () { location.reload(); }, scPV ? 900 : 0); }
+  // While the template's script starts up, note the listeners and timers it sets, so they can be taken off at the hand-over.
+  function scTrack() {
+    if (scOn) return; scOn = true;
+    EventTarget.prototype.addEventListener = function (t, f, o) { sc.ev.push([this || window, t, f, o]); return scAdd.call(this || window, t, f, o); };
+    window.setTimeout = function () { var id = scTO.apply(window, arguments); sc.tm.push(id); return id; };
+    window.setInterval = function () { var id = scIV.apply(window, arguments); sc.tm.push(id); return id; };
+    scTO.call(window, scUntrack, 0);
+  }
+  function scUntrack() { if (!scOn) return; scOn = false; EventTarget.prototype.addEventListener = scAdd; window.setTimeout = scTO; window.setInterval = scIV; }
+  function scQuiet() { scUntrack(); sc.ev.forEach(function (x) { try { x[0].removeEventListener(x[1], x[2], x[3]); } catch (e) { /* gone */ } }); sc.tm.forEach(function (id) { clearTimeout(id); clearInterval(id); }); sc.ev = []; sc.tm = []; }
+  function scCss(k, o) {
+    var el = o.css ? document.querySelector(o.css) : null, st = document.getElementById("site-code-css"), css = k ? String(k.css || "") : "";
+    if (!css.trim()) { if (st) st.remove(); if (el) el.disabled = false; return; }
+    if (!st) { st = document.createElement("style"); st.id = "site-code-css"; if (el && el.parentNode) el.parentNode.insertBefore(st, el.nextSibling); else document.head.appendChild(st); }
+    if (st.textContent !== css) st.textContent = css;
+    if (el) el.disabled = true;
+  }
+  function scHtml(k, o) {
+    var h = String(k.html || ""); if (!h.trim()) return;
+    var d = new DOMParser().parseFromString(h, "text/html"); if (!d || !d.body) return;
+    var known = function (s) {
+      var src = s.getAttribute("src");
+      var bare = function (u) { return String(u || "").split("?")[0]; };
+      if (src) return bare(src) === o.js || Array.prototype.some.call(document.scripts, function (x) { return bare(x.getAttribute("src")) === bare(src); });
+      var t = s.textContent.trim(); return !t || s.id === "main-js" || Array.prototype.some.call(document.scripts, function (x) { return !x.getAttribute("src") && x.textContent.trim() === t; });
+    };
+    var mk = function (s) { var n = document.createElement("script"); Array.prototype.slice.call(s.attributes).forEach(function (a) { n.setAttribute(a.name, a.value); }); n.text = s.textContent; n.async = false; return n; };
+    Array.prototype.slice.call(d.head.children).forEach(function (n) {
+      var tag = n.tagName;
+      if (tag === "TITLE" || tag === "BASE" || (tag === "META" && (n.hasAttribute("charset") || n.getAttribute("name") === "viewport"))) return;
+      if (tag === "SCRIPT") { if (!known(n)) document.head.appendChild(mk(n)); return; }
+      if (n.id === "main-css" || (o.css && n.matches(o.css))) return;
+      if (tag === "META" && n.getAttribute("name") && Array.prototype.some.call(document.head.querySelectorAll("meta[name]"), function (x) { return x.getAttribute("name") === n.getAttribute("name"); })) return;
+      var html = n.outerHTML; if (Array.prototype.some.call(document.head.children, function (x) { return x.outerHTML === html; })) return;
+      document.head.appendChild(document.importNode(n, true));
+    });
+    Array.prototype.slice.call(d.body.attributes).forEach(function (a) { if (a.name === "data-page") return; if (a.name === "class") a.value.split(/\s+/).forEach(function (c) { if (c) document.body.classList.add(c); }); else document.body.setAttribute(a.name, a.value); });
+    scBody.forEach(function (n) { if (n.parentNode === document.body && !(n.nodeType === 1 && n.tagName === "SCRIPT")) n.parentNode.removeChild(n); });
+    var first = document.body.firstChild, later = [];
+    Array.prototype.slice.call(d.body.childNodes).forEach(function (n) {
+      if (n.nodeType === 1 && n.tagName === "SCRIPT") { if (!known(n)) later.push(mk(n)); return; }
+      document.body.insertBefore(document.importNode(n, true), first);
+    });
+    later.forEach(function (n) { document.body.appendChild(n); });
+  }
+  function scBar(msg) {
+    var b = document.getElementById("site-code-bar"); if (!msg || !scPV) { if (b) b.remove(); return; }
+    if (!b) { b = document.createElement("div"); b.id = "site-code-bar"; b.setAttribute("role", "alert"); b.style.cssText = "position:fixed;left:12px;right:12px;bottom:12px;z-index:2147483000;padding:10px 14px;border-radius:10px;background:#7f1d1d;color:#fff;font:13px/1.45 system-ui,sans-serif;box-shadow:0 6px 24px rgba(0,0,0,.35)"; (document.body || document.documentElement).appendChild(b); }
+    b.textContent = msg;
+  }
+  function scFail(k, e) {
+    sc.run = null; sc.bad = scSig(k); scCss(null, sc.o);
+    try { console.error("Code Update: the JavaScript could not start, so the template's own code is used.", e); } catch (x) { /* no console */ }
+    scTO.call(window, function () { scBar("Code Update: your JavaScript has a mistake, so the template's own code is shown until it is fixed. " + String((e && e.message) || e).slice(0, 200)); }, 50);
+  }
+  /** Called by the template's script with the content, before it draws. True: the copy has the page, the caller stops. */
+  function scTake(content, o) {
+    o = o || {}; sc.o = o; var k = scWant(content); scFlag(!!k);
+    if (!k) { clearTimeout(sc.t); if (sc.bad !== null) { sc.bad = null; scBar(""); } return false; }
+    if (sc.bad !== null) { if (scSig(k) !== sc.bad) scReload(); else clearTimeout(sc.t); return false; }
+    if (o.drawn) { scReload(); return !scPV; }
+    var fn; try { fn = new Function("SiteCode", "fetch", String(k.js)); } catch (e) { scFail(k, e); return false; }
+    scQuiet();
+    try { scCss(k, o); scHtml(k, o); } catch (e) { /* keep the page's own frame */ }
+    var text = o.text, get = function (u, i) { if (text != null && /content\.json(\?|$)/.test(String(u))) { var x = text; text = null; return Promise.resolve(new Response(x, { status: 200, headers: { "Content-Type": "application/json" } })); } return window.fetch(u, i); };
+    sc.run = scSig(k);
+    try { fn(null, get); } catch (e) { scFail(k, e); return false; }
+    // In the editor's preview: a change to the CSS shows at once; a change to the HTML or JavaScript reloads the preview.
+    if (scPV) scAdd.call(window, "message", function (e) {
+      if (e.origin !== location.origin || e.source !== window.parent) return; var d = e.data || {};
+      if (d.type !== "cms:content" || !d.content || typeof d.content !== "object") return;
+      var k2 = scWant(d.content); scFlag(!!k2);
+      if (!k2 || scSig(k2) !== sc.run) scReload(); else { clearTimeout(sc.t); scCss(k2, o); }
+    });
+    return true;
+  }
+  window.SiteCode = { take: scTake, track: scTrack, untrack: scUntrack, wait: function () { try { return scPV && sessionStorage.getItem("site-code-wait") === "1"; } catch (e) { return false; } } };
   window.SiteFonts = { use: useFont, link: fontLink };
   window.SiteSkeleton = { show: skeleton };
   window.SiteLogo = { hero: heroLogo };

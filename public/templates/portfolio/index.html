@@ -12,7 +12,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Unbounded:wght@400;600;800&display=swap">
 <link rel="stylesheet" id="fontlink" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;600;800&display=swap">
-<style>
+<style id="main-css">
 /* Layout: one page, two views. The site is a Bauhaus construction kit on a blueprint sheet, rendered from editable content; #admin is a calm two-pane control room. Site tokens are rewritten live by the theme editor; panel tokens stay fixed so it is always legible. */
 :root{
   --bg:#0A1830;--surface:#0F2142;--deep:#06101F;--text:#E9EEF6;--soft:#93A6C4;--line:#2A4A7A;
@@ -981,9 +981,12 @@ html[data-hero-art=none] .stage-wrap #stage:not([data-gfx]){display:none}
 <script src="assets/motifs.js"></script>
 <script src="assets/layouts.js"></script>
 <script src="assets/pages.js"></script>
-<script>
+<script id="main-js">
 (()=>{
 "use strict";
+/* Code Update (content.code): when the site runs its own copy of this code, SiteCode (fx.js) takes the page over before anything is drawn. */
+const SC=typeof SiteCode==="undefined"||!SiteCode?null:SiteCode;if(SC)SC.track();
+const SCO={css:"#main-css",js:""};let DREW=false;
 /* ============================================================
    DEFAULT CONTENT
    ============================================================ */
@@ -1509,7 +1512,7 @@ function renderSite(c){
 /* Features (assets/addons.js): chat button, badge, custom code and the custom API for form entries. */
 let adP;
 function addons(c){
-  const A=c.addons||{},any=(A.chat&&A.chat.on)||(A.badge&&A.badge.on)||(A.api&&A.api.on)||(A.code||[]).some(x=>x&&x.on!==false&&x.code)||!!(c.code&&c.code.on)||!!document.getElementById("site-code-css")||!!document.getElementById("site-code-html");
+  const A=c.addons||{},any=(A.chat&&A.chat.on)||(A.badge&&A.badge.on)||(A.api&&A.api.on)||(A.code||[]).some(x=>x&&x.on!==false&&x.code);
   if(!any&&!window.SiteAddons)return;
   (adP||(adP=new Promise((ok,no)=>{if(window.SiteAddons)return ok();const s=document.createElement("script");s.src="assets/addons.js";s.onload=()=>ok();s.onerror=no;document.head.appendChild(s)})))
     .then(()=>SiteAddons.mount(c,{preview:PREVIEW,home:!(window.SitePages&&SitePages.here()),site:c.brand.logoText})).catch(()=>{})}
@@ -1777,14 +1780,16 @@ if(PREVIEW){
   addEventListener("message",e=>{
     if(e.origin!==location.origin||e.source!==window.parent)return;
     const d=e.data||{};
-    if(d.type==="cms:content"&&d.content&&typeof d.content==="object"){ASSETS=d.assets||{};const y=scrollY;saved=merge(DEFAULT,d.content);renderSite(saved);scrollTo(0,y)}
+    if(d.type==="cms:content"&&d.content&&typeof d.content==="object"){if(SC&&SC.take(d.content,{...SCO,drawn:DREW}))return;DREW=true;ASSETS=d.assets||{};const y=scrollY;saved=merge(DEFAULT,d.content);renderSite(saved);scrollTo(0,y)}
   });
   window.parent.postMessage({type:"cms:ready",page:"index.html"+(window.SitePages&&SitePages.here()?"?p="+encodeURIComponent(SitePages.here()):MNT_Q?"?maintenance=1":"")},location.origin);
 }
-if(PREVIEW)renderSite(saved);
+if(PREVIEW){if(!(SC&&SC.wait())){DREW=true;renderSite(saved)}}
 else(async()=>{let got=null;if(window.SiteSkeleton)SiteSkeleton.show(document.getElementById("siteRoot"));/* the page's outline while the content is fetched */try{const ac=new AbortController(),tm=setTimeout(()=>ac.abort(),5000);if(HOST&&HOST.api){const r=await fetch(HOST.api+"/p/"+encodeURIComponent(HOST.site)+"/content.json",{cache:"no-store",signal:ac.signal});if(r.ok)got=await r.json()}else if(HOST){const r=await fetch(HOST.db+"/rest/v1/site_content?select=content&site=eq."+encodeURIComponent(HOST.site),{cache:"no-store",signal:ac.signal,headers:{apikey:HOST.key,...(/^sb_/.test(HOST.key)?{}:{Authorization:"Bearer "+HOST.key})}});if(r.ok){const j=await r.json();if(j&&j[0]&&j[0].content)got=j[0].content}}}catch(e){}
   try{if(!got){const ac=new AbortController(),tm=setTimeout(()=>ac.abort(),5000);const r=await fetch("content.json",{cache:"no-store",signal:ac.signal});clearTimeout(tm);if(r.ok)got=await r.json()}}catch(e){}
+  if(got&&SC&&SC.take(got,{...SCO,text:JSON.stringify(got)}))return;
   if(got)saved=merge(DEFAULT,got);renderSite(saved)})();
+if(SC)SC.untrack();
 })();
 </script>
 

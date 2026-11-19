@@ -296,11 +296,29 @@ const schema: Category[] = [
     cards: [
       head("contact"),
       { title: "Details", fields: [{ t: "textarea", path: "contact.address", label: "Address", rows: 2 },
-        g2({ t: "text", path: "contact.phone", label: "Phone", check: "phone" }, { t: "text", path: "contact.email", label: "Email", check: "email" }, { t: "text", path: "contact.whatsapp", label: "WhatsApp number (optional)", check: "phone" }, { t: "text", path: "contact.parking", label: "Parking (optional)", ph: "Valet parking in the evening" })] },
+        g2({ t: "text", path: "contact.phone", label: "Phone", check: "phone" }, { t: "text", path: "contact.email", label: "Email", check: "email" }, { t: "text", path: "contact.whatsapp", label: "WhatsApp number (optional)", check: "phone" }, { t: "text", path: "contact.parking", label: "Parking (optional)", ph: "Valet parking in the evening" }),
+        g2({ t: "text", path: "contact.placeTitle", label: "Name of this location (optional)", ph: "Koregaon Park", hint: "Shown as the title of its map when you have more than one location." }, { t: "text", path: "contact.placeGroup", label: "City, state or country it is in (optional)", ph: "Pune", hint: "Locations that share this are grouped together." })] },
       { title: "Map", fields: [{ t: "toggle", path: "contact.mapEmbed", label: "Show a map of the address" },
         { t: "text", path: "contact.mapUrl", label: "Your Google Maps link (optional)", check: "https", hint: "Used by Get directions. Without it, directions search for the address above." },
+        g2({ t: "select", path: "contact.mapSize", label: "Size of the map", options: [{ value: "", label: "The theme's own size" }, { value: "s", label: "Small" }, { value: "m", label: "Medium" }, { value: "l", label: "Large" }, { value: "xl", label: "Extra large" }, { value: "tall", label: "Tall (portrait)" }] },
+          { t: "select", path: "contact.mapFrom", label: "What the map shows", options: [{ value: "", label: "The address entered above" }, { value: "place", label: "A place name or coordinates I type" }] }),
+        { t: "when", path: "contact.mapFrom", is: "place", fields: [{ t: "text", path: "contact.mapQ", label: "Place to show on the map", ph: "18.5362, 73.8940", hint: "The name of the place as Google Maps knows it, a plus code, or its coordinates (latitude, longitude). Use this when the address alone puts the pin in the wrong spot." }] },
         { t: "toggle", path: "contact.mapTap", label: "Wait for a tap before loading the map (privacy)" },
         { t: "note", text: "The map shows by itself as soon as there is an address. With “wait for a tap” on, visitors see a “Show the map” button first, and nothing is sent to Google before they press it." }] },
+      { title: "More locations", fields: [
+        { t: "note", text: "Add your other outlets here: in another country, state or city, or in other parts of the same city. Each one gets its own title, address and map. With more than one location, Find us shows them all in the style you choose below; the address above is the first one." },
+        { t: "list", path: "contact.places", max: 60, add: () => ({ id: "pl-" + Math.random().toString(36).slice(2, 8), on: true, title: "", group: "", address: "", phone: "", note: "", mapFrom: "", mapQ: "", mapUrl: "" }), title: (it) => `${it?.title || (it?.address || "").split("\n")[0] || "Location"}${it?.group ? " · " + it.group : ""}${it?.on === false ? " (hidden)" : ""}`,
+          item: [
+            g2({ t: "text", path: "title", label: "Title", ph: "Indiranagar" }, { t: "text", path: "group", label: "City, state or country it is in", ph: "Bengaluru", hint: "Locations that share this are grouped together." }),
+            { t: "textarea", path: "address", label: "Address", rows: 2 },
+            g2({ t: "text", path: "phone", label: "Phone (optional)", check: "phone" }, { t: "text", path: "note", label: "Hours or a note (optional)", ph: "Open 12 to 11, all days" }),
+            g2({ t: "select", path: "mapFrom", label: "What the map shows", options: [{ value: "", label: "The address entered above" }, { value: "place", label: "A place name or coordinates I type" }] }, { t: "text", path: "mapUrl", label: "Google Maps link (optional)", check: "https", hint: "Used by Get directions." }),
+            { t: "when", path: "mapFrom", is: "place", local: true, fields: [{ t: "text", path: "mapQ", label: "Place to show on the map", ph: "12.9719, 77.6412" }] },
+            { t: "toggle", path: "on", label: "Show this location" },
+          ] },
+        g2({ t: "select", path: "contact.placesStyle", label: "How several locations are shown", options: [{ value: "", label: "Stacked cards: one in front, the next ones peeking at the sides" }, { value: "tabs", label: "Tabs: a row of names, one location at a time" }, { value: "split", label: "List and map: names on the left, the chosen one on the right" }, { value: "grid", label: "Grid: every location as a card" }, { value: "accordion", label: "Fold-out list: tap a name to open it" }, { value: "strip", label: "Sliding row: swipe sideways through the cards" }] },
+          { t: "toggle", path: "contact.placesFilter", label: "Let visitors filter by city, state or country" }),
+      ] },
     ],
   },
   {
@@ -378,6 +396,7 @@ function prepareRestaurant(c: any) {
   { const F = c.contact.form; if (F.saveTo !== "file") F.saveTo = "auto"; if (F.notifyAsk !== 1) { F.notify = true; F.notifyAsk = 1; } else F.notify = F.notify === true; F.notifyTo ??= ""; F.notifySubject ??= "";
     for (const k of ["slots", "occasions", "types"]) if (!Array.isArray(F[k])) F[k] = []; }
   if (typeof c.contact.mapEmbed !== "boolean") c.contact.mapEmbed = true;
+  c.contact.places = (Array.isArray(c.contact.places) ? c.contact.places : []).filter((x: any) => x && typeof x === "object"); if (typeof c.contact.placesFilter !== "boolean") c.contact.placesFilter = true;
   prepareI18n(c, () => schema);
   prepareMenu(c, () => (Array.isArray(c.sections) ? c.sections : []).filter((x: any) => x && x.show !== false && x.inNav).map((x: any) => menuItem(x.label || x.id, x.id)));
   c.sections = (Array.isArray(c.sections) ? c.sections : []).filter((s: any) => s && REST_SECTIONS.some(([id]) => id === s.id));

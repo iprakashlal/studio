@@ -170,7 +170,7 @@ const DEFAULT = {
   },
   contact: {
     eyebrow: "Visit us", title: "Find us", lede: "",
-    email: "hello@picaffectz.example", phone: "+91 20 4000 1234", whatsapp: "", address: "14 Lane 6, Koregaon Park\nPune 411001", mapUrl: "", mapEmbed: true, parking: "Valet parking in the evening",
+    email: "hello@picaffectz.example", phone: "+91 20 4000 1234", whatsapp: "", address: "14 Lane 6, Koregaon Park\nPune 411001", mapUrl: "", mapEmbed: true, mapSize: "", mapFrom: "", mapQ: "", placeTitle: "", placeGroup: "", places: [], placesStyle: "", placesFilter: true, parking: "Valet parking in the evening",
     form: {
       enabled: true, title: "Request a table", askEmail: true, askGuests: true, maxGuests: 10, askDate: true, askTime: true, slots: ["12:00", "12:30", "13:00", "13:30", "14:00", "19:00", "19:30", "20:00", "20:30", "21:00", "21:30"],
       askOccasion: true, occasions: ["Birthday", "Anniversary", "Business meal", "Date night"], askType: true, types: ["Table booking", "Private event", "Catering", "Something else"],
@@ -610,14 +610,36 @@ function reserveHTML() {
   return `<section class="reserve band" id="reserve"><div class="wrap"><div class="rs-grid"><div class="rs-side">${head(R, "left")}${R.note ? `<p class="rs-note">${rich(R.note)}</p>` : ""}
       ${K.phone ? `<p class="rs-call"><a class="link" href="${esc(tel(K.phone))}">${icon("phone", "ci2")}${esc(K.phone)}</a></p>` : ""}${C.hours.showStatus !== false ? statusChip() : ""}</div>${form}</div></div></section>`;
 }
+/** Every location: the main address first, then the ones added under More locations. */
+function places() {
+  const K = C.contact, q = (v) => String(v || "").trim();
+  const one = (p, main) => ({ main, title: q(main ? K.placeTitle : p.title), group: q(main ? K.placeGroup : p.group), address: q(p.address), phone: q(p.phone), note: main ? "" : q(p.note), mapUrl: p.mapUrl, place: p.mapFrom === "place" ? q(p.mapQ) : "" });
+  return [...(q(K.address) ? [one(K, true)] : []), ...(Array.isArray(K.places) ? K.places : []).filter((p) => p && p.on !== false && (q(p.address) || (p.mapFrom === "place" && q(p.mapQ)))).map((p) => one(p, false))];
+}
+const placeDir = (p) => safeUrl(p.mapUrl) || "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(p.place || p.address.replace(/\n/g, ", "));
+const mapBox = (p) => C.contact.mapEmbed !== false ? `<div class="map" data-q="${esc(p.place || (C.brand.name + ", " + p.address).replace(/\n/g, ", "))}"><button type="button" class="map-b">${icon("pin", "map-ic")}<b>Show the map</b><small>Opens Google Maps here</small></button></div>` : "";
+/** Find us with more than one location: cards with a title and a map each, in one of six styles (contact.placesStyle). */
+function placesHTML(P) {
+  const K = C.contact, st = ["tabs", "split", "grid", "accordion", "strip"].includes(K.placesStyle) ? K.placesStyle : "stack";
+  const name = (p, i) => p.title || p.address.split("\n")[0] || "Location " + (i + 1), groups = [...new Set(P.map((p) => p.group).filter(Boolean))];
+  const chips = K.placesFilter !== false && groups.length > 1 ? `<div class="locs-chips" role="group" aria-label="Filter the locations"><button type="button" class="locs-chip" data-g="" aria-pressed="true">All</button>${groups.map((g) => `<button type="button" class="locs-chip" data-g="${esc(g)}" aria-pressed="false">${esc(g)}</button>`).join("")}</div>` : "";
+  const card = (p, i) => `<article class="loc card" data-i="${i}" data-g="${esc(p.group)}"><button type="button" class="loc-t" aria-label="${esc(name(p, i))}"><b>${esc(name(p, i))}</b>${p.group ? `<small>${esc(p.group)}</small>` : ""}<i class="loc-pm" aria-hidden="true"></i></button>
+    <div class="loc-b"><div class="loc-info">${p.address ? `<p class="loc-a">${icon("pin", "loc-ic")}<span>${ml(p.address)}</span></p>` : ""}${p.phone ? `<p>${icon("phone", "loc-ic")}<a href="${esc(tel(p.phone))}">${esc(p.phone)}</a></p>` : ""}${p.note ? `<p>${icon("clock", "loc-ic")}<span>${esc(p.note)}</span></p>` : ""}
+      <div class="cta-row"><a class="btn pri" href="${esc(placeDir(p))}" target="_blank" rel="noopener">Get directions</a></div></div>${mapBox(p)}</div></article>`;
+  return `<div class="locs" data-style="${st}" data-n="${P.length}">${chips}
+    <div class="locs-nav" role="tablist" aria-label="Locations">${P.map((p, i) => `<button type="button" role="tab" data-i="${i}" aria-selected="${i === 0}"><b>${esc(name(p, i))}</b><small>${esc(p.group || p.address.split("\n").pop())}</small></button>`).join("")}</div>
+    <div class="locs-view"><div class="locs-track">${P.map(card).join("")}</div></div>
+    <div class="locs-ctl"><button type="button" class="locs-a" data-d="-1" aria-label="Previous location">‹</button><div class="locs-d"></div><button type="button" class="locs-a" data-d="1" aria-label="Next location">›</button></div></div>`;
+}
 function contactHTML() {
-  const K = C.contact, addr = String(K.address || "").trim();
+  const K = C.contact, addr = String(K.address || "").trim(), P = places(), many = P.length > 1;
   const line = (ic, label, val, link, ext) => val ? `<li>${icon(ic, "ci")}<span><small>${esc(label)}</small>${link ? `<a href="${esc(link)}"${ext ? ' target="_blank" rel="noopener"' : ""}>${ml(val)}</a>` : ml(val)}</span></li>` : "";
-  const dir = safeUrl(K.mapUrl) || (addr ? "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(addr.replace(/\n/g, ", ")) : "");
-  const map = K.mapEmbed !== false && addr ? `<div class="map" data-q="${esc((C.brand.name + ", " + addr).replace(/\n/g, ", "))}"><button type="button" class="map-b">${icon("pin", "map-ic")}<b>Show the map</b><small>Opens Google Maps here</small></button></div>` : "";
-  return `<section class="contact" id="contact"><div class="wrap">${head(K)}<div class="visit">
-      <aside class="contact-info"><ul class="cl">${line("pin", "Address", addr, dir, 1)}${line("phone", "Phone", K.phone, K.phone ? tel(K.phone) : "")}${line("mail", "Email", K.email, K.email ? "mailto:" + K.email : "")}${line("car", "Parking", K.parking, "")}</ul>
-        <div class="cta-row">${dir ? `<a class="btn pri" href="${esc(dir)}" target="_blank" rel="noopener">Get directions</a>` : ""}${K.whatsapp ? `<a class="btn sec" href="${esc(waUrl(""))}" target="_blank" rel="noopener">WhatsApp</a>` : ""}</div></aside>
+  const first = P[0], dir = first ? placeDir(first) : "";
+  const map = !many && first ? mapBox(first) : "";
+  const size = ["s", "m", "l", "xl", "tall"].includes(K.mapSize) ? ` data-map="${K.mapSize}"` : "";
+  return `<section class="contact" id="contact"${size}><div class="wrap">${head(K)}${many ? placesHTML(P) : ""}<div class="visit">
+      <aside class="contact-info"><ul class="cl">${many ? "" : line("pin", "Address", addr, dir, 1)}${line("phone", "Phone", K.phone, K.phone ? tel(K.phone) : "")}${line("mail", "Email", K.email, K.email ? "mailto:" + K.email : "")}${line("car", "Parking", K.parking, "")}</ul>
+        <div class="cta-row">${dir && !many ? `<a class="btn pri" href="${esc(dir)}" target="_blank" rel="noopener">Get directions</a>` : ""}${K.whatsapp ? `<a class="btn sec" href="${esc(waUrl(""))}" target="_blank" rel="noopener">WhatsApp</a>` : ""}</div></aside>
       <div class="card hours-card"><div class="hours-h"><h3 class="h3">${esc(C.hours.title || "Opening hours")}</h3>${statusChip()}</div>${hoursTable()}</div>
       ${map}</div></div></section>`;
 }
@@ -880,9 +902,7 @@ function bind() {
   const f = $("#enquiry"); if (f) { f.addEventListener("submit", submit); bindForm(f); }
   bindMenu(); bindZoom();
   $$(".of-code").forEach((c) => c.addEventListener("click", () => { const t = c.dataset.copy; (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(() => toast("Code copied: <b>" + esc(t) + "</b>"), () => toast("Code: <b>" + esc(t) + "</b>")); }));
-  const mp = $(".map-b"); if (mp) mp.onclick = () => { const h = mp.parentNode, fr = document.createElement("iframe"); fr.title = "Map"; fr.loading = "lazy"; fr.referrerPolicy = "no-referrer-when-downgrade"; fr.src = "https://www.google.com/maps?q=" + encodeURIComponent(h.dataset.q) + "&output=embed"; h.innerHTML = ""; h.appendChild(fr); };
-  // The map shows by itself (it loads when it is scrolled near); with “wait for a tap” on, nothing goes to Google before the tap.
-  if (mp && !C.contact.mapTap) mp.onclick();
+  bindLocs(); bindMaps();
 }
 /** The booking form: no dates in the past, and "Plan an event" picks the kind of request. */
 function bindForm(f) {
@@ -1007,6 +1027,47 @@ async function submit(e) {
     msg.className = "form-msg bad"; msg.innerHTML = C.contact.phone ? `Couldn't send just now. Please call us on <a href="${esc(tel(C.contact.phone))}">${esc(C.contact.phone)}</a>.` : "Couldn't send just now. Please try again in a moment.";
   }
   btnEl.disabled = false;
+}
+
+/* Maps: each loads by itself once it is on screen (and, among several locations, once its card is the one in front); with
+   “wait for a tap” on, nothing goes to Google before the tap. */
+let mapIO = null;
+function loadMap(h) {
+  if (h.dataset.done) return; h.dataset.done = "1";
+  const fr = document.createElement("iframe"); fr.title = "Map"; fr.loading = "lazy"; fr.referrerPolicy = "no-referrer-when-downgrade"; fr.src = "https://www.google.com/maps?q=" + encodeURIComponent(h.dataset.q) + "&output=embed"; h.innerHTML = ""; h.appendChild(fr);
+}
+function bindMaps() {
+  if (mapIO) mapIO.disconnect();
+  const ready = (h) => { const c = h.closest(".loc"); return !c || (!c.hidden && c.classList.contains("on")); };
+  mapIO = "IntersectionObserver" in window ? new IntersectionObserver((es) => es.forEach((e) => { if (e.isIntersecting && ready(e.target)) { mapIO.unobserve(e.target); loadMap(e.target); } }), { rootMargin: "200px" }) : null;
+  $$(".map").forEach((h) => { const b = $(".map-b", h); if (b) b.onclick = () => loadMap(h); if (C.contact.mapTap || h.dataset.done) return; if (!h.closest(".loc") || !mapIO) { loadMap(h); return; } mapIO.observe(h); });
+}
+/* Several locations (.locs): one card in front at a time for the stacked cards, tabs, list-and-map and fold-out styles. */
+function bindLocs() {
+  const R = $(".locs"); if (!R) return;
+  const st = R.dataset.style, cards = $$(".loc", R), navs = $$(".locs-nav button", R), dots = $(".locs-d", R), track = $(".locs-track", R), all = st === "grid" || st === "strip";
+  let cur = 0;
+  const vis = () => cards.filter((c) => !c.hidden);
+  const show = (i) => {
+    const v = vis(); if (!v.length) return; cur = ((i % v.length) + v.length) % v.length;
+    cards.forEach((c) => c.classList.toggle("on", all || c === v[cur]));
+    navs.forEach((b) => { const c = cards[+b.dataset.i]; b.hidden = c.hidden; b.setAttribute("aria-selected", String(c === v[cur])); });
+    track.style.setProperty("--i", cur); R.dataset.n = v.length;
+    dots.innerHTML = all ? "" : v.map((_, n) => `<button type="button" aria-label="Location ${n + 1} of ${v.length}"${n === cur ? ' aria-current="true"' : ""}></button>`).join("");
+    $$("button", dots).forEach((b, n) => { b.onclick = () => show(n); });
+    // the card now in front: its map may load (it is already on screen, so the observer is asked again)
+    if (mapIO && !C.contact.mapTap) $$(".map", R).forEach((h) => { if (!h.dataset.done) { mapIO.unobserve(h); mapIO.observe(h); } });
+  };
+  cards.forEach((c) => {
+    c.addEventListener("click", (e) => { if (st === "stack" && !c.classList.contains("on")) { e.preventDefault(); show(vis().indexOf(c)); } });
+    $(".loc-t", c).onclick = () => { if (st === "accordion" && !c.classList.contains("on")) show(vis().indexOf(c)); };
+  });
+  navs.forEach((b) => { b.onclick = () => show(vis().indexOf(cards[+b.dataset.i])); });
+  $$(".locs-a", R).forEach((b) => { b.onclick = () => { const d = +b.dataset.d; if (st === "strip") track.scrollBy({ left: d * track.clientWidth * 0.8, behavior: "smooth" }); else show(cur + d); }; });
+  $$(".locs-chip", R).forEach((ch) => { ch.onclick = () => { $$(".locs-chip", R).forEach((x) => x.setAttribute("aria-pressed", String(x === ch))); cards.forEach((c) => { c.hidden = !!ch.dataset.g && c.dataset.g !== ch.dataset.g; }); show(0); }; });
+  if (st === "stack") { let x0 = null; track.addEventListener("pointerdown", (e) => { x0 = e.clientX; }); track.addEventListener("pointerup", (e) => { if (x0 !== null && Math.abs(e.clientX - x0) > 44) show(cur + (e.clientX < x0 ? 1 : -1)); x0 = null; }); }
+  if (st !== "grid" && st !== "strip") R.addEventListener("keydown", (e) => { if (e.target.closest("input,textarea,select")) return; if (e.key === "ArrowRight") show(cur + 1); else if (e.key === "ArrowLeft") show(cur - 1); });
+  show(0);
 }
 
 /* ============================================================

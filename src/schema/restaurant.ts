@@ -189,6 +189,7 @@ const schema: Category[] = [
       { title: "Order now page", fields: [{ t: "toggle", path: "ordering.on", label: "Take orders on the site (adds the Order now page)" },
         { t: "note", text: "The page lists every dish on your Menu that has a price. Guests search, filter by diet, save favourites, choose sizes and extras, and check out with their name, mobile number and address. It opens at order.html, a good address for a table QR code (order.html?table=7 fills in table 7)." },
         g2({ t: "text", path: "ordering.label", label: "Name in the menu bar and on buttons" }, { t: "toggle", path: "ordering.inNav", label: "Show it in the menu bar" }),
+        { t: "toggle", path: "ordering.onMenu", label: "Show the button on the Menu page (next to the search)" },
         g2({ t: "text", path: "ordering.title", label: "Page heading", ml: true }, { t: "text", path: "ordering.bestTitle", label: "Heading of the best sellers" }),
         { t: "textarea", path: "ordering.lede", label: "Line under the heading", rows: 2 },
         { t: "toggle", path: "ordering.tiles", label: "Show the menu's sections as tiles at the top" },
@@ -276,9 +277,13 @@ const schema: Category[] = [
     id: "hours", label: "Opening hours", group: "Pages", desc: "The week's hours, the “Open now” badge and your time zone.",
     cards: [
       { title: "The week", fields: [
+        { t: "toggle", path: "hours.same", label: "Same hours every day" },
+        { t: "when", path: "hours.same", is: "true", fields: [g2({ t: "text", path: "hours.all.open", label: "Opens", ph: "12:00" }, { t: "text", path: "hours.all.close", label: "Closes", ph: "23:00" }, { t: "text", path: "hours.all.open2", label: "Opens again (optional)", ph: "19:00" }, { t: "text", path: "hours.all.close2", label: "Closes", ph: "23:30" }),
+          { t: "note", text: "These hours apply to all seven days. Untick “Same hours every day” to set each day by itself (your day-by-day hours are kept)." }] },
+        { t: "when", path: "hours.same", not: "true", fields: [
         { t: "list", path: "hours.days", fixed: true, add: () => ({}), title: (it) => `${it.day || "Day"} · ${it.closed ? "closed" : [it.open && it.close ? `${it.open}–${it.close}` : "", it.open2 && it.close2 ? `${it.open2}–${it.close2}` : ""].filter(Boolean).join(", ") || "no hours yet"}`,
           item: [g2({ t: "text", path: "day", label: "Day" }, { t: "toggle", path: "closed", label: "Closed this day" }),
-            { t: "when", path: "closed", not: "true", local: true, fields: [g2({ t: "text", path: "open", label: "Opens", ph: "12:00" }, { t: "text", path: "close", label: "Closes", ph: "23:00" }, { t: "text", path: "open2", label: "Opens again (optional)", ph: "19:00" }, { t: "text", path: "close2", label: "Closes", ph: "23:30" })] }] },
+            { t: "when", path: "closed", not: "true", local: true, fields: [g2({ t: "text", path: "open", label: "Opens", ph: "12:00" }, { t: "text", path: "close", label: "Closes", ph: "23:00" }, { t: "text", path: "open2", label: "Opens again (optional)", ph: "19:00" }, { t: "text", path: "close2", label: "Closes", ph: "23:30" })] }] }] },
         { t: "note", text: "Write times as 12:00 or 7:30 pm. A closing time earlier than the opening time runs past midnight (18:00 to 01:00). Use “Opens again” for a break between lunch and dinner." }] },
       { title: "How they show", fields: [g2({ t: "text", path: "hours.title", label: "Heading" }, { t: "select", path: "hours.format", label: "Clock", options: [{ value: "12", label: "12-hour (7:30 pm)" }, { value: "24", label: "24-hour (19:30)" }] }),
         { t: "toggle", path: "hours.showStatus", label: "Show “Open now” / “Closed now”" },
@@ -356,10 +361,13 @@ function prepareRestaurant(c: any) {
   c.hours = { title: "Opening hours", format: "12", utcOffset: "+05:30", showStatus: true, note: "", openLabel: "Open now", closedLabel: "Closed now", ...(c.hours && typeof c.hours === "object" ? c.hours : {}) };
   const have: any[] = Array.isArray(c.hours.days) ? c.hours.days.filter((d: any) => d && typeof d === "object") : [];
   c.hours.days = DAYS.map((day, i) => ({ day, closed: false, open: "", close: "", open2: "", close2: "", ...(have[i] || {}) }));
+  // "Same hours every day": one set of times for the whole week (starts from Monday's when first switched on).
+  c.hours.same = c.hours.same === true;
+  { const a = c.hours.all && typeof c.hours.all === "object" ? c.hours.all : {}, m = c.hours.days[0] || {}; c.hours.all = { open: String(a.open ?? m.open ?? ""), close: String(a.close ?? m.close ?? ""), open2: String(a.open2 ?? m.open2 ?? ""), close2: String(a.close2 ?? m.close2 ?? "") }; }
   for (const k of ["highlights", "specials", "offers", "gallery", "chef", "events", "press", "testimonials", "order", "reserve", "faq", "about", "cta", "footer"]) c[k] = c[k] && typeof c[k] === "object" ? c[k] : {};
   {
     const o = c.ordering && typeof c.ordering === "object" ? c.ordering : {};
-    c.ordering = { on: false, label: "Order now", title: "Order online", lede: "Fresh from our kitchen, for delivery or pickup.", bestTitle: "Best sellers", tiles: true, inNav: true, deliveryMins: 40, pickupMins: 20, dineMins: 15, minOrder: 200, deliveryFee: 40, freeAbove: 0, areas: "", areaNote: "", askPin: true, packing: 0, taxPercent: 5, taxLabel: "GST", taxIncluded: false, roundOff: true,
+    c.ordering = { on: false, label: "Order now", title: "Order online", lede: "Fresh from our kitchen, for delivery or pickup.", bestTitle: "Best sellers", tiles: true, inNav: true, onMenu: true, deliveryMins: 40, pickupMins: 20, dineMins: 15, minOrder: 200, deliveryFee: 40, freeAbove: 0, areas: "", areaNote: "", askPin: true, packing: 0, taxPercent: 5, taxLabel: "GST", taxIncluded: false, roundOff: true,
       tips: true, tipOptions: "10, 20, 30", cutlery: true, notes: true, dishNotes: true, askEmail: false, schedule: true, slotMins: 30, daysAhead: 1, whatsapp: "", intro: "New order", prefix: "ORD", success: "Thank you! Your order is placed.", ...o,
       modes: { delivery: true, pickup: true, dinein: false, ...(o.modes && typeof o.modes === "object" ? o.modes : {}) }, pay: { cod: true, codLabel: "", upi: false, upiId: "", payee: "", razorpay: false, cashfree: false, phonepe: false, stripe: false, paypal: false, ...(o.pay && typeof o.pay === "object" ? o.pay : {}) },
       coupons: (Array.isArray(o.coupons) ? o.coupons : []).filter((x: any) => x && typeof x === "object") };
@@ -410,7 +418,7 @@ export const restaurantTemplate: TemplateDef = {
     if (!dishCount(c)) w.push("The menu has no dishes yet. Add them under Menu.");
     if (!String(K.phone || "").trim()) w.push("There is no phone number. Guests expect one: add it under Address & contact.");
     if (!String(K.address || "").trim()) w.push("There is no address, so Get directions and the map can't show.");
-    if (!(c?.hours?.days || []).some((d: any) => d && (d.closed || (d.open && d.close)))) w.push("The opening hours are empty. Fill them in under Opening hours.");
+    if (!(c?.hours?.same ? c.hours.all?.open && c.hours.all?.close : (c?.hours?.days || []).some((d: any) => d && (d.closed || (d.open && d.close))))) w.push("The opening hours are empty. Fill them in under Opening hours.");
     if (F.enabled && F.saveTo !== "file" && !K.email) w.push("The booking form has no email to fall back on. Add one under Address & contact.");
     if (F.enabled && (F.sbUrl || F.sbKey) && !(F.sbUrl && F.sbKey && F.site)) w.push("The booking form's Supabase settings are incomplete (Project URL, public key and Site ID are all needed).");
     if (c?.events?.button && c?.events?.type && F.askType !== false && !(F.types || []).includes(c.events.type)) w.push(`The events button picks “${c.events.type}” in the booking form, but that isn't one of the form's choices.`);

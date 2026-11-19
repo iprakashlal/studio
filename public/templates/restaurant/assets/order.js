@@ -69,7 +69,7 @@
   const lead = () => Math.max(0, +(mode() === "delivery" ? O().deliveryMins : mode() === "pickup" ? O().pickupMins : O().dineMins) || 0);
   /** ASAP (when open now) and the times a guest can ask for, from the opening hours. Values: "asap" or "<days ahead>:<minute of day>". */
   function slots() {
-    const H = C.hours || {}, Dd = H.days || [], out = [], s = A.openState(), ck = A.clock(), L = lead(), step = Math.max(10, +O().slotMins || 30);
+    const H = C.hours || {}, Dd = A.weekDays(), out = [], s = A.openState(), ck = A.clock(), L = lead(), step = Math.max(10, +O().slotMins || 30);
     if (!Dd.length) return [{ v: "asap", label: "As soon as possible" + (L ? ` (about ${L} min)` : "") }];
     if (s && s.open) out.push({ v: "asap", label: "As soon as possible" + (L ? ` (about ${L} min)` : "") });
     if (O().schedule === false || mode() === "dinein") return out;
@@ -156,7 +156,7 @@
   }
   function closedNote() {
     const s = A.openState(); if (!s || s.open) return "";
-    const Dd = (C.hours || {}).days || [], nx = s.next, at = nx ? `${nx.k === 0 ? "today at" : nx.k === 1 ? "tomorrow at" : esc((Dd[nx.day] || {}).day || "") + " at"} ${A.fmtTime(A.hhmm(nx.at))}` : "";
+    const Dd = A.weekDays(), nx = s.next, at = nx ? `${nx.k === 0 ? "today at" : nx.k === 1 ? "tomorrow at" : esc((Dd[nx.day] || {}).day || "") + " at"} ${A.fmtTime(A.hhmm(nx.at))}` : "";
     const later = slots().length > 0;
     return `<p class="ord-closed" role="status"><b>We're closed right now.</b> ${at ? `We open ${at}. ` : ""}${later ? "You can still order ahead for a later time." : "Ordering opens again then."}</p>`;
   }

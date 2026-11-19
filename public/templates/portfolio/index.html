@@ -1501,7 +1501,7 @@ function renderSite(c){
   if(SC&&SC.drawn)SC.drawn(siteRoot,c);
   initSite(c);}
   heroSlides(c);heroLogo(c);video(c);social(c);spLinks(c);menu(c);lang(c);consent(c);addons(c);festival(c);
-  if(window.SiteFX)try{window.SiteFX.init({root:$("#siteInner"),brand:c.theme.introTitle||c.brand.logoText,badge:c.poweredBy})}catch(e){}
+  if(window.SiteFX)try{window.SiteFX.init({root:$("#siteInner"),brand:c.theme.introTitle||c.brand.logoText,badge:c.poweredBy,bgs:c.sectionBg,asset:imgUrl,fonts:FONTS})}catch(e){}
   setIcon(c);fitLines();
   // Links inside the page follow the sections: to a section's own page, or back to the main page from one.
   if(SOLO.set.size)document.querySelectorAll('#siteRoot a[href^="#"]').forEach(a=>{const id=a.getAttribute("href").slice(1);if(SOLO.set.has(id)&&id!==SOLO.cur)a.setAttribute("href","./?s="+encodeURIComponent(id));else if(SOLO.cur&&id!==SOLO.cur&&(SOLO.vis.has(id)||id==="top"))a.setAttribute("href",id==="top"?"./":"./#"+id)});

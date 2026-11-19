@@ -1,7 +1,7 @@
 import { FESTIVALS, FESTIVAL_DECOS, festivalWhen } from "../lib/festivals";
 // Settings both templates share: where the site's own CMS lives.
 import { SOCIAL_KINDS, SOCIAL_GRAPHICS, socialDefault, socialKind, mergeSocial, type SocialItem } from "../lib/social";
-import type { Category, Field } from "./types";
+import type { Card, Category, Field } from "./types";
 import { fontLinkLine } from "../lib/fontlink";
 
 /** Page names a site already uses, so the admin page can't take them. */
@@ -536,6 +536,34 @@ export function featuresCategory(): Category {
       ] },
     ],
   };
+}
+
+/** A section's own look (content.sectionBg[key]): a background (a colour, a picture or GIF, or a video) and its own font,
+ *  text colour and text style, with a switch. Drawn by fx.js, whatever the theme. */
+export function sectionBgCard(key: string, title = "Background & text of this section", fonts: string[] = []): Card {
+  const p = `sectionBg.${key}.`;
+  return { title, fields: [
+    { t: "toggle", path: p + "on", label: "Give this section its own background and text" },
+    { t: "when", path: p + "on", is: "true", fields: [
+      { t: "grid", cols: 2, fields: [{ t: "select", path: p + "kind", label: "Background", options: [{ value: "", label: "A colour" }, { value: "image", label: "A picture or GIF" }, { value: "video", label: "A video" }, { value: "none", label: "Keep the theme's background" }] }, { t: "when", path: p + "kind", not: "none", fields: [{ t: "color", path: p + "color", label: "Colour" }] }] },
+      { t: "when", path: p + "kind", is: "image", fields: [{ t: "image", path: p + "image", label: "Picture or GIF", hint: "JPG, PNG, WebP or an animated GIF. It fills the section and is cropped to fit. The colour shows while it loads." }] },
+      { t: "when", path: p + "kind", is: "video", fields: [{ t: "videoFile", path: p + "video", label: "Video", hint: "MP4 or WebM, up to 20 MB. It plays silently on a loop behind the section. A short, calm clip works best." }, { t: "image", path: p + "image", label: "Picture shown until the video plays (optional)" }] },
+      { t: "grid", cols: 2, fields: [{ t: "range", path: p + "dim", label: "Dim the picture or video", min: 0, max: 90, step: 5, unit: "%" }, { t: "select", path: p + "text", label: "Text colour", options: [{ value: "", label: "Automatic" }, { value: "light", label: "Light text (for a dark background)" }, { value: "dark", label: "Dark text (for a light background)" }, { value: "custom", label: "A colour I choose" }] }] },
+      { t: "when", path: p + "text", is: "custom", fields: [{ t: "color", path: p + "textColor", label: "Colour of the text" }] },
+      { t: "grid", cols: 2, fields: [{ t: "select", path: p + "font", label: "Font", options: [{ value: "", label: "The theme's fonts" }, ...fonts.map((f) => ({ value: f, label: f }))] }, { t: "select", path: p + "fontFor", label: "Use the font for", options: [{ value: "", label: "All the text here" }, { value: "head", label: "The headings only" }] }] },
+      { t: "select", path: p + "fontStyle", label: "Text style", options: [{ value: "", label: "The theme's own" }, { value: "bold", label: "Bold" }, { value: "light", label: "Light" }, { value: "italic", label: "Italic" }, { value: "bolditalic", label: "Bold italic" }, { value: "upper", label: "CAPITALS" }, { value: "spaced", label: "Spaced out letters" }] },
+    ] },
+  ] };
+}
+/** Adds the background card to every section's category (those under "Sections"), and to the ones named in `more`:
+ *  category id → [section key, card title][]. */
+export function withSectionBg(schema: Category[], more: Record<string, [string, string?][]> = {}, fonts: string[] = []): Category[] {
+  const list = [...new Set(fonts)].sort((a, b) => a.localeCompare(b));
+  for (const c of schema) {
+    if (more[c.id]) for (const [key, title] of more[c.id]) c.cards.push(sectionBgCard(key, title, list));
+    else if (c.sub === "Sections") c.cards.push(sectionBgCard(c.id, undefined, list));
+  }
+  return schema;
 }
 
 /** Code Update: the site's own copy of the template's code (content.code = { on, html, css, js }). While it is on the

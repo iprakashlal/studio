@@ -716,9 +716,76 @@
     }
   }
 
+  // ---- A section's own background (content.sectionBg[key] = { on, kind, color, image, video, dim, text }): a colour, a
+  // picture or GIF, or a silent looping video, laid behind the section's content whatever the theme.
+  var SBG_CSS = ".has-sbg{isolation:isolate}.has-sbg[data-sbg-c]{background:var(--sbg)!important}" +
+    ".sbg{position:absolute;inset:0;z-index:-1;overflow:hidden;pointer-events:none;border-radius:inherit}" +
+    ".sbg img,.sbg video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}.sbg i{position:absolute;inset:0}" +
+    ".has-sbg[data-sbg-text=light]{--text:#fff;--soft:rgba(255,255,255,.82);--line:rgba(255,255,255,.24);--surface:rgba(255,255,255,.1);color:#fff}" +
+    ".has-sbg[data-sbg-text=dark]{--text:#14161a;--soft:rgba(20,22,26,.7);--line:rgba(20,22,26,.16);--surface:rgba(255,255,255,.72);color:#14161a}" +
+    // its own text colour, font and text style
+    ".has-sbg[data-sbg-text=custom]{--text:var(--scol);--soft:color-mix(in srgb,var(--scol) 76%,transparent);--line:color-mix(in srgb,var(--scol) 24%,transparent);color:var(--scol)}" +
+    ".has-sbg[data-sbg-text=custom] :is(h1,h2,h3,h4,h5,h6,p,li,blockquote,figcaption,summary,dt,dd,small){color:var(--scol)!important}" +
+    ".has-sbg[data-sbg-text=custom] :is(p,li,figcaption,dd,small):not(:is(h1,h2,h3,h4,h5,h6) *){color:color-mix(in srgb,var(--scol) 84%,transparent)!important}" +
+    ".has-sbg[data-sfont=all],.has-sbg[data-sfont=all] :is(h1,h2,h3,h4,h5,h6,p,li,a,span,b,strong,em,small,button,input,select,textarea,label,td,th,blockquote,figcaption,dt,dd,summary,div){font-family:var(--sfont),system-ui,sans-serif!important}" +
+    ".has-sbg[data-sfont=head] :is(h1,h2,h3,h4,h5,h6),.has-sbg[data-sfont=head] :is(h1,h2,h3,h4,h5,h6) *{font-family:var(--sfont),system-ui,sans-serif!important}" +
+    [["bold", "font-weight:800"], ["light", "font-weight:300"], ["italic", "font-style:italic"], ["bolditalic", "font-weight:800!important;font-style:italic"], ["upper", "text-transform:uppercase!important;letter-spacing:.04em"], ["spaced", "letter-spacing:.09em"]]
+      .map(function (x) { return ".has-sbg[data-sfs=" + x[0] + "] :is(h1,h2,h3,h4,h5,h6,p,li,blockquote,figcaption,summary,dt,dd){" + x[1] + "!important}"; }).join("");
+  var COLOR_OK = /^(#[0-9a-f]{3,8}|rgba?\([0-9., %]+\))$/i;
+  /** A section's own font, text colour and text style. */
+  function sectionText(el, k, opts) {
+    var fam = String(k.font || "").replace(/["\\<>;{}]/g, "").trim();
+    if (fam) {
+      var id = "sfont-" + fam.toLowerCase().replace(/[^a-z0-9]+/g, "-"), spec = (opts.fonts && opts.fonts[fam]) || encodeURIComponent(fam).replace(/%20/g, "+");
+      if (!document.getElementById(id)) { var l = document.createElement("link"); l.id = id; l.rel = "stylesheet"; l.href = "https://fonts.googleapis.com/css2?family=" + spec + "&display=swap"; document.head.appendChild(l); }
+      el.style.setProperty("--sfont", '"' + fam + '"'); el.setAttribute("data-sfont", k.fontFor === "head" ? "head" : "all");
+    }
+    var tc = String(k.textColor || "").trim();
+    if (k.text === "custom" && COLOR_OK.test(tc)) { el.style.setProperty("--scol", tc); el.setAttribute("data-sbg-text", "custom"); }
+    if (/^(bold|light|italic|bolditalic|upper|spaced)$/.test(k.fontStyle || "")) el.setAttribute("data-sfs", k.fontStyle);
+  }
+  function sectionBgs(opts, root) {
+    var map = opts.bgs; if (!map || typeof map !== "object") return;
+    var url = opts.asset || function (v) { return v && (v.url || v.path) || ""; };
+    if (!Object.keys(map).some(function (x) { return map[x] && map[x].on; })) return;
+    if (!document.getElementById("fx-sbg")) { var st2 = document.createElement("style"); st2.id = "fx-sbg"; st2.textContent = SBG_CSS; document.head.appendChild(st2); }
+    Object.keys(map).forEach(function (key) {
+      var k = map[key]; if (!k || !k.on) return;
+      var el = null; try { el = root.querySelector("#" + (window.CSS && CSS.escape ? CSS.escape(key) : key)) || root.querySelector('[data-sec="' + key + '"]'); } catch (e) { /* odd key */ }
+      if (!el && key === "hero") el = root.querySelector("section.hero,.hero");
+      if (!el && key === "footer") el = root.querySelector("footer");
+      if (!el) return;
+      var kind = k.kind === "image" || k.kind === "video" ? k.kind : "color", src = kind === "image" ? url(k.image) : kind === "video" ? url(k.video) : "";
+      var col = /^(#[0-9a-f]{3,8}|rgba?\([0-9., %]+\))$/i.test(String(k.color || "").trim()) ? String(k.color).trim() : "";
+      if (kind !== "color" && !src) kind = "color";
+      var old = el.querySelector(":scope > .sbg"); if (old) old.remove();
+      el.classList.add("has-sbg");
+      try { sectionText(el, k, opts); } catch (e) { /* the text keeps the theme's look */ }
+      if (k.kind === "none" || (kind === "color" && !col)) return;
+      el.setAttribute("data-sbg", kind);
+      if (col) { el.style.setProperty("--sbg", col); el.setAttribute("data-sbg-c", ""); }
+      if (k.text === "light" || k.text === "dark") el.setAttribute("data-sbg-text", k.text);
+      var cs = getComputedStyle(el);
+      if (cs.position === "static") el.style.position = "relative";
+      // Left on automatic: when the theme's text would be hard to read on the chosen colour, light or dark text is picked.
+      if (!k.text && kind === "color") {
+        var lum = function (c) { var m = /rgba?\(([^)]+)\)/.exec(c || ""); if (!m) return null; var v = m[1].split(",").slice(0, 3).map(function (x) { x = parseFloat(x) / 255; return x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4); }); return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2]; };
+        var lb = lum(cs.backgroundColor), lt = lum(cs.color);
+        if (lb !== null && lt !== null && (Math.max(lb, lt) + 0.05) / (Math.min(lb, lt) + 0.05) < 3.5) el.setAttribute("data-sbg-text", lb < 0.4 ? "light" : "dark");
+      }
+      if (kind === "color") return;
+      var box = document.createElement("div"); box.className = "sbg fx-skip"; box.setAttribute("aria-hidden", "true");
+      if (kind === "image") { var im = document.createElement("img"); im.alt = ""; im.decoding = "async"; im.loading = "lazy"; im.src = src; box.appendChild(im); }
+      else { var v = document.createElement("video"); v.muted = true; v.loop = true; v.playsInline = true; v.setAttribute("muted", ""); v.setAttribute("playsinline", ""); v.preload = "metadata"; if (!RM) v.autoplay = true; var poster = url(k.image); if (poster) v.poster = poster; v.src = src; box.appendChild(v); if (!RM) { var pl = v.play(); if (pl && pl.catch) pl.catch(function () {}); } }
+      var dim = Math.max(0, Math.min(95, Number(k.dim) || 0));
+      if (dim) { var ov = document.createElement("i"); ov.style.background = (k.text === "dark" ? "rgba(255,255,255," : "rgba(0,0,0,") + dim / 100 + ")"; box.appendChild(ov); }
+      el.insertBefore(box, el.firstChild);
+    });
+  }
   function init(opts) {
     opts = opts || {};
     var root = opts.root || document.body;
+    try { sectionBgs(opts, root); } catch (e) { /* a background is never worth a broken page */ }
     ensureStyle(); wire();
     try { badge(opts.badge); } catch (e) {}
     var c = cfg(), sig = JSON.stringify(c), changed = sig !== st.sig;

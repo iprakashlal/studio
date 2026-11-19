@@ -1,5 +1,5 @@
 import type { Category, Field, TemplateDef } from "./types";
-import { FX_AXES, LINE_BREAKS_AXIS, type Axis } from "../themes/catalog";
+import { FX_AXES, HERO_FX_AXIS, LINE_BREAKS_AXIS, type Axis } from "../themes/catalog";
 import { REST_AXES, REST_BODY_FONTS, REST_DISPLAY_FONTS, REST_TAGS, REST_THEMES, restaurantThemeValues } from "../themes/restaurant";
 import { INTRO_CARD, NAV_MODE_FIELD, NAV_MODE_MOB_FIELD } from "../themes/fields";
 import { adminCategory, videoCategory, socialCategory, logoFields, consentCategory, emailsCategory, i18nCategory, prepareI18n, featuresCategory, festivalCategory, menuCategory, menuItem, prepareMenu, staticPagesCategory, heroSlidesCard, prepareSlides, prepareMaintenance, seoCategory, customFontsCard } from "./common";
@@ -34,7 +34,7 @@ const schema: Category[] = [
       { title: "Style & graphics", fields: [g2(sel(REST_AXES.heading), sel(REST_AXES.shead), sel(REST_AXES.ornament), sel(REST_AXES.divider), sel(REST_AXES.pattern), sel(REST_AXES.cards), sel(REST_AXES.buttons), sel(REST_AXES.motionStyle)),
         { t: "note", text: "The ornament is the small drawing above section titles, in the menu and in the footer. The edge shapes show where a band of colour begins, so they need “Alternate soft bands” or “Alternate dark bands”. Visitors who ask their device for reduced motion always get a still page." }] },
       { title: "Interactions (optional)", fields: [{ t: "note", text: "Restaurant themes keep these off, so the page stays quick on a phone. Switch one on if it suits your place." },
-        g2({ ...sel(FX_AXES.cursor) }, sel(FX_AXES.loader), sel(FX_AXES.textfx), sel(FX_AXES.hoverfx), sel(FX_AXES.scrollfx), sel(FX_AXES.overlay))] },
+        g2({ ...sel(FX_AXES.cursor) }, sel(FX_AXES.loader), sel(FX_AXES.textfx), sel(FX_AXES.hoverfx), sel(FX_AXES.scrollfx), sel(FX_AXES.overlay)), sel(HERO_FX_AXIS), { t: "note", text: "Hero graphic effect is a slow, quiet loop on the hero's picture or graphic, drawn in your theme's accent colours. It stays still for visitors who ask their device for less motion." }] },
       { ...INTRO_CARD, fields: [{ t: "note", text: "Shown when “Intro & page transition” above is set to anything but None. Leave a colour empty to use the theme's own." }, ...INTRO_CARD.fields.slice(1)] },
     ],
   },

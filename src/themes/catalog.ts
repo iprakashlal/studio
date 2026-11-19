@@ -59,6 +59,9 @@ export function onColor(hex: string): string {
   return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2] > 0.42 ? "#111111" : "#FFFFFF";
 }
 
+/** Hero graphic effect: a quiet animation loop on the hero's picture or graphic, in the theme's colours. A site's own choice (themes leave it alone). */
+export const HERO_FX_AXIS: Axis = { key: "herofx", label: "Hero graphic effect", options: [["none", "None"], ["float", "Gentle float"], ["breathe", "Slow zoom (breathing)"], ["sway", "Soft sway"], ["follow", "Follows the pointer (depth)"],
+  ["halo", "Glowing halo"], ["orbit", "Orbiting rings"], ["ripple", "Ripple rings"], ["sparkle", "Floating sparkles"], ["shine", "Light sweep"], ["morph", "Liquid edge"]] };
 export const FX_KEYS = ["cursor", "loader", "textfx", "hoverfx", "scrollfx", "overlay"] as const;
 export type Fx = Record<(typeof FX_KEYS)[number], string>;
 

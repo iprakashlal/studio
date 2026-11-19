@@ -921,6 +921,8 @@ function bindForm(f) {
 /** The menu: search, diet filters, and the bar that jumps between its sections (or switches them, in the tabbed style). */
 function bindMenu() {
   const body = $(".mbody"); if (!body) return;
+  // The category row sticks right under the menu bar, whatever its height in this theme.
+  if (window.SiteFX && window.SiteFX.stick && $(".mcats")) window.SiteFX.stick($(".mcats"), "--mtop");
   const tabs = C.theme.menuStyle === "tabs", q = $("#menu-q"), links = $$(".mcats a"), secs = $$(".mcat", body);
   let diet = "";
   const apply = () => {

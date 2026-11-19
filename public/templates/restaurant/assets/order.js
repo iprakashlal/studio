@@ -534,6 +534,7 @@
     if (!bind.key) { bind.key = true; addEventListener("keydown", (e) => { if (e.key === "Escape" && (ui.sheet || ui.drawer)) close(); }); }
     // The toolbar sticks under the site's menu bar when that one stays on screen.
     const nv = $(".nav"), pos = nv ? getComputedStyle(nv).position : ""; root.style.setProperty("--ord-top", (pos === "sticky" || pos === "fixed" ? nv.offsetHeight : 0) + "px");
+    if (window.SiteFX && window.SiteFX.stick) window.SiteFX.stick($(".ord-bar", root), "--ord-top", root);
     filter(); over(true);
     if (ui.drawer === "done" && ui.done) track(ui.done);
     const be = A.backend();

@@ -1185,5 +1185,30 @@
   window.SiteFonts = { use: useFont, link: fontLink };
   window.SiteSkeleton = { show: skeleton };
   window.SiteLogo = { hero: heroLogo };
-  window.SiteFX = { init: init, version: 1, fontsOk: fontsOk, allowed: allowed };
+  // ---- Bars that stick under the site's menu bar (the order page's toolbar, the menu's category row). Their place is
+  // measured from the menu bar as it is drawn (every theme's bar has its own height, and some float with a see-through
+  // surround), and once a bar is stuck a plain backdrop reaches from it up to the top of the window and out to both
+  // edges, so the page never shows through around the menu bar.
+  var sticky = [], stickOn = false;
+  function stickMeasure() {
+    var nv = document.querySelector(".nav, header.hdr, .vx-hdr"), pos = nv ? getComputedStyle(nv).position : "", top = nv && (pos === "sticky" || pos === "fixed") ? Math.round(nv.getBoundingClientRect().height) : 0;
+    var vw = document.documentElement.clientWidth;
+    sticky = sticky.filter(function (x) { return x.el.isConnected; });
+    sticky.forEach(function (x) {
+      (x.on || document.documentElement).style.setProperty(x.name, top + "px");
+      var r = x.el.getBoundingClientRect(), stuck = top > 0 && r.top <= top + 1 && r.bottom > 0;
+      x.el.classList.toggle("fx-stuck", stuck);
+      if (!stuck) return;
+      x.el.style.setProperty("--fx-st", top + "px"); x.el.style.setProperty("--fx-sl", Math.max(0, Math.round(r.left)) + "px"); x.el.style.setProperty("--fx-sr", Math.max(0, Math.round(vw - r.right)) + "px");
+      if (!x.bg) { for (var n = x.el; n && n.nodeType === 1; n = n.parentNode) { var m = /rgba?\(([^)]+)\)/.exec(getComputedStyle(n).backgroundColor || ""), v = m ? m[1].split(",").map(parseFloat) : null; if (v && (v.length < 4 || v[3] > 0.5)) { x.bg = "rgb(" + v.slice(0, 3).join(",") + ")"; break; } } x.el.style.setProperty("--fx-sbg", x.bg || "#fff"); }
+    });
+  }
+  function stick(el, name, on) {
+    if (!el) return;
+    if (!document.getElementById("fx-stick")) { var st3 = document.createElement("style"); st3.id = "fx-stick"; st3.textContent = ".fx-stuck::before{content:\"\";position:absolute;z-index:-1;pointer-events:none;top:calc(-1*var(--fx-st,0px));bottom:0;left:calc(-1*var(--fx-sl,0px));right:calc(-1*var(--fx-sr,0px));background:var(--fx-sbg,var(--bg,#fff))}"; document.head.appendChild(st3); }
+    sticky = sticky.filter(function (x) { return x.el !== el && x.el.isConnected; }); sticky.push({ el: el, name: name, on: on });
+    if (!stickOn) { stickOn = true; var tick = false, go = function () { if (tick) return; tick = true; requestAnimationFrame(function () { tick = false; stickMeasure(); }); }; addEventListener("scroll", go, { passive: true }); addEventListener("resize", go); addEventListener("load", go); }
+    stickMeasure(); setTimeout(stickMeasure, 400);
+  }
+  window.SiteFX = { init: init, version: 1, fontsOk: fontsOk, allowed: allowed, stick: stick };
 })();

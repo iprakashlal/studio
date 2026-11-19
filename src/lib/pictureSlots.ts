@@ -18,7 +18,7 @@ export function pictureSlots(kind: string): Slot[] {
 export function placePicture(kind: string, c: any, slot: string, img: { path: string }, alt = ""): void {
   const set = (o: any, k: string) => { o[k] = img; };
   // a dish's own picture (shown on the Menu and on Order now), or one more photo of a product
-  if (slot.startsWith("dish:")) { const want = low(slot.slice(5)); for (const k of (c.food?.categories || [])) for (const d of (k?.items || [])) if (low(d?.name) === want) { d.image = img; return; } placePicture(kind, c, "gallery", img, alt); return; }
+  if (slot.startsWith("dish:")) { const want = low(slot.slice(5)); for (const k of (c.food?.categories || [])) for (const d of (k?.items || [])) if (low(d?.name) === want) { d.image = img; c.food.photos = true; return; } placePicture(kind, c, "gallery", img, alt); return; }
   if (slot.startsWith("product:")) { const id = slot.slice(8), pr = (c.products || []).find((x: any) => String(x?.id) === id); if (pr) (pr.images = Array.isArray(pr.images) ? pr.images : []).push(img); return; }
   if (slot === "logo") { c.brand ||= {}; set(c.brand, kind === "portfolio" ? "icon" : "logo"); return; }
   if (kind === "store") { c.home ||= {}; if (slot === "hero") { c.home.hero ||= {}; set(c.home.hero, "image"); } else if (slot === "banner") { c.home.banner ||= {}; set(c.home.banner, "image"); } return; }

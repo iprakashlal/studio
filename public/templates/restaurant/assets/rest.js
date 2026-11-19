@@ -882,7 +882,7 @@ function render() {
   if (PAGE === "order" && window.RestOrder && orderOn()) window.RestOrder.bind(ORDER_API);
   if (PAGE === "page" && window.SitePages) window.SitePages.after(window.SitePages.find(C, spCur(), PREVIEW));
   jsonLd(); slides(); heroLogo(); video(); social(); menu(); lang(); consent(); addons(); festival();
-  if (window.SiteFX) try { window.SiteFX.init({ root: $("#app"), brand: C.theme.introTitle || C.brand.name, badge: C.poweredBy }); } catch (e) {}
+  if (window.SiteFX) try { window.SiteFX.init({ root: $("#app"), brand: C.theme.introTitle || C.brand.name, badge: C.poweredBy, bgs: C.sectionBg, asset: imgUrl, fonts: FONTS }); } catch (e) {}
 }
 
 /* ============================================================

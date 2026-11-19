@@ -618,7 +618,8 @@ async function custOrder(env: Env, site: string, c: any, data: Record<string, st
   if (cart && typeof cart === "object") {
     if (isRest(c)) { const bal = verified ? Math.max(0, +((await env.DB.prepare("select points from customers where site = ? and ckey = ?").bind(site, key).first()) as any)?.points || 0) : 0;
       const b = restBill(c, { ...cart, _bal: bal }); if (!("error" in b)) { net = b.net ?? b.total; used = b.points || 0; off = b.pointsOff || 0; } }
-    else if (Array.isArray(c?.products)) { const b = shopBill(c, cart); if (!("error" in b)) net = b.total; }
+    else if (Array.isArray(c?.products)) { const bal = verified ? Math.max(0, +((await env.DB.prepare("select points from customers where site = ? and ckey = ?").bind(site, key).first()) as any)?.points || 0) : 0;
+      const b = shopBill(c, { ...cart, _bal: bal }); if (!("error" in b)) { net = b.net ?? b.total; used = b.points || 0; off = b.pointsOff || 0; } }
   }
   if (isNaN(net)) net = rnum(data.total);
   const spent = isNaN(net) ? 0 : net, earned = L.on && L.earn > 0 ? Math.floor((spent / 100) * L.earn) : 0;
@@ -678,7 +679,7 @@ function kindPrice(p: any, opt: unknown): number {
   const first = String(opt ?? "").split(" · ")[0].trim(), k = K.find((x: any) => String(x.label).trim() === first);
   return k ? Number(k.price) : NaN;
 }
-export function shopBill(c: any, q: any): { total: number } | { error: string } {
+export function shopBill(c: any, q: any): { total: number; points?: number; pointsOff?: number; net?: number } | { error: string } {
   const S = c?.settings || {}, P = new Map<string, any>((Array.isArray(c?.products) ? c.products : []).filter((p: any) => p && p.id).map((p: any) => [String(p.id), p]));
   const lines = Array.isArray(q?.items) ? q.items.slice(0, 100) : []; if (!lines.length) return { error: "The cart is empty." };
   const max = Math.max(1, Number(S.maxQty) || 10); let sub = 0;
@@ -695,8 +696,10 @@ export function shopBill(c: any, q: any): { total: number } | { error: string } 
     if (z) { fee = num(z.fee); freeOver = num(z.freeOver); } else if (H.rest === "no") return { error: "We don't deliver to that PIN code." }; else fee = num(H.restFee);
   }
   const over = freeOver != null ? freeOver : Number(S.freeShippingOver), free = over > 0 && sub >= over;
-  const ship = free ? 0 : fee != null ? fee : Number(S.shippingFee) || 0, pct = Number(S.taxPercent) || 0, taxAdd = pct && !S.taxIncluded ? Math.round(sub * pct) / 100 : 0;
-  return { total: Math.round((sub + ship + taxAdd) * 100) / 100 };
+  // points the buyer spends (q._bal: their balance, set by this database after their number is verified)
+  const pt = pointsFor(c, q.points, +q._bal || 0, sub);
+  const ship = free ? 0 : fee != null ? fee : Number(S.shippingFee) || 0, pct = Number(S.taxPercent) || 0, taxAdd = pct && !S.taxIncluded ? Math.round((sub - pt.off) * pct) / 100 : 0;
+  return { total: Math.round((sub - pt.off + ship + taxAdd) * 100) / 100, points: pt.points, pointsOff: pt.off, net: Math.round((sub - pt.off) * 100) / 100 };
 }
 
 /* ---- Payment gateways a site's owner can connect with their own keys. The amount is always worked out here, the gateway is
@@ -1005,7 +1008,8 @@ export default {
       if (/^\/site\/[a-z0-9][a-z0-9-]{0,59}\/can$/.test(p) && req.method === "GET") {
         const site = p.split("/")[2], w = await getSetting(env, "site:" + site, "wa").catch(() => null), z = await getSetting(env, "site:" + site, "rz").catch(() => null);
         const pg: string[] = []; for (const g of ["cf", "pe", "st", "pp"]) if (pgReady(g, await getSetting(env, "site:" + site, g).catch(() => null))) pg.push(g);
-        return json({ otp: !!(waReady(w) && w.orderOtp && String(w.tplOtp || "").trim()), rz: z?.on && z.secret && z.keyId ? String(z.keyId) : "", pg });
+        const canCode = !!(waReady(w) && String(w.tplOtp || "").trim());
+        return json({ otp: canCode && !!w.orderOtp, pts: canCode && loyOf(await siteContent(env, site).catch(() => null)).on, rz: z?.on && z.secret && z.keyId ? String(z.keyId) : "", pg });
       }
       if (/^\/points\/[a-z0-9][a-z0-9-]{0,59}$/.test(p) && req.method === "POST") {
         const site = p.split("/")[2], b = (await req.json()) as any, L = loyOf(await siteContent(env, site));
@@ -1015,7 +1019,8 @@ export default {
       }
       if (/^\/otp\/(send|check)\/[a-z0-9][a-z0-9-]{0,59}$/.test(p) && req.method === "POST") {
         const site = p.split("/")[3], b = (await req.json()) as any, w = await getSetting(env, "site:" + site, "wa");
-        if (!(waReady(w) && w.orderOtp && String(w.tplOtp || "").trim())) return err(404, "Not found.");
+        // Codes go out where the site asks guests to verify, or where points can be spent (a guest verifies to use theirs).
+        if (!(waReady(w) && String(w.tplOtp || "").trim() && (w.orderOtp || loyOf(await siteContent(env, site).catch(() => null)).on))) return err(404, "Not found.");
         const num = waNum(b.phone, w.cc); if (!num) return err(400, "Enter your mobile number with its country code.");
         const k = "o:" + site + ":" + num, now = Date.now();
         if (p.startsWith("/otp/send/")) {
@@ -1060,7 +1065,7 @@ export default {
         if (!/^[A-Z0-9][A-Z0-9-]{3,29}$/.test(no)) return err(400, "Which order?");
         const c = await siteContent(env, site), rest = isRest(c);
         if (g !== "rz" && !pgOn(c, g)) return err(404, "That way to pay isn't switched on for this site.");
-        q._bal = rest && +q.points > 0 ? (await pointsBal(env, site, q.phone, q.otp)).bal : 0;
+        q._bal = +q.points > 0 ? (await pointsBal(env, site, q.phone, q.otp)).bal : 0;
         const bill = rest ? restBill(c, q) : Array.isArray(c?.products) ? shopBill(c, q) : { error: "This site doesn't take orders." };
         if ("error" in bill) return err(409, bill.error);
         if (Math.abs(bill.total - (+q.total || 0)) > 0.5) return err(409, rest ? "The menu or its prices changed while you were ordering. Refresh the page and check your cart." : "Prices or delivery charges changed while you were ordering. Refresh the page and check your cart.");
@@ -1098,10 +1103,11 @@ export default {
         if (data.order_no) {
           // The guest's mobile number, proved with a code on WhatsApp, when the site asks for that.
           const w = await getSetting(env, "site:" + site, "wa").catch(() => null);
-          if (waReady(w) && w.orderOtp && String(w.tplOtp || "").trim()) {
+          if (waReady(w) && String(w.tplOtp || "").trim()) {
             const num = waNum(data.phone, w.cc), [exp, sig] = String(data.otp_token || "").split(".");
-            if (!num || !(+exp > Date.now()) || sig !== b64u(await hmac(env.SECRET, "otp:" + site + ":" + num + ":" + exp))) return err(403, "Please verify your mobile number first.");
-            data._phone = "Verified on WhatsApp";
+            const proved = !!num && +exp > Date.now() && sig === b64u(await hmac(env.SECRET, "otp:" + site + ":" + num + ":" + exp));
+            // Required where the site asks every guest for it; otherwise taken when given (a guest who verified to spend points).
+            if (proved) data._phone = "Verified on WhatsApp"; else if (w.orderOtp) return err(403, "Please verify your mobile number first.");
           }
           delete data.otp_token;
           // An online payment is accepted only with Razorpay's own signature for the payment this database started.

@@ -31,9 +31,10 @@ export function Editor({ tpl, draft, version, onChange, upload, img, extras = []
   const [cat, setCat] = useState(tpl.schema[0].id);
   // The site's own admin page leaves out the sections its Studio unticked for this site (content.cms.hide).
   const cmsHide: string[] = site && Array.isArray(draft?.cms?.hide) ? draft.cms.hide : [];
+  const cmsAllow: string[] = Array.isArray(draft?.cms?.allow) ? draft.cms.allow : [];
   // A client Studio whose partner switched the festival overlay off doesn't show it at all.
   const noFestival = !site && studioHidden().has("festival");
-  const shown = tpl.schema.filter((c) => (!c.showIf || c.showIf(draft)) && !cmsHide.includes(c.id) && !(c.id === "festival" && noFestival)).map((c) => (site && c.site ? { ...c, label: c.site.label || c.label, group: c.site.group || c.group } : c));
+  const shown = tpl.schema.filter((c) => (!c.showIf || c.showIf(draft)) && !cmsHide.includes(c.id) && !(site && c.siteIf && !cmsAllow.includes(c.siteIf)) && !(c.id === "festival" && noFestival)).map((c) => (site && c.site ? { ...c, label: c.site.label || c.label, group: c.site.group || c.group } : c));
   const nav = applyMenu(shown, extras.filter((e) => !cmsHide.includes(e.id)), menu);
   /** The menu entry showing a section (itself, or the one it was combined into). */
   const entryOf = (id: string) => nav.find((e) => e.from.includes(id));

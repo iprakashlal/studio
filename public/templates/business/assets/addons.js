@@ -97,6 +97,42 @@
       });
     });
   }
+  // ---- Code Update (content.code): the site's own CSS, HTML and JavaScript, laid over the finished page. The style goes
+  // last in the head so it wins over the theme's rules, the HTML lives in its own box, and the script runs once per load.
+  var codeRan = false;
+  function own(K, o, C) {
+    K = K || {}; var on = !!K.on && !(K.pages === "home" && !o.home);
+    var st = document.getElementById("site-code-css"), box = document.getElementById("site-code-html");
+    var css = on ? String(K.css || "") : "", html = on ? String(K.html || "") : "";
+    if (!css.trim()) { if (st) st.remove(); }
+    else {
+      if (!st) { st = document.createElement("style"); st.id = "site-code-css"; }
+      if (st.textContent !== css) st.textContent = css;
+      if (document.head.lastElementChild !== st) document.head.appendChild(st);
+    }
+    if (!html.trim()) { if (box) box.remove(); }
+    else {
+      var where = K.where === "top" || K.where === "main" ? K.where : "";
+      if (!box) { box = document.createElement("div"); box.id = "site-code-html"; }
+      if (box.__src !== html) {
+        var t = document.createElement("template"); t.innerHTML = html;
+        Array.prototype.slice.call(t.content.querySelectorAll("script")).forEach(function (s) { s.remove(); });
+        box.textContent = ""; box.appendChild(t.content); box.__src = html;
+      }
+      var foot = where === "main" ? document.querySelector("body > footer, footer.footer, footer") : null;
+      if (where === "top") { if (document.body.firstElementChild !== box) document.body.insertBefore(box, document.body.firstChild); }
+      else if (foot && foot.parentNode) { if (foot.previousElementSibling !== box) foot.parentNode.insertBefore(box, foot); }
+      else if (box.parentNode !== document.body || where !== box.__where) document.body.appendChild(box);
+      box.__where = where; box.setAttribute("data-where", where || "end");
+    }
+    document.documentElement.toggleAttribute("data-code", !!(css.trim() || html.trim()));
+    if (!on || codeRan || !String(K.js || "").trim() || (o.preview && !K.jsPreview)) return;
+    codeRan = true;
+    setTimeout(function () {
+      try { new Function("site", String(K.js))(C); }
+      catch (e) { try { console.error("Code Update: your JavaScript stopped with an error.", e); } catch (x) { /* no console */ } }
+    }, 0);
+  }
   // ---- custom API: form entries are also posted to the owner's address
   var api = { url: "", site: "" }, bound = false;
   function forms(a, o) {
@@ -118,7 +154,7 @@
   }
   function mount(C, o) {
     o = o || {}; var A = (C && C.addons) || {}; css();
-    chat(A.chat); badge(A.badge, o); stack(); setTimeout(stack, 900); code(A.code, o, C); forms(A.api, o);
+    chat(A.chat); badge(A.badge, o); stack(); setTimeout(stack, 900); code(A.code, o, C); own(C && C.code, o, C); forms(A.api, o);
   }
   window.SiteAddons = { mount: mount };
 })();

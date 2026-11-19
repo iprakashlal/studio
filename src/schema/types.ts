@@ -11,7 +11,7 @@ export type Field =
   | { t: "text"; path: string; label: string; hint?: string; ph?: string; check?: Check; ml?: boolean; /** Live line under the box, e.g. the resulting address. */ show?: (value: string) => string }
   /** pdf: a "Fill from a PDF" button that reads the PDF's text into the box (and the item's empty title).
    *  rich: buttons for the reading-page marks (headings, lists, tables, text styles; see src/fx/pages.js). */
-  | { t: "textarea"; path: string; label: string; hint?: string; rows?: number; pdf?: boolean; rich?: boolean }
+  | { t: "textarea"; path: string; label: string; hint?: string; rows?: number; pdf?: boolean; rich?: boolean; /** A code box: fixed-width letters, no spell check, Tab indents. */ code?: boolean; ph?: string }
   | { t: "number"; path: string; label: string; hint?: string; min?: number; step?: number }
   /** A calendar day, kept as YYYY-MM-DD ("" when empty). */
   | { t: "date"; path: string; label: string; hint?: string }
@@ -56,6 +56,7 @@ export type Field =
 
 export type Card = { title: string; fields: Field[]; /** Shown in the Studio only, not in the site's admin page. */ studio?: boolean };
 export type Category = { id: string; label: string; group: string; /** A folding sub-heading inside the group (e.g. "Sections"). */ sub?: string; desc: string; cards: Card[]; /** Show the category only when this returns true for the current content. */ showIf?: (content: any) => boolean;
+  /** Studio only. A site's own admin page shows it once the Studio has allowed this id for that site (content.cms.allow). */ siteIf?: string;
   /** A different name and menu heading in the site's own admin page. */ site?: { label?: string; group?: string } };
 
 export type TemplatePage = { file: string; label: string };

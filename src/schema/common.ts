@@ -538,6 +538,34 @@ export function featuresCategory(): Category {
   };
 }
 
+/** Code Update: the site's own CSS, JavaScript and HTML, kept apart from the theme (content.code) and laid over every
+ *  page by assets/addons.js, so changing the theme never removes or overwrites it. Studio only unless allowed for the site. */
+export function codeCategory(): Category {
+  const g2 = (...fields: Field[]): Field => ({ t: "grid", cols: 2, fields });
+  return {
+    id: "code", label: "Code Update", group: "Code", siteIf: "code", desc: "Your own CSS, JavaScript and HTML, laid over the whole site. It stays when you change the theme.",
+    cards: [
+      { title: "Code Update", fields: [
+        { t: "note", text: "This code is added on top of the finished page: your CSS is loaded after the theme's own styles, so it wins; your HTML gets its own place on the page; your JavaScript runs once the page has been drawn. It is saved apart from the theme, so picking another theme or layout keeps it. Mistakes here can break how the site looks: switch it off to get the plain site back, your code stays saved.", tone: "warn" },
+        g2({ t: "toggle", path: "code.on", label: "Use this code on the site" },
+          { t: "select", path: "code.pages", label: "Where it applies", options: [{ value: "", label: "Every page" }, { value: "home", label: "The home page only" }] }),
+      ] },
+      { title: "CSS: colours, sizes, spacing", fields: [
+        { t: "textarea", path: "code.css", label: "CSS", rows: 12, code: true, ph: "/* example */\n.hero h1 { letter-spacing: -0.02em; }\n.btn { border-radius: 999px; }", hint: "Shown in the preview as you type. To keep a rule working across themes, use the colours of the theme: var(--bg), var(--fg), var(--accent). Each page also carries data-theme on its <html>, so html[data-theme=\"name\"] .hero { … } styles one theme only." },
+      ] },
+      { title: "HTML: extra content", fields: [
+        { t: "textarea", path: "code.html", label: "HTML", rows: 8, code: true, ph: "<div class=\"my-strip\">Free delivery this week</div>", hint: "Put into its own box (id \"site-code-html\") so the theme never overwrites it. <script> tags here are ignored: use the JavaScript box." },
+        { t: "select", path: "code.where", label: "Where the HTML goes", options: [{ value: "", label: "End of the page, after the footer" }, { value: "top", label: "Top of the page, above the menu bar" }, { value: "main", label: "Just before the footer" }] },
+      ] },
+      { title: "JavaScript: behaviour", fields: [
+        { t: "textarea", path: "code.js", label: "JavaScript", rows: 12, code: true, ph: "// runs after the page is drawn\ndocument.querySelectorAll('.hero h1').forEach(function (h) { h.title = site.brand.name; });", hint: "Runs once on each page after it has been drawn; the site's content is available as \"site\". An error here is caught and written to the browser's console, the rest of the site carries on." },
+        { t: "toggle", path: "code.jsPreview", label: "Also run the JavaScript in this preview" },
+        { t: "note", text: "Off: the preview shows your CSS and HTML only, and the JavaScript runs on the live site. On: it also runs here, once each time the preview loads." },
+      ] },
+    ],
+  };
+}
+
 export function adminCategory(): Category {
   const g2 = (...fields: Field[]): Field => ({ t: "grid", cols: 2, fields });
   return {

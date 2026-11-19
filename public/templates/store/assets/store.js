@@ -721,7 +721,7 @@ const starRow = (n) => { const r = Math.max(0, Math.min(5, Math.round(+n || 0)))
 /* Features (assets/addons.js): chat button, badge, custom code and the custom API for form entries. */
 let adP;
 function addons() {
-  const A = C.addons || {}, any = (A.chat && A.chat.on) || (A.badge && A.badge.on) || (A.api && A.api.on) || (A.code || []).some((x) => x && x.on !== false && x.code);
+  const A = C.addons || {}, any = (A.chat && A.chat.on) || (A.badge && A.badge.on) || (A.api && A.api.on) || (A.code || []).some((x) => x && x.on !== false && x.code) || !!(C.code && C.code.on) || !!document.getElementById("site-code-css") || !!document.getElementById("site-code-html");
   if (!any && !window.SiteAddons) return;
   (adP ||= new Promise((ok, no) => { if (window.SiteAddons) return ok(); const s = document.createElement("script"); s.src = "assets/addons.js"; s.onload = () => ok(); s.onerror = no; document.head.appendChild(s); }))
     .then(() => window.SiteAddons.mount(C, { preview: PREVIEW, home: PAGE === "home", site: C.brand.name })).catch(() => {});

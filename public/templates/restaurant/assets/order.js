@@ -49,9 +49,10 @@
     D = [];
     A.cats().forEach((c) => c.items.forEach((d) => {
       if (d.noOrder) return;
-      const V = (d.variants || []).filter((v) => v && v.label && !isNaN(num(v.price))).map((v) => ({ label: String(v.label), price: num(v.price) })), base = num(d.price);
+      // sizes, varieties (one must be chosen), or every variety in every size: worked out by the site's script
+      const CH = A.choices ? A.choices(d) : null, V = CH ? CH.list : (d.variants || []).filter((v) => v && v.label && !isNaN(num(v.price))).map((v) => ({ label: String(v.label), price: num(v.price) })), base = num(d.price);
       if (isNaN(base) && !V.length) return;
-      D.push({ id: A.slug(c.name) + "/" + A.slug(d.name), cat: c, d, V, G: groupsOf(d), base: V.length ? Math.min.apply(null, V.map((v) => v.price)) : base });
+      D.push({ id: A.slug(c.name) + "/" + A.slug(d.name), cat: c, d, V, need: !!(CH && CH.need), G: groupsOf(d), base: V.length ? Math.min.apply(null, V.map((v) => v.price)) : base });
     }));
     // A dish taken off the menu (or sold out) leaves the cart.
     const ok = new Set(D.filter((x) => !x.d.soldOut).map((x) => x.id)), n = cart.length;
@@ -183,19 +184,19 @@
   }
 
   /* ---------- the dish sheet ---------- */
-  function sheetPrice(s) { const x = byId(s.id); if (!x) return 0; const v = x.V.length ? x.V[s.v] || x.V[0] : null; return (v ? v.price : x.base) + x.G.reduce((n, g, gi) => n + g.opts.reduce((m, op, oi) => m + ((s.g[gi] || []).includes(oi) ? op.price : 0), 0), 0); }
+  function sheetPrice(s) { const x = byId(s.id); if (!x) return 0; const v = x.V.length ? x.V[s.v] || (x.need ? null : x.V[0]) : null; return (v ? v.price : x.base) + x.G.reduce((n, g, gi) => n + g.opts.reduce((m, op, oi) => m + ((s.g[gi] || []).includes(oi) ? op.price : 0), 0), 0); }
   function sheetHTML() {
     const s = ui.sheet, x = byId(s.id); if (!x) return "";
-    const d = x.d, im = A.imgUrl(d.image), fav = favs.has(x.id), unit = sheetPrice(s), miss = x.G.some((g, gi) => g.need && !(s.g[gi] || []).length);
+    const d = x.d, im = A.imgUrl(d.image), fav = favs.has(x.id), unit = sheetPrice(s), pick = x.need && !x.V[s.v], miss = pick || x.G.some((g, gi) => g.need && !(s.g[gi] || []).length);
     return `<div class="ord-shade" data-act="close"></div><div class="ord-sheet" role="dialog" aria-modal="true" aria-label="${esc(d.name)}">
       <button type="button" class="ord-x" data-act="close" aria-label="Close">${SV.x}</button>
       <div class="osh-body"><div class="osh-top">${im ? `<img class="osh-img" src="${esc(im)}" alt="">` : ""}<div class="osh-info"><div class="oc-t"><h2>${A.dietMark(d.diet)}<span>${esc(d.name)}</span></h2><button type="button" class="oc-fav" data-act="fav" data-id="${esc(x.id)}" aria-pressed="${fav}" aria-label="${fav ? "Remove from favourites" : "Save as a favourite"}">${SV.heart}</button></div>
           ${d.desc ? `<p class="osh-d">${A.rich(d.desc)}</p>` : ""}${d.allergens ? `<p class="osh-a">Contains: ${esc(d.allergens)}</p>` : ""}
           <span class="ostep big" role="group" aria-label="Quantity"><button type="button" data-act="sq" data-id="-1" aria-label="One fewer"${s.qty <= 1 ? " disabled" : ""}>−</button><b aria-live="polite">${s.qty}</b><button type="button" data-act="sq" data-id="1" aria-label="One more">+</button></span></div></div>
         ${O().dishNotes !== false ? `<label class="osh-note"><span class="vh">Special instructions</span><input type="text" id="osh-note" maxlength="140" placeholder="Add special instructions…" value="${esc(s.note)}"></label>` : ""}
-        ${x.V.length ? `<fieldset class="osh-g"><legend><span>Choose one</span><small>Required</small></legend>${x.V.map((v, i) => `<label class="osh-o"><input type="radio" name="osh-v" value="${i}"${i === s.v ? " checked" : ""}><span>${esc(v.label)}</span><b>${fmt(v.price)}</b></label>`).join("")}</fieldset>` : ""}
+        ${x.V.length ? `<fieldset class="osh-g"><legend><span>${x.need ? "Choose a variety" : "Choose one"}</span><small>Required</small></legend>${x.V.map((v, i) => `<label class="osh-o"><input type="radio" name="osh-v" value="${i}"${i === s.v ? " checked" : ""}><span>${esc(v.label)}</span><b>${fmt(v.price)}</b></label>`).join("")}</fieldset>` : ""}
         ${x.G.map((g, gi) => { const sel = s.g[gi] || [], full = g.max > 0 && sel.length >= g.max; return `<fieldset class="osh-g"><legend><span>${esc(g.title)}</span><small>${g.need ? "Required · " : ""}${sel.length}/${g.max || g.opts.length}</small></legend>${g.opts.map((op, oi) => `<label class="osh-o${full && !sel.includes(oi) ? " off" : ""}"><input type="checkbox" data-g="${gi}" value="${oi}"${sel.includes(oi) ? " checked" : ""}${full && !sel.includes(oi) ? " disabled" : ""}><span>${esc(op.label)}</span><b>${op.price ? "+ " + fmt(op.price) : "Free"}</b></label>`).join("")}</fieldset>`; }).join("")}</div>
-      <div class="osh-foot"><div><b>${fmt(unit * s.qty)}</b><small>Total price</small></div><button type="button" class="btn pri" data-act="put"${miss ? " disabled" : ""}>${miss ? "Choose the required options" : "Add to cart"}</button></div></div>`;
+      <div class="osh-foot"><div>${pick ? `<b>From ${fmt(x.base)}</b><small>Choose a variety to see the price</small>` : `<b>${fmt(unit * s.qty)}</b><small>Total price</small>`}</div><button type="button" class="btn pri" data-act="put"${miss ? " disabled" : ""}>${pick ? "Choose a variety" : miss ? "Choose the required options" : "Add to cart"}</button></div></div>`;
   }
 
   /* ---------- cart, checkout, confirmation ---------- */
@@ -327,6 +328,7 @@
   }
   function toggleFav(id) { favs.has(id) ? favs.delete(id) : favs.add(id); st.set("favs", [...favs]); }
   function addLine(x, s) {
+    if (x.need && !x.V[s.v]) return;
     const v = x.V.length ? x.V[s.v] || x.V[0] : null, addons = [];
     x.G.forEach((g, gi) => (s.g[gi] || []).forEach((oi) => g.opts[oi] && addons.push({ label: g.opts[oi].label, price: g.opts[oi].price })));
     const note = String(s.note || "").trim().slice(0, 140), key = [x.id, v ? v.label : "", addons.map((a) => a.label).join("+"), note].join("|");
@@ -339,7 +341,7 @@
     const l = key ? cart.find((x) => x.key === key) : [...cart].reverse().find((x) => x.id === id); if (!l) return;
     l.qty += by; if (l.qty <= 0) cart = cart.filter((x) => x !== l); else if (l.qty > 50) l.qty = 50; save();
   }
-  const openSheet = (id) => { const x = byId(id); if (!x || x.d.soldOut) return; ui.sheet = { id, qty: 1, v: 0, g: {}, note: "" }; over(); };
+  const openSheet = (id) => { const x = byId(id); if (!x || x.d.soldOut) return; ui.sheet = { id, qty: 1, v: x.need ? -1 : 0, g: {}, note: "" }; over(); };
   const close = () => { const b = ui.back; ui.sheet = null; ui.drawer = ""; ui.err = ""; over(); if (b && b.isConnected) b.focus({ preventScroll: true }); };
   /** The words of the consent tick box (Legal & privacy → Consent on forms), or "" when it is off. */
   const agree = () => (A.consentWords ? A.consentWords() : "");

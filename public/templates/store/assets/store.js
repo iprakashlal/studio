@@ -259,7 +259,11 @@ const pimg = (p, i = 0) => (p.images && p.images[i] ? `<img src="${esc(imgUrl(p.
 let cart = store.get("cart", []);
 const saveCart = () => { store.set("cart", cart); $$("[data-cartcount]").forEach((el) => { el.textContent = cartCount(); }); };
 const cartCount = () => cart.reduce((n, l) => n + l.qty, 0);
-function cartLines() { return cart.map((l) => ({ ...l, p: prodBy(l.id) })).filter((l) => l.p && l.p.stock !== "out"); }
+/** A product's varieties with their own prices (p.kindsOn, p.kinds): the buyer must choose one, and it sets the price. */
+const kindsOf = (p) => (p && p.kindsOn ? (p.kinds || []).filter((k) => k && String(k.label || "").trim() && isFinite(Number(k.price)) && Number(k.price) >= 0).map((k) => ({ label: String(k.label).trim(), price: Number(k.price) })) : []);
+/** The product as bought on one cart line: with varieties, its price is the chosen variety's (the first part of the line's option). */
+function asBought(p, opt) { const K = kindsOf(p); if (!K.length) return p; const k = K.find((x) => x.label === String(opt || "").split(" · ")[0].trim()); return k ? { ...p, price: k.price, compareAt: 0 } : null; }
+function cartLines() { return cart.map((l) => ({ ...l, p: asBought(prodBy(l.id), l.opt) })).filter((l) => l.p && l.p.stock !== "out"); }
 function addToCart(id, opt, qty) {
   const max = Math.max(1, Number(C.settings.maxQty) || 10);
   const ex = cart.find((l) => l.id === id && l.opt === opt);
@@ -461,7 +465,7 @@ function footer() {
 }
 function pcard(p) {
   const badge = p.stock === "out" ? `<span class="badge out">Sold out</span>` : onSale(p) ? `<span class="badge sale">Sale</span>` : p.badge ? `<span class="badge">${esc(p.badge)}</span>` : "";
-  return `<a class="pcard" href="${productUrl(p)}"><div class="im">${badge}${pimg(p)}</div><div><h3>${esc(p.name)}</h3>${p.short ? `<p class="s">${esc(p.short)}</p>` : ""}</div><div class="price">${esc(money(p.price))}${onSale(p) ? `<s>${esc(money(p.compareAt))}</s>` : ""}</div></a>`;
+  return `<a class="pcard" href="${productUrl(p)}"><div class="im">${badge}${pimg(p)}</div><div><h3>${esc(p.name)}</h3>${p.short ? `<p class="s">${esc(p.short)}</p>` : ""}</div><div class="price">${kindsOf(p).length ? "From " + esc(money(Math.min(...kindsOf(p).map((k) => k.price)))) : esc(money(p.price)) + (onSale(p) ? `<s>${esc(money(p.compareAt))}</s>` : "")}</div></a>`;
 }
 
 /* ============================================================
@@ -532,9 +536,10 @@ const PAGES = {
     <div class="pd" data-pid="${esc(p.id)}"><div class="gal"><div class="main" id="mainimg">${imgs[0] ? `<img src="${esc(imgUrl(imgs[0]))}" alt="${esc(p.name)}">` : ph(p.name)}</div>
       ${imgs.length > 1 ? `<div class="thumbs">${imgs.map((im, i) => `<button type="button" data-i="${i}" aria-pressed="${i === 0}" aria-label="Photo ${i + 1}"><img src="${esc(imgUrl(im))}" alt=""></button>`).join("")}</div>` : ""}</div>
     <div class="info">${p.badge ? `<p class="eyebrow">${esc(p.badge)}</p>` : ""}<h1>${esc(p.name)}</h1>
-      <div class="price">${esc(money(p.price))}${onSale(p) ? `<s>${esc(money(p.compareAt))}</s><span class="off">${Math.round((1 - p.price / p.compareAt) * 100)}% off</span>` : ""}</div>
+      <div class="price" id="pd-price" aria-live="polite">${kindsOf(p).length ? "From " + esc(money(Math.min(...kindsOf(p).map((k) => k.price)))) : esc(money(p.price)) + (onSale(p) ? `<s>${esc(money(p.compareAt))}</s><span class="off">${Math.round((1 - p.price / p.compareAt) * 100)}% off</span>` : "")}</div>
       <p class="stock ${p.stock}">${p.stock === "out" ? "Sold out" : p.stock === "low" ? "Only a few left" : "In stock"}</p>
       ${p.short ? `<p style="font-size:17px">${esc(p.short)}</p>` : ""}
+      ${kindsOf(p).length ? `<div class="opt"><span class="lbl" id="kindl">${esc(p.kindName || "Variety")} <small class="soft">(choose one)</small></span><div class="kindbtns optbtns-k" role="group" aria-labelledby="kindl">${kindsOf(p).map((k) => `<button type="button" data-k="${esc(k.label)}" aria-pressed="false">${esc(k.label)} · ${esc(money(k.price))}</button>`).join("")}</div></div>` : ""}
       ${p.options && p.options.length ? `<div class="opt"><span class="lbl" id="optl">${esc(p.optionName || "Option")}</span><div class="optbtns" role="group" aria-labelledby="optl">${p.options.map((o, i) => `<button type="button" data-o="${esc(o)}" aria-pressed="${i === 0}">${esc(o)}</button>`).join("")}</div></div>` : ""}
       ${pinBox()}
       ${p.stock !== "out" ? `<div class="opt"><span class="lbl">Quantity</span><div class="buy"><div class="qty"><button type="button" data-q="-1" aria-label="Fewer">−</button><output id="qty" aria-live="polite">1</output><button type="button" data-q="1" aria-label="More">+</button></div>
@@ -914,12 +919,17 @@ function bindShop() {
 function bindProduct() {
   const box = $(".pd"); if (!box) return;
   const p = prodBy(box.dataset.pid), max = Math.max(1, Number(C.settings.maxQty) || 10);
-  let qty = 1, opt = p.options && p.options.length ? p.options[0] : "";
+  let qty = 1, opt = p.options && p.options.length ? p.options[0] : "", kind = "";
+  // Varieties: one must be chosen before the price is final and the product can be added.
+  const KS = kindsOf(p), full = () => [kind, opt].filter(Boolean).join(" · "), ready = () => !KS.length || !!kind;
+  const gate = () => { for (const id of ["#add", "#buynow"]) { const b = $(id); if (b) { b.disabled = !ready(); if (id === "#add") b.textContent = ready() ? "Add to cart" : "Choose " + (/^[aeiou]/i.test(p.kindName || "variety") ? "an " : "a ") + String(p.kindName || "variety").toLowerCase(); } } };
+  $$(".kindbtns button").forEach((b) => (b.onclick = () => { kind = b.dataset.k; $$(".kindbtns button").forEach((x) => x.setAttribute("aria-pressed", x === b)); const k = KS.find((x) => x.label === kind), pr = $("#pd-price"); if (k && pr) pr.textContent = money(k.price); gate(); }));
+  gate();
   $$(".thumbs button").forEach((b) => (b.onclick = () => { $("#mainimg").innerHTML = `<img src="${esc(imgUrl(p.images[+b.dataset.i]))}" alt="${esc(p.name)}">`; $$(".thumbs button").forEach((x) => x.setAttribute("aria-pressed", x === b)); }));
   $$(".optbtns button").forEach((b) => (b.onclick = () => { opt = b.dataset.o; $$(".optbtns button").forEach((x) => x.setAttribute("aria-pressed", x === b)); }));
   $$("[data-q]").forEach((b) => (b.onclick = () => { qty = Math.min(max, Math.max(1, qty + Number(b.dataset.q))); $("#qty").textContent = qty; }));
-  const add = $("#add"); if (add) add.onclick = () => { addToCart(p.id, opt, qty); toast(`Added to cart · <a href="cart.html">View cart</a>`); };
-  const bn = $("#buynow"); if (bn) bn.onclick = () => { addToCart(p.id, opt, qty); location.href = "checkout.html"; };
+  const add = $("#add"); if (add) add.onclick = () => { if (!ready()) return; addToCart(p.id, full(), qty); toast(`Added to cart · <a href="cart.html">View cart</a>`); };
+  const bn = $("#buynow"); if (bn) bn.onclick = () => { if (!ready()) return; addToCart(p.id, full(), qty); location.href = "checkout.html"; };
   const wb = $("#wish");
   if (wb) {
     const show = () => { const on = !!(WISH && WISH.has(p.id)); wb.setAttribute("aria-pressed", on); wb.textContent = on ? "♥ Saved to wishlist" : "♡ Save to wishlist"; };

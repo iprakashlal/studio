@@ -510,14 +510,26 @@ function specialsHTML() {
 }
 /* ---------- The menu: categories of dishes, with search, diet filters and a jump bar. ---------- */
 const cats = () => (C.food.categories || []).filter((c) => c && (c.name || "").trim()).map((c, i) => ({ ...c, id: "mc-" + slug(c.name) + "-" + i, items: (c.items || []).filter((d) => d && (d.name || "").trim()) })).filter((c) => c.items.length);
+/** What a dish is sold as: its sizes, its varieties (d.kindsOn, d.kinds: the guest must choose one), or every variety in
+ *  every size (the first size at the variety's price, a bigger size adds its difference). The database prices orders the same way. */
+function dishChoices(d) {
+  const n = (p) => { const x = parseFloat(String(p == null ? "" : p).replace(/[^\d.]/g, "")); return isFinite(x) ? x : NaN; };
+  const ok = (v) => v && String(v.label || "").trim() && !isNaN(n(v.price));
+  const S = (d.variants || []).filter(ok), K = d.kindsOn ? (d.kinds || []).filter(ok) : [];
+  if (!K.length) return { kinds: [], sizes: S, need: false, list: S.map((v) => ({ label: String(v.label), price: n(v.price) })) };
+  const s0 = S.length ? n(S[0].price) : 0, t = (v) => String(v.label).trim();
+  return { kinds: K, sizes: S, need: true, diff: (v) => n(v.price) - s0,
+    list: S.length ? K.flatMap((k) => S.map((v) => ({ label: t(k) + " · " + t(v), price: n(k.price) + n(v.price) - s0 }))) : K.map((k) => ({ label: t(k), price: n(k.price) })) };
+}
 function dishHTML(d) {
-  const F = C.food, im = F.photos !== false ? imgUrl(d.image) : "", V = (d.variants || []).filter((v) => v && (v.label || v.price));
+  const F = C.food, im = F.photos !== false ? imgUrl(d.image) : "", CH = dishChoices(d), KD = CH.kinds, V = KD.length ? [] : (d.variants || []).filter((v) => v && (v.label || v.price));
+  const kinds = KD.length ? `<ul class="dish-v dish-k" aria-label="Varieties">${KD.map((v) => `<li><span>${esc(v.label)}</span><b>${esc(money(v.price))}</b></li>`).join("")}</ul>${CH.sizes.length > 1 ? `<ul class="dish-v dish-s" aria-label="Sizes">${CH.sizes.map((v, i) => `<li><span>${esc(v.label)}</span>${i && CH.diff(v) ? `<b>${CH.diff(v) > 0 ? "+ " : "− "}${esc(money(String(Math.abs(CH.diff(v)))))}</b>` : ""}</li>`).join("")}</ul>` : ""}` : "";
   const sp = Math.max(0, Math.min(3, +d.spice || 0));
   const extra = [sp ? `<span class="spice" role="img" aria-label="Spice level ${sp} of 3" title="Spice level ${sp} of 3">${`<i></i>`.repeat(sp)}</span>` : "", d.allergens ? `<span class="alg">Contains: ${esc(d.allergens)}</span>` : ""].filter(Boolean).join("");
   return `<li class="dish${im ? " has-img" : ""}${d.soldOut ? " sold" : ""}" data-diet="${esc(d.diet || "")}" data-q="${esc(((d.name || "") + " " + (d.desc || "") + " " + (d.tag || "")).toLowerCase())}">
       ${im ? `<button type="button" class="dish-pic zoom" data-zoom="${esc(im)}" data-cap="${esc(d.name)}" aria-label="Photo of ${esc(d.name)}"><img src="${esc(im)}" alt="" loading="lazy"></button>` : `<span class="dish-pic none" aria-hidden="true">${ph(d.name)}</span>`}
-      <div class="dish-main"><div class="dish-top"><h4 class="dish-n">${dietMark(d.diet)}<span>${esc(d.name)}</span>${d.tag ? `<em class="dtag">${esc(d.tag)}</em>` : ""}${d.soldOut ? `<em class="dtag out">Sold out</em>` : ""}</h4><span class="dish-dots" aria-hidden="true"></span>${d.price && !V.length ? `<span class="dish-p">${esc(money(d.price))}</span>` : ""}</div>
-        ${d.desc ? `<p class="dish-d">${rich(d.desc)}</p>` : ""}${V.length ? `<ul class="dish-v">${V.map((v) => `<li><span>${esc(v.label)}</span><b>${esc(money(v.price))}</b></li>`).join("")}</ul>` : ""}${extra ? `<p class="dish-x">${extra}</p>` : ""}</div></li>`;
+      <div class="dish-main"><div class="dish-top"><h4 class="dish-n">${dietMark(d.diet)}<span>${esc(d.name)}</span>${d.tag ? `<em class="dtag">${esc(d.tag)}</em>` : ""}${d.soldOut ? `<em class="dtag out">Sold out</em>` : ""}</h4><span class="dish-dots" aria-hidden="true"></span>${d.price && !V.length && !KD.length ? `<span class="dish-p">${esc(money(d.price))}</span>` : ""}</div>
+        ${d.desc ? `<p class="dish-d">${rich(d.desc)}</p>` : ""}${V.length ? `<ul class="dish-v">${V.map((v) => `<li><span>${esc(v.label)}</span><b>${esc(money(v.price))}</b></li>`).join("")}</ul>` : ""}${kinds}${extra ? `<p class="dish-x">${extra}</p>` : ""}</div></li>`;
 }
 function foodHTML() {
   const F = C.food, all = cats();
@@ -725,7 +737,7 @@ function mobileBar() {
 /** What the Order now page (assets/order.js) needs from this file. */
 /** The consent words as HTML, with “Privacy policy” linked to the policy when the site has one. */
 const consentHTML = (words) => { const u = policyUrl(), t = esc(words), a = (x) => `<a href="${esc(u)}" target="_blank" rel="noopener">${x}</a>`; return !u ? t : /privacy policy/i.test(t) ? t.replace(/privacy policy/i, (m) => a(m)) : t + " " + a("Privacy policy"); };
-const ORDER_API = { consentWords: () => consentWords(""), consentHTML: () => consentHTML(consentWords("")), C: () => C, PAGES, DIET, PREVIEW, esc, rich, money, imgUrl, icon, toast, cats, dietMark, slug, ph, tel, clock, periods, openState, fmtTime, hhmm, statusChip, weekDays: () => weekDays(), backend: () => backend(), postEnquiry: (d, pg, cart) => postEnquiry(d, pg, cart) };
+const ORDER_API = { choices: dishChoices, consentWords: () => consentWords(""), consentHTML: () => consentHTML(consentWords("")), C: () => C, PAGES, DIET, PREVIEW, esc, rich, money, imgUrl, icon, toast, cats, dietMark, slug, ph, tel, clock, periods, openState, fmtTime, hhmm, statusChip, weekDays: () => weekDays(), backend: () => backend(), postEnquiry: (d, pg, cart) => postEnquiry(d, pg, cart) };
 function orderPage() {
   if (!orderOn()) return `<section class="phead"><div class="wrap"><h1 class="h1">${esc((C.ordering || {}).label || "Order now")}</h1><p class="hero-lede">${PREVIEW ? "Online ordering is switched off. Turn it on under Online ordering to see this page." : "Online ordering isn't available right now."}</p></div></section>`;
   return window.RestOrder ? window.RestOrder.page(ORDER_API) : "";

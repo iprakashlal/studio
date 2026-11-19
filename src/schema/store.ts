@@ -85,6 +85,11 @@ const schema: Category[] = [
           { t: "strings", path: "features", label: "Key details", addLabel: "Add detail" },
           g2({ t: "text", path: "optionName", label: "Option name (e.g. Size)" }, { t: "text", path: "badge", label: "Badge (e.g. New)" }),
           { t: "strings", path: "options", label: "Option choices", addLabel: "Add choice" },
+          { t: "toggle", path: "kindsOn", label: "This product comes in varieties with their own prices (the buyer must choose one)" },
+          { t: "when", path: "kindsOn", is: "true", local: true, fields: [
+            { t: "text", path: "kindName", label: "What the varieties are called", ph: "Variety" },
+            { t: "list", path: "kinds", label: "Varieties with their own prices", max: 20, title: (it) => `${it.label || "Variety"}${it.price !== "" && it.price != null ? " · " + it.price : ""}`, add: () => ({ label: "", price: 0 }), item: [g2({ t: "text", path: "label", label: "Variety", ph: "500 g" }, { t: "number", path: "price", label: "Price", min: 0, step: 1 })] },
+            { t: "note", text: "The product page shows the varieties as buttons with none chosen: the price shows “From” the lowest one until the buyer picks, and it can only be added to the cart after that. The product's own Price is not used then. Options without a price (colour, say) still go in the Options list." }] },
           g2({ t: "toggle", path: "featured", label: "Feature on the home page" }, { t: "text", path: "slug", label: "Page address (optional)", ph: "made from the name" }),
           { t: "toggle", path: "sample", label: "This is a sample product (warns before export)" },
         ] }] },

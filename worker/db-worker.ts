@@ -525,8 +525,8 @@ export function restBill(c: any, q: any): { total: number } | { error: string } 
   let sub = 0; const lines = Array.isArray(q?.items) ? q.items.slice(0, 60) : []; if (!lines.length) return { error: "The cart is empty." };
   for (const l of lines) {
     const d = dishes.get(String(l?.id || "")); if (!d) return { error: "A dish in the cart is no longer on the menu. Refresh the page." };
-    const V = (d.variants || []).filter((v: any) => v && v.label && !isNaN(rnum(v.price))), qty = Math.max(1, Math.min(50, Math.floor(+l.qty || 0)));
-    let unit = V.length ? rnum((V.find((v: any) => String(v.label) === String(l.variant)) || {}).price) : rnum(d.price);
+    const V = rchoices(d), qty = Math.max(1, Math.min(50, Math.floor(+l.qty || 0)));
+    let unit = V.length ? Number((V.find((v) => v.label === String(l.variant)) || { price: NaN }).price) : rnum(d.price);
     if (isNaN(unit)) return { error: "A dish in the cart changed. Refresh the page." };
     const opts = new Map<string, number>(); for (const g of d.addons || []) for (const s of (g && g.options) || []) { const t = String(s || ""), i = t.lastIndexOf("="), label = (i > 0 ? t.slice(0, i) : t).trim(), pr = i > 0 ? rnum(t.slice(i + 1)) : 0; if (label) opts.set(label, isNaN(pr) ? 0 : pr); }
     for (const a of Array.isArray(l.addons) ? l.addons.slice(0, 20) : []) { if (!opts.has(String(a))) return { error: "An extra in the cart changed. Refresh the page." }; unit += opts.get(String(a))!; }
@@ -561,7 +561,8 @@ export function posItems(c: any, q: any): { items: any[]; sub: number } | { erro
   const items: any[] = []; let sub = 0;
   for (const l of Array.isArray(q?.items) ? q.items.slice(0, 60) : []) {
     const d = dishes.get(String(l?.id || "")); if (!d) return { error: "a dish that is no longer on the menu" };
-    const V = (d.variants || []).filter((v: any) => v && v.label && !isNaN(rnum(v.price))), v = V.length ? V.find((x: any) => String(x.label) === String(l.variant)) : null, qty = Math.max(1, Math.min(50, Math.floor(+l.qty || 0)));
+    const V = rchoices(d), v = V.length ? V.find((x) => x.label === String(l.variant)) : null, qty = Math.max(1, Math.min(50, Math.floor(+l.qty || 0)));
+    if (V.length && !v) return { error: `a size or variety of “${String(d.name).slice(0, 60)}” that is no longer on the menu` };
     const id = String(d.posId || "").trim(), vid = v ? String(v.posId || "").trim() : "";
     if (!id) return { error: `“${String(d.name).slice(0, 60)}” has no Petpooja item ID` };
     let unit = v ? rnum(v.price) : rnum(d.price); if (isNaN(unit)) return { error: "a dish whose price changed" };
@@ -602,12 +603,28 @@ async function posSend(env: Env, site: string, z: any, c: any, q: any, data: Rec
 const POS_STATUS: Record<string, string> = { "-1": "cancelled", "1": "accepted", "2": "accepted", "3": "accepted", "4": "out", "5": "ready", "10": "done" };
 
 /* ---- A shop's bill, by the same rules as the shop's own checkout (assets/store.js): prices come from the site's content. ---- */
+/** What a dish is sold as, exactly as the site works it out (rest.js dishChoices): sizes, varieties, or every variety in every size. */
+function rchoices(d: any): { label: string; price: number; posId: string }[] {
+  const ok = (v: any) => v && String(v.label || "").trim() && !isNaN(rnum(v.price));
+  const S = (d.variants || []).filter(ok), K = d.kindsOn ? (Array.isArray(d.kinds) ? d.kinds : []).filter(ok) : [];
+  if (!K.length) return (d.variants || []).filter((v: any) => v && v.label && !isNaN(rnum(v.price))).map((v: any) => ({ label: String(v.label), price: rnum(v.price), posId: String(v.posId || "").trim() }));
+  const s0 = S.length ? rnum(S[0].price) : 0, t = (v: any) => String(v.label).trim();
+  return S.length ? K.flatMap((k: any) => S.map((v: any) => ({ label: t(k) + " · " + t(v), price: rnum(k.price) + rnum(v.price) - s0, posId: String(k.posId || v.posId || "").trim() })))
+    : K.map((k: any) => ({ label: t(k), price: rnum(k.price), posId: String(k.posId || "").trim() }));
+}
+/** A product's price for the chosen variety (p.kindsOn, p.kinds; the variety is the first part of the line's option). NaN: no such variety. */
+function kindPrice(p: any, opt: unknown): number {
+  const K = p?.kindsOn ? (Array.isArray(p.kinds) ? p.kinds : []).filter((k: any) => k && String(k.label || "").trim() && isFinite(Number(k.price)) && Number(k.price) >= 0) : [];
+  if (!K.length) return Number(p?.price);
+  const first = String(opt ?? "").split(" · ")[0].trim(), k = K.find((x: any) => String(x.label).trim() === first);
+  return k ? Number(k.price) : NaN;
+}
 export function shopBill(c: any, q: any): { total: number } | { error: string } {
   const S = c?.settings || {}, P = new Map<string, any>((Array.isArray(c?.products) ? c.products : []).filter((p: any) => p && p.id).map((p: any) => [String(p.id), p]));
   const lines = Array.isArray(q?.items) ? q.items.slice(0, 100) : []; if (!lines.length) return { error: "The cart is empty." };
   const max = Math.max(1, Number(S.maxQty) || 10); let sub = 0;
   for (const l of lines) {
-    const p = P.get(String(l?.id || "")), price = Number(p?.price);
+    const p = P.get(String(l?.id || "")), price = kindPrice(p, l?.opt);
     if (!p || p.stock === "out" || !isFinite(price) || price < 0) return { error: "Something in the cart is no longer sold. Refresh the page." };
     sub += price * Math.max(1, Math.min(max, Math.floor(+l.qty || 0)));
   }

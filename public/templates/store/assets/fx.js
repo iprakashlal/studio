@@ -254,6 +254,10 @@
   } catch (e) {}
   // The page's <head> hid everything (in the panel colour) until this cover existed: no flash in between.
   var pre = document.getElementById("fx-pre"); if (pre) pre.remove();
+  // The page's <head> may also have painted the intro's colour for a site with an intro (id fx-boot): it goes as soon as
+  // the intro's panel is up, or the page starts, and in any case shortly after this script has loaded.
+  function unboot() { var bt = document.getElementById("fx-boot"); if (bt) bt.remove(); }
+  setTimeout(unboot, 1500);
   var coverAt = 0;
   function revealCover() {
     var c = cover; cover = null; if (!c) return;
@@ -669,6 +673,7 @@
     st.skewEls.forEach(function (n) { n.style.transform = ""; });
     st.skewEls = c.scroll === "skew" && !RM ? $$("main > *", root).filter(function (n) { return !n.querySelector(".stack,[style*=sticky]") && !n.classList.contains("hero"); }) : [];
 
+    unboot();
     // entrance: page cover from the previous page, or the theme's loader
     var animate = !RM && (!PREVIEW || changed), delay = 0;
     if (cover && c.loader !== "none" && !RM) {
@@ -679,12 +684,16 @@
       requestAnimationFrame(function () { requestAnimationFrame(function () { cv.remove(); }); });
       delay = c.loader === "counter" ? 1250 : 950;
     }
+    // A signature theme with its own preloader is already on screen: the waiting panel just goes.
+    else if (cover && document.getElementById("vxLoad")) { cover.remove(); cover = null; st.loaderPlayed = true; }
     else if (cover) { st.loaderPlayed = true; revealCover(); delay = 350; }
     else if (c.loader !== "none" && !RM) {
       var play = PREVIEW ? c.loader !== st.loader : !st.loaderPlayed && Date.now() - T0 < 5000;
       if (play) { st.loaderPlayed = true; playLoader(c.loader, opts.brand || document.title); delay = c.loader === "counter" ? 1250 : 950; }
     }
     st.loader = c.loader;
+    // Remembered on this device, so the next visit starts on the intro's panel (see skeleton()).
+    if (!PREVIEW) try { var ik = "site-intro:" + location.pathname.replace(/[^/]*$/, ""); var vxl = document.getElementById("vxLoad"); if (c.loader !== "none") { var ic = colors(); localStorage.setItem(ik, JSON.stringify({ k: c.loader, bg: ic.deep, fg: ic.on })); } else if (vxl) { st.ownIntro = true; var vcs = getComputedStyle(vxl); localStorage.setItem(ik, JSON.stringify({ k: "curtain", bg: vcs.backgroundColor, fg: vcs.color })); } else if (!st.ownIntro) localStorage.removeItem(ik); } catch (e) {}
     setupText(root, c, animate, delay);
     setupScrollExtras(root, c);
     onScroll();
@@ -716,6 +725,24 @@
      screen. The template's first render replaces it. Neutral greys, so it sits on any theme's background. */
   function skeleton(root) {
     if (!root || root.firstElementChild) return null;
+    // A site with an intro screen: its panel closes at once (in the colours remembered on this device), so the visitor
+    // sees the intro from the first moment and never the outline before it. The intro then plays on that same panel.
+    if (!cover && !st.bootTried && !RM && !PREVIEW) {
+      st.bootTried = true;
+      try {
+        var m = JSON.parse(localStorage.getItem("site-intro:" + location.pathname.replace(/[^/]*$/, "")) || "null"), okc = /^(#[0-9a-f]{3,8}|rgba?\([0-9., %]+\))$/i;
+        if (m && m.k && okc.test(m.bg || "")) {
+          ensureStyle();
+          var bk = m.k === "split" ? "split" : "curtain";
+          cover = el("div", "fx-load fx-cover fx-load--" + bk, panels(bk, ""));
+          cover.style.setProperty("--fxd", m.bg); cover.style.setProperty("--fxo", okc.test(m.fg || "") ? m.fg : "#fff");
+          document.body.appendChild(cover); coverAt = Date.now(); unboot();
+          // Content that takes very long: open the panel and show the outline after all.
+          setTimeout(function () { if (cover) { revealCover(); skeleton(root); } }, 7000);
+          return null;
+        }
+      } catch (e) {}
+    }
     var b = function (st) { return '<i style="' + st + '"></i>'; }, row = function (inner, st) { return '<div style="display:flex;gap:14px;align-items:center;' + (st || "") + '">' + inner + "</div>"; };
     var d = document.createElement("div"); d.className = "site-skel"; d.setAttribute("role", "status"); d.setAttribute("aria-label", "Loading");
     d.innerHTML = "<style>.site-skel{max-width:1200px;margin:0 auto;padding:22px clamp(18px,4vw,32px) 60px;min-height:100vh}.site-skel i{display:block;border-radius:10px;background:linear-gradient(100deg,rgba(128,128,128,.16) 30%,rgba(128,128,128,.3) 50%,rgba(128,128,128,.16) 70%);background-size:220% 100%;animation:site-skel 1.6s ease-in-out infinite}" +

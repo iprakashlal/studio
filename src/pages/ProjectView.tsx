@@ -180,7 +180,7 @@ export function ProjectView({ studio, index, project, session, onIndex }: { stud
       render: () => <EnquiriesPanel only="orders" cfg={project.host?.cf ? null : enquiriesCfg(draft, project.host?.sb)} cf={project.host?.cf} account={project.host?.account} hosted={!!project.host} email={draft?.contact?.email} form={draft?.contact?.form} ghToken={ghPublish.token(session.token)} inStudio />,
     }] : []),
     ...(project.template !== "portfolio" ? [{
-      id: "connections", label: project.template === "restaurant" ? "Restaurant backend" : "WhatsApp", group: project.template === "restaurant" ? "Selling" : "Forms & records", desc: project.template === "restaurant" ? "What runs the Order now page behind the scenes, on your own Cloudflare database: your Razorpay keys, and WhatsApp for alerts and codes." : "Optional: WhatsApp alerts when an enquiry or order arrives, and sign-in codes on WhatsApp. The keys stay on your own Cloudflare database.",
+      id: "connections", label: project.template === "restaurant" ? "Restaurant backend" : "WhatsApp", group: project.template === "restaurant" ? "Selling" : "Forms & records", desc: project.template === "restaurant" ? "What runs the Order now page behind the scenes, on your own Cloudflare database: Petpooja, and WhatsApp for alerts and codes. Payment gateway keys are under Payments." : "Optional: WhatsApp alerts when an enquiry or order arrives, and sign-in codes on WhatsApp. The keys stay on your own Cloudflare database.",
       render: () => <SiteConnections cf={project.host?.cf} template={project.template} />,
     }] : []),
     ...(project.template === "store" || project.template === "business" ? [{

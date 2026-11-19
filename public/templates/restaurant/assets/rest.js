@@ -353,9 +353,10 @@ function applyTheme(t) {
   for (const k of ["layout", "heroArt", "nav", "cards", "buttons", "motionStyle", "pattern", "heading", "shead", "width", "bands", "menuStyle", "divider", "ornament", "gallery", "cursor", "loader", "textfx", "hoverfx", "scrollfx", "overlay", "herofx"]) d[k] = String(t[k] || "");
   d.scrollease = t.scrollEase || "light"; d.linebreaks = t.lineBreaks || "typed"; d.menu = String(t.navMode || ""); d.menumob = String(t.navModeMob || "");
   d.crumbs = (C.site || {}).crumbs === false ? "off" : "on"; d.introfont = t.introFont || "display"; d.introcase = t.introCase || "upper"; d.dark = String(onColor(t.bg) === "#FFFFFF");
+  const FOK = !(window.SiteFX && window.SiteFX.fontsOk) || window.SiteFX.fontsOk(C); // Google Fonts wait for consent when the site says so
   [[FONTS[t.fontDisplay], "fontlink"], [FONTS[t.fontBody], "fontlink2"]].forEach(([f, id]) => {
     let l = document.getElementById(id); if (!l) { l = document.createElement("link"); l.id = id; l.rel = "stylesheet"; document.head.appendChild(l); }
-    const h = f ? "https://fonts.googleapis.com/css2?family=" + f + "&display=swap" : ""; if (h && l.getAttribute("href") !== h) l.setAttribute("href", h);
+    const h = f && FOK ? "https://fonts.googleapis.com/css2?family=" + f + "&display=swap" : ""; if (h && l.getAttribute("href") !== h) l.setAttribute("href", h); if (!FOK) l.removeAttribute("href");
   });
   if (!PREVIEW) try { localStorage.setItem("site-fonts:" + location.pathname.replace(/[^/]*$/, ""), JSON.stringify(["fontlink", "fontlink2"].map((id) => [id, (document.getElementById(id) || {}).href || ""]))); } catch (e) {}
 }
@@ -603,7 +604,7 @@ function reserveHTML() {
       ${F.askEmail !== false ? field("email", "Email", `<input id="f-email" name="email" type="email" autocomplete="email">`) : ""}
       ${field("message", F.messageLabel || "Anything we should know?", `<textarea id="f-message" name="message" rows="3"></textarea>`)}
       <input class="hp-f" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
-      ${F.consent ? `<label class="consent"><input type="checkbox" name="consent" required> <span>${esc(F.consent)}</span></label>` : ""}
+      ${consentWords(F.consent) ? `<label class="consent"><input type="checkbox" name="consent" required> <span>${esc(consentWords(F.consent))}</span></label>` : ""}
       <p class="form-msg" role="status" aria-live="polite"></p>
       <button class="btn pri" type="submit">${esc(F.submit || "Send")} ${arrow}</button></form>`;
   const K = C.contact;
@@ -722,7 +723,9 @@ function mobileBar() {
   return b.length > 1 ? `<nav class="mbar" aria-label="Quick actions">${b.join("")}</nav>` : "";
 }
 /** What the Order now page (assets/order.js) needs from this file. */
-const ORDER_API = { C: () => C, PAGES, DIET, PREVIEW, esc, rich, money, imgUrl, icon, toast, cats, dietMark, slug, ph, tel, clock, periods, openState, fmtTime, hhmm, statusChip, weekDays: () => weekDays(), backend: () => backend(), postEnquiry: (d, pg, cart) => postEnquiry(d, pg, cart) };
+/** The consent words as HTML, with “Privacy policy” linked to the policy when the site has one. */
+const consentHTML = (words) => { const u = policyUrl(), t = esc(words), a = (x) => `<a href="${esc(u)}" target="_blank" rel="noopener">${x}</a>`; return !u ? t : /privacy policy/i.test(t) ? t.replace(/privacy policy/i, (m) => a(m)) : t + " " + a("Privacy policy"); };
+const ORDER_API = { consentWords: () => consentWords(""), consentHTML: () => consentHTML(consentWords("")), C: () => C, PAGES, DIET, PREVIEW, esc, rich, money, imgUrl, icon, toast, cats, dietMark, slug, ph, tel, clock, periods, openState, fmtTime, hhmm, statusChip, weekDays: () => weekDays(), backend: () => backend(), postEnquiry: (d, pg, cart) => postEnquiry(d, pg, cart) };
 function orderPage() {
   if (!orderOn()) return `<section class="phead"><div class="wrap"><h1 class="h1">${esc((C.ordering || {}).label || "Order now")}</h1><p class="hero-lede">${PREVIEW ? "Online ordering is switched off. Turn it on under Online ordering to see this page." : "Online ordering isn't available right now."}</p></div></section>`;
   return window.RestOrder ? window.RestOrder.page(ORDER_API) : "";
@@ -806,6 +809,9 @@ function video() {
     .then(() => window.SiteVideo.mount(C, { sections: "#main > section", home: PAGE === "home", imgUrl })).catch(() => {});
 }
 /** The footer's link that reopens the consent choices (while the banner is on). */
+/* Legal & privacy: the privacy policy's address, and the words of the consent tick box on forms (content.privacy). */
+const policyUrl = () => { const K = C.consent || {}; if (safeUrl(K.policyUrl)) return safeUrl(K.policyUrl); const L = spList(), p = L.find((x) => x.id === K.policyPage) || L.find((x) => x.id === "pg-privacy" || /privacy/i.test(String(x.title || ""))); return p ? spHref(p) : ""; };
+const consentWords = (own) => String(own || "").trim() || ((C.privacy || {}).formConsent === false ? "" : String((C.privacy || {}).formText || "").trim() || "I agree to my details being used to respond to me, as described in the Privacy policy.");
 const ckOn = () => !!(C.consent && C.consent.on && C.consent.footerLink !== false);
 /* Regional languages (assets/lang.js): the chosen language is put into the content before the page is drawn, then
    the page's fixed wording is translated and the language switcher added. */
@@ -882,7 +888,7 @@ function render() {
   if (PAGE === "order" && window.RestOrder && orderOn()) window.RestOrder.bind(ORDER_API);
   if (PAGE === "page" && window.SitePages) window.SitePages.after(window.SitePages.find(C, spCur(), PREVIEW));
   jsonLd(); slides(); heroLogo(); video(); social(); menu(); lang(); consent(); addons(); festival();
-  if (window.SiteFX) try { window.SiteFX.init({ root: $("#app"), brand: C.theme.introTitle || C.brand.name, badge: C.poweredBy, bgs: C.sectionBg, asset: imgUrl, fonts: FONTS }); } catch (e) {}
+  if (window.SiteFX) try { window.SiteFX.init({ root: $("#app"), brand: C.theme.introTitle || C.brand.name, badge: C.poweredBy, bgs: C.sectionBg, asset: imgUrl, fonts: FONTS, c: C, policy: policyUrl(), again: render }); } catch (e) {}
 }
 
 /* ============================================================
@@ -986,12 +992,15 @@ async function postEnquiry(data, page, cart) {
   const r = await fetch(cfg.url + "/rest/v1/site_enquiries", { method: "POST", headers: { apikey: cfg.key, ...(/^sb_/.test(cfg.key) ? {} : { Authorization: "Bearer " + cfg.key }), "Content-Type": "application/json", Prefer: "return=minimal" }, body: JSON.stringify({ site: cfg.site, data, page: pg }) });
   if (!r.ok) throw new Error("save " + r.status); return "db";
 }
+let FORM_T0 = 0; // when the page was last drawn (performance.now)
 async function submit(e) {
   e.preventDefault();
   const f = e.currentTarget, msg = $(".form-msg", f), btnEl = $("button[type=submit]", f), F = C.contact.form;
   const data = Object.fromEntries(new FormData(f).entries());
-  if (data.website) return; // spam trap
-  delete data.website; data.consent = data.consent ? "yes" : "";
+  // spam traps: the hidden box only robots fill in; and the time since the page opened goes with the entry (the database drops one sent faster than anyone types)
+  const guard = (C.privacy || {}).spam !== false, took = Math.max(1600, Math.round(performance.now() - FORM_T0));
+  if (data.website) return;
+  delete data.website; data.consent = data.consent ? "Agreed on " + new Date().toISOString() + ": " + consentWords(C.contact.form.consent) : "";
   const bad = [...f.querySelectorAll("[required]")].find((i) => (i.type === "checkbox" ? !i.checked : !String(i.value).trim()));
   const em = $("#f-email", f), ph = $("#f-phone", f), dt = $("#f-date", f);
   const say = (el, t) => { msg.className = "form-msg bad"; msg.textContent = t; el && el.focus(); };
@@ -1010,7 +1019,7 @@ async function submit(e) {
       if (!r.ok) throw new Error("save " + r.status);
       f.reset(); msg.className = "form-msg ok"; msg.textContent = okMsg;
     } else if (cfg && cfg.cf) {
-      const r = await fetch(cfg.cf + "/enquire/" + encodeURIComponent(cfg.site), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ data, page: location.pathname }) });
+      const r = await fetch(cfg.cf + "/enquire/" + encodeURIComponent(cfg.site), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ data, page: location.pathname, ...(guard ? { took } : {}) }) });
       if (!r.ok) throw new Error("save " + r.status);
       f.reset(); msg.className = "form-msg ok"; msg.textContent = okMsg;
     } else if (cfg) {
@@ -1036,11 +1045,13 @@ function loadMap(h) {
   if (h.dataset.done) return; h.dataset.done = "1";
   const fr = document.createElement("iframe"); fr.title = "Map"; fr.loading = "lazy"; fr.referrerPolicy = "no-referrer-when-downgrade"; fr.src = "https://www.google.com/maps?q=" + encodeURIComponent(h.dataset.q) + "&output=embed"; h.innerHTML = ""; h.appendChild(fr);
 }
+/** Maps wait for a tap when the owner says so, or until the visitor allows the Preferences category (Legal & privacy). */
+const mapWait = () => !!C.contact.mapTap || (!!(C.privacy || {}).blockMaps && !!window.SiteFX && !!window.SiteFX.allowed && !window.SiteFX.allowed(C, "preferences"));
 function bindMaps() {
   if (mapIO) mapIO.disconnect();
   const ready = (h) => { const c = h.closest(".loc"); return !c || (!c.hidden && c.classList.contains("on")); };
   mapIO = "IntersectionObserver" in window ? new IntersectionObserver((es) => es.forEach((e) => { if (e.isIntersecting && ready(e.target)) { mapIO.unobserve(e.target); loadMap(e.target); } }), { rootMargin: "200px" }) : null;
-  $$(".map").forEach((h) => { const b = $(".map-b", h); if (b) b.onclick = () => loadMap(h); if (C.contact.mapTap || h.dataset.done) return; if (!h.closest(".loc") || !mapIO) { loadMap(h); return; } mapIO.observe(h); });
+  $$(".map").forEach((h) => { const b = $(".map-b", h); if (b) b.onclick = () => loadMap(h); if (mapWait() || h.dataset.done) return; if (!h.closest(".loc") || !mapIO) { loadMap(h); return; } mapIO.observe(h); });
 }
 /* Several locations (.locs): one card in front at a time for the stacked cards, tabs, list-and-map and fold-out styles. */
 function bindLocs() {
@@ -1056,7 +1067,7 @@ function bindLocs() {
     dots.innerHTML = all ? "" : v.map((_, n) => `<button type="button" aria-label="Location ${n + 1} of ${v.length}"${n === cur ? ' aria-current="true"' : ""}></button>`).join("");
     $$("button", dots).forEach((b, n) => { b.onclick = () => show(n); });
     // the card now in front: its map may load (it is already on screen, so the observer is asked again)
-    if (mapIO && !C.contact.mapTap) $$(".map", R).forEach((h) => { if (!h.dataset.done) { mapIO.unobserve(h); mapIO.observe(h); } });
+    if (mapIO && !mapWait()) $$(".map", R).forEach((h) => { if (!h.dataset.done) { mapIO.unobserve(h); mapIO.observe(h); } });
   };
   cards.forEach((c) => {
     c.addEventListener("click", (e) => { if (st === "stack" && !c.classList.contains("on")) { e.preventDefault(); show(vis().indexOf(c)); } });

@@ -9,6 +9,8 @@ import { Motifs, THEMES, type Theme } from "../themes/catalog";
 import { limitThemes } from "../themes/limit";
 import { themeCode } from "../themes/codes";
 import type { Field as F, TemplateDef } from "../schema/types";
+import { staticPageDefault } from "../schema/common";
+import { LEGAL_PAGES, a11yChecks, collects, identity, legalPage, makeLegalPage, type LegalKind } from "../lib/legal";
 import { getP, setP, clone, vpaOk, paypalOk, httpsOk, hostIs, emailOk, phoneOk } from "../lib/util";
 import { Field, ProgressBar, Toggle, useConfirm, useToast } from "../ui/kit";
 import { GatewayForm, WhatsAppForm } from "../pages/Connections";
@@ -139,7 +141,7 @@ export function FieldView({ f, obj, base }: { f: F; obj: any; base: string }) {
       );
     }
     case "toggle":
-      return <Toggle id={id} label={f.label} checked={!!val} onChange={set} />;
+      return <Toggle id={id} label={f.label} checked={val === undefined || val === null ? !!f.def : !!val} onChange={set} />;
     case "range":
       return (
         <Field label={f.label} htmlFor={id}>
@@ -217,6 +219,10 @@ export function FieldView({ f, obj, base }: { f: F; obj: any; base: string }) {
       return <AdminSectionsField />;
     case "codeTemplate":
       return <CodeTemplateField />;
+    case "legalPages":
+      return <LegalPagesField />;
+    case "a11yCheck":
+      return <A11yCheckField />;
     case "googleReviews":
       return (
         <div className="flex flex-wrap items-center gap-3 rounded-lg border border-brand-500/40 bg-brand-500/5 p-3">
@@ -732,6 +738,63 @@ function RichBar({ id, value, set }: { id: string; value: string; set: (v: strin
           <span className="hint basis-full">Each line is a row and | separates the cells. Add a row by copying a line; add a column by adding a cell to every line. In the line of dashes, :---: centres a column and ---: lines it up on the right.</span>
         </div>
       )}
+    </div>
+  );
+}
+
+/** Legal & privacy → Legal pages: writes the privacy policy and the terms from the business's details, as custom pages. */
+function LegalPagesField() {
+  const { tpl, root, bump } = useCtx();
+  const [ask, setAsk] = useState<"" | LegalKind>("");
+  const F = collects(tpl.id, root), I = identity(root);
+  const row = (kind: LegalKind, need: boolean, why: string) => {
+    const p = legalPage(root, kind), ours = !!p && p.id === LEGAL_PAGES[kind].id, name = LEGAL_PAGES[kind].title;
+    const make = () => { makeLegalPage(tpl.id, root, kind, staticPageDefault); setAsk(""); bump(); };
+    return (
+      <div className="flex flex-col gap-2 rounded-lg border border-ink-700 p-3" aria-label={name}>
+        <div className="flex flex-wrap items-center justify-between gap-2"><b className="text-[14px]">{name}</b>
+          <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider ${p ? "bg-emerald-400/15 text-emerald-200" : need ? "bg-red-400/15 text-red-200" : "bg-ink-700 text-ink-300"}`}>{p ? (p.external ? "Linked" : ours ? "Written here" : "Your own page") : need ? "Missing: required" : "Not made"}</span></div>
+        <p className="text-[13px] text-ink-300">{p ? (p.external ? "The consent banner links to a privacy policy at another address." : ours ? `On the site as “${p.title}”, linked at the bottom of every page. Edit its text under Custom pages; “Write it again” replaces the text with a fresh one from your details.` : `Your page “${p.title}” is used.`) : why}</p>
+        <div className="flex flex-wrap items-center gap-2 text-[13px]">
+          {ask === kind ? <><span className="text-ink-200">Replace the page's text with a fresh one from your details? Changes you made to it are lost.</span><button type="button" className="btn btn-sm" onClick={make}>Yes, write it again</button><button type="button" className="btn btn-sm" onClick={() => setAsk("")}>Keep it</button></>
+            : !p ? <button type="button" className="btn btn-sm btn-pri" onClick={make}>Write the {name.toLowerCase()} from my details</button>
+            : ours ? <button type="button" className="btn btn-sm" onClick={() => setAsk(kind)}>Write it again</button> : null}
+        </div>
+      </div>
+    );
+  };
+  return (
+    <div className="flex flex-col gap-3" aria-label="Legal pages">
+      <p className="rounded-lg border border-amber-400/40 bg-amber-400/5 px-3 py-2.5 text-[13px] text-amber-100">These pages are written from what you entered: {I.name || "no name yet"}{I.address ? ", " + I.address.split("\n")[0] : ""}{I.email ? ", " + I.email : ""}. They are a sound starting point, not legal advice: read them, change what does not fit your business, and have them checked if you can.</p>
+      {row("privacy", F.form || F.checkout || F.accounts, F.form || F.checkout || F.accounts ? "This site collects personal details, so it needs a privacy policy before it is published." : "Not required for this site yet: it has no form or checkout.")}
+      {row("terms", F.checkout, F.checkout ? "This site takes orders, so it needs terms before it is published." : "Recommended. Required once the site takes orders.")}
+    </div>
+  );
+}
+type A11yIssue = { kind: string; text: string; where: string };
+/** Legal & privacy → Accessibility check: asks the preview to look at the page it shows. */
+function A11yCheckField() {
+  const { root } = useCtx();
+  const [busy, setBusy] = useState(false), [res, setRes] = useState<{ page: string; issues: A11yIssue[]; seen: number } | null>(null), [err, setErr] = useState("");
+  const run = () => {
+    setBusy(true); setErr("");
+    const fr = document.querySelector<HTMLIFrameElement>('iframe[name="cms-preview"]'), w = fr?.contentWindow;
+    if (!w) { setErr("Open the preview first: the check looks at the page shown there."); setBusy(false); return; }
+    const done = () => { window.clearTimeout(tm); removeEventListener("message", on); setBusy(false); };
+    const on = (e: MessageEvent) => { if (e.source !== w || e.origin !== location.origin || e.data?.type !== "cms:a11y") return; done(); setRes({ page: String(e.data.page || ""), issues: Array.isArray(e.data.issues) ? e.data.issues : [], seen: Number(e.data.seen) || 0 }); };
+    const tm = window.setTimeout(() => { done(); setErr("The preview did not answer. If this site runs an older build, update the site first."); }, 5000);
+    addEventListener("message", on); w.postMessage({ type: "cms:a11y" }, location.origin);
+  };
+  const fromSettings = a11yChecks(root);
+  return (
+    <div className="flex flex-col gap-3" aria-label="Accessibility check">
+      <p className="text-[13px] text-ink-300">Checks the page shown in the preview the way a visitor gets it: text that is hard to read on its background, pictures without a description, buttons and links without a name, form boxes without a label, and the order of headings. Open each page in the preview and check it before you publish.</p>
+      {fromSettings.length > 0 && <ul className="list-disc rounded-lg border border-amber-400/40 bg-amber-400/5 py-2.5 pl-8 pr-3 text-[13px] text-amber-100">{fromSettings.map((x) => <li key={x}>{x.replace(/^Accessibility: /, "")}</li>)}</ul>}
+      <div className="flex flex-wrap items-center gap-2"><button type="button" className="btn btn-sm btn-pri" disabled={busy} onClick={run}>{busy ? "Checking…" : "Check the page in the preview"}</button>{err && <span className="text-[13px] text-red-300" role="alert">{err}</span>}</div>
+      {res && (res.issues.length === 0
+        ? <p className="rounded-lg border border-emerald-400/30 bg-emerald-400/5 px-3 py-2.5 text-[13px] text-emerald-100" role="status">No problems found on this page ({res.seen} pieces of text and controls looked at). A check like this cannot find everything: also try the page with the keyboard only (Tab, Enter).</p>
+        : <div className="rounded-lg border border-amber-400/40 bg-amber-400/5 px-3 py-2.5 text-[13px] text-amber-100" role="status"><b>{res.issues.length} thing{res.issues.length === 1 ? "" : "s"} to look at on this page:</b>
+          <ul className="mt-1 list-disc pl-5">{res.issues.map((x, i) => <li key={i}>{x.text}{x.where ? <span className="text-amber-100/70"> ({x.where})</span> : null}</li>)}</ul></div>)}
     </div>
   );
 }

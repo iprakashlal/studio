@@ -1006,7 +1006,9 @@ export default {
       if (p.startsWith("/enquire/") && req.method === "POST") {
         const site = p.split("/")[2]; if (!/^[a-z0-9][a-z0-9-]{0,59}$/.test(site)) return err(404, "Not found.");
         const raw = await req.text(); if (raw.length > 20000) return err(413, "Too long.");
-        const q = JSON.parse(raw || "{}"); if (q.website) return json({ ok: true });
+        const q = JSON.parse(raw || "{}");
+        // spam traps: the hidden box only robots fill in, and a form sent faster than anyone can type (orders have their own checks)
+        if (q.website || (q.took != null && Number(q.took) < 1500 && !(q.data && q.data.order_no))) return json({ ok: true });
         const data: Record<string, string> = {};
         for (const [k, v] of Object.entries(q.data || {}).slice(0, 25)) if (/^[a-z0-9][\w-]{0,39}$/i.test(k) && v != null && String(v).trim()) data[k] = String(v).slice(0, 5000);
         if (!Object.keys(data).length) return err(400, "The form was empty.");

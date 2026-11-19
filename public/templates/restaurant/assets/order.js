@@ -230,6 +230,7 @@
       <fieldset><legend>Payment</legend>${ps.length ? ps.map((p) => `<label class="osh-o"><input type="radio" name="of-pay" value="${p.id}"${p.id === f.pay ? " checked" : ""}><span>${esc(p.label)}${p.note ? `<small>${esc(p.note)}</small>` : ""}</span></label>`).join("") : `<p class="od-bad">No payment method is set up yet. Please call us to order.</p>`}</fieldset>
       ${o.notes !== false ? `<div class="of"><label for="of-notes">Note for the kitchen (optional)</label><textarea id="of-notes" data-f="notes" rows="2" maxlength="300">${esc(f.notes || "")}</textarea></div>` : ""}
       <div class="od-box" id="od-bill"><span class="od-l">Bill details</span>${billRows(b)}</div>
+      ${agree() ? `<label class="of-consent"><input type="checkbox" id="of-consent"${ui.agreed ? " checked" : ""}> <span>${A.consentHTML ? A.consentHTML() : esc(agree())}</span></label>` : ""}
       <p class="od-bad" id="od-err" role="alert"${ui.err ? "" : " hidden"}>${esc(ui.err)}</p></form>`;
   }
   const STEPS = { delivery: ["Order received", "Confirmed", "Being prepared", "Out for delivery", "Delivered"], pickup: ["Order received", "Confirmed", "Being prepared", "Ready for pickup", "Collected"], dinein: ["Order received", "Confirmed", "Being prepared", "Served", "Completed"] };
@@ -340,7 +341,9 @@
   }
   const openSheet = (id) => { const x = byId(id); if (!x || x.d.soldOut) return; ui.sheet = { id, qty: 1, v: 0, g: {}, note: "" }; over(); };
   const close = () => { const b = ui.back; ui.sheet = null; ui.drawer = ""; ui.err = ""; over(); if (b && b.isConnected) b.focus({ preventScroll: true }); };
-  function sync() { $$("[data-f]", root).forEach((e) => { ui.form[e.dataset.f] = e.value; }); const p = $('input[name="of-pay"]:checked', root); if (p) ui.form.pay = p.value; }
+  /** The words of the consent tick box (Legal & privacy → Consent on forms), or "" when it is off. */
+  const agree = () => (A.consentWords ? A.consentWords() : "");
+  function sync() { $$("[data-f]", root).forEach((e) => { ui.form[e.dataset.f] = e.value; }); { const cc = $("#of-consent", root); if (cc) ui.agreed = cc.checked; } const p = $('input[name="of-pay"]:checked', root); if (p) ui.form.pay = p.value; }
   const remember = () => { const f = ui.form; st.set("me", { name: f.name, phone: f.phone, email: f.email, line1: f.line1, area: f.area, landmark: f.landmark, pin: f.pin, label: f.label, cutlery: f.cutlery }); };
   function newId() { const d = new Date(), pre = String(O().prefix || "ORD").replace(/[^A-Za-z0-9]/g, "").slice(0, 6).toUpperCase() || "ORD"; return `${pre}-${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}-${Math.floor(1000 + Math.random() * 9000)}`; }
   async function place() {
@@ -360,9 +363,10 @@
     if (!sl.some((s) => s.v === f.when)) return bad("when", "Please choose a time.");
     if (b.short) return bad("name", `The minimum order is ${txt(b.min)}.`);
     const ps = pays(), pay = ps.find((p) => p.id === f.pay); if (!pay) return bad("name", "Please choose how you'll pay.");
+    if (agree() && !ui.agreed) return bad("consent", "Please tick the box to agree before placing the order.");
     ui.err = ""; remember();
     const key = Array.from(crypto.getRandomValues(new Uint8Array(12)), (x) => x.toString(16).padStart(2, "0")).join("");
-    const od = { id: newId(), k: key, at: Date.now(), mode: m, when: f.when, whenLabel: whenLabel(f.when, sl), items: cart.map((l) => ({ ...l })), bill: b, taxLabel: o.taxLabel || "Tax", pay: pay.id, payLabel: pay.label, upiId: String((o.pay || {}).upiId || "").trim(), payee: (o.pay || {}).payee || "", notes: String(f.notes || "").trim(), cutlery: !!f.cutlery, intro: o.intro || "", wa: o.whatsapp || C.contact.whatsapp || "",
+    const od = { consent: agree() ? "Agreed on " + new Date().toISOString() + ": " + agree() : "", id: newId(), k: key, at: Date.now(), mode: m, when: f.when, whenLabel: whenLabel(f.when, sl), items: cart.map((l) => ({ ...l })), bill: b, taxLabel: o.taxLabel || "Tax", pay: pay.id, payLabel: pay.label, upiId: String((o.pay || {}).upiId || "").trim(), payee: (o.pay || {}).payee || "", notes: String(f.notes || "").trim(), cutlery: !!f.cutlery, intro: o.intro || "", wa: o.whatsapp || C.contact.whatsapp || "",
       pin: String(f.pin || "").trim(), area: String(f.area || "").trim(),
       c: { name: String(f.name).trim(), phone: String(f.phone).trim(), email: String(f.email || "").trim(), table: String(f.table || "").trim(), address: m === "delivery" ? [f.line1, f.area, f.landmark ? "Near " + f.landmark : "", f.pin].map((x) => String(x || "").trim()).filter(Boolean).join(", ") + ` (${f.label})` : "" }, status: "new", sent: false, live: false };
     // Paying by UPI comes before the order is placed.
@@ -431,7 +435,7 @@
   /** The cart as the database reads it (to hand the order to the restaurant's billing system when one is connected). */
   function cartOf(od) { return { mode: od.mode, pin: od.pin || "", area: od.area || "", coupon: od.bill.code || "", tip: od.bill.tip || 0, items: od.items.map((l) => ({ id: l.id, qty: l.qty, variant: l.variant, addons: (l.addons || []).map((a) => a.label) })) }; }
   /** What is saved for an order (it goes to the site's database under Purchased orders). */
-  function orderData(od) { const m = od.mode, b = od.bill, pay = { label: od.payLabel }; return { type: "Order", order_no: od.id, okey: od.k, name: od.c.name, phone: od.c.phone, email: od.c.email, mode: MODES[m], when: od.whenLabel, address: od.c.address, table: od.c.table, items: od.items.map((l) => `${l.qty} × ${l.name}${lineText(l) ? ` (${lineText(l)})` : ""}${l.note ? ` [${l.note}]` : ""} = ${txt(l.unit * l.qty)}`).join("\n"), total: txt(b.total), payment: od.utr ? "UPI, paid before ordering" : od.rz ? "Paid online (Razorpay)" : od.pg ? `Paid online (${GW[od.pg.gw].name})` : pay.label, utr: od.utr || "", ...(od.pg ? { pay_gw: od.pg.gw, pay_ref: od.pg.ref, otp_token: od.pg.otp || undefined } : {}), ...(od.rz ? { rz_order: od.rz.razorpay_order_id, rz_payment: od.rz.razorpay_payment_id, rz_sig: od.rz.razorpay_signature } : {}), ...(can.otp && ui.otp ? { otp_token: ui.otp.token } : {}), message: orderText(od) }; }
+  function orderData(od) { const m = od.mode, b = od.bill, pay = { label: od.payLabel }; return { ...(od.consent ? { consent: od.consent } : {}), type: "Order", order_no: od.id, okey: od.k, name: od.c.name, phone: od.c.phone, email: od.c.email, mode: MODES[m], when: od.whenLabel, address: od.c.address, table: od.c.table, items: od.items.map((l) => `${l.qty} × ${l.name}${lineText(l) ? ` (${lineText(l)})` : ""}${l.note ? ` [${l.note}]` : ""} = ${txt(l.unit * l.qty)}`).join("\n"), total: txt(b.total), payment: od.utr ? "UPI, paid before ordering" : od.rz ? "Paid online (Razorpay)" : od.pg ? `Paid online (${GW[od.pg.gw].name})` : pay.label, utr: od.utr || "", ...(od.pg ? { pay_gw: od.pg.gw, pay_ref: od.pg.ref, otp_token: od.pg.otp || undefined } : {}), ...(od.rz ? { rz_order: od.rz.razorpay_order_id, rz_payment: od.rz.razorpay_payment_id, rz_sig: od.rz.razorpay_signature } : {}), ...(can.otp && ui.otp ? { otp_token: ui.otp.token } : {}), message: orderText(od) }; }
   /** The order is placed: the cart empties and the page shows it. */
   function shown(od) {
     cart = []; save(); ui.coupon = ""; st.set("coupon", ""); ui.tip = 0; ui.form.notes = ""; ui.paying = null; ui.utr = ""; ui.err = "";

@@ -1,8 +1,9 @@
+import { legalChecks } from "../lib/legal";
 import type { Category, Field, TemplateDef } from "./types";
 import { BODY_FONTS, DISPLAY_FONTS, FX_AXES, HERO_FX_AXIS, LINE_BREAKS_AXIS, type Axis } from "../themes/catalog";
 import { BIZ_AXES, BIZ_TAGS, BIZ_THEMES, businessThemeValues } from "../themes/business";
 import { INTRO_CARD, NAV_MODE_FIELD, NAV_MODE_MOB_FIELD } from "../themes/fields";
-import { adminCategory, codeCategory, withSectionBg, videoCategory, socialCategory, logoFields, consentCategory, emailsCategory, i18nCategory, prepareI18n, featuresCategory, festivalCategory, menuCategory, menuItem, prepareMenu, staticPagesCategory, heroSlidesCard, prepareSlides, prepareMaintenance, seoCategory, warrantyCategory, customFontsCard } from "./common";
+import { adminCategory, legalCategory, codeCategory, withSectionBg, videoCategory, socialCategory, logoFields, consentCategory, emailsCategory, i18nCategory, prepareI18n, featuresCategory, festivalCategory, menuCategory, menuItem, prepareMenu, staticPagesCategory, heroSlidesCard, prepareSlides, prepareMaintenance, seoCategory, warrantyCategory, customFontsCard } from "./common";
 
 const g2 = (...fields: Field[]): Field => ({ t: "grid", cols: 2, fields });
 const g3 = (...fields: Field[]): Field => ({ t: "grid", cols: 3, fields });
@@ -216,6 +217,7 @@ const schema: Category[] = [
   i18nCategory(),
   seoCategory(true),
   consentCategory(),
+  legalCategory(),
   adminCategory(),
   codeCategory(),
 ];
@@ -277,6 +279,6 @@ export const businessTemplate: TemplateDef = {
     if (F.enabled && F.saveTo !== "file" && !c?.contact?.email) w.push("The enquiry form has no email to fall back on. Add one under Contact & form → Details.");
     if (F.enabled && F.saveTo !== "email" && (F.sbUrl || F.sbKey) && !(F.sbUrl && F.sbKey && F.site)) w.push("The enquiry form's Supabase settings are incomplete (Project URL, public key and Site ID are all needed).");
     if (/^picaffectz$/i.test(String(c?.brand?.name || "").trim()) && c?.brand?.tagline === "Strategy, design and engineering for growing companies") w.push("The company name and tagline are still the sample (Picaffectz).");
-    return w;
+    return [...w, ...legalChecks("business", c)];
   },
 };

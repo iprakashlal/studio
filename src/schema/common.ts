@@ -579,6 +579,41 @@ export function codeCategory(): Category {
   };
 }
 
+/** Legal & privacy: who runs the site (content.legal), its privacy policy and terms pages, consent on forms, what
+ *  waits for consent, spam protection (content.privacy) and an accessibility check. Wording is a starting point, not legal advice. */
+export function legalCategory(): Category {
+  const g2 = (...fields: Field[]): Field => ({ t: "grid", cols: 2, fields });
+  return {
+    id: "legal", label: "Legal & privacy", group: "Settings",
+    desc: "Who runs this site, its privacy policy and terms, consent on forms, what waits for consent, spam protection and an accessibility check.",
+    cards: [
+      { title: "Business identity", fields: [
+        { t: "note", text: "The business behind this site, as registered. Visitors and payment providers expect to find this on the site, and the privacy policy and terms are written from it." },
+        g2({ t: "text", path: "legal.name", label: "Legal name", ph: "Acme Foods Private Limited" }, { t: "text", path: "legal.email", label: "Email for legal and privacy questions", check: "email" }),
+        { t: "textarea", path: "legal.address", label: "Registered address", rows: 2 },
+        g2({ t: "text", path: "legal.phone", label: "Phone", check: "phone" }, { t: "text", path: "legal.gstin", label: "GSTIN (if registered for GST)", ph: "27ABCDE1234F1Z5" }),
+        g2({ t: "text", path: "legal.cin", label: "CIN or other registration number (if any)", ph: "U12345MH2020PTC123456" }, { t: "toggle", path: "legal.footer", label: "Show these details at the bottom of every page", def: true }),
+      ] },
+      { title: "Legal pages", fields: [{ t: "legalPages" }] },
+      { title: "Consent on forms", fields: [
+        { t: "toggle", path: "privacy.formConsent", label: "Ask visitors to agree before they send a form or place an order", def: true },
+        { t: "when", path: "privacy.formConsent", not: "false", fields: [
+          { t: "text", path: "privacy.formText", label: "Words next to the tick box", ph: "I agree to my details being used to respond to me, as described in the Privacy policy." },
+          { t: "note", text: "A tick box, never ticked in advance, is added to the enquiry or booking form and to the checkout, with a link to your privacy policy. The entry is saved with the words the visitor agreed to and the time. A form that already has its own consent text keeps that text." }] },
+      ] },
+      { title: "Before consent", fields: [
+        g2({ t: "toggle", path: "privacy.blockFonts", label: "Load Google Fonts only after consent" }, { t: "toggle", path: "privacy.blockMaps", label: "Load Google Maps only after consent or a tap" }),
+        { t: "note", text: "Google Fonts and Google Maps are fetched from Google, which sees the visitor's address. With these on, the site uses the device's own fonts and shows a “Show the map” button until the visitor accepts the Preferences category in the consent banner (Settings → Cookie consent must be on). Fonts you uploaded yourself are not affected." },
+      ] },
+      { title: "Spam protection", fields: [
+        { t: "toggle", path: "privacy.spam", label: "Protect forms from spam robots", def: true },
+        { t: "note", text: "No puzzle for visitors: forms carry a hidden box only robots fill in, and an entry sent faster than a person can type is quietly dropped. Sites on a Cloudflare database are also limited to a fair number of entries per hour." },
+      ] },
+      { title: "Accessibility check", fields: [{ t: "a11yCheck" }] },
+    ],
+  };
+}
+
 export function adminCategory(): Category {
   const g2 = (...fields: Field[]): Field => ({ t: "grid", cols: 2, fields });
   return {

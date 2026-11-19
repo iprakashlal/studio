@@ -743,7 +743,7 @@
     var fam = String(k.font || "").replace(/["\\<>;{}]/g, "").trim();
     if (fam) {
       var id = "sfont-" + fam.toLowerCase().replace(/[^a-z0-9]+/g, "-"), spec = (opts.fonts && opts.fonts[fam]) || encodeURIComponent(fam).replace(/%20/g, "+");
-      if (!document.getElementById(id)) { var l = document.createElement("link"); l.id = id; l.rel = "stylesheet"; l.href = "https://fonts.googleapis.com/css2?family=" + spec + "&display=swap"; document.head.appendChild(l); }
+      if (!document.getElementById(id) && fontsOk(opts.c)) { var l = document.createElement("link"); l.id = id; l.rel = "stylesheet"; l.href = "https://fonts.googleapis.com/css2?family=" + spec + "&display=swap"; document.head.appendChild(l); }
       el.style.setProperty("--sfont", '"' + fam + '"'); el.setAttribute("data-sfont", k.fontFor === "head" ? "head" : "all");
     }
     var tc = String(k.textColor || "").trim();
@@ -797,9 +797,97 @@
       el.insertBefore(box, el.firstChild);
     });
   }
+  // ---- Legal & privacy (content.legal, content.privacy)
+  /** Has the visitor allowed this consent category? Read straight from the saved choice, so it works before consent.js loads. */
+  function allowed(c, cat) {
+    var K = c && c.consent; if (!K || !K.on || PREVIEW) return true;
+    if (window.SiteConsent) { try { var st = window.SiteConsent.state(); if (st && st.asked) return !!st.categories[cat]; } catch (e) { /* not mounted yet */ } }
+    if (K.mode === "notice") return true;
+    try { var x = JSON.parse(localStorage.getItem("site-consent:" + location.pathname.replace(/[^/]*$/, "")) || "null"); if (x && x.c && (K.version == null || x.v === K.version)) return x.c[cat] === true; } catch (e) { /* no storage */ }
+    return K.mode === "optout";
+  }
+  var fontsWere = null, fontWatch = null;
+  /** Google Fonts may load: always, unless the site holds them back until the visitor allows the Preferences category. */
+  function fontsOk(c) {
+    var ok = !(c && c.privacy && c.privacy.blockFonts) || allowed(c, "preferences");
+    fontsWere = ok;
+    if (!ok && !fontWatch && window.MutationObserver) {
+      // a backstop for fonts asked for by other parts of the page
+      var G = /^https:\/\/fonts\.(googleapis|gstatic)\.com\//;
+      document.querySelectorAll('link[href*="fonts.googleapis.com"],link[href*="fonts.gstatic.com"]').forEach(function (l) { l.remove(); });
+      fontWatch = new MutationObserver(function (ms) { if (fontsWere) return; ms.forEach(function (m) { Array.prototype.forEach.call(m.addedNodes, function (n) { if (n.tagName === "LINK" && G.test(n.href || "")) n.remove(); }); if (m.type === "attributes" && m.target.tagName === "LINK" && G.test(m.target.href || "")) m.target.removeAttribute("href"); }); });
+      fontWatch.observe(document.head, { childList: true, attributes: true, attributeFilter: ["href"], subtree: true });
+    }
+    return ok;
+  }
+  var legalCss = false;
+  function legalBits(opts, root) {
+    var c = opts.c; if (!c) return;
+    if (!legalCss) { legalCss = true; var st2 = document.createElement("style"); st2.id = "fx-legal"; st2.textContent = ".legal-id{box-sizing:border-box;width:100%;max-width:1180px;margin:0 auto;padding:14px 20px calc(14px + env(safe-area-inset-bottom,0px));text-align:center;font:400 12.5px/1.6 var(--fb,system-ui,sans-serif);opacity:.78;border-top:1px solid color-mix(in srgb,currentColor 16%,transparent)}.legal-id b{font-weight:600}.legal-id span+span::before{content:'·';margin:0 .55em;opacity:.6}" +
+      "label.consent a,.of-consent a,.co-consent a{text-decoration:underline;color:inherit}.of-consent,.co-consent{display:flex;gap:10px;align-items:flex-start;font-size:14px;line-height:1.45;margin:12px 0 4px;cursor:pointer}.of-consent input,.co-consent input{flex:none;width:18px;height:18px;margin-top:2px;accent-color:var(--c1,var(--accent,currentColor))}"; document.head.appendChild(st2); }
+    // who runs the site, at the bottom of every page
+    var L = c.legal || {}, name = String(L.name || "").trim(), foot = root.querySelector("footer");
+    var old = root.querySelector(".legal-id"); if (old) old.remove();
+    if (foot && name && L.footer !== false) {
+      var bits = [["", name, 1], ["", String(L.address || "").replace(/\s*\n\s*/g, ", ").trim()], ["Phone: ", String(L.phone || "").trim()], ["Email: ", String(L.email || "").trim()], ["GSTIN: ", String(L.gstin || "").trim()], ["CIN: ", String(L.cin || "").trim()]].filter(function (x) { return x[1]; });
+      var d = document.createElement("div"); d.className = "legal-id fx-skip"; d.setAttribute("aria-label", "Business details");
+      d.innerHTML = bits.map(function (x) { return "<span>" + escHtml(x[0]) + (x[2] ? "<b>" + escHtml(x[1]) + "</b>" : escHtml(x[1])) + "</span>"; }).join("");
+      foot.appendChild(d);
+    }
+    // the consent tick boxes link to the privacy policy
+    var url = String(opts.policy || "");
+    if (/^(https?:\/\/|[\w.?=&%\/#-]+$)/i.test(url)) Array.prototype.forEach.call(root.querySelectorAll("label.consent span,.of-consent span,.co-consent span"), function (sp) {
+      if (sp.querySelector("a")) return; var t = sp.textContent, m = /privacy policy/i.exec(t), a = document.createElement("a"); a.href = url; a.target = "_blank"; a.rel = "noopener";
+      if (m) { a.textContent = m[0]; sp.textContent = ""; sp.appendChild(document.createTextNode(t.slice(0, m.index))); sp.appendChild(a); sp.appendChild(document.createTextNode(t.slice(m.index + m[0].length))); }
+      else { a.textContent = "Privacy policy"; sp.appendChild(document.createTextNode(" ")); sp.appendChild(a); }
+    });
+    // fonts held back: draw again with them once the visitor allows it
+    if (opts.again && !legalBits.on) { legalBits.on = true; addEventListener("site:consent", function () { var c2 = legalBits.c; if (c2 && c2.privacy && (c2.privacy.blockFonts || c2.privacy.blockMaps) && fontsWere === false && allowed(c2, "preferences")) { fontsWere = true; try { legalBits.again(); } catch (e) { /* next page load */ } } }); }
+    legalBits.c = c; legalBits.again = opts.again;
+  }
+  // ---- Accessibility check, asked for by the editor: looks at the page as drawn and answers with what it found.
+  function a11yScan() {
+    var out = [], seen = 0, add = function (kind, text, el) { if (out.length < 40 && !out.some(function (o) { return o.text === text && o.where === w(el); })) out.push({ kind: kind, text: text, where: w(el) }); };
+    var w = function (el) { if (!el) return ""; var t = (el.getAttribute("aria-label") || el.textContent || el.getAttribute("alt") || el.getAttribute("src") || "").replace(/\s+/g, " ").trim().slice(0, 48), sec = el.closest("section[id],footer,header,nav"); return (sec ? (sec.id || sec.tagName.toLowerCase()) + ": " : "") + (t ? "“" + t + "”" : el.tagName.toLowerCase()); };
+    var vis = function (el) { if (!el.getClientRects().length) return false; var cs = getComputedStyle(el); return cs.visibility !== "hidden" && cs.display !== "none" && parseFloat(cs.opacity) > 0.05; };
+    var parse = function (c) { var m = /rgba?\(([^)]+)\)/.exec(c || ""); if (!m) return null; var v = m[1].split(/[,\/ ]+/).filter(Boolean).map(parseFloat); return { r: v[0], g: v[1], b: v[2], a: v.length > 3 ? v[3] : 1 }; };
+    var lum = function (c) { var f = function (x) { x /= 255; return x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4); }; return 0.2126 * f(c.r) + 0.7152 * f(c.g) + 0.0722 * f(c.b); };
+    // the colour behind an element: the nearest solid background; a picture, video or gradient behind it cannot be judged
+    var behind = function (el) { var q = el.getBoundingClientRect(), cx = q.left + q.width / 2, cy = q.top + q.height / 2;
+      for (var e = el; e && e.nodeType === 1; e = e.parentElement) { var cs = getComputedStyle(e); if (cs.backgroundImage && cs.backgroundImage !== "none") return null;
+        // a picture or video lying under the text (a card with a photo behind its title)
+        if (e !== el) { for (var ps = 0; ps < 2; ps++) { var pc = getComputedStyle(e, ps ? "::after" : "::before"); if (pc && pc.content && pc.content !== "none" && pc.position === "absolute" && ((pc.backgroundImage && pc.backgroundImage !== "none") || ((parse(pc.backgroundColor) || { a: 0 }).a > 0.05))) return null; }
+          for (var k2 = 0; k2 < e.children.length && k2 < 20; k2++) { var ch = e.children[k2]; if (ch === el || ch.contains(el)) continue; var cc = getComputedStyle(ch); if (cc.position !== "absolute" && cc.position !== "fixed") continue; var cr = ch.getBoundingClientRect(); if (cr.width > 40 && cx >= cr.left && cx <= cr.right && cy >= cr.top && cy <= cr.bottom && cc.display !== "none") return null; }
+          var media = e.querySelectorAll("img,video,canvas"); for (var n = 0; n < media.length && n < 12; n++) { if (el.contains(media[n])) continue; var r = media[n].getBoundingClientRect(); if (r.width > 40 && cx >= r.left && cx <= r.right && cy >= r.top && cy <= r.bottom) return null; } } if (e.classList.contains("has-sbg") && e.getAttribute("data-sbg") && e.getAttribute("data-sbg") !== "color") return null; var b = parse(cs.backgroundColor); if (b && b.a > 0.95) return b; if (b && b.a > 0.05) return null; } return { r: 255, g: 255, b: 255, a: 1 }; };
+    var lowText = 0;
+    Array.prototype.forEach.call(document.querySelectorAll("h1,h2,h3,h4,h5,h6,p,li,a,button,label,span,td,th,small,summary,blockquote,figcaption,dt,dd"), function (el) {
+      if (el.closest(".fx-skip,[aria-hidden=true],#site-consent,#site-code-bar,.sbg") || !vis(el)) return;
+      var own = Array.prototype.some.call(el.childNodes, function (n) { return n.nodeType === 3 && n.nodeValue.trim().length > 1; }); if (!own) return;
+      seen++; var cs = getComputedStyle(el), fg = parse(cs.color), bg = behind(el); if (!fg || !bg || fg.a < 0.5) return;
+      var l1 = lum(fg), l2 = lum(bg), ratio = (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05), size = parseFloat(cs.fontSize), big = size >= 24 || (size >= 18.5 && parseInt(cs.fontWeight, 10) >= 700);
+      if (ratio < (big ? 3 : 4.5)) { lowText++; add("contrast", "Text is hard to read on its background (contrast " + ratio.toFixed(1) + ":1, needs " + (big ? "3" : "4.5") + ":1)", el); }
+    });
+    Array.prototype.forEach.call(document.querySelectorAll("img"), function (im) { if (im.closest(".fx-skip,[aria-hidden=true],.sbg") || !vis(im)) return; seen++; if (!im.hasAttribute("alt")) add("alt", "A picture has no description for screen readers", im); else if (!im.getAttribute("alt").trim() && im.closest("a,button") && !(im.closest("a,button").textContent || "").trim() && !im.closest("a,button").getAttribute("aria-label")) add("alt", "A picture used as a link or button has no description", im); });
+    Array.prototype.forEach.call(document.querySelectorAll("a[href],button,[role=button]"), function (el) { if (el.closest(".fx-skip,[aria-hidden=true],#site-consent") || !vis(el)) return; seen++; var nm = (el.getAttribute("aria-label") || el.getAttribute("title") || el.textContent || "").trim() || Array.prototype.map.call(el.querySelectorAll("img[alt]"), function (i) { return i.alt; }).join("").trim() || (el.getAttribute("aria-labelledby") ? "x" : ""); if (!nm) add("name", "A " + (el.tagName === "A" ? "link" : "button") + " has no name a screen reader can say", el); });
+    Array.prototype.forEach.call(document.querySelectorAll("input:not([type=hidden]):not([type=submit]):not([type=button]),select,textarea"), function (el) { if (el.closest(".fx-skip,[aria-hidden=true],#site-consent") || el.classList.contains("hp-f") || !vis(el)) return; seen++; var ok = el.getAttribute("aria-label") || el.getAttribute("aria-labelledby") || el.closest("label") || (el.id && document.querySelector('label[for="' + el.id.replace(/"/g, "") + '"]')) || el.getAttribute("title"); if (!ok) add("label", "A form box has no label" + (el.getAttribute("placeholder") ? " (a placeholder is not a label)" : ""), el); });
+    var hs = Array.prototype.filter.call(document.querySelectorAll("h1,h2,h3,h4,h5,h6"), function (h) { return vis(h) && !h.closest(".fx-skip,[aria-hidden=true]"); }), h1 = hs.filter(function (h) { return h.tagName === "H1"; });
+    if (!h1.length) add("heading", "The page has no main heading (h1)", null); else if (h1.length > 1) add("heading", "The page has " + h1.length + " main headings (h1); one is best", h1[1]);
+    for (var i = 1; i < hs.length; i++) { var a = +hs[i - 1].tagName[1], b = +hs[i].tagName[1]; if (b > a + 1) { add("heading", "A heading skips a level (h" + a + " then h" + b + ")", hs[i]); break; } }
+    if (!document.documentElement.getAttribute("lang")) add("lang", "The page does not say which language it is in", null);
+    if (!document.title.trim()) add("title", "The page has no title for the browser tab", null);
+    Array.prototype.forEach.call(document.querySelectorAll("[tabindex]"), function (el) { if (+el.getAttribute("tabindex") > 0 && vis(el)) add("keyboard", "An element changes the keyboard's Tab order (tabindex above 0)", el); });
+    Array.prototype.forEach.call(document.querySelectorAll("[onclick],div[role=button],span[role=button]"), function (el) { if (vis(el) && !/^(A|BUTTON|INPUT|SELECT|TEXTAREA|SUMMARY|LABEL)$/.test(el.tagName) && !el.hasAttribute("tabindex")) add("keyboard", "Something that is clicked cannot be reached with the keyboard", el); });
+    return { issues: out, seen: seen };
+  }
+  if (PREVIEW) addEventListener("message", function (e) {
+    if (e.origin !== location.origin || e.source !== window.parent || !e.data || e.data.type !== "cms:a11y") return;
+    var r; try { r = a11yScan(); } catch (x) { r = { issues: [{ kind: "error", text: "The check could not finish on this page.", where: String(x && x.message || x).slice(0, 80) }], seen: 0 }; }
+    window.parent.postMessage({ type: "cms:a11y", page: (location.pathname.split("/").pop() || "index.html") + location.search, issues: r.issues, seen: r.seen }, location.origin);
+  });
   function init(opts) {
     opts = opts || {};
     var root = opts.root || document.body;
+    try { legalBits(opts, root); } catch (e) { /* never worth a broken page */ }
     try { sectionBgs(opts, root); } catch (e) { /* a background is never worth a broken page */ }
     ensureStyle(); wire();
     try { badge(opts.badge); } catch (e) {}
@@ -1073,5 +1161,5 @@
   window.SiteFonts = { use: useFont, link: fontLink };
   window.SiteSkeleton = { show: skeleton };
   window.SiteLogo = { hero: heroLogo };
-  window.SiteFX = { init: init, version: 1 };
+  window.SiteFX = { init: init, version: 1, fontsOk: fontsOk, allowed: allowed };
 })();

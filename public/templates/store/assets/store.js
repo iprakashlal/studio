@@ -375,9 +375,10 @@ function applyTheme(t) {
   r.setProperty("--fd", `"${t.fontDisplay}",Georgia,serif`); r.setProperty("--fb", `"${t.fontBody}","Helvetica Neue",Arial,sans-serif`);
   if (window.SiteFonts) { const cd = SiteFonts.use(t, "display", imgUrl), cb = SiteFonts.use(t, "body", imgUrl); if (cd) r.setProperty("--fd", `"${cd}","${t.fontDisplay}",Georgia,serif`); if (cb) r.setProperty("--fb", `"${cb}","${t.fontBody}","Helvetica Neue",Arial,sans-serif`); }
   // One stylesheet per family, so a family Google can't serve never blocks the others.
+  const FOK = !(window.SiteFX && window.SiteFX.fontsOk) || window.SiteFX.fontsOk(C); // Google Fonts wait for consent when the site says so
   [[FONTS[t.fontDisplay], "fontlink"], [FONTS[t.fontBody], "fontlink2"], ["JetBrains+Mono:wght@400;500", "fontlink3"]].forEach(([f, id]) => {
     let l = document.getElementById(id); if (!l) { l = document.createElement("link"); l.id = id; l.rel = "stylesheet"; document.head.appendChild(l); }
-    const href = f ? "https://fonts.googleapis.com/css2?family=" + f + "&display=swap" : ""; if (href && l.getAttribute("href") !== href) l.setAttribute("href", href);
+    const href = f && FOK ? "https://fonts.googleapis.com/css2?family=" + f + "&display=swap" : ""; if (href && l.getAttribute("href") !== href) l.setAttribute("href", href); if (!FOK) l.removeAttribute("href");
   });
   // The next page starts loading these fonts from its <head>, before any script runs (no font swap on arrival).
   if (!PREVIEW) try { localStorage.setItem("site-fonts:" + location.pathname.replace(/[^/]*$/, ""), JSON.stringify(["fontlink", "fontlink2", "fontlink3"].map((id) => [id, (document.getElementById(id) || {}).href || ""]))); } catch (e) {}
@@ -579,6 +580,7 @@ const PAGES = {
       <div class="box"><h2>Payment</h2>${ms.length ? `<div class="pays" role="radiogroup" aria-label="Payment method">${ms.map((m, i) => `<label class="pay"><input type="radio" name="pm" value="${m.id}"${i === 0 ? " checked" : ""}><div><b>${esc(m.label)}</b><span>${esc(m.desc)}</span></div></label>`).join("")}</div>` : `<p class="note">Online payment isn't set up yet. Place the order and we'll contact you about payment.</p>`}</div>
     </div>
     <aside class="sum"><h2>Order</h2><div class="mini">${lines.map((l) => `<div class="it"><div class="im">${pimg(l.p)}</div><div>${esc(l.p.name)}${l.opt ? `<br><span class="soft">${esc(l.opt)}</span>` : ""} × ${l.qty}</div><b>${esc(money(l.p.price * l.qty))}</b></div>`).join("")}</div><div id="sumrows">${summaryRows(t)}</div>
+      ${consentWords("") ? `<label class="co-consent"><input type="checkbox" id="co-consent"> <span>${esc(consentWords(""))}</span></label>` : ""}
       <p class="err" id="co-err" role="alert"></p><button class="btn pri block" type="submit">${esc(K.button)}</button><p class="soft" style="font-size:13px">${BE() ? "You'll see the exact total before you pay." : "Nothing is charged yet. You'll pay and send the order on the next screen."}</p></aside></form>`;
   },
   portfolio() {
@@ -766,6 +768,9 @@ function video() {
     .then(() => window.SiteVideo.mount(C, { sections: "#main > section", home: PAGE === "home", imgUrl })).catch(() => {});
 }
 /** The footer's link that reopens the consent choices (while the banner is on). */
+/* Legal & privacy: the privacy policy's address, and the words of the consent tick box on forms (content.privacy). */
+const policyUrl = () => { const K = C.consent || {}; if (safeUrl(K.policyUrl)) return safeUrl(K.policyUrl); const L = spList(), p = L.find((x) => x.id === K.policyPage) || L.find((x) => x.id === "pg-privacy" || /privacy/i.test(String(x.title || ""))); return p ? spHref(p) : ""; };
+const consentWords = (own) => String(own || "").trim() || ((C.privacy || {}).formConsent === false ? "" : String((C.privacy || {}).formText || "").trim() || "I agree to my details being used to respond to me, as described in the Privacy policy.");
 const ckOn = () => !!(C.consent && C.consent.on && C.consent.footerLink !== false);
 /* Regional languages (assets/lang.js): the chosen language is put into the content before the page is drawn, then
    the page's fixed wording is translated and the language switcher added. */
@@ -850,7 +855,7 @@ function render() {
   bind();
   reveal();
   slides();
-  if (window.SiteFX) try { window.SiteFX.init({ root: $("#app"), brand: C.theme.introTitle || C.brand.name, badge: C.poweredBy, bgs: C.sectionBg, asset: imgUrl, fonts: FONTS }); } catch (e) {}
+  if (window.SiteFX) try { window.SiteFX.init({ root: $("#app"), brand: C.theme.introTitle || C.brand.name, badge: C.poweredBy, bgs: C.sectionBg, asset: imgUrl, fonts: FONTS, c: C, policy: policyUrl(), again: render }); } catch (e) {}
   setIcon(); fitLines();
 }
 /* Hero background slides on the home page (assets/slides.js, loaded when switched on). */
@@ -981,6 +986,7 @@ function bindCheckout() {
       if (er) er.textContent = m; if (m && !bad) bad = i;
     });
     if (bad) { bad.focus(); return; }
+    { const cc = $("#co-consent", form); if (cc && !cc.checked) { $("#co-err").textContent = "Please tick the box to agree before placing the order."; cc.focus(); return; } AGREED = cc ? "Agreed on " + new Date().toISOString() + ": " + consentWords("") : ""; }
     const fd = Object.fromEntries(new FormData(form).entries());
     if (shipOn() && fd.pin) {
       store.set("pin", String(fd.pin).trim()); const q = shipQuote(fd.pin);
@@ -999,7 +1005,8 @@ function bindCheckout() {
   };
 }
 /** What the shop's database keeps for an order (it shows under Purchased orders). */
-const orderData = (o) => ({ type: "Order", order_no: o.id, name: o.c.name, phone: o.c.phone, email: o.c.email, mode: "Shop order", address: [o.c.address, o.c.city, o.c.pin, o.c.state].filter(Boolean).join(", "),
+let AGREED = ""; // the consent given at checkout, saved with the order
+const orderData = (o) => ({ ...(AGREED ? { consent: AGREED } : {}), type: "Order", order_no: o.id, name: o.c.name, phone: o.c.phone, email: o.c.email, mode: "Shop order", address: [o.c.address, o.c.city, o.c.pin, o.c.state].filter(Boolean).join(", "),
   items: o.items.map((i) => `${i.qty} × ${i.name}${i.opt ? ` (${i.opt})` : ""} = ${money(i.price * i.qty)}`).join("\n"), total: money(o.t.total), payment: o.utr ? "UPI, paid before ordering" : o.rz || o.pg ? `Paid online (${GWNAME[o.method]})` : o.methodLabel, utr: o.utr || "",
   ...(o.rz ? { rz_order: o.rz.razorpay_order_id, rz_payment: o.rz.razorpay_payment_id, rz_sig: o.rz.razorpay_signature } : {}), ...(o.pg ? { pay_gw: o.pg.gw, pay_ref: o.pg.ref } : {}), notes: o.c.notes, message: orderText(o) });
 const sendOrder = (o) => fetch(HOST.api + "/enquire/" + encodeURIComponent(HOST.site), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ page: "checkout.html", data: orderData(o) }) });

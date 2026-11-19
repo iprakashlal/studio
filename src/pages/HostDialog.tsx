@@ -96,6 +96,8 @@ export function HostDialog({ studio, project, tpl, draft, dirty, save, onIndex, 
   const [note, setNote] = useState("");
   const [step, setStep] = useState<{ i: number; detail?: string } | null>(null);
   const [done, setDone] = useState<{ url: string; admin: string; warnings: string[]; moved?: MoveResult | null; from?: string } | null>(null);
+  const [anyway, setAnyway] = useState(false);
+  const mustFix = (tpl.checks?.(draft) || []).some((w: string) => /^Required:/.test(w));
   const sbReady = sbUrlOk(sb.url) && sb.key.trim().length > 30 && siteIdOk(sb.site);
   // The Studio's database on Cloudflare instead of Supabase.
   const [dbKind, setDbKind] = useState<"cloudflare" | "supabase">(host ? (host.cf ? "cloudflare" : "supabase") : "cloudflare");
@@ -323,9 +325,11 @@ export function HostDialog({ studio, project, tpl, draft, dirty, save, onIndex, 
         ));
   return (
     <Modal title={host ? `Hosted on ${PAGES_LABEL[host.kind]}` : "Host to External Services"} wide onClose={onClose}
-      footer={<><button className="btn" onClick={onClose}>Close</button><button className="btn btn-pri" disabled={!!busy || !pagesOk || !dbOk} onClick={publish}>{busy === "publish" ? "Publishing…" : dbMoving ? `Move to Cloudflare and publish v${project.version + 1}` : host && !moving ? `Publish v${project.version + 1}` : `Move the site and publish v${project.version + 1}`}</button></>}>
+      footer={<><button className="btn" onClick={onClose}>Close</button><button className="btn btn-pri" disabled={!!busy || !pagesOk || !dbOk || (mustFix && !anyway)} onClick={publish}>{busy === "publish" ? "Publishing…" : dbMoving ? `Move to Cloudflare and publish v${project.version + 1}` : host && !moving ? `Publish v${project.version + 1}` : `Move the site and publish v${project.version + 1}`}</button></>}>
       {!host && <p className="text-sm text-ink-300">Moves this site off GitHub: <b>Cloudflare</b> or <b>Netlify</b> serves the pages, and <b>Cloudflare</b> or <b>Supabase</b> holds the content, photos and who can edit. The site keeps its own CMS (with email sign-in), and stays in step with this project.{project.publish ? " The GitHub copy isn't deleted; it simply stops being updated." : ""}</p>}
       {host && <p className="text-sm text-ink-300">Live at <a className="font-semibold text-brand-300 underline" href={siteAddress(host)} target="_blank" rel="noopener">{siteAddress(host)}</a> · {PAGES_LABEL[host.kind]} site <b>{host.siteName}</b> · content in {host.cf ? "Cloudflare" : "Supabase"}.</p>}
+
+      {(() => { const list = (tpl.checks?.(draft) || []).filter((w: string) => /^Required:|^Accessibility:|legal name|Consent on forms/.test(w)); return list.length ? <div className="rounded-lg border border-amber-400/40 bg-amber-400/5 px-3 py-2.5 text-[13px] text-amber-100" aria-label="Before you publish"><b>Before you publish:</b><ul className="mt-1 list-disc pl-5">{list.map((w: string) => <li key={w}>{w}</li>)}</ul>{mustFix && <label className="mt-2 flex items-start gap-2 text-ink-100"><input type="checkbox" className="mt-0.5 accent-brand-500" checked={anyway} onChange={(e) => setAnyway(e.target.checked)} /><span>Publish anyway: I will add what is marked “Required” later.</span></label>}</div> : null; })()}
 
       <section className="flex flex-col gap-3 rounded-xl border border-ink-700 bg-ink-950 p-4" aria-label="Hosting">
         <b className="text-sm">1 · Hosting (serves the pages)</b>

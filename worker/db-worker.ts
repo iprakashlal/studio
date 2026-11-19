@@ -465,10 +465,12 @@ async function graph(token: string, path: string, init?: { method?: string; body
     business that owns WhatsApp accounts, then as a single phone number. */
 async function waFind(token: string, hint = ""): Promise<{ wabas: any[]; why?: string }> {
   const ids = new Set<string>(); let why = "", refused = false, said = "", scopes: string[] | null = null;
-  const note = (e: any) => { const m = String(e?.message || "").trim(); if (m && !/^Meta answered 404|nonexisting field|Unsupported get request|does not exist/i.test(m)) said = m; };
+  let raw = "", named = 0, firms = 0;
+  const note = (e: any) => { const m = String(e?.message || "").trim(); if (m) raw = m; if (m && !/^Meta answered 404|nonexisting field|Unsupported get request|does not exist/i.test(m)) said = m; };
   if (/^\d{6,20}$/.test(hint)) ids.add(hint);
   try { const d = await graph(token, "/debug_token?input_token=" + encodeURIComponent(token)); for (const g of d?.data?.granular_scopes || []) if (/^(whatsapp_business_(management|messaging)|business_management)$/.test(g?.scope)) for (const t of g.target_ids || []) ids.add(String(t)); if (Array.isArray(d?.data?.scopes)) scopes = d.data.scopes.map(String); if (d?.data?.is_valid === false) why = "Meta says this token isn't valid (it may have expired)."; }
   catch (e: any) { if (e?.status === 401 || e?.code === 190) { refused = true; why = "Meta refused the token. Check that you copied all of it and that it hasn't expired."; } }
+  named = ids.size - (/^\d{6,20}$/.test(hint) ? 1 : 0);
   const wabas: any[] = [], seen = new Set<string>();
   const account = async (id: string): Promise<boolean> => {
     if (seen.has(id)) return true;
@@ -479,7 +481,7 @@ async function waFind(token: string, hint = ""): Promise<{ wabas: any[]; why?: s
   };
   const lone: any[] = [];
   // A token that names no assets (some are made for "all assets"): ask which businesses it belongs to, and look there.
-  if (!ids.size && !refused) { const b = await graph(token, "/me/businesses?fields=id&limit=10").catch((e) => { note(e); return null; }); for (const x of b?.data || []) if (x?.id) ids.add(String(x.id)); }
+  if (!ids.size && !refused) { const b = await graph(token, "/me/businesses?fields=id&limit=10").catch((e) => { note(e); return null; }); for (const x of b?.data || []) if (x?.id) { ids.add(String(x.id)); firms++; } }
   for (const id of refused ? [] : [...ids].slice(0, 8)) {
     if (await account(id).catch(() => false)) continue;
     // Not a WhatsApp account: a business portfolio that owns some?
@@ -497,9 +499,11 @@ async function waFind(token: string, hint = ""): Promise<{ wabas: any[]; why?: s
   if (!wabas.length && lone.length) wabas.push({ id: "", phones: lone, templates: [] });
   // Say what is actually missing, when Meta told us.
   if (!wabas.length && !why && scopes) { const need = ["whatsapp_business_management", "whatsapp_business_messaging"].filter((x) => !scopes!.includes(x)); if (need.length) why = `This token was made without the permission${need.length > 1 ? "s" : ""} ${need.join(" and ")}. In Business settings → System users, press Generate new token, tick whatsapp_business_management and whatsapp_business_messaging in the list of permissions, and paste the new token here.`; }
-  if (!wabas.length && !why && hint && said) why = `Meta would not open the account ${hint} with this token: “${said.slice(0, 200)}”. Check that the ID is the WhatsApp Business Account ID (not the phone number ID or the app ID), and that the system user has Full control of that account.`;
-  const tail = !wabas.length && !why && said ? ` Meta said: “${said.slice(0, 200)}”.` : "";
-  return { wabas, ...(wabas.length ? {} : { why: why || "The token works, but Meta didn't show a WhatsApp account for it. Give the system user Full control of your WhatsApp account (Business settings → System users → Assign assets → WhatsApp accounts), generate a new token, and press Connect again. Or paste the WhatsApp Business Account ID below (it is on the app's WhatsApp → API Setup page)." + tail }) };
+  if (!wabas.length && !why && hint && /^\d{6,20}$/.test(hint)) why = `Meta would not open ${hint} with this token${said || raw ? `: “${(said || raw).slice(0, 220)}”` : ""}. That usually means the number pasted is not the WhatsApp Business Account ID, or the token was made without whatsapp_business_management. On the app's WhatsApp → API Setup page (Step 1. Try it out), copy the “WhatsApp Business Account ID”, or paste the “Phone number ID” shown beside it instead: either one works here.`;
+  else if (!wabas.length && !why && hint) why = "The ID pasted should be digits only: the WhatsApp Business Account ID, or the Phone number ID, from the app's WhatsApp → API Setup page.";
+  // What was looked at, so the next step is clear.
+  const tail = !wabas.length && !why ? ` (Looked at: ${named} asset${named === 1 ? "" : "s"} named by the token, ${firms} business${firms === 1 ? "" : "es"} it belongs to.${said ? ` Meta said: “${said.slice(0, 200)}”.` : ""})` : "";
+  return { wabas, ...(wabas.length ? {} : { why: why || "The token works, but Meta didn't show a WhatsApp account for it. Give the system user Full control of your WhatsApp account (Business settings → System users → Assign assets → WhatsApp accounts), generate a new token, and press Connect again. Or paste the WhatsApp Business Account ID, or the Phone number ID, below (both are on the app's WhatsApp → API Setup page)." + tail }) };
 }
 const WA_TPL: Record<string, (lang: string) => any> = {
   otp: (language) => ({ name: "signin_code", language, category: "authentication", components: [{ type: "body", add_security_recommendation: true }, { type: "footer", code_expiration_minutes: 10 }, { type: "buttons", buttons: [{ type: "otp", otp_type: "copy_code" }] }] }),

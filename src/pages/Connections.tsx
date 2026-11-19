@@ -84,6 +84,15 @@ export function WhatsAppForm({ where, kind }: { where: Where | null | undefined;
   const blank = { on: false, phoneId: "", waba: "", token: "", cc: "91", lang: "en", to: "", phones: "", tplOtp: "", tplOrder: "", tplEnquiry: "", login: false, orderOtp: false, orderAlert: false, enquiryAlert: false };
   const [f, setF] = useState<Record<string, any>>(blank), [busy, setBusy] = useState(""), [found, setFound] = useState<WaFound[] | null>(null), [note, setNote] = useState(""), [testTo, setTestTo] = useState(""), [hand, setHand] = useState(false);
   useEffect(() => { if (keep.current) { keep.current = false; return; } const w = saved?.wa; setF(w ? { ...blank, ...w, token: "" } : blank); }, [saved]);
+  // A saved connection is looked up with Meta once when the card opens, so the numbers and templates show by name
+  // (as right after Connect) and not as bare IDs. Quietly: if Meta can't be asked just now, the saved IDs stay as they are.
+  const looked = useRef("");
+  useEffect(() => {
+    const w: any = saved?.wa, key = where && w?.token && (w.waba || w.phoneId) ? where.api + "|" + where.scope + "|" + (w.waba || w.phoneId) : "";
+    if (!key || looked.current === key) return; looked.current = key;
+    cfCall<any>(where!.api, "/set/wa?scope=" + encodeURIComponent(where!.scope), { method: "POST", body: JSON.stringify({ do: "find", token: "", waba: String(w.waba || w.phoneId || "") }) })
+      .then((r) => { if (Array.isArray(r?.wabas) && r.wabas.length && r.wabas.some((a: any) => a.id)) setFound((cur) => cur || r.wabas); }).catch(() => {});
+  }, [saved, where?.api, where?.scope]);
   const lead = <>Optional. Messages go through your own WhatsApp Business account (Meta's WhatsApp Business Cloud API), and Meta charges you per message. Nothing is sent on WhatsApp unless this is switched on and the matching box below is ticked; email keeps working as before.</>;
   if (where === undefined) return <Shell title="WhatsApp" lead={lead}><Missing why="Checking your database…" /></Shell>;
   if (!where) return <Shell title="WhatsApp" lead={lead}><Missing why={kind === "studio" ? "WhatsApp is kept on the Studio's Cloudflare database. Host the Studio on Cloudflare (Settings → Hostings) and sign in there as its owner." : "WhatsApp needs this site hosted on your Cloudflare database, and you signed in to it on this device as its owner."} /></Shell>;

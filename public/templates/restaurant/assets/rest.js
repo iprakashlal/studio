@@ -161,7 +161,7 @@ const DEFAULT = {
   reserve: { eyebrow: "Reservations", title: "Book a table", lede: "Tell us when you'd like to come. We'll confirm by phone or message.", note: "For groups of more than 10, please call us." },
   hours: {
     title: "Opening hours", format: "12", utcOffset: "+05:30", showStatus: true, note: "Kitchen closes 30 minutes before closing time.",
-    openLabel: "Open now", closedLabel: "Closed now",
+    openLabel: "Open now", closedLabel: "Closed now", same: false, all: { open: "12:00", close: "23:00", open2: "", close2: "" },
     days: DAYS.map((day, i) => ({ day, closed: false, open: "12:00", close: i >= 4 && i <= 5 ? "23:30" : "23:00", open2: "", close2: "" })),
   },
   contact: {
@@ -383,8 +383,15 @@ function clock() {
   return { day: (d.getUTCDay() + 6) % 7, min: d.getUTCHours() * 60 + d.getUTCMinutes() };
 }
 /** { open, until | next: { day, at } } for right now. */
+/** The week's hours as the site shows them: with "Same hours every day" on, every day takes the one set of times. */
+function weekDays() {
+  const H = C.hours || {}, D = Array.isArray(H.days) ? H.days : [];
+  if (!H.same) return D;
+  const a = H.all || {};
+  return DAYS.map((day, i) => ({ day: (D[i] && D[i].day) || day, closed: false, open: a.open || "", close: a.close || "", open2: a.open2 || "", close2: a.close2 || "" }));
+}
 function openState() {
-  const D = C.hours.days || [], { day, min } = clock();
+  const D = weekDays(), { day, min } = clock();
   if (!D.length) return null;
   for (const [a, b] of periods(D[day])) if (min >= a && min < b) return { open: true, until: b % 1440 };
   for (const [, b] of periods(D[(day + 6) % 7])) if (b > 1440 && min < b - 1440) return { open: true, until: b - 1440 };
@@ -395,15 +402,15 @@ const hhmm = (n) => String(Math.floor(n / 60)).padStart(2, "0") + ":" + String(n
 function statusChip() {
   const H = C.hours; if (H.showStatus === false) return "";
   const s = openState(); if (!s) return "";
-  const D = H.days || [];
+  const D = weekDays();
   const more = s.open ? `Closes ${fmtTime(hhmm(s.until))}` : s.next ? `Opens ${s.next.k === 0 ? "" : s.next.k === 1 ? "tomorrow " : esc((D[s.next.day] || {}).day || "") + " "}${fmtTime(hhmm(s.next.at))}` : "";
   return `<span class="ostat ${s.open ? "on" : "off"}"><i aria-hidden="true"></i><b>${esc(s.open ? H.openLabel || "Open now" : H.closedLabel || "Closed now")}</b>${more ? `<span>${more}</span>` : ""}</span>`;
 }
 function hoursTable() {
-  const H = C.hours, D = (H.days || []).filter((d) => d && d.day), today = clock().day;
+  const H = C.hours, W7 = weekDays(), D = W7.filter((d) => d && d.day), today = clock().day;
   if (!D.length) return "";
   const line = (d) => { const p = [[d.open, d.close], [d.open2, d.close2]].filter(([a, b]) => mins(a) != null && mins(b) != null); return d.closed || !p.length ? `<span class="closed">Closed</span>` : p.map(([a, b]) => `${fmtTime(a)} – ${fmtTime(b)}`).join(`<br>`); };
-  return `<table class="hours"><caption class="vh">${esc(H.title || "Opening hours")}</caption><tbody>${D.map((d, i) => `<tr${(H.days || []).indexOf(d) === today ? ' class="today"' : ""}><th scope="row">${esc(d.day)} ${(H.days || []).indexOf(d) === today ? `<span class="tod">Today</span>` : ""}</th><td>${line(d)}</td></tr>`).join("")}</tbody></table>${H.note ? `<p class="hours-n">${rich(H.note)}</p>` : ""}`;
+  return `<table class="hours"><caption class="vh">${esc(H.title || "Opening hours")}</caption><tbody>${D.map((d, i) => `<tr${W7.indexOf(d) === today ? ' class="today"' : ""}><th scope="row">${esc(d.day)} ${W7.indexOf(d) === today ? `<span class="tod">Today</span>` : ""}</th><td>${line(d)}</td></tr>`).join("")}</tbody></table>${H.note ? `<p class="hours-n">${rich(H.note)}</p>` : ""}`;
 }
 
 /* ============================================================
@@ -515,7 +522,7 @@ function foodHTML() {
   const tools = full ? `<div class="mtools">
       ${F.search !== false && all.reduce((n, c) => n + c.items.length, 0) > 8 ? `<label class="msearch"><span class="vh">Search the menu</span>${icon("search", "ms-ic")}<input type="search" id="menu-q" placeholder="Search the menu" autocomplete="off"></label>` : ""}
       ${F.filters !== false && diets.length > 1 ? `<div class="chips mdiet" role="group" aria-label="Filter by diet"><button type="button" class="chip" aria-pressed="true" data-diet="">All</button>${["veg", "vegan", "egg", "nonveg"].filter((d) => diets.includes(d)).map((d) => `<button type="button" class="chip" aria-pressed="false" data-diet="${d}"><span class="diet ${d}" aria-hidden="true"></span>${DIET[d]}</button>`).join("")}</div>` : ""}
-      ${orderOn() ? `<a class="btn pri morder" href="${PAGES.order}">${icon("bag", "ic")}${esc(C.ordering.label || "Order now")}</a>` : ""}
+      ${orderOn() && C.ordering.onMenu !== false ? `<a class="btn pri morder" href="${PAGES.order}">${icon("bag", "ic")}${esc(C.ordering.label || "Order now")}</a>` : ""}
       ${safeUrl(F.pdfUrl) ? `<a class="link mpdf" href="${esc(safeUrl(F.pdfUrl))}" target="_blank" rel="noopener">${esc(F.pdfLabel || "Download the menu")} ${arrow}</a>` : ""}</div>` : "";
   const jump = L.length > 1 ? `<nav class="mcats" aria-label="Menu sections"><div class="mcats-in">${L.map((c, i) => `<a href="#${c.id}" data-cat="${c.id}"${i === 0 ? ' class="on"' : ""}>${esc(c.name)}</a>`).join("")}</div></nav>` : "";
   return `<section class="food band" id="food"><div class="wrap">${head(F)}${tools}${jump}<div class="mbody">${L.map((c, i) => { const im = imgUrl(c.image); return `<section class="mcat${i === 0 ? " on" : ""}${im ? " has-img" : ""}" id="${c.id}" aria-label="${esc(c.name)}">
@@ -663,7 +670,7 @@ function pageHead() {
   return `<section class="phead" id="page"><div class="wrap"><p class="crumbs"><a href="${PAGES.home}">${esc(C.site.pageLabels.home || "Home")}</a> / ${esc(C.site.pageLabels[PAGE] || PAGE)}</p><h1 class="h1">${rich(S.title || C.site.pageLabels[PAGE])}</h1>${S.lede ? `<p class="hero-lede">${rich(S.lede)}</p>` : ""}</div></section>`;
 }
 function footerHTML() {
-  const F = C.footer, B = C.brand, K = C.contact, D = (C.hours.days || []).filter((d) => d && d.day);
+  const F = C.footer, B = C.brand, K = C.contact, D = weekDays().filter((d) => d && d.day);
   const cols = multi() ? mpages().map((p) => `<a href="${PAGES[p]}">${esc(C.site.pageLabels[p] || p)}</a>`) : C.sections.filter((s) => s.show !== false && s.inNav && RENDER[s.id]).map((s) => `<a href="${AT}#${s.id}">${esc(s.label)}</a>`);
   spList().filter((p) => p.inFooter !== false).forEach((p) => cols.push(`<a href="${esc(spHref(p))}">${esc(p.navLabel || p.title)}</a>`));
   if (ckOn()) cols.push(`<a href="#cookie-settings">${esc(C.consent.reopenLabel || "Cookie settings")}</a>`);
@@ -689,7 +696,7 @@ function mobileBar() {
   return b.length > 1 ? `<nav class="mbar" aria-label="Quick actions">${b.join("")}</nav>` : "";
 }
 /** What the Order now page (assets/order.js) needs from this file. */
-const ORDER_API = { C: () => C, PAGES, DIET, PREVIEW, esc, rich, money, imgUrl, icon, toast, cats, dietMark, slug, ph, tel, clock, periods, openState, fmtTime, hhmm, statusChip, backend: () => backend(), postEnquiry: (d, pg, cart) => postEnquiry(d, pg, cart) };
+const ORDER_API = { C: () => C, PAGES, DIET, PREVIEW, esc, rich, money, imgUrl, icon, toast, cats, dietMark, slug, ph, tel, clock, periods, openState, fmtTime, hhmm, statusChip, weekDays: () => weekDays(), backend: () => backend(), postEnquiry: (d, pg, cart) => postEnquiry(d, pg, cart) };
 function orderPage() {
   if (!orderOn()) return `<section class="phead"><div class="wrap"><h1 class="h1">${esc((C.ordering || {}).label || "Order now")}</h1><p class="hero-lede">${PREVIEW ? "Online ordering is switched off. Turn it on under Online ordering to see this page." : "Online ordering isn't available right now."}</p></div></section>`;
   return window.RestOrder ? window.RestOrder.page(ORDER_API) : "";
@@ -732,7 +739,7 @@ function setIcon() {
 function jsonLd() {
   let s = document.getElementById("ld-restaurant");
   if (PREVIEW || PAGE !== "home") { if (s) s.remove(); return; }
-  const K = C.contact, S = C.seo, D = C.hours.days || [], base = String(S.siteUrl || "").replace(/\/+$/, "");
+  const K = C.contact, S = C.seo, D = weekDays(), base = String(S.siteUrl || "").replace(/\/+$/, "");
   const o = { "@context": "https://schema.org", "@type": "Restaurant", name: C.brand.name };
   if (S.description) o.description = S.description; if (base) { o.url = base + "/"; if (shown("food") && cats().length) o.hasMenu = base + "/" + (multi() ? PAGES.menu : "#food"); }
   if (K.phone) o.telephone = K.phone; if (K.email) o.email = K.email; if (K.address) o.address = String(K.address).replace(/\n/g, ", ");

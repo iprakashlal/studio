@@ -62,6 +62,8 @@ export class Cloudflare {
   /** For Connect Cloudflare: the permissions a token can have, and making the Studio's own token. */
   permissionGroups() { return this.api<{ id: string; name: string; scopes?: string[] }[]>("GET", "/user/tokens/permission_groups"); }
   createToken(json: unknown) { return this.api<{ id: string; value?: string }>("POST", "/user/tokens", { json }); }
+  accountPermissionGroups(account: string) { return this.api<{ id: string; name: string; scopes?: string[] }[]>("GET", `/accounts/${account}/tokens/permission_groups`); }
+  createAccountToken(account: string, json: unknown) { return this.api<{ id: string; value?: string }>("POST", `/accounts/${account}/tokens`, { json }); }
   /** The account's workers.dev name, creating it when the account doesn't have one yet. */
   /** The account's workers.dev name, or null when it has none (doesn't create one). */
   /** Deletes a Worker (and its routes and bindings). */

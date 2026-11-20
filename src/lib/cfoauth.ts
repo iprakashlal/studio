@@ -7,7 +7,9 @@ import type { Cloudflare, CfAccount } from "./cloudflare";
 const AUTH = "https://dash.cloudflare.com/oauth2/auth", TOKEN = "https://dash.cloudflare.com/oauth2/token", REVOKE = "https://dash.cloudflare.com/oauth2/revoke";
 const CFG = "studio-cf-oauth", BACK = "studio-cf-oauth-back";
 /** Cloudflare's names for what the Studio needs (the same permissions as the pasted token). Editable in the set-up box. */
-export const CF_OAUTH_SCOPES = "account-settings.read workers-scripts.write d1.write workers-routes.write zone.write dns.write api-tokens.write";
+export const CF_OAUTH_SCOPES = "user-details.read account-settings.read workers:write d1.write workers-routes.write zone.read dns.write";
+/** Earlier guesses at the names, which Cloudflare refuses: a list saved from one of these is replaced by the current one. */
+const OLD_SCOPES = ["account-settings.read workers-scripts.write d1.write workers-routes.write zone.write dns.write api-tokens.write"];
 export type CfOauthCfg = { client: string; scopes: string };
 /** The connection kept when the Studio couldn't make its own token: renewed with `refresh` before `exp`. */
 export type CfOauthKeep = { refresh: string; exp: number; client: string };
@@ -18,7 +20,8 @@ export const cfOauthCfg = {
   /** The OAuth client this Studio uses (not a secret): saved on this device, else the one built in. */
   get(): CfOauthCfg {
     let s: any = null; try { s = JSON.parse(localStorage.getItem(CFG) || "null"); } catch { /* private mode */ }
-    return { client: String(s?.client || env("VITE_CF_OAUTH_CLIENT")).trim(), scopes: String(s?.scopes || env("VITE_CF_OAUTH_SCOPES") || CF_OAUTH_SCOPES).trim().replace(/[\s,]+/g, " ") };
+    const saved = String(s?.scopes || "").trim().replace(/[\s,]+/g, " ");
+    return { client: String(s?.client || env("VITE_CF_OAUTH_CLIENT")).trim(), scopes: (saved && !OLD_SCOPES.includes(saved) ? saved : String(env("VITE_CF_OAUTH_SCOPES") || CF_OAUTH_SCOPES)).trim().replace(/[\s,]+/g, " ") };
   },
   set(c: CfOauthCfg) { try { localStorage.setItem(CFG, JSON.stringify({ client: c.client.trim(), scopes: c.scopes.trim().replace(/[\s,]+/g, " ") })); } catch { /* private mode */ } },
 };
@@ -79,19 +82,32 @@ export async function cfOauthRevoke(client: string, token: string) {
 }
 
 const WANT = [/^workers scripts (write|edit)$/i, /^d1 (write|edit)$/i, /^account settings read$/i, /^workers routes (write|edit)$/i, /^zone (write|edit)$/i, /^dns (write|edit)$/i];
-/** Makes the Studio's own long-lasting API token for just these accounts (the same permissions as a pasted one).
- *  null when Cloudflare doesn't allow making one, or the new token doesn't work (`test`). */
-export async function cfOauthMint(cf: Cloudflare, accounts: CfAccount[], test: (token: string) => Promise<boolean>): Promise<string | null> {
-  try {
-    const groups = await cf.permissionGroups(), found = WANT.map((re) => groups.find((g) => re.test(g.name)));
+/** Makes the Studio's own long-lasting API token for these accounts (the same permissions as a pasted one): one
+ *  token of the person's for all of them, else one owned by each account. Returns account id → token; null when
+ *  Cloudflare doesn't allow making any, or a new token doesn't work (`test`). */
+export async function cfOauthMint(cf: Cloudflare, accounts: CfAccount[], test: (token: string) => Promise<boolean>): Promise<Record<string, string> | null> {
+  const policiesFor = (groups: { id: string; name: string; scopes?: string[] }[], accs: CfAccount[]) => {
+    const found = WANT.map((re) => groups.find((g) => re.test(g.name)));
     if (!found[0] || !found[1] || !found[2]) return null;
     const has = (g: { scopes?: string[] }, sc: string) => (g.scopes || []).includes(sc);
     const acct = found.filter((g) => g && has(g, "com.cloudflare.api.account")), zone = found.filter((g) => g && !has(g, "com.cloudflare.api.account") && has(g, "com.cloudflare.api.account.zone"));
-    const policies = [{ effect: "allow", resources: Object.fromEntries(accounts.map((a) => ["com.cloudflare.api.account." + a.id, "*"])), permission_groups: acct.map((g) => ({ id: g!.id })) },
-      ...(zone.length ? [{ effect: "allow", resources: Object.fromEntries(accounts.map((a) => ["com.cloudflare.api.account." + a.id, { "com.cloudflare.api.account.zone.*": "*" }])), permission_groups: zone.map((g) => ({ id: g!.id })) }] : [])];
-    const t = await cf.createToken({ name: "Picaffectz Studio", policies });
-    return t?.value && (await test(t.value)) ? t.value : null;
-  } catch { return null; }
+    return [{ effect: "allow", resources: Object.fromEntries(accs.map((a) => ["com.cloudflare.api.account." + a.id, "*"])), permission_groups: acct.map((g) => ({ id: g!.id })) },
+      ...(zone.length ? [{ effect: "allow", resources: Object.fromEntries(accs.map((a) => ["com.cloudflare.api.account." + a.id, { "com.cloudflare.api.account.zone.*": "*" }])), permission_groups: zone.map((g) => ({ id: g!.id })) }] : [])];
+  };
+  try {
+    const policies = policiesFor(await cf.permissionGroups(), accounts);
+    const t = policies ? await cf.createToken({ name: "Picaffectz Studio", policies }) : null;
+    if (t?.value && (await test(t.value))) return Object.fromEntries(accounts.map((a) => [a.id, t.value!]));
+  } catch { /* not allowed to make the person's own tokens: try the accounts' */ }
+  const out: Record<string, string> = {};
+  for (const a of accounts) {
+    try {
+      const policies = policiesFor(await cf.accountPermissionGroups(a.id), [a]);
+      const t = policies ? await cf.createAccountToken(a.id, { name: "Picaffectz Studio", policies }) : null;
+      if (t?.value && (await test(t.value))) out[a.id] = t.value;
+    } catch { /* not allowed on this account */ }
+  }
+  return Object.keys(out).length ? out : null;
 }
 
 /** The sign-in in use in this tab (never written to the device), shared by every Cloudflare box on the page. */

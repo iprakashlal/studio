@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useCfAccount, useCloudflarePicker, type CfAccountHook } from "./CfPicker";
 import { cloudflarePages, netlifyPages, pagesViaDbs, PAGES_LABEL, type Pages, type PagesKind } from "../lib/pages";
 import { CfError, registrarHelp, type Cloudflare } from "../lib/cloudflare";
@@ -338,8 +338,8 @@ export function HostDialog({ studio, project, tpl, draft, dirty, save, onIndex, 
 
       {(() => { const list = (tpl.checks?.(draft) || []).filter((w: string) => /^Required:|^Accessibility:|legal name|Consent on forms/.test(w)); return list.length ? <div className="rounded-lg border border-amber-400/40 bg-amber-400/5 px-3 py-2.5 text-[13px] text-amber-100" aria-label="Before you publish"><b>Before you publish:</b><ul className="mt-1 list-disc pl-5">{list.map((w: string) => <li key={w}>{w}</li>)}</ul>{mustFix && <label className="mt-2 flex items-start gap-2 text-ink-100"><input type="checkbox" className="mt-0.5 accent-brand-500" checked={anyway} onChange={(e) => setAnyway(e.target.checked)} /><span>Publish anyway: I will add what is marked “Required” later.</span></label>}</div> : null; })()}
 
-      <section className="flex flex-col gap-3 rounded-xl border border-ink-700 bg-ink-950 p-4" aria-label="Hosting">
-        <b className="text-sm">1 · Hosting (serves the pages)</b>
+      <Sect id="hosting" label="Hosting" title="1 · Hosting (serves the pages)">
+
         <div className="flex flex-wrap rounded-lg border border-ink-600 self-start" role="radiogroup" aria-label="Pages host">
           {([["cloudflare", "Cloudflare (free, unlimited traffic)"], ["netlify", "Netlify"]] as const).map(([k, l]) => <button key={k} type="button" role="radio" aria-checked={pagesKind === k} onClick={() => setPagesKind(k)} className={`btn btn-sm border-0 ${pagesKind === k ? "bg-ink-700" : "bg-transparent"}`}>{l}</button>)}
         </div>
@@ -357,7 +357,7 @@ export function HostDialog({ studio, project, tpl, draft, dirty, save, onIndex, 
             <input id="nf-name" className="input" value={siteName} onChange={(e) => setSiteName(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "-"))} />
           </Field>
         )}
-      </section>
+      </Sect>
 
       {otherDb && !bridged && !cfSigned && (
         <section className="flex flex-col gap-2 rounded-xl border border-brand-400/40 bg-brand-500/5 p-4 text-[13px]" aria-label="Reach this site from every device">
@@ -365,8 +365,8 @@ export function HostDialog({ studio, project, tpl, draft, dirty, save, onIndex, 
           <span className="text-ink-300">Its content, photos and editors stay in <span className="font-mono">{host!.cf!.api.replace(/^https:\/\//, "")}</span> on its own Cloudflare account. To reach it from every device without signing in to it separately, add that account in <b>Settings → Hostings → Sites and hosting accounts</b>. Or sign in to it below with an email code (this device only).</span>
         </section>
       )}
-      <section className="flex flex-col gap-3 rounded-xl border border-ink-700 bg-ink-950 p-4" aria-label="Supabase">
-        <b className="text-sm">2 · Database (content, photos and logins)</b>
+      <Sect id="database" label="Supabase" title="2 · Database (content, photos and logins)">
+
         <div className="flex flex-wrap rounded-lg border border-ink-600 self-start" role="radiogroup" aria-label="Site database">
           {([["cloudflare", "Cloudflare"], ["supabase", "Supabase"]] as const).map(([k, l]) => <button key={k} type="button" role="radio" aria-checked={dbKind === k} disabled={!!host && !canMoveDb} onClick={() => setDbKind(k)} className={`btn btn-sm border-0 ${dbKind === k ? "bg-ink-700" : "bg-transparent"}`}>{l}</button>)}
         </div>
@@ -448,11 +448,10 @@ export function HostDialog({ studio, project, tpl, draft, dirty, save, onIndex, 
         </div>)}
         {sbReady && sbSignIn}
         </>}
-      </section>
+      </Sect>
 
       {host && !dbMoving && <Toggle id="hd-content" label="Replace the site's content with this version" checked={withContent} onChange={setWithContent} />}
       {host && !dbMoving && <p className="hint">{withContent ? "Overwrites the live content in the database, including edits made in the site's own CMS. Photos it already has aren't uploaded again." : "Updates pages, design code and the CMS only. Content edited in the site's own CMS is kept."}</p>}
-      <Field label="Version note (optional)" htmlFor="hd-note"><input id="hd-note" className="input" value={note} onChange={(e) => setNote(e.target.value)} /></Field>
       {!pagesOk || !dbOk ? (
         <div className="rounded-lg border border-amber-400/40 bg-amber-400/5 px-3 py-2.5 text-[13px] text-amber-100" role="status">
           <b>Publish is waiting for:</b>
@@ -474,7 +473,26 @@ export function HostDialog({ studio, project, tpl, draft, dirty, save, onIndex, 
 
       {host && !moving && host.kind === "netlify" && nf && <DomainCard host={host} nf={nf} onHost={async (h) => onIndex(await studio.updateMeta(project.id, { host: h }, "Update the site's domain"))} />}
       {host && !moving && host.kind === "cloudflare" && cfAcc.ready && siteAccKnown && <CfDomainCard host={host} acc={{ ...cfAcc, client: siteClient }} onHost={async (h) => onIndex(await studio.updateMeta(project.id, { host: h }, "Update the site's domain"))} />}
+      <Field label="Version note (optional)" htmlFor="hd-note"><input id="hd-note" className="input" value={note} onChange={(e) => setNote(e.target.value)} /></Field>
     </Modal>
+  );
+}
+
+/** A numbered part of the publish window: its heading folds it away. Starts folded; what is opened is remembered on this device. */
+function Sect({ id, label, title, children }: { id: string; label: string; title: ReactNode; children: ReactNode }) {
+  const KEY = "studio-hostdlg-open";
+  const [open, setOpen] = useState(() => { try { const v = localStorage.getItem(KEY); if (v === "all") return true; return !!JSON.parse(v || "{}")[id]; } catch { return false; } });
+  return (
+    <section className="rounded-xl border border-ink-700 bg-ink-950 p-4" aria-label={label}>
+      <details className="group" open={open} onToggle={(e) => {
+        if (e.target !== e.currentTarget) return;
+        const o = e.currentTarget.open; if (o === open) return; setOpen(o);
+        try { const v = localStorage.getItem(KEY), j = v && v !== "all" ? JSON.parse(v) : {}; j[id] = o; localStorage.setItem(KEY, JSON.stringify(j)); } catch { /* private mode */ }
+      }}>
+        <summary className="flex cursor-pointer select-none items-center gap-2"><b className="text-sm">{title}</b><span className="ml-auto text-[12.5px] text-brand-300 underline group-open:hidden">Show</span><span className="ml-auto hidden text-[12.5px] text-brand-300 underline group-open:inline">Hide</span></summary>
+        <div className="mt-3 flex flex-col gap-3">{children}</div>
+      </details>
+    </section>
   );
 }
 
@@ -500,8 +518,8 @@ function DomainCard({ host, nf, onHost }: { host: HostCfg; nf: Netlify; onHost: 
   });
   const remove = () => run("remove", async () => { await nf.removeDomain(host.siteId); await onHost({ ...host, domain: undefined }); setD(""); setDns(null); toast("Domain removed. The site is back on its netlify.app address."); });
   return (
-    <section className="flex flex-col gap-3 rounded-xl border border-ink-700 bg-ink-950 p-4" aria-label="Domain">
-      <b className="text-sm">3 · Your domain (optional)</b>
+    <Sect id="domain" label="Domain" title="3 · Your domain (optional)">
+
       {!host.domain ? (
         <>
           <p className="text-[13px] text-ink-400">Buy a domain from any registrar (GoDaddy, Namecheap, Cloudflare, Google…), then connect it here. The site stays on {netlifyHost} until the DNS is set.</p>
@@ -540,7 +558,7 @@ function DomainCard({ host, nf, onHost }: { host: HostCfg; nf: Netlify; onHost: 
           </div>
         </>
       )}
-    </section>
+    </Sect>
   );
 }
 
@@ -604,8 +622,8 @@ function CfDomainCard({ host, acc, onHost }: { host: HostCfg; acc: CfAccountHook
   const useNewToken = () => run("token", async () => { await acc.replaceToken(newTok); setNewTok(""); setNeedPerm(false); toast("New token saved on this device. Press the button again."); });
   const copy = (t: string) => { navigator.clipboard?.writeText(t).then(() => toast("Copied " + t)).catch(() => {}); };
   return (
-    <section className="flex flex-col gap-3 rounded-xl border border-ink-700 bg-ink-950 p-4" aria-label="Domain">
-      <b className="text-sm">3 · Your domain (optional)</b>
+    <Sect id="domain" label="Domain" title="3 · Your domain (optional)">
+
       {host.domain ? <div className="flex flex-wrap items-center gap-2 text-[13px]">
         <span className="h-2 w-2 rounded-full bg-emerald-400" /><span>Live on <b>{host.domain}</b>{!host.subdomain && <> and <b>www.{host.domain}</b></>}</span>
         <a className="btn btn-sm" href={siteAddress(host)} target="_blank" rel="noopener">Open ↗</a>
@@ -635,6 +653,6 @@ function CfDomainCard({ host, acc, onHost }: { host: HostCfg; acc: CfAccountHook
         <p><a className="btn btn-pri btn-sm" href={CF_DB_TOKEN_PAGE} target="_blank" rel="noopener noreferrer">Create a token that can add domains ↗</a> Everything is ticked; press <b>Continue to summary → Create Token</b>, then paste it here. It replaces the old one on this device.</p>
         <div className="flex gap-2"><input aria-label="New Cloudflare token" className="input min-w-0 flex-1 font-mono text-xs" type="password" autoComplete="off" value={newTok} onChange={(e) => setNewTok(e.target.value)} placeholder="New Cloudflare API token" /><button type="button" className="btn btn-sm" disabled={!!busy || newTok.trim().length < 20} onClick={useNewToken}>{busy === "token" ? "Checking…" : "Use it"}</button></div>
       </div>}
-    </section>
+    </Sect>
   );
 }

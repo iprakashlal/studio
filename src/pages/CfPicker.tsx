@@ -244,7 +244,7 @@ export function useCfAccount(studioToken: string, nf: Netlify | null | undefined
     <div className="flex flex-col gap-2.5 text-[13px]">
       {helper.ui}
       <details className="group rounded-lg border border-ink-700" aria-label="Cloudflare connection" open={boxOpen ?? (!acc || !oc.client)} onToggle={(e) => { if (e.target !== e.currentTarget) return; const o = e.currentTarget.open; if (o !== (boxOpen ?? (!acc || !oc.client))) setBoxOpen(o); }}>
-        <summary className="flex cursor-pointer select-none items-center gap-2 px-3 py-2"><span className={`h-2 w-2 rounded-full ${acc ? "bg-emerald-400" : "bg-ink-500"}`} /><b className="text-ink-100">Cloudflare connection</b><span className="text-ink-400">{acc ? (cfMemTokens.has(tok.trim()) ? "signed in for this tab" : "connected") : "not connected"}</span><span className="ml-auto text-[12.5px] text-brand-300 underline group-open:hidden">Change</span><span className="ml-auto hidden text-[12.5px] text-brand-300 underline group-open:inline">Hide</span></summary>
+        <summary className="flex cursor-pointer select-none items-center gap-2 px-3 py-2"><span className={`h-2 w-2 rounded-full ${acc ? "bg-emerald-400" : "bg-ink-500"}`} /><b className="text-ink-100">Cloudflare connection</b><span className="text-ink-400">{acc ? (cfMemTokens.has(tok.trim()) ? "connected · this tab only" : "connected") : "not connected"}</span><span className="ml-auto text-[12.5px] text-brand-300 underline group-open:hidden">Change</span><span className="ml-auto hidden text-[12.5px] text-brand-300 underline group-open:inline">Hide</span></summary>
         <div className="flex flex-col gap-2.5 px-3 pb-3">
           {ocUi}
           <details aria-label="Paste a token" open={!oc.client}>

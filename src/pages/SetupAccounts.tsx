@@ -1,5 +1,6 @@
 // Settings → Hostings → Hosting accounts: the Studio's helper (on Cloudflare or Netlify), the Cloudflare account used for
 // hosting pages, the database and Workers, and the shop's Cloudflare token, as kept on this device.
+import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import type { Session } from "../lib/auth";
 import { cfVault } from "../lib/cloudflare";
@@ -16,6 +17,22 @@ import { useToast } from "../ui/kit";
 import { ghPublish } from "../lib/ghpublish";
 import { isHosted } from "../lib/backend";
 
+/** One hosting account in Settings → Hostings: a heading that folds its box away. What is open is remembered on this device. */
+export function HostFold({ id, title, open: byDefault, children }: { id: string; title: string; open?: boolean; children: ReactNode }) {
+  const KEY = "studio-hostacc-open";
+  const [open, setOpen] = useState(() => { try { const v = localStorage.getItem(KEY); if (v === "all") return true; const j = JSON.parse(v || "{}"); return id in j ? !!j[id] : !!byDefault; } catch { return !!byDefault; } });
+  return (
+    <details className="group rounded-lg border border-ink-700" data-fold={id} open={open} onToggle={(e) => {
+      if (e.target !== e.currentTarget) return;
+      const o = e.currentTarget.open; if (o === open) return; setOpen(o);
+      try { const v = localStorage.getItem(KEY), j = v && v !== "all" ? JSON.parse(v) : {}; j[id] = o; localStorage.setItem(KEY, JSON.stringify(j)); } catch { /* private mode */ }
+    }}>
+      <summary className="flex cursor-pointer select-none items-center gap-2 px-3 py-2.5"><h3 className="text-sm font-bold">{title}</h3><span className="ml-auto text-[12.5px] text-brand-300 underline group-open:hidden">Show</span><span className="ml-auto hidden text-[12.5px] text-brand-300 underline group-open:inline">Hide</span></summary>
+      <div className="flex flex-col gap-3 px-3 pb-3 text-sm">{children}</div>
+    </details>
+  );
+}
+
 export function SetupAccounts({ session, index }: { session: Session; index?: StudioIndex }) {
   const [nf, setNf] = useState<Netlify | null | undefined>(undefined);
   const [shop, setShop] = useState<boolean | undefined>(undefined);
@@ -23,14 +40,14 @@ export function SetupAccounts({ session, index }: { session: Session; index?: St
   if (nf === undefined || shop === undefined) return null;
   return (
     <div className="flex flex-col gap-3 text-sm">
-      <h3 className="mt-2 text-sm font-bold">Studio helper</h3>
-      <HelperStatus studioToken={session.token} nf={nf} />
-      <h3 className="mt-2 text-sm font-bold">Cloudflare (hosting, database and Workers)</h3>
-      <CloudflareAccount session={session} nf={nf} index={index} />
-      {shop && <div className="flex flex-wrap items-center gap-2">
-        <span className="h-2 w-2 rounded-full bg-emerald-400" /><span>Shop backend's Cloudflare token saved on this device</span>
-        <button type="button" className="btn btn-sm ml-auto" onClick={() => { cfVault.clear(); setShop(false); }}>Disconnect</button>
-      </div>}
+      <HostFold id="helper" title="Studio helper"><HelperStatus studioToken={session.token} nf={nf} /></HostFold>
+      <HostFold id="cloudflare" title="Cloudflare (hosting, database and Workers)" open>
+        <CloudflareAccount session={session} nf={nf} index={index} />
+        {shop && <div className="flex flex-wrap items-center gap-2">
+          <span className="h-2 w-2 rounded-full bg-emerald-400" /><span>Shop backend's Cloudflare token saved on this device</span>
+          <button type="button" className="btn btn-sm ml-auto" onClick={() => { cfVault.clear(); setShop(false); }}>Disconnect</button>
+        </div>}
+      </HostFold>
     </div>
   );
 }

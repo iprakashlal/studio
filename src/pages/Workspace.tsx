@@ -15,7 +15,7 @@ import { siteRepoFor } from "../lib/hosting";
 import { AccountPanel } from "../ui/gate";
 import { NetlifyAccount } from "./HostDialog";
 import { GitHubPublishAccount } from "./GitHubAccount";
-import { SetupAccounts } from "./SetupAccounts";
+import { HostFold, SetupAccounts } from "./SetupAccounts";
 import { ghPublish } from "../lib/ghpublish";
 import { Field, Logo, Skel, SkelDashboard, SkelRows, useToast } from "../ui/kit";
 import { accentFromImage, tintPalette } from "../lib/tint";
@@ -170,10 +170,8 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
             <section className="card flex flex-col gap-3 p-5" aria-label="Hosting accounts">
             <h3 className="text-[15px] font-extrabold">Hosting accounts</h3>
             <p className="text-sm text-ink-300">GitHub publishing creates each site's repository and turns on GitHub Pages; Cloudflare (free, no traffic limit) or Netlify hosts sites outside GitHub. Tokens stay on this device, encrypted. Each site's database details are kept with its project.</p>
-            <h3 className="mt-2 text-sm font-bold">GitHub (publishing)</h3>
-            <GitHubPublishAccount session={session} />
-            <h3 className="mt-2 text-sm font-bold">Netlify</h3>
-            <NetlifyAccount session={session} />
+            <HostFold id="github" title="GitHub (publishing)"><GitHubPublishAccount session={session} /></HostFold>
+            <HostFold id="netlify" title="Netlify"><NetlifyAccount session={session} /></HostFold>
             <SetupAccounts session={session} index={index} />
           </section>
           <SitesHostingCard session={session} studio={studio} index={index} onIndex={setIndex} />

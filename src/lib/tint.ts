@@ -40,6 +40,43 @@ export function accentFromPixels(data: Uint8ClampedArray | number[]): string | n
   if (!top || !seen || top.w / seen < 0.004) return null;
   return hex([top.r / top.w, top.g / top.w, top.b / top.w]);
 }
+/** Ready-made colours for the Studio's look and a site's admin page. */
+export const SCHEMES: { id: string; name: string; hex: string }[] = [
+  { id: "emerald", name: "Emerald", hex: "#10B981" }, { id: "teal", name: "Teal", hex: "#0D9488" }, { id: "sky", name: "Sky", hex: "#0EA5E9" }, { id: "indigo", name: "Indigo", hex: "#6366F1" },
+  { id: "violet", name: "Violet", hex: "#8B5CF6" }, { id: "orchid", name: "Orchid", hex: "#D946EF" }, { id: "rose", name: "Rose", hex: "#F43F5E" }, { id: "crimson", name: "Crimson", hex: "#DC2626" },
+  { id: "sunset", name: "Sunset", hex: "#F97316" }, { id: "amber", name: "Amber", hex: "#F59E0B" }, { id: "gold", name: "Gold", hex: "#CA8A04" }, { id: "lime", name: "Lime", hex: "#65A30D" },
+  { id: "forest", name: "Forest", hex: "#166534" }, { id: "coffee", name: "Coffee", hex: "#92400E" },
+];
+/** A picture's distinct colours (RGBA pixels), most present first: up to `n`, each from a different part of the
+ *  colour wheel. Empty for black, white or grey pictures. */
+export function coloursFromPixels(data: Uint8ClampedArray | number[], n = 5): string[] {
+  const bins = new Map<number, { score: number; r: number; g: number; b: number; w: number }>(); let seen = 0;
+  for (let i = 0; i + 3 < data.length; i += 4) {
+    if (data[i + 3] < 128) continue; seen++;
+    const c: RGB = [data[i], data[i + 1], data[i + 2]], [h, s, l] = hsl(c);
+    if (s < 0.28 || l < 0.12 || l > 0.92) continue;
+    const w = s * s * (1 - Math.abs(l - 0.5)), k = Math.round(h / 24) % 15, b = bins.get(k);
+    if (b) { b.score += w; b.r += c[0] * w; b.g += c[1] * w; b.b += c[2] * w; b.w += w; } else bins.set(k, { score: w, r: c[0] * w, g: c[1] * w, b: c[2] * w, w });
+  }
+  if (!seen) return [];
+  return [...bins.values()].filter((b) => b.w / seen >= 0.004).sort((a, b) => b.score - a.score).slice(0, n).map((b) => hex([b.r / b.w, b.g / b.w, b.b / b.w]));
+}
+async function pixelsOf(src: string): Promise<Uint8ClampedArray | null> {
+  if (!src) return null;
+  let url = src, made = false;
+  try {
+    if (!/^data:|^blob:/i.test(src)) { const r = await fetch(src, { cache: "force-cache" }); if (!r.ok) return null; url = URL.createObjectURL(await r.blob()); made = true; }
+    const img = await new Promise<HTMLImageElement>((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => no(new Error("unreadable")); i.src = url; });
+    const w = 96, h = Math.max(1, Math.min(192, Math.round(((img.naturalHeight || img.height || w) / (img.naturalWidth || img.width || w)) * w)));
+    const cv = document.createElement("canvas"); cv.width = w; cv.height = h;
+    const cx = cv.getContext("2d", { willReadFrequently: true }); if (!cx) return null;
+    cx.drawImage(img, 0, 0, w, h);
+    return cx.getImageData(0, 0, w, h).data;
+  } catch { return null; }
+  finally { if (made) URL.revokeObjectURL(url); }
+}
+/** A picture's distinct colours, most present first (see coloursFromPixels). */
+export async function coloursFromImage(src: string, n = 5): Promise<string[]> { const d = await pixelsOf(src); return d ? coloursFromPixels(d, n) : []; }
 /** The main colour of a picture (a data: address, or one this page may read), or null. */
 export async function accentFromImage(src: string): Promise<string | null> {
   if (!src) return null;

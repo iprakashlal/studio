@@ -2,7 +2,7 @@ import { legalChecks } from "../lib/legal";
 import type { Category, Field, TemplateDef } from "./types";
 import { uid, vpaOk, paypalOk, httpsOk } from "../lib/util";
 import { BODY_FONTS, DISPLAY_FONTS, LINE_BREAKS_AXIS, STORE_AXES, THEMES, onColor, storeThemeValues } from "../themes/catalog";
-import { adminCategory, loyaltyCard, accountCard, legalCategory, codeCategory, withSectionBg, videoCategory, socialCategory, logoFields, consentCategory, emailsCategory, i18nCategory, prepareI18n, featuresCategory, festivalCategory, menuCategory, menuItem, prepareMenu, staticPagesCategory, heroSlidesCard, prepareSlides, prepareMaintenance, seoCategory, warrantyCategory, customFontsCard } from "./common";
+import { adminCategory, loyaltyCard, accountsCategory, legalCategory, codeCategory, withSectionBg, videoCategory, socialCategory, logoFields, consentCategory, emailsCategory, i18nCategory, prepareI18n, featuresCategory, festivalCategory, menuCategory, menuItem, prepareMenu, staticPagesCategory, heroSlidesCard, prepareSlides, prepareMaintenance, seoCategory, warrantyCategory, customFontsCard } from "./common";
 import { NAV_MODE_FIELD, NAV_MODE_MOB_FIELD, themeCards } from "../themes/fields";
 
 const CURRENCIES = ["INR", "USD", "EUR", "GBP", "AED", "SGD", "AUD", "CAD"];
@@ -189,13 +189,15 @@ const schema: Category[] = [
       { title: "Form", fields: [g2({ t: "text", path: "checkout.title", label: "Page title", ml: true }, { t: "text", path: "checkout.button", label: "Order button label" }), { t: "textarea", path: "checkout.intro", label: "Intro" },
         g3({ t: "toggle", path: "checkout.askPhone", label: "Ask for phone" }, { t: "toggle", path: "checkout.askAddress", label: "Ask for address" }, { t: "toggle", path: "checkout.askNotes", label: "Ask for notes" }),
         { t: "select", path: "checkout.need", label: "A shopper must give", options: [{ value: "", label: "Standard: email (and phone if asked above)" }, { value: "phone", label: "Mobile number (email optional)" }, { value: "email", label: "Email address (mobile optional)" }, { value: "both", label: "Both mobile number and email" }, { value: "either", label: "Either one: mobile number or email" }] },
+        { t: "toggle", path: "checkout.verifyPhone", label: "Verify the mobile number with a code before the order is placed" },
+        { t: "when", path: "checkout.verifyPhone", is: "true", fields: [{ t: "note", text: "The shopper gets a code on WhatsApp or by SMS and enters it at checkout (“Verify” sits inside the mobile number box); the order then shows the number as verified. It needs WhatsApp or SMS set up with a code template. Until one is, nothing is asked and orders go through as before. Switching it on here is the same as ticking “Ask customers to verify their mobile number” in the WhatsApp or SMS card." }] },
         { t: "toggle", path: "checkout.verifyEmail", label: "Verify the email address with a code before the order is placed" },
         { t: "when", path: "checkout.verifyEmail", is: "true", fields: [{ t: "note", text: "The shopper is emailed a 6-digit code and enters it at checkout; the order then shows “Email: verified by a code” under Purchased orders. This works on a shop hosted on Cloudflare, and the codes are sent by that database's own email (Resend). While its sender is still in test mode, codes can't reach shoppers: orders are then let through and marked “not verified”, so nobody is locked out. Send from your own domain (hosting window → Email settings) to verify everyone. An email address is checked only when one is given: choose Email or Both above to ask every shopper for it." }] },
         { t: "note", text: "Any choice but Standard shows both boxes, with the one that isn't required marked optional. A shop with customer accounts always needs the email. Points are spent with a WhatsApp code, so they need a phone number." }] },
-      accountCard("store"),
       { title: "After ordering", fields: [{ t: "text", path: "checkout.successTitle", label: "Title", ml: true }, { t: "textarea", path: "checkout.successText", label: "Text" }] },
     ],
   },
+  accountsCategory("store"),
   {
     id: "payments", label: "Payments", group: "Selling", desc: "Turn on the ways customers can pay. A gateway shows at checkout once its keys are saved. The keys are kept on the shop's own Cloudflare database (Host to External Services), encrypted.",
     cards: [

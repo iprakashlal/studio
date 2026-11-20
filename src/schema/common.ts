@@ -600,6 +600,19 @@ export function accountCard(kind: "restaurant" | "store"): Card {
       { t: "note", text: `Where customers sign in: ${kind === "restaurant" ? "the “My account” link in the site's menu, the same button on the Order now page, and the checkout itself" : "the “Sign in” link in the site's header on every page, and the checkout itself"}. To link straight to it (from a message, a QR code or a button), add #account to the end of ${kind === "restaurant" ? "the Order now page's address, for example yoursite.com/order.html#account" : "any page's address, for example yoursite.com/index.html#account"}.` },
       { t: "note", text: `Signing in and signing up are one step: the ${who} enters their mobile number or email address, gets a one-time code and types it in. There is no password. At checkout they are then asked for their name${kind === "restaurant" ? ", address (for delivery)" : ", address"} and the other contact (the email if they signed in by mobile, the mobile if by email); “A ${who} must give” above decides whether that one is required. They stay signed in on that device for 30 days, and “My account” (${kind === "restaurant" ? "on the Order now page" : "in the site's header"}) shows their orders and points. This works on a site hosted on Cloudflare. A mobile sign-in needs WhatsApp or SMS set up with a code template; an email sign-in is sent by the site database's own email. Where no code can be sent at all, checkout carries on without an account so nobody is locked out.` }] }] };
 }
+/** Selling → User accounts: customer accounts and what goes with them, in one place. */
+export function accountsCategory(kind: "restaurant" | "store"): Category {
+  const who = kind === "restaurant" ? "guest" : "shopper";
+  return { id: "users", label: "User accounts", group: "Selling", desc: `Customer accounts: signing in before checkout, and “My account” with orders, bills, points and a profile.`,
+    cards: [
+      accountCard(kind),
+      { title: "What “My account” holds", fields: [{ t: "note", text: `“My account” opens as a panel at the side of the site with three parts. Current order: the order in progress with its steps (it follows the status you set under Purchased orders${kind === "restaurant" ? ", or Petpooja's" : ""}). Order history: every order placed while signed in, with pictures of what was ordered and a bill to download. Profile: the ${who}'s name, the other contact and ${kind === "store" ? "up to six saved addresses" : "their address"}, which then fill in the checkout for them. Points show at the top when points are switched on.` }] },
+      { title: "Verifying contacts", fields: [
+        { t: "toggle", path: kind === "restaurant" ? "ordering.verifyPhone" : "checkout.verifyPhone", label: `Verify the mobile number with a code before the order is placed` },
+        { t: "toggle", path: kind === "restaurant" ? "ordering.verifyEmail" : "checkout.verifyEmail", label: `Verify the email address with a code before the order is placed` },
+        { t: "note", text: `These are the same two switches as under Checkout. A ${who} who is signed in has already proved the contact they signed in with, so they are not asked again for that one. Mobile codes go on WhatsApp or by SMS (set up under ${kind === "restaurant" ? "Restaurant backend" : "WhatsApp & SMS"}); email codes are sent by the site database's own email.` }] },
+    ] };
+}
 export function loyaltyCard(kind: "restaurant" | "store"): Card {
   const g2 = (...fields: Field[]): Field => ({ t: "grid", cols: 2, fields });
   return { title: "Points for returning customers", fields: [

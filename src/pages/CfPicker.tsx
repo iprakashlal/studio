@@ -82,15 +82,16 @@ export function useCfAccount(studioToken: string, nf: Netlify | null | undefined
     setOcBusy("Making the Studio's own token");
     const minted = await cfOauthMint(viaSignIn, can, async (t) => { try { return (await new Cloudflare(relay, t).accounts()).length > 0; } catch { return false; } });
     if (!minted) return `${tab} Cloudflare didn't let the Studio make a long-lasting token, so none was kept on the database. To publish from other devices, paste a token once below.`;
-    const main = can.find((a) => a.id === setup.account), others = can.filter((a) => a.id !== setup.account);
+    const got = can.filter((a) => minted[a.id]);
+    const main = got.find((a) => a.id === setup.account), others = got.filter((a) => a.id !== setup.account);
     if (main) {
       setOcBusy("Keeping it on your Studio's database");
-      const next = await setupCfDb(relay, access, { account: main, resendKey: "", mailFrom: v!.mailFrom || "", name: brand().name, existing: setup, deployToken: minted, requireMail: false }, setOcBusy);
+      const next = await setupCfDb(relay, access, { account: main, resendKey: "", mailFrom: v!.mailFrom || "", name: brand().name, existing: setup, deployToken: minted[main.id], requireMail: false }, setOcBusy);
       const cur = await cfAccountVault.load(studioToken); await cfAccountVault.save({ ...(cur || { token: "" }), setup: next }, studioToken);
     }
-    for (const a of others) await writer!.putSecret(setup.account, CFDB_WORKER, "CFX_" + a.id.replace(/-/g, "_"), JSON.stringify({ t: minted, n: a.name }));
+    for (const a of others) await writer!.putSecret(setup.account, CFDB_WORKER, "CFX_" + a.id.replace(/-/g, "_"), JSON.stringify({ t: minted[a.id], n: a.name }));
     if (others.length) { const cur = await cfAccountVault.load(studioToken); await cfAccountVault.save({ ...(cur || { token: "" }), inDb: [...new Set([...(cur?.inDb || []), ...others.map((a) => a.id)])] }, studioToken); }
-    return `The Studio made its own token for ${can.map((a) => a.name).join(", ")} and keeps it on your Studio's database (a secret on your own Cloudflare), so your other devices can publish too. ${tab}`;
+    return `The Studio made its own token for ${got.map((a) => a.name).join(", ")} and keeps it on your Studio's database (a secret on your own Cloudflare), so your other devices can publish too. ${tab}`;
   };
   const oauthConnect = async () => {
     setErr(""); setOcNote("");
@@ -144,7 +145,8 @@ export function useCfAccount(studioToken: string, nf: Netlify | null | undefined
           <li>In Cloudflare open <a className="text-brand-300 underline" href="https://dash.cloudflare.com/?to=/:account/oauth-clients" target="_blank" rel="noopener noreferrer">Manage Account → OAuth clients ↗</a> and press <b>Create client</b>.</li>
           <li>Token authentication method: <b>None</b> (a browser app, no secret). Grant types: <b>Authorization code</b> and <b>Refresh token</b>.</li>
           <li>Redirect URL: <code className="select-all break-all font-mono text-xs text-ink-200">{cfOauthRedirect()}</code>. Allowed CORS origin: <code className="select-all font-mono text-xs text-ink-200">{location.origin}</code></li>
-          <li>Permissions: Workers Scripts, D1, Workers Routes, Zone and DNS (write), Account Settings (read), and API Tokens (write) so the Studio can make its own token.</li>
+          <li>Permissions: tick the ones for Workers (write), D1 (write), Workers Routes (write), DNS (write), Zone (read), Account Settings (read) and User Details (read). If the list offers API Tokens (write), tick it too, so the Studio can make its own token for your other devices.</li>
+          <li>Cloudflare shows each permission's short name on the client (like <code className="font-mono text-xs">d1.write</code>). The box below must hold exactly the names you ticked, with a space between them; Cloudflare refuses the sign-in if it asks for one the client doesn't have.</li>
           <li>Copy the <b>Client ID</b> (it isn't a secret) and paste it here.</li>
         </ol>
         <div className="mt-2 flex flex-col gap-2">

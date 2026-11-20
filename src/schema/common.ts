@@ -540,12 +540,18 @@ export function featuresCategory(): Category {
 
 /** A section's own look (content.sectionBg[key]): a background (a colour, a picture or GIF, or a video) and its own font,
  *  text colour and text style, with a switch. Drawn by fx.js, whatever the theme. */
+import { ANIM_BGS, ANIM_SPEEDS, BG_PATTERNS } from "./animbg";
+export { ANIM_BGS, ANIM_BG_FIELDS, BG_PATTERNS } from "./animbg";
 export function sectionBgCard(key: string, title = "Background & text of this section", fonts: string[] = []): Card {
   const p = `sectionBg.${key}.`;
   return { title, fields: [
     { t: "toggle", path: p + "on", label: "Give this section its own background and text" },
     { t: "when", path: p + "on", is: "true", fields: [
-      { t: "grid", cols: 2, fields: [{ t: "select", path: p + "kind", label: "Background", options: [{ value: "", label: "A colour" }, { value: "image", label: "A picture or GIF" }, { value: "slides", label: "A slideshow of pictures" }, { value: "video", label: "A video" }, { value: "none", label: "Keep the theme's background" }] }, { t: "when", path: p + "kind", not: "none", fields: [{ t: "color", path: p + "color", label: "Colour" }] }] },
+      { t: "grid", cols: 2, fields: [{ t: "select", path: p + "kind", label: "Background", options: [{ value: "", label: "A colour" }, { value: "image", label: "A picture or GIF" }, { value: "slides", label: "A slideshow of pictures" }, { value: "video", label: "A video" }, { value: "anim", label: "A moving background" }, { value: "pattern", label: "A pattern" }, { value: "none", label: "Keep the theme's background" }] }, { t: "when", path: p + "kind", not: "none", fields: [{ t: "color", path: p + "color", label: "Colour" }] }] },
+      { t: "when", path: p + "kind", is: "anim", fields: [{ t: "grid", cols: 2, fields: [{ t: "select", path: p + "anim", label: "Moving background", options: [{ value: "", label: "Choose one" }, ...ANIM_BGS.map(([value, label]) => ({ value, label }))] }, { t: "select", path: p + "animSpeed", label: "Speed", options: ANIM_SPEEDS }] },
+        { t: "range", path: p + "animStrength", label: "Strength", min: 20, max: 100, step: 5, unit: "%" },
+        { t: "note", text: "Drawn in the theme's colours over the colour above (leave the colour empty to keep the section's own). It stays still for visitors who ask their device for less motion." }] },
+      { t: "when", path: p + "kind", is: "pattern", fields: [{ t: "select", path: p + "pattern", label: "Pattern", options: [{ value: "", label: "Choose one" }, ...BG_PATTERNS.map(([value, label]) => ({ value, label }))] }] },
       { t: "when", path: p + "kind", is: "image", fields: [{ t: "image", path: p + "image", label: "Picture or GIF", hint: "JPG, PNG, WebP or an animated GIF. It fills the section and is cropped to fit. The colour shows while it loads." }] },
       { t: "when", path: p + "kind", is: "video", fields: [{ t: "videoFile", path: p + "video", label: "Video", hint: "MP4 or WebM, up to 20 MB. It plays silently on a loop behind the section. A short, calm clip works best." }, { t: "image", path: p + "image", label: "Picture shown until the video plays (optional)" }] },
       { t: "when", path: p + "kind", is: "slides", fields: [{ t: "images", path: p + "slides", label: "Pictures of the slideshow", hint: "Two or more pictures. They follow each other by themselves in a soft fade, on a loop, with no arrows, dots or pause button." },

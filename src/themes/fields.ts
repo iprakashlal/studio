@@ -1,4 +1,5 @@
 import type { Card, Field } from "../schema/types";
+import { ANIM_BG_FIELDS } from "../schema/animbg";
 import { AXES, FX_AXES, HERO_FX_AXIS, MOTIF_AXIS, SCROLL_EASE_AXIS, THEMES, type Axis } from "./catalog";
 
 const sel = (a: Axis): Field => ({ t: "select", path: "theme." + a.key, label: a.label, options: a.options.map(([value, label]) => ({ value, label })) });
@@ -31,7 +32,7 @@ export function themeCards(extra: Axis[], note: string, layout: Axis = AXES.layo
       sel(MOTIF_AXIS),
     ] },
     { title: "Layout & elements", fields: [g(sel(layout), sel(AXES.heroArt), sel(AXES.nav), NAV_MODE_FIELD, NAV_MODE_MOB_FIELD, sel(AXES.width), sel(AXES.heading), sel(AXES.shead), ...extra.map(sel)), { t: "note", text: NAV_MODE_NOTE }] },
-    { title: "Cards, buttons & motion", fields: [g(sel(AXES.cards), sel(AXES.buttons), sel(AXES.motionStyle), sel(AXES.pattern), sel(AXES.ornament)), { t: "note", text: note }] },
+    { title: "Cards, buttons & motion", fields: [g(sel(AXES.cards), sel(AXES.buttons), sel(AXES.motionStyle), sel(AXES.pattern), sel(AXES.ornament)), { t: "note", text: note }, ...ANIM_BG_FIELDS] },
     { title: "Interactions", fields: [
       { t: "note", text: "Award-style effects: a custom cursor, an intro that also animates links between pages, heading reveals, hover physics, smooth scrolling and a screen texture. Themes tagged Motion set these for you. Cursor and hover effects only run with a mouse; visitors who ask for reduced motion get a still page." },
       g(sel(FX_AXES.cursor), sel(FX_AXES.loader), sel(FX_AXES.textfx), sel(FX_AXES.hoverfx), sel(FX_AXES.scrollfx), sel(FX_AXES.overlay)),

@@ -1,0 +1,14 @@
+<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Connecting Cloudflare</title>
+<style>body{font:16px/1.6 system-ui,sans-serif;max-width:420px;margin:18vh auto;padding:0 20px;color:#1d2433;text-align:center}p{color:#5b6475}</style>
+<h1 id="h">Connecting…</h1><p id="p">Passing Cloudflare's answer back to the Studio.</p>
+<script>
+// Cloudflare sends the person here after they press Allow. The answer goes to the Studio's tab and is not kept.
+(function () {
+  var q = new URLSearchParams(location.search), out = { state: q.get("state") || "", code: q.get("code") || "", error: q.get("error") || "", text: (q.get("error_description") || "").slice(0, 300), at: Date.now() };
+  try { history.replaceState(null, "", location.pathname); } catch (e) {}
+  var ok = false; try { localStorage.setItem("studio-cf-oauth-back", JSON.stringify(out)); ok = true; } catch (e) {}
+  document.getElementById("h").textContent = !ok ? "Couldn't pass it back" : out.error ? "Not connected" : "Connected";
+  document.getElementById("p").textContent = !ok ? "This browser blocked site data. Allow it for the Studio and try again." : "You can close this window and go back to the Studio.";
+  setTimeout(function () { try { window.close(); } catch (e) {} }, 300);
+})();
+</script>

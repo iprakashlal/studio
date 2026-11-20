@@ -143,7 +143,7 @@ html.ord-lock .fx-badge{display:none!important}html.ord-cart .fx-badge{bottom:84
 .of-via button{border:0;background:transparent;color:var(--soft);font:600 13px/1 var(--fb);padding:7px 14px;border-radius:999px;cursor:pointer}.of-via button[aria-pressed=true]{background:var(--text);color:var(--bg)}
 
 /* Customer accounts: the sign-in step before checkout */
-#od-acct .sa-card{border:0;padding:6px 0;max-width:none;background:transparent}.od-me{margin:0}
+#od-acct{padding:4px 2px}#od-acct .sa-card{max-width:none;padding:22px 20px;box-shadow:0 0 0 1px var(--line),0 14px 30px -24px rgba(0,0,0,.45);border:0}.od-me{margin:0}
 .of-codein{margin-top:2px}.of-codein input{letter-spacing:.08em}
 
 /* Checkout sections: cards (the usual), numbered steps, or plain (Theme & layout → Account customization) */

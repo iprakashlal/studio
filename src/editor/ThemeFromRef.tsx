@@ -39,7 +39,7 @@ export function ThemeFromRef({ tpl, onApply }: { tpl: TemplateDef; onApply: (m: 
   return (
     <>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-ink-700 px-3 py-2.5 text-[13px]">
-        <span className="min-w-0 flex-1 text-ink-300"><b className="text-ink-100">Have a design in mind?</b> Upload a template, a picture or a PDF, or give a link, and a theme is made to match it.</span>
+        <span className="min-w-0 flex-1 basis-56 text-ink-300"><b className="text-ink-100">Have a design in mind?</b> Upload a template, a picture or a PDF, or give a link, and a theme is made to match it.</span>
         <button type="button" className="btn btn-sm" onClick={() => setOpen(true)}>Create a theme from a reference</button>
       </div>
       {open && (

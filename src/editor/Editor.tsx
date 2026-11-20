@@ -120,21 +120,38 @@ export function Editor({ tpl, draft, version, onChange, upload, img, extras = []
     for (const pass of [0, 1]) for (const r of index) { if ((pass === 0) !== !r.where) continue; if (!words.every((w) => r.text.includes(w))) continue; const k = r.id + "|" + r.where; if (seen.has(k) || (pass === 0 && seen.has(r.id + "|"))) continue; seen.add(k); out.push(r); if (out.length >= 14) return out; }
     return out;
   }, [q, index]);
-  const pick = (r: { id: string; path?: string }) => { setQ(""); if (r.path) dispatchEvent(new CustomEvent(GOTO_EVENT, { detail: { path: r.path } })); else { setCat(r.id); onCategory?.(r.id); } };
+  // On a phone the menu is a full-screen list opened from one bar (the section's name, with previous and next beside it).
+  const [sheet, setSheet] = useState(false), navRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (!sheet) return;
+    const cur = navRef.current?.querySelector<HTMLElement>('[aria-current="page"]'); cur?.scrollIntoView({ block: "center" });
+    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") setSheet(false); }; addEventListener("keydown", esc); return () => removeEventListener("keydown", esc);
+  }, [sheet]);
+  const pick = (r: { id: string; path?: string }) => { setQ(""); setSheet(false); if (r.path) dispatchEvent(new CustomEvent(GOTO_EVENT, { detail: { path: r.path } })); else { setCat(r.id); onCategory?.(r.id); } };
   const entry = entryOf(cat) || nav[0];
   const curId = entry?.id;
   const extra = entry?.extra ? extras.find((e) => e.id === entry.id) : undefined;
+  const flat = groups.flatMap((g) => g.items), at = flat.findIndex((x) => x.id === curId), step = (d: number) => { const n = flat[at + d]; if (n) { setCat(n.id); onCategory?.(n.id); } };
 
   return (
     <Ctx.Provider value={ctx}>
       <div className="flex min-h-0 flex-1 flex-col md:flex-row">
-        <nav aria-label="Content categories" className="scroll-thin flex flex-none gap-1 overflow-x-auto border-b border-ink-700 bg-ink-900 p-2 md:w-52 md:flex-col md:overflow-y-auto md:border-b-0 md:border-r md:p-3">
-          <div className="flex-none md:sticky md:-top-3 md:z-10 md:-mx-3 md:-mt-3 md:bg-ink-900 md:px-3 md:pb-1 md:pt-3">
+        <div className="flex flex-none items-center gap-1.5 border-b border-ink-700 bg-ink-900 p-2 md:hidden" aria-label="Section">
+          <button type="button" className="btn btn-sm flex-none px-3 text-base" aria-label="Previous section" disabled={at <= 0} onClick={() => step(-1)}>‹</button>
+          <button type="button" onClick={() => setSheet(true)} aria-haspopup="dialog" aria-expanded={sheet} className="flex min-w-0 flex-1 items-center gap-2 rounded-lg border border-ink-600 bg-ink-950 px-3 py-1.5 text-left">
+            <span className="min-w-0 flex-1"><span className="block truncate text-[10.5px] font-bold uppercase tracking-widest text-ink-500">{[entry?.group, entry?.sub].filter(Boolean).join(" · ")}{at >= 0 ? ` · ${at + 1} of ${flat.length}` : ""}</span><span className="block truncate text-[15px] font-extrabold text-ink-100">{entry?.label}</span></span>
+            <span className="flex-none text-[12px] font-semibold text-ink-400">All <span aria-hidden>▾</span></span>
+          </button>
+          <button type="button" className="btn btn-sm flex-none px-3 text-base" aria-label="Next section" disabled={at < 0 || at >= flat.length - 1} onClick={() => step(1)}>›</button>
+        </div>
+        <nav ref={navRef} aria-label="Content categories" className={`scroll-thin ${sheet ? "fixed inset-0 z-[80] flex" : "hidden"} flex-none flex-col gap-1 overflow-y-auto bg-ink-900 p-3 md:static md:z-auto md:flex md:w-52 md:border-r md:border-ink-700`}>
+          <div className="sticky -top-3 z-10 -mx-3 -mt-3 flex-none bg-ink-900 px-3 pb-1 pt-3">
+            <div className="mb-2 flex items-center md:hidden"><b className="flex-1 text-base font-extrabold">All sections</b><button type="button" className="btn btn-sm" onClick={() => setSheet(false)}>Close</button></div>
             <label className="sr-only" htmlFor="menu-search">Search the settings</label>
-            <input id="menu-search" type="search" className="input w-40 py-1.5 text-[13px] md:w-full" placeholder="Search settings" autoComplete="off" value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === "Escape") setQ(""); if (e.key === "Enter" && found?.length) pick(found[0]); }} />
+            <input id="menu-search" type="search" className="input w-full py-2 text-[15px] md:py-1.5 md:text-[13px]" placeholder="Search settings" autoComplete="off" value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === "Escape") setQ(""); if (e.key === "Enter" && found?.length) pick(found[0]); }} />
           </div>
           {found && (
-            <ul className="flex gap-1 md:flex-col" aria-label="Search results">
+            <ul className="flex flex-col gap-1" aria-label="Search results">
               {found.map((r, i) => (
                 <li key={i} className="flex-none"><button type="button" onClick={() => pick(r)} className="flex w-full flex-col rounded-lg px-2.5 py-2 text-left text-[13.5px] font-semibold text-ink-200 hover:bg-ink-800 hover:text-ink-100">
                   <span>{r.label}</span>{r.where ? <span className="whitespace-normal text-[11.5px] font-normal text-ink-400">{r.where}</span> : <span className="text-[11px] font-normal uppercase tracking-wide text-ink-500">{r.group}</span>}
@@ -144,8 +161,8 @@ export function Editor({ tpl, draft, version, onChange, upload, img, extras = []
             </ul>
           )}
           {!found && groups.map((g) => { const shut = folded.includes(g.group); return (
-            <div key={g.group} className="flex gap-1 md:flex-col">
-              <button type="button" onClick={() => foldGroup(g.group)} aria-expanded={!shut} className="hidden items-center px-2.5 pb-1 pt-3 text-left text-[10.5px] font-bold uppercase tracking-widest text-ink-500 hover:text-ink-300 md:flex">
+            <div key={g.group} className="flex flex-col gap-1">
+              <button type="button" onClick={() => foldGroup(g.group)} aria-expanded={!shut} className="flex items-center px-2.5 pb-1 pt-3 text-left text-[11.5px] font-bold uppercase tracking-widest text-ink-500 hover:text-ink-300 md:text-[10.5px]">
                 <span className="flex-1">{g.group}</span><span aria-hidden className={`inline-block text-[9px] transition-transform ${shut ? "-rotate-90" : ""}`}>▾</span>
               </button>
               {g.items.filter((it) => !shut || curId === it.id).map((it, i, list) => {
@@ -155,13 +172,13 @@ export function Editor({ tpl, draft, version, onChange, upload, img, extras = []
                 return (
                   <Fragment key={it.id}>
                     {head && (
-                      <button type="button" onClick={() => foldGroup(key)} aria-expanded={!subShut} className="hidden items-center rounded-lg px-2.5 py-1.5 text-left text-[12.5px] font-bold text-ink-300 hover:bg-ink-800 hover:text-ink-100 md:flex">
+                      <button type="button" onClick={() => foldGroup(key)} aria-expanded={!subShut} className="flex items-center rounded-lg px-2.5 py-2 text-left text-[14px] font-bold text-ink-300 hover:bg-ink-800 hover:text-ink-100 md:py-1.5 md:text-[12.5px]">
                         <span className="flex-1">{it.sub}</span><span className="mr-1.5 text-[11px] font-semibold text-ink-500">{list.filter((x) => x.sub === it.sub).length}</span><span aria-hidden className={`inline-block text-[9px] transition-transform ${subShut ? "-rotate-90" : ""}`}>▾</span>
                       </button>
                     )}
                     {(!subShut || curId === it.id) && (
-                      <button type="button" onClick={() => setCat(it.id)} aria-current={curId === it.id ? "page" : undefined}
-                        className={`flex-none whitespace-nowrap rounded-lg px-2.5 py-2 text-left text-[13.5px] font-semibold transition md:w-full ${it.sub && !shut ? "md:ml-2.5 md:w-[calc(100%-10px)] md:border-l md:border-ink-700 md:rounded-l-none md:pl-3" : ""} ${curId === it.id ? "bg-brand-500/15 text-ink-100" : "text-ink-400 hover:bg-ink-800 hover:text-ink-100"}`}>
+                      <button type="button" onClick={() => { setCat(it.id); setSheet(false); }} aria-current={curId === it.id ? "page" : undefined}
+                        className={`w-full flex-none rounded-lg px-2.5 py-2.5 text-left text-[15px] font-semibold transition md:whitespace-nowrap md:py-2 md:text-[13.5px] ${it.sub && !shut ? "ml-2.5 w-[calc(100%-10px)] rounded-l-none border-l border-ink-700 pl-3" : ""} ${curId === it.id ? "bg-brand-500/15 text-ink-100" : "text-ink-400 hover:bg-ink-800 hover:text-ink-100"}`}>
                         {it.label}
                       </button>
                     )}

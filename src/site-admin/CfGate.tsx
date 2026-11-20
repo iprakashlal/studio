@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { cfRole, resendTestOnly, cfSendCode, cfSession, cfSignedIn, cfVerifyCode } from "../lib/cfdb";
 import type { CfSiteCfg } from "../lib/supa";
 import { Field, Logo, Spinner, useToast } from "../ui/kit";
+import { GoogleButton } from "../ui/GoogleSignIn";
 
 export function CfGate({ cf, brand, onIn }: { cf: CfSiteCfg; brand: string; onIn: () => void }) {
   const [email, setEmail] = useState(""), [code, setCode] = useState(""), [sent, setSent] = useState(false), [busy, setBusy] = useState(true), [err, setErr] = useState("");
@@ -44,6 +45,7 @@ export function CfGate({ cf, brand, onIn }: { cf: CfSiteCfg; brand: string; onIn
             <button type="button" className="btn btn-ghost btn-sm" disabled={busy} onClick={() => { setSent(false); setCode(""); }}>Use another email or send a new code</button>
           </form>
         )}
+        {!(busy && !sent && !email) && <GoogleButton api={cf.api} disabled={busy} onIn={admit} />}
         {err && <p role="alert" className="rounded-lg border border-amber-400/40 bg-amber-400/5 px-3 py-2 text-[13px] text-amber-100">{err}</p>}
         {own && !sent && <button type="button" className="btn btn-sm self-start" disabled={busy} onClick={() => send(undefined, own)}>Send the code to {own}</button>}
         <a href="./" className="text-sm text-ink-400 hover:text-ink-100">← Back to the website</a>

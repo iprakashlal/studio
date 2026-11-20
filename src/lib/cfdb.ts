@@ -91,6 +91,36 @@ export async function cfVerifyCode(api: string, email: string, code: string) {
   cfSession.save(api, { email: j.email, token: j.token });
   return j.email;
 }
+// ---- Sign in with Google (the database checks Google's signed answer; see the Worker's /auth/google…)
+export const cfGoogleInfo = (api: string): Promise<{ on: boolean; clientId: string; redirect: string }> =>
+  cfCall<{ on: boolean; clientId: string; redirect: string }>(api, "/auth/google", { auth: false }).then((j) => ({ on: !!j?.on, clientId: String(j?.clientId || ""), redirect: String(j?.redirect || clean(api) + "/auth/google/cb") })).catch(() => ({ on: false, clientId: "", redirect: clean(api) + "/auth/google/cb" }));
+export const cfGoogleSet = (api: string, clientId: string, on: boolean) => cfCall<{ ok: true; on: boolean; clientId: string }>(api, "/auth/google/set", { method: "POST", body: JSON.stringify({ clientId, on }) });
+/** Opens Google's sign-in in a small window (call it straight from the click) and waits for the database to say who
+ *  signed in. Signs this device in to `api` and resolves with the email. */
+export function cfGoogleSignIn(api: string): { done: Promise<string>; cancel: () => void } {
+  const nonce = btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32)))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  const win = window.open(`${clean(api)}/auth/google/start?${new URLSearchParams({ origin: location.origin, nonce })}`, "google-signin", "popup,width=520,height=680");
+  if (!win) throw new Error("Your browser blocked the Google window. Allow pop-ups for this page and press Sign in with Google again.");
+  let stop = () => {};
+  const done = new Promise<string>((res, rej) => {
+    const started = Date.now(); let busy = false;
+    const t = setInterval(async () => {
+      if (busy) return;
+      if (Date.now() - started > 5 * 60000) { end(); rej(new Error("No answer came back from Google in five minutes. Press Sign in with Google to try again.")); return; }
+      busy = true;
+      try {
+        const r = await fetch(clean(api) + "/auth/google/poll", { method: "POST", cache: "no-store", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ nonce }) });
+        const j: any = await r.json().catch(() => null);
+        if (r.ok && j?.token) { end(); cfSession.save(api, { email: j.email, token: j.token }); try { win.close(); } catch { /* gone */ } res(j.email); }
+        else if (!r.ok) { end(); rej(new Error(j?.error || "Couldn't sign in with Google.")); }
+      } catch { /* offline for a moment: keep waiting */ }
+      busy = false;
+    }, 1500);
+    const end = () => clearInterval(t);
+    stop = () => { end(); try { win.close(); } catch { /* gone */ } rej(new Error("Cancelled.")); };
+  });
+  return { done, cancel: () => stop() };
+}
 /** The signed-in email (checked with the database), or null. */
 export async function cfSignedIn(api: string): Promise<string | null> {
   if (!cfSession.load(api)) return null;

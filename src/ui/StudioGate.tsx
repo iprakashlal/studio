@@ -5,6 +5,7 @@ import { type StudioHostCfg } from "../lib/studiohost";
 import { backendOf } from "../lib/backend";
 import { Field, Logo, Spinner } from "./kit";
 import { BrandMark } from "../lib/brand";
+import { GoogleButton } from "./GoogleSignIn";
 
 export function StudioGate({ cfg, brand, onIn, links }: { cfg: StudioHostCfg; brand: string; onIn: (email: string, role: string) => void; links?: React.ReactNode }) {
   const [email, setEmail] = useState(""), [code, setCode] = useState(""), [sent, setSent] = useState(false);
@@ -39,6 +40,7 @@ export function StudioGate({ cfg, brand, onIn, links }: { cfg: StudioHostCfg; br
             <button type="button" className="btn btn-ghost btn-sm" disabled={busy} onClick={() => { setSent(false); setCode(""); }}>Use another email or send a new code</button>
           </form>
         )}
+        {cfg.kind === "cloudflare" && !(busy && !sent && !email) && <GoogleButton api={cfg.api} disabled={busy} onIn={admit} />}
         {err && <p role="alert" className="rounded-lg border border-amber-400/40 bg-amber-400/5 px-3 py-2 text-[13px] text-amber-100">{err}</p>}
         {sharedSource(cfg) && <p className="text-center text-[12.5px] text-ink-400">This Studio keeps its projects in your Cloudflare database. <a className="underline" href="?data=github">Open the older GitHub data instead</a> (for example to bring projects across).</p>}
       </div>

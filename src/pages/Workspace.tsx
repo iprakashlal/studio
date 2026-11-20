@@ -1,3 +1,4 @@
+import { StudioGoogleCard } from "./StudioGoogle";
 import { SitesHostingCard } from "./SitesHostingCard";
 import { AiEngineCard, StudioWhatsAppCard } from "./AiEngine";
 import { setAiEngine } from "../lib/ai";
@@ -165,6 +166,7 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
             {!hid("badge") && <BadgeCard studio={studio} saved={index.badge} onIndex={setIndex} />}
             {!hid("pages") && <StudioPagesCard repo={repo} />}
             <StudioEmailCard repo={repo} />
+            {session.cfg.owner === "cloudflare" && <StudioGoogleCard />}
             {!hid("menus") && <MenusCard studio={studio} menus={index.menus || {}} onIndex={setIndex} />}
           </> : tab === "hostings" ? <>
             <section className="card flex flex-col gap-3 p-5" aria-label="Hosting accounts">

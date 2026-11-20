@@ -1,6 +1,7 @@
 // Connections an owner can switch on, kept on their own Cloudflare database (encrypted there, never sent back):
 // their own AI API, WhatsApp (Meta's WhatsApp Business Cloud API) and Razorpay.
 // Each form shows what is saved (a key only as "saved"), and a key box left empty keeps the saved key.
+import { GoogleSignInCard } from "../ui/GoogleSignIn";
 import { useEffect, useRef, useState } from "react";
 import { cfCall, cfRole, cfSendCode, cfSession, cfSignedIn, cfVerifyCode, resendTestOnly, signedInApi } from "../lib/cfdb";
 import { Field, Toggle, useToast } from "../ui/kit";
@@ -382,7 +383,8 @@ export function SiteConnections({ cf, template, cms, site }: { cf?: { api: strin
     {template === "restaurant" && <section className="card flex flex-col gap-2 p-5"><h3 className="text-[15px] font-extrabold">Restaurant backend</h3><p className="text-sm text-ink-300">Orders, payments and messages run on the site's own Cloudflare database: it saves each order under Purchased orders, works out what an order costs from your menu, confirms online payments with your payment gateway, passes orders to Petpooja, and sends WhatsApp messages. Keys you enter here stay on that database, encrypted. The payment gateways (Razorpay, Cashfree, PhonePe, Stripe, PayPal) and their keys are under Payments.</p></section>}
     {template === "restaurant" && <PetpoojaForm where={where} />}<WhatsAppForm where={where} kind="site" allow={aw} />
     {/* In the site's own admin page SMS shows only when the Studio lets the site use it for something. */}
-    {!(site && !as.login && !as.checkout) && <SmsForm where={where} kind="site" allow={as} />}</div>;
+    {!(site && !as.login && !as.checkout) && <SmsForm where={where} kind="site" allow={as} />}
+    {cf && signed && <GoogleSignInCard api={cf.api} what="this site's admin page (and anything else that signs in to the same database)" />}</div>;
 }
 /** The Studio's own database, looked up once. */
 export function useStudioWhere() { const [w, setW] = useState<Where | null | undefined>(undefined); useEffect(() => { let on = true; studioWhere().then((x) => on && setW(x)); return () => { on = false; }; }, []); return w; }

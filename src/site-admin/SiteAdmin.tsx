@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { brand } from "../lib/brand";
 import { accentFromImage, applyTint, isHex } from "../lib/tint";
 import { CfAccount, CfGate } from "./CfGate";
 import { CfRepo, cfSession } from "../lib/cfdb";
@@ -225,14 +226,21 @@ function Workspace({ info, onInfo, repo, account, onSignOut, hosted, ghToken }: 
   // "Colour this site's admin page from its logo" (Admin page → Admin page colours): follows the draft, so it shows at once.
   const tintOn = !!draft?.cms?.tint, tintLogo = tintOn ? draft?.brand?.icon || draft?.brand?.logo : null;
   const tintSrc = tintLogo?.path ? assets[tintLogo.path] || (photoBase && String(tintLogo.path).startsWith("assets/uploads/") ? photoBase + String(tintLogo.path).split("/").map(encodeURIComponent).join("/") : tintLogo.path) : /^(https:|data:image\/)/i.test(String(tintLogo?.url || "")) ? String(tintLogo.url) : "";
-  const tintFallback = String(draft?.theme?.c1 || draft?.theme?.accent || "");
+  const tintFallback = String([draft?.theme?.c1, draft?.theme?.accent].find(isHex) || "");
+  const tintColor = isHex(draft?.cms?.tintColor) ? String(draft.cms.tintColor) : "", tintMode = draft?.cms?.tintMode === "light" || draft?.cms?.tintMode === "dark" ? (draft.cms.tintMode as "light" | "dark") : "";
   useEffect(() => {
-    if (!tintOn) { applyTint(null); return; }
+    // Off: the Studio's own look (its colour and dark or light), not the bare standard one.
+    const base = brand();
+    if (!tintOn) { applyTint(base.tint || null, base.mode); return; }
+    const mode = tintMode || (base.mode === "light" ? "light" : "dark");
+    if (tintColor) { applyTint(tintColor, mode); return; }
     let on = true;
-    (tintSrc ? accentFromImage(tintSrc) : Promise.resolve(null)).then((a) => { if (on) applyTint(a || (isHex(tintFallback) ? tintFallback : null)); });
+    // Until the logo is read, the site's accent (or the Studio's colour) in the chosen look: no flash of another look.
+    applyTint(tintFallback || base.tint || null, mode);
+    (tintSrc ? accentFromImage(tintSrc) : Promise.resolve(null)).then((a) => { if (on) applyTint(a || tintFallback || base.tint || null, mode); });
     return () => { on = false; };
-  }, [tintOn, tintSrc, tintFallback]);
-  useEffect(() => () => applyTint(null), []);
+  }, [tintOn, tintSrc, tintFallback, tintColor, tintMode]);
+  useEffect(() => () => { const base = brand(); applyTint(base.tint || null, base.mode); }, []);
   const img = useCallback((val: any) => (val?.path ? assets[val.path] || (photoBase && val.path.startsWith("assets/uploads/") ? photoBase + val.path.split("/").map(encodeURIComponent).join("/") : val.path) : ""), [assets, photoBase]);
 
   const conflict = async (e: any, path: string, setter: (x: string | null) => void) => {

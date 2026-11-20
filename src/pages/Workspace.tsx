@@ -18,7 +18,7 @@ import { GitHubPublishAccount } from "./GitHubAccount";
 import { HostFold, SetupAccounts } from "./SetupAccounts";
 import { ghPublish } from "../lib/ghpublish";
 import { Field, Logo, Skel, SkelDashboard, SkelRows, useToast } from "../ui/kit";
-import { accentFromImage, tintPalette } from "../lib/tint";
+import { accentFromImage, SCHEMES, tintPalette } from "../lib/tint";
 import { setCurrentMenus } from "../lib/menus";
 import { MenusCard } from "./MenusCard";
 import { MigrationTab } from "./MigrationTab";
@@ -220,12 +220,6 @@ function DashNumbersCard({ studio, index, onIndex }: { studio: Studio; index: St
 
 /** Settings → the Studio's own name and logo (saved in studio.json, so every device shows them). */
 // Ready-made colour schemes for the Studio. Each is one accent colour; the buttons, links and backgrounds follow it.
-const SCHEMES: { id: string; name: string; hex: string }[] = [
-  { id: "emerald", name: "Emerald", hex: "#10B981" }, { id: "teal", name: "Teal", hex: "#0D9488" }, { id: "sky", name: "Sky", hex: "#0EA5E9" }, { id: "indigo", name: "Indigo", hex: "#6366F1" },
-  { id: "violet", name: "Violet", hex: "#8B5CF6" }, { id: "orchid", name: "Orchid", hex: "#D946EF" }, { id: "rose", name: "Rose", hex: "#F43F5E" }, { id: "crimson", name: "Crimson", hex: "#DC2626" },
-  { id: "sunset", name: "Sunset", hex: "#F97316" }, { id: "amber", name: "Amber", hex: "#F59E0B" }, { id: "gold", name: "Gold", hex: "#CA8A04" }, { id: "lime", name: "Lime", hex: "#65A30D" },
-  { id: "forest", name: "Forest", hex: "#166534" }, { id: "coffee", name: "Coffee", hex: "#92400E" },
-];
 function BrandCard({ studio, onIndex }: { studio: Studio; onIndex: (i: StudioIndex) => void }) {
   const toast = useToast();
   const b = useBrand();

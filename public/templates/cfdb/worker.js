@@ -16,7 +16,7 @@ create index if not exists approvals_project on approvals (scope, project, creat
 create table if not exists approval_notes (id integer primary key autoincrement, token text not null, who text not null, body text not null, page text not null default '', kind text not null default 'comment', created_at text not null);
 create index if not exists approval_notes_token on approval_notes (token, id);
 `;
-var CFDB_VERSION = 38;
+var CFDB_VERSION = 39;
 var CFDB_WORKER_NAME = "picaffectz-db";
 
 // src/lib/lookdigest.ts
@@ -2419,6 +2419,33 @@ var db_worker_default = {
       if (p === "/c/points") {
         const site = scope.replace(/^site:/, ""), key = String(u.searchParams.get("key") || "");
         return json((await env.DB.prepare("select delta, why, order_no, at from points where site = ? and ckey = ? order by id desc limit 100").bind(site, key).all()).results || []);
+      }
+      if (p === "/c/rebuild" && req.method === "POST") {
+        const b = await req.json().catch(() => ({})), site = scope.replace(/^site:/, ""), c = await siteContent(env, site).catch(() => null), L = loyOf(c);
+        const cc = (await getSetting(env, "site:" + site, "wa").catch(() => null))?.cc || (await getSetting(env, "site:" + site, "sms").catch(() => null))?.cc;
+        const rows = (await env.DB.prepare("select data, created_at from enquiries where site = ? order by created_at asc limit 5000").bind(site).all()).results || [];
+        const done = new Set(((await env.DB.prepare("select distinct order_no from points where site = ? and order_no <> ''").bind(site).all()).results || []).map((r) => String(r.order_no)));
+        let orders = 0;
+        const who2 = /* @__PURE__ */ new Set(), st = [];
+        for (const r of rows) {
+          let d = null;
+          try {
+            d = JSON.parse(r.data);
+          } catch {
+          }
+          const no = String(d?.order_no || "");
+          if (!no || done.has(no)) continue;
+          const key = waNum(d.phone, cc) || String(d.email || "").trim().toLowerCase().slice(0, 120);
+          if (!key) continue;
+          const n = rnum(d.total), spent = isNaN(n) ? 0 : n, earned = b.points && L.on && L.earn > 0 ? Math.floor(spent / 100 * L.earn) : 0, at = String(r.created_at || (/* @__PURE__ */ new Date()).toISOString());
+          st.push(env.DB.prepare("insert into customers (site, ckey, name, phone, email, verified, orders, spent, points, first_at, last_at) values (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?) on conflict (site, ckey) do update set name = case when name = '' then excluded.name else name end, phone = case when phone = '' then excluded.phone else phone end, email = case when email = '' then excluded.email else email end, verified = max(verified, excluded.verified), orders = orders + 1, spent = spent + excluded.spent, points = points + excluded.points, first_at = min(first_at, excluded.first_at), last_at = max(last_at, excluded.last_at)").bind(site, key, oneLine(String(d.name || "")).slice(0, 100), String(d.phone || "").slice(0, 24), String(d.email || "").trim().slice(0, 120), d._phone ? 1 : 0, spent, earned, at, at));
+          st.push(env.DB.prepare("insert into points (site, ckey, delta, why, order_no, at) values (?, ?, ?, ?, ?, ?)").bind(site, key, earned, earned ? "Earned on an earlier order" : "Earlier order counted in", no, at));
+          done.add(no);
+          who2.add(key);
+          orders++;
+        }
+        for (let i = 0; i < st.length; i += 80) await env.DB.batch(st.slice(i, i + 80));
+        return json({ ok: true, orders, customers: who2.size });
       }
       if ((p === "/c/adjust" || p === "/c/delete") && req.method === "POST") {
         const b = await req.json(), site = scope.replace(/^site:/, ""), key = String(b.key || "");

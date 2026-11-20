@@ -1707,6 +1707,27 @@ export default {
         const site = scope.replace(/^site:/, ""), key = String(u.searchParams.get("key") || "");
         return json((await env.DB.prepare("select delta, why, order_no, at from points where site = ? and ckey = ? order by id desc limit 100").bind(site, key).all()).results || []);
       }
+      // Orders saved before customer records were kept (or before this database knew them): counted in now, once each.
+      // No points are given for them unless asked (`points`), and then by the site's rule of today.
+      if (p === "/c/rebuild" && req.method === "POST") {
+        const b = (await req.json().catch(() => ({}))) as any, site = scope.replace(/^site:/, ""), c = await siteContent(env, site).catch(() => null), L = loyOf(c);
+        const cc = (await getSetting(env, "site:" + site, "wa").catch(() => null))?.cc || (await getSetting(env, "site:" + site, "sms").catch(() => null))?.cc;
+        const rows = ((await env.DB.prepare("select data, created_at from enquiries where site = ? order by created_at asc limit 5000").bind(site).all()).results || []) as any[];
+        const done = new Set((((await env.DB.prepare("select distinct order_no from points where site = ? and order_no <> ''").bind(site).all()).results || []) as any[]).map((r) => String(r.order_no)));
+        let orders = 0; const who = new Set<string>(), st: any[] = [];
+        for (const r of rows) {
+          let d: any = null; try { d = JSON.parse(r.data); } catch { /* not an order */ }
+          const no = String(d?.order_no || ""); if (!no || done.has(no)) continue;
+          const key = waNum(d.phone, cc) || String(d.email || "").trim().toLowerCase().slice(0, 120); if (!key) continue;
+          const n = rnum(d.total), spent = isNaN(n) ? 0 : n, earned = b.points && L.on && L.earn > 0 ? Math.floor((spent / 100) * L.earn) : 0, at = String(r.created_at || new Date().toISOString());
+          st.push(env.DB.prepare("insert into customers (site, ckey, name, phone, email, verified, orders, spent, points, first_at, last_at) values (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?) on conflict (site, ckey) do update set name = case when name = '' then excluded.name else name end, phone = case when phone = '' then excluded.phone else phone end, email = case when email = '' then excluded.email else email end, verified = max(verified, excluded.verified), orders = orders + 1, spent = spent + excluded.spent, points = points + excluded.points, first_at = min(first_at, excluded.first_at), last_at = max(last_at, excluded.last_at)")
+            .bind(site, key, oneLine(String(d.name || "")).slice(0, 100), String(d.phone || "").slice(0, 24), String(d.email || "").trim().slice(0, 120), d._phone ? 1 : 0, spent, earned, at, at));
+          st.push(env.DB.prepare("insert into points (site, ckey, delta, why, order_no, at) values (?, ?, ?, ?, ?, ?)").bind(site, key, earned, earned ? "Earned on an earlier order" : "Earlier order counted in", no, at));
+          done.add(no); who.add(key); orders++;
+        }
+        for (let i = 0; i < st.length; i += 80) await env.DB.batch(st.slice(i, i + 80));
+        return json({ ok: true, orders, customers: who.size });
+      }
       if ((p === "/c/adjust" || p === "/c/delete") && req.method === "POST") {
         const b = (await req.json()) as any, site = scope.replace(/^site:/, ""), key = String(b.key || "");
         const row: any = await env.DB.prepare("select points from customers where site = ? and ckey = ?").bind(site, key).first(); if (!row) return err(404, "That customer isn't here any more.");

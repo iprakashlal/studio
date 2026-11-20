@@ -4,7 +4,8 @@
 import { RepoError, type FileIn, type Repo } from "./repo";
 import type { RepoCfg } from "./crypto";
 import type { Relay } from "./relay";
-import { Cloudflare, type CfAccount } from "./cloudflare";
+import { Cloudflare, cfDbToken, isCfDbToken, type CfAccount } from "./cloudflare";
+import { loadHostConfig } from "./studiohost";
 import { CFDB_SCHEMA, CFDB_VERSION, CFDB_WORKER_NAME } from "./cfdbSchema";
 import { STUDIO_BUILD } from "../build-info";
 import { vault } from "./vault";
@@ -32,9 +33,11 @@ export const cfAccountVault = {
     return v;
   },
   async save(v: CfKept, studioToken: string) {
-    if (cfMemTokens.has(v.token) || (v.more || []).some((m) => cfMemTokens.has(m.token))) {
+    // Never written down: a sign-in used in this tab only, and the "through the database" marker (it isn't a token).
+    const mem = (t: string) => cfMemTokens.has(t) || isCfDbToken(t);
+    if (mem(v.token) || (v.more || []).some((m) => mem(m.token))) {
       const old = await cfRawVault.load(studioToken);
-      v = { ...v, token: cfMemTokens.has(v.token) ? (old?.token && !cfMemTokens.has(old.token) ? old.token : "") : v.token, ...(v.more ? { more: v.more.filter((m) => !cfMemTokens.has(m.token)) } : {}) };
+      v = { ...v, token: mem(v.token) ? (old?.token && !mem(old.token) ? old.token : "") : v.token, ...(v.more ? { more: v.more.filter((m) => !mem(m.token)) } : {}) };
     }
     return cfRawVault.save(v, studioToken);
   },
@@ -184,7 +187,7 @@ export const membersSql = (scope: string, list: { email: string; role: "owner" |
 export async function setupCfDb(relay: Relay, token: string, o: { account: CfAccount; resendKey: string; mailFrom: string; name: string; existing?: CfDbSetup | null; deployToken?: string; requireMail?: boolean }, step: (s: string) => void): Promise<CfDbSetup> {
   const cf = new Cloudflare(relay, token), acc = o.account.id;
   // A Cloudflare sign-in's token runs out within hours: it is never kept on the Worker as its publishing token.
-  const dep = o.deployToken && !cfShortTokens.has(o.deployToken) ? o.deployToken : "";
+  const dep = o.deployToken && !cfShortTokens.has(o.deployToken) && !isCfDbToken(o.deployToken) ? o.deployToken : "";
   // A database Worker set up from another device or Studio keeps its secret (sessions and codes) and settings.
   const keep = !!o.existing || !!(await cf.script(acc, CFDB_WORKER).catch(() => null));
   step("Finding the Studio's database");
@@ -228,8 +231,18 @@ export const resendTestOnly = (msg: string): string | null => /own email address
 
 // ---------------------------------------------------------------- publishing from any device
 /** Whether this database keeps a Cloudflare token for publishing (and for which account). */
-export async function cfDeployInfo(api: string): Promise<{ /** The database build's version number. */ v?: number; cfx?: boolean; cfxImport?: boolean; bridge?: boolean; studioPages?: boolean; del?: boolean; enqMail?: boolean; deploy: boolean; account?: string; gh?: boolean; ai?: boolean; reviews?: boolean; pamphlet?: boolean; accounts?: boolean; more?: number }> {
-  try { const j = await (await fetch(clean(api) + "/", { cache: "no-store" })).json(); return { v: +j?.v || 0, deploy: !!j?.deploy, account: j?.account, gh: !!j?.gh, ai: !!j?.ai, reviews: !!j?.reviews, cfx: !!j?.cfx, cfxImport: (+j?.cfx || 0) >= 2, bridge: (+j?.cfx || 0) >= 3, studioPages: !!j?.studioPages, del: !!j?.del, enqMail: (+j?.enqMail || 0) >= 3, pamphlet: (+j?.pamphlet || 0) >= 2, accounts: (+j?.accounts || 0) >= 2, more: +j?.more || 0 }; } catch { return { deploy: false }; }
+export async function cfDeployInfo(api: string): Promise<{ /** The database build's version number. */ v?: number; cfx?: boolean; cfxImport?: boolean; bridge?: boolean; studioPages?: boolean; del?: boolean; enqMail?: boolean; deploy: boolean; account?: string; gh?: boolean; ai?: boolean; /** Passes on the Studio owners' Cloudflare calls with its kept tokens (connect once, every device). */ cfa?: boolean; reviews?: boolean; pamphlet?: boolean; accounts?: boolean; more?: number }> {
+  try { const j = await (await fetch(clean(api) + "/", { cache: "no-store" })).json(); return { v: +j?.v || 0, deploy: !!j?.deploy, account: j?.account, cfa: !!j?.cfa, gh: !!j?.gh, ai: !!j?.ai, reviews: !!j?.reviews, cfx: !!j?.cfx, cfxImport: (+j?.cfx || 0) >= 2, bridge: (+j?.cfx || 0) >= 3, studioPages: !!j?.studioPages, del: !!j?.del, enqMail: (+j?.enqMail || 0) >= 3, pamphlet: (+j?.pamphlet || 0) >= 2, accounts: (+j?.accounts || 0) >= 2, more: +j?.more || 0 }; } catch { return { deploy: false }; }
+}
+/** Where this device can do the Studio's Cloudflare work with no token or helper of its own: the Studio's database,
+ *  when the Studio signs in there by email, this device is signed in, and the database keeps a token and passes calls on. */
+export async function studioDbWay(): Promise<{ api: string; scope: string; token: string } | null> {
+  const hc = await loadHostConfig().catch(() => null);
+  if (!hc || hc.kind !== "cloudflare" || !cfSession.load(hc.api)) return null;
+  const i = await cfDeployInfo(hc.api);
+  if (!i.cfa || !(i.deploy || i.more)) return null;
+  const scope = "studio:" + hc.studio;
+  return { api: hc.api, scope, token: cfDbToken(hc.api, scope) };
 }
 /** GitHub calls through the database (its kept token) as a signed-in owner of `scope`: a fetch-like Response. */
 export function dbGitHub(api: string, scope: string) {

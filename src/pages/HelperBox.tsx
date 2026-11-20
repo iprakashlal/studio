@@ -1,6 +1,7 @@
 // The Studio's helper: the small go-between for Cloudflare's, Resend's, Stripe's and Supabase's APIs (they don't
 // accept calls from web pages). It runs on the user's Cloudflare (a Worker deployed with one button, then its
 // address pasted here) or, when Netlify is connected, as a function on their Netlify (set up by itself).
+import { studioDbWay } from "../lib/cfdb";
 import { useEffect, useState } from "react";
 import type { Netlify } from "../lib/netlify";
 import { CF_HELPER_DEPLOY, CF_HELPER_NAME, HelperClaimed, connectCfHelper, getHelper, helperHandoff, helperOk, relayVault, type Relay } from "../lib/relay";
@@ -72,17 +73,21 @@ export function useHelper(studioToken: string, nf: Netlify | null | undefined, w
 export function HelperStatus({ studioToken, nf }: { studioToken: string; nf: Netlify | null }) {
   const h = useHelper(studioToken, nf);
   const [shown, setShown] = useState<Relay | null | undefined>(undefined);
+  // Signed in to the Studio's database, which makes the Cloudflare calls itself: no helper needed on this device.
+  const [viaDb, setViaDb] = useState(false);
+  useEffect(() => { studioDbWay().then((w) => setViaDb(!!w)).catch(() => {}); }, [studioToken]);
   useEffect(() => { relayVault.load(studioToken).then(setShown); }, [studioToken, h.relay]);
   if (shown === undefined) return null;
   return (
     <div className="flex flex-col gap-2 text-sm">
       <div className="flex flex-wrap items-center gap-2">
-        <span className={`h-2 w-2 rounded-full ${helperOk(shown) ? "bg-emerald-400" : "bg-ink-500"}`} />
-        <span>Studio helper: {shown ? <><b>{shown.kind === "cloudflare" ? "Cloudflare" : "Netlify"}</b> · <a className="text-brand-300 underline" href={shown.url} target="_blank" rel="noopener noreferrer">{shown.url.replace(/^https:\/\//, "")}</a></> : <span className="text-ink-400">not set up</span>}</span>
+        <span className={`h-2 w-2 rounded-full ${helperOk(shown) || viaDb ? "bg-emerald-400" : "bg-ink-500"}`} />
+        <span>Studio helper: {!shown && viaDb ? <b>not needed on this device</b> : shown ? <><b>{shown.kind === "cloudflare" ? "Cloudflare" : "Netlify"}</b> · <a className="text-brand-300 underline" href={shown.url} target="_blank" rel="noopener noreferrer">{shown.url.replace(/^https:\/\//, "")}</a></> : <span className="text-ink-400">not set up</span>}</span>
         {shown && <button type="button" className="btn btn-sm ml-auto" onClick={() => { relayVault.clear(); setShown(null); location.reload(); }} title="Forget it on this device. Delete the Worker (or Netlify site) to remove it completely.">Forget</button>}
       </div>
       <p className="pl-4 text-[12.5px] text-ink-400">The go-between: passes the Studio's requests to Cloudflare (which doesn't accept them straight from a web page). Holds no permissions and keeps none of your keys.</p>
-      {!shown && h.ui}
+      {!shown && viaDb && <p className="pl-4 text-[12.5px] text-emerald-300">You are signed in to your Studio's database, which makes the Studio's Cloudflare calls with the token it keeps. A helper is only needed here to connect another Cloudflare account from this device, or to set up email sending.</p>}
+      {!shown && (viaDb ? <details className="pl-4 text-[12.5px] text-ink-400"><summary className="cursor-pointer select-none">Set up a helper on this device anyway</summary><div className="mt-2">{h.ui}</div></details> : h.ui)}
     </div>
   );
 }

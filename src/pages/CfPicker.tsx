@@ -4,8 +4,8 @@
 import { useEffect, useState } from "react";
 import type { Relay } from "../lib/relay";
 import { Netlify } from "../lib/netlify";
-import { Cloudflare, CfError, type CfAccount } from "../lib/cloudflare";
-import { CF_DB_TOKEN_PAGE, CFDB_WORKER, cfAccountVault, cfDeployInfo, cfMemTokens, cfShortTokens, setupCfDb, type CfDbSetup, type CfMoreToken } from "../lib/cfdb";
+import { Cloudflare, CfError, cfDbToken, isCfDbToken, type CfAccount } from "../lib/cloudflare";
+import { CF_DB_TOKEN_PAGE, CFDB_WORKER, cfAccountVault, cfDeployInfo, cfMemTokens, cfShortTokens, setupCfDb, studioDbWay, type CfDbSetup, type CfMoreToken } from "../lib/cfdb";
 import { useHelper } from "./HelperBox";
 import { CF_OAUTH_SCOPES, CF_OAUTH_SETUP_TOKEN_PAGE, cfMem, cfOauthCfg, cfOauthMint, cfOauthOpen, cfOauthRedirect, cfOauthSetup } from "../lib/cfoauth";
 import { brand } from "../lib/brand";
@@ -19,17 +19,27 @@ export function useCfAccount(studioToken: string, nf: Netlify | null | undefined
   const helper = useHelper(studioToken, nf, "Cloudflare");
   const [tok, setTok] = useState(""), [accounts, setAccounts] = useState<CfAccount[] | null>(null), [account, setAccount] = useState("");
   const [busy, setBusy] = useState(""), [err, setErr] = useState("");
+  /** Set when this device has no token of its own and works through the Studio's database (see studioDbWay). */
+  const [dbWay, setDbWay] = useState<{ api: string; scope: string; token: string } | null>(null);
+  const viaDb = !!dbWay && isCfDbToken(tok);
+  const NO_HELPER = { kind: "cloudflare", siteId: "", url: "", key: "", v: 0 } as Relay;
   // Other Cloudflare accounts (their own tokens), for sites hosted there.
   const [more, setMore] = useState<CfMoreToken[]>([]), [addOpen, setAddOpen] = useState(false), [addTok, setAddTok] = useState(""), [addBusy, setAddBusy] = useState(""), [addErr, setAddErr] = useState("");
   useEffect(() => {
     if (!persist) { setTok(""); setAccounts(null); setMore([]); return; }
-    let offMem = () => {};
+    let offMem = () => {}, live = true;
     cfAccountVault.load(studioToken).then(async (v) => {
       // A Cloudflare sign-in made in this tab (never kept on the device) serves every box on the page.
       const mem = () => { if (cfMem.cur && !v?.token) { setTok(cfMem.cur.token); setAccounts(cfMem.cur.accounts); setAccount((a) => (cfMem.cur!.accounts.some((x) => x.id === a) ? a : v?.account && cfMem.cur!.accounts.some((x) => x.id === v.account) ? v.account : cfMem.cur!.accounts[0].id)); } };
       addEventListener("studio:cf-mem", mem); offMem = () => removeEventListener("studio:cf-mem", mem);
-      if (!v) { mem(); return; }
-      setTok(v.token || ""); if (v.account) setAccount(v.account); setMore(v.more || []); mem();
+      if (v) { setTok(v.token || ""); if (v.account) setAccount(v.account); setMore(v.more || []); }
+      mem();
+      // No token of its own on this device: the Studio's database does the Cloudflare work, when this device is signed in to it.
+      if (!v?.token && !cfMem.cur) {
+        const way = await studioDbWay().catch(() => null);
+        const list = way ? await new Cloudflare(null, way.token).accounts().catch(() => [] as CfAccount[]) : [];
+        if (way && list.length && live) { setDbWay(way); setTok(way.token); setAccounts(list); setAccount((a) => (list.some((x) => x.id === a) ? a : v?.account && list.some((x) => x.id === v.account) ? v.account : list[0].id)); }
+      }
     });
     // A kept Cloudflare sign-in is renewed while the tab stays open (loading it renews it when it is about to run out).
     const renew = setInterval(() => cfAccountVault.load(studioToken).then((v) => {
@@ -39,7 +49,7 @@ export function useCfAccount(studioToken: string, nf: Netlify | null | undefined
     }).catch(() => {}), 60000);
     // Accounts added or removed in Settings in another tab show up here without reopening.
     const on = (e: StorageEvent) => { if (e.key === "site-studio:cfdb") cfAccountVault.load(studioToken).then((v) => setMore(v?.more || [])); };
-    addEventListener("storage", on); return () => { removeEventListener("storage", on); offMem(); clearInterval(renew); };
+    addEventListener("storage", on); return () => { live = false; removeEventListener("storage", on); offMem(); clearInterval(renew); };
   }, [studioToken, persist]);
   const saveMore = async (list: CfMoreToken[]) => { setMore(list); const v = await cfAccountVault.load(studioToken); await cfAccountVault.save({ ...(v || { token: "" }), more: list }, studioToken); };
   /** Adds another account's token (kept encrypted on this device, like the main one). */
@@ -214,7 +224,7 @@ export function useCfAccount(studioToken: string, nf: Netlify | null | undefined
       {suTxt && <p className="text-ink-300">For making it public later, Cloudflare checks your domain with this DNS TXT record: <code className="select-all break-all font-mono text-xs text-ink-200">{suTxt}</code></p>}
     </div>
   );
-  useEffect(() => { if (persist && tok && !accounts && !busy && helper.ready) connect(); }, [tok && persist, helper.ready]);
+  useEffect(() => { if (persist && tok && !isCfDbToken(tok) && !accounts && !busy && helper.ready) connect(); }, [tok && persist, helper.ready]);
   const pickAccount = async (id: string) => { setAccount(id); if (persist) { const v = await cfAccountVault.load(studioToken); if (v) await cfAccountVault.save({ ...v, account: id }, studioToken); } };
   const acc = accounts?.find((a) => a.id === account) || null;
   /** Every Cloudflare account this device can manage: the main token's, then the other tokens'. */
@@ -223,6 +233,7 @@ export function useCfAccount(studioToken: string, nf: Netlify | null | undefined
   /** A client for a given account, with the token that can manage it. */
   const clientFor = async (id: string | undefined, step?: (s: string) => void): Promise<{ cf: Cloudflare; relay: Relay; account: CfAccount; token: string }> => {
     const other = id ? more.find((m) => m.accounts.some((a) => a.id === id)) : null;
+    if (viaDb && id && (accounts || []).some((a) => a.id === id)) { const a = accounts!.find((x) => x.id === id)!, t = cfDbToken(dbWay!.api, dbWay!.scope, id); return { cf: new Cloudflare(null, t), relay: NO_HELPER, account: a, token: t }; }
     if (!other || (accounts || []).some((a) => a.id === id)) {
       if (!id || id === acc?.id) return client(step);
       const a = (accounts || []).find((x) => x.id === id); if (!a) throw new Error("No Cloudflare token on this device can manage that account. Add it in Settings → Hostings → Sites and hosting accounts.");
@@ -234,6 +245,7 @@ export function useCfAccount(studioToken: string, nf: Netlify | null | undefined
   /** A Cloudflare API client through the helper, for the chosen account. */
   const client = async (step?: (s: string) => void): Promise<{ cf: Cloudflare; relay: Relay; account: CfAccount; token: string }> => {
     if (!acc) throw new Error("Connect your Cloudflare account first.");
+    if (viaDb) { const t = cfDbToken(dbWay!.api, dbWay!.scope, acc.id); return { cf: new Cloudflare(null, t), relay: NO_HELPER, account: acc, token: t }; }
     const relay = await helper.get(step);
     return { cf: new Cloudflare(relay, tok.trim()), relay, account: acc, token: tok.trim() };
   };
@@ -256,18 +268,19 @@ export function useCfAccount(studioToken: string, nf: Netlify | null | undefined
       ) : null;
   const ui = (
     <div className="flex flex-col gap-2.5 text-[13px]">
-      {helper.ui}
-      <details className="group rounded-lg border border-ink-700" aria-label="Cloudflare connection" open={boxOpen ?? (!acc || !oc.client)} onToggle={(e) => { if (e.target !== e.currentTarget) return; const o = e.currentTarget.open; if (o !== (boxOpen ?? (!acc || !oc.client))) setBoxOpen(o); }}>
-        <summary className="flex cursor-pointer select-none items-center gap-2 px-3 py-2"><span className={`h-2 w-2 rounded-full ${acc ? "bg-emerald-400" : "bg-ink-500"}`} /><b className="text-ink-100">Cloudflare connection</b><span className="text-ink-400">{acc ? (cfMemTokens.has(tok.trim()) ? "connected · this tab only" : "connected") : "not connected"}</span><span className="ml-auto text-[12.5px] text-brand-300 underline group-open:hidden">Change</span><span className="ml-auto hidden text-[12.5px] text-brand-300 underline group-open:inline">Hide</span></summary>
+      {!viaDb && helper.ui}
+      <details className="group rounded-lg border border-ink-700" aria-label="Cloudflare connection" open={boxOpen ?? (!acc || (!oc.client && !viaDb))} onToggle={(e) => { if (e.target !== e.currentTarget) return; const o = e.currentTarget.open; if (o !== (boxOpen ?? (!acc || (!oc.client && !viaDb)))) setBoxOpen(o); }}>
+        <summary className="flex cursor-pointer select-none items-center gap-2 px-3 py-2"><span className={`h-2 w-2 rounded-full ${acc ? "bg-emerald-400" : "bg-ink-500"}`} /><b className="text-ink-100">Cloudflare connection</b><span className="text-ink-400">{acc ? (viaDb ? "connected through your Studio's database" : cfMemTokens.has(tok.trim()) ? "connected · this tab only" : "connected") : "not connected"}</span><span className="ml-auto text-[12.5px] text-brand-300 underline group-open:hidden">Change</span><span className="ml-auto hidden text-[12.5px] text-brand-300 underline group-open:inline">Hide</span></summary>
         <div className="flex flex-col gap-2.5 px-3 pb-3">
+          {viaDb && <p className="text-ink-300">This device has no Cloudflare token of its own and needs none: you are signed in to your Studio's database, which keeps the token (as a secret on your own Cloudflare) and makes the Studio's Cloudflare calls for you. Connect here only to add another Cloudflare account.</p>}
           {ocUi}
           <details aria-label="Paste a token" open={!oc.client}>
             <summary className="cursor-pointer select-none text-ink-400">{oc.client ? "Paste a token instead" : "Paste a Cloudflare token"}</summary>
             <p className="mt-1.5 text-ink-400"><a className="text-brand-300 underline" href={CF_DB_TOKEN_PAGE} target="_blank" rel="noopener noreferrer">Create a Cloudflare token ↗</a> (permissions already ticked), then paste it here. {persist ? "Kept encrypted on this device only." : "Used now only, not kept."}</p>
             <div className="mt-1.5">
             <div className="flex gap-2">
-        <input aria-label="Cloudflare API token" className="input min-w-0 flex-1 font-mono text-xs" type="password" autoComplete="off" value={tok} onChange={(e) => { setTok(e.target.value); setAccounts(null); }} placeholder="Cloudflare API token" />
-        <button type="button" className="btn btn-sm" disabled={!tok.trim() || !!busy || !helper.ready} onClick={connect}>{busy && !accounts ? busy + "…" : "Connect"}</button>
+        <input aria-label="Cloudflare API token" className="input min-w-0 flex-1 font-mono text-xs" type="password" autoComplete="off" value={isCfDbToken(tok) ? "" : tok} onChange={(e) => { setTok(e.target.value); setAccounts(null); }} placeholder="Cloudflare API token" />
+        <button type="button" className="btn btn-sm" disabled={!tok.trim() || isCfDbToken(tok) || !!busy || !helper.ready} onClick={connect}>{busy && !accounts ? busy + "…" : "Connect"}</button>
             </div>
             </div>
           </details>
@@ -302,7 +315,7 @@ export function useCfAccount(studioToken: string, nf: Netlify | null | undefined
     if (persist) { const v = await cfAccountVault.load(studioToken); await cfAccountVault.save({ ...(v || {}), token: t.trim(), account: pick, ...(v?.token !== t.trim() ? { oauth: undefined } : {}) }, studioToken); }
     return new Cloudflare(await helper.get(), t.trim());
   };
-  return { ui, othersUi: others, ready: !!acc && helper.ready, account: acc, token: tok.trim(), client, clientFor, allAccounts, busy, helper, replaceToken, /** What Connect Cloudflare last said. */ note: ocNote, /** Connected by a Cloudflare sign-in used in this tab only (nothing on the device). */ tabOnly: cfMemTokens.has(tok.trim()) };
+  return { ui, othersUi: others, ready: !!acc && (helper.ready || viaDb), /** Working through the Studio's database: no token or helper on this device. */ viaDb, account: acc, token: tok.trim(), client, clientFor, allAccounts, busy, helper, replaceToken, /** What Connect Cloudflare last said. */ note: ocNote, /** Connected by a Cloudflare sign-in used in this tab only (nothing on the device). */ tabOnly: cfMemTokens.has(tok.trim()) };
 }
 
 /** The Studio's database on Cloudflare. Pass `shared` to use a Cloudflare account picked elsewhere on the page

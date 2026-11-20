@@ -16,7 +16,7 @@ create index if not exists approvals_project on approvals (scope, project, creat
 create table if not exists approval_notes (id integer primary key autoincrement, token text not null, who text not null, body text not null, page text not null default '', kind text not null default 'comment', created_at text not null);
 create index if not exists approval_notes_token on approval_notes (token, id);
 `;
-var CFDB_VERSION = 41;
+var CFDB_VERSION = 42;
 var CFDB_WORKER_NAME = "picaffectz-db";
 
 // src/lib/lookdigest.ts
@@ -1519,7 +1519,7 @@ var db_worker_default = {
     if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
     const u = new URL(req.url), p = u.pathname.replace(/\/+$/, "") || "/";
     try {
-      if (p === "/") return json({ ok: true, service: "site-studio-db", v: V, mail: !!(env.RESEND_API_KEY && env.MAIL_FROM), ...env.CF_TOKEN && env.CF_ACCOUNT ? { deploy: true, account: env.CF_ACCOUNT } : {}, ...env.GH_TOKEN ? { gh: true } : {}, ...env.AI ? { ai: true, pamphlet: 2 } : {}, reviews: true, look: 1, outline: 1, pictures: 1, connect: 2, translate: 4, approvals: 1, accounts: 2, cfx: 4, studioPages: 1, del: 1, enqMail: 3, ...otherAccounts(env).length ? { more: otherAccounts(env).length } : {} });
+      if (p === "/") return json({ ok: true, service: "site-studio-db", v: V, mail: !!(env.RESEND_API_KEY && env.MAIL_FROM), ...env.CF_TOKEN && env.CF_ACCOUNT ? { deploy: true, account: env.CF_ACCOUNT } : {}, ...env.GH_TOKEN ? { gh: true } : {}, ...env.AI ? { ai: true, pamphlet: 2 } : {}, reviews: true, look: 1, outline: 1, pictures: 1, connect: 2, translate: 4, approvals: 1, accounts: 2, cfx: 4, cfa: 1, studioPages: 1, del: 1, enqMail: 3, ...otherAccounts(env).length ? { more: otherAccounts(env).length } : {} });
       if (p.startsWith("/ai/") && u.searchParams.get("engine") === "custom") {
         const c = await anySetting(env, "ai");
         if (!c?.on || !c.key || !c.model || !publicUrl(String(c.base || "").trim())) return json({ error: "Your own AI API isn't set up yet. Fill it in under Settings \u2192 AI engine." });
@@ -2421,6 +2421,42 @@ var db_worker_default = {
             return err(502, "Couldn't read the other account's database: " + (e?.message || e));
           }
           return err(400, "Unknown step.");
+        }
+        return err(404, "Not found.");
+      }
+      if (p === "/cfa/accounts" || p === "/cfa") {
+        if (!scope.startsWith("studio:")) return err(400, "Only for the Studio's own scope.");
+        if (role !== "owner") return err(403, "Only the Studio's owners can use its Cloudflare accounts.");
+        const tokenFor = (a) => otherToken(env, a) || (a && a === env.CF_ACCOUNT ? env.CF_TOKEN || "" : "");
+        if (p === "/cfa/accounts" && req.method === "GET") {
+          const ids = [...env.CF_TOKEN && env.CF_ACCOUNT ? [env.CF_ACCOUNT] : [], ...otherAccounts(env).map((x) => x.id)];
+          const out = [];
+          for (const id of ids) {
+            if (out.some((x) => x.id === id)) continue;
+            let name = otherAccounts(env).find((x) => x.id === id)?.name || "";
+            if (!name) {
+              try {
+                const r = await fetch("https://api.cloudflare.com/client/v4/accounts/" + id, { headers: { Authorization: "Bearer " + tokenFor(id) } });
+                name = String((await r.json().catch(() => null))?.result?.name || "");
+              } catch {
+              }
+            }
+            out.push({ id, name: (name || "Cloudflare account " + id.slice(0, 6)).slice(0, 80) });
+          }
+          return json({ accounts: out, main: env.CF_TOKEN && env.CF_ACCOUNT ? env.CF_ACCOUNT : null });
+        }
+        if (p === "/cfa" && req.method === "POST") {
+          const q = await req.json(), method = String(q.method || "GET").toUpperCase(), path2 = String(q.path || "");
+          if (!/^\/[\w\-./?=&%:,]*$/.test(path2) || path2.includes("..") || !["GET", "POST", "PUT", "PATCH", "DELETE"].includes(method)) return err(400, "Not a Cloudflare call the Studio makes.");
+          const inAcc = /^\/accounts\/([\w-]{1,64})\/(workers|d1)\//.exec(path2), zone = /^\/zones(\/|\?|$)/.test(path2);
+          if (!inAcc && !zone) return err(403, "The database only passes on calls about Workers, D1 and domains.");
+          const A = inAcc ? inAcc[1] : /^[\w-]{1,64}$/.test(String(q.acct || "")) ? String(q.acct) : env.CF_ACCOUNT || "";
+          const tok = tokenFor(A);
+          if (!tok) return err(501, "No Cloudflare token for that account is kept on this database. Connect it once on a device (Settings \u2192 Hostings) and turn on Publish from any device.");
+          const jwt = /^\/accounts\/[\w-]+\/workers\/assets\/upload/.test(path2) && /^[\w.~+/=-]{8,4096}$/.test(String(q.jwt || "")) ? String(q.jwt) : "";
+          const body = q.body64 ? Uint8Array.from(atob(String(q.body64)), (c) => c.charCodeAt(0)) : q.body != null ? String(q.body) : void 0;
+          const r = await fetch("https://api.cloudflare.com/client/v4" + path2, { method, headers: { Authorization: "Bearer " + (jwt || tok), ...q.contentType ? { "Content-Type": String(q.contentType) } : {} }, body: method === "GET" ? void 0 : body });
+          return json({ status: r.status, body: await r.text() });
         }
         return err(404, "Not found.");
       }

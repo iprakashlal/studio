@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useCfAccount, useCloudflarePicker, type CfAccountHook } from "./CfPicker";
 import { cloudflarePages, netlifyPages, pagesViaDbs, PAGES_LABEL, type Pages, type PagesKind } from "../lib/pages";
 import { CfError, registrarHelp, type Cloudflare } from "../lib/cloudflare";
-import { CFDB_WORKER, CF_DB_TOKEN_PAGE, CfRepo, registerWorkers, cfAccountVault, cfAddMembers, resendTestOnly, cfRole, cfSendCode, cfSignedIn, cfVerifyCode, cfSetupFor } from "../lib/cfdb";
+import { cfShortTokens, CFDB_WORKER, CF_DB_TOKEN_PAGE, CfRepo, registerWorkers, cfAccountVault, cfAddMembers, resendTestOnly, cfRole, cfSendCode, cfSignedIn, cfVerifyCode, cfSetupFor } from "../lib/cfdb";
 import { SupabaseAuto } from "./SupabaseAuto";
 import type { Session } from "../lib/auth";
 import type { ProjectMeta, Studio, StudioIndex } from "../lib/studio";
@@ -190,7 +190,7 @@ export function HostDialog({ studio, project, tpl, draft, dirty, save, onIndex, 
     try {
       const v = await cfAccountVault.load(session.token);
       if (h.kind !== "cloudflare" || !h.account || !v?.setup || h.account === v.setup.account || !cfAcc.ready) return;
-      const other = (v.more || []).find((m) => m.accounts.some((a) => a.id === h.account)); if (!other) return;
+      const other = (v.more || []).find((m) => m.accounts.some((a) => a.id === h.account)); if (!other || cfShortTokens.has(other.token)) return;
       const { cf } = await cfAcc.client(), name = other.accounts.find((a) => a.id === h.account)!.name;
       await cf.putSecret(v.setup.account, CFDB_WORKER, "CFX_" + h.account.replace(/-/g, "_"), JSON.stringify({ t: other.token, n: name }));
     } catch { /* older database: kept when it's updated, or from Settings → Publish from any device */ }

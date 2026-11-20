@@ -16,7 +16,7 @@ create index if not exists approvals_project on approvals (scope, project, creat
 create table if not exists approval_notes (id integer primary key autoincrement, token text not null, who text not null, body text not null, page text not null default '', kind text not null default 'comment', created_at text not null);
 create index if not exists approval_notes_token on approval_notes (token, id);
 `;
-var CFDB_VERSION = 40;
+var CFDB_VERSION = 41;
 var CFDB_WORKER_NAME = "picaffectz-db";
 
 // src/lib/lookdigest.ts
@@ -351,7 +351,7 @@ async function notifyEnquiry(env, site, data, page) {
   let said = wantOwner && !owners.length ? "Not emailed: no address to send to. Fill in \u201CSend to\u201D under Enquiry form." : "";
   const vars = { name: oneLine(data.name || ""), site: name, page: page || "", email: oneLine(data.email || "") };
   const label = (k) => k.replace(/[-_]+/g, " ").replace(/^./, (ch) => ch.toUpperCase());
-  const rows = Object.entries(data).filter(([k]) => k !== "consent" && k !== "okey" && k !== "pay_state" && k !== "rz_order" && k !== "pay_gw" && k !== "cart" && !(k === "message" && data.order_no) && !k.startsWith("_")).map(([k, v]) => `<tr><td style="padding:6px 14px 6px 0;color:#667;vertical-align:top;white-space:nowrap">${hesc(label(k))}</td><td style="padding:6px 0;white-space:pre-wrap">${hesc(v)}</td></tr>`).join("");
+  const rows = Object.entries(data).filter(([k]) => k !== "consent" && k !== "okey" && k !== "pay_state" && k !== "rz_order" && k !== "pay_gw" && k !== "cart" && k !== "_items" && !(k === "message" && data.order_no) && !k.startsWith("_")).map(([k, v]) => `<tr><td style="padding:6px 14px 6px 0;color:#667;vertical-align:top;white-space:nowrap">${hesc(label(k))}</td><td style="padding:6px 0;white-space:pre-wrap">${hesc(v)}</td></tr>`).join("");
   const table = `<table style="border-collapse:collapse;margin:0 0 14px">${rows}</table>`;
   const jobs = [];
   if (wantOwner && owners.length) {
@@ -675,6 +675,8 @@ async function ensure(env) {
     env.DB.prepare("create table if not exists customers (site text not null, ckey text not null, name text not null default '', phone text not null default '', email text not null default '', verified integer not null default 0, orders integer not null default 0, spent real not null default 0, points integer not null default 0, first_at text not null, last_at text not null, primary key (site, ckey))"),
     env.DB.prepare("create table if not exists points (id integer primary key autoincrement, site text not null, ckey text not null, delta integer not null, why text not null default '', order_no text not null default '', at text not null)"),
     env.DB.prepare("create index if not exists points_site_key on points (site, ckey, id)"),
+    // what a signed-in customer keeps about themselves beyond their name and contacts (their saved addresses)
+    env.DB.prepare("create table if not exists profiles (site text not null, ckey text not null, data text not null default '{}', primary key (site, ckey))"),
     env.DB.prepare("create table if not exists otps (k text primary key, hash text not null, expires integer not null, tries integer not null default 0, sent integer not null default 0)"),
     env.DB.prepare("create table if not exists payments (rz_order text primary key, site text not null, order_no text not null, amount integer not null, status text not null default 'created', created_at text not null)")
   ]);
@@ -941,9 +943,10 @@ function msgPolicy(c) {
 }
 async function codeWays(env, site, c) {
   const w = await getSetting(env, "site:" + site, "wa").catch(() => null), z = await getSetting(env, "site:" + site, "sms").catch(() => null);
-  const pol = msgPolicy(c === void 0 ? await siteContent(env, site).catch(() => null) : c).checkout;
+  const sc = c === void 0 ? await siteContent(env, site).catch(() => null) : c, pol = msgPolicy(sc).checkout;
   const wa = pol.wa && waReady(w) && !!String(w.tplOtp || "").trim(), sms = pol.sms && smsReady(z);
-  return { w, z, wa, sms, any: wa || sms, need: wa && !!w.orderOtp || sms && !!z.orderOtp, cc: String(w?.cc || z?.cc || "91") };
+  const asked = !!(isRest(sc) ? sc?.ordering?.verifyPhone : sc?.checkout?.verifyPhone);
+  return { w, z, wa, sms, any: wa || sms, need: wa && !!w.orderOtp || sms && !!z.orderOtp || (wa || sms) && asked, cc: String(w?.cc || z?.cc || "91") };
 }
 var waPhoneOf = (lines, email) => {
   for (const l of String(lines || "").split(/\n/)) {
@@ -1076,6 +1079,28 @@ function posItems(c, q) {
   }
   return items.length ? { items, sub } : { error: "an empty cart" };
 }
+function orderItems(c, cart) {
+  const out = [], lines = Array.isArray(cart?.items) ? cart.items.slice(0, 40) : [], pic = (v) => typeof v?.path === "string" && !/^[a-z]+:|^\/\//i.test(v.path) ? v.path.slice(0, 200) : "";
+  if (isRest(c)) {
+    const dishes = /* @__PURE__ */ new Map();
+    for (const k of c?.food?.categories || []) for (const d of k?.items || []) if (d && String(d.name || "").trim()) dishes.set(rslug(k.name) + "/" + rslug(d.name), d);
+    for (const l of lines) {
+      const d = dishes.get(String(l?.id || ""));
+      if (d) out.push({ n: (oneLine(String(d.name)) + (l.variant ? " \xB7 " + oneLine(String(l.variant)) : "")).slice(0, 90), q: Math.max(1, Math.floor(+l.qty || 1)), i: pic(d.image) });
+    }
+  } else {
+    const P = new Map((Array.isArray(c?.products) ? c.products : []).filter((x) => x && x.id).map((x) => [String(x.id), x]));
+    for (const l of lines) {
+      const p = P.get(String(l?.id || ""));
+      if (p) out.push({ n: (oneLine(String(p.name)) + (l.opt ? " \xB7 " + oneLine(String(l.opt)) : "")).slice(0, 90), q: Math.max(1, Math.floor(+l.qty || 1)), i: pic(Array.isArray(p.images) ? p.images[0] : null) });
+    }
+  }
+  return out;
+}
+var cleanAddr = (a) => {
+  const t = (v, n = 120) => oneLine(String(v ?? "")).replace(/\s+/g, " ").slice(0, n);
+  return { label: t(a?.label, 30), line1: t(a?.line1), line2: t(a?.line2), city: t(a?.city, 60), pin: t(a?.pin, 12), state: t(a?.state, 60) };
+};
 var CUST_DAYS = 30;
 var custPass = async (env, site, key, exp) => exp + "." + b64u(await hmac(env.SECRET, "cust:" + site + ":" + key + ":" + exp));
 async function custOk(env, site, key, pass) {
@@ -1670,7 +1695,7 @@ var db_worker_default = {
         if (!v.ok) return err(403, "Verify your mobile number first.");
         return json({ points: v.bal, worth: L.worth, min: L.min, maxPct: L.maxPct, earn: L.earn });
       }
-      if (/^\/acct\/(in|me)\/[a-z0-9][a-z0-9-]{0,59}$/.test(p) && req.method === "POST") {
+      if (/^\/acct\/(in|me|save)\/[a-z0-9][a-z0-9-]{0,59}$/.test(p) && req.method === "POST") {
         const site = p.split("/")[3], b = await req.json(), sc = await siteContent(env, site).catch(() => null), cw = await codeWays(env, site, sc), A = acctOf(env, sc, cw);
         if (!A) return err(404, "Not found.");
         if (p.startsWith("/acct/in/")) {
@@ -1694,7 +1719,24 @@ var db_worker_default = {
         }
         const key = String(b.key || "");
         if (!await custOk(env, site, key, b.pass)) return err(401, "Please sign in again.");
+        const byMail = key.includes("@");
+        if (p.startsWith("/acct/save/")) {
+          const name = oneLine(String(b.name || "")).replace(/\s+/g, " ").slice(0, 100), phone = byMail ? String(b.phone || "").replace(/[^\d+ ()-]/g, "").slice(0, 24) : "", email2 = byMail ? "" : emailKey(b.email);
+          if (!byMail && String(b.email || "").trim() && !email2) return err(400, "Enter a valid email address.");
+          if (byMail && phone && phone.replace(/\D/g, "").length < 8) return err(400, "Enter a mobile number with at least 8 digits.");
+          const addrs = (Array.isArray(b.addresses) ? b.addresses : []).slice(0, 6).map(cleanAddr).filter((a) => a.line1 || a.city || a.pin), now = (/* @__PURE__ */ new Date()).toISOString();
+          await env.DB.batch([
+            env.DB.prepare("insert into customers (site, ckey, name, phone, email, verified, orders, spent, points, first_at, last_at) values (?, ?, ?, ?, ?, 1, 0, 0, 0, ?, ?) on conflict (site, ckey) do update set name = excluded.name, phone = case when ? = 1 then excluded.phone else phone end, email = case when ? = 1 then email else excluded.email end, verified = 1").bind(site, key, name, byMail ? phone : "+" + key, byMail ? key : email2, now, now, byMail ? 1 : 0, byMail ? 1 : 0),
+            env.DB.prepare("insert into profiles (site, ckey, data) values (?, ?, ?) on conflict (site, ckey) do update set data = excluded.data").bind(site, key, JSON.stringify({ addresses: addrs }))
+          ]);
+          return json({ ok: true, profile: { name, phone: byMail ? phone : "+" + key, email: byMail ? key : email2, addresses: addrs } });
+        }
         const row = await env.DB.prepare("select name, phone, email, orders, spent, points, first_at from customers where site = ? and ckey = ?").bind(site, key).first();
+        let addresses = [];
+        try {
+          addresses = (JSON.parse(String((await env.DB.prepare("select data from profiles where site = ? and ckey = ?").bind(site, key).first())?.data || "{}")).addresses || []).slice(0, 6).map(cleanAddr);
+        } catch {
+        }
         const nos = ((await env.DB.prepare("select order_no, max(at) t from points where site = ? and ckey = ? and order_no <> '' group by order_no order by t desc limit 25").bind(site, key).all()).results || []).map((r) => String(r.order_no));
         const orders = [];
         if (nos.length) {
@@ -1707,11 +1749,16 @@ var db_worker_default = {
               continue;
             }
             if (!nos.includes(String(d.order_no))) continue;
-            orders.push({ no: String(d.order_no), at: r.created_at, total: String(d.total || ""), status: String(r.status || "new"), mode: String(d.mode || ""), paid: d._paid === "yes", points: String(d._points || ""), text: String(d.items || d.order || d.message || "").slice(0, 1200) });
+            let items = [];
+            try {
+              items = JSON.parse(String(d._items || "[]")).slice(0, 40);
+            } catch {
+            }
+            orders.push({ no: String(d.order_no), at: r.created_at, total: String(d.total || ""), status: String(r.status || "new"), mode: String(d.mode || ""), paid: d._paid === "yes", pay: String(d.payment || d.pay || ""), address: String(d.address || ""), name: String(d.name || ""), points: String(d._points || ""), items, text: String(d.items || d.order || d.message || "").slice(0, 2e3) });
           }
         }
         const L = loyOf(sc);
-        return json({ ok: true, name: row?.name || "", phone: row?.phone || "", email: row?.email || "", count: +row?.orders || 0, points: Math.max(0, +row?.points || 0), loyalty: L.on ? { worth: L.worth, min: L.min, maxPct: L.maxPct } : null, orders });
+        return json({ ok: true, name: row?.name || "", phone: byMail ? row?.phone || "" : "+" + key, email: byMail ? key : row?.email || "", addresses, count: +row?.orders || 0, points: Math.max(0, +row?.points || 0), loyalty: L.on ? { worth: L.worth, min: L.min, maxPct: L.maxPct } : null, orders });
       }
       if (/^\/eotp\/(send|check)\/[a-z0-9][a-z0-9-]{0,59}$/.test(p) && req.method === "POST") {
         const site = p.split("/")[3], b = await req.json(), sc = await siteContent(env, site).catch(() => null);
@@ -1930,6 +1977,13 @@ var db_worker_default = {
           if (posReady(pz)) {
             const pc = await siteContent(env, site);
             if (isRest(pc)) data._pos = await posSend(env, site, pz, pc, q.cart, data, u.origin);
+          }
+        }
+        if (data.order_no && q.cart) {
+          try {
+            const it = orderItems(await siteContent(env, site), q.cart);
+            if (it.length) data._items = JSON.stringify(it).slice(0, 6e3);
+          } catch {
           }
         }
         if (data.order_no) {

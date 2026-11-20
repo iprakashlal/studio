@@ -35,7 +35,13 @@
      their orders and points. A signed-in mobile number or email address counts as verified. */
   const ME = () => (window.SiteAcct && SiteAcct.on() ? SiteAcct.user() : null);
   const mustSign = () => !!(window.SiteAcct && SiteAcct.on() && !SiteAcct.user() && !SiteAcct.skipped() && !A.PREVIEW);
-  const applyMe = () => { const m = ME(), k = window.SiteAcct && SiteAcct.skipped(); if (m && m.kind === "phone") ui.form.phone = m.typed || "+" + m.key; if (m && m.kind === "email") ui.form.email = m.key; if (!m && k) { ui.form.email = k.email; ui.eotp = { email: k.email, token: k.token }; } };
+  const applyMe = (fresh) => { const m = ME(), k = window.SiteAcct && SiteAcct.skipped(), f = ui.form; if (m && m.kind === "phone") f.phone = m.typed || "+" + m.key; if (m && m.kind === "email") f.email = m.key; if (!m && k) { f.email = k.email; ui.eotp = { email: k.email, token: k.token }; }
+    // their saved name, other contact and address fill the form where it is still empty
+    const P = m && SiteAcct.profile(); if (!P) return; const a = (P.addresses || [])[0] || {};
+    // (`fresh`: they have just signed in or saved their profile, so it wins over what an earlier order left in the form)
+    const put = (k, v) => { if (v && (fresh || !f[k])) f[k] = v; };
+    put("name", P.name); if (m.kind === "phone") put("email", P.email); if (m.kind === "email") put("phone", P.phone);
+    put("line1", a.line1); put("area", a.line2 || a.city); put("pin", a.pin); };
   let acctP = null;
   const loadAcct = () => (acctP ||= new Promise((ok, no) => { if (window.SiteAcct) return ok(); const s = document.createElement("script"); s.src = "assets/acct.js"; s.onload = () => ok(); s.onerror = no; document.head.appendChild(s); }));
   const verified = () => { const m = ME(); return !!(m && m.kind === "phone") || !!(ui.otp && ui.otp.token && ui.otp.phone === digits(ui.form.phone) && +ui.otp.token.split(".")[0] > Date.now() + 60000); };
@@ -258,7 +264,7 @@
     return { phone: !!can.otp || n === "phone" || n === "both", email: n === "email" || n === "both", askEmail: true, either: n === "either" && !can.otp };
   }
   /** A box with its “Verify” inside it: the button (a tick once verified) sits at the end of the box, and the code row opens under it. */
-  const vbox = (o) => `<div class="of ofv" id="${o.id}"><label for="of-${o.k}">${o.label}</label><div class="of-in${o.on ? " has" : ""}"><input id="of-${o.k}" data-f="${o.k}" value="${esc(ui.form[o.k] || "")}" ${o.attrs}>${!o.on ? "" : o.done ? `<span class="of-tick">✓ Verified</span>` : `<button type="button" class="of-vbtn" data-act="${o.act}send">${o.sent ? "Resend" : "Verify"}</button>`}</div>${o.on && !o.done ? (o.sent ? `<div class="od-code"><input id="of-${o.code}" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="Code" aria-label="${o.sentTo}"><button type="button" class="btn sec" data-act="${o.act}check">Confirm</button></div><p class="od-live">${o.sentTo}.</p>` : `${o.pick || ""}<p class="od-live">${o.hint}</p>`) : ""}${o.on && o.msg ? `<p class="od-bad" role="alert">${esc(o.msg)}</p>` : ""}</div>`;
+  const vbox = (o) => `<div class="of ofv" id="${o.id}"><label for="of-${o.k}">${o.label}</label><div class="of-in${o.on ? " has" : ""}"><input id="of-${o.k}" data-f="${o.k}" value="${esc(ui.form[o.k] || "")}" ${o.attrs}>${!o.on ? "" : o.done ? `<span class="of-tick">✓ Verified</span>` : `<button type="button" class="of-vbtn" data-act="${o.act}send">${o.sent ? "Resend" : "Verify"}</button>`}</div>${o.on && !o.done ? (o.sent ? `<div class="of-in has of-codein"><input id="of-${o.code}" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="Enter the code" aria-label="${o.sentTo}"><button type="button" class="of-vbtn" data-act="${o.act}check">Confirm</button></div><p class="od-live">${o.sentTo}.</p>` : `${o.pick || ""}<p class="od-live">${o.hint}</p>`) : ""}${o.on && o.msg ? `<p class="od-bad" role="alert">${esc(o.msg)}</p>` : ""}</div>`;
   const phoneBox = () => { const M = must(), ways = can.via.map((v) => VIA[v]).join(" or ");
     return vbox({ id: "od-otp", k: "phone", label: "Mobile number" + (M.phone ? "" : " (optional)"), attrs: 'type="tel" inputmode="tel" autocomplete="tel"' + (M.phone ? " required" : "") + (ME() && ME().kind === "phone" ? " readonly" : ""), on: can.otp || (can.pts && loy().on) || !!(ME() && ME().kind === "phone"), done: verified(), sent: ui.otpSent, act: "otp", code: "code", msg: ui.otpMsg,
       sentTo: "Enter the code we sent " + VIA[viaNow()], pick: can.via.length > 1 ? `<div class="of-via" role="group" aria-label="Send the code">${can.via.map((v) => `<button type="button" data-act="otpvia" data-via="${v}" aria-pressed="${viaNow() === v}">${v === "wa" ? "WhatsApp" : "SMS"}</button>`).join("")}</div>` : "",
@@ -621,8 +627,8 @@
     if (!bind.back) { bind.back = true; cameBack(); }
     if (!canAsked && !A.PREVIEW && be && be.cf) { canAsked = true; fetch(be.cf + "/site/" + encodeURIComponent(be.site) + "/can", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((j) => { if (j) { can = { otp: !!j.otp, pts: !!j.pts, em: !!j.em, via: Array.isArray(j.via) && j.via.length ? j.via.filter((v) => v === "wa" || v === "sms") : ["wa"], rz: String(j.rz || ""), pg: Array.isArray(j.pg) ? j.pg : [] }; if (ui.drawer === "checkout") { sync(); over(true); }
       // customer accounts: sign-in before checkout, and "My account" in the toolbar
-      if (j.acct) loadAcct().then(() => { const redo = () => { sync(); applyMe(); if (!ME()) ui.pts = null; const host = root.parentNode, y = scrollY; host.innerHTML = page(A); bind(A); scrollTo(0, y); loadPts(); };
-        SiteAcct.init({ api: be.cf, site: be.site, acct: j.acct, money: (n) => fmt(n), onChange: redo }); redo(); }).catch(() => {}); } }).catch(() => {}); }
+      if (j.acct) loadAcct().then(() => { const redo = () => { sync(); applyMe(true); if (!ME()) ui.pts = null; const host = root.parentNode, y = scrollY; host.innerHTML = page(A); bind(A); scrollTo(0, y); loadPts(); };
+        SiteAcct.init({ api: be.cf, site: be.site, kind: "restaurant", acct: j.acct, money: (n) => fmt(n), img: (path) => A.imgUrl({ path }), biz: (() => { const L = C.legal || {}, K = C.contact || {}; return { name: L.name || (C.brand && C.brand.name) || "", address: L.address || K.address || "", phone: L.phone || K.phone || "", email: L.email || K.email || "", gstin: L.gstin || "" }; })(), onChange: redo }); redo(); }).catch(() => {}); } }).catch(() => {}); }
   }
   window.RestOrder = { page, bind };
 })();

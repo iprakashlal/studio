@@ -694,6 +694,8 @@ function navHTML() {
     ? mpages().map((p) => ({ label: C.site.pageLabels[p] || p, url: PAGES[p], on: PAGE === p }))
     : C.sections.filter((s) => s.show !== false && s.inNav && RENDER[s.id]).map((s) => ({ label: s.label, url: AT + "#" + s.id }));
   if (orderOn() && C.ordering.inNav !== false) items.push({ label: C.ordering.label || "Order now", url: PAGES.order, on: PAGE === "order" });
+  // Customer accounts: a link to sign in / "My account" (it opens on the Order now page).
+  if (orderOn() && C.account && C.account.on && C.account.inNav !== false) items.push({ label: C.account.label || "My account", url: PAGES.order + "#account" });
   spList().filter((p) => p.inNav).forEach((p) => items.push({ label: p.navLabel || p.title, url: spHref(p), on: PAGE === "page" && spSlug(p) === spSlug({ slug: spCur() }) }));
   const half = Math.ceil(items.length / 2), a = (i) => `<a href="${esc(i.url)}"${i.on ? ' aria-current="page"' : ""}>${esc(i.label)}</a>`;
   return `<header class="nav" id="top"><div class="wrap nav-in">

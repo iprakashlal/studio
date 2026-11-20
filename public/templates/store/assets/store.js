@@ -360,7 +360,7 @@ function evSlot() { const t = evTok(); if (ME() && ME().kind === "email") return
 function evBox() {
   if (!evCan() || evTok() || (ME() && ME().kind === "email")) return "";
   const bad = EV.msg ? `<span class="err" role="alert">${esc(EV.msg)}</span>` : "";
-  return (EV.sent ? `<div class="ptsrow"><input class="in" id="evcode" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="Code" aria-label="Code we emailed you"><button type="button" class="btn" data-ev="check">Confirm</button></div><span class="soft vnote">Enter the code we emailed you.</span>`
+  return (EV.sent ? `<div class="in-v has"><input class="in" id="evcode" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="Enter the code" aria-label="Code we emailed you"><button type="button" class="in-vbtn" data-ev="check">Confirm</button></div><span class="soft vnote">Enter the code we emailed you.</span>`
     : `<span class="soft vnote">We email a code to verify this address before taking the order${mustGive().email ? "" : " (only if you give one)"}.</span>`) + bad;
 }
 function vDraw(slot, box, a, b) { const s = $(slot), x = $(box); if (s) { s.innerHTML = a; s.parentNode.classList.toggle("has", !!a); } if (x) x.innerHTML = b; }
@@ -399,7 +399,7 @@ function pvSlot() { if (ME() && ME().kind === "phone") return vTick; return !pts
 function pvBox() {
   if (!ptsCan() || ptsProved() || (ME() && !CAN.otp)) return "";
   const ways = CAN.via.map((v) => VIA[v]).join(" or "), bad = PTS.msg ? `<span class="err" role="alert">${esc(PTS.msg)}</span>` : "";
-  return (PTS.sent ? `<div class="ptsrow"><input class="in" id="ptscode" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="Code" aria-label="Code we sent you ${VIA[viaNow()]}"><button type="button" class="btn" data-pts="check">Confirm</button></div><span class="soft vnote">Enter the code we sent ${VIA[viaNow()]}.</span>`
+  return (PTS.sent ? `<div class="in-v has"><input class="in" id="ptscode" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="Enter the code" aria-label="Code we sent you ${VIA[viaNow()]}"><button type="button" class="in-vbtn" data-pts="check">Confirm</button></div><span class="soft vnote">Enter the code we sent ${VIA[viaNow()]}.</span>`
     : `${CAN.via.length > 1 ? `<div class="in-via" role="group" aria-label="Send the code">${CAN.via.map((v) => `<button type="button" data-pts="via" data-via="${v}" aria-pressed="${viaNow() === v}">${v === "wa" ? "WhatsApp" : "SMS"}</button>`).join("")}</div>` : ""}<span class="soft vnote">${CAN.otp ? `We send a code ${ways} to verify this number before taking the order.` : `Optional: verify ${ways} to use your points.`}</span>`) + bad;
 }
 /** The points themselves, beside the order summary: the tick box once the number is verified, and what this order earns. */
@@ -436,6 +436,7 @@ const dbPay = (m) => !BE() && !PREVIEW && !!(HOST && HOST.api && HOST.site) && (
 /* Customer accounts (assets/acct.js, content.account): the shopper signs in before checkout, and "My account" in the
    header shows their orders and points. A signed-in phone number or email address counts as verified. */
 const ME = () => (window.SiteAcct && SiteAcct.on() ? SiteAcct.user() : null);
+let ADDR_AT = 0; // which saved address the checkout is using
 const mustSign = () => !!(window.SiteAcct && SiteAcct.on() && !SiteAcct.user() && !SiteAcct.skipped() && !PREVIEW);
 let acctP = null;
 const loadAcct = () => (acctP ||= new Promise((ok, no) => { if (window.SiteAcct) return ok(); const s = document.createElement("script"); s.src = "assets/acct.js"; s.onload = () => ok(); s.onerror = no; document.head.appendChild(s); }));
@@ -447,7 +448,7 @@ function askCan() {
   if (askCan.done || PREVIEW || BE() || !(HOST && HOST.api && HOST.site) || (PAGE !== "checkout" && !(C.account && C.account.on))) return; askCan.done = true;
   fetch(HOST.api + "/site/" + encodeURIComponent(HOST.site) + "/can", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((j) => { if (!j) return; CAN = { rz: String(j.rz || ""), pg: Array.isArray(j.pg) ? j.pg : [], pts: !!j.pts, em: !!j.em, otp: !!j.otp, via: Array.isArray(j.via) && j.via.length ? j.via.filter((v) => v === "wa" || v === "sms") : ["wa"] }; if (PAGE === "checkout") { if (!cameBack() && (CAN.rz || CAN.pg.length || CAN.otp)) render(); else { ptsDraw(); evDraw(); } }
     if (j.acct) loadAcct().then(() => { const redo = () => { if (!ME()) { PTS.info = null; PTS.use = false; } if (!$(".done")) render(); ptsMine(); };
-      SiteAcct.init({ api: HOST.api, site: HOST.site, acct: j.acct, money: (n) => money(n), onChange: redo }); redo(); }).catch(() => {}); }).catch(() => {});
+      SiteAcct.init({ api: HOST.api, site: HOST.site, kind: "store", addresses: true, acct: j.acct, money: (n) => money(n), img: (path) => imgUrl({ path }), biz: (() => { const L = C.legal || {}, K = C.contact || {}; return { name: L.name || (C.brand && C.brand.name) || "", address: L.address || K.address || "", phone: L.phone || K.phone || "", email: L.email || K.email || "", gstin: L.gstin || "" }; })(), onChange: redo }); redo(); }).catch(() => {}); }).catch(() => {});
 }
 function methods() {
   const P = C.payments, out = [], own = (n) => `You pay on ${n}'s secure page and come back here. The order is placed as soon as you've paid.`;
@@ -681,13 +682,15 @@ const PAGES = {
     if (ACCOUNTS() && C.backend.requireLogin && !USER && !PREVIEW) return `<section class="page-h"><div class="wrap"><h1 class="fit">${ml(K.title)}</h1></div></section><div class="wrap" style="padding-bottom:80px"><div class="box" style="max-width:520px"><h2>Sign in to check out</h2><p class="soft">We'll send a 6-digit code to your email. Your orders then appear in your account.</p><a class="btn pri" href="account.html?next=checkout.html">Sign in</a></div></div>`;
     if (mustSign()) return `<section class="page-h"><div class="wrap"><h1 class="fit">${ml(K.title)}</h1></div></section><div class="wrap" style="padding-bottom:80px"><div id="sa-gate"></div></div>`;
     { const k = window.SiteAcct && !ME() && SiteAcct.skipped(); if (k) { EV.tok = k.token; EV.email = k.email; } }
-    const me = { ...store.get("me", {}), ...(PROFILE ? { name: PROFILE.name || "", phone: PROFILE.phone || "", ...(PROFILE.address || {}) } : {}), ...(USER ? { email: USER.email } : {}), ...(ME() ? (ME().kind === "phone" ? { phone: ME().typed || "+" + ME().key } : { email: ME().key }) : window.SiteAcct && SiteAcct.skipped() ? { email: SiteAcct.skipped().email } : {}) };
+    const SP = ME() ? SiteAcct.profile() : null, SA = (SP && SP.addresses) || [], sa = SA[Math.min(ADDR_AT, SA.length - 1)] || null;
+    const saved = SP ? { ...(SP.name ? { name: SP.name } : {}), ...(ME().kind === "phone" && SP.email ? { email: SP.email } : {}), ...(ME().kind === "email" && SP.phone ? { phone: SP.phone } : {}), ...(sa ? { address: [sa.line1, sa.line2].filter(Boolean).join(", "), city: sa.city, pin: sa.pin, state: sa.state } : {}) } : {};
+    const me = { ...store.get("me", {}), ...saved, ...(PROFILE ? { name: PROFILE.name || "", phone: PROFILE.phone || "", ...(PROFILE.address || {}) } : {}), ...(USER ? { email: USER.email } : {}), ...(ME() ? (ME().kind === "phone" ? { phone: ME().typed || "+" + ME().key } : { email: ME().key }) : window.SiteAcct && SiteAcct.skipped() ? { email: SiteAcct.skipped().email } : {}) };
     const V = { email: ["ev", evSlot(), evBox()], phone: ["pv", pvSlot(), pvBox()] };
     const fld = (id, label, type = "text", req = true, full = false, ac = "") => `<div class="f${full ? " full" : ""}"><label for="${id}">${esc(label)}${req ? "" : ' <span class="soft">(optional)</span>'}</label>${V[id] ? `<div class="in-v${V[id][1] ? " has" : ""}">` : ""}<input class="in" id="${id}" name="${id}" type="${type}"${req ? " required" : ""}${ac ? ` autocomplete="${ac}"` : ""}${(id === "email" && USER) || (ME() && ME().kind === id) ? " readonly" : ""} value="${esc(me[id] || "")}">${V[id] ? `<span id="${V[id][0]}slot">${V[id][1]}</span></div>` : ""}<span class="err" id="${id}-e"></span>${V[id] ? `<div class="vbox" id="${V[id][0]}box">${V[id][2]}</div>` : ""}</div>`;
     return `<section class="page-h"><div class="wrap"><h1 class="fit">${ml(K.title)}</h1>${K.intro ? `<p>${ml(K.intro)}</p>` : ""}</div></section>
     <form class="wrap two" id="co" novalidate><div class="form">
       <div class="box"><h2>Your details</h2>${ME() ? `<p class="soft" style="font-size:13.5px;margin:-6px 0 12px">Signed in as <b>${esc(/@/.test(ME().key) ? ME().key : "+" + ME().key)}</b> · <a href="#" data-acct>My account</a></p>` : ""}<div class="fgrid">${fld("name", "Full name", "text", true, false, "name")}${fld("email", "Email", "email", mustGive().email, false, "email")}${mustGive().askPhone ? fld("phone", "Phone", "tel", mustGive().phone, false, "tel") : ""}</div>${mustGive().either ? `<p class="soft" style="font-size:13.5px;margin-top:8px">Give your email address or your phone number (or both), so we can reach you about the order.</p>` : ""}</div>
-      ${K.askAddress ? `<div class="box"><h2>Delivery address</h2><div class="fgrid">${fld("address", "Address", "text", true, true, "street-address")}${fld("city", "City", "text", true, false, "address-level2")}${fld("pin", "PIN / postcode", "text", true, false, "postal-code")}${fld("state", "State", "text", true, false, "address-level1")}${gstOn() && C.gst.askGstin ? fld("gstin", "GSTIN, for a business invoice", "text", false, true) : ""}</div>${shipOn() ? `<p class="soft" id="pin-msg" role="status" style="font-size:14px;margin-top:8px"></p>` : ""}</div>` : ""}
+      ${K.askAddress ? `<div class="box"><h2>Delivery address</h2>${SA.length > 1 ? `<div class="f" style="margin-bottom:12px"><label for="addrpick">Use a saved address</label><select class="in" id="addrpick">${SA.map((a, i) => `<option value="${i}"${i === Math.min(ADDR_AT, SA.length - 1) ? " selected" : ""}>${esc([a.label, a.line1, a.city].filter(Boolean).join(" · "))}</option>`).join("")}</select></div>` : ""}<div class="fgrid">${fld("address", "Address", "text", true, true, "street-address")}${fld("city", "City", "text", true, false, "address-level2")}${fld("pin", "PIN / postcode", "text", true, false, "postal-code")}${fld("state", "State", "text", true, false, "address-level1")}${gstOn() && C.gst.askGstin ? fld("gstin", "GSTIN, for a business invoice", "text", false, true) : ""}</div>${shipOn() ? `<p class="soft" id="pin-msg" role="status" style="font-size:14px;margin-top:8px"></p>` : ""}</div>` : ""}
       ${K.askNotes ? `<div class="box"><div class="f"><label for="notes">Notes <span class="soft">(optional)</span></label><textarea class="in" id="notes" name="notes" rows="3"></textarea></div></div>` : ""}
       <div class="box"><h2>Payment</h2>${ms.length ? `<div class="pays" role="radiogroup" aria-label="Payment method">${ms.map((m, i) => `<label class="pay"><input type="radio" name="pm" value="${m.id}"${i === 0 ? " checked" : ""}><div><b>${esc(m.label)}</b><span>${esc(m.desc)}</span></div></label>`).join("")}</div>` : `<p class="note">Online payment isn't set up yet. Place the order and we'll contact you about payment.</p>`}</div>
     </div>
@@ -910,7 +913,7 @@ document.addEventListener("click", (e) => {
   const v = e.target.closest && e.target.closest("[data-inv]");
   if (v) { const o = invOrder(v.getAttribute("data-inv")); if (o) openInvoice(o); }
 });
-document.addEventListener("change", (e) => { if (e.target && e.target.id === "usepts") { PTS.use = e.target.checked; ptsDraw(); } });
+document.addEventListener("change", (e) => { if (e.target && e.target.id === "addrpick") { ADDR_AT = +e.target.value || 0; const k = $("#co"); if (k) { const m = store.get("me", {}); for (const i of ["name", "email", "phone"]) { const el = $("#" + i, k); if (el) m[i] = el.value; } store.set("me", m); } render(); return; } if (e.target && e.target.id === "usepts") { PTS.use = e.target.checked; ptsDraw(); } });
 document.addEventListener("input", (e) => {
   if (e.target && e.target.id === "phone" && PTS.tok) ptsDraw(); // a changed number is no longer the proved one
   if (e.target && e.target.id === "email" && (EV.tok || EV.sent)) { EV.sent = false; evDraw(); } // nor a changed email address

@@ -144,3 +144,4 @@ html.ord-lock .fx-badge{display:none!important}html.ord-cart .fx-badge{bottom:84
 
 /* Customer accounts: the sign-in step before checkout */
 #od-acct .sa-card{border:0;padding:6px 0;max-width:none;background:transparent}.od-me{margin:0}
+.of-codein{margin-top:2px}.of-codein input{letter-spacing:.08em}

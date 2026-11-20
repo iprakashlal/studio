@@ -1,7 +1,7 @@
 // "Connect Cloudflare": Cloudflare's own sign-in window (OAuth, with PKCE, no secret) in place of creating a token
-// by hand. The Studio asks Cloudflare which accounts were allowed, then makes its own long-lasting API token for
-// just those accounts and keeps it where a pasted token is kept (encrypted on this device). When Cloudflare won't
-// let it make one, the connection itself is kept and renewed by this device.
+// by hand. The sign-in is used in the open tab only and never written to the device. For the other devices the
+// Studio makes its own long-lasting API token for just the allowed accounts and keeps it on the Studio's database
+// (a secret on the owner's own Cloudflare).
 import type { Cloudflare, CfAccount } from "./cloudflare";
 
 const AUTH = "https://dash.cloudflare.com/oauth2/auth", TOKEN = "https://dash.cloudflare.com/oauth2/token", REVOKE = "https://dash.cloudflare.com/oauth2/revoke";
@@ -76,22 +76,23 @@ export async function cfOauthRevoke(client: string, token: string) {
 }
 
 const WANT = [/^workers scripts (write|edit)$/i, /^d1 (write|edit)$/i, /^account settings read$/i, /^workers routes (write|edit)$/i, /^zone (write|edit)$/i, /^dns (write|edit)$/i];
-/** What to keep after a sign-in: the Studio's own API token for just these accounts when Cloudflare allows making
- *  one (`lasting`), else the sign-in itself with what renews it. `test` checks a new token really works. */
-export async function cfOauthKeepToken(cf: Cloudflare, got: CfOauthGot, accounts: CfAccount[], client: string, test: (token: string) => Promise<boolean>): Promise<{ token: string; lasting: boolean; oauth?: CfOauthKeep }> {
+/** Makes the Studio's own long-lasting API token for just these accounts (the same permissions as a pasted one).
+ *  null when Cloudflare doesn't allow making one, or the new token doesn't work (`test`). */
+export async function cfOauthMint(cf: Cloudflare, accounts: CfAccount[], test: (token: string) => Promise<boolean>): Promise<string | null> {
   try {
     const groups = await cf.permissionGroups(), found = WANT.map((re) => groups.find((g) => re.test(g.name)));
-    if (found[0] && found[1] && found[2]) {
-      const has = (g: { scopes?: string[] }, s: string) => (g.scopes || []).includes(s);
-      const acct = found.filter((g) => g && has(g, "com.cloudflare.api.account")), zone = found.filter((g) => g && !has(g, "com.cloudflare.api.account") && has(g, "com.cloudflare.api.account.zone"));
-      const policies = [{ effect: "allow", resources: Object.fromEntries(accounts.map((a) => ["com.cloudflare.api.account." + a.id, "*"])), permission_groups: acct.map((g) => ({ id: g!.id })) },
-        ...(zone.length ? [{ effect: "allow", resources: Object.fromEntries(accounts.map((a) => ["com.cloudflare.api.account." + a.id, { "com.cloudflare.api.account.zone.*": "*" }])), permission_groups: zone.map((g) => ({ id: g!.id })) }] : [])];
-      const t = await cf.createToken({ name: "Picaffectz Studio", policies });
-      if (t?.value && await test(t.value)) { cfOauthRevoke(client, got.refresh || got.access); return { token: t.value, lasting: true }; }
-    }
-  } catch { /* not allowed to make tokens: keep the sign-in */ }
-  return { token: got.access, lasting: false, ...(got.refresh ? { oauth: { refresh: got.refresh, exp: got.exp, client } } : {}) };
+    if (!found[0] || !found[1] || !found[2]) return null;
+    const has = (g: { scopes?: string[] }, sc: string) => (g.scopes || []).includes(sc);
+    const acct = found.filter((g) => g && has(g, "com.cloudflare.api.account")), zone = found.filter((g) => g && !has(g, "com.cloudflare.api.account") && has(g, "com.cloudflare.api.account.zone"));
+    const policies = [{ effect: "allow", resources: Object.fromEntries(accounts.map((a) => ["com.cloudflare.api.account." + a.id, "*"])), permission_groups: acct.map((g) => ({ id: g!.id })) },
+      ...(zone.length ? [{ effect: "allow", resources: Object.fromEntries(accounts.map((a) => ["com.cloudflare.api.account." + a.id, { "com.cloudflare.api.account.zone.*": "*" }])), permission_groups: zone.map((g) => ({ id: g!.id })) }] : [])];
+    const t = await cf.createToken({ name: "Picaffectz Studio", policies });
+    return t?.value && (await test(t.value)) ? t.value : null;
+  } catch { return null; }
 }
+
+/** The sign-in in use in this tab (never written to the device), shared by every Cloudflare box on the page. */
+export const cfMem: { cur: { token: string; accounts: CfAccount[] } | null } = { cur: null };
 
 type Kept = { token: string; oauth?: CfOauthKeep; more?: { token: string; oauth?: CfOauthKeep }[] };
 /** Renews any kept sign-in that is about to run out. Returns the same object (changed in place) and whether to save it. */

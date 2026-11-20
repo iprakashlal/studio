@@ -34,6 +34,8 @@
   /* Customer accounts (assets/acct.js, content.account): the guest signs in before checkout, and "My account" shows
      their orders and points. A signed-in mobile number or email address counts as verified. */
   const ME = () => (window.SiteAcct && SiteAcct.on() ? SiteAcct.user() : null);
+  /** How the checkout's sections are drawn (Theme & layout → Account customization): cards, numbered steps, or plain. */
+  const coLook = () => { const v = A.C().account && A.C().account.ui && A.C().account.ui.checkout; return ["cards", "steps", "plain"].includes(v) ? v : "cards"; };
   const mustSign = () => !!(window.SiteAcct && SiteAcct.on() && !SiteAcct.user() && !SiteAcct.skipped() && !A.PREVIEW);
   const applyMe = (fresh) => { const m = ME(), k = window.SiteAcct && SiteAcct.skipped(), f = ui.form; if (m && m.kind === "phone") f.phone = m.typed || "+" + m.key; if (m && m.kind === "email") f.email = m.key; if (!m && k) { f.email = k.email; ui.eotp = { email: k.email, token: k.token }; }
     // their saved name, other contact and address fill the form where it is still empty
@@ -278,7 +280,7 @@
     if (!sl.some((s) => s.v === f.when)) f.when = sl.length ? sl[0].v : "";
     if (!ps.some((p) => p.id === f.pay)) f.pay = ps.length ? ps[0].id : "";
     if (mustSign()) return `<div id="od-acct"></div>`; // sign in first: the form follows
-    return `<form class="od-form" id="od-form" novalidate>${ME() ? `<p class="od-live od-me">Signed in as <b>${esc(/@/.test(ME().key) ? ME().key : "+" + ME().key)}</b> · <button type="button" class="link" data-act="acct">My account</button></p>` : ""}
+    return `<form class="od-form" id="od-form" data-look="${esc(coLook())}" novalidate>${ME() ? `<p class="od-me"><span>Signed in as <b>${esc(/@/.test(ME().key) ? ME().key : "+" + ME().key)}</b></span><button type="button" class="chip" data-act="acct">My account</button></p>` : ""}
       <fieldset><legend>Your details</legend>${inp("name", "Name", 'autocomplete="name" required')}${phoneBox()}${must().askEmail ? emailBox() : ""}${must().either ? `<p class="od-live">Give your mobile number or your email address (or both), so we can reach you about the order.</p>` : ""}
         ${ptsBox()}</fieldset>
       ${m === "delivery" ? `<fieldset><legend>Delivery address</legend>${inp("line1", "Flat, house or building", 'autocomplete="address-line1" required')}${inp("area", "Street and area", 'autocomplete="address-line2" required')}<div class="of2">${inp("landmark", "Landmark (optional)")}${inp("pin", "PIN code", 'inputmode="numeric" autocomplete="postal-code" maxlength="10"' + (o.askPin !== false ? " required" : ""))}</div>
@@ -625,10 +627,17 @@
     if (ui.drawer === "done" && ui.done) track(ui.done);
     const be = A.backend();
     if (!bind.back) { bind.back = true; cameBack(); }
+    // The Studio's preview has no database: a made-up account stands in, so the look can be chosen.
+    if (A.PREVIEW && C.account && C.account.on) loadAcct().then(() => {
+      const by = C.account.by === "email" || C.account.by === "either" ? C.account.by : "phone", again = () => { sync(); applyMe(true); const host = root.parentNode, y = scrollY; host.innerHTML = page(A); bind(A); scrollTo(0, y); };
+      const dishes = (C.food.categories || []).flatMap((k) => k.items || []).filter((d) => d && d.name).slice(0, 3).map((d) => ({ n: d.name, i: (d.image && d.image.path) || "" }));
+      SiteAcct.init({ demo: true, api: "", site: "preview", kind: "restaurant", ui: C.account.ui || {}, acct: { by, phone: by === "email" ? [] : ["wa"], email: by !== "phone" }, money: (n) => fmt(n), img: (path) => A.imgUrl({ path }), demoItems: dishes, biz: { name: (C.brand && C.brand.name) || "" }, onChange: again });
+      if (!$('[data-act="acct"]', root)) again();
+    }).catch(() => {});
     if (!canAsked && !A.PREVIEW && be && be.cf) { canAsked = true; fetch(be.cf + "/site/" + encodeURIComponent(be.site) + "/can", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((j) => { if (j) { can = { otp: !!j.otp, pts: !!j.pts, em: !!j.em, via: Array.isArray(j.via) && j.via.length ? j.via.filter((v) => v === "wa" || v === "sms") : ["wa"], rz: String(j.rz || ""), pg: Array.isArray(j.pg) ? j.pg : [] }; if (ui.drawer === "checkout") { sync(); over(true); }
       // customer accounts: sign-in before checkout, and "My account" in the toolbar
       if (j.acct) loadAcct().then(() => { const redo = () => { sync(); applyMe(true); if (!ME()) ui.pts = null; const host = root.parentNode, y = scrollY; host.innerHTML = page(A); bind(A); scrollTo(0, y); loadPts(); };
-        SiteAcct.init({ api: be.cf, site: be.site, kind: "restaurant", acct: j.acct, money: (n) => fmt(n), img: (path) => A.imgUrl({ path }), biz: (() => { const L = C.legal || {}, K = C.contact || {}; return { name: L.name || (C.brand && C.brand.name) || "", address: L.address || K.address || "", phone: L.phone || K.phone || "", email: L.email || K.email || "", gstin: L.gstin || "" }; })(), onChange: redo }); redo(); }).catch(() => {}); } }).catch(() => {}); }
+        SiteAcct.init({ api: be.cf, site: be.site, kind: "restaurant", ui: (C.account && C.account.ui) || {}, acct: j.acct, money: (n) => fmt(n), img: (path) => A.imgUrl({ path }), biz: (() => { const L = C.legal || {}, K = C.contact || {}; return { name: L.name || (C.brand && C.brand.name) || "", address: L.address || K.address || "", phone: L.phone || K.phone || "", email: L.email || K.email || "", gstin: L.gstin || "" }; })(), onChange: redo }); redo(); }).catch(() => {}); } }).catch(() => {}); }
   }
   window.RestOrder = { page, bind };
 })();

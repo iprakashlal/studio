@@ -444,11 +444,20 @@ async function ptsMine() { // a signed-in shopper's points, without another code
   if (!ME() || !ptsOn() || PAGE !== "checkout") return;
   try { const r = await fetch(HOST.api + "/points/" + encodeURIComponent(HOST.site), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ phone: ptsPhone(), email: evEmail(), acct: ME().pass }) }); if (r.ok) { PTS.info = await r.json(); ptsDraw(); } } catch (e) { /* points are a bonus */ }
 }
+/** How the checkout's sections are drawn (Theme & layout → Account customization): cards, numbered steps, or plain. */
+const coLook = () => { const v = C.account && C.account.ui && C.account.ui.checkout; return ["cards", "steps", "plain"].includes(v) ? v : "cards"; };
+/* The Studio's preview has no database: a made-up account stands in, so the look can be chosen. */
+function previewAcct() {
+  if (!PREVIEW || !(C.account && C.account.on) || BE()) return;
+  loadAcct().then(() => { const by = C.account.by === "email" || C.account.by === "either" ? C.account.by : "phone", had = !!(window.SiteAcct && SiteAcct.on());
+    SiteAcct.init({ demo: true, api: "", site: "preview", kind: "store", addresses: true, ui: C.account.ui || {}, acct: { by, phone: by === "email" ? [] : ["wa"], email: by !== "phone" }, money: (n) => money(n), img: (path) => imgUrl({ path }), demoItems: (C.products || []).slice(0, 3).map((p) => ({ n: p.name, i: (p.images && p.images[0] && p.images[0].path) || "" })), biz: { name: (C.brand && C.brand.name) || "" }, onChange: () => render() });
+    if (!had) render(); }).catch(() => {});
+}
 function askCan() {
   if (askCan.done || PREVIEW || BE() || !(HOST && HOST.api && HOST.site) || (PAGE !== "checkout" && !(C.account && C.account.on))) return; askCan.done = true;
   fetch(HOST.api + "/site/" + encodeURIComponent(HOST.site) + "/can", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((j) => { if (!j) return; CAN = { rz: String(j.rz || ""), pg: Array.isArray(j.pg) ? j.pg : [], pts: !!j.pts, em: !!j.em, otp: !!j.otp, via: Array.isArray(j.via) && j.via.length ? j.via.filter((v) => v === "wa" || v === "sms") : ["wa"] }; if (PAGE === "checkout") { if (!cameBack() && (CAN.rz || CAN.pg.length || CAN.otp)) render(); else { ptsDraw(); evDraw(); } }
     if (j.acct) loadAcct().then(() => { const redo = () => { if (!ME()) { PTS.info = null; PTS.use = false; } if (!$(".done")) render(); ptsMine(); };
-      SiteAcct.init({ api: HOST.api, site: HOST.site, kind: "store", addresses: true, acct: j.acct, money: (n) => money(n), img: (path) => imgUrl({ path }), biz: (() => { const L = C.legal || {}, K = C.contact || {}; return { name: L.name || (C.brand && C.brand.name) || "", address: L.address || K.address || "", phone: L.phone || K.phone || "", email: L.email || K.email || "", gstin: L.gstin || "" }; })(), onChange: redo }); redo(); }).catch(() => {}); }).catch(() => {});
+      SiteAcct.init({ api: HOST.api, site: HOST.site, kind: "store", addresses: true, ui: (C.account && C.account.ui) || {}, acct: j.acct, money: (n) => money(n), img: (path) => imgUrl({ path }), biz: (() => { const L = C.legal || {}, K = C.contact || {}; return { name: L.name || (C.brand && C.brand.name) || "", address: L.address || K.address || "", phone: L.phone || K.phone || "", email: L.email || K.email || "", gstin: L.gstin || "" }; })(), onChange: redo }); redo(); }).catch(() => {}); }).catch(() => {});
 }
 function methods() {
   const P = C.payments, out = [], own = (n) => `You pay on ${n}'s secure page and come back here. The order is placed as soon as you've paid.`;
@@ -688,7 +697,7 @@ const PAGES = {
     const V = { email: ["ev", evSlot(), evBox()], phone: ["pv", pvSlot(), pvBox()] };
     const fld = (id, label, type = "text", req = true, full = false, ac = "") => `<div class="f${full ? " full" : ""}"><label for="${id}">${esc(label)}${req ? "" : ' <span class="soft">(optional)</span>'}</label>${V[id] ? `<div class="in-v${V[id][1] ? " has" : ""}">` : ""}<input class="in" id="${id}" name="${id}" type="${type}"${req ? " required" : ""}${ac ? ` autocomplete="${ac}"` : ""}${(id === "email" && USER) || (ME() && ME().kind === id) ? " readonly" : ""} value="${esc(me[id] || "")}">${V[id] ? `<span id="${V[id][0]}slot">${V[id][1]}</span></div>` : ""}<span class="err" id="${id}-e"></span>${V[id] ? `<div class="vbox" id="${V[id][0]}box">${V[id][2]}</div>` : ""}</div>`;
     return `<section class="page-h"><div class="wrap"><h1 class="fit">${ml(K.title)}</h1>${K.intro ? `<p>${ml(K.intro)}</p>` : ""}</div></section>
-    <form class="wrap two" id="co" novalidate><div class="form">
+    <form class="wrap two" id="co" data-look="${esc(coLook())}" novalidate><div class="form">
       <div class="box"><h2>Your details</h2>${ME() ? `<p class="soft" style="font-size:13.5px;margin:-6px 0 12px">Signed in as <b>${esc(/@/.test(ME().key) ? ME().key : "+" + ME().key)}</b> · <a href="#" data-acct>My account</a></p>` : ""}<div class="fgrid">${fld("name", "Full name", "text", true, false, "name")}${fld("email", "Email", "email", mustGive().email, false, "email")}${mustGive().askPhone ? fld("phone", "Phone", "tel", mustGive().phone, false, "tel") : ""}</div>${mustGive().either ? `<p class="soft" style="font-size:13.5px;margin-top:8px">Give your email address or your phone number (or both), so we can reach you about the order.</p>` : ""}</div>
       ${K.askAddress ? `<div class="box"><h2>Delivery address</h2>${SA.length > 1 ? `<div class="f" style="margin-bottom:12px"><label for="addrpick">Use a saved address</label><select class="in" id="addrpick">${SA.map((a, i) => `<option value="${i}"${i === Math.min(ADDR_AT, SA.length - 1) ? " selected" : ""}>${esc([a.label, a.line1, a.city].filter(Boolean).join(" · "))}</option>`).join("")}</select></div>` : ""}<div class="fgrid">${fld("address", "Address", "text", true, true, "street-address")}${fld("city", "City", "text", true, false, "address-level2")}${fld("pin", "PIN / postcode", "text", true, false, "postal-code")}${fld("state", "State", "text", true, false, "address-level1")}${gstOn() && C.gst.askGstin ? fld("gstin", "GSTIN, for a business invoice", "text", false, true) : ""}</div>${shipOn() ? `<p class="soft" id="pin-msg" role="status" style="font-size:14px;margin-top:8px"></p>` : ""}</div>` : ""}
       ${K.askNotes ? `<div class="box"><div class="f"><label for="notes">Notes <span class="soft">(optional)</span></label><textarea class="in" id="notes" name="notes" rows="3"></textarea></div></div>` : ""}
@@ -968,7 +977,7 @@ function maintGate(again) {
   return true;
 }
 function render() {
-  askCan();
+  askCan(); previewAcct();
   if (langGate()) return;
   applyTheme(C.theme);
   if (maintGate(render)) return;

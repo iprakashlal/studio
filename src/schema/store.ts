@@ -2,7 +2,7 @@ import { legalChecks } from "../lib/legal";
 import type { Category, Field, TemplateDef } from "./types";
 import { uid, vpaOk, paypalOk, httpsOk } from "../lib/util";
 import { BODY_FONTS, DISPLAY_FONTS, LINE_BREAKS_AXIS, STORE_AXES, THEMES, onColor, storeThemeValues } from "../themes/catalog";
-import { adminCategory, loyaltyCard, accountsCategory, legalCategory, codeCategory, withSectionBg, videoCategory, socialCategory, logoFields, consentCategory, emailsCategory, i18nCategory, prepareI18n, featuresCategory, festivalCategory, menuCategory, menuItem, prepareMenu, staticPagesCategory, heroSlidesCard, prepareSlides, prepareMaintenance, seoCategory, warrantyCategory, customFontsCard } from "./common";
+import { adminCategory, loyaltyCard, accountsCategory, accountLookCard, legalCategory, codeCategory, withSectionBg, videoCategory, socialCategory, logoFields, consentCategory, emailsCategory, i18nCategory, prepareI18n, featuresCategory, festivalCategory, menuCategory, menuItem, prepareMenu, staticPagesCategory, heroSlidesCard, prepareSlides, prepareMaintenance, seoCategory, warrantyCategory, customFontsCard } from "./common";
 import { NAV_MODE_FIELD, NAV_MODE_MOB_FIELD, themeCards } from "../themes/fields";
 
 const CURRENCIES = ["INR", "USD", "EUR", "GBP", "AED", "SGD", "AUD", "CAD"];
@@ -15,7 +15,7 @@ const GST_STATES = ["Andaman and Nicobar Islands", "Andhra Pradesh", "Arunachal 
 const schema: Category[] = [
   {
     id: "look", label: "Theme & layout", group: "Design", desc: `Choose from ${THEMES.length} themes, then fine-tune the layout, elements and animation.`,
-    cards: themeCards([STORE_AXES.grid, STORE_AXES.product], "“Stacked” puts the hero text over a full-width image. Visitors who ask their device for reduced motion always get a still page."),
+    cards: [...themeCards([STORE_AXES.grid, STORE_AXES.product], "“Stacked” puts the hero text over a full-width image. Visitors who ask their device for reduced motion always get a still page."), accountLookCard("store")],
   },
   {
     id: "theme", label: "Brand & theme", group: "Design", desc: "Store name, logo, colours, fonts and the announcement bar.",

@@ -600,6 +600,28 @@ export function accountCard(kind: "restaurant" | "store"): Card {
       { t: "note", text: `Where customers sign in: ${kind === "restaurant" ? "the “My account” link in the site's menu, the same button on the Order now page, and the checkout itself" : "the “Sign in” link in the site's header on every page, and the checkout itself"}. To link straight to it (from a message, a QR code or a button), add #account to the end of ${kind === "restaurant" ? "the Order now page's address, for example yoursite.com/order.html#account" : "any page's address, for example yoursite.com/index.html#account"}.` },
       { t: "note", text: `Signing in and signing up are one step: the ${who} enters their mobile number or email address, gets a one-time code and types it in. There is no password. At checkout they are then asked for their name${kind === "restaurant" ? ", address (for delivery)" : ", address"} and the other contact (the email if they signed in by mobile, the mobile if by email); “A ${who} must give” above decides whether that one is required. They stay signed in on that device for 30 days, and “My account” (${kind === "restaurant" ? "on the Order now page" : "in the site's header"}) shows their orders and points. This works on a site hosted on Cloudflare. A mobile sign-in needs WhatsApp or SMS set up with a code template; an email sign-in is sent by the site database's own email. Where no code can be sent at all, checkout carries on without an account so nobody is locked out.` }] }] };
 }
+/** Theme & layout → Account customization: how the sign-in step, "My account" and the checkout look. They always take
+ *  the theme's own accent colour, corners, fonts and dark mode; these choices shape the rest. */
+export function accountLookCard(kind: "restaurant" | "store"): Card {
+  const o = (pairs: [string, string][]) => pairs.map(([value, label]) => ({ value, label }));
+  const S = (path: string, label: string, pairs: [string, string][]): Field => ({ t: "select", path: "account.ui." + path, label, options: o(pairs) });
+  return { title: "Account customization", fields: [
+    { t: "note", text: `How the sign-in step, “My account” and the checkout look. They always use this theme's accent colour, corners, fonts and dark mode; the choices below shape the rest. To see them in the preview, switch accounts on (Selling → User accounts), then tap “Sign in” ${kind === "restaurant" ? "on the Order now page" : "in the header"}: the preview signs you in with any number and any code, and shows a sample account.` },
+    { t: "grid", cols: 2, fields: [
+      S("panel", "“My account” opens as", [["", "A panel from the right"], ["left", "A panel from the left"], ["sheet", "A card in the middle"], ["full", "The whole screen"]]),
+      S("head", "Top of “My account”", [["", "A coloured banner with a greeting"], ["plain", "Plain, no banner"]]),
+      S("tone", "Buttons and highlights", [["", "The theme's accent colour"], ["ink", "The text colour (dark)"], ["soft", "A soft tint of the accent"]]),
+      S("corners", "Corners", [["", "As the theme has them"], ["soft", "Soft"], ["round", "Very round"], ["sharp", "Sharp"]]),
+      S("cards", "Order cards", [["", "Lifted, with a shadow"], ["outline", "Outlined"], ["filled", "Tinted"]]),
+      S("tabs", "Tabs", [["", "Underlined"], ["pills", "Pills"], ["blocks", "A switch"]]),
+      S("track", "Order tracking", [["", "A progress bar"], ["steps", "The steps one under another"]]),
+      S("checkout", "Checkout sections", [["", "Cards"], ["steps", "Numbered steps"], ["plain", "Plain"]]),
+    ] },
+    { t: "grid", cols: 2, fields: [
+      { t: "text", path: "account.ui.signTitle", label: "Sign-in heading", ph: "Sign in or create your account" },
+      { t: "text", path: "account.ui.signText", label: "Line under it", ph: "New here? It is the same step…" }] },
+  ] };
+}
 /** Selling → User accounts: customer accounts and what goes with them, in one place. */
 export function accountsCategory(kind: "restaurant" | "store"): Category {
   const who = kind === "restaurant" ? "guest" : "shopper";

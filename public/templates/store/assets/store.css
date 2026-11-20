@@ -643,3 +643,11 @@ html[data-crumbs=off] :is(.crumbs,.sp-crumbs,.solo-top){display:none}
 
 /* Customer accounts: the sign-in step before checkout, and the header link */
 #sa-gate{display:grid;justify-items:center}#sa-gate .sa-card{width:100%}.acctlink .t{white-space:nowrap}
+
+/* Checkout sections: cards (the usual), numbered steps, or plain (Theme & layout → Account customization) */
+#co[data-look=steps]{counter-reset:cost}#co[data-look=steps] .form>.box{counter-increment:cost}
+#co[data-look=steps] .form>.box>h2{display:flex;align-items:center;gap:12px}#co[data-look=steps] .form>.box>h2::before{content:counter(cost);width:30px;height:30px;border-radius:50%;display:grid;place-items:center;flex:none;background:var(--accent);color:var(--on-accent);font:700 14px/1 var(--fb)}
+#co[data-look=plain] .form>.box{border:0;background:transparent;padding:0 0 22px;border-bottom:1px solid var(--line);border-radius:0}
+#co[data-look=cards] .form>.box,#co[data-look=steps] .form>.box{box-shadow:0 14px 34px -28px rgba(0,0,0,.4)}
+#co .in:focus{outline:0;border-color:var(--accent);box-shadow:0 0 0 4px color-mix(in srgb,var(--accent) 14%,transparent)}
+.in-vbtn{background:var(--accent);color:var(--on-accent)}.in-via button[aria-pressed=true]{background:var(--accent);color:var(--on-accent)}

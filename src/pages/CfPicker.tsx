@@ -5,9 +5,9 @@ import { useEffect, useState } from "react";
 import type { Relay } from "../lib/relay";
 import { Netlify } from "../lib/netlify";
 import { Cloudflare, CfError, type CfAccount } from "../lib/cloudflare";
-import { CF_DB_TOKEN_PAGE, CFDB_WORKER, cfAccountVault, cfDeployInfo, cfMemTokens, setupCfDb, type CfDbSetup, type CfMoreToken } from "../lib/cfdb";
+import { CF_DB_TOKEN_PAGE, CFDB_WORKER, cfAccountVault, cfDeployInfo, cfMemTokens, cfShortTokens, setupCfDb, type CfDbSetup, type CfMoreToken } from "../lib/cfdb";
 import { useHelper } from "./HelperBox";
-import { CF_OAUTH_SCOPES, CF_OAUTH_SETUP_TOKEN_PAGE, cfMem, cfOauthCfg, cfOauthFreshen, cfOauthMint, cfOauthOpen, cfOauthRedirect, cfOauthSetup } from "../lib/cfoauth";
+import { CF_OAUTH_SCOPES, CF_OAUTH_SETUP_TOKEN_PAGE, cfMem, cfOauthCfg, cfOauthMint, cfOauthOpen, cfOauthRedirect, cfOauthSetup } from "../lib/cfoauth";
 import { brand } from "../lib/brand";
 
 export type CfAccountHook = ReturnType<typeof useCfAccount>;
@@ -29,12 +29,17 @@ export function useCfAccount(studioToken: string, nf: Netlify | null | undefined
       const mem = () => { if (cfMem.cur && !v?.token) { setTok(cfMem.cur.token); setAccounts(cfMem.cur.accounts); setAccount((a) => (cfMem.cur!.accounts.some((x) => x.id === a) ? a : v?.account && cfMem.cur!.accounts.some((x) => x.id === v.account) ? v.account : cfMem.cur!.accounts[0].id)); } };
       addEventListener("studio:cf-mem", mem); offMem = () => removeEventListener("studio:cf-mem", mem);
       if (!v) { mem(); return; }
-      if (await cfOauthFreshen(v)) await cfAccountVault.save(v, studioToken);
       setTok(v.token || ""); if (v.account) setAccount(v.account); setMore(v.more || []); mem();
     });
+    // A kept Cloudflare sign-in is renewed while the tab stays open (loading it renews it when it is about to run out).
+    const renew = setInterval(() => cfAccountVault.load(studioToken).then((v) => {
+      if (!v) return;
+      if (v.oauth && v.token) setTok((t) => (cfShortTokens.has(t) && t !== v.token ? v.token : t));
+      if ((v.more || []).some((m) => m.oauth)) setMore((m) => (m.some((x) => x.oauth) ? v.more! : m));
+    }).catch(() => {}), 60000);
     // Accounts added or removed in Settings in another tab show up here without reopening.
     const on = (e: StorageEvent) => { if (e.key === "site-studio:cfdb") cfAccountVault.load(studioToken).then((v) => setMore(v?.more || [])); };
-    addEventListener("storage", on); return () => { removeEventListener("storage", on); offMem(); };
+    addEventListener("storage", on); return () => { removeEventListener("storage", on); offMem(); clearInterval(renew); };
   }, [studioToken, persist]);
   const saveMore = async (list: CfMoreToken[]) => { setMore(list); const v = await cfAccountVault.load(studioToken); await cfAccountVault.save({ ...(v || { token: "" }), more: list }, studioToken); };
   /** Adds another account's token (kept encrypted on this device, like the main one). */
@@ -70,8 +75,7 @@ export function useCfAccount(studioToken: string, nf: Netlify | null | undefined
   /** Keeps a long-lasting token for the allowed accounts on the Studio's database (a secret on the owner's own
    *  Cloudflare), for the accounts it doesn't hold one for yet. Nothing is written to this device but which accounts
    *  are kept. Returns what to tell the person. */
-  const keepOnDb = async (relay: Relay, viaSignIn: Cloudflare, access: string, list: CfAccount[], deviceToken: string): Promise<string> => {
-    const tab = "Nothing is kept on this device: here the sign-in is used in this tab only.";
+  const keepOnDb = async (relay: Relay, viaSignIn: Cloudflare, access: string, list: CfAccount[], deviceToken: string, tab: string): Promise<string> => {
     const v = await cfAccountVault.load(studioToken), setup = v?.setup;
     if (!setup) return `${tab} Your Studio has no database on Cloudflare yet; once it has one, press Connect Cloudflare again and its token is kept there for your other devices.`;
     const info = await cfDeployInfo(setup.api), known = new Set(v!.inDb || []);
@@ -117,18 +121,28 @@ export function useCfAccount(studioToken: string, nf: Netlify | null | undefined
       }
       const mainAlive = !!v?.token && !!mainList?.length;
       const fresh = mainAlive ? list.filter((a) => !mainList!.some((m) => m.id === a.id)) : list;
-      if (mainAlive && !fresh.length) { if (!accounts) setAccounts(mainList); setOcNote(`Already connected to ${list.map((a) => a.name).join(", ")}. Your saved token still works, so nothing was changed.`); setOcBusy(""); return; }
-      // The sign-in is used in this tab only: it is never written to this device.
-      cfMemTokens.add(got.access);
+      if (mainAlive && !fresh.length) {
+        if (!accounts) setAccounts(mainList);
+        // Nothing to change on this device; the database is still given its own token when it has none.
+        const where = persist ? await keepOnDb(relay, viaSignIn, got.access, list, v!.token, "This device was already connected, so nothing was changed here.") : "";
+        setOcNote(`Already connected to ${list.map((a) => a.name).join(", ")}. ${where || "Your saved connection still works, so nothing was changed."}`); setOcBusy(""); return;
+      }
+      // The device stays connected: the sign-in is kept encrypted here with what renews it (as a pasted token is kept).
+      // Without a way to renew it (Cloudflare gave none), it is used in this tab only and never written down.
+      const stay = persist && !!got.refresh, oauth = stay ? { refresh: got.refresh, exp: got.exp, client: oc.client } : undefined;
+      cfShortTokens.add(got.access); if (!stay) cfMemTokens.add(got.access);
       const names = fresh.map((a) => a.name).join(", ");
       if (!mainAlive) {
         const pick = list.some((x) => x.id === account) ? account : list[0].id;
+        // Kept first, shown after. (A saved token Cloudflare now refuses is of no use: it goes, so the device doesn't keep trying it.)
+        if (persist) { const cur = await cfAccountVault.load(studioToken); if (stay || cur?.token) await cfAccountVault.save({ ...(cur || {}), token: stay ? got.access : "", oauth, ...(stay ? { account: pick } : {}) }, studioToken); }
         setTok(got.access); setAccounts(list); setAccount(pick);
-        // A saved token Cloudflare now refuses is of no use: it goes, so the device doesn't keep trying it.
-        if (persist && v?.token) await cfAccountVault.save({ ...v, token: "", oauth: undefined }, studioToken);
         if (persist) { cfMem.cur = { token: got.access, accounts: list }; dispatchEvent(new Event("studio:cf-mem")); }
-      } else setMore([...more.filter((m) => !m.accounts.every((a) => fresh.some((f) => f.id === a.id))), { token: got.access, accounts: fresh.map((a) => ({ id: a.id, name: a.name })) }]);
-      const where = persist ? await keepOnDb(relay, viaSignIn, got.access, list, mainAlive ? v!.token : "") : "Used now only, not kept.";
+      } else {
+        const next = [...more.filter((m) => !m.accounts.every((a) => fresh.some((f) => f.id === a.id))), { token: got.access, accounts: fresh.map((a) => ({ id: a.id, name: a.name })), ...(oauth ? { oauth } : {}) }];
+        if (stay) await saveMore(next); else setMore(next);
+      }
+      const where = persist ? await keepOnDb(relay, viaSignIn, got.access, list, mainAlive ? v!.token : "", stay ? "This device stays connected: the sign-in is kept encrypted here and renews itself." : "Cloudflare gave no way to renew this sign-in, so it works in this tab only and isn't kept.") : "Used now only, not kept.";
       setOcNote(`${mainAlive ? "Added" : "Connected to"} ${names}. ${where}${mainAlive ? " The account you were already connected to is unchanged." : ""}`);
     } catch (e: any) { setOcFlow(null); setErr(e?.message || "Couldn't connect Cloudflare."); }
     setOcBusy("");
@@ -164,7 +178,7 @@ export function useCfAccount(studioToken: string, nf: Netlify | null | undefined
   const ocUi = (
     <div className="flex flex-col gap-2" aria-label="Connect Cloudflare">
       {oc.client ? <>
-        <p><button type="button" className="btn btn-sm btn-pri" disabled={!!ocBusy || !helper.ready} onClick={oauthConnect}>{ocBusy ? "Connecting…" : "Connect Cloudflare"}</button> <span className="text-ink-400">A Cloudflare window opens: choose the account, press <b>Allow</b>, and you're back here. No token to create or paste. {persist ? "Nothing is kept on this device: the sign-in is used in this tab only, and the token the Studio makes for your other devices is kept on your Studio's database." : "Used now only, not kept."}</span></p>
+        <p><button type="button" className="btn btn-sm btn-pri" disabled={!!ocBusy || !helper.ready} onClick={oauthConnect}>{ocBusy ? "Connecting…" : "Connect Cloudflare"}</button> <span className="text-ink-400">A Cloudflare window opens: choose the account, press <b>Allow</b>, and you're back here. No token to create or paste. {persist ? "This device then stays connected (the sign-in is kept encrypted here and renews itself), and the token the Studio makes for your other devices is kept on your Studio's database." : "Used now only, not kept."}</span></p>
         {ocBusy && <p role="status" className="text-ink-300">{ocBusy}… {ocFlow && <button type="button" className="text-brand-300 underline" onClick={() => ocFlow.cancel()}>Cancel</button>}</p>}
       </> : <p className="text-ink-300"><b className="text-ink-100">Connect Cloudflare in one click.</b> Set it up once below, then no token needs creating or pasting.</p>}
       <details className="text-ink-400" open={!oc.client}>

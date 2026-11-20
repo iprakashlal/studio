@@ -3,8 +3,9 @@
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import type { Session } from "../lib/auth";
-import { cfVault } from "../lib/cloudflare";
-import { cfAccountVault } from "../lib/cfdb";
+import { cfVault, Cloudflare as CloudflareApi } from "../lib/cloudflare";
+import { cfAccountVault, cfShortTokens } from "../lib/cfdb";
+import { cfOauthMint } from "../lib/cfoauth";
 import { netlifyToken } from "../lib/hosting";
 import { Netlify } from "../lib/netlify";
 import { HelperStatus } from "./HelperBox";
@@ -60,7 +61,7 @@ function CloudflareAccount({ session, nf, index }: { session: Session; nf: Netli
         <div className="flex flex-wrap items-center gap-2">
           <span className="h-2 w-2 rounded-full bg-emerald-400" /><span>Cloudflare: <b>{acc.account.name}</b></span>
           <button type="button" className="btn btn-sm ml-auto" onClick={() => { if (!acc.tabOnly) cfAccountVault.clear(); location.reload(); }} title={acc.tabOnly ? "Ends the sign-in in this tab." : "Forget the token on this device (the database's setup is forgotten too; running a setup again finds it)."}>Disconnect</button>
-          <p className="w-full pl-4 text-[12.5px] text-ink-400">{acc.tabOnly ? "Signed in on Cloudflare for this tab only: nothing is kept on this device. It lets the Studio publish sites, run the database and connect domains until you close or reload this tab." : "The permission: your API token, kept encrypted on this device only. It goes with each request through the helper and lets the Studio publish sites, run the database and connect domains."}</p>
+          <p className="w-full pl-4 text-[12.5px] text-ink-400">{acc.tabOnly ? "Signed in on Cloudflare for this tab only: nothing is kept on this device. It lets the Studio publish sites, run the database and connect domains until you close or reload this tab." : "The permission: your API token or Cloudflare sign-in, kept encrypted on this device only. It goes with each request through the helper and lets the Studio publish sites, run the database and connect domains."}</p>
         </div>
       )}
       {/* The same connection section as in Publish to Cloudflare: folded once connected, with the other accounts under it. */}
@@ -101,7 +102,7 @@ function AnyDevice({ session, acc, index }: { session: Session; acc: CfAccountHo
   const keepOthers = async (cf: Cloudflare, setup: CfDbSetup) => {
     const v = await cfAccountVault.load(session.token), more = v?.more || [];
     for (const m of more) for (const a of m.accounts) {
-      if (a.id === setup.account) continue;
+      if (a.id === setup.account || cfShortTokens.has(m.token)) continue;
       await cf.putSecret(setup.account, CFDB_WORKER, "CFX_" + a.id.replace(/-/g, "_"), JSON.stringify({ t: m.token, n: a.name }));
     }
     const ids = new Set(more.flatMap((m) => m.accounts.map((a) => a.id)));
@@ -131,7 +132,15 @@ function AnyDevice({ session, acc, index }: { session: Session; acc: CfAccountHo
       const { cf, relay, account, token } = await acc.client((x) => setBusy(x));
       if (enable) {
         // Finds the Studio's database on this account (or creates it), keeping its sign-ins and email settings.
-        const setup = await setupCfDb(relay, token, { account, resendKey: "", mailFrom: v?.mailFrom || "", name: brand().name, existing: v?.setup && v.setup.account === account.id ? v.setup : null, deployToken: token, requireMail: false }, (x) => setBusy(x));
+        // A Cloudflare sign-in's token runs out within hours, so the database is given a long-lasting one made for it.
+        let dep = token;
+        if (cfShortTokens.has(token)) {
+          setBusy("Making the Studio's own token");
+          const m = await cfOauthMint(cf, [account], async (t) => { try { return (await new CloudflareApi(relay, t).accounts()).length > 0; } catch { return false; } });
+          if (!m?.[account.id]) throw new Error("Cloudflare didn't let the Studio make a long-lasting token from your sign-in, and the database needs one to publish from other devices. Open Cloudflare connection → Paste a token instead, paste a token once, then press Turn on.");
+          dep = m[account.id];
+        }
+        const setup = await setupCfDb(relay, token, { account, resendKey: "", mailFrom: v?.mailFrom || "", name: brand().name, existing: v?.setup && v.setup.account === account.id ? v.setup : null, deployToken: dep, requireMail: false }, (x) => setBusy(x));
         await cfAccountVault.save({ ...(v || {}), token, account: account.id, setup }, session.token);
         setBusy("Letting your sites be published from any device"); await register(cf, setup);
         if ((v?.more || []).length) { setBusy("Keeping your other Cloudflare accounts for all devices"); await keepOthers(cf, setup); }

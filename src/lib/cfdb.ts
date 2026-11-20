@@ -8,15 +8,29 @@ import { Cloudflare, type CfAccount } from "./cloudflare";
 import { CFDB_SCHEMA, CFDB_VERSION, CFDB_WORKER_NAME } from "./cfdbSchema";
 import { STUDIO_BUILD } from "../build-info";
 import { vault } from "./vault";
-import type { CfOauthKeep } from "./cfoauth";
+import { cfOauthFreshen, type CfOauthKeep } from "./cfoauth";
 
 /** The Cloudflare account on this device (one token for hosting, the database and Workers) and the database's setup. */
 type CfKept = { token: string; /** Set when the token is a Cloudflare sign-in this device renews (see cfoauth.ts). */ oauth?: CfOauthKeep; account?: string; resendKey?: string; mailFrom?: string; setup?: CfDbSetup; /** Databases set up on other Cloudflare accounts (a site's own database on its own account). */ setups?: CfDbSetup[]; more?: CfMoreToken[]; /** Other accounts whose token this device knows is kept on the database (ids only). */ inDb?: string[] };
 const cfRawVault = vault<CfKept>("cfdb");
 /** Tokens in use in this tab only (a Cloudflare sign-in): never written to the device, whoever saves. */
 export const cfMemTokens = new Set<string>();
+/** Cloudflare sign-in tokens (they last a short while and are renewed): fine for this device's own calls, but never
+ *  to be stored anywhere as a lasting secret (a Worker's CF_TOKEN and the like). */
+export const cfShortTokens = new Set<string>();
+let cfRenewing: Promise<void> | null = null;
 export const cfAccountVault = {
   ...cfRawVault,
+  /** Loads the kept connection, renewing a Cloudflare sign-in that is about to run out first (once, however many ask). */
+  async load(studioToken: string): Promise<CfKept | null> {
+    let v = await cfRawVault.load(studioToken);
+    if (v && [v, ...(v.more || [])].some((e) => e.oauth && e.oauth.exp - Date.now() <= 5 * 60000)) {
+      cfRenewing ||= (async () => { const cur = await cfRawVault.load(studioToken); if (cur && (await cfOauthFreshen(cur))) await cfRawVault.save(cur, studioToken); })().catch(() => {}).finally(() => { cfRenewing = null; });
+      await cfRenewing; v = await cfRawVault.load(studioToken);
+    }
+    if (v) for (const e of [v, ...(v.more || [])]) if (e.oauth && e.token) cfShortTokens.add(e.token);
+    return v;
+  },
   async save(v: CfKept, studioToken: string) {
     if (cfMemTokens.has(v.token) || (v.more || []).some((m) => cfMemTokens.has(m.token))) {
       const old = await cfRawVault.load(studioToken);
@@ -169,6 +183,8 @@ export const membersSql = (scope: string, list: { email: string; role: "owner" |
 /** Finds or creates the database, its tables and the Worker, and checks the Worker answers. Safe to run again. */
 export async function setupCfDb(relay: Relay, token: string, o: { account: CfAccount; resendKey: string; mailFrom: string; name: string; existing?: CfDbSetup | null; deployToken?: string; requireMail?: boolean }, step: (s: string) => void): Promise<CfDbSetup> {
   const cf = new Cloudflare(relay, token), acc = o.account.id;
+  // A Cloudflare sign-in's token runs out within hours: it is never kept on the Worker as its publishing token.
+  const dep = o.deployToken && !cfShortTokens.has(o.deployToken) ? o.deployToken : "";
   // A database Worker set up from another device or Studio keeps its secret (sessions and codes) and settings.
   const keep = !!o.existing || !!(await cf.script(acc, CFDB_WORKER).catch(() => null));
   step("Finding the Studio's database");
@@ -181,8 +197,8 @@ export async function setupCfDb(relay: Relay, token: string, o: { account: CfAcc
   step("Uploading the Worker");
   const secret = [...crypto.getRandomValues(new Uint8Array(32))].map((b) => b.toString(16).padStart(2, "0")).join("");
   await cf.upload(acc, CFDB_WORKER, await r.text(), {
-    vars: { MAIL_FROM: o.mailFrom, NAME: o.name, ...(o.deployToken ? { CF_ACCOUNT: acc } : {}) },
-    secrets: { ...(keep ? {} : { SECRET: secret }), ...(o.resendKey ? { RESEND_API_KEY: o.resendKey } : {}), ...(o.deployToken ? { CF_TOKEN: o.deployToken } : {}) },
+    vars: { MAIL_FROM: o.mailFrom, NAME: o.name, ...(dep ? { CF_ACCOUNT: acc } : {}) },
+    secrets: { ...(keep ? {} : { SECRET: secret }), ...(o.resendKey ? { RESEND_API_KEY: o.resendKey } : {}), ...(dep ? { CF_TOKEN: dep } : {}) },
     d1: [{ name: "DB", id: db.uuid }], keep, ai: true,
   });
   step("Turning on its workers.dev address");

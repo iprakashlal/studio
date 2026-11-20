@@ -19,6 +19,13 @@ export function CustomerPanel({ cf, currency = "₹", points }: { cf?: { api: st
   const t = useRef<number>(0);
   const signed = useSiteDbSigned(cf), scope = cf ? "scope=" + encodeURIComponent("site:" + cf.site) : "";
   const money = (n: number) => currency + (Math.round((+n || 0) * 100) / 100).toLocaleString("en-IN");
+  const [oldPts, setOldPts] = useState(false);
+  const rebuild = async () => {
+    if (!cf) return; setBusy("old");
+    try { const r = await cfCall<any>(cf.api, `/c/rebuild?${scope}`, { method: "POST", body: JSON.stringify({ points: oldPts }) }); toast(r.orders ? `${r.orders} older order${r.orders === 1 ? "" : "s"} counted in, for ${r.customers} customer${r.customers === 1 ? "" : "s"}.` : "Every order is already counted. Nothing to add."); await load(); }
+    catch (e: any) { toast(e?.status === 404 ? "This needs the database updated once (Settings → Hostings → Update this database)." : e?.message || "Couldn't count the older orders.", "bad"); }
+    setBusy("");
+  };
   const load = async (q = find, p = page) => {
     if (!cf || !signed) return; setErr("");
     try { const r = await cfCall<any>(cf.api, `/c/list?${scope}&q=${encodeURIComponent(q)}&page=${p}&per=${PER}`); setRows(r.rows || []); setTot({ total: r.total || 0, points: r.points || 0, spent: r.spent || 0, orders: r.orders || 0 }); }
@@ -59,20 +66,25 @@ export function CustomerPanel({ cf, currency = "₹", points }: { cf?: { api: st
           <button type="button" className="btn btn-sm" disabled={!!busy || !tot.total} onClick={exportCsv}>{busy === "export" ? "Exporting…" : "Export as a spreadsheet (CSV)"}</button>
           <button type="button" className="btn btn-sm btn-ghost" onClick={() => void load()}>Refresh</button>
         </div>
+        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-ink-700 pt-3 text-[13px] text-ink-300" aria-label="Older orders">
+          <span className="min-w-0 flex-1 basis-64">Customers are listed from the day this was switched on. Orders placed before that are still under Purchased orders; count them in here once.</span>
+          {points && <label className="flex items-center gap-2"><input type="checkbox" checked={oldPts} onChange={(e) => setOldPts(e.target.checked)} /> Give points for them too</label>}
+          <button type="button" className="btn btn-sm" disabled={!!busy} onClick={rebuild}>{busy === "old" ? "Counting…" : "Add customers from older orders"}</button>
+        </div>
       </div>
       {err && <p role="alert" className="rounded-lg border border-amber-400/40 bg-amber-400/5 px-3 py-2 text-sm text-amber-100">{err}</p>}
       {rows === null ? <Spinner /> : !rows.length && !err ? <p className="card p-5 text-sm text-ink-300">{find ? "No customer matches that search." : "No customers yet. They appear here from the first order placed on the site."}</p> : rows.length > 0 && (
         <div className="card overflow-x-auto p-0">
-          <table className="w-full min-w-[720px] text-left text-[13.5px]">
+          <table className="w-full min-w-[860px] text-left text-[13.5px]">
             <thead className="text-[11px] uppercase tracking-wider text-ink-400"><tr><th className="px-4 py-2.5">Customer</th><th className="px-3 py-2.5">Mobile</th><th className="px-3 py-2.5">Email</th><th className="px-3 py-2.5 text-right">Orders</th><th className="px-3 py-2.5 text-right">Spent</th><th className="px-3 py-2.5 text-right">Points</th><th className="px-3 py-2.5">Last order</th><th className="px-3 py-2.5" /></tr></thead>
             <tbody>
               {rows.map((r) => (<>
                 <tr key={r.ckey} className="border-t border-ink-700" data-customer={r.ckey}>
                   <td className="px-4 py-2.5 font-semibold text-ink-100">{r.name || "No name"}</td>
-                  <td className="px-3 py-2.5 tabular-nums">{r.phone || "–"}{r.verified ? <span className="chip ml-1.5 border-emerald-400/50 text-emerald-200" title="Proved with a code on WhatsApp">Verified</span> : null}</td>
+                  <td className="whitespace-nowrap px-3 py-2.5 tabular-nums">{r.phone || "–"}{r.verified ? <span className="chip ml-1.5 border-emerald-400/50 px-2 py-0.5 text-[11px] text-emerald-200" title="Proved with a code on WhatsApp or by SMS">Verified</span> : null}</td>
                   <td className="px-3 py-2.5">{r.email || "–"}</td>
                   <td className="px-3 py-2.5 text-right tabular-nums">{r.orders}</td><td className="px-3 py-2.5 text-right tabular-nums">{money(r.spent)}</td><td className="px-3 py-2.5 text-right font-semibold tabular-nums">{r.points}</td>
-                  <td className="px-3 py-2.5">{fmtDate(r.last_at)}</td>
+                  <td className="whitespace-nowrap px-3 py-2.5" title={fmtDate(r.last_at)}>{new Date(r.last_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</td>
                   <td className="px-3 py-2.5 text-right"><button type="button" className="btn btn-sm" aria-expanded={open === r.ckey} onClick={() => void show(r)}>{open === r.ckey ? "Close" : "Points & more"}</button></td>
                 </tr>
                 {open === r.ckey && <tr key={r.ckey + ":x"} className="border-t border-ink-800 bg-ink-950/40"><td colSpan={8} className="px-4 py-3">

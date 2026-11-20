@@ -7,7 +7,7 @@ import { Netlify } from "../lib/netlify";
 import { Cloudflare, CfError, type CfAccount } from "../lib/cloudflare";
 import { CF_DB_TOKEN_PAGE, CFDB_WORKER, cfAccountVault, cfDeployInfo, cfMemTokens, setupCfDb, type CfDbSetup, type CfMoreToken } from "../lib/cfdb";
 import { useHelper } from "./HelperBox";
-import { CF_OAUTH_SCOPES, cfMem, cfOauthCfg, cfOauthFreshen, cfOauthMint, cfOauthOpen, cfOauthRedirect } from "../lib/cfoauth";
+import { CF_OAUTH_SCOPES, CF_OAUTH_SETUP_TOKEN_PAGE, cfMem, cfOauthCfg, cfOauthFreshen, cfOauthMint, cfOauthOpen, cfOauthRedirect, cfOauthSetup } from "../lib/cfoauth";
 import { brand } from "../lib/brand";
 
 export type CfAccountHook = ReturnType<typeof useCfAccount>;
@@ -132,6 +132,24 @@ export function useCfAccount(studioToken: string, nf: Netlify | null | undefined
     setOcBusy("");
   };
   const saveOc = () => { cfOauthCfg.set(ocEdit); const c = cfOauthCfg.get(); setOc(c); setOcEdit(c); };
+  // Set it up for me: the Studio creates its own OAuth client with a token used now and not kept.
+  const [suTok, setSuTok] = useState(""), [suBusy, setSuBusy] = useState(""), [suErr, setSuErr] = useState(""), [suNote, setSuNote] = useState(""), [suTxt, setSuTxt] = useState("");
+  const autoSetup = async () => {
+    setSuErr(""); setSuNote(""); setSuTxt(""); setSuBusy("Checking the token");
+    try {
+      const relay = await helper.get(setSuBusy), cf = new Cloudflare(relay, suTok.trim());
+      let list: CfAccount[];
+      try { list = await cf.accounts(); } catch (e: any) { throw new Error(e instanceof CfError && (e.status === 401 || e.status === 403) ? "Cloudflare didn't accept that token. Copy it again from the page where you created it (it is shown only once)." : e?.message || "Couldn't reach Cloudflare."); }
+      if (!list.length) throw new Error("That token can't see any Cloudflare account. Create it while signed in to the account the client should live in.");
+      // The account the Studio already uses, when the token can see it; else the token's first.
+      const where = list.find((a) => a.id === account) || list[0];
+      setSuBusy(`Setting up on ${where.name}`);
+      const r = await cfOauthSetup(cf, where);
+      cfOauthCfg.set(r.cfg); const c = cfOauthCfg.get(); setOc(c); setOcEdit(c); setSuTok(""); setSuTxt(r.txt);
+      setSuNote(`${r.made ? "Created" : "Found"} the Studio's OAuth client on ${where.name}, with exactly the permissions the Studio asks for. Press Connect Cloudflare.${r.left.length ? ` Cloudflare's list has no permission for ${r.left.join(", ")}, so ${r.left.some((x) => /API Tokens/.test(x)) ? "the Studio may not be able to make its own token for your other devices" : "some set-up steps may still need a pasted token"}.` : ""} The set-up token wasn't kept; you can delete it in Cloudflare now.${r.visibility !== "public" ? " The client is private: it works for members of that account. To let any Cloudflare login connect, open it in Cloudflare and choose Change Visibility." : ""}`);
+    } catch (e: any) { setSuErr(e?.message || "Couldn't set it up."); }
+    setSuBusy("");
+  };
   const ocUi = (
     <div className="flex flex-col gap-2 rounded-lg border border-ink-700 p-3" aria-label="Connect Cloudflare">
       {oc.client ? <>
@@ -141,6 +159,16 @@ export function useCfAccount(studioToken: string, nf: Netlify | null | undefined
       </> : <p className="text-ink-300"><b className="text-ink-100">Connect Cloudflare in one click.</b> Set it up once below, then no token needs creating or pasting.</p>}
       <details className="text-ink-400" open={!oc.client}>
         <summary className="cursor-pointer select-none">{oc.client ? "One-click connect settings" : "Set up one-click connect (once)"}</summary>
+        <div className="mt-1.5 flex flex-col gap-2 rounded-lg border border-ink-700 p-2.5" aria-label="Set it up for me">
+          <b className="text-ink-100">Let the Studio set it up</b>
+          <span><a className="btn btn-sm" href={CF_OAUTH_SETUP_TOKEN_PAGE} target="_blank" rel="noopener noreferrer">Create a set-up token ↗</a> It needs one permission only: <b>Account → OAuth Client → Edit</b> (tick it if the page doesn't already). Press <b>Continue to summary → Create Token</b>, copy it and paste it here. The Studio uses it once to create its sign-in client and doesn't keep it.</span>
+          <div className="flex gap-2">
+            <input aria-label="Cloudflare set-up token" className="input min-w-0 flex-1 font-mono text-xs" type="password" autoComplete="off" value={suTok} onChange={(e) => setSuTok(e.target.value)} placeholder="Set-up token" />
+            <button type="button" className="btn btn-sm btn-pri" disabled={!suTok.trim() || !!suBusy || !helper.ready} onClick={autoSetup}>{suBusy ? suBusy + "…" : "Set it up"}</button>
+          </div>
+          {suErr && <p role="alert" className="text-red-300">{suErr}</p>}
+        </div>
+        <p className="mt-2 font-semibold text-ink-300">Or do it by hand</p>
         <ol className="mt-1.5 list-decimal space-y-1 pl-5">
           <li>In Cloudflare open <a className="text-brand-300 underline" href="https://dash.cloudflare.com/?to=/:account/oauth-clients" target="_blank" rel="noopener noreferrer">Manage Account → OAuth clients ↗</a> and press <b>Create client</b>.</li>
           <li>Token authentication method: <b>None</b> (a browser app, no secret). Grant types: <b>Authorization code</b> and <b>Refresh token</b>.</li>
@@ -155,6 +183,8 @@ export function useCfAccount(studioToken: string, nf: Netlify | null | undefined
           <div className="flex items-center gap-2"><button type="button" className="btn btn-sm" disabled={ocEdit.client.trim() === oc.client && ocEdit.scopes.trim() === oc.scopes} onClick={saveOc}>Save</button><span>Saved on this device. Until the client is made public in Cloudflare, it works for members of the account it was created in.</span></div>
         </div>
       </details>
+      {suNote && <p role="status" aria-label="Set-up result" className="text-emerald-300">{suNote}</p>}
+      {suTxt && <p className="text-ink-300">For making it public later, Cloudflare checks your domain with this DNS TXT record: <code className="select-all break-all font-mono text-xs text-ink-200">{suTxt}</code></p>}
     </div>
   );
   useEffect(() => { if (persist && tok && !accounts && !busy && helper.ready) connect(); }, [tok && persist, helper.ready]);

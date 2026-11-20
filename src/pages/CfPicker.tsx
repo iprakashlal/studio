@@ -134,13 +134,22 @@ export function useCfAccount(studioToken: string, nf: Netlify | null | undefined
   const saveOc = () => { cfOauthCfg.set(ocEdit); const c = cfOauthCfg.get(); setOc(c); setOcEdit(c); };
   // Set it up for me: the Studio creates its own OAuth client with a token used now and not kept.
   const [suTok, setSuTok] = useState(""), [suBusy, setSuBusy] = useState(""), [suErr, setSuErr] = useState(""), [suNote, setSuNote] = useState(""), [suTxt, setSuTxt] = useState("");
+  const [suAcc, setSuAcc] = useState(""), [suAsk, setSuAsk] = useState(false);
+  const allKnown: { id: string; name: string }[] = [...(accounts || []), ...more.flatMap((m) => m.accounts)];
   const autoSetup = async () => {
     setSuErr(""); setSuNote(""); setSuTxt(""); setSuBusy("Checking the token");
     try {
       const relay = await helper.get(setSuBusy), cf = new Cloudflare(relay, suTok.trim());
       let list: CfAccount[];
       try { list = await cf.accounts(); } catch (e: any) { throw new Error(e instanceof CfError && (e.status === 401 || e.status === 403) ? "Cloudflare didn't accept that token. Copy it again from the page where you created it (it is shown only once)." : e?.message || "Couldn't reach Cloudflare."); }
-      if (!list.length) throw new Error("That token can't see any Cloudflare account. Create it while signed in to the account the client should live in.");
+      // A token with only the OAuth Client permission can't list accounts: then the account is the one the Studio
+      // already uses on this device (its database's, else the connected one), or the ID typed below.
+      if (!list.length) {
+        const v = await cfAccountVault.load(studioToken), typed = suAcc.trim().toLowerCase();
+        const id = /^[0-9a-f]{32}$/.test(typed) ? typed : v?.setup?.account || account || v?.account || "";
+        if (!id) { setSuAsk(true); throw new Error("This token can't list your accounts, so the Studio doesn't know which one to use. Paste the Account ID below (Cloudflare shows it on the account's home page, and in the address bar after dash.cloudflare.com/), then press Set it up again."); }
+        list = [{ id, name: allKnown.find((a) => a.id === id)?.name || "your Cloudflare account" }];
+      }
       // The account the Studio already uses, when the token can see it; else the token's first.
       const where = list.find((a) => a.id === account) || list[0];
       setSuBusy(`Setting up on ${where.name}`);
@@ -161,11 +170,12 @@ export function useCfAccount(studioToken: string, nf: Netlify | null | undefined
         <summary className="cursor-pointer select-none">{oc.client ? "One-click connect settings" : "Set up one-click connect (once)"}</summary>
         <div className="mt-1.5 flex flex-col gap-2 rounded-lg border border-ink-700 p-2.5" aria-label="Set it up for me">
           <b className="text-ink-100">Let the Studio set it up</b>
-          <span><a className="btn btn-sm" href={CF_OAUTH_SETUP_TOKEN_PAGE} target="_blank" rel="noopener noreferrer">Create a set-up token ↗</a> It needs one permission only: <b>Account → OAuth Client → Edit</b> (tick it if the page doesn't already). Press <b>Continue to summary → Create Token</b>, copy it and paste it here. The Studio uses it once to create its sign-in client and doesn't keep it.</span>
+          <span><a className="btn btn-sm" href={CF_OAUTH_SETUP_TOKEN_PAGE} target="_blank" rel="noopener noreferrer">Create a set-up token ↗</a> It needs <b>Account → OAuth Client → Edit</b> (tick it if the page doesn't already); <b>Account Settings → Read</b> as well lets the Studio find the account by itself. Press <b>Continue to summary → Create Token</b>, copy it and paste it here. The Studio uses it once to create its sign-in client and doesn't keep it.</span>
           <div className="flex gap-2">
             <input aria-label="Cloudflare set-up token" className="input min-w-0 flex-1 font-mono text-xs" type="password" autoComplete="off" value={suTok} onChange={(e) => setSuTok(e.target.value)} placeholder="Set-up token" />
             <button type="button" className="btn btn-sm btn-pri" disabled={!suTok.trim() || !!suBusy || !helper.ready} onClick={autoSetup}>{suBusy ? suBusy + "…" : "Set it up"}</button>
           </div>
+          {suAsk && <label className="flex flex-col gap-1"><span className="label">Cloudflare account ID (32 letters and numbers; not a secret)</span><input aria-label="Cloudflare account ID" className="input font-mono text-xs" autoComplete="off" value={suAcc} onChange={(e) => setSuAcc(e.target.value)} placeholder="e.g. 0123456789abcdef0123456789abcdef" /></label>}
           {suErr && <p role="alert" className="text-red-300">{suErr}</p>}
         </div>
         <p className="mt-2 font-semibold text-ink-300">Or do it by hand</p>

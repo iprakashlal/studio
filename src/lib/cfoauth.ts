@@ -126,7 +126,7 @@ export async function cfOauthFreshen<T extends Kept>(v: T): Promise<boolean> {
 
 // ---------------------------------------------------------------- setting the client up (once, by the Studio's owner)
 /** Cloudflare's token page with the one permission the set-up needs (managing OAuth clients) asked for. */
-export const CF_OAUTH_SETUP_TOKEN_PAGE = `https://dash.cloudflare.com/profile/api-tokens?${new URLSearchParams({ permissionGroupKeys: JSON.stringify([{ key: "oauth_client", type: "edit" }]), accountId: "*", name: "Picaffectz Studio set-up (delete after use)" })}`;
+export const CF_OAUTH_SETUP_TOKEN_PAGE = `https://dash.cloudflare.com/profile/api-tokens?${new URLSearchParams({ permissionGroupKeys: JSON.stringify([{ key: "oauth_client", type: "edit" }, { key: "account_settings", type: "read" }]), accountId: "*", name: "Picaffectz Studio set-up (delete after use)" })}`;
 export const CF_OAUTH_CLIENT_NAME = "Picaffectz Studio";
 /** What the Studio needs, as the names Cloudflare may use for each (the first one its list has is taken), then by
  *  the permission's plain name. `must`: the sign-in is no use without it. */

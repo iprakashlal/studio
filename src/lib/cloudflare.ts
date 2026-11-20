@@ -38,10 +38,33 @@ export function registrarHelp(z: Pick<CfZone, "name" | "original_registrar" | "o
   return { name: "your domain company", url: "https://developers.cloudflare.com/dns/zone-setups/full-setup/setup/#update-your-nameservers", how: "Find Nameservers in the domain's settings, set them to the two below (remove the others)" };
 }
 
+type CfVia = (q: { method: string; path: string; auth?: string; body?: string; body64?: string; contentType?: string }) => Promise<{ status: number; body: string }>;
+/** "Through the Studio's database": in place of a token, where the device has none of its own. The database (signed
+ *  in to by email code, as an owner of the Studio) makes the call with the token it keeps. Not a secret. */
+export const cfDbToken = (api: string, scope: string, account = "") => `db:${api.replace(/\/+$/, "")}|${scope}|${account}`;
+export const isCfDbToken = (t: string | undefined | null) => !!t && t.startsWith("db:");
+function cfDbVia(token: string): CfVia {
+  const [api, scope, acct] = token.slice(3).split("|");
+  const sess = () => { try { return String(JSON.parse(localStorage.getItem("site-cfdb:" + api) || "null")?.token || ""); } catch { return ""; } };
+  const fail = (status: number, message: string) => ({ status, body: JSON.stringify({ success: false, errors: [{ code: status, message }] }) });
+  return async (q) => {
+    const list = q.method === "GET" && q.path.startsWith("/accounts?");
+    let r: Response;
+    try {
+      r = await fetch(`${api}${list ? "/cfa/accounts" : "/cfa"}?scope=${encodeURIComponent(scope)}`, { method: list ? "GET" : "POST", cache: "no-store", headers: { Authorization: "Bearer " + sess(), ...(list ? {} : { "Content-Type": "application/json" }) },
+        ...(list ? {} : { body: JSON.stringify({ method: q.method, path: q.path, body: q.body, body64: q.body64, contentType: q.contentType, acct, ...(q.auth && q.auth !== token ? { jwt: q.auth } : {}) }) }) });
+    } catch { return fail(502, "Couldn't reach your Studio's database on Cloudflare."); }
+    const j: any = await r.json().catch(() => null);
+    // (Not 401/403, which would read as a refused token: the database says in words what is wrong.)
+    if (!r.ok) return fail(r.status === 401 || r.status === 403 ? 400 : r.status, r.status === 401 ? "Sign in to your Studio's database again on this device (your email code), then try again." : j?.error || `The database answered ${r.status}.`);
+    return list ? { status: 200, body: JSON.stringify({ success: true, errors: [], result: j?.accounts || [] }) } : (j as { status: number; body: string });
+  };
+}
+
 export class Cloudflare {
   /** Through the Studio's helper with a token, or (`via`) another route that adds the token itself, such as the
    *  Studio's database publishing for a signed-in owner (see cfdb.ts dbCloudflare). */
-  constructor(private relay: Relay | null, private token: string, private via?: (q: { method: string; path: string; auth?: string; body?: string; body64?: string; contentType?: string }) => Promise<{ status: number; body: string }>) {}
+  constructor(private relay: Relay | null, private token: string, private via?: CfVia) { if (!via && isCfDbToken(token)) this.via = cfDbVia(token); }
   private async api<T = any>(method: string, path: string, body?: { json?: unknown; bytes?: Uint8Array; text?: string; type?: string; auth?: string }): Promise<T> {
     const q = { target: "cloudflare" as const, method, path, auth: body?.auth || this.token, ...(body?.json !== undefined ? { body: JSON.stringify(body.json), contentType: "application/json" } : body?.bytes ? { body64: b64(body.bytes), contentType: body.type } : body?.text !== undefined ? { body: body.text, contentType: body.type } : {}) };
     // Cloudflare's "unknown error" (10013) and 5xx answers are usually momentary: try again twice before giving up.

@@ -979,7 +979,7 @@ export default {
     if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
     const u = new URL(req.url), p = u.pathname.replace(/\/+$/, "") || "/";
     try {
-      if (p === "/") return json({ ok: true, service: "site-studio-db", v: V, mail: !!(env.RESEND_API_KEY && env.MAIL_FROM), ...(env.CF_TOKEN && env.CF_ACCOUNT ? { deploy: true, account: env.CF_ACCOUNT } : {}), ...(env.GH_TOKEN ? { gh: true } : {}), ...(env.AI ? { ai: true, pamphlet: 2 } : {}), reviews: true, look: 1, outline: 1, pictures: 1, connect: 2, translate: 4, approvals: 1, accounts: 2, cfx: 4, studioPages: 1, del: 1, enqMail: 3, ...(otherAccounts(env).length ? { more: otherAccounts(env).length } : {}) });
+      if (p === "/") return json({ ok: true, service: "site-studio-db", v: V, mail: !!(env.RESEND_API_KEY && env.MAIL_FROM), ...(env.CF_TOKEN && env.CF_ACCOUNT ? { deploy: true, account: env.CF_ACCOUNT } : {}), ...(env.GH_TOKEN ? { gh: true } : {}), ...(env.AI ? { ai: true, pamphlet: 2 } : {}), reviews: true, look: 1, outline: 1, pictures: 1, connect: 2, translate: 4, approvals: 1, accounts: 2, cfx: 4, cfa: 1, studioPages: 1, del: 1, enqMail: 3, ...(otherAccounts(env).length ? { more: otherAccounts(env).length } : {}) });
 
       // The owner's own AI API in the place of Workers AI, when a request asks for it.
       if (p.startsWith("/ai/") && u.searchParams.get("engine") === "custom") {
@@ -1687,6 +1687,42 @@ export default {
             }
           } catch (e: any) { return err(502, "Couldn't read the other account's database: " + (e?.message || e)); }
           return err(400, "Unknown step.");
+        }
+        return err(404, "Not found.");
+      }
+      // ---- Connect once, use on every device: the Studio's own Cloudflare work (new sites, the database, domains,
+      // updates) made with the tokens kept here, for the Studio's OWNERS only, signed in by email code. Limited to
+      // Workers, D1 and zones (domains and DNS): no tokens, members, billing or OAuth clients. A site's own owners
+      // never reach this; they keep to /cf below.
+      if (p === "/cfa/accounts" || p === "/cfa") {
+        if (!scope.startsWith("studio:")) return err(400, "Only for the Studio's own scope.");
+        if (role !== "owner") return err(403, "Only the Studio's owners can use its Cloudflare accounts.");
+        const tokenFor = (a: string) => otherToken(env, a) || (a && a === env.CF_ACCOUNT ? env.CF_TOKEN || "" : "");
+        if (p === "/cfa/accounts" && req.method === "GET") {
+          // The accounts a token is kept for, with their names as Cloudflare gives them (the main one first).
+          const ids = [...(env.CF_TOKEN && env.CF_ACCOUNT ? [env.CF_ACCOUNT] : []), ...otherAccounts(env).map((x) => x.id)];
+          const out: { id: string; name: string }[] = [];
+          for (const id of ids) {
+            if (out.some((x) => x.id === id)) continue;
+            let name = otherAccounts(env).find((x) => x.id === id)?.name || "";
+            if (!name) { try { const r = await fetch("https://api.cloudflare.com/client/v4/accounts/" + id, { headers: { Authorization: "Bearer " + tokenFor(id) } }); name = String((((await r.json().catch(() => null)) as any)?.result?.name) || ""); } catch { /* shown by its id */ } }
+            out.push({ id, name: (name || "Cloudflare account " + id.slice(0, 6)).slice(0, 80) });
+          }
+          return json({ accounts: out, main: env.CF_TOKEN && env.CF_ACCOUNT ? env.CF_ACCOUNT : null });
+        }
+        if (p === "/cfa" && req.method === "POST") {
+          const q = (await req.json()) as any, method = String(q.method || "GET").toUpperCase(), path = String(q.path || "");
+          if (!/^\/[\w\-./?=&%:,]*$/.test(path) || path.includes("..") || !["GET", "POST", "PUT", "PATCH", "DELETE"].includes(method)) return err(400, "Not a Cloudflare call the Studio makes.");
+          const inAcc = /^\/accounts\/([\w-]{1,64})\/(workers|d1)\//.exec(path), zone = /^\/zones(\/|\?|$)/.test(path);
+          if (!inAcc && !zone) return err(403, "The database only passes on calls about Workers, D1 and domains.");
+          const A = inAcc ? inAcc[1] : /^[\w-]{1,64}$/.test(String(q.acct || "")) ? String(q.acct) : env.CF_ACCOUNT || "";
+          const tok = tokenFor(A);
+          if (!tok) return err(501, "No Cloudflare token for that account is kept on this database. Connect it once on a device (Settings → Hostings) and turn on Publish from any device.");
+          // Uploading a site's files carries its own short upload token, as Cloudflare asks.
+          const jwt = /^\/accounts\/[\w-]+\/workers\/assets\/upload/.test(path) && /^[\w.~+/=-]{8,4096}$/.test(String(q.jwt || "")) ? String(q.jwt) : "";
+          const body = q.body64 ? Uint8Array.from(atob(String(q.body64)), (c) => c.charCodeAt(0)) : q.body != null ? String(q.body) : undefined;
+          const r = await fetch("https://api.cloudflare.com/client/v4" + path, { method, headers: { Authorization: "Bearer " + (jwt || tok), ...(q.contentType ? { "Content-Type": String(q.contentType) } : {}) }, body: method === "GET" ? undefined : body });
+          return json({ status: r.status, body: await r.text() });
         }
         return err(404, "Not found.");
       }

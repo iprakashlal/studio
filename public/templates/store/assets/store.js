@@ -344,8 +344,9 @@ function totals(lines = cartLines(), pin = curPin()) {
  *  Left alone, it is as before: email always, and the phone when it is asked for. A shop with accounts always needs the email. */
 function mustGive() {
   const K = C.checkout || {}, n = ["email", "phone", "both", "either"].includes(K.need) ? K.need : "", acc = BE() || !!USER;
-  if (!n) return { email: true, phone: !!K.askPhone, askPhone: !!K.askPhone, either: false };
-  return { email: acc || n === "email" || n === "both", phone: n === "phone" || n === "both", askPhone: true, either: n === "either" && !acc };
+  const v = !!CAN.otp && !BE() && !PREVIEW; // every shopper verifies their number: it is always asked for
+  if (!n) return { email: true, phone: v || !!K.askPhone, askPhone: v || !!K.askPhone, either: false };
+  return { email: acc || n === "email" || n === "both", phone: v || n === "phone" || n === "both", askPhone: true, either: n === "either" && !acc && !v };
 }
 /* Email check (Checkout → “Verify the email address”): a 6-digit code is emailed, and the order carries the proof.
    If the shop's database can't send the code at all, it gives a pass instead, so shoppers are never locked out. */
@@ -378,28 +379,33 @@ async function evAct(send) {
 }
 /* Points (content.loyalty): a buyer proves their phone number with a WhatsApp code, sees their points and can take them
    off the order. The shop's database holds the points and works the discount out again itself. */
-const PTS = { tok: "", phone: "", info: null, use: false, sent: false, msg: "" };
-const ptsCan = () => !!(C.loyalty && C.loyalty.on) && !!CAN.pts && !BE() && !PREVIEW && !!(HOST && HOST.api && HOST.site) && mustGive().askPhone;
+const PTS = { tok: "", phone: "", info: null, use: false, sent: false, msg: "", via: "" };
+const VIA = { wa: "on WhatsApp", sms: "by SMS" }, viaNow = () => (CAN.via.includes(PTS.via) ? PTS.via : CAN.via[0] || "wa");
+const ptsOn = () => !!(C.loyalty && C.loyalty.on) && !!CAN.pts; // points can be spent here
+const ptsCan = () => (ptsOn() || !!CAN.otp) && !BE() && !PREVIEW && !!(HOST && HOST.api && HOST.site) && mustGive().askPhone;
+/** Where the verify box sits: under the details when every shopper must verify, else beside the summary (points only). */
+const ptsSlot = (where) => (where === (CAN.otp ? "top" : "side") ? `<div id="ptsbox">${ptsBox()}</div>` : "");
 const ptsPhone = () => { const i = $("#phone"); return i ? i.value : PTS.phone; };
 const ptsProved = () => !!PTS.tok && +PTS.tok.split(".")[0] > Date.now() + 60000 && digits(PTS.phone).length >= 8 && digits(ptsPhone()) === digits(PTS.phone);
 function ptsFor(sub) {
   const P = PTS.info;
-  if (PAGE !== "checkout" || !P || !PTS.use || !ptsCan() || !ptsProved() || !(P.worth > 0) || P.points < Math.max(1, P.min || 0) || !(sub > 0)) return { pts: 0, off: 0 };
+  if (PAGE !== "checkout" || !P || !PTS.use || !ptsCan() || !ptsOn() || !ptsProved() || !(P.worth > 0) || P.points < Math.max(1, P.min || 0) || !(sub > 0)) return { pts: 0, off: 0 };
   const pts = Math.max(0, Math.min(Math.floor(P.points), Math.floor((sub * P.maxPct) / 100 / P.worth)));
   return { pts, off: Math.round(pts * P.worth * 100) / 100 };
 }
 function ptsBox() {
   if (!ptsCan()) return "";
   const P = PTS.info, bad = PTS.msg ? `<p class="err" role="alert">${esc(PTS.msg)}</p>` : "", n = (k) => `${k} point${k === 1 ? "" : "s"}`;
-  let h;
-  if (ptsProved() && P) {
-    const t = totals();
-    h = P.points >= Math.max(1, P.min || 0) && P.worth > 0
+  let h; const ways = CAN.via.map((v) => VIA[v]).join(" or "), sendBtns = (lead, cls) => CAN.via.map((v) => `<button type="button" class="${cls}" data-pts="send" data-via="${v}">${lead} ${VIA[v]}</button>`).join(" ");
+  if (ptsProved() && (P || !ptsOn())) {
+    const t = totals(), ok = CAN.otp ? `<p class="soft"><b>Phone number verified.</b></p>` : "";
+    h = !ptsOn() || !P ? ok : ok + (P.points >= Math.max(1, P.min || 0) && P.worth > 0
       ? `<label class="co-consent"><input type="checkbox" id="usepts"${PTS.use ? " checked" : ""}> <span><b>Use my points</b><br><span class="soft">You have ${n(P.points)}${t.pts ? `: ${t.pts} used here, ${esc(money(t.ptsOff))} off` : `, worth up to ${esc(money(Math.round(P.points * P.worth * 100) / 100))}`}.</span></span></label>`
-      : `<p class="soft">You have ${n(P.points)}.${P.min > P.points ? ` Points can be used from ${P.min}.` : ""}</p>`;
-  } else if (PTS.sent) h = `<div class="f"><label for="ptscode">Code we sent you on WhatsApp</label><div class="ptsrow"><input class="in" id="ptscode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="6 digits"><button type="button" class="btn" data-pts="check">Verify</button></div></div><button type="button" class="rm" data-pts="send">Send a new code</button>`;
-  else h = `<button type="button" class="btn block" data-pts="send">Use my points</button><p class="soft">Optional. We send a 6-digit code on WhatsApp to the phone number you entered, then show the points you can take off this order.</p>`;
-  const e = totals().earn;
+      : `<p class="soft">You have ${n(P.points)}.${P.min > P.points ? ` Points can be used from ${P.min}.` : ""}</p>`);
+  } else if (PTS.sent) h = `<div class="f"><label for="ptscode">Code we sent you ${VIA[viaNow()]}</label><div class="ptsrow"><input class="in" id="ptscode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="6 digits"><button type="button" class="btn" data-pts="check">Verify</button></div></div>${sendBtns("Send a new code", "rm")}`;
+  else if (CAN.otp) h = `${sendBtns("Verify my number", "btn")}<p class="soft">We send a 6-digit code ${ways} to the phone number you entered, before taking the order.${ptsOn() ? " It also shows the points you can take off this order." : ""}</p>`;
+  else h = `${sendBtns("Use my points: send a code", "btn")}<p class="soft">Optional. We send a 6-digit code ${ways} to the phone number you entered, then show the points you can take off this order.</p>`;
+  const e = ptsOn() || (C.loyalty && C.loyalty.on) ? totals().earn : 0;
   return `<div class="ptsbox" aria-live="polite">${h}${bad}${e ? `<p class="soft">This order earns you ${n(e)}.</p>` : ""}</div>`;
 }
 function ptsDraw() { const b = $("#ptsbox"); if (b) b.innerHTML = ptsBox(); const rows = $("#sumrows"); if (rows && PAGE === "checkout") rows.innerHTML = summaryRows(totals()); }
@@ -409,23 +415,23 @@ async function ptsAct(send) {
   if (!send && !/^\d{6}$/.test(code)) { PTS.msg = "Enter the 6-digit code."; return ptsDraw(); }
   PTS.msg = "";
   try {
-    const r = await post("otp/" + (send ? "send" : "check"), { phone, code }), j = await r.json().catch(() => null);
+    const r = await post("otp/" + (send ? "send" : "check"), { phone, code, via: viaNow() }), j = await r.json().catch(() => null);
     if (!r.ok) PTS.msg = (j && j.error) || "That didn't work. Please try again.";
-    else if (send) { PTS.sent = true; PTS.tok = ""; PTS.info = null; }
+    else if (send) { PTS.sent = true; PTS.tok = ""; PTS.info = null; if (j && j.via) PTS.via = j.via; }
     else {
       PTS.tok = String(j.token || ""); PTS.phone = phone; PTS.sent = false;
-      const pr = await post("points", { phone, otp: PTS.tok }); PTS.info = pr.ok ? await pr.json() : { points: 0, min: 0, worth: 0, maxPct: 0 };
+      if (ptsOn()) { const pr = await post("points", { phone, otp: PTS.tok }); PTS.info = pr.ok ? await pr.json() : { points: 0, min: 0, worth: 0, maxPct: 0 }; }
     }
   } catch (e) { PTS.msg = "Couldn't reach us just now. Check your connection."; }
   ptsDraw(); const c = $("#ptscode"); if (c) c.focus();
 }
 /** Gateways the shop's own database (Host to External Services) can charge with the owner's keys: the exact total, confirmed by itself. */
-let CAN = { rz: "", pg: [], pts: false, em: false };
+let CAN = { rz: "", pg: [], pts: false, em: false, otp: false, via: ["wa"] };
 const GWID = { razorpay: "rz", cashfree: "cf", phonepe: "pe", stripe: "st", paypal: "pp" }, GWNAME = { razorpay: "Razorpay", cashfree: "Cashfree", phonepe: "PhonePe", stripe: "Stripe", paypal: "PayPal" };
 const dbPay = (m) => !BE() && !PREVIEW && !!(HOST && HOST.api && HOST.site) && (m === "razorpay" ? !!CAN.rz : CAN.pg.includes(GWID[m]));
 function askCan() {
   if (askCan.done || PREVIEW || BE() || !(HOST && HOST.api && HOST.site) || PAGE !== "checkout") return; askCan.done = true;
-  fetch(HOST.api + "/site/" + encodeURIComponent(HOST.site) + "/can", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((j) => { if (!j) return; CAN = { rz: String(j.rz || ""), pg: Array.isArray(j.pg) ? j.pg : [], pts: !!j.pts, em: !!j.em }; if (!cameBack() && (CAN.rz || CAN.pg.length)) render(); else { ptsDraw(); evDraw(); } }).catch(() => {});
+  fetch(HOST.api + "/site/" + encodeURIComponent(HOST.site) + "/can", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((j) => { if (!j) return; CAN = { rz: String(j.rz || ""), pg: Array.isArray(j.pg) ? j.pg : [], pts: !!j.pts, em: !!j.em, otp: !!j.otp, via: Array.isArray(j.via) && j.via.length ? j.via.filter((v) => v === "wa" || v === "sms") : ["wa"] }; if (!cameBack() && (CAN.rz || CAN.pg.length || CAN.otp)) render(); else { ptsDraw(); evDraw(); } }).catch(() => {});
 }
 function methods() {
   const P = C.payments, out = [], own = (n) => `You pay on ${n}'s secure page and come back here. The order is placed as soon as you've paid.`;
@@ -660,12 +666,12 @@ const PAGES = {
     const fld = (id, label, type = "text", req = true, full = false, ac = "") => `<div class="f${full ? " full" : ""}"><label for="${id}">${esc(label)}${req ? "" : ' <span class="soft">(optional)</span>'}</label><input class="in" id="${id}" name="${id}" type="${type}"${req ? " required" : ""}${ac ? ` autocomplete="${ac}"` : ""}${id === "email" && USER ? " readonly" : ""} value="${esc(me[id] || "")}"><span class="err" id="${id}-e"></span></div>`;
     return `<section class="page-h"><div class="wrap"><h1 class="fit">${ml(K.title)}</h1>${K.intro ? `<p>${ml(K.intro)}</p>` : ""}</div></section>
     <form class="wrap two" id="co" novalidate><div class="form">
-      <div class="box"><h2>Your details</h2><div class="fgrid">${fld("name", "Full name", "text", true, false, "name")}${fld("email", "Email", "email", mustGive().email, false, "email")}${mustGive().askPhone ? fld("phone", "Phone", "tel", mustGive().phone, false, "tel") : ""}</div>${mustGive().either ? `<p class="soft" style="font-size:13.5px;margin-top:8px">Give your email address or your phone number (or both), so we can reach you about the order.</p>` : ""}<div id="evbox">${evBox()}</div></div>
+      <div class="box"><h2>Your details</h2><div class="fgrid">${fld("name", "Full name", "text", true, false, "name")}${fld("email", "Email", "email", mustGive().email, false, "email")}${mustGive().askPhone ? fld("phone", "Phone", "tel", mustGive().phone, false, "tel") : ""}</div>${mustGive().either ? `<p class="soft" style="font-size:13.5px;margin-top:8px">Give your email address or your phone number (or both), so we can reach you about the order.</p>` : ""}<div id="evbox">${evBox()}</div>${ptsSlot("top")}</div>
       ${K.askAddress ? `<div class="box"><h2>Delivery address</h2><div class="fgrid">${fld("address", "Address", "text", true, true, "street-address")}${fld("city", "City", "text", true, false, "address-level2")}${fld("pin", "PIN / postcode", "text", true, false, "postal-code")}${fld("state", "State", "text", true, false, "address-level1")}${gstOn() && C.gst.askGstin ? fld("gstin", "GSTIN, for a business invoice", "text", false, true) : ""}</div>${shipOn() ? `<p class="soft" id="pin-msg" role="status" style="font-size:14px;margin-top:8px"></p>` : ""}</div>` : ""}
       ${K.askNotes ? `<div class="box"><div class="f"><label for="notes">Notes <span class="soft">(optional)</span></label><textarea class="in" id="notes" name="notes" rows="3"></textarea></div></div>` : ""}
       <div class="box"><h2>Payment</h2>${ms.length ? `<div class="pays" role="radiogroup" aria-label="Payment method">${ms.map((m, i) => `<label class="pay"><input type="radio" name="pm" value="${m.id}"${i === 0 ? " checked" : ""}><div><b>${esc(m.label)}</b><span>${esc(m.desc)}</span></div></label>`).join("")}</div>` : `<p class="note">Online payment isn't set up yet. Place the order and we'll contact you about payment.</p>`}</div>
     </div>
-    <aside class="sum"><h2>Order</h2><div class="mini">${lines.map((l) => `<div class="it"><div class="im">${pimg(l.p)}</div><div>${esc(l.p.name)}${l.opt ? `<br><span class="soft">${esc(l.opt)}</span>` : ""} × ${l.qty}</div><b>${esc(money(l.p.price * l.qty))}</b></div>`).join("")}</div><div id="sumrows">${summaryRows(t)}</div><div id="ptsbox">${ptsBox()}</div>
+    <aside class="sum"><h2>Order</h2><div class="mini">${lines.map((l) => `<div class="it"><div class="im">${pimg(l.p)}</div><div>${esc(l.p.name)}${l.opt ? `<br><span class="soft">${esc(l.opt)}</span>` : ""} × ${l.qty}</div><b>${esc(money(l.p.price * l.qty))}</b></div>`).join("")}</div><div id="sumrows">${summaryRows(t)}</div>${ptsSlot("side")}
       ${consentWords("") ? `<label class="co-consent"><input type="checkbox" id="co-consent"> <span>${esc(consentWords(""))}</span></label>` : ""}
       <p class="err" id="co-err" role="alert"></p><button class="btn pri block" type="submit">${esc(K.button)}</button><p class="soft" style="font-size:13px">${BE() ? "You'll see the exact total before you pay." : "Nothing is charged yet. You'll pay and send the order on the next screen."}</p></aside></form>`;
   },
@@ -878,7 +884,7 @@ document.addEventListener("click", (e) => {
   const eb = e.target.closest && e.target.closest("[data-ev]");
   if (eb) { evAct(eb.getAttribute("data-ev") === "send"); return; }
   const pb = e.target.closest && e.target.closest("[data-pts]");
-  if (pb) { ptsAct(pb.getAttribute("data-pts") === "send"); return; }
+  if (pb) { const v = pb.getAttribute("data-via"); if (v) PTS.via = v; ptsAct(pb.getAttribute("data-pts") === "send"); return; }
   const v = e.target.closest && e.target.closest("[data-inv]");
   if (v) { const o = invOrder(v.getAttribute("data-inv")); if (o) openInvoice(o); }
 });
@@ -1091,6 +1097,8 @@ function bindCheckout() {
       if (ph && !ph.required && ph.value.trim() && digits(ph.value).length < 8) say(ph, "Enter a phone number with at least 8 digits.");
       if (!bad && mustGive().either && em && !em.value.trim() && !(ph && ph.value.trim())) say(em, "Enter your email address or your phone number."); }
     if (bad) { bad.focus(); return; }
+    // every shopper verifies their phone number, where the shop asks for that
+    if (CAN.otp && ptsCan() && !ptsProved()) { $("#co-err").textContent = PTS.sent ? "Enter the code we sent to your phone to verify your number." : "Please verify your phone number first (under your details)."; const c = $("#ptscode") || $("#ptsbox button"); if (c) { c.scrollIntoView({ block: "center" }); c.focus(); } return; }
     // the email address must be proved first, where the shop asks for that: the code is sent now if it wasn't yet
     if (evCan() && evEmail() && !evTok()) {
       const tell = (t) => { $("#co-err").textContent = t; const c = $("#evcode"); if (c) c.focus(); };

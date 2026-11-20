@@ -16,7 +16,7 @@ create index if not exists approvals_project on approvals (scope, project, creat
 create table if not exists approval_notes (id integer primary key autoincrement, token text not null, who text not null, body text not null, page text not null default '', kind text not null default 'comment', created_at text not null);
 create index if not exists approval_notes_token on approval_notes (token, id);
 `;
-var CFDB_VERSION = 35;
+var CFDB_VERSION = 36;
 var CFDB_WORKER_NAME = "picaffectz-db";
 
 // src/lib/lookdigest.ts
@@ -689,7 +689,9 @@ var SETTINGS = {
   st: { secret: ["secret"], text: [], flags: [] },
   pp: { secret: ["secret"], text: ["clientId"], flags: ["test"] },
   // Petpooja (the restaurant's billing system): orders placed on the site go to it, and it sends back each order's status.
-  pos: { secret: ["secret", "token"], text: ["appKey", "restId", "url"], flags: ["on"] }
+  pos: { secret: ["secret", "token"], text: ["appKey", "restId", "url"], flags: ["on"] },
+  // SMS (text messages) through the owner's own account with MSG91 or Twilio: codes for signing in and for checkout.
+  sms: { secret: ["key"], text: ["provider", "tpl", "varName", "sender", "sid", "from", "text", "cc", "phones"], flags: ["on", "login", "orderOtp"] }
 };
 async function aesKey(env) {
   return crypto.subtle.importKey("raw", await crypto.subtle.digest("SHA-256", enc.encode("settings:" + env.SECRET)), "AES-GCM", false, ["encrypt", "decrypt"]);
@@ -853,6 +855,42 @@ var WA_TPL = {
   enquiry: (language) => ({ name: "enquiry_alert", language, category: "utility", components: [{ type: "body", text: "New enquiry from {{1}} ({{2}}): {{3}}", example: { body_text: [["Asha Rao", "9876543210", "Do you take group bookings on Sunday?"]] } }] })
 };
 var waReady = (c) => !!(c && c.on && c.token && String(c.phoneId || "").trim());
+var smsReady = (z) => !!(z && z.on && z.key && (z.provider === "twilio" ? String(z.sid || "").trim() && String(z.from || "").trim() : String(z.tpl || "").trim()));
+async function smsSend(z, to, code, brand) {
+  if (z.provider === "twilio") {
+    const body = (String(z.text || "").trim() || "{code} is your verification code for {site}.").replace(/\{code\}/g, code).replace(/\{site\}/g, brand).slice(0, 300), from = String(z.from).trim();
+    const f = new URLSearchParams({ To: "+" + to, Body: body });
+    f.set(/^MG[0-9a-f]{32}$/i.test(from) ? "MessagingServiceSid" : "From", from);
+    const r2 = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${encodeURIComponent(String(z.sid).trim())}/Messages.json`, { method: "POST", headers: { Authorization: "Basic " + btoa(String(z.sid).trim() + ":" + z.key), "Content-Type": "application/x-www-form-urlencoded" }, body: f.toString() });
+    if (!r2.ok) {
+      let m = "";
+      try {
+        m = String((await r2.json())?.message || "");
+      } catch {
+      }
+      throw new Error(`Twilio didn't accept the message (${r2.status})${m ? ": " + m.slice(0, 200) : ""}`);
+    }
+    return;
+  }
+  const v = String(z.varName || "var1").trim() || "var1", rec = { mobiles: to, [v]: code, [v.toUpperCase()]: code, [v.toLowerCase()]: code }, tpl = String(z.tpl).trim();
+  const r = await fetch("https://control.msg91.com/api/v5/flow/", { method: "POST", headers: { authkey: z.key, "Content-Type": "application/json", accept: "application/json" }, body: JSON.stringify({ template_id: tpl, flow_id: tpl, ...String(z.sender || "").trim() ? { sender: String(z.sender).trim() } : {}, short_url: "0", recipients: [rec] }) });
+  let j = null;
+  try {
+    j = await r.json();
+  } catch {
+  }
+  if (!r.ok || !j || j.type !== "success") throw new Error(`MSG91 didn't accept the message (${r.status})${j?.message ? ": " + String(j.message).slice(0, 200) : ""}`);
+}
+function msgPolicy(c) {
+  const m = c?.cms?.msg || {}, of = (v) => ({ wa: v == null || v === "" || v === "wa" || v === "both", sms: v == null || v === "" || v === "sms" || v === "both" });
+  return { login: of(m.login), checkout: of(m.checkout) };
+}
+async function codeWays(env, site, c) {
+  const w = await getSetting(env, "site:" + site, "wa").catch(() => null), z = await getSetting(env, "site:" + site, "sms").catch(() => null);
+  const pol = msgPolicy(c === void 0 ? await siteContent(env, site).catch(() => null) : c).checkout;
+  const wa = pol.wa && waReady(w) && !!String(w.tplOtp || "").trim(), sms = pol.sms && smsReady(z);
+  return { w, z, wa, sms, any: wa || sms, need: wa && !!w.orderOtp || sms && !!z.orderOtp, cc: String(w?.cc || z?.cc || "91") };
+}
 var waPhoneOf = (lines, email) => {
   for (const l of String(lines || "").split(/\n/)) {
     const i = l.indexOf("=");
@@ -985,13 +1023,13 @@ function posItems(c, q) {
   return items.length ? { items, sub } : { error: "an empty cart" };
 }
 async function pointsBal(env, site, phone, token) {
-  const w = await getSetting(env, "site:" + site, "wa").catch(() => null), num = waNum(phone, w?.cc), [exp, sig] = String(token || "").split(".");
+  const cc = (await getSetting(env, "site:" + site, "wa").catch(() => null))?.cc || (await getSetting(env, "site:" + site, "sms").catch(() => null))?.cc, num = waNum(phone, cc), [exp, sig] = String(token || "").split(".");
   if (!num || !(+exp > Date.now()) || sig !== b64u(await hmac(env.SECRET, "otp:" + site + ":" + num + ":" + exp))) return { key: num, bal: 0, ok: false };
   const r = await env.DB.prepare("select points from customers where site = ? and ckey = ?").bind(site, num).first();
   return { key: num, bal: Math.max(0, +r?.points || 0), ok: true };
 }
 async function custOrder(env, site, c, data, cart) {
-  const w = await getSetting(env, "site:" + site, "wa").catch(() => null);
+  const w = { cc: (await getSetting(env, "site:" + site, "wa").catch(() => null))?.cc || (await getSetting(env, "site:" + site, "sms").catch(() => null))?.cc };
   const key = waNum(data.phone, w?.cc) || String(data.email || "").trim().toLowerCase().slice(0, 120);
   if (!key) return "";
   if (await env.DB.prepare("select 1 from points where site = ? and order_no = ? limit 1").bind(site, data.order_no).first()) return "";
@@ -1421,22 +1459,29 @@ var db_worker_default = {
             if (T.footer) footer = fill(String(T.footer), vars);
           }
         }
-        let onWa = false;
+        let onWa = false, onSms = false;
         const waScope = typeof forSite === "string" && /^[a-z0-9][a-z0-9-]{0,59}$/.test(forSite) ? "site:" + forSite : typeof forStudio === "string" && /^[a-z0-9][a-z0-9-]{0,59}$/.test(forStudio) ? "studio:" + forStudio : "";
         if (waScope && await env.DB.prepare("select 1 from members where email = ? and scope = ? limit 1").bind(email2, waScope).first()) {
           const w = await getSetting(env, waScope, "wa").catch(() => null), num = waReady(w) && w.login && String(w.tplOtp || "").trim() ? waNum(waPhoneOf(w.phones, email2), w.cc) : "";
-          if (num) try {
+          const pol = waScope.startsWith("site:") ? msgPolicy(await siteContent(env, waScope.slice(5)).catch(() => null)).login : { wa: true, sms: true };
+          if (num && pol.wa) try {
             await waSend(w, num, w.tplOtp, [code], code);
             onWa = true;
+          } catch {
+          }
+          const z = await getSetting(env, waScope, "sms").catch(() => null), sn = pol.sms && smsReady(z) && z.login ? waNum(waPhoneOf(z.phones, email2), z.cc) : "";
+          if (sn) try {
+            await smsSend(z, sn, code, env.NAME || "your account");
+            onSms = true;
           } catch {
           }
         }
         try {
           await sendMail(env, email2, subject, WRAP(`<h2 style="margin:0 0 12px;font-size:20px">${hesc(heading)}</h2>${paras(intro)}<p style="font-size:28px;font-weight:700;letter-spacing:6px;margin:0 0 14px">${code}</p>${paras(footer, "margin:0 0 8px;color:#667;font-size:13px")}`));
         } catch (e) {
-          if (!onWa) throw e;
+          if (!onWa && !onSms) throw e;
         }
-        return json({ ok: true, ...onWa ? { whatsapp: true } : {} });
+        return json({ ok: true, ...onWa ? { whatsapp: true } : {}, ...onSms ? { sms: true } : {} });
       }
       if (p === "/auth/verify" && req.method === "POST") {
         const b = await req.json();
@@ -1534,8 +1579,8 @@ var db_worker_default = {
         const site = p.split("/")[2], w = await getSetting(env, "site:" + site, "wa").catch(() => null), z = await getSetting(env, "site:" + site, "rz").catch(() => null);
         const pg = [];
         for (const g of ["cf", "pe", "st", "pp"]) if (pgReady(g, await getSetting(env, "site:" + site, g).catch(() => null))) pg.push(g);
-        const canCode = !!(waReady(w) && String(w.tplOtp || "").trim()), sc = await siteContent(env, site).catch(() => null);
-        return json({ otp: canCode && !!w.orderOtp, pts: canCode && loyOf(sc).on, em: emailCheckOn(env, sc), rz: z?.on && z.secret && z.keyId ? String(z.keyId) : "", pg });
+        const sc = await siteContent(env, site).catch(() => null), cw = await codeWays(env, site, sc), canCode = cw.any;
+        return json({ otp: cw.need, pts: canCode && loyOf(sc).on, via: [cw.wa ? "wa" : "", cw.sms ? "sms" : ""].filter(Boolean), em: emailCheckOn(env, sc), rz: z?.on && z.secret && z.keyId ? String(z.keyId) : "", pg });
       }
       if (/^\/points\/[a-z0-9][a-z0-9-]{0,59}$/.test(p) && req.method === "POST") {
         const site = p.split("/")[2], b = await req.json(), L = loyOf(await siteContent(env, site));
@@ -1577,9 +1622,10 @@ var db_worker_default = {
         return json({ ok: true, token: exp + "." + b64u(await hmac(env.SECRET, "eotp:" + site + ":" + em + ":" + exp)) });
       }
       if (/^\/otp\/(send|check)\/[a-z0-9][a-z0-9-]{0,59}$/.test(p) && req.method === "POST") {
-        const site = p.split("/")[3], b = await req.json(), w = await getSetting(env, "site:" + site, "wa");
-        if (!(waReady(w) && String(w.tplOtp || "").trim() && (w.orderOtp || loyOf(await siteContent(env, site).catch(() => null)).on))) return err(404, "Not found.");
-        const num = waNum(b.phone, w.cc);
+        const site = p.split("/")[3], b = await req.json(), sc = await siteContent(env, site).catch(() => null), cw = await codeWays(env, site, sc), w = cw.w;
+        if (!(cw.any && (cw.need || loyOf(sc).on))) return err(404, "Not found.");
+        const via = b.via === "sms" && cw.sms ? "sms" : b.via === "wa" && cw.wa ? "wa" : cw.wa ? "wa" : "sms";
+        const num = waNum(b.phone, cw.cc);
         if (!num) return err(400, "Enter your mobile number with its country code.");
         const k = "o:" + site + ":" + num, now = Date.now();
         if (p.startsWith("/otp/send/")) {
@@ -1590,11 +1636,12 @@ var db_worker_default = {
           const code = String(1e5 + crypto.getRandomValues(new Uint32Array(1))[0] % 9e5);
           await env.DB.prepare("insert into otps (k, hash, expires, tries, sent) values (?, ?, ?, 0, ?) on conflict (k) do update set hash = excluded.hash, expires = excluded.expires, tries = 0, sent = excluded.sent").bind(k, b64u(await hmac(env.SECRET, k + ":" + code)), now + 10 * 6e4, now).run();
           try {
-            await waSend(w, num, w.tplOtp, [code], code);
+            if (via === "sms") await smsSend(cw.z, num, code, siteName(sc, site));
+            else await waSend(w, num, w.tplOtp, [code], code);
           } catch {
-            return err(502, "We couldn't send the code on WhatsApp just now. Check the number, or call us to order.");
+            return err(502, `We couldn't send the code ${via === "sms" ? "by SMS" : "on WhatsApp"} just now. Check the number${cw.wa && cw.sms ? ", try the other way" : ""}, or call us to order.`);
           }
-          return json({ ok: true });
+          return json({ ok: true, via });
         }
         const c = await env.DB.prepare("select hash, expires, tries from otps where k = ?").bind(k).first();
         if (!c || c.expires < now) return err(403, "The code has expired. Ask for a new one.");
@@ -1605,7 +1652,7 @@ var db_worker_default = {
         }
         await env.DB.prepare("update otps set expires = 0 where k = ?").bind(k).run();
         const exp = now + 45 * 6e4;
-        return json({ ok: true, token: exp + "." + b64u(await hmac(env.SECRET, "otp:" + site + ":" + num + ":" + exp)) });
+        return json({ ok: true, token: exp + "." + b64u(await hmac(env.SECRET, "otp:" + site + ":" + num + ":" + exp)) + (via === "sms" ? ".s" : "") });
       }
       if (/^\/hook\/pos\/[a-z0-9][a-z0-9-]{0,59}$/.test(p) && req.method === "POST") {
         const site = p.split("/")[3], key = b64u(await hmac(env.SECRET, "pos:" + site)).slice(0, 32);
@@ -1696,12 +1743,12 @@ var db_worker_default = {
         for (const [k, v] of Object.entries(q.data || {}).slice(0, 25)) if (/^[a-z0-9][\w-]{0,39}$/i.test(k) && v != null && String(v).trim()) data[k] = String(v).slice(0, 5e3);
         if (!Object.keys(data).length) return err(400, "The form was empty.");
         if (data.order_no) {
-          const w = await getSetting(env, "site:" + site, "wa").catch(() => null);
-          if (waReady(w) && String(w.tplOtp || "").trim()) {
-            const num = waNum(data.phone, w.cc), [exp, sig] = String(data.otp_token || "").split(".");
+          const cw = await codeWays(env, site);
+          if (cw.any) {
+            const num = waNum(data.phone, cw.cc), [exp, sig, how] = String(data.otp_token || "").split(".");
             const proved = !!num && +exp > Date.now() && sig === b64u(await hmac(env.SECRET, "otp:" + site + ":" + num + ":" + exp));
-            if (proved) data._phone = "Verified on WhatsApp";
-            else if (w.orderOtp) return err(403, "Please verify your mobile number first.");
+            if (proved) data._phone = how === "s" ? "Verified by SMS" : "Verified on WhatsApp";
+            else if (cw.need) return err(403, "Please verify your mobile number first.");
           }
           delete data.otp_token;
           {
@@ -1743,7 +1790,7 @@ var db_worker_default = {
             delete data.pay_ref;
           }
         }
-        if (data.order_no && q.cart && typeof q.cart === "object") q.cart._bal = data._phone && +q.cart.points > 0 ? Math.max(0, +(await env.DB.prepare("select points from customers where site = ? and ckey = ?").bind(site, waNum(data.phone, (await getSetting(env, "site:" + site, "wa").catch(() => null))?.cc)).first())?.points || 0) : 0;
+        if (data.order_no && q.cart && typeof q.cart === "object") q.cart._bal = data._phone && +q.cart.points > 0 ? Math.max(0, +(await env.DB.prepare("select points from customers where site = ? and ckey = ?").bind(site, waNum(data.phone, (await codeWays(env, site)).cc)).first())?.points || 0) : 0;
         if (data.order_no && q.cart && typeof q.cart === "object") {
           const pz = await getSetting(env, "site:" + site, "pos").catch(() => null);
           if (posReady(pz)) {
@@ -1839,8 +1886,19 @@ var db_worker_default = {
       if (!scopeOk(scope)) return err(400, "Unknown scope.");
       const role = await roleOf(env, scope, email);
       if (!role) return err(403, `${email} isn't a member of this ${scope.startsWith("site:") ? "site" : "Studio"}.`);
-      if (p === "/set" || p === "/set/test" || p === "/set/wa") {
+      if (p === "/set" || p === "/set/test" || p === "/set/wa" || p === "/set/sms") {
         if (role !== "owner") return err(403, "Only an owner can change connections.");
+        if (p === "/set/sms" && req.method === "POST") {
+          const b2 = await req.json(), z = await getSetting(env, scope, "sms"), to = waNum(b2.to, z?.cc);
+          if (!smsReady(z)) return json({ error: "Switch SMS on, fill in the boxes and press Save first." });
+          if (!to) return json({ error: "Enter the mobile number to send the test to." });
+          try {
+            await smsSend(z, to, "123456", env.NAME || "your site");
+            return json({ ok: true });
+          } catch (e) {
+            return json({ error: String(e?.message || e).slice(0, 300) });
+          }
+        }
         if (p === "/set/wa" && req.method === "POST") {
           const b2 = await req.json(), old2 = await getSetting(env, scope, "wa") || {}, token = String(b2.token || "").trim() || String(old2.token || "");
           if (!token) return json({ error: "Paste the access token first." });

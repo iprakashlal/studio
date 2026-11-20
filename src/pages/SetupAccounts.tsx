@@ -39,15 +39,15 @@ function CloudflareAccount({ session, nf, index }: { session: Session; nf: Netli
   const acc = useCfAccount(session.token, nf, true, true);
   return (
     <div className="flex flex-col gap-2">
-      {acc.account ? (
+      {acc.account && (
         <div className="flex flex-wrap items-center gap-2">
           <span className="h-2 w-2 rounded-full bg-emerald-400" /><span>Cloudflare: <b>{acc.account.name}</b></span>
           <button type="button" className="btn btn-sm ml-auto" onClick={() => { if (!acc.tabOnly) cfAccountVault.clear(); location.reload(); }} title={acc.tabOnly ? "Ends the sign-in in this tab." : "Forget the token on this device (the database's setup is forgotten too; running a setup again finds it)."}>Disconnect</button>
           <p className="w-full pl-4 text-[12.5px] text-ink-400">{acc.tabOnly ? "Signed in on Cloudflare for this tab only: nothing is kept on this device. It lets the Studio publish sites, run the database and connect domains until you close or reload this tab." : "The permission: your API token, kept encrypted on this device only. It goes with each request through the helper and lets the Studio publish sites, run the database and connect domains."}</p>
-          {acc.note && <p role="status" className="w-full pl-4 text-[12.5px] text-emerald-300" aria-label="Connect Cloudflare result">{acc.note}</p>}
         </div>
-      ) : acc.ui}
-      {acc.account && acc.othersUi}
+      )}
+      {/* The same connection section as in Publish to Cloudflare: folded once connected, with the other accounts under it. */}
+      {acc.ui}
       {index && <AnyDevice session={session} acc={acc} index={index} />}
     </div>
   );

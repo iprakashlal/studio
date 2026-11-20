@@ -2,7 +2,7 @@ import { legalChecks } from "../lib/legal";
 import type { Category, Field, TemplateDef } from "./types";
 import { uid, vpaOk, paypalOk, httpsOk } from "../lib/util";
 import { BODY_FONTS, DISPLAY_FONTS, LINE_BREAKS_AXIS, STORE_AXES, THEMES, onColor, storeThemeValues } from "../themes/catalog";
-import { adminCategory, loyaltyCard, legalCategory, codeCategory, withSectionBg, videoCategory, socialCategory, logoFields, consentCategory, emailsCategory, i18nCategory, prepareI18n, featuresCategory, festivalCategory, menuCategory, menuItem, prepareMenu, staticPagesCategory, heroSlidesCard, prepareSlides, prepareMaintenance, seoCategory, warrantyCategory, customFontsCard } from "./common";
+import { adminCategory, loyaltyCard, accountCard, legalCategory, codeCategory, withSectionBg, videoCategory, socialCategory, logoFields, consentCategory, emailsCategory, i18nCategory, prepareI18n, featuresCategory, festivalCategory, menuCategory, menuItem, prepareMenu, staticPagesCategory, heroSlidesCard, prepareSlides, prepareMaintenance, seoCategory, warrantyCategory, customFontsCard } from "./common";
 import { NAV_MODE_FIELD, NAV_MODE_MOB_FIELD, themeCards } from "../themes/fields";
 
 const CURRENCIES = ["INR", "USD", "EUR", "GBP", "AED", "SGD", "AUD", "CAD"];
@@ -192,6 +192,7 @@ const schema: Category[] = [
         { t: "toggle", path: "checkout.verifyEmail", label: "Verify the email address with a code before the order is placed" },
         { t: "when", path: "checkout.verifyEmail", is: "true", fields: [{ t: "note", text: "The shopper is emailed a 6-digit code and enters it at checkout; the order then shows “Email: verified by a code” under Purchased orders. This works on a shop hosted on Cloudflare, and the codes are sent by that database's own email (Resend). While its sender is still in test mode, codes can't reach shoppers: orders are then let through and marked “not verified”, so nobody is locked out. Send from your own domain (hosting window → Email settings) to verify everyone. An email address is checked only when one is given: choose Email or Both above to ask every shopper for it." }] },
         { t: "note", text: "Any choice but Standard shows both boxes, with the one that isn't required marked optional. A shop with customer accounts always needs the email. Points are spent with a WhatsApp code, so they need a phone number." }] },
+      accountCard("store"),
       { title: "After ordering", fields: [{ t: "text", path: "checkout.successTitle", label: "Title", ml: true }, { t: "textarea", path: "checkout.successText", label: "Text" }] },
     ],
   },

@@ -141,3 +141,6 @@ html.ord-lock .fx-badge{display:none!important}html.ord-cart .fx-badge{bottom:84
 .ofv .od-code{margin-top:2px}.ofv .od-live,.ofv .od-bad{margin:0}
 .of-via{display:inline-flex;justify-self:start;border:1px solid var(--line);border-radius:999px;padding:3px;gap:2px}
 .of-via button{border:0;background:transparent;color:var(--soft);font:600 13px/1 var(--fb);padding:7px 14px;border-radius:999px;cursor:pointer}.of-via button[aria-pressed=true]{background:var(--text);color:var(--bg)}
+
+/* Customer accounts: the sign-in step before checkout */
+#od-acct .sa-card{border:0;padding:6px 0;max-width:none;background:transparent}.od-me{margin:0}

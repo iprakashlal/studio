@@ -539,7 +539,7 @@ async function mcCheck(z: any, to: string, ref: string, code: string): Promise<b
 /** Sends a code by SMS. Gives back a reference when the SMS company made the code itself (it is then checked with them). */
 async function smsSend(z: any, to: string, code: string, brand: string): Promise<string | void> {
   if (z.provider === "mcentral") {
-    const q = new URLSearchParams({ ...mcParts(z, to), customerId: String(z.sid).trim(), flowType: "SMS" });
+    const q = new URLSearchParams({ ...mcParts(z, to), customerId: String(z.sid).trim(), flowType: "SMS", otpLength: "6" }); // (its own default is 4 digits)
     const r = await fetch(`${MC}/verification/v3/send?${q}`, { method: "POST", headers: { accept: "*/*", authToken: await mcToken(z) } }); let j: any = null; try { j = await r.json(); } catch { /* not JSON */ }
     const ref = String(j?.data?.verificationId ?? ""); if (!r.ok || !ref) throw new Error(`Message Central didn't send the code (${r.status})${j?.message ? ": " + String(j.message).slice(0, 200) : ""}`);
     return ref;

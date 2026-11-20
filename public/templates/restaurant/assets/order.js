@@ -25,7 +25,6 @@
   let can = { otp: false, pts: false, em: false, via: ["wa"], rz: "", pg: [] }, canAsked = false;
   /** How a code for the mobile number can be sent here: on WhatsApp, by SMS, or either (the guest then chooses). */
   const VIA = { wa: "on WhatsApp", sms: "by SMS" }, viaNow = () => (can.via.includes(ui.otpVia) ? ui.otpVia : can.via[0] || "wa");
-  const viaBtns = (lead) => can.via.length > 1 ? `<div class="od-code">${can.via.map((v) => `<button type="button" class="btn sec" data-act="otpsend" data-via="${v}">${lead} ${VIA[v]}</button>`).join("")}</div>` : `<button type="button" class="btn sec" data-act="otpsend" data-via="${can.via[0] || "wa"}">${lead} ${VIA[can.via[0] || "wa"]}</button>`;
   /** Gateways other than Razorpay: the guest pays on the gateway's own page and comes back here. */
   const GW = { cf: { key: "cashfree", name: "Cashfree", label: "Pay online with Cashfree (UPI, card, netbanking)" }, pe: { key: "phonepe", name: "PhonePe", label: "Pay with PhonePe (UPI, card, netbanking)" }, st: { key: "stripe", name: "Stripe", label: "Pay by card (Stripe)" }, pp: { key: "paypal", name: "PayPal", label: "Pay with PayPal" } };
   const digits = (v) => String(v || "").replace(/\D/g, "").slice(-10);
@@ -248,14 +247,23 @@
     if (!n) return { phone: true, email: false, askEmail: !!o.askEmail, either: false };
     return { phone: !!can.otp || n === "phone" || n === "both", email: n === "email" || n === "both", askEmail: true, either: n === "either" && !can.otp };
   }
+  /** A box with its “Verify” inside it: the button (a tick once verified) sits at the end of the box, and the code row opens under it. */
+  const vbox = (o) => `<div class="of ofv" id="${o.id}"><label for="of-${o.k}">${o.label}</label><div class="of-in${o.on ? " has" : ""}"><input id="of-${o.k}" data-f="${o.k}" value="${esc(ui.form[o.k] || "")}" ${o.attrs}>${!o.on ? "" : o.done ? `<span class="of-tick">✓ Verified</span>` : `<button type="button" class="of-vbtn" data-act="${o.act}send">${o.sent ? "Resend" : "Verify"}</button>`}</div>${o.on && !o.done ? (o.sent ? `<div class="od-code"><input id="of-${o.code}" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="Code" aria-label="${o.sentTo}"><button type="button" class="btn sec" data-act="${o.act}check">Confirm</button></div><p class="od-live">${o.sentTo}.</p>` : `${o.pick || ""}<p class="od-live">${o.hint}</p>`) : ""}${o.on && o.msg ? `<p class="od-bad" role="alert">${esc(o.msg)}</p>` : ""}</div>`;
+  const phoneBox = () => { const M = must(), ways = can.via.map((v) => VIA[v]).join(" or ");
+    return vbox({ id: "od-otp", k: "phone", label: "Mobile number" + (M.phone ? "" : " (optional)"), attrs: 'type="tel" inputmode="tel" autocomplete="tel"' + (M.phone ? " required" : ""), on: can.otp || (can.pts && loy().on), done: verified(), sent: ui.otpSent, act: "otp", code: "code", msg: ui.otpMsg,
+      sentTo: "Enter the code we sent " + VIA[viaNow()], pick: can.via.length > 1 ? `<div class="of-via" role="group" aria-label="Send the code">${can.via.map((v) => `<button type="button" data-act="otpvia" data-via="${v}" aria-pressed="${viaNow() === v}">${v === "wa" ? "WhatsApp" : "SMS"}</button>`).join("")}</div>` : "",
+      hint: can.otp ? `We send a code ${ways} to verify this number before taking the order.` : `Optional: verify ${ways} to use your points.` }); };
+  const emailBox = () => { const M = must(), t = etok();
+    return vbox({ id: "od-eotp", k: "email", label: "Email" + (M.email ? "" : " (optional)"), attrs: 'type="email" autocomplete="email"' + (M.email ? " required" : ""), on: can.em && !(t && t.startsWith("s:")), done: !!t, sent: ui.eSent, act: "eotp", code: "ecode", msg: ui.eMsg,
+      sentTo: "Enter the code we emailed you", hint: `We email a code to verify this address before taking the order${M.email ? "" : " (only if you give one)"}.` }); };
   const inp = (k, label, a = "") => `<div class="of"><label for="of-${k}">${label}</label><input id="of-${k}" data-f="${k}" value="${esc(ui.form[k] || "")}" ${a}></div>`;
   function checkoutHTML() {
     const b = bill(), o = O(), m = mode(), f = ui.form, sl = slots(), ps = pays();
     if (!sl.some((s) => s.v === f.when)) f.when = sl.length ? sl[0].v : "";
     if (!ps.some((p) => p.id === f.pay)) f.pay = ps.length ? ps[0].id : "";
     return `<form class="od-form" id="od-form" novalidate>
-      <fieldset><legend>Your details</legend>${inp("name", "Name", 'autocomplete="name" required')}${inp("phone", "Mobile number" + (must().phone ? "" : " (optional)"), 'type="tel" inputmode="tel" autocomplete="tel"' + (must().phone ? " required" : ""))}${must().askEmail ? inp("email", "Email" + (must().email ? "" : " (optional)"), 'type="email" autocomplete="email"' + (must().email ? " required" : "")) : ""}${can.em && must().askEmail ? `<div class="od-otp" id="od-eotp">${etok() ? (etok().startsWith("s:") ? "" : `<p class="od-ok">Email address verified.</p>`) : ui.eSent ? `<div class="of"><label for="of-ecode">Code we emailed you</label><div class="od-code"><input id="of-ecode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="6 digits"><button type="button" class="btn sec" data-act="eotpcheck">Verify</button></div></div><button type="button" class="link od-more" data-act="eotpsend">Send a new code</button>` : `<button type="button" class="btn sec" data-act="eotpsend">Verify this email address</button><p class="od-live">We email a 6-digit code to this address before taking the order${must().email ? "" : " (only if you give an email address)"}.</p>`}${ui.eMsg ? `<p class="od-bad" role="alert">${esc(ui.eMsg)}</p>` : ""}</div>` : ""}${must().either ? `<p class="od-live">Give your mobile number or your email address (or both), so we can reach you about the order.</p>` : ""}
-        ${can.otp || (can.pts && loy().on) ? `<div class="od-otp" id="od-otp">${verified() ? `<p class="od-ok">Mobile number verified.</p>` : ui.otpSent ? `<div class="of"><label for="of-code">Code we sent you ${VIA[viaNow()]}</label><div class="od-code"><input id="of-code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="6 digits"><button type="button" class="btn sec" data-act="otpcheck">Verify</button></div></div>${can.via.map((v) => `<button type="button" class="link od-more" data-act="otpsend" data-via="${v}">Send a new code ${VIA[v]}</button>`).join(" ")}` : can.otp ? `${viaBtns("Verify this number")}<p class="od-live">We send a 6-digit code to this number ${can.via.map((v) => VIA[v]).join(" or ")} before taking the order.</p>` : `${viaBtns("Use my points: send a code")}<p class="od-live">Optional. We send a 6-digit code to this number ${can.via.map((v) => VIA[v]).join(" or ")}, then show the points you can take off this order.</p>`}${ui.otpMsg ? `<p class="od-bad" role="alert">${esc(ui.otpMsg)}</p>` : ""}</div>` : ""}${ptsBox()}</fieldset>
+      <fieldset><legend>Your details</legend>${inp("name", "Name", 'autocomplete="name" required')}${phoneBox()}${must().askEmail ? emailBox() : ""}${must().either ? `<p class="od-live">Give your mobile number or your email address (or both), so we can reach you about the order.</p>` : ""}
+        ${ptsBox()}</fieldset>
       ${m === "delivery" ? `<fieldset><legend>Delivery address</legend>${inp("line1", "Flat, house or building", 'autocomplete="address-line1" required')}${inp("area", "Street and area", 'autocomplete="address-line2" required')}<div class="of2">${inp("landmark", "Landmark (optional)")}${inp("pin", "PIN code", 'inputmode="numeric" autocomplete="postal-code" maxlength="10"' + (o.askPin !== false ? " required" : ""))}</div>
         <div class="od-tips" role="radiogroup" aria-label="Save this address as">${["Home", "Work", "Other"].map((l) => `<button type="button" class="chip" role="radio" data-act="label" data-id="${l}" aria-checked="${f.label === l}">${l}</button>`).join("")}</div>
         <p class="od-bad" id="od-area" role="alert"${!b.area.ok && (f.pin || f.area) ? "" : " hidden"}>${esc(o.areaNote || "Sorry, we don't deliver to that area yet. Choose Pick up, or call us.")}</p></fieldset>` : ""}
@@ -488,7 +496,7 @@
   async function eotp(send) {
     sync(); const be = A.backend(), email = elow(), code = String(($("#of-ecode", root) || {}).value || "").trim();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { ui.eMsg = "Enter your email address first."; return over(true); }
-    if (!send && !/^\d{6}$/.test(code)) { ui.eMsg = "Enter the 6-digit code."; return over(true); }
+    if (!send && !/^\d{4,8}$/.test(code)) { ui.eMsg = "Enter the code."; return over(true); }
     ui.eMsg = "";
     try {
       const r = await fetch(be.cf + "/eotp/" + (send ? "send" : "check") + "/" + encodeURIComponent(be.site), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, code }) }), j = await r.json().catch(() => null);
@@ -503,7 +511,7 @@
   async function otp(send) {
     sync(); const be = A.backend(), phone = ui.form.phone, code = String(($("#of-code", root) || {}).value || "").trim();
     if (digits(phone).length < 10) { ui.otpMsg = "Enter your mobile number first."; return over(true); }
-    if (!send && !/^\d{6}$/.test(code)) { ui.otpMsg = "Enter the 6-digit code."; return over(true); }
+    if (!send && !/^\d{4,8}$/.test(code)) { ui.otpMsg = "Enter the code."; return over(true); }
     ui.otpMsg = "";
     try {
       const r = await fetch(be.cf + "/otp/" + (send ? "send" : "check") + "/" + encodeURIComponent(be.site), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ phone, code, via: viaNow() }) }), j = await r.json().catch(() => null);
@@ -559,6 +567,7 @@
     else if (a === "label") { sync(); ui.form.label = id; over(true); }
     else if (a === "checkout") { const c = $("#od-cutlery", root); if (c) ui.form.cutlery = c.checked; ui.err = ""; ui.drawer = "checkout"; over(); }
     else if (a === "place") place();
+    else if (a === "otpvia") { sync(); ui.otpVia = t.getAttribute("data-via"); over(true); }
     else if (a === "otpsend" || a === "otpcheck") { const v = t.getAttribute && t.getAttribute("data-via"); if (v) ui.otpVia = v; otp(a === "otpsend"); }
     else if (a === "eotpsend" || a === "eotpcheck") eotp(a === "eotpsend");
     else if (a === "unpay") { ui.err = ""; ui.drawer = "checkout"; over(); }

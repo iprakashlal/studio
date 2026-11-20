@@ -132,3 +132,12 @@ html.ord-lock .fx-badge{display:none!important}html.ord-cart .fx-badge{bottom:84
 .od-amt{margin:0;font:800 34px/1 var(--fb);color:var(--text)}.od-steps{margin:6px 0 0;padding-left:20px;text-align:left;font-size:14.5px}.od-pay code,.od-done code{font:600 14px/1 ui-monospace,Menlo,monospace;background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:4px 8px}
 .od-pay .btn{justify-self:center;width:auto}
 .od-otp{display:grid;gap:8px;justify-items:start}.od-otp .of{width:100%}.od-otp .od-ok,.od-otp .od-bad,.od-otp .od-live{margin:0}
+
+/* Verify inside the box it verifies */
+.of-in{position:relative;display:block}.of-in.has input{padding-right:112px}
+.of-vbtn,.of-tick{position:absolute;right:6px;top:50%;transform:translateY(-50%);display:inline-flex;align-items:center;height:34px;padding:0 14px;border-radius:calc(var(--r)*.5 + 2px);font:700 13.5px/1 var(--fb);white-space:nowrap}
+.of-vbtn{border:0;background:var(--text);color:var(--bg);cursor:pointer}.of-vbtn:hover{opacity:.88}.of-vbtn:focus-visible{outline:2px solid var(--c1);outline-offset:2px}
+.of-tick{color:#1E7A46;background:rgba(30,122,70,.1);pointer-events:none}html[data-dark=true] .of-tick{color:#7BD9A0;background:rgba(123,217,160,.12)}
+.ofv .od-code{margin-top:2px}.ofv .od-live,.ofv .od-bad{margin:0}
+.of-via{display:inline-flex;justify-self:start;border:1px solid var(--line);border-radius:999px;padding:3px;gap:2px}
+.of-via button{border:0;background:transparent;color:var(--soft);font:600 13px/1 var(--fb);padding:7px 14px;border-radius:999px;cursor:pointer}.of-via button[aria-pressed=true]{background:var(--text);color:var(--bg)}

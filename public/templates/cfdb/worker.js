@@ -16,7 +16,7 @@ create index if not exists approvals_project on approvals (scope, project, creat
 create table if not exists approval_notes (id integer primary key autoincrement, token text not null, who text not null, body text not null, page text not null default '', kind text not null default 'comment', created_at text not null);
 create index if not exists approval_notes_token on approval_notes (token, id);
 `;
-var CFDB_VERSION = 37;
+var CFDB_VERSION = 38;
 var CFDB_WORKER_NAME = "picaffectz-db";
 
 // src/lib/lookdigest.ts
@@ -889,7 +889,7 @@ async function mcCheck(z, to, ref, code) {
 }
 async function smsSend(z, to, code, brand) {
   if (z.provider === "mcentral") {
-    const q = new URLSearchParams({ ...mcParts(z, to), customerId: String(z.sid).trim(), flowType: "SMS" });
+    const q = new URLSearchParams({ ...mcParts(z, to), customerId: String(z.sid).trim(), flowType: "SMS", otpLength: "6" });
     const r2 = await fetch(`${MC}/verification/v3/send?${q}`, { method: "POST", headers: { accept: "*/*", authToken: await mcToken(z) } });
     let j2 = null;
     try {

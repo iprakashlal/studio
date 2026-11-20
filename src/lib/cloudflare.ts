@@ -23,7 +23,7 @@ export function cfStep(method: string, path: string): string {
 }
 export class CfError extends Error { constructor(msg: string, public status = 0, public code = 0) { super(msg); } }
 export type CfAccount = { id: string; name: string };
-export type CfOauthClient = { client_id: string; client_name?: string; visibility?: string; redirect_uris?: string[]; scopes?: string[]; token_endpoint_auth_method?: string; client_uri_verification?: { status?: string; text?: string } };
+export type CfOauthClient = { client_id: string; client_name?: string; visibility?: string; redirect_uris?: string[]; scopes?: string[]; token_endpoint_auth_method?: string; response_types?: string[]; grant_types?: string[]; client_uri_verification?: { status?: string; text?: string } };
 export type CfZone = { id: string; name: string; status: string; name_servers?: string[]; original_name_servers?: string[] | null; original_registrar?: string | null };
 /** Where to change nameservers, for the registrars people use most (else Cloudflare's guide). */
 export function registrarHelp(z: Pick<CfZone, "name" | "original_registrar" | "original_name_servers">): { name: string; url: string; how: string } {
@@ -67,6 +67,7 @@ export class Cloudflare {
   /** For setting up Connect Cloudflare: Cloudflare's permission names, and the Studio's own OAuth client. */
   oauthScopes() { return this.api<{ id: string; name: string; category?: string }[]>("GET", "/oauth/scopes"); }
   oauthClients(account: string) { return this.api<CfOauthClient[]>("GET", `/accounts/${account}/oauth_clients`); }
+  updateOauthClient(account: string, id: string, json: unknown) { return this.api<CfOauthClient>("PATCH", `/accounts/${account}/oauth_clients/${encodeURIComponent(id)}`, { json }); }
   createOauthClient(account: string, json: unknown) { return this.api<CfOauthClient>("POST", `/accounts/${account}/oauth_clients`, { json }); }
   createAccountToken(account: string, json: unknown) { return this.api<{ id: string; value?: string }>("POST", `/accounts/${account}/tokens`, { json }); }
   /** The account's workers.dev name, creating it when the account doesn't have one yet. */

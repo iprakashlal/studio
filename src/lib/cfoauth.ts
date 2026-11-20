@@ -66,6 +66,8 @@ export function cfOauthOpen(cfg: CfOauthCfg): { done: Promise<CfOauthGot>; cance
     try { win.close(); } catch { /* gone */ }
     if (back.error || !back.code) {
       if (back.error === "invalid_scope") throw new Error(`Cloudflare says this OAuth client isn't allowed one of the permissions the Studio asked for (${cfg.scopes}). Tick them on the client in Cloudflare, or correct the list under “Set up one-click connect”.`);
+      if (back.error === "unsupported_response_type" || /response_type/i.test(back.text || "")) throw new Error("This OAuth client isn't set to the “Code” response type, which the sign-in needs. Run “Let the Studio set it up” again (it makes a client with the right settings), or open the client in Cloudflare and set Response type: Code and Grant type: Authorization code.");
+      if (back.error === "unauthorized_client" || /grant/i.test(back.error || "")) throw new Error(`This OAuth client isn't allowed the authorization-code sign-in (${back.text || back.error}). Run “Let the Studio set it up” again, or set Grant type: Authorization code (and Refresh token) on the client in Cloudflare.`);
       if (back.error === "access_denied") throw new Error("You didn't allow it on Cloudflare. Nothing was changed.");
       throw new Error(`Cloudflare didn't complete the sign-in: ${back.text || back.error || "no code came back"}.`);
     }
@@ -150,7 +152,10 @@ export async function cfOauthSetup(cf: Cloudflare, account: CfAccount): Promise<
   let list: Awaited<ReturnType<Cloudflare["oauthClients"]>>;
   try { list = (await cf.oauthClients(account.id)) || []; }
   catch (e: any) { throw new Error(denied(e) ? `That token can't manage OAuth clients on ${account.name}. Create it from the link (permission: Account → OAuth Client → Edit) while signed in to that account, and paste it again.` : e?.message || "Couldn't reach Cloudflare."); }
-  const mine = list.find((c) => (c.redirect_uris || []).includes(redirect) && (!c.token_endpoint_auth_method || c.token_endpoint_auth_method === "none"));
+  // A client is only reused when the sign-in can work with it: the Studio's return page, no secret, and the "code"
+  // response type with the authorization-code grant. One made by hand with other choices is left alone.
+  const usable = (c: { response_types?: string[]; grant_types?: string[] }) => (!c.response_types || c.response_types.includes("code")) && (!c.grant_types || c.grant_types.includes("authorization_code"));
+  const mine = list.find((c) => (c.redirect_uris || []).includes(redirect) && (!c.token_endpoint_auth_method || c.token_endpoint_auth_method === "none") && usable(c));
   if (mine) {
     const scopes = (mine.scopes || []).filter((x) => !PROTOCOL.includes(x));
     if (!scopes.length) throw new Error("The OAuth client already on this account has no permissions. Delete it in Cloudflare (Manage Account → OAuth clients) and press Set it up again.");
@@ -174,6 +179,11 @@ export async function cfOauthSetup(cf: Cloudflare, account: CfAccount): Promise<
     catch (e: any) { if (denied(e)) throw e; made = await cf.createOauthClient(account.id, body); }
   } catch (e: any) { throw new Error(denied(e) ? `That token can read OAuth clients on ${account.name} but can't create one. Give it Account → OAuth Client → Edit and paste it again.` : e?.message || "Cloudflare didn't create the client."); }
   if (!made?.client_id) throw new Error("Cloudflare didn't give back a client ID. Check Manage Account → OAuth clients, and paste its Client ID by hand.");
+  // Cloudflare kept other choices than the ones sent: put them right, or say what to change.
+  if (!usable(made)) {
+    try { made = { ...made, ...(await cf.updateOauthClient(account.id, made.client_id, { response_types: ["code"], grant_types: ["authorization_code", "refresh_token"] })) }; } catch { /* said below */ }
+    if (!usable(made)) throw new Error(`The client was created (${CF_OAUTH_CLIENT_NAME}) but Cloudflare didn't set its response type to Code. Open it in Cloudflare (Manage Account → OAuth clients), set Response type: Code and Grant type: Authorization code, then paste its Client ID below.`);
+  }
   const scopes = ((made.scopes || []).filter((x) => !PROTOCOL.includes(x)).length ? (made.scopes || []).filter((x) => !PROTOCOL.includes(x)) : picked).join(" ");
   return { cfg: { client: made.client_id, scopes }, made: true, left, visibility: made.visibility || "private", txt: made.client_uri_verification?.text || "" };
 }

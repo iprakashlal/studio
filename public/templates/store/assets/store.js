@@ -347,6 +347,35 @@ function mustGive() {
   if (!n) return { email: true, phone: !!K.askPhone, askPhone: !!K.askPhone, either: false };
   return { email: acc || n === "email" || n === "both", phone: n === "phone" || n === "both", askPhone: true, either: n === "either" && !acc };
 }
+/* Email check (Checkout → “Verify the email address”): a 6-digit code is emailed, and the order carries the proof.
+   If the shop's database can't send the code at all, it gives a pass instead, so shoppers are never locked out. */
+const EV = { tok: "", email: "", sent: false, msg: "" };
+const evCan = () => !!CAN.em && !BE() && !PREVIEW && !!(HOST && HOST.api && HOST.site);
+const evEmail = () => { const i = $("#email"); return String(i ? i.value : EV.email).trim().toLowerCase(); };
+const evTok = () => (EV.tok && EV.email === evEmail() && +EV.tok.replace(/^s:/, "").split(".")[0] > Date.now() + 60000 ? EV.tok : "");
+function evBox() {
+  if (!evCan()) return "";
+  const bad = EV.msg ? `<p class="err" role="alert">${esc(EV.msg)}</p>` : "", t = evTok();
+  const h = t ? (t.startsWith("s:") ? "" : `<p class="soft"><b>Email address verified.</b></p>`)
+    : EV.sent ? `<div class="f"><label for="evcode">Code we emailed you</label><div class="ptsrow"><input class="in" id="evcode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="6 digits"><button type="button" class="btn" data-ev="check">Verify</button></div></div><button type="button" class="rm" data-ev="send">Send a new code</button>`
+    : `<button type="button" class="btn" data-ev="send">Verify this email address</button><p class="soft">We email a 6-digit code to this address before taking the order${mustGive().email ? "" : " (only if you give an email address)"}.</p>`;
+  return `<div class="ptsbox" aria-live="polite">${h}${bad}</div>`;
+}
+function evDraw() { const b = $("#evbox"); if (b) b.innerHTML = evBox(); }
+async function evAct(send) {
+  const email = evEmail(), code = String(($("#evcode") || {}).value || "").trim();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { EV.msg = "Enter your email address first."; return evDraw(); }
+  if (!send && !/^\d{6}$/.test(code)) { EV.msg = "Enter the 6-digit code."; return evDraw(); }
+  EV.msg = "";
+  try {
+    const r = await fetch(HOST.api + "/eotp/" + (send ? "send" : "check") + "/" + encodeURIComponent(HOST.site), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, code }) }), j = await r.json().catch(() => null);
+    if (!r.ok) EV.msg = (j && j.error) || "That didn't work. Please try again.";
+    else if (send && j && j.skip) { EV.tok = "s:" + j.skip; EV.email = email; EV.sent = false; }
+    else if (send) { EV.sent = true; EV.tok = ""; }
+    else { EV.tok = String(j.token || ""); EV.email = email; EV.sent = false; }
+  } catch (e) { EV.msg = "Couldn't reach us just now. Check your connection."; }
+  evDraw(); const c = $("#evcode"); if (c) c.focus();
+}
 /* Points (content.loyalty): a buyer proves their phone number with a WhatsApp code, sees their points and can take them
    off the order. The shop's database holds the points and works the discount out again itself. */
 const PTS = { tok: "", phone: "", info: null, use: false, sent: false, msg: "" };
@@ -391,12 +420,12 @@ async function ptsAct(send) {
   ptsDraw(); const c = $("#ptscode"); if (c) c.focus();
 }
 /** Gateways the shop's own database (Host to External Services) can charge with the owner's keys: the exact total, confirmed by itself. */
-let CAN = { rz: "", pg: [], pts: false };
+let CAN = { rz: "", pg: [], pts: false, em: false };
 const GWID = { razorpay: "rz", cashfree: "cf", phonepe: "pe", stripe: "st", paypal: "pp" }, GWNAME = { razorpay: "Razorpay", cashfree: "Cashfree", phonepe: "PhonePe", stripe: "Stripe", paypal: "PayPal" };
 const dbPay = (m) => !BE() && !PREVIEW && !!(HOST && HOST.api && HOST.site) && (m === "razorpay" ? !!CAN.rz : CAN.pg.includes(GWID[m]));
 function askCan() {
   if (askCan.done || PREVIEW || BE() || !(HOST && HOST.api && HOST.site) || PAGE !== "checkout") return; askCan.done = true;
-  fetch(HOST.api + "/site/" + encodeURIComponent(HOST.site) + "/can", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((j) => { if (!j) return; CAN = { rz: String(j.rz || ""), pg: Array.isArray(j.pg) ? j.pg : [], pts: !!j.pts }; if (!cameBack() && (CAN.rz || CAN.pg.length)) render(); else ptsDraw(); }).catch(() => {});
+  fetch(HOST.api + "/site/" + encodeURIComponent(HOST.site) + "/can", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((j) => { if (!j) return; CAN = { rz: String(j.rz || ""), pg: Array.isArray(j.pg) ? j.pg : [], pts: !!j.pts, em: !!j.em }; if (!cameBack() && (CAN.rz || CAN.pg.length)) render(); else { ptsDraw(); evDraw(); } }).catch(() => {});
 }
 function methods() {
   const P = C.payments, out = [], own = (n) => `You pay on ${n}'s secure page and come back here. The order is placed as soon as you've paid.`;
@@ -631,7 +660,7 @@ const PAGES = {
     const fld = (id, label, type = "text", req = true, full = false, ac = "") => `<div class="f${full ? " full" : ""}"><label for="${id}">${esc(label)}${req ? "" : ' <span class="soft">(optional)</span>'}</label><input class="in" id="${id}" name="${id}" type="${type}"${req ? " required" : ""}${ac ? ` autocomplete="${ac}"` : ""}${id === "email" && USER ? " readonly" : ""} value="${esc(me[id] || "")}"><span class="err" id="${id}-e"></span></div>`;
     return `<section class="page-h"><div class="wrap"><h1 class="fit">${ml(K.title)}</h1>${K.intro ? `<p>${ml(K.intro)}</p>` : ""}</div></section>
     <form class="wrap two" id="co" novalidate><div class="form">
-      <div class="box"><h2>Your details</h2><div class="fgrid">${fld("name", "Full name", "text", true, false, "name")}${fld("email", "Email", "email", mustGive().email, false, "email")}${mustGive().askPhone ? fld("phone", "Phone", "tel", mustGive().phone, false, "tel") : ""}</div>${mustGive().either ? `<p class="soft" style="font-size:13.5px;margin-top:8px">Give your email address or your phone number (or both), so we can reach you about the order.</p>` : ""}</div>
+      <div class="box"><h2>Your details</h2><div class="fgrid">${fld("name", "Full name", "text", true, false, "name")}${fld("email", "Email", "email", mustGive().email, false, "email")}${mustGive().askPhone ? fld("phone", "Phone", "tel", mustGive().phone, false, "tel") : ""}</div>${mustGive().either ? `<p class="soft" style="font-size:13.5px;margin-top:8px">Give your email address or your phone number (or both), so we can reach you about the order.</p>` : ""}<div id="evbox">${evBox()}</div></div>
       ${K.askAddress ? `<div class="box"><h2>Delivery address</h2><div class="fgrid">${fld("address", "Address", "text", true, true, "street-address")}${fld("city", "City", "text", true, false, "address-level2")}${fld("pin", "PIN / postcode", "text", true, false, "postal-code")}${fld("state", "State", "text", true, false, "address-level1")}${gstOn() && C.gst.askGstin ? fld("gstin", "GSTIN, for a business invoice", "text", false, true) : ""}</div>${shipOn() ? `<p class="soft" id="pin-msg" role="status" style="font-size:14px;margin-top:8px"></p>` : ""}</div>` : ""}
       ${K.askNotes ? `<div class="box"><div class="f"><label for="notes">Notes <span class="soft">(optional)</span></label><textarea class="in" id="notes" name="notes" rows="3"></textarea></div></div>` : ""}
       <div class="box"><h2>Payment</h2>${ms.length ? `<div class="pays" role="radiogroup" aria-label="Payment method">${ms.map((m, i) => `<label class="pay"><input type="radio" name="pm" value="${m.id}"${i === 0 ? " checked" : ""}><div><b>${esc(m.label)}</b><span>${esc(m.desc)}</span></div></label>`).join("")}</div>` : `<p class="note">Online payment isn't set up yet. Place the order and we'll contact you about payment.</p>`}</div>
@@ -846,6 +875,8 @@ function lang() { if (window.SiteLang) window.SiteLang.mount(C, { navs: ["#nav"]
 document.addEventListener("click", (e) => {
   const b = e.target.closest && e.target.closest("[data-pinchk]");
   if (b) { const i = $("#pinchk"), pin = i ? i.value.replace(/\D/g, "").slice(0, 6) : ""; const out = $("#pinres"); if (pin.length < 6) { if (out) { out.textContent = "Enter the 6 digits of your PIN code."; out.style.color = ""; } return; } store.set("pin", pin); const r = pinSays(pin); if (out) { out.textContent = r.text; out.style.color = r.ok === false ? "var(--sale,#c0392b)" : ""; } const rows = $("#sumrows"); if (rows) rows.innerHTML = summaryRows(totals()); return; }
+  const eb = e.target.closest && e.target.closest("[data-ev]");
+  if (eb) { evAct(eb.getAttribute("data-ev") === "send"); return; }
   const pb = e.target.closest && e.target.closest("[data-pts]");
   if (pb) { ptsAct(pb.getAttribute("data-pts") === "send"); return; }
   const v = e.target.closest && e.target.closest("[data-inv]");
@@ -854,6 +885,7 @@ document.addEventListener("click", (e) => {
 document.addEventListener("change", (e) => { if (e.target && e.target.id === "usepts") { PTS.use = e.target.checked; ptsDraw(); } });
 document.addEventListener("input", (e) => {
   if (e.target && e.target.id === "phone" && PTS.tok) ptsDraw(); // a changed number is no longer the proved one
+  if (e.target && e.target.id === "email" && (EV.tok || EV.sent)) { EV.sent = false; evDraw(); } // nor a changed email address
   if (!e.target || e.target.id !== "pin" || !shipOn()) return;
   const pin = e.target.value.replace(/\D/g, ""), msg = $("#pin-msg"), er = $("#pin-e"); if (er) er.textContent = "";
   if (pin.length < 6) { if (msg) msg.textContent = ""; return; }
@@ -1059,6 +1091,13 @@ function bindCheckout() {
       if (ph && !ph.required && ph.value.trim() && digits(ph.value).length < 8) say(ph, "Enter a phone number with at least 8 digits.");
       if (!bad && mustGive().either && em && !em.value.trim() && !(ph && ph.value.trim())) say(em, "Enter your email address or your phone number."); }
     if (bad) { bad.focus(); return; }
+    // the email address must be proved first, where the shop asks for that: the code is sent now if it wasn't yet
+    if (evCan() && evEmail() && !evTok()) {
+      const tell = (t) => { $("#co-err").textContent = t; const c = $("#evcode"); if (c) c.focus(); };
+      if (EV.sent) return tell("Enter the code we emailed you to verify your email address.");
+      $("#co-err").textContent = ""; await evAct(true);
+      if (!evTok()) return tell(EV.sent ? "We've emailed you a code. Enter it under your email address, then place the order." : EV.msg || "Please verify your email address first.");
+    }
     { const cc = $("#co-consent", form); if (cc && !cc.checked) { $("#co-err").textContent = "Please tick the box to agree before placing the order."; cc.focus(); return; } AGREED = cc ? "Agreed on " + new Date().toISOString() + ": " + consentWords("") : ""; }
     const fd = Object.fromEntries(new FormData(form).entries());
     if (shipOn() && fd.pin) {
@@ -1069,7 +1108,7 @@ function bindCheckout() {
     const lines = cartLines(), ms = methods(), m = ms.find((x) => x.id === fd.pm);
     if (BE() && !PREVIEW) return placeServerOrder(form, fd, lines, m);
     const o = { id: newOrderId(), at: new Date().toISOString(), method: m ? m.id : "none", methodLabel: m ? m.label : "To be arranged",
-      items: lines.map((l) => ({ id: l.p.id, name: l.p.name, opt: l.opt, qty: l.qty, price: Number(l.p.price) })), t: totals(lines), ...(ptsProved() ? { otp: PTS.tok } : {}),
+      items: lines.map((l) => ({ id: l.p.id, name: l.p.name, opt: l.opt, qty: l.qty, price: Number(l.p.price) })), t: totals(lines), ...(ptsProved() ? { otp: PTS.tok } : {}), ...(evCan() && evTok() ? { et: evTok() } : {}),
       c: { name: fd.name || "", email: fd.email || "", phone: fd.phone || "", address: fd.address || "", city: fd.city || "", pin: fd.pin || "", state: fd.state || "", notes: fd.notes || "", gstin: String(fd.gstin || "").trim().toUpperCase().slice(0, 15) } };
     store.set("me", { name: o.c.name, email: o.c.email, phone: o.c.phone, address: o.c.address, city: o.c.city, pin: o.c.pin, state: o.c.state });
     const placeIt = () => placeOrder(o);
@@ -1081,7 +1120,7 @@ function bindCheckout() {
 let AGREED = ""; // the consent given at checkout, saved with the order
 const orderData = (o) => ({ ...(AGREED ? { consent: AGREED } : {}), type: "Order", order_no: o.id, name: o.c.name, phone: o.c.phone, email: o.c.email, mode: "Shop order", address: [o.c.address, o.c.city, o.c.pin, o.c.state].filter(Boolean).join(", "),
   items: o.items.map((i) => `${i.qty} × ${i.name}${i.opt ? ` (${i.opt})` : ""} = ${money(i.price * i.qty)}`).join("\n"), total: money(o.t.total), payment: o.utr ? "UPI, paid before ordering" : o.rz || o.pg ? `Paid online (${GWNAME[o.method]})` : o.methodLabel, utr: o.utr || "",
-  ...(o.rz ? { rz_order: o.rz.razorpay_order_id, rz_payment: o.rz.razorpay_payment_id, rz_sig: o.rz.razorpay_signature } : {}), ...(o.pg ? { pay_gw: o.pg.gw, pay_ref: o.pg.ref } : {}), notes: o.c.notes, ...(o.otp ? { otp_token: o.otp } : {}), message: orderText(o) });
+  ...(o.rz ? { rz_order: o.rz.razorpay_order_id, rz_payment: o.rz.razorpay_payment_id, rz_sig: o.rz.razorpay_signature } : {}), ...(o.pg ? { pay_gw: o.pg.gw, pay_ref: o.pg.ref } : {}), notes: o.c.notes, ...(o.otp ? { otp_token: o.otp } : {}), ...(o.et ? { email_token: o.et } : {}), message: orderText(o) });
 /** The order as the database can price it again (what was bought, and the points asked for). */
 const orderCart = (o) => ({ items: o.items.map((i) => ({ id: i.id, qty: i.qty, opt: i.opt || "" })), pin: o.c.pin || "", points: (o.t && o.t.pts) || 0 });
 const sendOrder = (o) => fetch(HOST.api + "/enquire/" + encodeURIComponent(HOST.site), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ page: "checkout.html", data: orderData(o), cart: orderCart(o) }) });

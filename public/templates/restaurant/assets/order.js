@@ -22,10 +22,13 @@
   try { const t = new URLSearchParams(location.search).get("table"); if (t) { ui.form.table = t.slice(0, 12); ui.table = true; } } catch (e) {}
 
   /** What the site's database offers this page: a WhatsApp code for the guest's number, and online payment (its public key id). */
-  let can = { otp: false, pts: false, rz: "", pg: [] }, canAsked = false;
+  let can = { otp: false, pts: false, em: false, rz: "", pg: [] }, canAsked = false;
   /** Gateways other than Razorpay: the guest pays on the gateway's own page and comes back here. */
   const GW = { cf: { key: "cashfree", name: "Cashfree", label: "Pay online with Cashfree (UPI, card, netbanking)" }, pe: { key: "phonepe", name: "PhonePe", label: "Pay with PhonePe (UPI, card, netbanking)" }, st: { key: "stripe", name: "Stripe", label: "Pay by card (Stripe)" }, pp: { key: "paypal", name: "PayPal", label: "Pay with PayPal" } };
   const digits = (v) => String(v || "").replace(/\D/g, "").slice(-10);
+  /** The proof that the email address typed is the guest's own (a code sent to it), or the pass given when no code could be sent. */
+  const elow = () => String(ui.form.email || "").trim().toLowerCase();
+  const etok = () => (ui.eotp && ui.eotp.email === elow() && +String(ui.eotp.token).replace(/^s:/, "").split(".")[0] > Date.now() + 60000 ? ui.eotp.token : "");
   const verified = () => !!(ui.otp && ui.otp.token && ui.otp.phone === digits(ui.form.phone) && +ui.otp.token.split(".")[0] > Date.now() + 60000);
   const esc = (s) => A.esc(s);
   const num = (p) => { const n = parseFloat(String(p == null ? "" : p).replace(/[^\d.]/g, "")); return isFinite(n) ? n : NaN; };
@@ -248,7 +251,7 @@
     if (!sl.some((s) => s.v === f.when)) f.when = sl.length ? sl[0].v : "";
     if (!ps.some((p) => p.id === f.pay)) f.pay = ps.length ? ps[0].id : "";
     return `<form class="od-form" id="od-form" novalidate>
-      <fieldset><legend>Your details</legend>${inp("name", "Name", 'autocomplete="name" required')}${inp("phone", "Mobile number" + (must().phone ? "" : " (optional)"), 'type="tel" inputmode="tel" autocomplete="tel"' + (must().phone ? " required" : ""))}${must().askEmail ? inp("email", "Email" + (must().email ? "" : " (optional)"), 'type="email" autocomplete="email"' + (must().email ? " required" : "")) : ""}${must().either ? `<p class="od-live">Give your mobile number or your email address (or both), so we can reach you about the order.</p>` : ""}
+      <fieldset><legend>Your details</legend>${inp("name", "Name", 'autocomplete="name" required')}${inp("phone", "Mobile number" + (must().phone ? "" : " (optional)"), 'type="tel" inputmode="tel" autocomplete="tel"' + (must().phone ? " required" : ""))}${must().askEmail ? inp("email", "Email" + (must().email ? "" : " (optional)"), 'type="email" autocomplete="email"' + (must().email ? " required" : "")) : ""}${can.em && must().askEmail ? `<div class="od-otp" id="od-eotp">${etok() ? (etok().startsWith("s:") ? "" : `<p class="od-ok">Email address verified.</p>`) : ui.eSent ? `<div class="of"><label for="of-ecode">Code we emailed you</label><div class="od-code"><input id="of-ecode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="6 digits"><button type="button" class="btn sec" data-act="eotpcheck">Verify</button></div></div><button type="button" class="link od-more" data-act="eotpsend">Send a new code</button>` : `<button type="button" class="btn sec" data-act="eotpsend">Verify this email address</button><p class="od-live">We email a 6-digit code to this address before taking the order${must().email ? "" : " (only if you give an email address)"}.</p>`}${ui.eMsg ? `<p class="od-bad" role="alert">${esc(ui.eMsg)}</p>` : ""}</div>` : ""}${must().either ? `<p class="od-live">Give your mobile number or your email address (or both), so we can reach you about the order.</p>` : ""}
         ${can.otp || (can.pts && loy().on) ? `<div class="od-otp" id="od-otp">${verified() ? `<p class="od-ok">Mobile number verified on WhatsApp.</p>` : ui.otpSent ? `<div class="of"><label for="of-code">Code we sent you on WhatsApp</label><div class="od-code"><input id="of-code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="6 digits"><button type="button" class="btn sec" data-act="otpcheck">Verify</button></div></div><button type="button" class="link od-more" data-act="otpsend">Send a new code</button>` : can.otp ? `<button type="button" class="btn sec" data-act="otpsend">Verify this number on WhatsApp</button><p class="od-live">We send a 6-digit code to this number on WhatsApp before taking the order.</p>` : `<button type="button" class="btn sec" data-act="otpsend">Verify this number to use your points</button><p class="od-live">Optional. We send a 6-digit code to this number on WhatsApp, then show the points you can take off this order.</p>`}${ui.otpMsg ? `<p class="od-bad" role="alert">${esc(ui.otpMsg)}</p>` : ""}</div>` : ""}${ptsBox()}</fieldset>
       ${m === "delivery" ? `<fieldset><legend>Delivery address</legend>${inp("line1", "Flat, house or building", 'autocomplete="address-line1" required')}${inp("area", "Street and area", 'autocomplete="address-line2" required')}<div class="of2">${inp("landmark", "Landmark (optional)")}${inp("pin", "PIN code", 'inputmode="numeric" autocomplete="postal-code" maxlength="10"' + (o.askPin !== false ? " required" : ""))}</div>
         <div class="od-tips" role="radiogroup" aria-label="Save this address as">${["Home", "Work", "Other"].map((l) => `<button type="button" class="chip" role="radio" data-act="label" data-id="${l}" aria-checked="${f.label === l}">${l}</button>`).join("")}</div>
@@ -392,6 +395,7 @@
     }
     if (m === "dinein" && !String(f.table).trim()) return bad("table", "Please enter your table number.");
     if (can.otp && !A.PREVIEW && !verified()) return bad("phone", "Please verify your mobile number on WhatsApp first.");
+    if (can.em && !A.PREVIEW && elow() && !etok()) { if (!ui.eSent) return eotp(true).then(() => { if (etok()) return place(); ui.err = "We've emailed you a code. Enter it above to verify your email address."; over(true); const c = $("#of-ecode", root); c && c.focus(); }); return bad("ecode", "Enter the code we emailed you to verify your email address."); }
     if (!sl.some((s) => s.v === f.when)) return bad("when", "Please choose a time.");
     if (b.short) return bad("name", `The minimum order is ${txt(b.min)}.`);
     const ps = pays(), pay = ps.find((p) => p.id === f.pay); if (!pay) return bad("name", "Please choose how you'll pay.");
@@ -400,6 +404,7 @@
     const key = Array.from(crypto.getRandomValues(new Uint8Array(12)), (x) => x.toString(16).padStart(2, "0")).join("");
     const od = { consent: agree() ? "Agreed on " + new Date().toISOString() + ": " + agree() : "", id: newId(), k: key, at: Date.now(), mode: m, when: f.when, whenLabel: whenLabel(f.when, sl), items: cart.map((l) => ({ ...l })), bill: b, taxLabel: o.taxLabel || "Tax", pay: pay.id, payLabel: pay.label, upiId: String((o.pay || {}).upiId || "").trim(), payee: (o.pay || {}).payee || "", notes: String(f.notes || "").trim(), cutlery: !!f.cutlery, intro: o.intro || "", wa: o.whatsapp || C.contact.whatsapp || "",
       pin: String(f.pin || "").trim(), area: String(f.area || "").trim(),
+      et: etok(),
       c: { name: String(f.name).trim(), phone: String(f.phone).trim(), email: String(f.email || "").trim(), table: String(f.table || "").trim(), address: m === "delivery" ? [f.line1, f.area, f.landmark ? "Near " + f.landmark : "", f.pin].map((x) => String(x || "").trim()).filter(Boolean).join(", ") + ` (${f.label})` : "" }, status: "new", sent: false, live: false };
     // Paying by UPI comes before the order is placed.
     if (pay.id === "upi") { ui.paying = od; ui.utr = ""; ui.drawer = "pay"; over(); return; }
@@ -467,7 +472,7 @@
   /** The cart as the database reads it (to hand the order to the restaurant's billing system when one is connected). */
   function cartOf(od) { return { mode: od.mode, pin: od.pin || "", area: od.area || "", coupon: od.bill.code || "", tip: od.bill.tip || 0, points: od.bill.pts || 0, items: od.items.map((l) => ({ id: l.id, qty: l.qty, variant: l.variant, addons: (l.addons || []).map((a) => a.label) })) }; }
   /** What is saved for an order (it goes to the site's database under Purchased orders). */
-  function orderData(od) { const m = od.mode, b = od.bill, pay = { label: od.payLabel }; return { ...(od.consent ? { consent: od.consent } : {}), type: "Order", order_no: od.id, okey: od.k, name: od.c.name, phone: od.c.phone, email: od.c.email, mode: MODES[m], when: od.whenLabel, address: od.c.address, table: od.c.table, items: od.items.map((l) => `${l.qty} × ${l.name}${lineText(l) ? ` (${lineText(l)})` : ""}${l.note ? ` [${l.note}]` : ""} = ${txt(l.unit * l.qty)}`).join("\n"), total: txt(b.total), payment: od.utr ? "UPI, paid before ordering" : od.rz ? "Paid online (Razorpay)" : od.pg ? `Paid online (${GW[od.pg.gw].name})` : pay.label, utr: od.utr || "", ...(od.pg ? { pay_gw: od.pg.gw, pay_ref: od.pg.ref, otp_token: od.pg.otp || undefined } : {}), ...(od.rz ? { rz_order: od.rz.razorpay_order_id, rz_payment: od.rz.razorpay_payment_id, rz_sig: od.rz.razorpay_signature } : {}), ...(ui.otp ? { otp_token: ui.otp.token } : {}), message: orderText(od) }; }
+  function orderData(od) { const m = od.mode, b = od.bill, pay = { label: od.payLabel }; return { ...(od.consent ? { consent: od.consent } : {}), type: "Order", order_no: od.id, okey: od.k, name: od.c.name, phone: od.c.phone, email: od.c.email, mode: MODES[m], when: od.whenLabel, address: od.c.address, table: od.c.table, items: od.items.map((l) => `${l.qty} × ${l.name}${lineText(l) ? ` (${lineText(l)})` : ""}${l.note ? ` [${l.note}]` : ""} = ${txt(l.unit * l.qty)}`).join("\n"), total: txt(b.total), payment: od.utr ? "UPI, paid before ordering" : od.rz ? "Paid online (Razorpay)" : od.pg ? `Paid online (${GW[od.pg.gw].name})` : pay.label, utr: od.utr || "", ...(od.pg ? { pay_gw: od.pg.gw, pay_ref: od.pg.ref, otp_token: od.pg.otp || undefined } : {}), ...(od.rz ? { rz_order: od.rz.razorpay_order_id, rz_payment: od.rz.razorpay_payment_id, rz_sig: od.rz.razorpay_signature } : {}), ...(ui.otp ? { otp_token: ui.otp.token } : {}), ...(od.et ? { email_token: od.et } : {}), message: orderText(od) }; }
   /** The order is placed: the cart empties and the page shows it. */
   function shown(od) {
     cart = []; save(); ui.usePts = false; ui.pts = null; ui.coupon = ""; st.set("coupon", ""); ui.tip = 0; ui.form.notes = ""; ui.paying = null; ui.utr = ""; ui.err = "";
@@ -475,6 +480,21 @@
     ui.busy = false; ui.done = od; ui.drawer = "done";
     // The whole page is drawn again, so “Your orders” shows in the toolbar.
     const host = root.parentNode, y = scrollY; host.innerHTML = page(A); bind(A); scrollTo(0, y);
+  }
+  /** The guest's email address is checked with a code sent to it (only when the owner switched that on). */
+  async function eotp(send) {
+    sync(); const be = A.backend(), email = elow(), code = String(($("#of-ecode", root) || {}).value || "").trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { ui.eMsg = "Enter your email address first."; return over(true); }
+    if (!send && !/^\d{6}$/.test(code)) { ui.eMsg = "Enter the 6-digit code."; return over(true); }
+    ui.eMsg = "";
+    try {
+      const r = await fetch(be.cf + "/eotp/" + (send ? "send" : "check") + "/" + encodeURIComponent(be.site), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, code }) }), j = await r.json().catch(() => null);
+      if (!r.ok) ui.eMsg = (j && j.error) || "That didn't work. Please try again.";
+      else if (send && j && j.skip) { ui.eotp = { email, token: "s:" + j.skip }; ui.eSent = false; } // no code could be sent: the order isn't held up for it
+      else if (send) { ui.eSent = true; A.toast("Code sent to your email"); }
+      else { ui.eotp = { email, token: j.token }; ui.eSent = false; ui.err = ""; }
+    } catch (e) { ui.eMsg = "Couldn't reach us just now. Check your connection."; }
+    over(true); const c = $("#of-ecode", root); c && c.focus();
   }
   /** The guest's number is checked with a code sent on WhatsApp (only when the owner switched that on). */
   async function otp(send) {
@@ -537,6 +557,7 @@
     else if (a === "checkout") { const c = $("#od-cutlery", root); if (c) ui.form.cutlery = c.checked; ui.err = ""; ui.drawer = "checkout"; over(); }
     else if (a === "place") place();
     else if (a === "otpsend" || a === "otpcheck") otp(a === "otpsend");
+    else if (a === "eotpsend" || a === "eotpcheck") eotp(a === "eotpsend");
     else if (a === "unpay") { ui.err = ""; ui.drawer = "checkout"; over(); }
     else if (a === "paid") {
       const v = String(($("#of-utr", root) || {}).value || "").replace(/[\s-]/g, ""); ui.utr = v;
@@ -572,7 +593,7 @@
     if (ui.drawer === "done" && ui.done) track(ui.done);
     const be = A.backend();
     if (!bind.back) { bind.back = true; cameBack(); }
-    if (!canAsked && !A.PREVIEW && be && be.cf) { canAsked = true; fetch(be.cf + "/site/" + encodeURIComponent(be.site) + "/can", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((j) => { if (j) { can = { otp: !!j.otp, pts: !!j.pts, rz: String(j.rz || ""), pg: Array.isArray(j.pg) ? j.pg : [] }; if (ui.drawer === "checkout") { sync(); over(true); } } }).catch(() => {}); }
+    if (!canAsked && !A.PREVIEW && be && be.cf) { canAsked = true; fetch(be.cf + "/site/" + encodeURIComponent(be.site) + "/can", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((j) => { if (j) { can = { otp: !!j.otp, pts: !!j.pts, em: !!j.em, rz: String(j.rz || ""), pg: Array.isArray(j.pg) ? j.pg : [] }; if (ui.drawer === "checkout") { sync(); over(true); } } }).catch(() => {}); }
   }
   window.RestOrder = { page, bind };
 })();

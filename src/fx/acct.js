@@ -120,14 +120,18 @@
     draw();
   }
   function open() { if (!cfg || !can) return; style(); if (!modal) { modal = document.createElement("div"); modal.className = "sa-back"; modal.innerHTML = `<div class="sa-modal" role="dialog" aria-modal="true" aria-label="My account"></div>`; modal.addEventListener("mousedown", (e) => { if (e.target === modal) shut(); }); document.body.appendChild(modal); } data = null; ui.msg = ""; draw(); if (me) load(); else { const f = document.getElementById("sa-val"); if (f) f.focus(); } }
-  function shut() { if (modal) { modal.remove(); modal = null; } }
+  /** The page's address with #account on the end opens this (a link to "My account" from anywhere, or from a message). */
+  const asked = () => /^#account$/i.test(location.hash);
+  function shut() { if (modal) { modal.remove(); modal = null; } if (asked()) try { history.replaceState(null, "", location.pathname + location.search); } catch (e) { /* the address stays */ } }
+  addEventListener("hashchange", () => { if (asked() && cfg && can && !modal) open(); });
   function out() { me = null; data = null; try { localStorage.removeItem(key()); } catch (e) { /* private window */ } shut(); changed(); draw(); }
 
   window.SiteAcct = {
     /** { api, site, acct (from the database's "what can this site do"), money(n), track(order), onChange(user) } */
     init(o) { cfg = o; can = o.acct || null; me = null; try { me = JSON.parse(localStorage.getItem(key()) || "null"); } catch (e) { me = null; }
       if (me && !(+String(me.pass).split(".")[0] > Date.now() && me.key)) me = null;
-      if (me && can && !kinds().includes(me.kind)) me = null; },
+      if (me && can && !kinds().includes(me.kind)) me = null;
+      if (asked() && can && !modal) setTimeout(open, 0); },
     /** Signing in is offered here. */
     on: () => !!(cfg && can),
     user: () => me,

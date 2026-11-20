@@ -326,6 +326,13 @@ export function HostDialog({ studio, project, tpl, draft, dirty, save, onIndex, 
   return (
     <Modal title={host ? `Hosted on ${PAGES_LABEL[host.kind]}` : "Host to External Services"} wide onClose={onClose}
       footer={<><button className="btn" onClick={onClose}>Close</button><button className="btn btn-pri" disabled={!!busy || !pagesOk || !dbOk || (mustFix && !anyway)} onClick={publish}>{busy === "publish" ? "Publishing…" : dbMoving ? `Move to Cloudflare and publish v${project.version + 1}` : host && !moving ? `Publish v${project.version + 1}` : `Move the site and publish v${project.version + 1}`}</button></>}>
+      {/* What publishing is doing, at the top where it is seen without scrolling. */}
+      {step && (
+        <ol ref={(el) => { if (el && !el.dataset.seen) { el.dataset.seen = "1"; el.scrollIntoView({ block: "start", behavior: "smooth" }); } }} aria-label="Publishing progress" className="flex flex-col gap-1 rounded-lg border border-brand-500/40 bg-ink-950 p-3 text-[13px]" aria-live="polite">
+          {step.i < 0 && <li>{step.detail}</li>}
+          {stepsFor(pagesKind).map((s, i) => <li key={s} className={i < step.i ? "text-emerald-300" : i === step.i ? "text-ink-100" : "text-ink-500"}>{i < step.i ? "✓" : i === step.i ? "…" : "·"} {s}{i === step.i && step.detail ? ` (${step.detail})` : ""}</li>)}
+        </ol>
+      )}
       {!host && <p className="text-sm text-ink-300">Moves this site off GitHub: <b>Cloudflare</b> or <b>Netlify</b> serves the pages, and <b>Cloudflare</b> or <b>Supabase</b> holds the content, photos and who can edit. The site keeps its own CMS (with email sign-in), and stays in step with this project.{project.publish ? " The GitHub copy isn't deleted; it simply stops being updated." : ""}</p>}
       {host && <p className="text-sm text-ink-300">Live at <a className="font-semibold text-brand-300 underline" href={siteAddress(host)} target="_blank" rel="noopener">{siteAddress(host)}</a> · {PAGES_LABEL[host.kind]} site <b>{host.siteName}</b> · content in {host.cf ? "Cloudflare" : "Supabase"}.</p>}
 
@@ -446,12 +453,6 @@ export function HostDialog({ studio, project, tpl, draft, dirty, save, onIndex, 
       {host && !dbMoving && <Toggle id="hd-content" label="Replace the site's content with this version" checked={withContent} onChange={setWithContent} />}
       {host && !dbMoving && <p className="hint">{withContent ? "Overwrites the live content in the database, including edits made in the site's own CMS. Photos it already has aren't uploaded again." : "Updates pages, design code and the CMS only. Content edited in the site's own CMS is kept."}</p>}
       <Field label="Version note (optional)" htmlFor="hd-note"><input id="hd-note" className="input" value={note} onChange={(e) => setNote(e.target.value)} /></Field>
-      {step && (
-        <ol className="flex flex-col gap-1 rounded-lg border border-brand-500/40 bg-ink-950 p-3 text-[13px]" aria-live="polite">
-          {step.i < 0 && <li>{step.detail}</li>}
-          {stepsFor(pagesKind).map((s, i) => <li key={s} className={i < step.i ? "text-emerald-300" : i === step.i ? "text-ink-100" : "text-ink-500"}>{i < step.i ? "✓" : i === step.i ? "…" : "·"} {s}{i === step.i && step.detail ? ` (${step.detail})` : ""}</li>)}
-        </ol>
-      )}
       {!pagesOk || !dbOk ? (
         <div className="rounded-lg border border-amber-400/40 bg-amber-400/5 px-3 py-2.5 text-[13px] text-amber-100" role="status">
           <b>Publish is waiting for:</b>

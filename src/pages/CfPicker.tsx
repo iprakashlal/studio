@@ -65,6 +65,8 @@ export function useCfAccount(studioToken: string, nf: Netlify | null | undefined
   // ---- Connect Cloudflare: Cloudflare's own sign-in window in place of a pasted token.
   const [oc, setOc] = useState(cfOauthCfg.get), [ocEdit, setOcEdit] = useState(cfOauthCfg.get), [ocNote, setOcNote] = useState(""), [ocBusy, setOcBusy] = useState("");
   const [ocFlow, setOcFlow] = useState<{ cancel: () => void } | null>(null);
+  /** The connection box: open until connected (when one-click connect is set up), then folded; null = by itself. */
+  const [boxOpen, setBoxOpen] = useState<boolean | null>(null);
   /** Keeps a long-lasting token for the allowed accounts on the Studio's database (a secret on the owner's own
    *  Cloudflare), for the accounts it doesn't hold one for yet. Nothing is written to this device but which accounts
    *  are kept. Returns what to tell the person. */
@@ -160,11 +162,10 @@ export function useCfAccount(studioToken: string, nf: Netlify | null | undefined
     setSuBusy("");
   };
   const ocUi = (
-    <div className="flex flex-col gap-2 rounded-lg border border-ink-700 p-3" aria-label="Connect Cloudflare">
+    <div className="flex flex-col gap-2" aria-label="Connect Cloudflare">
       {oc.client ? <>
         <p><button type="button" className="btn btn-sm btn-pri" disabled={!!ocBusy || !helper.ready} onClick={oauthConnect}>{ocBusy ? "Connecting…" : "Connect Cloudflare"}</button> <span className="text-ink-400">A Cloudflare window opens: choose the account, press <b>Allow</b>, and you're back here. No token to create or paste. {persist ? "Nothing is kept on this device: the sign-in is used in this tab only, and the token the Studio makes for your other devices is kept on your Studio's database." : "Used now only, not kept."}</span></p>
         {ocBusy && <p role="status" className="text-ink-300">{ocBusy}… {ocFlow && <button type="button" className="text-brand-300 underline" onClick={() => ocFlow.cancel()}>Cancel</button>}</p>}
-        {ocNote && <p role="status" className="text-emerald-300">{ocNote}</p>}
       </> : <p className="text-ink-300"><b className="text-ink-100">Connect Cloudflare in one click.</b> Set it up once below, then no token needs creating or pasting.</p>}
       <details className="text-ink-400" open={!oc.client}>
         <summary className="cursor-pointer select-none">{oc.client ? "One-click connect settings" : "Set up one-click connect (once)"}</summary>
@@ -178,7 +179,8 @@ export function useCfAccount(studioToken: string, nf: Netlify | null | undefined
           {suAsk && <label className="flex flex-col gap-1"><span className="label">Cloudflare account ID (32 letters and numbers; not a secret)</span><input aria-label="Cloudflare account ID" className="input font-mono text-xs" autoComplete="off" value={suAcc} onChange={(e) => setSuAcc(e.target.value)} placeholder="e.g. 0123456789abcdef0123456789abcdef" /></label>}
           {suErr && <p role="alert" className="text-red-300">{suErr}</p>}
         </div>
-        <p className="mt-2 font-semibold text-ink-300">Or do it by hand</p>
+        <details className="mt-2" open={!oc.client} aria-label="Set up by hand">
+        <summary className="cursor-pointer select-none font-semibold text-ink-300">{oc.client ? "The client the Studio uses (and setting it up by hand)" : "Or do it by hand"}</summary>
         <ol className="mt-1.5 list-decimal space-y-1 pl-5">
           <li>In Cloudflare open <a className="text-brand-300 underline" href="https://dash.cloudflare.com/?to=/:account/oauth-clients" target="_blank" rel="noopener noreferrer">Manage Account → OAuth clients ↗</a> and press <b>Create client</b>.</li>
           <li>Token authentication method: <b>None</b> (a browser app, no secret). Grant types: <b>Authorization code</b> and <b>Refresh token</b>.</li>
@@ -192,6 +194,7 @@ export function useCfAccount(studioToken: string, nf: Netlify | null | undefined
           <label className="flex flex-col gap-1"><span className="label">Permissions to ask for (Cloudflare's scope names, as shown on the client)</span><input aria-label="Cloudflare OAuth permissions" className="input font-mono text-xs" autoComplete="off" value={ocEdit.scopes} onChange={(e) => setOcEdit({ ...ocEdit, scopes: e.target.value })} placeholder={CF_OAUTH_SCOPES} /></label>
           <div className="flex items-center gap-2"><button type="button" className="btn btn-sm" disabled={ocEdit.client.trim() === oc.client && ocEdit.scopes.trim() === oc.scopes} onClick={saveOc}>Save</button><span>Saved on this device. Until the client is made public in Cloudflare, it works for members of the account it was created in.</span></div>
         </div>
+        </details>
       </details>
       {suNote && <p role="status" aria-label="Set-up result" className="text-emerald-300">{suNote}</p>}
       {suTxt && <p className="text-ink-300">For making it public later, Cloudflare checks your domain with this DNS TXT record: <code className="select-all break-all font-mono text-xs text-ink-200">{suTxt}</code></p>}
@@ -240,12 +243,22 @@ export function useCfAccount(studioToken: string, nf: Netlify | null | undefined
   const ui = (
     <div className="flex flex-col gap-2.5 text-[13px]">
       {helper.ui}
-      {ocUi}
-      <p>{oc.client && <span className="text-ink-400">Or paste a token: </span>}<a className={oc.client ? "btn btn-sm" : "btn btn-sm btn-pri"} href={CF_DB_TOKEN_PAGE} target="_blank" rel="noopener noreferrer">Create a Cloudflare token ↗</a> <span className="text-ink-400">The permissions are already ticked (Workers, D1, account settings, and your domains and their DNS, so the Studio can connect a domain). Press <b>Continue to summary → Create Token</b>, copy it and paste it here. {persist ? "It's kept encrypted on this device only." : "Used now only, not kept."}</span></p>
-      <div className="flex gap-2">
+      <details className="group rounded-lg border border-ink-700" aria-label="Cloudflare connection" open={boxOpen ?? (!acc || !oc.client)} onToggle={(e) => { if (e.target !== e.currentTarget) return; const o = e.currentTarget.open; if (o !== (boxOpen ?? (!acc || !oc.client))) setBoxOpen(o); }}>
+        <summary className="flex cursor-pointer select-none items-center gap-2 px-3 py-2"><span className={`h-2 w-2 rounded-full ${acc ? "bg-emerald-400" : "bg-ink-500"}`} /><b className="text-ink-100">Cloudflare connection</b><span className="text-ink-400">{acc ? (cfMemTokens.has(tok.trim()) ? "signed in for this tab" : "connected") : "not connected"}</span><span className="ml-auto text-[12.5px] text-brand-300 underline group-open:hidden">Change</span><span className="ml-auto hidden text-[12.5px] text-brand-300 underline group-open:inline">Hide</span></summary>
+        <div className="flex flex-col gap-2.5 px-3 pb-3">
+          {ocUi}
+          <details aria-label="Paste a token" open={!oc.client}>
+            <summary className="cursor-pointer select-none text-ink-400">{oc.client ? "Paste a token instead" : "Paste a Cloudflare token"}</summary>
+            <p className="mt-1.5 text-ink-400"><a className="text-brand-300 underline" href={CF_DB_TOKEN_PAGE} target="_blank" rel="noopener noreferrer">Create a Cloudflare token ↗</a> (permissions already ticked), then paste it here. {persist ? "Kept encrypted on this device only." : "Used now only, not kept."}</p>
+            <div className="mt-1.5">
+            <div className="flex gap-2">
         <input aria-label="Cloudflare API token" className="input min-w-0 flex-1 font-mono text-xs" type="password" autoComplete="off" value={tok} onChange={(e) => { setTok(e.target.value); setAccounts(null); }} placeholder="Cloudflare API token" />
         <button type="button" className="btn btn-sm" disabled={!tok.trim() || !!busy || !helper.ready} onClick={connect}>{busy && !accounts ? busy + "…" : "Connect"}</button>
-      </div>
+            </div>
+            </div>
+          </details>
+        </div>
+      </details>
       {site && acc ? (() => {
         // One site: its own account, from every account this device has a token for.
         const cur = site.id || acc.id, known = allAccounts.some((a) => a.id === cur);
@@ -261,6 +274,7 @@ export function useCfAccount(studioToken: string, nf: Netlify | null | undefined
         {accounts && accounts.length > 1 && <label className="flex flex-col gap-1"><span className="label">Cloudflare account</span><select className="input" aria-label="Cloudflare account" value={account} onChange={(e) => pickAccount(e.target.value)}>{accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select></label>}
         {acc && <p className="text-emerald-300">Connected to {acc.name}.</p>}
       </>}
+      {ocNote && <p role="status" aria-label="Connect Cloudflare result" className="text-emerald-300">{ocNote}</p>}
       {err && <p role="alert" className="text-red-300">{err}</p>}
       {manage && others}
     </div>

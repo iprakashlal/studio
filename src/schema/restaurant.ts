@@ -104,6 +104,7 @@ const schema: Category[] = [
         { t: "note", text: "A price that is only a number gets the currency sign in front; anything else shows as you type it (“Market price”, “₹250 / ₹450”). The menu's look is under Theme & layout → Food menu & gallery." },
       ] },
       { title: "Fill in from a photo of your menu", studio: true, fields: [{ t: "pamphlet", text: "Have a printed menu, a menu PDF or photos of the menu board? Upload it and the sections, dishes and prices are filled in for you.", button: "Fill in from my menu" }] },
+      { title: "Dish photos in bulk", fields: [{ t: "bulkPhotos", kind: "dish" }] },
       { title: "Sections and dishes", fields: [{ t: "list", path: "food.categories", max: 40, title: (it) => `${it.name || "Section"} · ${(it.items || []).length} dish${(it.items || []).length === 1 ? "" : "es"}`, add: () => ({ name: "New section", note: "", image: null, items: [newDish()] }),
         item: [g2({ t: "text", path: "name", label: "Section name", ph: "Starters" }, { t: "text", path: "note", label: "Note (optional)", ph: "Served till 4 pm" }),
           { t: "image", path: "image", label: "Section photo (magazine style)", hint: "Shown beside the section in the magazine menu style." },

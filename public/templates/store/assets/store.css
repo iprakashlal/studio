@@ -631,3 +631,12 @@ html[data-crumbs=off] :is(.crumbs,.sp-crumbs,.solo-top){display:none}
 
 /* Points at checkout */
 .ptsbox{display:grid;gap:8px;margin:12px 0}.ptsbox:empty{display:none}.ptsbox p{margin:0;font-size:13.5px}.ptsrow{display:flex;gap:8px}.ptsrow .in{flex:1;min-width:0}
+
+/* Verify inside the box it verifies */
+.in-v{position:relative;display:block}.in-v.has .in{padding-right:108px}
+.in-vbtn,.in-tick{position:absolute;right:5px;top:50%;transform:translateY(-50%);display:inline-flex;align-items:center;height:32px;padding:0 13px;border-radius:calc(var(--r)*.45 + 2px);font-weight:700;font-size:13.5px;line-height:1;white-space:nowrap}
+.in-vbtn{border:0;background:var(--text);color:var(--bg);cursor:pointer}.in-vbtn:hover{opacity:.88}
+.in-tick{color:#1E7A46;background:rgba(30,122,70,.1);pointer-events:none}
+.vbox{display:grid;gap:6px}.vbox:empty{display:none}.vnote{font-size:13px}.vbox .ptsrow .btn{flex:none;padding-block:0}
+.in-via{display:inline-flex;justify-self:start;border:1px solid var(--line);border-radius:999px;padding:3px;gap:2px}
+.in-via button{border:0;background:transparent;color:inherit;opacity:.75;font:inherit;font-size:13px;font-weight:600;padding:6px 13px;border-radius:999px;cursor:pointer}.in-via button[aria-pressed=true]{background:var(--text);color:var(--bg);opacity:1}

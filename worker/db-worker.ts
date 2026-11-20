@@ -663,7 +663,34 @@ export function posItems(c: any, q: any): { items: any[]; sub: number } | { erro
 }
 /** A guest's verified points balance: their number proved with the code sent on WhatsApp (the same proof an order
  *  needs), then looked up here. 0 when the proof is missing or stale. */
-async function pointsBal(env: Env, site: string, phone: unknown, token: unknown): Promise<{ key: string; bal: number; ok: boolean }> {
+/* ---- Customer accounts (content.account): a customer signs in with a code sent to their mobile number or email address,
+   and stays signed in on that device with a pass only this database can make. The pass names the customer by that number
+   or address (the same key their record and points are kept under). */
+const CUST_DAYS = 30;
+const custPass = async (env: Env, site: string, key: string, exp: number) => exp + "." + b64u(await hmac(env.SECRET, "cust:" + site + ":" + key + ":" + exp));
+async function custOk(env: Env, site: string, key: string, pass: unknown): Promise<boolean> {
+  const [exp, sig] = String(pass || "").split("."); return !!key && +exp > Date.now() && sig === b64u(await hmac(env.SECRET, "cust:" + site + ":" + key + ":" + exp));
+}
+/** What signing in is offered with on this site just now, or null when accounts are off or no code can be sent. */
+function acctOf(env: Env, c: any, cw: { wa: boolean; sms: boolean }): { by: string; phone: string[]; email: boolean } | null {
+  const a = c?.account; if (!a?.on) return null;
+  const by = a.by === "email" || a.by === "either" ? a.by : "phone", via = [cw.wa ? "wa" : "", cw.sms ? "sms" : ""].filter(Boolean);
+  const phone = by === "email" ? [] : via, email = by !== "phone" && !!(env.RESEND_API_KEY && env.MAIL_FROM);
+  return phone.length || email ? { by, phone, email } : null;
+}
+/** The customer a signed-in pass stands for, among the number and address given: their key, or "". */
+async function custWho(env: Env, site: string, A: { phone: string[]; email: boolean } | null, cc: string, phone: unknown, email: unknown, pass: unknown): Promise<{ key: string; kind: "" | "phone" | "email" }> {
+  if (!A || !pass) return { key: "", kind: "" };
+  const pk = A.phone.length ? waNum(phone, cc) : "", ek = A.email ? emailKey(email) : "";
+  if (pk && (await custOk(env, site, pk, pass))) return { key: pk, kind: "phone" };
+  if (ek && (await custOk(env, site, ek, pass))) return { key: ek, kind: "email" };
+  return { key: "", kind: "" };
+}
+async function pointsBal(env: Env, site: string, phone: unknown, token: unknown, more?: { email?: unknown; acct?: unknown }): Promise<{ key: string; bal: number; ok: boolean }> {
+  if (more?.acct) { // signed in: the pass is the proof
+    const sc = await siteContent(env, site).catch(() => null), cw = await codeWays(env, site, sc), who = await custWho(env, site, acctOf(env, sc, cw), cw.cc, phone, more.email, more.acct);
+    if (who.key) { const r: any = await env.DB.prepare("select points from customers where site = ? and ckey = ?").bind(site, who.key).first(); return { key: who.key, bal: Math.max(0, +r?.points || 0), ok: true }; }
+  }
   const cc = (await getSetting(env, "site:" + site, "wa").catch(() => null))?.cc || (await getSetting(env, "site:" + site, "sms").catch(() => null))?.cc, num = waNum(phone, cc), [exp, sig] = String(token || "").split(".");
   if (!num || !(+exp > Date.now()) || sig !== b64u(await hmac(env.SECRET, "otp:" + site + ":" + num + ":" + exp))) return { key: num, bal: 0, ok: false };
   const r: any = await env.DB.prepare("select points from customers where site = ? and ckey = ?").bind(site, num).first();
@@ -671,11 +698,12 @@ async function pointsBal(env: Env, site: string, phone: unknown, token: unknown)
 }
 /** Keeps the customer of an order (by mobile number, else email), counts the order, and settles its points: spent ones
  *  come off, new ones are earned on what was paid for the goods. Gives back a line for the order's record. */
-async function custOrder(env: Env, site: string, c: any, data: Record<string, string>, cart: any): Promise<string> {
+async function custOrder(env: Env, site: string, c: any, data: Record<string, string>, cart: any, who = ""): Promise<string> {
   const w = { cc: (await getSetting(env, "site:" + site, "wa").catch(() => null))?.cc || (await getSetting(env, "site:" + site, "sms").catch(() => null))?.cc };
-  const key = waNum(data.phone, w?.cc) || String(data.email || "").trim().toLowerCase().slice(0, 120); if (!key) return "";
+  // a signed-in customer is kept under what they signed in with; anyone else by mobile number, else email
+  const key = who || waNum(data.phone, w?.cc) || String(data.email || "").trim().toLowerCase().slice(0, 120); if (!key) return "";
   if (await env.DB.prepare("select 1 from points where site = ? and order_no = ? limit 1").bind(site, data.order_no).first()) return "";
-  const L = loyOf(c), verified = data._phone ? 1 : 0, now = new Date().toISOString();
+  const L = loyOf(c), verified = data._phone || who ? 1 : 0, now = new Date().toISOString();
   let net = NaN, used = 0, off = 0;
   if (cart && typeof cart === "object") {
     if (isRest(c)) { const bal = verified ? Math.max(0, +((await env.DB.prepare("select points from customers where site = ? and ckey = ?").bind(site, key).first()) as any)?.points || 0) : 0;
@@ -1078,18 +1106,43 @@ export default {
         const site = p.split("/")[2], w = await getSetting(env, "site:" + site, "wa").catch(() => null), z = await getSetting(env, "site:" + site, "rz").catch(() => null);
         const pg: string[] = []; for (const g of ["cf", "pe", "st", "pp"]) if (pgReady(g, await getSetting(env, "site:" + site, g).catch(() => null))) pg.push(g);
         const sc = await siteContent(env, site).catch(() => null), cw = await codeWays(env, site, sc), canCode = cw.any;
-        return json({ otp: cw.need, pts: canCode && loyOf(sc).on, via: [cw.wa ? "wa" : "", cw.sms ? "sms" : ""].filter(Boolean), em: emailCheckOn(env, sc), rz: z?.on && z.secret && z.keyId ? String(z.keyId) : "", pg });
+        return json({ otp: cw.need, pts: canCode && loyOf(sc).on, via: [cw.wa ? "wa" : "", cw.sms ? "sms" : ""].filter(Boolean), em: emailCheckOn(env, sc), acct: acctOf(env, sc, cw), rz: z?.on && z.secret && z.keyId ? String(z.keyId) : "", pg });
       }
       if (/^\/points\/[a-z0-9][a-z0-9-]{0,59}$/.test(p) && req.method === "POST") {
         const site = p.split("/")[2], b = (await req.json()) as any, L = loyOf(await siteContent(env, site));
         if (!L.on) return err(404, "Not found.");
-        const v = await pointsBal(env, site, b.phone, b.otp); if (!v.ok) return err(403, "Verify your mobile number first.");
+        const v = await pointsBal(env, site, b.phone, b.otp, { email: b.email, acct: b.acct }); if (!v.ok) return err(403, "Verify your mobile number first.");
         return json({ points: v.bal, worth: L.worth, min: L.min, maxPct: L.maxPct, earn: L.earn });
+      }
+      // ---- Customer accounts: signing in with a proved number or address, and the customer's own orders and points.
+      if (/^\/acct\/(in|me)\/[a-z0-9][a-z0-9-]{0,59}$/.test(p) && req.method === "POST") {
+        const site = p.split("/")[3], b = (await req.json()) as any, sc = await siteContent(env, site).catch(() => null), cw = await codeWays(env, site, sc), A = acctOf(env, sc, cw);
+        if (!A) return err(404, "Not found.");
+        if (p.startsWith("/acct/in/")) {
+          // the proof is the one a code check just gave (never the "couldn't send" pass: that proves nothing about who this is)
+          let key = "", kind = "";
+          if (A.phone.length && b.phone) { const num = waNum(b.phone, cw.cc), [exp, sig] = String(b.otp || "").split("."); if (num && +exp > Date.now() && sig === b64u(await hmac(env.SECRET, "otp:" + site + ":" + num + ":" + exp))) { key = num; kind = "phone"; } }
+          else if (A.email && b.email) { const em = emailKey(b.email), [exp, sig] = String(b.eotp || "").split("."); if (em && +exp > Date.now() && sig === b64u(await hmac(env.SECRET, "eotp:" + site + ":" + em + ":" + exp))) { key = em; kind = "email"; } }
+          if (!key) return err(403, "That code has expired. Ask for a new one.");
+          const exp = Date.now() + CUST_DAYS * 86400_000;
+          return json({ ok: true, key, kind, pass: await custPass(env, site, key, exp) });
+        }
+        const key = String(b.key || ""); if (!(await custOk(env, site, key, b.pass))) return err(401, "Please sign in again.");
+        const row: any = await env.DB.prepare("select name, phone, email, orders, spent, points, first_at from customers where site = ? and ckey = ?").bind(site, key).first();
+        const nos = (((await env.DB.prepare("select order_no, max(at) t from points where site = ? and ckey = ? and order_no <> '' group by order_no order by t desc limit 25").bind(site, key).all()).results || []) as any[]).map((r) => String(r.order_no));
+        const orders: any[] = [];
+        if (nos.length) {
+          const rows = ((await env.DB.prepare(`select data, status, created_at from enquiries where site = ? and (${nos.map(() => "instr(data, ?) > 0").join(" or ")}) order by created_at desc limit 40`).bind(site, ...nos.map((n) => `"order_no":${JSON.stringify(n)}`)).all()).results || []) as any[];
+          for (const r of rows) { let d: any = null; try { d = JSON.parse(r.data); } catch { continue; } if (!nos.includes(String(d.order_no))) continue;
+            orders.push({ no: String(d.order_no), at: r.created_at, total: String(d.total || ""), status: String(r.status || "new"), mode: String(d.mode || ""), paid: d._paid === "yes", points: String(d._points || ""), text: String(d.items || d.order || d.message || "").slice(0, 1200) }); }
+        }
+        const L = loyOf(sc);
+        return json({ ok: true, name: row?.name || "", phone: row?.phone || "", email: row?.email || "", count: +row?.orders || 0, points: Math.max(0, +row?.points || 0), loyalty: L.on ? { worth: L.worth, min: L.min, maxPct: L.maxPct } : null, orders });
       }
       // ---- A customer proves their email address at checkout: a 6-digit code by email, then a proof only this database can make.
       if (/^\/eotp\/(send|check)\/[a-z0-9][a-z0-9-]{0,59}$/.test(p) && req.method === "POST") {
         const site = p.split("/")[3], b = (await req.json()) as any, sc = await siteContent(env, site).catch(() => null);
-        if (!emailCheckOn(env, sc)) return err(404, "Not found.");
+        if (!emailCheckOn(env, sc) && !acctOf(env, sc, { wa: false, sms: false })?.email) return err(404, "Not found."); // (also where customers sign in by email)
         const em = emailKey(b.email); if (!em) return err(400, "Enter a valid email address.");
         const k = "e:" + site + ":" + em, now = Date.now();
         if (p.startsWith("/eotp/send/")) {
@@ -1119,7 +1172,7 @@ export default {
       if (/^\/otp\/(send|check)\/[a-z0-9][a-z0-9-]{0,59}$/.test(p) && req.method === "POST") {
         const site = p.split("/")[3], b = (await req.json()) as any, sc = await siteContent(env, site).catch(() => null), cw = await codeWays(env, site, sc), w = cw.w;
         // Codes go out where the site asks guests to verify, or where points can be spent (a guest verifies to use theirs).
-        if (!(cw.any && (cw.need || loyOf(sc).on))) return err(404, "Not found.");
+        if (!(cw.any && (cw.need || loyOf(sc).on || acctOf(env, sc, cw)?.phone.length))) return err(404, "Not found."); // (also where customers sign in by mobile)
         // on WhatsApp or by SMS: the one asked for when the site has both, else the one it has
         const via = b.via === "sms" && cw.sms ? "sms" : b.via === "wa" && cw.wa ? "wa" : cw.wa ? "wa" : "sms";
         const num = waNum(b.phone, cw.cc); if (!num) return err(400, "Enter your mobile number with its country code.");
@@ -1173,7 +1226,7 @@ export default {
         if (!/^[A-Z0-9][A-Z0-9-]{3,29}$/.test(no)) return err(400, "Which order?");
         const c = await siteContent(env, site), rest = isRest(c);
         if (g !== "rz" && !pgOn(c, g)) return err(404, "That way to pay isn't switched on for this site.");
-        q._bal = +q.points > 0 ? (await pointsBal(env, site, q.phone, q.otp)).bal : 0;
+        q._bal = +q.points > 0 ? (await pointsBal(env, site, q.phone, q.otp, { email: q.email, acct: q.acct })).bal : 0;
         const bill = rest ? restBill(c, q) : Array.isArray(c?.products) ? shopBill(c, q) : { error: "This site doesn't take orders." };
         if ("error" in bill) return err(409, bill.error);
         if (Math.abs(bill.total - (+q.total || 0)) > 0.5) return err(409, rest ? "The menu or its prices changed while you were ordering. Refresh the page and check your cart." : "Prices or delivery charges changed while you were ordering. Refresh the page and check your cart.");
@@ -1208,10 +1261,14 @@ export default {
         const data: Record<string, string> = {};
         for (const [k, v] of Object.entries(q.data || {}).slice(0, 25)) if (/^[a-z0-9][\w-]{0,39}$/i.test(k) && v != null && String(v).trim()) data[k] = String(v).slice(0, 5000);
         if (!Object.keys(data).length) return err(400, "The form was empty.");
+        let who = ""; // the signed-in customer's key, when there is one
         if (data.order_no) {
           // The guest's mobile number, proved with a code on WhatsApp, when the site asks for that.
-          const cw = await codeWays(env, site);
-          if (cw.any) {
+          const sc0 = await siteContent(env, site).catch(() => null), cw = await codeWays(env, site, sc0), A = acctOf(env, sc0, cw);
+          // A signed-in customer: their pass stands for the number or address they signed in with.
+          const me = await custWho(env, site, A, cw.cc, data.phone, data.email, data.acct_token); delete data.acct_token; who = me.key;
+          if (me.kind === "phone") data._phone = "Verified (signed in)"; if (me.kind === "email") data._email = "Verified (signed in)";
+          if (cw.any && me.kind !== "phone") {
             const num = waNum(data.phone, cw.cc), [exp, sig, how] = String(data.otp_token || "").split(".");
             const proved = !!num && +exp > Date.now() && sig === b64u(await hmac(env.SECRET, "otp:" + site + ":" + num + ":" + exp));
             // Required where the site asks every guest for it; otherwise taken when given (a guest who verified to spend points).
@@ -1220,11 +1277,13 @@ export default {
           delete data.otp_token;
           // an email address that must be proved (the site's own setting): the proof, or the pass given when the code could not be sent
           { const em = emailKey(data.email), tk = String(data.email_token || ""); delete data.email_token;
-            if (em && emailCheckOn(env, await siteContent(env, site).catch(() => null))) {
-              const skip = tk.startsWith("s:"), [exp, sig] = (skip ? tk.slice(2) : tk).split(".");
-              if (!(+exp > Date.now()) || sig !== b64u(await hmac(env.SECRET, (skip ? "eskip:" : "eotp:") + site + ":" + em + ":" + exp))) return err(403, "Please verify your email address first.");
+            const skip = tk.startsWith("s:"), [exp, sig] = (skip ? tk.slice(2) : tk).split("."), good = !!em && +exp > Date.now() && sig === b64u(await hmac(env.SECRET, (skip ? "eskip:" : "eotp:") + site + ":" + em + ":" + exp));
+            if (em && me.kind !== "email" && emailCheckOn(env, sc0)) {
+              if (!good) return err(403, "Please verify your email address first.");
               data._email = skip ? "Not verified: the code could not be sent" : "Verified by a code";
-            } }
+            }
+            // Where customers must sign in before ordering: a pass, or (email only) the note that no code could be sent to them.
+            if (A && !who && !(A.email && good && skip)) return err(403, "Please sign in before placing the order."); }
           // An online payment is accepted only with Razorpay's own signature for the payment this database started.
           if (data.rz_order || data.rz_payment || data.rz_sig) {
             const z = await getSetting(env, "site:" + site, "rz").catch(() => null);
@@ -1256,7 +1315,7 @@ export default {
           if (posReady(pz)) { const pc = await siteContent(env, site); if (isRest(pc)) data._pos = await posSend(env, site, pz, pc, q.cart, data, u.origin); }
         }
         // The customer is kept, and the order's points settled, with the order.
-        if (data.order_no) { const said = await custOrder(env, site, await siteContent(env, site), data, q.cart).catch(() => ""); if (said) data._points = said; }
+        if (data.order_no) { const said = await custOrder(env, site, await siteContent(env, site), data, q.cart, who).catch(() => ""); if (said) data._points = said; }
         const made: any = await env.DB.prepare("insert into enquiries (site, data, page, created_at) values (?, ?, ?, ?) returning id").bind(site, JSON.stringify(data), String(q.page || "").slice(0, 200), new Date().toISOString()).first();
         // The enquiry is saved either way; the email is a copy, so a mail failure never fails the form. What happened
         // to the email is noted on the enquiry (_mail: keys starting with "_" never come from the visitor).

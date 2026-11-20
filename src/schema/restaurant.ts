@@ -3,7 +3,7 @@ import type { Category, Field, TemplateDef } from "./types";
 import { FX_AXES, HERO_FX_AXIS, LINE_BREAKS_AXIS, type Axis } from "../themes/catalog";
 import { REST_AXES, REST_BODY_FONTS, REST_DISPLAY_FONTS, REST_TAGS, REST_THEMES, restaurantThemeValues } from "../themes/restaurant";
 import { INTRO_CARD, NAV_MODE_FIELD, NAV_MODE_MOB_FIELD } from "../themes/fields";
-import { adminCategory, loyaltyCard, legalCategory, codeCategory, withSectionBg, videoCategory, socialCategory, logoFields, consentCategory, emailsCategory, i18nCategory, prepareI18n, featuresCategory, festivalCategory, menuCategory, menuItem, prepareMenu, staticPagesCategory, heroSlidesCard, prepareSlides, prepareMaintenance, seoCategory, customFontsCard } from "./common";
+import { adminCategory, loyaltyCard, accountCard, legalCategory, codeCategory, withSectionBg, videoCategory, socialCategory, logoFields, consentCategory, emailsCategory, i18nCategory, prepareI18n, featuresCategory, festivalCategory, menuCategory, menuItem, prepareMenu, staticPagesCategory, heroSlidesCard, prepareSlides, prepareMaintenance, seoCategory, customFontsCard } from "./common";
 
 const g2 = (...fields: Field[]): Field => ({ t: "grid", cols: 2, fields });
 const g3 = (...fields: Field[]): Field => ({ t: "grid", cols: 3, fields });
@@ -235,6 +235,7 @@ const schema: Category[] = [
       { title: "Cart extras", fields: [g2({ t: "toggle", path: "ordering.tips", label: "Offer a tip for the team" }, { t: "text", path: "ordering.tipOptions", label: "Tip amounts", ph: "10, 20, 30" }),
         g3({ t: "toggle", path: "ordering.cutlery", label: "Ask whether to send cutlery" }, { t: "toggle", path: "ordering.dishNotes", label: "Special instructions per dish" }, { t: "toggle", path: "ordering.notes", label: "A note for the kitchen" }),
         { t: "toggle", path: "ordering.askEmail", label: "Ask for an email address (optional for the guest)" }] },
+      accountCard("restaurant"),
       { title: "Contact details before checkout", fields: [
         { t: "select", path: "ordering.need", label: "A guest must give", options: [{ value: "", label: "Standard: mobile number (email only if asked above)" }, { value: "phone", label: "Mobile number (email optional)" }, { value: "email", label: "Email address (mobile optional)" }, { value: "both", label: "Both mobile number and email" }, { value: "either", label: "Either one: mobile number or email" }] },
         { t: "toggle", path: "ordering.verifyEmail", label: "Verify the email address with a code before the order is placed" },

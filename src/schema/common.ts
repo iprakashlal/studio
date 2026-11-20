@@ -589,6 +589,15 @@ export function codeCategory(): Category {
 
 /** Points for returning customers (content.loyalty): earned on every order kept in the site's database; a restaurant's
  *  guest with a verified mobile number can spend them at checkout. */
+/** Customer accounts: sign in before checkout with a code, then "My account" with orders and points. */
+export function accountCard(kind: "restaurant" | "store"): Card {
+  const who = kind === "restaurant" ? "guest" : "shopper";
+  return { title: "Customer accounts", fields: [
+    { t: "toggle", path: "account.on", label: `Ask every ${who} to sign in (or sign up) before checkout` },
+    { t: "when", path: "account.on", is: "true", fields: [
+      { t: "select", path: "account.by", label: "They sign in with", options: [{ value: "phone", label: "Mobile number (a code on WhatsApp or by SMS)" }, { value: "email", label: "Email address (a code by email)" }, { value: "either", label: "Either: the customer chooses" }] },
+      { t: "note", text: `Signing in and signing up are one step: the ${who} enters their mobile number or email address, gets a one-time code and types it in. There is no password. At checkout they are then asked for their name${kind === "restaurant" ? ", address (for delivery)" : ", address"} and the other contact (the email if they signed in by mobile, the mobile if by email); “A ${who} must give” above decides whether that one is required. They stay signed in on that device for 30 days, and “My account” (${kind === "restaurant" ? "on the Order now page" : "in the site's header"}) shows their orders and points. This works on a site hosted on Cloudflare. A mobile sign-in needs WhatsApp or SMS set up with a code template; an email sign-in is sent by the site database's own email. Where no code can be sent at all, checkout carries on without an account so nobody is locked out.` }] }] };
+}
 export function loyaltyCard(kind: "restaurant" | "store"): Card {
   const g2 = (...fields: Field[]): Field => ({ t: "grid", cols: 2, fields });
   return { title: "Points for returning customers", fields: [

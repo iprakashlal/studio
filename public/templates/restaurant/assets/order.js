@@ -31,7 +31,16 @@
   /** The proof that the email address typed is the guest's own (a code sent to it), or the pass given when no code could be sent. */
   const elow = () => String(ui.form.email || "").trim().toLowerCase();
   const etok = () => (ui.eotp && ui.eotp.email === elow() && +String(ui.eotp.token).replace(/^s:/, "").split(".")[0] > Date.now() + 60000 ? ui.eotp.token : "");
-  const verified = () => !!(ui.otp && ui.otp.token && ui.otp.phone === digits(ui.form.phone) && +ui.otp.token.split(".")[0] > Date.now() + 60000);
+  /* Customer accounts (assets/acct.js, content.account): the guest signs in before checkout, and "My account" shows
+     their orders and points. A signed-in mobile number or email address counts as verified. */
+  const ME = () => (window.SiteAcct && SiteAcct.on() ? SiteAcct.user() : null);
+  const mustSign = () => !!(window.SiteAcct && SiteAcct.on() && !SiteAcct.user() && !SiteAcct.skipped() && !A.PREVIEW);
+  const applyMe = () => { const m = ME(), k = window.SiteAcct && SiteAcct.skipped(); if (m && m.kind === "phone") ui.form.phone = m.typed || "+" + m.key; if (m && m.kind === "email") ui.form.email = m.key; if (!m && k) { ui.form.email = k.email; ui.eotp = { email: k.email, token: k.token }; } };
+  let acctP = null;
+  const loadAcct = () => (acctP ||= new Promise((ok, no) => { if (window.SiteAcct) return ok(); const s = document.createElement("script"); s.src = "assets/acct.js"; s.onload = () => ok(); s.onerror = no; document.head.appendChild(s); }));
+  const verified = () => { const m = ME(); return !!(m && m.kind === "phone") || !!(ui.otp && ui.otp.token && ui.otp.phone === digits(ui.form.phone) && +ui.otp.token.split(".")[0] > Date.now() + 60000); };
+  /** Enough to show and spend points: a verified number, or being signed in. */
+  const proved = () => verified() || !!ME();
   const esc = (s) => A.esc(s);
   const num = (p) => { const n = parseFloat(String(p == null ? "" : p).replace(/[^\d.]/g, "")); return isFinite(n) ? n : NaN; };
   /** An amount as plain text (messages), and for the page. */
@@ -108,8 +117,8 @@
   const loy = () => { const L = (C && C.loyalty) || {}; return { on: !!L.on, earn: Math.max(0, +L.earn || 0) }; };
   /** A verified guest's points, asked from the site's database (it answers only with the proof of the number). */
   async function loadPts() {
-    const be = A.backend(); if (!loy().on || !be || !be.cf || !verified()) return;
-    try { const r = await fetch(be.cf + "/points/" + encodeURIComponent(be.site), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ phone: ui.form.phone, otp: ui.otp.token }) }); if (r.ok) { ui.pts = await r.json(); over(true); } } catch (e) { /* points are a bonus: ordering carries on */ }
+    const be = A.backend(); if (!loy().on || !be || !be.cf || !proved()) return;
+    try { const r = await fetch(be.cf + "/points/" + encodeURIComponent(be.site), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ phone: ui.form.phone, otp: ui.otp ? ui.otp.token : "", email: ui.form.email, acct: ME() ? ME().pass : "" }) }); if (r.ok) { ui.pts = await r.json(); over(true); } } catch (e) { /* points are a bonus: ordering carries on */ }
   }
   function bill() {
     const o = O(), m = mode(), sub = cart.reduce((n, l) => n + l.unit * l.qty, 0);
@@ -123,7 +132,7 @@
     const del = m !== "delivery" || !cart.length ? 0 : free ? 0 : Math.max(0, ar.fee != null ? ar.fee : +o.deliveryFee || 0);
     // Points (content.loyalty): a guest whose number is verified can pay part of the bill with theirs; the database works it out the same way.
     const P = ui.pts, L = loy(); let pts = 0, ptsOff = 0;
-    if (L.on && P && ui.usePts && verified() && P.points >= Math.max(1, P.min || 0) && P.worth > 0 && sub - disc > 0) { pts = Math.max(0, Math.min(Math.floor(P.points), Math.floor(((sub - disc) * P.maxPct) / 100 / P.worth))); ptsOff = Math.round(pts * P.worth * 100) / 100; }
+    if (L.on && P && ui.usePts && proved() && P.points >= Math.max(1, P.min || 0) && P.worth > 0 && sub - disc > 0) { pts = Math.max(0, Math.min(Math.floor(P.points), Math.floor(((sub - disc) * P.maxPct) / 100 / P.worth))); ptsOff = Math.round(pts * P.worth * 100) / 100; }
     const earn = L.on && L.earn > 0 ? Math.floor(((sub - disc - ptsOff) / 100) * L.earn) : 0;
     const base = sub - disc - ptsOff + (cart.length ? pack : 0), pct = Math.max(0, +o.taxPercent || 0);
     const tax = o.taxIncluded || !pct ? 0 : Math.round(base * pct) / 100;
@@ -192,6 +201,7 @@
             ${diets.length > 1 ? ["veg", "vegan", "egg", "nonveg"].filter((d) => diets.includes(d)).map((d) => `<button type="button" class="chip" data-act="diet" data-id="${d}" aria-pressed="${ui.diet === d}"><span class="diet ${d}" aria-hidden="true"></span>${A.DIET[d]}</button>`).join("") : ""}
             <button type="button" class="chip" data-act="favs" aria-pressed="${ui.fav}">${SV.heart} Favourites</button>
             ${past.length ? `<button type="button" class="chip" data-act="orders">Your orders (${past.length})</button>` : ""}
+            ${window.SiteAcct && SiteAcct.on() ? `<button type="button" class="chip" data-act="acct">${SiteAcct.user() ? "My account" : "Sign in"}</button>` : ""}
           </div>
         </div>
         <div class="ord-menu" id="ord-menu">${D.length ? menuHTML() : `<p class="ord-empty">The menu for ordering isn't ready yet. Please call us to order.</p>`}</div>
@@ -234,7 +244,7 @@
   /** Points at checkout: what the guest has and a tick box to use them (verified numbers only), and what this order earns. */
   function ptsBox() {
     const L = loy(); if (!L.on) return ""; const P = ui.pts, b = bill();
-    const have = P && verified() ? (P.points >= Math.max(1, P.min || 0) && P.worth > 0
+    const have = P && proved() ? (P.points >= Math.max(1, P.min || 0) && P.worth > 0
       ? `<label class="od-check"><input type="checkbox" id="od-pts"${ui.usePts ? " checked" : ""}><span>Use my points<small>You have ${P.points} point${P.points === 1 ? "" : "s"}${b.pts ? `: ${b.pts} used here, ${fmt(b.ptsOff)} off` : `, worth up to ${fmt(Math.round(P.points * P.worth * 100) / 100)}`}.</small></span></label>`
       : `<p class="od-live">You have ${P.points} point${P.points === 1 ? "" : "s"}.${P.min > P.points ? ` Points can be used from ${P.min}.` : ""}</p>`) : "";
     return `<div class="od-pts" id="od-ptsbox">${have}${b.earn ? `<p class="od-live">This order earns you ${b.earn} point${b.earn === 1 ? "" : "s"}.</p>` : ""}</div>`;
@@ -244,24 +254,25 @@
    *  Where every guest verifies on WhatsApp, the mobile number is always needed. */
   function must() {
     const o = O(), n = ["email", "phone", "both", "either"].includes(o.need) ? o.need : "";
-    if (!n) return { phone: true, email: false, askEmail: !!o.askEmail, either: false };
+    if (!n) return { phone: true, email: false, askEmail: !!o.askEmail || !!ME(), either: false }; // (signed in: the other contact is asked for too)
     return { phone: !!can.otp || n === "phone" || n === "both", email: n === "email" || n === "both", askEmail: true, either: n === "either" && !can.otp };
   }
   /** A box with its “Verify” inside it: the button (a tick once verified) sits at the end of the box, and the code row opens under it. */
   const vbox = (o) => `<div class="of ofv" id="${o.id}"><label for="of-${o.k}">${o.label}</label><div class="of-in${o.on ? " has" : ""}"><input id="of-${o.k}" data-f="${o.k}" value="${esc(ui.form[o.k] || "")}" ${o.attrs}>${!o.on ? "" : o.done ? `<span class="of-tick">✓ Verified</span>` : `<button type="button" class="of-vbtn" data-act="${o.act}send">${o.sent ? "Resend" : "Verify"}</button>`}</div>${o.on && !o.done ? (o.sent ? `<div class="od-code"><input id="of-${o.code}" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="Code" aria-label="${o.sentTo}"><button type="button" class="btn sec" data-act="${o.act}check">Confirm</button></div><p class="od-live">${o.sentTo}.</p>` : `${o.pick || ""}<p class="od-live">${o.hint}</p>`) : ""}${o.on && o.msg ? `<p class="od-bad" role="alert">${esc(o.msg)}</p>` : ""}</div>`;
   const phoneBox = () => { const M = must(), ways = can.via.map((v) => VIA[v]).join(" or ");
-    return vbox({ id: "od-otp", k: "phone", label: "Mobile number" + (M.phone ? "" : " (optional)"), attrs: 'type="tel" inputmode="tel" autocomplete="tel"' + (M.phone ? " required" : ""), on: can.otp || (can.pts && loy().on), done: verified(), sent: ui.otpSent, act: "otp", code: "code", msg: ui.otpMsg,
+    return vbox({ id: "od-otp", k: "phone", label: "Mobile number" + (M.phone ? "" : " (optional)"), attrs: 'type="tel" inputmode="tel" autocomplete="tel"' + (M.phone ? " required" : "") + (ME() && ME().kind === "phone" ? " readonly" : ""), on: can.otp || (can.pts && loy().on) || !!(ME() && ME().kind === "phone"), done: verified(), sent: ui.otpSent, act: "otp", code: "code", msg: ui.otpMsg,
       sentTo: "Enter the code we sent " + VIA[viaNow()], pick: can.via.length > 1 ? `<div class="of-via" role="group" aria-label="Send the code">${can.via.map((v) => `<button type="button" data-act="otpvia" data-via="${v}" aria-pressed="${viaNow() === v}">${v === "wa" ? "WhatsApp" : "SMS"}</button>`).join("")}</div>` : "",
       hint: can.otp ? `We send a code ${ways} to verify this number before taking the order.` : `Optional: verify ${ways} to use your points.` }); };
   const emailBox = () => { const M = must(), t = etok();
-    return vbox({ id: "od-eotp", k: "email", label: "Email" + (M.email ? "" : " (optional)"), attrs: 'type="email" autocomplete="email"' + (M.email ? " required" : ""), on: can.em && !(t && t.startsWith("s:")), done: !!t, sent: ui.eSent, act: "eotp", code: "ecode", msg: ui.eMsg,
+    return vbox({ id: "od-eotp", k: "email", label: "Email" + (M.email ? "" : " (optional)"), attrs: 'type="email" autocomplete="email"' + (M.email ? " required" : "") + (ME() && ME().kind === "email" ? " readonly" : ""), on: (can.em && !(t && t.startsWith("s:"))) || !!(ME() && ME().kind === "email"), done: !!t || !!(ME() && ME().kind === "email"), sent: ui.eSent, act: "eotp", code: "ecode", msg: ui.eMsg,
       sentTo: "Enter the code we emailed you", hint: `We email a code to verify this address before taking the order${M.email ? "" : " (only if you give one)"}.` }); };
   const inp = (k, label, a = "") => `<div class="of"><label for="of-${k}">${label}</label><input id="of-${k}" data-f="${k}" value="${esc(ui.form[k] || "")}" ${a}></div>`;
   function checkoutHTML() {
     const b = bill(), o = O(), m = mode(), f = ui.form, sl = slots(), ps = pays();
     if (!sl.some((s) => s.v === f.when)) f.when = sl.length ? sl[0].v : "";
     if (!ps.some((p) => p.id === f.pay)) f.pay = ps.length ? ps[0].id : "";
-    return `<form class="od-form" id="od-form" novalidate>
+    if (mustSign()) return `<div id="od-acct"></div>`; // sign in first: the form follows
+    return `<form class="od-form" id="od-form" novalidate>${ME() ? `<p class="od-live od-me">Signed in as <b>${esc(/@/.test(ME().key) ? ME().key : "+" + ME().key)}</b> · <button type="button" class="link" data-act="acct">My account</button></p>` : ""}
       <fieldset><legend>Your details</legend>${inp("name", "Name", 'autocomplete="name" required')}${phoneBox()}${must().askEmail ? emailBox() : ""}${must().either ? `<p class="od-live">Give your mobile number or your email address (or both), so we can reach you about the order.</p>` : ""}
         ${ptsBox()}</fieldset>
       ${m === "delivery" ? `<fieldset><legend>Delivery address</legend>${inp("line1", "Flat, house or building", 'autocomplete="address-line1" required')}${inp("area", "Street and area", 'autocomplete="address-line2" required')}<div class="of2">${inp("landmark", "Landmark (optional)")}${inp("pin", "PIN code", 'inputmode="numeric" autocomplete="postal-code" maxlength="10"' + (o.askPin !== false ? " required" : ""))}</div>
@@ -336,6 +347,7 @@
     const T = { cart: "Your cart", checkout: "Checkout", pay: "Pay to place your order", done: "Your order", orders: "Your orders", cats: "Categories" }[ui.drawer], b = bill(), blocked = ui.drawer === "checkout" && (!slots().length || !pays().length || (mode() === "delivery" && !b.area.ok && !!(ui.form.pin || ui.form.area)));
     const body = ui.drawer === "cart" ? cartHTML() : ui.drawer === "checkout" ? checkoutHTML() : ui.drawer === "pay" ? payHTML() : ui.drawer === "done" ? doneHTML(ui.done) : ui.drawer === "orders" ? ordersHTML() : catsHTML();
     const foot = ui.drawer === "cart" && cart.length ? `<div class="od-foot"><div><b>${fmt(b.total)}</b><small>${count()} item${count() === 1 ? "" : "s"} · ${MODES[mode()]}</small></div><button type="button" class="btn pri" data-act="checkout"${b.short ? " disabled" : ""}>Checkout</button></div>`
+      : ui.drawer === "checkout" && mustSign() ? ""
       : ui.drawer === "checkout" ? `<div class="od-foot"><div><b>${fmt(b.total)}</b><small>To pay</small></div><button type="button" class="btn pri" data-act="place"${blocked || ui.busy ? " disabled" : ""}>${ui.busy ? "Placing…" : ui.form.pay === "upi" || ui.form.pay === "rz" ? "Continue to pay" : "Place order"}</button></div>`
       : ui.drawer === "pay" ? `<div class="od-foot"><div><b>${fmt(ui.paying.bill.total)}</b><small>Pay first, then place</small></div><button type="button" class="btn pri" data-act="paid"${ui.busy ? " disabled" : ""}>${ui.busy ? "Placing…" : "I've paid: place the order"}</button></div>` : "";
     return `<div class="ord-shade" data-act="close"></div><aside class="ord-drawer${ui.drawer === "cats" ? " small" : ""}" role="dialog" aria-modal="true" aria-label="${T}"><header><${ui.drawer === "checkout" ? 'button type="button" class="od-back" data-act="cart" aria-label="Back to the cart">←</button><h2' : ui.drawer === "pay" ? 'button type="button" class="od-back" data-act="unpay" aria-label="Back to checkout">←</button><h2' : "h2"}>${T}</h2><button type="button" class="ord-x" data-act="close" aria-label="Close">${SV.x}</button></header><div class="od-body">${body}</div>${foot}</aside>`;
@@ -348,6 +360,7 @@
     const el = $("#ord-over", root); if (!el) return;
     const sc = keep ? ($(".od-body, .osh-body", el) || {}).scrollTop : 0;
     el.innerHTML = overHTML(); $("#ord-fab", root).innerHTML = fabHTML();
+    { const g = $("#od-acct", el); if (g && window.SiteAcct) SiteAcct.gate(g); }
     const open = !!(ui.sheet || ui.drawer); document.documentElement.classList.toggle("ord-lock", open); document.documentElement.classList.toggle("ord-cart", !open && count() > 0);
     const b = $(".od-body, .osh-body", el); if (b && sc) b.scrollTop = sc;
     if (open && !keep) { const f = $(".ord-x", el); f && f.focus({ preventScroll: true }); }
@@ -406,7 +419,7 @@
     }
     if (m === "dinein" && !String(f.table).trim()) return bad("table", "Please enter your table number.");
     if (can.otp && !A.PREVIEW && !verified()) return bad("phone", "Please verify your mobile number first.");
-    if (can.em && !A.PREVIEW && elow() && !etok()) { if (!ui.eSent) return eotp(true).then(() => { if (etok()) return place(); ui.err = "We've emailed you a code. Enter it above to verify your email address."; over(true); const c = $("#of-ecode", root); c && c.focus(); }); return bad("ecode", "Enter the code we emailed you to verify your email address."); }
+    if (can.em && !A.PREVIEW && elow() && !etok() && !(ME() && ME().kind === "email")) { if (!ui.eSent) return eotp(true).then(() => { if (etok()) return place(); ui.err = "We've emailed you a code. Enter it above to verify your email address."; over(true); const c = $("#of-ecode", root); c && c.focus(); }); return bad("ecode", "Enter the code we emailed you to verify your email address."); }
     if (!sl.some((s) => s.v === f.when)) return bad("when", "Please choose a time.");
     if (b.short) return bad("name", `The minimum order is ${txt(b.min)}.`);
     const ps = pays(), pay = ps.find((p) => p.id === f.pay); if (!pay) return bad("name", "Please choose how you'll pay.");
@@ -415,7 +428,7 @@
     const key = Array.from(crypto.getRandomValues(new Uint8Array(12)), (x) => x.toString(16).padStart(2, "0")).join("");
     const od = { consent: agree() ? "Agreed on " + new Date().toISOString() + ": " + agree() : "", id: newId(), k: key, at: Date.now(), mode: m, when: f.when, whenLabel: whenLabel(f.when, sl), items: cart.map((l) => ({ ...l })), bill: b, taxLabel: o.taxLabel || "Tax", pay: pay.id, payLabel: pay.label, upiId: String((o.pay || {}).upiId || "").trim(), payee: (o.pay || {}).payee || "", notes: String(f.notes || "").trim(), cutlery: !!f.cutlery, intro: o.intro || "", wa: o.whatsapp || C.contact.whatsapp || "",
       pin: String(f.pin || "").trim(), area: String(f.area || "").trim(),
-      et: etok(),
+      et: etok(), ac: ME() ? ME().pass : "",
       c: { name: String(f.name).trim(), phone: String(f.phone).trim(), email: String(f.email || "").trim(), table: String(f.table || "").trim(), address: m === "delivery" ? [f.line1, f.area, f.landmark ? "Near " + f.landmark : "", f.pin].map((x) => String(x || "").trim()).filter(Boolean).join(", ") + ` (${f.label})` : "" }, status: "new", sent: false, live: false };
     // Paying by UPI comes before the order is placed.
     if (pay.id === "upi") { ui.paying = od; ui.utr = ""; ui.drawer = "pay"; over(); return; }
@@ -429,7 +442,7 @@
     ui.busy = true; over(true);
     try {
       const g = od.pay;
-      const r = await fetch(be.cf + "/pay/" + g + "/" + encodeURIComponent(be.site), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ back: location.origin + location.pathname, name: od.c.name, phone: od.c.phone, email: od.c.email, order_no: od.id, mode: od.mode, pin: f.pin, area: f.area, coupon: od.bill.code, tip: od.bill.tip, total: od.bill.total, points: od.bill.pts || 0, otp: ui.otp ? ui.otp.token : "", items: od.items.map((l) => ({ id: l.id, qty: l.qty, variant: l.variant, addons: (l.addons || []).map((a) => a.label) })) }) });
+      const r = await fetch(be.cf + "/pay/" + g + "/" + encodeURIComponent(be.site), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ back: location.origin + location.pathname, name: od.c.name, phone: od.c.phone, email: od.c.email, order_no: od.id, mode: od.mode, pin: f.pin, area: f.area, coupon: od.bill.code, tip: od.bill.tip, total: od.bill.total, points: od.bill.pts || 0, otp: ui.otp ? ui.otp.token : "", acct: od.ac || "", items: od.items.map((l) => ({ id: l.id, qty: l.qty, variant: l.variant, addons: (l.addons || []).map((a) => a.label) })) }) });
       const j = await r.json().catch(() => null); if (!r.ok || !j || !(j.order_id || j.go || j.session)) return stop((j && j.error) || "Online payment couldn't start. Please try again, or choose another way to pay.");
       if (GW[g]) {
         // The order waits on this device while the guest pays on the gateway's page; it is placed when they come back paid.
@@ -483,7 +496,7 @@
   /** The cart as the database reads it (to hand the order to the restaurant's billing system when one is connected). */
   function cartOf(od) { return { mode: od.mode, pin: od.pin || "", area: od.area || "", coupon: od.bill.code || "", tip: od.bill.tip || 0, points: od.bill.pts || 0, items: od.items.map((l) => ({ id: l.id, qty: l.qty, variant: l.variant, addons: (l.addons || []).map((a) => a.label) })) }; }
   /** What is saved for an order (it goes to the site's database under Purchased orders). */
-  function orderData(od) { const m = od.mode, b = od.bill, pay = { label: od.payLabel }; return { ...(od.consent ? { consent: od.consent } : {}), type: "Order", order_no: od.id, okey: od.k, name: od.c.name, phone: od.c.phone, email: od.c.email, mode: MODES[m], when: od.whenLabel, address: od.c.address, table: od.c.table, items: od.items.map((l) => `${l.qty} × ${l.name}${lineText(l) ? ` (${lineText(l)})` : ""}${l.note ? ` [${l.note}]` : ""} = ${txt(l.unit * l.qty)}`).join("\n"), total: txt(b.total), payment: od.utr ? "UPI, paid before ordering" : od.rz ? "Paid online (Razorpay)" : od.pg ? `Paid online (${GW[od.pg.gw].name})` : pay.label, utr: od.utr || "", ...(od.pg ? { pay_gw: od.pg.gw, pay_ref: od.pg.ref, otp_token: od.pg.otp || undefined } : {}), ...(od.rz ? { rz_order: od.rz.razorpay_order_id, rz_payment: od.rz.razorpay_payment_id, rz_sig: od.rz.razorpay_signature } : {}), ...(ui.otp ? { otp_token: ui.otp.token } : {}), ...(od.et ? { email_token: od.et } : {}), message: orderText(od) }; }
+  function orderData(od) { const m = od.mode, b = od.bill, pay = { label: od.payLabel }; return { ...(od.consent ? { consent: od.consent } : {}), type: "Order", order_no: od.id, okey: od.k, name: od.c.name, phone: od.c.phone, email: od.c.email, mode: MODES[m], when: od.whenLabel, address: od.c.address, table: od.c.table, items: od.items.map((l) => `${l.qty} × ${l.name}${lineText(l) ? ` (${lineText(l)})` : ""}${l.note ? ` [${l.note}]` : ""} = ${txt(l.unit * l.qty)}`).join("\n"), total: txt(b.total), payment: od.utr ? "UPI, paid before ordering" : od.rz ? "Paid online (Razorpay)" : od.pg ? `Paid online (${GW[od.pg.gw].name})` : pay.label, utr: od.utr || "", ...(od.pg ? { pay_gw: od.pg.gw, pay_ref: od.pg.ref, otp_token: od.pg.otp || undefined } : {}), ...(od.rz ? { rz_order: od.rz.razorpay_order_id, rz_payment: od.rz.razorpay_payment_id, rz_sig: od.rz.razorpay_signature } : {}), ...(ui.otp ? { otp_token: ui.otp.token } : {}), ...(od.et ? { email_token: od.et } : {}), ...(od.ac ? { acct_token: od.ac } : {}), message: orderText(od) }; }
   /** The order is placed: the cart empties and the page shows it. */
   function shown(od) {
     cart = []; save(); ui.usePts = false; ui.pts = null; ui.coupon = ""; st.set("coupon", ""); ui.tip = 0; ui.form.notes = ""; ui.paying = null; ui.utr = ""; ui.err = "";
@@ -567,6 +580,7 @@
     else if (a === "label") { sync(); ui.form.label = id; over(true); }
     else if (a === "checkout") { const c = $("#od-cutlery", root); if (c) ui.form.cutlery = c.checked; ui.err = ""; ui.drawer = "checkout"; over(); }
     else if (a === "place") place();
+    else if (a === "acct") { if (window.SiteAcct) SiteAcct.open(); }
     else if (a === "otpvia") { sync(); ui.otpVia = t.getAttribute("data-via"); over(true); }
     else if (a === "otpsend" || a === "otpcheck") { const v = t.getAttribute && t.getAttribute("data-via"); if (v) ui.otpVia = v; otp(a === "otpsend"); }
     else if (a === "eotpsend" || a === "eotpcheck") eotp(a === "eotpsend");
@@ -605,7 +619,10 @@
     if (ui.drawer === "done" && ui.done) track(ui.done);
     const be = A.backend();
     if (!bind.back) { bind.back = true; cameBack(); }
-    if (!canAsked && !A.PREVIEW && be && be.cf) { canAsked = true; fetch(be.cf + "/site/" + encodeURIComponent(be.site) + "/can", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((j) => { if (j) { can = { otp: !!j.otp, pts: !!j.pts, em: !!j.em, via: Array.isArray(j.via) && j.via.length ? j.via.filter((v) => v === "wa" || v === "sms") : ["wa"], rz: String(j.rz || ""), pg: Array.isArray(j.pg) ? j.pg : [] }; if (ui.drawer === "checkout") { sync(); over(true); } } }).catch(() => {}); }
+    if (!canAsked && !A.PREVIEW && be && be.cf) { canAsked = true; fetch(be.cf + "/site/" + encodeURIComponent(be.site) + "/can", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((j) => { if (j) { can = { otp: !!j.otp, pts: !!j.pts, em: !!j.em, via: Array.isArray(j.via) && j.via.length ? j.via.filter((v) => v === "wa" || v === "sms") : ["wa"], rz: String(j.rz || ""), pg: Array.isArray(j.pg) ? j.pg : [] }; if (ui.drawer === "checkout") { sync(); over(true); }
+      // customer accounts: sign-in before checkout, and "My account" in the toolbar
+      if (j.acct) loadAcct().then(() => { const redo = () => { sync(); applyMe(); if (!ME()) ui.pts = null; const host = root.parentNode, y = scrollY; host.innerHTML = page(A); bind(A); scrollTo(0, y); loadPts(); };
+        SiteAcct.init({ api: be.cf, site: be.site, acct: j.acct, money: (n) => fmt(n), onChange: redo }); redo(); }).catch(() => {}); } }).catch(() => {}); }
   }
   window.RestOrder = { page, bind };
 })();

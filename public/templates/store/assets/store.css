@@ -640,3 +640,6 @@ html[data-crumbs=off] :is(.crumbs,.sp-crumbs,.solo-top){display:none}
 .vbox{display:grid;gap:6px}.vbox:empty{display:none}.vnote{font-size:13px}.vbox .ptsrow .btn{flex:none;padding-block:0}
 .in-via{display:inline-flex;justify-self:start;border:1px solid var(--line);border-radius:999px;padding:3px;gap:2px}
 .in-via button{border:0;background:transparent;color:inherit;opacity:.75;font:inherit;font-size:13px;font-weight:600;padding:6px 13px;border-radius:999px;cursor:pointer}.in-via button[aria-pressed=true]{background:var(--text);color:var(--bg);opacity:1}
+
+/* Customer accounts: the sign-in step before checkout, and the header link */
+#sa-gate{display:grid;justify-items:center}#sa-gate .sa-card{width:100%}.acctlink .t{white-space:nowrap}

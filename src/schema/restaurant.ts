@@ -235,6 +235,9 @@ const schema: Category[] = [
       { title: "Cart extras", fields: [g2({ t: "toggle", path: "ordering.tips", label: "Offer a tip for the team" }, { t: "text", path: "ordering.tipOptions", label: "Tip amounts", ph: "10, 20, 30" }),
         g3({ t: "toggle", path: "ordering.cutlery", label: "Ask whether to send cutlery" }, { t: "toggle", path: "ordering.dishNotes", label: "Special instructions per dish" }, { t: "toggle", path: "ordering.notes", label: "A note for the kitchen" }),
         { t: "toggle", path: "ordering.askEmail", label: "Ask for an email address (optional for the guest)" }] },
+      { title: "Contact details before checkout", fields: [
+        { t: "select", path: "ordering.need", label: "A guest must give", options: [{ value: "", label: "Standard: mobile number (email only if asked above)" }, { value: "phone", label: "Mobile number (email optional)" }, { value: "email", label: "Email address (mobile optional)" }, { value: "both", label: "Both mobile number and email" }, { value: "either", label: "Either one: mobile number or email" }] },
+        { t: "note", text: "The other one is still shown, marked optional. Where guests verify their number on WhatsApp, or orders go to Petpooja, keep the mobile number required: verifying always asks for it, and Petpooja expects one." }] },
     ],
   },
   {

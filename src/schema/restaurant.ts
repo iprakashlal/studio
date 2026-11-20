@@ -3,7 +3,7 @@ import type { Category, Field, TemplateDef } from "./types";
 import { FX_AXES, HERO_FX_AXIS, LINE_BREAKS_AXIS, type Axis } from "../themes/catalog";
 import { REST_AXES, REST_BODY_FONTS, REST_DISPLAY_FONTS, REST_TAGS, REST_THEMES, restaurantThemeValues } from "../themes/restaurant";
 import { INTRO_CARD, NAV_MODE_FIELD, NAV_MODE_MOB_FIELD } from "../themes/fields";
-import { adminCategory, loyaltyCard, accountsCategory, accountLookCard, legalCategory, codeCategory, withSectionBg, videoCategory, socialCategory, logoFields, consentCategory, emailsCategory, i18nCategory, prepareI18n, featuresCategory, festivalCategory, menuCategory, menuItem, prepareMenu, staticPagesCategory, heroSlidesCard, prepareSlides, prepareMaintenance, seoCategory, customFontsCard } from "./common";
+import { ANIM_BG_FIELDS, adminCategory, loyaltyCard, accountsCategory, accountLookCard, legalCategory, codeCategory, withSectionBg, videoCategory, socialCategory, logoFields, consentCategory, emailsCategory, i18nCategory, prepareI18n, featuresCategory, festivalCategory, menuCategory, menuItem, prepareMenu, staticPagesCategory, heroSlidesCard, prepareSlides, prepareMaintenance, seoCategory, customFontsCard } from "./common";
 
 const g2 = (...fields: Field[]): Field => ({ t: "grid", cols: 2, fields });
 const g3 = (...fields: Field[]): Field => ({ t: "grid", cols: 3, fields });
@@ -33,7 +33,7 @@ const schema: Category[] = [
       { title: "Food menu & gallery", fields: [g2(sel(REST_AXES.menuStyle), sel(REST_AXES.gallery)),
         { t: "note", text: "Photo cards, the list and the magazine style show dish photos; the classic, chalkboard, printed card and boxes keep the menu to words and prices." }] },
       { title: "Style & graphics", fields: [g2(sel(REST_AXES.heading), sel(REST_AXES.shead), sel(REST_AXES.ornament), sel(REST_AXES.divider), sel(REST_AXES.pattern), sel(REST_AXES.cards), sel(REST_AXES.buttons), sel(REST_AXES.motionStyle)),
-        { t: "note", text: "The ornament is the small drawing above section titles, in the menu and in the footer. The edge shapes show where a band of colour begins, so they need “Alternate soft bands” or “Alternate dark bands”. Visitors who ask their device for reduced motion always get a still page." }] },
+        { t: "note", text: "The ornament is the small drawing above section titles, in the menu and in the footer. The edge shapes show where a band of colour begins, so they need “Alternate soft bands” or “Alternate dark bands”. Visitors who ask their device for reduced motion always get a still page." }, ...ANIM_BG_FIELDS] },
       { title: "Interactions (optional)", fields: [{ t: "note", text: "Restaurant themes keep these off, so the page stays quick on a phone. Switch one on if it suits your place." },
         g2({ ...sel(FX_AXES.cursor) }, sel(FX_AXES.loader), sel(FX_AXES.textfx), sel(FX_AXES.hoverfx), sel(FX_AXES.scrollfx), sel(FX_AXES.overlay)), sel(HERO_FX_AXIS), { t: "note", text: "Hero graphic effect is a slow, quiet loop on the hero's picture or graphic, drawn in your theme's accent colours. It stays still for visitors who ask their device for less motion." }] },
       { ...INTRO_CARD, fields: [{ t: "note", text: "Shown when “Intro & page transition” above is set to anything but None. Leave a colour empty to use the theme's own." }, ...INTRO_CARD.fields.slice(1)] },

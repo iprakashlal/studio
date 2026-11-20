@@ -772,6 +772,210 @@
     if (k.text === "custom" && COLOR_OK.test(tc)) { el.style.setProperty("--scol", tc); el.setAttribute("data-sbg-text", "custom"); }
     if (/^(bold|light|italic|bolditalic|upper|spaced)$/.test(k.fontStyle || "")) el.setAttribute("data-sfs", k.fontStyle);
   }
+  // ---- Moving backgrounds and patterns, drawn here with no library: for a section (sectionBg[key].kind "anim" or
+  // "pattern") and for the page or its hero (theme.animBg). They take the theme's colours, pause when out of sight
+  // or when the tab is hidden, and stay still for visitors who ask their device for less motion.
+  var ANIMS = { motion: 1, sand: 1, synth: 1, liquid: 1, terrain: 1, aurora: 1, stars: 1 };
+  var PATTERNS = { dots: 1, grid: 1, lines: 1, columns: 1, diagonal: 1, cross: 1, waves: 1, rings: 1, topo: 1, gingham: 1, stripes: 1, mesh: 1, grain: 1 };
+  function rgbOf(str) { var m = /rgba?\(\s*([\d.]+)[ ,]+([\d.]+)[ ,]+([\d.]+)(?:[ ,/]+([\d.]+%?))?/.exec(String(str || "")); if (!m) return null; var a = m[4] == null ? 1 : /%$/.test(m[4]) ? parseFloat(m[4]) / 100 : +m[4]; return a < 0.05 ? null : [Math.round(+m[1]), Math.round(+m[2]), Math.round(+m[3])]; }
+  /** The colours to draw with: the theme's two accents, and the colour behind `el` (its own, else the nearest one above it). */
+  function animCols(el, fixed) {
+    var probe = document.createElement("i"); probe.style.cssText = "position:absolute;width:0;height:0;visibility:hidden"; (el || document.body).appendChild(probe);
+    var read = function (v) { probe.style.color = ""; probe.style.color = v; return rgbOf(getComputedStyle(probe).color); };
+    var c1 = read("var(--c1, var(--accent, #5B7CFF))") || [91, 124, 255], c2 = read("var(--c2, var(--accent2, var(--c3, var(--c1, var(--accent, #5B7CFF)))))") || c1;
+    probe.remove();
+    var bg = rgbOf(fixed), n = el;
+    while (!bg && n && n.nodeType === 1) { bg = rgbOf(getComputedStyle(n).backgroundColor); n = n.parentNode; }
+    if (!bg) bg = rgbOf(getComputedStyle(document.documentElement).backgroundColor) || [255, 255, 255];
+    if (Math.abs(c1[0] - c2[0]) + Math.abs(c1[1] - c2[1]) + Math.abs(c1[2] - c2[2]) < 40) c2 = [c1[1], c1[2], c1[0]];   // one accent only: a second from the same family
+    return { c1: c1, c2: c2, bg: bg, dark: (0.2126 * bg[0] + 0.7152 * bg[1] + 0.0722 * bg[2]) < 140 };
+  }
+  var RGBA = function (c, a) { return "rgba(" + c[0] + "," + c[1] + "," + c[2] + "," + a + ")"; };
+  var MIX = function (a, b, t) { return [Math.round(a[0] + (b[0] - a[0]) * t), Math.round(a[1] + (b[1] - a[1]) * t), Math.round(a[2] + (b[2] - a[2]) * t)]; };
+  // smooth noise (value noise, three octaves): the same every time, so a still frame is always the same picture
+  function h2(x, y) { var n = Math.sin(x * 127.1 + y * 311.7) * 43758.5453; return n - Math.floor(n); }
+  function vn(x, y) { var xi = Math.floor(x), yi = Math.floor(y), xf = x - xi, yf = y - yi, u = xf * xf * (3 - 2 * xf), v = yf * yf * (3 - 2 * yf); return (h2(xi, yi) * (1 - u) + h2(xi + 1, yi) * u) * (1 - v) + (h2(xi, yi + 1) * (1 - u) + h2(xi + 1, yi + 1) * u) * v; }
+  function fbm(x, y) { return vn(x, y) * 0.55 + vn(x * 2.1, y * 2.1) * 0.3 + vn(x * 4.3, y * 4.3) * 0.15; }
+  /** Draws `kind` on a canvas filling `host`. Returns { stop }. */
+  function animMount(host, kind, o) {
+    o = o || {};
+    var cv = document.createElement("canvas"); cv.setAttribute("aria-hidden", "true"); cv.className = "fx-anim"; cv.setAttribute("data-anim", kind);
+    cv.style.cssText = "position:absolute;inset:0;width:100%;height:100%;display:block" + (kind === "liquid" ? ";filter:blur(26px) saturate(1.25);transform:scale(1.12)" : kind === "aurora" ? ";filter:blur(14px);transform:scale(1.06)" : "");
+    host.insertBefore(cv, host.firstChild);
+    var g = cv.getContext("2d"); if (!g) return { stop: function () {} };
+    var K = animCols(host, o.bg), c1 = K.c1, c2 = K.c2, bg = K.bg, dark = K.dark, ink = dark ? [255, 255, 255] : [20, 22, 26];
+    var W = 0, H = 0, D = 1, S = {}, speed = o.speed === "lively" ? 1.9 : o.speed === "slow" ? 0.55 : 1, strength = Math.max(0.2, Math.min(1, (+o.strength || 100) / 100));
+    cv.style.opacity = String(strength);
+    function size() {
+      var r = host.getBoundingClientRect(); D = Math.min(1.5, window.devicePixelRatio || 1) * (kind === "liquid" || kind === "aurora" ? 0.5 : 1);
+      var w = Math.max(2, Math.round(r.width * D)), h = Math.max(2, Math.round(r.height * D));
+      if (w === W && h === H) return; W = cv.width = w; H = cv.height = h; S = {};
+    }
+    var DRAW = {
+      // drifting shapes: circles, rings, bars, plus signs and triangles, each on its own slow path
+      motion: function (t) {
+        var n = Math.max(10, Math.min(26, Math.round(W * H / (D * D) / 52000))), i;
+        if (!S.p) { S.p = []; for (i = 0; i < n; i++) S.p.push({ x: h2(i, 1), y: h2(i, 2), r: 18 + h2(i, 3) * 70, k: Math.floor(h2(i, 4) * 5), a: 0.07 + h2(i, 5) * 0.13, ph: h2(i, 6) * 6.28, c: h2(i, 7) > 0.5 ? c1 : c2, sp: 0.4 + h2(i, 8) }); }
+        g.clearRect(0, 0, W, H);
+        S.p.forEach(function (p) {
+          var x = (p.x + Math.sin(t * 0.09 * p.sp + p.ph) * 0.07) * W, y = (p.y + Math.cos(t * 0.07 * p.sp + p.ph * 1.3) * 0.09) * H, r = p.r * D * (1 + Math.sin(t * 0.3 + p.ph) * 0.08), rot = t * 0.12 * p.sp + p.ph;
+          g.save(); g.translate(x, y); g.rotate(rot); g.fillStyle = RGBA(p.c, p.a); g.strokeStyle = RGBA(p.c, p.a * 1.7); g.lineWidth = Math.max(1.5, r * 0.09);
+          if (p.k === 0) { g.beginPath(); g.arc(0, 0, r, 0, 6.2832); g.fill(); }
+          else if (p.k === 1) { g.beginPath(); g.arc(0, 0, r, 0, 6.2832); g.stroke(); }
+          else if (p.k === 2) { var w = r * 2.4, hh = r * 0.5; g.beginPath(); if (g.roundRect) g.roundRect(-w / 2, -hh / 2, w, hh, hh / 2); else g.rect(-w / 2, -hh / 2, w, hh); g.fill(); }
+          else if (p.k === 3) { g.fillRect(-r, -r * 0.16, r * 2, r * 0.32); g.fillRect(-r * 0.16, -r, r * 0.32, r * 2); }
+          else { g.beginPath(); g.moveTo(0, -r); g.lineTo(r * 0.9, r * 0.7); g.lineTo(-r * 0.9, r * 0.7); g.closePath(); g.stroke(); }
+          g.restore();
+        });
+      },
+      // grains carried by a slow wind, each catching the light in turn
+      sand: function (t) {
+        var n = Math.max(350, Math.min(2400, Math.round(W * H / (D * D) / 650))), i, p;
+        if (!S.p) { S.p = []; for (i = 0; i < n; i++) S.p.push({ x: h2(i, 11) * W, y: h2(i, 12) * H, s: (0.7 + h2(i, 13) * 1.5) * D, ph: h2(i, 14) * 6.28, c: h2(i, 15) }); S.t = t; }
+        var dt = Math.min(0.05, Math.max(0, t - S.t)); S.t = t;
+        g.clearRect(0, 0, W, H);
+        for (i = 0; i < S.p.length; i++) {
+          p = S.p[i];
+          var a = fbm(p.x / (260 * D), p.y / (260 * D) + t * 0.03) * 6.2832 * 1.4, v = (14 + p.c * 22) * D;
+          p.x += (Math.cos(a) * v + 9 * D) * dt; p.y += Math.sin(a) * v * 0.55 * dt;
+          if (p.x > W + 4) p.x = -4; else if (p.x < -4) p.x = W + 4; if (p.y > H + 4) p.y = -4; else if (p.y < -4) p.y = H + 4;
+          var tw = Math.pow(Math.abs(Math.sin(p.ph + t * (0.6 + p.c))), 6), col = p.c < 0.34 ? c1 : p.c < 0.67 ? c2 : ink;
+          g.fillStyle = RGBA(col, (0.16 + tw * 0.74).toFixed(3)); g.fillRect(p.x, p.y, p.s, p.s);
+        }
+      },
+      // a low sun over a grid that runs to the horizon
+      synth: function (t) {
+        var hz = H * 0.6, cx = W / 2, i, y;
+        var sky = g.createLinearGradient(0, 0, 0, hz); sky.addColorStop(0, RGBA(bg, 1)); sky.addColorStop(1, RGBA(MIX(bg, c2, dark ? 0.42 : 0.3), 1));
+        g.fillStyle = sky; g.fillRect(0, 0, W, hz);
+        for (i = 0; i < 46; i++) { var tw = 0.25 + 0.75 * Math.abs(Math.sin(t * 0.7 + i * 2.3)); g.fillStyle = RGBA(ink, (0.1 + tw * 0.4).toFixed(3)); g.fillRect(h2(i, 21) * W, h2(i, 22) * hz * 0.8, D * (1 + h2(i, 23)), D * (1 + h2(i, 23))); }
+        var r = Math.min(W, H) * 0.24, sun = g.createLinearGradient(0, hz - r * 2, 0, hz); sun.addColorStop(0, RGBA(c2, 1)); sun.addColorStop(1, RGBA(c1, 1));
+        g.save(); g.beginPath(); g.rect(0, 0, W, hz); g.clip(); g.shadowColor = RGBA(c1, 0.6); g.shadowBlur = r * 0.5; g.fillStyle = sun; g.beginPath(); g.arc(cx, hz - r * 0.35, r, 0, 6.2832); g.fill(); g.shadowBlur = 0;
+        // bands across the sun, sliding down and thickening as they reach the horizon
+        g.fillStyle = RGBA(MIX(bg, c2, dark ? 0.42 : 0.3), 1);
+        for (i = 0; i < 7; i++) { var f = ((i + (t * 0.08) % 1) / 7), by = hz - r * 1.35 + r * 1.35 * (0.35 + f * 0.65), bh = Math.max(D, r * 0.11 * f); g.fillRect(cx - r - 4, by, r * 2 + 8, bh); }
+        g.restore();
+        var fl = g.createLinearGradient(0, hz, 0, H); fl.addColorStop(0, RGBA(MIX(bg, c1, dark ? 0.3 : 0.2), 1)); fl.addColorStop(1, RGBA(bg, 1)); g.fillStyle = fl; g.fillRect(0, hz, W, H - hz);
+        g.lineWidth = Math.max(1, D); g.strokeStyle = RGBA(c1, dark ? 0.75 : 0.6);
+        for (i = -14; i <= 14; i++) { g.beginPath(); g.moveTo(cx + i * W * 0.012, hz); g.lineTo(cx + i * W * 0.16, H); g.stroke(); }
+        var ph = (t * 0.22) % 1;
+        for (i = 0; i < 13; i++) { var z = (i + ph) / 13; y = hz + (H - hz) * z * z; g.globalAlpha = Math.min(1, 0.25 + z); g.beginPath(); g.moveTo(0, y); g.lineTo(W, y); g.stroke(); }
+        g.globalAlpha = 1; g.strokeStyle = RGBA(c2, 0.9); g.lineWidth = Math.max(1.5, D * 1.5); g.beginPath(); g.moveTo(0, hz); g.lineTo(W, hz); g.stroke();
+      },
+      // slow blobs of colour that merge and part, with waves along the bottom
+      liquid: function (t) {
+        g.fillStyle = RGBA(bg, 1); g.fillRect(0, 0, W, H);
+        var n = 7, i, R = Math.max(W, H) * 0.32;
+        for (i = 0; i < n; i++) {
+          var x = W * (0.5 + 0.42 * Math.sin(t * 0.11 * (1 + i * 0.13) + i * 2.1)), y = H * (0.5 + 0.4 * Math.cos(t * 0.09 * (1 + i * 0.17) + i * 1.7)), r = R * (0.55 + 0.35 * Math.sin(t * 0.2 + i));
+          var c = i % 3 === 0 ? c1 : i % 3 === 1 ? c2 : MIX(c1, c2, 0.5), gr = g.createRadialGradient(x, y, 0, x, y, r);
+          gr.addColorStop(0, RGBA(c, dark ? 0.75 : 0.6)); gr.addColorStop(1, RGBA(c, 0)); g.fillStyle = gr; g.beginPath(); g.arc(x, y, r, 0, 6.2832); g.fill();
+        }
+        for (i = 0; i < 3; i++) {
+          g.fillStyle = RGBA(i % 2 ? c1 : c2, 0.18); g.beginPath(); g.moveTo(0, H);
+          for (var x2 = 0; x2 <= W; x2 += W / 40) g.lineTo(x2, H * (0.72 + i * 0.08) + Math.sin(x2 / W * 6.28 * (1.2 + i * 0.5) + t * (0.5 + i * 0.2)) * H * 0.045 + Math.sin(x2 / W * 14 - t * 0.35) * H * 0.015);
+          g.lineTo(W, H); g.closePath(); g.fill();
+        }
+      },
+      // ridge after ridge of a landscape, scrolling toward you
+      terrain: function (t) {
+        g.clearRect(0, 0, W, H);
+        var rows = 26, top = H * 0.2, i, x, step = Math.max(6 * D, W / 130), sc = t * 0.16;
+        for (i = 0; i < rows; i++) {
+          var z = i / (rows - 1), y0 = top + (H - top) * Math.pow(z, 1.55), amp = H * (0.035 + 0.15 * z), f = 1.2 + 2.2 * (1 - z);
+          g.beginPath(); g.moveTo(-2, H + 2);
+          for (x = -2; x <= W + step; x += step) { var e = fbm(x / W * f + 5, i * 0.33 - sc), mid = 1 - Math.pow(Math.abs(x / W - 0.5) * 1.5, 2); g.lineTo(x, y0 - (e - 0.3) * amp * (0.45 + 0.55 * Math.max(0, mid))); }
+          g.lineTo(W + 2, H + 2); g.closePath();
+          g.fillStyle = RGBA(bg, 1); g.fill();
+          g.strokeStyle = RGBA(MIX(c2, c1, z), (0.16 + 0.62 * z).toFixed(3)); g.lineWidth = Math.max(1, D * (0.7 + z * 0.9)); g.stroke();
+        }
+      },
+      // ribbons of light that sway
+      aurora: function (t) {
+        g.clearRect(0, 0, W, H);
+        for (var i = 0; i < 5; i++) {
+          var c = i % 2 ? c2 : MIX(c1, c2, i / 6), base = H * (0.18 + i * 0.13), gr = g.createLinearGradient(0, base - H * 0.2, 0, base + H * 0.35);
+          gr.addColorStop(0, RGBA(c, 0)); gr.addColorStop(0.45, RGBA(c, dark ? 0.55 : 0.4)); gr.addColorStop(1, RGBA(c, 0));
+          g.fillStyle = gr; g.beginPath(); g.moveTo(0, H);
+          for (var x = 0; x <= W; x += W / 36) g.lineTo(x, base + Math.sin(x / W * 5 + t * (0.22 + i * 0.05) + i * 1.9) * H * 0.09 + (fbm(x / W * 2.2 + i * 3, t * 0.06 + i) - 0.5) * H * 0.22);
+          g.lineTo(W, H); g.closePath(); g.fill();
+        }
+      },
+      // points that drift, joined when they come near each other
+      stars: function (t) {
+        var n = Math.max(26, Math.min(90, Math.round(W * H / (D * D) / 15000))), i, j, link = 130 * D;
+        if (!S.p) { S.p = []; for (i = 0; i < n; i++) S.p.push({ x: h2(i, 31), y: h2(i, 32), ph: h2(i, 33) * 6.28, sp: 0.3 + h2(i, 34), c: h2(i, 35) > 0.5 ? c1 : c2 }); }
+        g.clearRect(0, 0, W, H);
+        var P = S.p.map(function (p) { return { x: (p.x + Math.sin(t * 0.05 * p.sp + p.ph) * 0.06) * W, y: (p.y + Math.cos(t * 0.045 * p.sp + p.ph * 1.7) * 0.07) * H, p: p }; });
+        g.lineWidth = Math.max(1, D);
+        for (i = 0; i < P.length; i++) for (j = i + 1; j < P.length; j++) { var dx = P[i].x - P[j].x, dy = P[i].y - P[j].y, d = Math.sqrt(dx * dx + dy * dy); if (d < link) { g.strokeStyle = RGBA(MIX(c1, c2, 0.5), ((1 - d / link) * 0.42).toFixed(3)); g.beginPath(); g.moveTo(P[i].x, P[i].y); g.lineTo(P[j].x, P[j].y); g.stroke(); } }
+        P.forEach(function (q) { var tw = 0.5 + 0.5 * Math.sin(t * 1.3 * q.p.sp + q.p.ph); g.fillStyle = RGBA(q.p.c, (0.45 + tw * 0.5).toFixed(3)); g.beginPath(); g.arc(q.x, q.y, D * (1.6 + tw * 1.6), 0, 6.2832); g.fill(); });
+      }
+    };
+    var draw = DRAW[kind] || DRAW.motion, raf = 0, seen = true, alive = true, t0 = performance.now(), last = 0;
+    function frame(now) {
+      raf = 0; if (!alive) return;
+      if (!cv.isConnected) { stop(); return; }
+      if (seen && !document.hidden && now - last > 30) { last = now; size(); try { draw((now - t0) / 1000 * speed); } catch (e) { stop(); return; } }
+      raf = requestAnimationFrame(frame);
+    }
+    function still() { size(); try { draw(7.3); } catch (e) { /* stays empty */ } }
+    var io = null, ro = null;
+    function stop() { alive = false; if (raf) cancelAnimationFrame(raf); if (io) io.disconnect(); if (ro) ro.disconnect(); }
+    if (RM || o.still) { still(); if (window.ResizeObserver) { ro = new ResizeObserver(function () { if (cv.isConnected) still(); else stop(); }); ro.observe(host); } }
+    else {
+      if (window.IntersectionObserver) { io = new IntersectionObserver(function (es) { seen = es[es.length - 1].isIntersecting; }); io.observe(host); }
+      still(); raf = requestAnimationFrame(frame);
+    }
+    return { stop: stop };
+  }
+  /** A still pattern as a CSS background, in the theme's colour. */
+  function patternCss(name, K) {
+    var a = RGBA(K.c1, K.dark ? 0.34 : 0.26), b = RGBA(K.c1, K.dark ? 0.2 : 0.13), c = RGBA(K.c2, K.dark ? 0.3 : 0.2), s = "rgb(" + K.c1.join(",") + ")", op = K.dark ? 0.42 : 0.3;
+    var svg = function (w, h, body) { return "url(\"data:image/svg+xml," + encodeURIComponent("<svg xmlns='http://www.w3.org/2000/svg' width='" + w + "' height='" + h + "' viewBox='0 0 " + w + " " + h + "'>" + body + "</svg>") + "\")"; };
+    var L = "fill='none' stroke='" + s + "' stroke-opacity='" + op + "' stroke-width='1.4'";
+    switch (name) {
+      case "dots": return "radial-gradient(" + a + " 1.4px,transparent 1.9px) 0 0/20px 20px";
+      case "grid": return "linear-gradient(" + b + " 1px,transparent 1px) 0 0/30px 30px,linear-gradient(90deg," + b + " 1px,transparent 1px) 0 0/30px 30px";
+      case "lines": return "repeating-linear-gradient(0deg," + b + " 0 1px,transparent 1px 24px)";
+      case "columns": return "repeating-linear-gradient(90deg," + b + " 0 1px,transparent 1px 72px)";
+      case "diagonal": return "repeating-linear-gradient(45deg," + b + " 0 2px,transparent 2px 18px)";
+      case "cross": return svg(34, 34, "<path d='M17 11v12M11 17h12' " + L + "/>");
+      case "waves": return svg(80, 24, "<path d='M0 12c10-12 30-12 40 0s30 12 40 0' " + L + "/>");
+      case "rings": return svg(72, 72, "<circle cx='36' cy='36' r='10' " + L + "/><circle cx='36' cy='36' r='22' " + L + "/><circle cx='36' cy='36' r='34' " + L + "/>");
+      case "topo": return svg(160, 120, "<path d='M-10 30c40-30 70 20 110-5s50 10 70 0M-10 60c30-18 60 22 100 0s60-20 80 5M-10 92c45-25 75 18 115-4s45 6 65-6' " + L + "/><path d='M40 8c18 10 34 8 50-2M30 112c22-12 44-8 66 2' " + L + "/>");
+      case "gingham": return "linear-gradient(" + b + " 50%,transparent 50%) 0 0/32px 32px,linear-gradient(90deg," + b + " 50%,transparent 50%) 0 0/32px 32px";
+      case "stripes": return "repeating-linear-gradient(90deg," + b + " 0 26px,transparent 26px 52px)";
+      case "mesh": return "radial-gradient(60% 90% at 12% 8%," + RGBA(K.c1, K.dark ? 0.5 : 0.32) + ",transparent 62%),radial-gradient(55% 80% at 92% 96%," + c + ",transparent 60%),radial-gradient(40% 60% at 70% 20%," + RGBA(K.c2, 0.16) + ",transparent 60%)";
+      case "grain": return svg(160, 160, "<filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 " + (K.dark ? 1 : 0) + " 0 0 0 0 " + (K.dark ? 1 : 0) + " 0 0 0 0 " + (K.dark ? 1 : 0) + " 0 0 0 " + (K.dark ? 0.22 : 0.3) + " 0'/></filter><rect width='160' height='160' filter='url(#n)'/>");
+    }
+    return "";
+  }
+  /** The page's own moving background (Theme & layout → Style): in the hero, or fixed behind the whole page. */
+  var pageAnim = null;
+  function pageBg(opts, root) {
+    var th = (opts.c && opts.c.theme) || {}, kind = ANIMS[th.animBg] ? th.animBg : "", where = th.animBgWhere === "page" ? "page" : "hero";
+    var sig = kind + "|" + where + "|" + (th.animBgSpeed || "") + "|" + (th.animBgStrength || "");
+    var heroOwn = opts.bgs && opts.bgs.hero && opts.bgs.hero.on && opts.bgs.hero.kind !== "none";
+    var hero = kind && where === "hero" && !heroOwn ? (root.querySelector("#hero") || root.querySelector('[data-sec="hero"]') || root.querySelector("section.hero,.hero") || root.querySelector("main section,section")) : null;
+    if (pageAnim && pageAnim.sig === sig && pageAnim.host.isConnected && (where === "page" || pageAnim.host.parentNode === hero)) return;
+    if (pageAnim) { pageAnim.a.stop(); pageAnim.host.remove(); if (pageAnim.el) pageAnim.el.classList.remove("has-pbg"); document.documentElement.classList.remove("fx-pbg"); pageAnim = null; }
+    if (!kind) return;
+    if (!document.getElementById("fx-pbg")) { var st3 = document.createElement("style"); st3.id = "fx-pbg"; st3.textContent = ".has-pbg{isolation:isolate;position:relative}.fx-pbgl{position:absolute;inset:0;z-index:-1;overflow:hidden;pointer-events:none;border-radius:inherit}html.fx-pbg{background:var(--fx-pbg)}html.fx-pbg body{background:transparent!important}.fx-pbgl[data-where=page]{position:fixed;z-index:-1}@media print{.fx-pbgl{display:none}}"; document.head.appendChild(st3); }
+    var host = document.createElement("div"); host.className = "fx-pbgl"; host.setAttribute("aria-hidden", "true"); host.setAttribute("data-where", where);
+    var o = { speed: th.animBgSpeed, strength: th.animBgStrength };
+    if (where === "page") {
+      var bgc = getComputedStyle(document.body).backgroundColor; if (!rgbOf(bgc)) bgc = getComputedStyle(document.documentElement).backgroundColor;
+      if (rgbOf(bgc)) { document.documentElement.style.setProperty("--fx-pbg", bgc); o.bg = bgc; }
+      document.body.appendChild(host); document.documentElement.classList.add("fx-pbg");
+      pageAnim = { sig: sig, host: host, el: null, a: animMount(host, kind, o) };
+    } else {
+      if (!hero) return;
+      if (getComputedStyle(hero).position === "static") hero.classList.add("has-pbg"); else hero.style.isolation = "isolate";
+      hero.insertBefore(host, hero.firstChild);
+      pageAnim = { sig: sig, host: host, el: hero, a: animMount(host, kind, o) };
+    }
+  }
   function sectionBgs(opts, root) {
     var map = opts.bgs; if (!map || typeof map !== "object") return;
     var url = opts.asset || function (v) { return v && (v.url || v.path) || ""; };
@@ -788,9 +992,10 @@
       var pics = k.kind === "slides" && Array.isArray(k.slides) ? k.slides.map(function (x) { return url(x); }).filter(Boolean) : [];
       var kind = k.kind === "image" || k.kind === "video" ? k.kind : pics.length > 1 ? "slides" : "color", src = kind === "image" ? url(k.image) : kind === "video" ? url(k.video) : kind === "slides" ? pics[0] : pics[0] || "";
       if (k.kind === "slides" && pics.length === 1) kind = "image";
+      if (k.kind === "anim" && ANIMS[k.anim]) kind = "anim"; else if (k.kind === "pattern" && PATTERNS[k.pattern]) kind = "pattern";
       var col = /^(#[0-9a-f]{3,8}|rgba?\([0-9., %]+\))$/i.test(String(k.color || "").trim()) ? String(k.color).trim() : "";
-      if (kind !== "color" && !src) kind = "color";
-      var old = el.querySelector(":scope > .sbg"); if (old) old.remove();
+      if (kind !== "color" && kind !== "anim" && kind !== "pattern" && !src) kind = "color";
+      var old = el.querySelector(":scope > .sbg"); if (old) { if (old.__ab) old.__ab.stop(); old.remove(); }
       el.classList.add("has-sbg");
       try { sectionText(el, k, opts); } catch (e) { /* the text keeps the theme's look */ }
       if (k.kind === "none" || (kind === "color" && !col)) return;
@@ -808,7 +1013,8 @@
       if (kind === "color") return;
       var box = document.createElement("div"); box.className = "sbg fx-skip"; box.setAttribute("aria-hidden", "true");
       var blur = Math.max(0, Math.min(40, Number(k.blur) || 0)); if (blur) { box.setAttribute("data-blur", ""); box.style.setProperty("--sbl", blur + "px"); }
-      if (kind === "slides") {
+      if (kind === "anim" || kind === "pattern") { /* drawn below, once it is in the page (it reads the colours around it) */ }
+      else if (kind === "slides") {
         box.setAttribute("data-slides", k.slideFx === "zoom" || k.slideFx === "slide" ? k.slideFx : "fade");
         var ims = pics.map(function (u, n) { var x = document.createElement("img"); x.alt = ""; x.decoding = "async"; if (n > 1) x.loading = "lazy"; x.src = u; if (!n) x.className = "on"; box.appendChild(x); return x; });
         if (!RM) { var at = 0, secs = Math.max(2, Math.min(20, Number(k.slideSecs) || 5));
@@ -819,6 +1025,8 @@
       var dim = Math.max(0, Math.min(95, Number(k.dim) || 0));
       if (dim) { var ov = document.createElement("i"); ov.style.background = ((k.shade ? k.shade === "light" : k.text === "dark") ? "rgba(255,255,255," : "rgba(0,0,0,") + dim / 100 + ")"; box.appendChild(ov); }
       el.insertBefore(box, el.firstChild);
+      if (kind === "anim") box.__ab = animMount(box, k.anim, { speed: k.animSpeed, strength: k.animStrength, bg: col });
+      else if (kind === "pattern") { var pt = document.createElement("i"); pt.setAttribute("data-pattern", k.pattern); pt.style.background = patternCss(k.pattern, animCols(box, col)); box.insertBefore(pt, box.firstChild); }
     });
   }
   // ---- Legal & privacy (content.legal, content.privacy)
@@ -913,6 +1121,7 @@
     var root = opts.root || document.body;
     try { legalBits(opts, root); } catch (e) { /* never worth a broken page */ }
     try { sectionBgs(opts, root); } catch (e) { /* a background is never worth a broken page */ }
+    try { pageBg(opts, root); } catch (e) { /* a background is never worth a broken page */ }
     ensureStyle(); wire();
     try { badge(opts.badge); } catch (e) {}
     var c = cfg(), sig = JSON.stringify(c), changed = sig !== st.sig;

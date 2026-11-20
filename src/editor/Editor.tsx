@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode, Fragment } from "
 import type { TemplateDef } from "../schema/types";
 import { Ctx, FieldView, openListItem, type EditorCtx } from "./fields";
 import { locateField } from "./locate";
+import { SettingsHub } from "./SettingsHub";
 import { studioHidden } from "../lib/features";
 import { applyMenu, type MenuCfg } from "../lib/menus";
 
@@ -122,6 +123,9 @@ export function Editor({ tpl, draft, version, onChange, upload, img, extras = []
   }, [q, index]);
   // On a phone the menu is a full-screen list opened from one bar (the section's name, with previous and next beside it).
   const [sheet, setSheet] = useState(false), navRef = useRef<HTMLElement>(null);
+  // "All settings": the menu opened out into tiles. Choosing one goes to it and marks where you landed for a moment.
+  const [hub, setHub] = useState(false), [landed, setLanded] = useState(0);
+  const hubPick = (id: string) => { setHub(false); setSheet(false); setQ(""); setCat(id); onCategory?.(id); scroller.current?.scrollTo({ top: 0 }); setLanded(Date.now()); };
   useEffect(() => {
     if (!sheet) return;
     const cur = navRef.current?.querySelector<HTMLElement>('[aria-current="page"]'); cur?.scrollIntoView({ block: "center" });
@@ -144,9 +148,11 @@ export function Editor({ tpl, draft, version, onChange, upload, img, extras = []
           </button>
           <button type="button" className="btn btn-sm flex-none px-3 text-base" aria-label="Next section" disabled={at < 0 || at >= flat.length - 1} onClick={() => step(1)}>›</button>
         </div>
+        {hub && <SettingsHub groups={groups} cur={curId} onPick={hubPick} onClose={() => setHub(false)} />}
         <nav ref={navRef} aria-label="Content categories" className={`scroll-thin ${sheet ? "fixed inset-0 z-[80] flex" : "hidden"} flex-none flex-col gap-1 overflow-y-auto bg-ink-900 p-3 md:static md:z-auto md:flex md:w-52 md:border-r md:border-ink-700`}>
           <div className="sticky -top-3 z-10 -mx-3 -mt-3 flex-none bg-ink-900 px-3 pb-1 pt-3">
             <div className="mb-2 flex items-center md:hidden"><b className="flex-1 text-base font-extrabold">All sections</b><button type="button" className="btn btn-sm" onClick={() => setSheet(false)}>Close</button></div>
+            <button type="button" className="btn btn-sm mb-2 min-h-[42px] w-full justify-between md:min-h-0" aria-haspopup="dialog" onClick={() => setHub(true)}><span>All settings</span><span aria-hidden className="grid grid-cols-2 gap-[3px]">{[0, 1, 2, 3].map((k) => <i key={k} className="block h-[5px] w-[5px] rounded-[1.5px] bg-current" />)}</span></button>
             <label className="sr-only" htmlFor="menu-search">Search the settings</label>
             <input id="menu-search" type="search" className="input w-full py-2 text-[15px] md:py-1.5 md:text-[13px]" placeholder="Search settings" autoComplete="off" value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === "Escape") setQ(""); if (e.key === "Enter" && found?.length) pick(found[0]); }} />
           </div>
@@ -190,7 +196,7 @@ export function Editor({ tpl, draft, version, onChange, upload, img, extras = []
         </nav>
         <div ref={scroller} className="scroll-thin min-w-0 flex-1 overflow-y-auto">
           <div className="mx-auto flex max-w-5xl flex-col gap-4 px-4 py-5 sm:px-6">
-            <div>
+            <div key={landed} className={landed ? "hub-landed -mx-2 rounded-lg px-2 py-1" : undefined}>
               <h2 className="text-lg font-extrabold">{entry?.label}</h2>
               <p className="mt-1 text-sm text-ink-400">{entry?.desc}</p>
             </div>

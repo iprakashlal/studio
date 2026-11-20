@@ -70,3 +70,8 @@
 :root[data-ui="light"] .text-sky-100, :root[data-ui="light"] .text-sky-200, :root[data-ui="light"] .text-sky-300 { color: #0b6596; }
 :root[data-ui="light"] .border-white\/15, :root[data-ui="light"] .border-white\/20 { border-color: rgb(0 0 0 / .12); }
 :root[data-ui="light"] .card { box-shadow: 0 1px 2px rgb(16 24 40 / .05); }
+
+/* Arriving at a setting from "All settings": its heading is marked for a moment. */
+@keyframes hub-landed { 0% { background: rgb(var(--brand-500, 91 124 255) / .28); box-shadow: 0 0 0 2px rgb(var(--brand-500, 91 124 255) / .7); } 100% { background: transparent; box-shadow: 0 0 0 2px transparent; } }
+.hub-landed { animation: hub-landed 1.4s ease-out; }
+@media (prefers-reduced-motion: reduce) { .hub-landed { animation: none; } }

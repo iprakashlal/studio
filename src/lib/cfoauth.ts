@@ -2,7 +2,7 @@
 // by hand. The sign-in is used in the open tab only and never written to the device. For the other devices the
 // Studio makes its own long-lasting API token for just the allowed accounts and keeps it on the Studio's database
 // (a secret on the owner's own Cloudflare).
-import type { Cloudflare, CfAccount } from "./cloudflare";
+import { CfError, type Cloudflare, type CfAccount } from "./cloudflare";
 
 const AUTH = "https://dash.cloudflare.com/oauth2/auth", TOKEN = "https://dash.cloudflare.com/oauth2/token", REVOKE = "https://dash.cloudflare.com/oauth2/revoke";
 const CFG = "studio-cf-oauth", BACK = "studio-cf-oauth-back";
@@ -122,4 +122,58 @@ export async function cfOauthFreshen<T extends Kept>(v: T): Promise<boolean> {
     try { const g = await cfOauthRefresh(e.oauth); e.token = g.access; e.oauth = { ...e.oauth, refresh: g.refresh || e.oauth.refresh, exp: g.exp }; changed = true; } catch { /* shown as "connect again" when the token is refused */ }
   }
   return changed;
+}
+
+// ---------------------------------------------------------------- setting the client up (once, by the Studio's owner)
+/** Cloudflare's token page with the one permission the set-up needs (managing OAuth clients) asked for. */
+export const CF_OAUTH_SETUP_TOKEN_PAGE = `https://dash.cloudflare.com/profile/api-tokens?${new URLSearchParams({ permissionGroupKeys: JSON.stringify([{ key: "oauth_client", type: "edit" }]), accountId: "*", name: "Picaffectz Studio set-up (delete after use)" })}`;
+export const CF_OAUTH_CLIENT_NAME = "Picaffectz Studio";
+/** What the Studio needs, as the names Cloudflare may use for each (the first one its list has is taken), then by
+ *  the permission's plain name. `must`: the sign-in is no use without it. */
+const NEEDS: { what: string; ids: string[]; name: RegExp; must?: boolean }[] = [
+  { what: "User Details (read)", ids: ["user-details.read", "user.read"], name: /^user details read$/i },
+  { what: "Account Settings (read)", ids: ["account-settings.read", "account.read"], name: /^account settings read$/i, must: true },
+  { what: "Workers (write)", ids: ["workers:write", "workers-scripts.write", "workers.write"], name: /^workers scripts? (write|edit)$/i, must: true },
+  { what: "D1 (write)", ids: ["d1.write"], name: /^d1 (write|edit)$/i, must: true },
+  { what: "Workers Routes (write)", ids: ["workers-routes.write"], name: /^workers routes (write|edit)$/i },
+  { what: "Zone (read)", ids: ["zone.read"], name: /^zone read$/i },
+  { what: "DNS (write)", ids: ["dns.write", "dns-records.write"], name: /^dns (write|edit)$/i },
+  { what: "API Tokens (write)", ids: ["api-tokens.write", "user-api-tokens.write", "account-api-tokens.write"], name: /^(user |account )?api tokens (write|edit)$/i },
+];
+const PROTOCOL = ["openid", "offline", "offline_access"];
+/** Creates the Studio's OAuth client on `account` with a token that may manage OAuth clients (used now, not kept),
+ *  or finds the one already there. The permissions are taken from Cloudflare's own list, so what the Studio asks for
+ *  at sign-in is exactly what the client has. */
+export async function cfOauthSetup(cf: Cloudflare, account: CfAccount): Promise<{ cfg: CfOauthCfg; made: boolean; left: string[]; visibility: string; txt: string }> {
+  const redirect = cfOauthRedirect(), origin = location.origin;
+  const denied = (e: any) => e instanceof CfError && (e.status === 401 || e.status === 403);
+  let list: Awaited<ReturnType<Cloudflare["oauthClients"]>>;
+  try { list = (await cf.oauthClients(account.id)) || []; }
+  catch (e: any) { throw new Error(denied(e) ? `That token can't manage OAuth clients on ${account.name}. Create it from the link (permission: Account → OAuth Client → Edit) while signed in to that account, and paste it again.` : e?.message || "Couldn't reach Cloudflare."); }
+  const mine = list.find((c) => (c.redirect_uris || []).includes(redirect) && (!c.token_endpoint_auth_method || c.token_endpoint_auth_method === "none"));
+  if (mine) {
+    const scopes = (mine.scopes || []).filter((x) => !PROTOCOL.includes(x));
+    if (!scopes.length) throw new Error("The OAuth client already on this account has no permissions. Delete it in Cloudflare (Manage Account → OAuth clients) and press Set it up again.");
+    return { cfg: { client: mine.client_id, scopes: scopes.join(" ") }, made: false, left: [], visibility: mine.visibility || "private", txt: mine.client_uri_verification?.text || "" };
+  }
+  // Cloudflare's own names for the permissions; without its list, the names known to work.
+  let catalog: { id: string; name: string }[] | null = null;
+  try { catalog = await cf.oauthScopes(); } catch { catalog = null; }
+  const picked: string[] = [], left: string[] = [];
+  if (catalog?.length) {
+    for (const n of NEEDS) {
+      const id = n.ids.find((x) => catalog!.some((c) => c.id === x)) || catalog.find((c) => n.name.test(String(c.name || "").trim()))?.id;
+      if (id) picked.push(id); else if (n.must) throw new Error(`Cloudflare's list of permissions for OAuth clients has none for ${n.what}, which the Studio can't work without. Nothing was created.`); else left.push(n.what);
+    }
+  } else picked.push(...CF_OAUTH_SCOPES.split(" "));
+  const body = { client_name: CF_OAUTH_CLIENT_NAME, grant_types: ["authorization_code", "refresh_token"], response_types: ["code"], redirect_uris: [redirect], allowed_cors_origins: [origin], scopes: picked, token_endpoint_auth_method: "none" };
+  let made: Awaited<ReturnType<Cloudflare["createOauthClient"]>>;
+  try {
+    // With the Studio's address on it, the client can later be made public (after Cloudflare's domain check).
+    try { made = await cf.createOauthClient(account.id, { ...body, client_uri: origin }); }
+    catch (e: any) { if (denied(e)) throw e; made = await cf.createOauthClient(account.id, body); }
+  } catch (e: any) { throw new Error(denied(e) ? `That token can read OAuth clients on ${account.name} but can't create one. Give it Account → OAuth Client → Edit and paste it again.` : e?.message || "Cloudflare didn't create the client."); }
+  if (!made?.client_id) throw new Error("Cloudflare didn't give back a client ID. Check Manage Account → OAuth clients, and paste its Client ID by hand.");
+  const scopes = ((made.scopes || []).filter((x) => !PROTOCOL.includes(x)).length ? (made.scopes || []).filter((x) => !PROTOCOL.includes(x)) : picked).join(" ");
+  return { cfg: { client: made.client_id, scopes }, made: true, left, visibility: made.visibility || "private", txt: made.client_uri_verification?.text || "" };
 }

@@ -708,6 +708,9 @@ const PG: Record<string, { name: string; key: string; inr?: boolean }> = { rz: {
 const PG_CUR = ["INR", "USD", "EUR", "GBP", "AUD", "CAD", "SGD", "AED", "NZD", "CHF"];
 const pgReady = (g: string, z: any) => !!z && !!(g === "rz" ? z.on && z.secret && z.keyId : g === "cf" ? z.secret && z.appId : g === "pe" ? z.secret && z.clientId : g === "st" ? z.secret : g === "pp" ? z.secret && z.clientId : false);
 const isRest = (c: any) => !!(c?.ordering && c?.food);
+/** A site that asks customers to prove their email address at checkout (its own content says so), on a database that can send mail. */
+const emailCheckOn = (env: Env, c: any) => !!(env.RESEND_API_KEY && env.MAIL_FROM) && !!(isRest(c) ? c?.ordering?.verifyEmail : c?.checkout?.verifyEmail);
+const emailKey = (v: unknown) => { const e = String(v || "").trim().toLowerCase().slice(0, 120); return EMAIL_RE.test(e) ? e : ""; };
 /** Whether the site's published content has this way to pay switched on. */
 const pgOn = (c: any, g: string) => !!(isRest(c) ? c.ordering?.pay?.[PG[g].key] : c?.payments?.[PG[g].key]?.enabled);
 function siteCur(c: any): string {
@@ -1008,14 +1011,44 @@ export default {
       if (/^\/site\/[a-z0-9][a-z0-9-]{0,59}\/can$/.test(p) && req.method === "GET") {
         const site = p.split("/")[2], w = await getSetting(env, "site:" + site, "wa").catch(() => null), z = await getSetting(env, "site:" + site, "rz").catch(() => null);
         const pg: string[] = []; for (const g of ["cf", "pe", "st", "pp"]) if (pgReady(g, await getSetting(env, "site:" + site, g).catch(() => null))) pg.push(g);
-        const canCode = !!(waReady(w) && String(w.tplOtp || "").trim());
-        return json({ otp: canCode && !!w.orderOtp, pts: canCode && loyOf(await siteContent(env, site).catch(() => null)).on, rz: z?.on && z.secret && z.keyId ? String(z.keyId) : "", pg });
+        const canCode = !!(waReady(w) && String(w.tplOtp || "").trim()), sc = await siteContent(env, site).catch(() => null);
+        return json({ otp: canCode && !!w.orderOtp, pts: canCode && loyOf(sc).on, em: emailCheckOn(env, sc), rz: z?.on && z.secret && z.keyId ? String(z.keyId) : "", pg });
       }
       if (/^\/points\/[a-z0-9][a-z0-9-]{0,59}$/.test(p) && req.method === "POST") {
         const site = p.split("/")[2], b = (await req.json()) as any, L = loyOf(await siteContent(env, site));
         if (!L.on) return err(404, "Not found.");
         const v = await pointsBal(env, site, b.phone, b.otp); if (!v.ok) return err(403, "Verify your mobile number first.");
         return json({ points: v.bal, worth: L.worth, min: L.min, maxPct: L.maxPct, earn: L.earn });
+      }
+      // ---- A customer proves their email address at checkout: a 6-digit code by email, then a proof only this database can make.
+      if (/^\/eotp\/(send|check)\/[a-z0-9][a-z0-9-]{0,59}$/.test(p) && req.method === "POST") {
+        const site = p.split("/")[3], b = (await req.json()) as any, sc = await siteContent(env, site).catch(() => null);
+        if (!emailCheckOn(env, sc)) return err(404, "Not found.");
+        const em = emailKey(b.email); if (!em) return err(400, "Enter a valid email address.");
+        const k = "e:" + site + ":" + em, now = Date.now();
+        if (p.startsWith("/eotp/send/")) {
+          const prev: any = await env.DB.prepare("select sent from otps where k = ?").bind(k).first();
+          if (prev && now - prev.sent < 45_000) return err(429, "A code was just sent. Wait a minute before asking for another.");
+          const n: any = await env.DB.prepare("select count(*) n from otps where k like ? and sent > ?").bind("e:" + site + ":%", now - 3600_000).first();
+          if ((n?.n || 0) >= 150) return err(429, "Too many codes were asked for. Please try again later.");
+          const code = String(100000 + (crypto.getRandomValues(new Uint32Array(1))[0] % 900000)), name = oneLine(String(sc?.brand?.name || "")).slice(0, 60) || "your order";
+          await env.DB.prepare("insert into otps (k, hash, expires, tries, sent) values (?, ?, ?, 0, ?) on conflict (k) do update set hash = excluded.hash, expires = excluded.expires, tries = 0, sent = excluded.sent").bind(k, b64u(await hmac(env.SECRET, k + ":" + code)), now + 10 * 60_000, now).run();
+          try { await sendMail(env, em, `${code} is your code for ${name}`, `<p>Your code to confirm this email address for ${hesc(name)}:</p><p style="font-size:28px;font-weight:700;letter-spacing:4px">${code}</p><p>It works for 10 minutes. If you didn't ask for it, ignore this email.</p>`); }
+          catch {
+            // The database could not send mail to this address at all (for example its sender is still in test mode). Customers are
+            // not locked out for that: the order may go ahead unverified, with a pass only this database can make, and is marked so.
+            const exp = now + 45 * 60_000;
+            return json({ ok: false, skip: exp + "." + b64u(await hmac(env.SECRET, "eskip:" + site + ":" + em + ":" + exp)) });
+          }
+          return json({ ok: true });
+        }
+        const c: any = await env.DB.prepare("select hash, expires, tries from otps where k = ?").bind(k).first();
+        if (!c || c.expires < now) return err(403, "The code has expired. Ask for a new one.");
+        if (c.tries >= 5) return err(429, "Too many tries. Ask for a new code.");
+        if (c.hash !== b64u(await hmac(env.SECRET, k + ":" + String(b.code || "").trim()))) { await env.DB.prepare("update otps set tries = tries + 1 where k = ?").bind(k).run(); return err(403, "That code isn't right."); }
+        await env.DB.prepare("update otps set expires = 0 where k = ?").bind(k).run();
+        const exp = now + 45 * 60_000;
+        return json({ ok: true, token: exp + "." + b64u(await hmac(env.SECRET, "eotp:" + site + ":" + em + ":" + exp)) });
       }
       if (/^\/otp\/(send|check)\/[a-z0-9][a-z0-9-]{0,59}$/.test(p) && req.method === "POST") {
         const site = p.split("/")[3], b = (await req.json()) as any, w = await getSetting(env, "site:" + site, "wa");
@@ -1110,6 +1143,13 @@ export default {
             if (proved) data._phone = "Verified on WhatsApp"; else if (w.orderOtp) return err(403, "Please verify your mobile number first.");
           }
           delete data.otp_token;
+          // an email address that must be proved (the site's own setting): the proof, or the pass given when the code could not be sent
+          { const em = emailKey(data.email), tk = String(data.email_token || ""); delete data.email_token;
+            if (em && emailCheckOn(env, await siteContent(env, site).catch(() => null))) {
+              const skip = tk.startsWith("s:"), [exp, sig] = (skip ? tk.slice(2) : tk).split(".");
+              if (!(+exp > Date.now()) || sig !== b64u(await hmac(env.SECRET, (skip ? "eskip:" : "eotp:") + site + ":" + em + ":" + exp))) return err(403, "Please verify your email address first.");
+              data._email = skip ? "Not verified: the code could not be sent" : "Verified by a code";
+            } }
           // An online payment is accepted only with Razorpay's own signature for the payment this database started.
           if (data.rz_order || data.rz_payment || data.rz_sig) {
             const z = await getSetting(env, "site:" + site, "rz").catch(() => null);

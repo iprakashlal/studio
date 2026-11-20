@@ -217,6 +217,7 @@ function EnquiryList<R extends Row>({ rows: every, setStatus, remove, load, name
                     {Object.keys(d).filter((k) => !LABELS[k] && d[k] && !k.startsWith("_") && !HIDE.has(k)).map((k) => (<Fragment key={k}><dt className="text-ink-400">{k}</dt><dd className="whitespace-pre-wrap">{d[k]}</dd></Fragment>))}
                     {r.page && <><dt className="text-ink-400">Sent from</dt><dd className="font-mono text-xs text-ink-400">{r.page}</dd></>}
                     {d._phone && <><dt className="text-ink-400">Mobile number</dt><dd className="text-emerald-200">{d._phone}</dd></>}
+                    {d._email && <><dt className="text-ink-400">Email address</dt><dd className={/^Verified/.test(d._email) ? "text-emerald-200" : "text-amber-200"}>{d._email}</dd></>}
                     {d._wa && <><dt className="text-ink-400">WhatsApp to you</dt><dd className={/^Not sent/.test(d._wa) ? "text-amber-200" : "text-ink-300"}>{d._wa}</dd></>}
                     {d._mail && <><dt className="text-ink-400">Email to you</dt><dd className={/^Not emailed/.test(d._mail) ? "text-amber-200" : "text-ink-300"}>{mailSaid(d._mail)}</dd></>}
                   </dl>

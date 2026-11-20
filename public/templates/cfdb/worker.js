@@ -16,7 +16,7 @@ create index if not exists approvals_project on approvals (scope, project, creat
 create table if not exists approval_notes (id integer primary key autoincrement, token text not null, who text not null, body text not null, page text not null default '', kind text not null default 'comment', created_at text not null);
 create index if not exists approval_notes_token on approval_notes (token, id);
 `;
-var CFDB_VERSION = 34;
+var CFDB_VERSION = 35;
 var CFDB_WORKER_NAME = "picaffectz-db";
 
 // src/lib/lookdigest.ts
@@ -1138,6 +1138,11 @@ var PG = { rz: { name: "Razorpay", key: "razorpay", inr: true }, cf: { name: "Ca
 var PG_CUR = ["INR", "USD", "EUR", "GBP", "AUD", "CAD", "SGD", "AED", "NZD", "CHF"];
 var pgReady = (g, z) => !!z && !!(g === "rz" ? z.on && z.secret && z.keyId : g === "cf" ? z.secret && z.appId : g === "pe" ? z.secret && z.clientId : g === "st" ? z.secret : g === "pp" ? z.secret && z.clientId : false);
 var isRest = (c) => !!(c?.ordering && c?.food);
+var emailCheckOn = (env, c) => !!(env.RESEND_API_KEY && env.MAIL_FROM) && !!(isRest(c) ? c?.ordering?.verifyEmail : c?.checkout?.verifyEmail);
+var emailKey = (v) => {
+  const e = String(v || "").trim().toLowerCase().slice(0, 120);
+  return EMAIL_RE.test(e) ? e : "";
+};
 var pgOn = (c, g) => !!(isRest(c) ? c.ordering?.pay?.[PG[g].key] : c?.payments?.[PG[g].key]?.enabled);
 function siteCur(c) {
   if (isRest(c)) {
@@ -1529,8 +1534,8 @@ var db_worker_default = {
         const site = p.split("/")[2], w = await getSetting(env, "site:" + site, "wa").catch(() => null), z = await getSetting(env, "site:" + site, "rz").catch(() => null);
         const pg = [];
         for (const g of ["cf", "pe", "st", "pp"]) if (pgReady(g, await getSetting(env, "site:" + site, g).catch(() => null))) pg.push(g);
-        const canCode = !!(waReady(w) && String(w.tplOtp || "").trim());
-        return json({ otp: canCode && !!w.orderOtp, pts: canCode && loyOf(await siteContent(env, site).catch(() => null)).on, rz: z?.on && z.secret && z.keyId ? String(z.keyId) : "", pg });
+        const canCode = !!(waReady(w) && String(w.tplOtp || "").trim()), sc = await siteContent(env, site).catch(() => null);
+        return json({ otp: canCode && !!w.orderOtp, pts: canCode && loyOf(sc).on, em: emailCheckOn(env, sc), rz: z?.on && z.secret && z.keyId ? String(z.keyId) : "", pg });
       }
       if (/^\/points\/[a-z0-9][a-z0-9-]{0,59}$/.test(p) && req.method === "POST") {
         const site = p.split("/")[2], b = await req.json(), L = loyOf(await siteContent(env, site));
@@ -1538,6 +1543,38 @@ var db_worker_default = {
         const v = await pointsBal(env, site, b.phone, b.otp);
         if (!v.ok) return err(403, "Verify your mobile number first.");
         return json({ points: v.bal, worth: L.worth, min: L.min, maxPct: L.maxPct, earn: L.earn });
+      }
+      if (/^\/eotp\/(send|check)\/[a-z0-9][a-z0-9-]{0,59}$/.test(p) && req.method === "POST") {
+        const site = p.split("/")[3], b = await req.json(), sc = await siteContent(env, site).catch(() => null);
+        if (!emailCheckOn(env, sc)) return err(404, "Not found.");
+        const em = emailKey(b.email);
+        if (!em) return err(400, "Enter a valid email address.");
+        const k = "e:" + site + ":" + em, now = Date.now();
+        if (p.startsWith("/eotp/send/")) {
+          const prev = await env.DB.prepare("select sent from otps where k = ?").bind(k).first();
+          if (prev && now - prev.sent < 45e3) return err(429, "A code was just sent. Wait a minute before asking for another.");
+          const n = await env.DB.prepare("select count(*) n from otps where k like ? and sent > ?").bind("e:" + site + ":%", now - 36e5).first();
+          if ((n?.n || 0) >= 150) return err(429, "Too many codes were asked for. Please try again later.");
+          const code = String(1e5 + crypto.getRandomValues(new Uint32Array(1))[0] % 9e5), name = oneLine(String(sc?.brand?.name || "")).slice(0, 60) || "your order";
+          await env.DB.prepare("insert into otps (k, hash, expires, tries, sent) values (?, ?, ?, 0, ?) on conflict (k) do update set hash = excluded.hash, expires = excluded.expires, tries = 0, sent = excluded.sent").bind(k, b64u(await hmac(env.SECRET, k + ":" + code)), now + 10 * 6e4, now).run();
+          try {
+            await sendMail(env, em, `${code} is your code for ${name}`, `<p>Your code to confirm this email address for ${hesc(name)}:</p><p style="font-size:28px;font-weight:700;letter-spacing:4px">${code}</p><p>It works for 10 minutes. If you didn't ask for it, ignore this email.</p>`);
+          } catch {
+            const exp2 = now + 45 * 6e4;
+            return json({ ok: false, skip: exp2 + "." + b64u(await hmac(env.SECRET, "eskip:" + site + ":" + em + ":" + exp2)) });
+          }
+          return json({ ok: true });
+        }
+        const c = await env.DB.prepare("select hash, expires, tries from otps where k = ?").bind(k).first();
+        if (!c || c.expires < now) return err(403, "The code has expired. Ask for a new one.");
+        if (c.tries >= 5) return err(429, "Too many tries. Ask for a new code.");
+        if (c.hash !== b64u(await hmac(env.SECRET, k + ":" + String(b.code || "").trim()))) {
+          await env.DB.prepare("update otps set tries = tries + 1 where k = ?").bind(k).run();
+          return err(403, "That code isn't right.");
+        }
+        await env.DB.prepare("update otps set expires = 0 where k = ?").bind(k).run();
+        const exp = now + 45 * 6e4;
+        return json({ ok: true, token: exp + "." + b64u(await hmac(env.SECRET, "eotp:" + site + ":" + em + ":" + exp)) });
       }
       if (/^\/otp\/(send|check)\/[a-z0-9][a-z0-9-]{0,59}$/.test(p) && req.method === "POST") {
         const site = p.split("/")[3], b = await req.json(), w = await getSetting(env, "site:" + site, "wa");
@@ -1667,6 +1704,15 @@ var db_worker_default = {
             else if (w.orderOtp) return err(403, "Please verify your mobile number first.");
           }
           delete data.otp_token;
+          {
+            const em = emailKey(data.email), tk = String(data.email_token || "");
+            delete data.email_token;
+            if (em && emailCheckOn(env, await siteContent(env, site).catch(() => null))) {
+              const skip = tk.startsWith("s:"), [exp, sig] = (skip ? tk.slice(2) : tk).split(".");
+              if (!(+exp > Date.now()) || sig !== b64u(await hmac(env.SECRET, (skip ? "eskip:" : "eotp:") + site + ":" + em + ":" + exp))) return err(403, "Please verify your email address first.");
+              data._email = skip ? "Not verified: the code could not be sent" : "Verified by a code";
+            }
+          }
           if (data.rz_order || data.rz_payment || data.rz_sig) {
             const z = await getSetting(env, "site:" + site, "rz").catch(() => null);
             const row = z?.secret ? await env.DB.prepare("select order_no, amount from payments where rz_order = ? and site = ?").bind(String(data.rz_order || ""), site).first() : null;

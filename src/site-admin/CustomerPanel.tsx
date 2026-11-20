@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { cfCall, cfSession } from "../lib/cfdb";
+import { cfCall } from "../lib/cfdb";
+import { SiteDbSignIn, useSiteDbSigned } from "../pages/Connections";
 import { fmtDate } from "../lib/util";
 import { Spinner, useToast } from "../ui/kit";
 
@@ -16,7 +17,7 @@ export function CustomerPanel({ cf, currency = "₹", points }: { cf?: { api: st
   const [find, setFind] = useState(""), [page, setPage] = useState(0), [busy, setBusy] = useState("");
   const [open, setOpen] = useState(""), [log, setLog] = useState<Entry[] | null>(null), [delta, setDelta] = useState(""), [why, setWhy] = useState(""), [ask, setAsk] = useState("");
   const t = useRef<number>(0);
-  const signed = !!(cf && cfSession.load(cf.api)), scope = cf ? "scope=" + encodeURIComponent("site:" + cf.site) : "";
+  const signed = useSiteDbSigned(cf), scope = cf ? "scope=" + encodeURIComponent("site:" + cf.site) : "";
   const money = (n: number) => currency + (Math.round((+n || 0) * 100) / 100).toLocaleString("en-IN");
   const load = async (q = find, p = page) => {
     if (!cf || !signed) return; setErr("");
@@ -45,7 +46,7 @@ export function CustomerPanel({ cf, currency = "₹", points }: { cf?: { api: st
   };
 
   if (!cf) return <section className="card max-w-3xl p-5 text-sm text-ink-300" aria-label="Customer Data"><h3 className="mb-1 text-[15px] font-extrabold text-ink-100">Customer Data</h3>Customers are kept on the site's own Cloudflare database. Host this site on Cloudflare (Host to External Services) and its customers will be listed here from the first order.</section>;
-  if (!signed) return <section className="card max-w-3xl p-5 text-sm text-ink-300" aria-label="Customer Data"><h3 className="mb-1 text-[15px] font-extrabold text-ink-100">Customer Data</h3>Sign in to this site's database on this device (the site's admin page, or Restaurant backend / WhatsApp here) to see its customers.</section>;
+  if (!signed) return cf ? <div className="max-w-3xl"><SiteDbSignIn cf={cf} what="show its customers" /></div> : <section className="card max-w-3xl p-5 text-sm text-ink-300" aria-label="Customer Data"><h3 className="mb-1 text-[15px] font-extrabold text-ink-100">Customer Data</h3>Customers are kept on the site's own Cloudflare database. Host this site on Cloudflare (Host to External Services) to see them here.</section>;
   const pages = Math.max(1, Math.ceil(tot.total / PER));
   return (
     <section className="flex max-w-5xl flex-col gap-4" aria-label="Customer Data">

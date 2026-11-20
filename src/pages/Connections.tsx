@@ -2,7 +2,7 @@
 // their own AI API, WhatsApp (Meta's WhatsApp Business Cloud API) and Razorpay.
 // Each form shows what is saved (a key only as "saved"), and a key box left empty keeps the saved key.
 import { useEffect, useRef, useState } from "react";
-import { cfCall, cfSession, signedInApi } from "../lib/cfdb";
+import { cfCall, cfRole, cfSendCode, cfSession, cfSignedIn, cfVerifyCode, resendTestOnly, signedInApi } from "../lib/cfdb";
 import { Field, Toggle, useToast } from "../ui/kit";
 
 type Kind = "ai" | "wa" | "rz" | "cf" | "pe" | "st" | "pp" | "pos";
@@ -255,10 +255,55 @@ export function PetpoojaForm({ where }: { where: Where | null | undefined }) {
 /** Kept for the places that ask for Razorpay by name. */
 export function RazorpayForm({ where }: { where: Where | null | undefined; plain?: boolean }) { return <GatewayForm where={where} gw="rz" />; }
 
+/** Whether this device is signed in to a site's database. Every panel on the page follows a sign-in made in any of them. */
+export function useSiteDbSigned(cf?: { api: string; site: string } | null): boolean {
+  const [, tick] = useState(0);
+  useEffect(() => { const f = () => tick((n) => n + 1); addEventListener("sitedb:in", f); return () => removeEventListener("sitedb:in", f); }, []);
+  return !!(cf && cfSession.load(cf.api));
+}
+/** Signing in to a site's database right where its keys or records are asked for: a 6-digit code by email (or on
+ *  WhatsApp where the site sends codes there). Only the site's own people get in. `small` starts as one button. */
+export function SiteDbSignIn({ cf, small, what = "see and change what is kept there" }: { cf: { api: string; site: string }; small?: boolean; what?: string }) {
+  const [open, setOpen] = useState(!small), [email, setEmail] = useState(""), [code, setCode] = useState(""), [sent, setSent] = useState(false), [busy, setBusy] = useState(false), [err, setErr] = useState(""), [own, setOwn] = useState<string | null>(null);
+  const send = async (e?: React.FormEvent, to = email.trim()) => {
+    e?.preventDefault(); setErr(""); setOwn(null); setBusy(true);
+    try { await cfSendCode(cf.api, to, cf.site); setEmail(to); setSent(true); }
+    catch (x: any) { const o = resendTestOnly(x?.message || ""); if (o && o !== to.toLowerCase()) { setOwn(o); setErr(`This site's sign-in email is still in test mode, so codes can only go to ${o}.`); } else setErr(x?.message || "Couldn't send the code. Check your connection."); }
+    setBusy(false);
+  };
+  const verify = async (e: React.FormEvent) => {
+    e.preventDefault(); setErr(""); setBusy(true);
+    try {
+      await cfVerifyCode(cf.api, email.trim(), code);
+      const who = await cfSignedIn(cf.api);
+      if (who && (await cfRole(cf.api, "site:" + cf.site))) dispatchEvent(new Event("sitedb:in"));
+      else { cfSession.clear(cf.api); setSent(false); setCode(""); setErr(`${who || "That email"} isn't one of this site's people. Sign in with the owner's email, or add this one under the site's hosting window → People.`); }
+    } catch (x: any) { setErr(x?.message || "Couldn't sign in."); }
+    setBusy(false);
+  };
+  if (!open) return <div className="flex flex-wrap items-center gap-2 rounded-lg border border-ink-600 p-3 text-[13px] text-ink-300" aria-label="Sign in to this site's database"><span className="min-w-0 flex-1 basis-48">This device isn't signed in to the site's database yet.</span><button type="button" className="btn btn-sm" onClick={() => setOpen(true)}>Sign in</button></div>;
+  return <section className="card flex flex-col gap-3 p-5" aria-label="Sign in to this site's database">
+    <h3 className="text-[15px] font-extrabold">Sign in to this site's database</h3>
+    <p className="text-sm text-ink-300">This device isn't signed in to the site's own database yet, so it can't {what}. Sign in once with the site owner's email (or an editor's): we send a 6-digit code.</p>
+    {!sent ? <form className="flex flex-wrap items-end gap-2" onSubmit={send}>
+      <div className="min-w-0 flex-1 basis-56"><Field label="Email" htmlFor={"sdb-email-" + cf.site}><input id={"sdb-email-" + cf.site} className="input" type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} /></Field></div>
+      <button className="btn btn-pri" disabled={busy || !email.includes("@")}>{busy ? "Sending…" : "Send me a code"}</button>
+    </form> : <form className="flex flex-col gap-2" onSubmit={verify}>
+      <p className="text-sm text-ink-300">Enter the code sent to <b className="text-ink-100">{email}</b>. It can take a minute; check spam too.</p>
+      <div className="flex flex-wrap items-end gap-2"><div className="min-w-0 flex-1 basis-40"><Field label="Code" htmlFor={"sdb-code-" + cf.site}><input id={"sdb-code-" + cf.site} className="input font-mono text-lg tracking-widest" inputMode="numeric" autoComplete="one-time-code" maxLength={10} value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))} /></Field></div>
+        <button className="btn btn-pri" disabled={busy || code.length < 6}>{busy ? "Checking…" : "Sign in"}</button></div>
+      <button type="button" className="btn btn-ghost btn-sm self-start" disabled={busy} onClick={() => { setSent(false); setCode(""); }}>Use another email or send a new code</button>
+    </form>}
+    {err && <p role="alert" className="rounded-lg border border-amber-400/40 bg-amber-400/5 px-3 py-2 text-[13px] text-amber-100">{err}</p>}
+    {own && !sent && <button type="button" className="btn btn-sm self-start" disabled={busy} onClick={() => send(undefined, own)}>Send the code to {own}</button>}
+  </section>;
+}
+
 /** A site's "Payments & WhatsApp" section (site admin and the Studio's editor). */
 export function SiteConnections({ cf, template }: { cf?: { api: string; site: string } | null; template: string }) {
-  const where = cf && cfSession.load(cf.api) ? { api: cf.api, scope: "site:" + cf.site } : null;
+  const signed = useSiteDbSigned(cf), where = cf && signed ? { api: cf.api, scope: "site:" + cf.site } : null;
   return <div className="flex max-w-3xl flex-col gap-4">
+    {cf && !signed && <SiteDbSignIn cf={cf} what={template === "restaurant" ? "show the boxes for Petpooja's and WhatsApp's keys" : "show the boxes for WhatsApp's keys"} />}
     {template === "restaurant" && <section className="card flex flex-col gap-2 p-5"><h3 className="text-[15px] font-extrabold">Restaurant backend</h3><p className="text-sm text-ink-300">Orders, payments and messages run on the site's own Cloudflare database: it saves each order under Purchased orders, works out what an order costs from your menu, confirms online payments with your payment gateway, passes orders to Petpooja, and sends WhatsApp messages. Keys you enter here stay on that database, encrypted. The payment gateways (Razorpay, Cashfree, PhonePe, Stripe, PayPal) and their keys are under Payments.</p></section>}
     {template === "restaurant" && <PetpoojaForm where={where} />}<WhatsAppForm where={where} kind="site" /></div>;
 }

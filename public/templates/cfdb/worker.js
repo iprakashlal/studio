@@ -16,7 +16,7 @@ create index if not exists approvals_project on approvals (scope, project, creat
 create table if not exists approval_notes (id integer primary key autoincrement, token text not null, who text not null, body text not null, page text not null default '', kind text not null default 'comment', created_at text not null);
 create index if not exists approval_notes_token on approval_notes (token, id);
 `;
-var CFDB_VERSION = 36;
+var CFDB_VERSION = 37;
 var CFDB_WORKER_NAME = "picaffectz-db";
 
 // src/lib/lookdigest.ts
@@ -691,7 +691,7 @@ var SETTINGS = {
   // Petpooja (the restaurant's billing system): orders placed on the site go to it, and it sends back each order's status.
   pos: { secret: ["secret", "token"], text: ["appKey", "restId", "url"], flags: ["on"] },
   // SMS (text messages) through the owner's own account with MSG91 or Twilio: codes for signing in and for checkout.
-  sms: { secret: ["key"], text: ["provider", "tpl", "varName", "sender", "sid", "from", "text", "cc", "phones"], flags: ["on", "login", "orderOtp"] }
+  sms: { secret: ["key"], text: ["provider", "tpl", "varName", "sender", "sid", "from", "text", "cc", "phones", "chan", "email"], flags: ["on", "login", "orderOtp"] }
 };
 async function aesKey(env) {
   return crypto.subtle.importKey("raw", await crypto.subtle.digest("SHA-256", enc.encode("settings:" + env.SECRET)), "AES-GCM", false, ["encrypt", "decrypt"]);
@@ -855,8 +855,62 @@ var WA_TPL = {
   enquiry: (language) => ({ name: "enquiry_alert", language, category: "utility", components: [{ type: "body", text: "New enquiry from {{1}} ({{2}}): {{3}}", example: { body_text: [["Asha Rao", "9876543210", "Do you take group bookings on Sunday?"]] } }] })
 };
 var waReady = (c) => !!(c && c.on && c.token && String(c.phoneId || "").trim());
-var smsReady = (z) => !!(z && z.on && z.key && (z.provider === "twilio" ? String(z.sid || "").trim() && String(z.from || "").trim() : String(z.tpl || "").trim()));
+var smsReady = (z) => !!(z && z.on && z.key && (z.provider === "twilio" ? String(z.sid || "").trim() && String(z.from || "").trim() : z.provider === "mcentral" ? String(z.sid || "").trim() : String(z.tpl || "").trim()));
+var smsOwnCode = (z) => z?.provider !== "mcentral";
+var MC = "https://cpaas.messagecentral.com";
+async function mcToken(z) {
+  const q = new URLSearchParams({ customerId: String(z.sid).trim(), key: btoa(String(z.key)), scope: "NEW" });
+  if (String(z.email || "").trim()) {
+    q.set("email", String(z.email).trim());
+    q.set("country", "IN");
+  }
+  const r = await fetch(`${MC}/auth/v1/authentication/token?${q}`, { headers: { accept: "*/*" } });
+  let j = null;
+  try {
+    j = await r.json();
+  } catch {
+  }
+  if (!r.ok || !j?.token) throw new Error(`Message Central didn't accept the sign-in (${r.status}). Check the Customer ID and password.`);
+  return String(j.token);
+}
+var mcParts = (z, to) => {
+  const cc = String(z.cc || "91").replace(/\D/g, "") || "91";
+  return to.startsWith(cc) ? { countryCode: cc, mobileNumber: to.slice(cc.length) } : { countryCode: cc, mobileNumber: to };
+};
+async function mcCheck(z, to, ref, code) {
+  const q = new URLSearchParams({ ...mcParts(z, to), verificationId: ref, customerId: String(z.sid).trim(), code });
+  const r = await fetch(`${MC}/verification/v3/validateOtp?${q}`, { headers: { accept: "*/*", authToken: await mcToken(z) } });
+  let j = null;
+  try {
+    j = await r.json();
+  } catch {
+  }
+  return r.ok && j?.data?.verificationStatus === "VERIFICATION_COMPLETED";
+}
 async function smsSend(z, to, code, brand) {
+  if (z.provider === "mcentral") {
+    const q = new URLSearchParams({ ...mcParts(z, to), customerId: String(z.sid).trim(), flowType: "SMS" });
+    const r2 = await fetch(`${MC}/verification/v3/send?${q}`, { method: "POST", headers: { accept: "*/*", authToken: await mcToken(z) } });
+    let j2 = null;
+    try {
+      j2 = await r2.json();
+    } catch {
+    }
+    const ref = String(j2?.data?.verificationId ?? "");
+    if (!r2.ok || !ref) throw new Error(`Message Central didn't send the code (${r2.status})${j2?.message ? ": " + String(j2.message).slice(0, 200) : ""}`);
+    return ref;
+  }
+  if (z.provider === "sent") {
+    const v2 = String(z.varName || "code").trim() || "code", chan = ["sms", "whatsapp", "rcs", "sent"].includes(z.chan) ? z.chan : "sms";
+    const r2 = await fetch("https://api.sent.dm/v3/messages", { method: "POST", headers: { "x-api-key": z.key, "Content-Type": "application/json" }, body: JSON.stringify({ to: ["+" + to], template: { id: String(z.tpl).trim(), parameters: { [v2]: code } }, channel: [chan] }) });
+    let j2 = null;
+    try {
+      j2 = await r2.json();
+    } catch {
+    }
+    if (!r2.ok || j2?.success === false) throw new Error(`Sent didn't accept the message (${r2.status})${j2?.error?.message ? ": " + String(j2.error.message).slice(0, 200) : ""}`);
+    return;
+  }
   if (z.provider === "twilio") {
     const body = (String(z.text || "").trim() || "{code} is your verification code for {site}.").replace(/\{code\}/g, code).replace(/\{site\}/g, brand).slice(0, 300), from = String(z.from).trim();
     const f = new URLSearchParams({ To: "+" + to, Body: body });
@@ -1469,7 +1523,7 @@ var db_worker_default = {
             onWa = true;
           } catch {
           }
-          const z = await getSetting(env, waScope, "sms").catch(() => null), sn = pol.sms && smsReady(z) && z.login ? waNum(waPhoneOf(z.phones, email2), z.cc) : "";
+          const z = await getSetting(env, waScope, "sms").catch(() => null), sn = pol.sms && smsReady(z) && smsOwnCode(z) && z.login ? waNum(waPhoneOf(z.phones, email2), z.cc) : "";
           if (sn) try {
             await smsSend(z, sn, code, env.NAME || "your account");
             onSms = true;
@@ -1636,8 +1690,10 @@ var db_worker_default = {
           const code = String(1e5 + crypto.getRandomValues(new Uint32Array(1))[0] % 9e5);
           await env.DB.prepare("insert into otps (k, hash, expires, tries, sent) values (?, ?, ?, 0, ?) on conflict (k) do update set hash = excluded.hash, expires = excluded.expires, tries = 0, sent = excluded.sent").bind(k, b64u(await hmac(env.SECRET, k + ":" + code)), now + 10 * 6e4, now).run();
           try {
-            if (via === "sms") await smsSend(cw.z, num, code, siteName(sc, site));
-            else await waSend(w, num, w.tplOtp, [code], code);
+            if (via === "sms") {
+              const ref = await smsSend(cw.z, num, code, siteName(sc, site));
+              if (ref) await env.DB.prepare("update otps set hash = ? where k = ?").bind("ref:" + ref, k).run();
+            } else await waSend(w, num, w.tplOtp, [code], code);
           } catch {
             return err(502, `We couldn't send the code ${via === "sms" ? "by SMS" : "on WhatsApp"} just now. Check the number${cw.wa && cw.sms ? ", try the other way" : ""}, or call us to order.`);
           }
@@ -1646,7 +1702,8 @@ var db_worker_default = {
         const c = await env.DB.prepare("select hash, expires, tries from otps where k = ?").bind(k).first();
         if (!c || c.expires < now) return err(403, "The code has expired. Ask for a new one.");
         if (c.tries >= 5) return err(429, "Too many tries. Ask for a new code.");
-        if (c.hash !== b64u(await hmac(env.SECRET, k + ":" + String(b.code || "").trim()))) {
+        const typed = String(b.code || "").trim(), right = String(c.hash).startsWith("ref:") ? /^\d{4,8}$/.test(typed) && !!cw.z && await mcCheck(cw.z, num, String(c.hash).slice(4), typed).catch(() => false) : c.hash === b64u(await hmac(env.SECRET, k + ":" + typed));
+        if (!right) {
           await env.DB.prepare("update otps set tries = tries + 1 where k = ?").bind(k).run();
           return err(403, "That code isn't right.");
         }
@@ -1893,8 +1950,8 @@ var db_worker_default = {
           if (!smsReady(z)) return json({ error: "Switch SMS on, fill in the boxes and press Save first." });
           if (!to) return json({ error: "Enter the mobile number to send the test to." });
           try {
-            await smsSend(z, to, "123456", env.NAME || "your site");
-            return json({ ok: true });
+            const own = !await smsSend(z, to, "123456", env.NAME || "your site");
+            return json({ ok: true, own });
           } catch (e) {
             return json({ error: String(e?.message || e).slice(0, 300) });
           }

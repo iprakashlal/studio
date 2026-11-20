@@ -234,13 +234,21 @@
       : `<p class="od-live">You have ${P.points} point${P.points === 1 ? "" : "s"}.${P.min > P.points ? ` Points can be used from ${P.min}.` : ""}</p>`) : "";
     return `<div class="od-pts" id="od-ptsbox">${have}${b.earn ? `<p class="od-live">This order earns you ${b.earn} point${b.earn === 1 ? "" : "s"}.</p>` : ""}</div>`;
   }
+  /** Which of mobile and email a guest must give (Ordering → “A guest must give”): mobile, email, both or either one.
+   *  Left alone, it is as before: the mobile number always, the email optional when it is asked for.
+   *  Where every guest verifies on WhatsApp, the mobile number is always needed. */
+  function must() {
+    const o = O(), n = ["email", "phone", "both", "either"].includes(o.need) ? o.need : "";
+    if (!n) return { phone: true, email: false, askEmail: !!o.askEmail, either: false };
+    return { phone: !!can.otp || n === "phone" || n === "both", email: n === "email" || n === "both", askEmail: true, either: n === "either" && !can.otp };
+  }
   const inp = (k, label, a = "") => `<div class="of"><label for="of-${k}">${label}</label><input id="of-${k}" data-f="${k}" value="${esc(ui.form[k] || "")}" ${a}></div>`;
   function checkoutHTML() {
     const b = bill(), o = O(), m = mode(), f = ui.form, sl = slots(), ps = pays();
     if (!sl.some((s) => s.v === f.when)) f.when = sl.length ? sl[0].v : "";
     if (!ps.some((p) => p.id === f.pay)) f.pay = ps.length ? ps[0].id : "";
     return `<form class="od-form" id="od-form" novalidate>
-      <fieldset><legend>Your details</legend>${inp("name", "Name", 'autocomplete="name" required')}${inp("phone", "Mobile number", 'type="tel" inputmode="tel" autocomplete="tel" required')}${o.askEmail ? inp("email", "Email (optional)", 'type="email" autocomplete="email"') : ""}
+      <fieldset><legend>Your details</legend>${inp("name", "Name", 'autocomplete="name" required')}${inp("phone", "Mobile number" + (must().phone ? "" : " (optional)"), 'type="tel" inputmode="tel" autocomplete="tel"' + (must().phone ? " required" : ""))}${must().askEmail ? inp("email", "Email" + (must().email ? "" : " (optional)"), 'type="email" autocomplete="email"' + (must().email ? " required" : "")) : ""}${must().either ? `<p class="od-live">Give your mobile number or your email address (or both), so we can reach you about the order.</p>` : ""}
         ${can.otp || (can.pts && loy().on) ? `<div class="od-otp" id="od-otp">${verified() ? `<p class="od-ok">Mobile number verified on WhatsApp.</p>` : ui.otpSent ? `<div class="of"><label for="of-code">Code we sent you on WhatsApp</label><div class="od-code"><input id="of-code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="6 digits"><button type="button" class="btn sec" data-act="otpcheck">Verify</button></div></div><button type="button" class="link od-more" data-act="otpsend">Send a new code</button>` : can.otp ? `<button type="button" class="btn sec" data-act="otpsend">Verify this number on WhatsApp</button><p class="od-live">We send a 6-digit code to this number on WhatsApp before taking the order.</p>` : `<button type="button" class="btn sec" data-act="otpsend">Verify this number to use your points</button><p class="od-live">Optional. We send a 6-digit code to this number on WhatsApp, then show the points you can take off this order.</p>`}${ui.otpMsg ? `<p class="od-bad" role="alert">${esc(ui.otpMsg)}</p>` : ""}</div>` : ""}${ptsBox()}</fieldset>
       ${m === "delivery" ? `<fieldset><legend>Delivery address</legend>${inp("line1", "Flat, house or building", 'autocomplete="address-line1" required')}${inp("area", "Street and area", 'autocomplete="address-line2" required')}<div class="of2">${inp("landmark", "Landmark (optional)")}${inp("pin", "PIN code", 'inputmode="numeric" autocomplete="postal-code" maxlength="10"' + (o.askPin !== false ? " required" : ""))}</div>
         <div class="od-tips" role="radiogroup" aria-label="Save this address as">${["Home", "Work", "Other"].map((l) => `<button type="button" class="chip" role="radio" data-act="label" data-id="${l}" aria-checked="${f.label === l}">${l}</button>`).join("")}</div>
@@ -371,8 +379,11 @@
     sync(); const f = ui.form, m = mode(), b = bill(), o = O(), sl = slots(), bad = (k, t) => { ui.err = t; over(true); const e = $("#of-" + k, root); e && e.focus(); };
     if (!cart.length) return;
     if (!String(f.name).trim()) return bad("name", "Please enter your name.");
-    if (String(f.phone).replace(/\D/g, "").length < 10) return bad("phone", "Please enter a mobile number we can reach you on.");
-    if (f.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email)) return bad("email", "Please check the email address.");
+    { const M = must(), ph = String(f.phone || "").replace(/\D/g, ""), em = String(f.email || "").trim();
+      if ((M.phone || ph) && ph.length < 10) return bad("phone", "Please enter a mobile number we can reach you on.");
+      if (M.email && !em) return bad("email", "Please enter your email address.");
+      if (em && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)) return bad("email", "Please check the email address.");
+      if (M.either && !ph && !em) return bad("phone", "Please enter your mobile number or your email address."); }
     if (m === "delivery") {
       if (!String(f.line1).trim()) return bad("line1", "Please enter your flat, house or building.");
       if (!String(f.area).trim()) return bad("area", "Please enter your street and area.");

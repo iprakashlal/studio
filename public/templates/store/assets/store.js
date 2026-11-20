@@ -340,10 +340,17 @@ function totals(lines = cartLines(), pin = curPin()) {
   const L = C.loyalty || {}, earn = L.on && +L.earn > 0 ? Math.floor((net / 100) * +L.earn) : 0;
   return { sub, ship, taxAdd, taxIn, total, left, free, pts: pt.pts, ptsOff: pt.off, earn };
 }
+/** Which of email and phone a shopper must give (Checkout → “A shopper must give”): email, phone, both or either one.
+ *  Left alone, it is as before: email always, and the phone when it is asked for. A shop with accounts always needs the email. */
+function mustGive() {
+  const K = C.checkout || {}, n = ["email", "phone", "both", "either"].includes(K.need) ? K.need : "", acc = BE() || !!USER;
+  if (!n) return { email: true, phone: !!K.askPhone, askPhone: !!K.askPhone, either: false };
+  return { email: acc || n === "email" || n === "both", phone: n === "phone" || n === "both", askPhone: true, either: n === "either" && !acc };
+}
 /* Points (content.loyalty): a buyer proves their phone number with a WhatsApp code, sees their points and can take them
    off the order. The shop's database holds the points and works the discount out again itself. */
 const PTS = { tok: "", phone: "", info: null, use: false, sent: false, msg: "" };
-const ptsCan = () => !!(C.loyalty && C.loyalty.on) && !!CAN.pts && !BE() && !PREVIEW && !!(HOST && HOST.api && HOST.site) && !!C.checkout.askPhone;
+const ptsCan = () => !!(C.loyalty && C.loyalty.on) && !!CAN.pts && !BE() && !PREVIEW && !!(HOST && HOST.api && HOST.site) && mustGive().askPhone;
 const ptsPhone = () => { const i = $("#phone"); return i ? i.value : PTS.phone; };
 const ptsProved = () => !!PTS.tok && +PTS.tok.split(".")[0] > Date.now() + 60000 && digits(PTS.phone).length >= 8 && digits(ptsPhone()) === digits(PTS.phone);
 function ptsFor(sub) {
@@ -624,7 +631,7 @@ const PAGES = {
     const fld = (id, label, type = "text", req = true, full = false, ac = "") => `<div class="f${full ? " full" : ""}"><label for="${id}">${esc(label)}${req ? "" : ' <span class="soft">(optional)</span>'}</label><input class="in" id="${id}" name="${id}" type="${type}"${req ? " required" : ""}${ac ? ` autocomplete="${ac}"` : ""}${id === "email" && USER ? " readonly" : ""} value="${esc(me[id] || "")}"><span class="err" id="${id}-e"></span></div>`;
     return `<section class="page-h"><div class="wrap"><h1 class="fit">${ml(K.title)}</h1>${K.intro ? `<p>${ml(K.intro)}</p>` : ""}</div></section>
     <form class="wrap two" id="co" novalidate><div class="form">
-      <div class="box"><h2>Your details</h2><div class="fgrid">${fld("name", "Full name", "text", true, false, "name")}${fld("email", "Email", "email", true, false, "email")}${K.askPhone ? fld("phone", "Phone", "tel", true, false, "tel") : ""}</div></div>
+      <div class="box"><h2>Your details</h2><div class="fgrid">${fld("name", "Full name", "text", true, false, "name")}${fld("email", "Email", "email", mustGive().email, false, "email")}${mustGive().askPhone ? fld("phone", "Phone", "tel", mustGive().phone, false, "tel") : ""}</div>${mustGive().either ? `<p class="soft" style="font-size:13.5px;margin-top:8px">Give your email address or your phone number (or both), so we can reach you about the order.</p>` : ""}</div>
       ${K.askAddress ? `<div class="box"><h2>Delivery address</h2><div class="fgrid">${fld("address", "Address", "text", true, true, "street-address")}${fld("city", "City", "text", true, false, "address-level2")}${fld("pin", "PIN / postcode", "text", true, false, "postal-code")}${fld("state", "State", "text", true, false, "address-level1")}${gstOn() && C.gst.askGstin ? fld("gstin", "GSTIN, for a business invoice", "text", false, true) : ""}</div>${shipOn() ? `<p class="soft" id="pin-msg" role="status" style="font-size:14px;margin-top:8px"></p>` : ""}</div>` : ""}
       ${K.askNotes ? `<div class="box"><div class="f"><label for="notes">Notes <span class="soft">(optional)</span></label><textarea class="in" id="notes" name="notes" rows="3"></textarea></div></div>` : ""}
       <div class="box"><h2>Payment</h2>${ms.length ? `<div class="pays" role="radiogroup" aria-label="Payment method">${ms.map((m, i) => `<label class="pay"><input type="radio" name="pm" value="${m.id}"${i === 0 ? " checked" : ""}><div><b>${esc(m.label)}</b><span>${esc(m.desc)}</span></div></label>`).join("")}</div>` : `<p class="note">Online payment isn't set up yet. Place the order and we'll contact you about payment.</p>`}</div>
@@ -681,7 +688,7 @@ function orderText(o) {
   L.push("", `Subtotal: ${money(o.t.sub)}`); if (o.t.ptsOff) L.push(`Points used (${o.t.pts}): − ${money(o.t.ptsOff)}`);
   L.push(`Shipping: ${o.t.ship ? money(o.t.ship) : "Free"}`);
   if (o.t.taxAdd) L.push(`${C.settings.taxLabel}: ${money(o.t.taxAdd)}`);
-  L.push(`Total: ${money(o.t.total)}`, `Payment: ${o.methodLabel}`, "", "Customer:", o.c.name, o.c.email);
+  L.push(`Total: ${money(o.t.total)}`, `Payment: ${o.methodLabel}`, "", "Customer:", o.c.name); if (o.c.email) L.push(o.c.email);
   if (o.c.phone) L.push(o.c.phone);
   if (o.c.address) L.push(`${o.c.address}, ${o.c.city} ${o.c.pin}, ${o.c.state}`);
   if (o.c.notes) L.push("", `Notes: ${o.c.notes}`);
@@ -695,8 +702,8 @@ function serverDone(o) {
   const K = C.checkout, P = C.payments, wa = digits(C.orders.whatsapp), total = esc(money(o.t.total));
   const paid = o.payment_status === "paid", cod = o.payment_status === "cod";
   let pay = "";
-  if (paid) pay = `<p class="note"><b>Payment received.</b> We've emailed a confirmation to ${esc(o.c.email)}.</p>`;
-  else if (cod) pay = `<p>${esc(P.cod.note || "Pay when your order arrives.")} Keep <b>${total}</b> ready.</p><p class="note">We've emailed your order confirmation to ${esc(o.c.email)}.</p>`;
+  if (paid) pay = `<p class="note"><b>Payment received.</b> ${o.c.email ? `We've emailed a confirmation to ${esc(o.c.email)}.` : `We'll reach you on ${esc(o.c.phone)} about your order.`}</p>`;
+  else if (cod) pay = `<p>${esc(P.cod.note || "Pay when your order arrives.")} Keep <b>${total}</b> ready.</p><p class="note">${o.c.email ? `We've emailed your order confirmation to ${esc(o.c.email)}.` : `We'll reach you on ${esc(o.c.phone)} about your order.`}</p>`;
   else if (o.method === "razorpay") pay = `<p>Your payment isn't complete yet.</p><button class="btn pri" type="button" id="payrz">Pay ${total} now</button>`;
   else if (o.method === "stripe") pay = `<p>If you've just paid, this page updates in a moment.</p>${o.stripeUrl ? `<a class="btn pri" href="${esc(o.stripeUrl)}">Pay ${total} on Stripe</a>` : ""}`;
   else if (o.method === "upi") pay = `<p>Scan the code in any UPI app, or pay to the UPI ID. The amount and order number are filled in.</p><div class="qr" id="qr" aria-label="UPI QR code"></div><div class="copyrow"><code>${esc(P.upi.vpa)}</code><button type="button" data-copy="${esc(P.upi.vpa)}">Copy UPI ID</button></div><a class="btn pri" href="${esc(upiLink(o))}">Open UPI app</a><p class="note">Check your UPI app shows <b>${esc(P.upi.payeeName || C.brand.name)}</b> and <b>${total}</b>. Once we confirm your payment, we'll email you at ${esc(o.c.email)}.</p>`;
@@ -704,7 +711,7 @@ function serverDone(o) {
   if (!paid && !cod && (o.method === "upi" || o.method === "paypal")) {
     const what = o.method === "upi" ? "UPI transaction ID (UTR)" : "PayPal transaction ID";
     pay += o.reported
-      ? `<p class="note"><b>Thanks, we've got your reference ${esc(o.utr || "")}.</b> We'll email you at ${esc(o.c.email)} as soon as we've confirmed the payment.</p>`
+      ? `<p class="note"><b>Thanks, we've got your reference ${esc(o.utr || "")}.</b> We'll ${o.c.email ? `email you at ${esc(o.c.email)}` : `reach you on ${esc(o.c.phone)}`} as soon as we've confirmed the payment.</p>`
       : `<form id="utr" class="form" novalidate style="border-top:1px solid var(--line);padding-top:16px"><div class="f"><label for="utr-in">Paid already? Enter the ${what}</label><input class="in" id="utr-in" inputmode="${o.method === "upi" ? "numeric" : "text"}" autocomplete="off" placeholder="${o.method === "upi" ? "12-digit number from your UPI app" : "Transaction ID"}"><span class="err" id="utr-e" role="alert"></span></div><button class="btn" type="submit">Send reference</button><p class="soft" style="font-size:13px">We'll check it and email you a confirmation.</p></form>`;
   }
   const title = paid || cod ? K.successTitle : "Your order is saved";
@@ -1046,6 +1053,11 @@ function bindCheckout() {
       else if (i.type === "tel" && digits(i.value).length < 8) m = "Enter a phone number with at least 8 digits.";
       if (er) er.textContent = m; if (m && !bad) bad = i;
     });
+    // an optional email or phone that was filled in is checked too, and "either one" needs one of them
+    { const em = $("#email", form), ph = $("#phone", form), say = (i, m) => { const er = $("#" + i.id + "-e"); if (er) er.textContent = m; if (!bad) bad = i; };
+      if (em && !em.required && em.value.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em.value.trim())) say(em, "Enter a valid email address.");
+      if (ph && !ph.required && ph.value.trim() && digits(ph.value).length < 8) say(ph, "Enter a phone number with at least 8 digits.");
+      if (!bad && mustGive().either && em && !em.value.trim() && !(ph && ph.value.trim())) say(em, "Enter your email address or your phone number."); }
     if (bad) { bad.focus(); return; }
     { const cc = $("#co-consent", form); if (cc && !cc.checked) { $("#co-err").textContent = "Please tick the box to agree before placing the order."; cc.focus(); return; } AGREED = cc ? "Agreed on " + new Date().toISOString() + ": " + consentWords("") : ""; }
     const fd = Object.fromEntries(new FormData(form).entries());

@@ -163,6 +163,40 @@ export function hostTag(html: string, db: SbCfg | CfSiteCfg): string {
   return /<head[^>]*>/i.test(html) ? html.replace(/<head[^>]*>/i, (m) => `${m}\n${tag}`) : tag + html;
 }
 
+/** What a site ZIP made by Export holds, for loading it back into a project. */
+export type SiteZip = { template: string; name: string; version: number; exportedAt: string; content: any; /** Pictures the content uses that are in the ZIP. */ assets: { path: string; data: Uint8Array }[]; /** Pictures the content names that the ZIP doesn't have. */ missing: string[] };
+const ZIP_MAX = 300 * 1024 * 1024, CONTENT_MAX = 8 * 1024 * 1024, ASSET_MAX = 40 * 1024 * 1024;
+/** Reads a ZIP made by Export ZIP. Only the content and the pictures it names are taken; the pages, scripts and
+ *  CMS files in the ZIP are ignored (the Studio builds those itself). Throws a plain message when it isn't one. */
+export async function readSiteZip(file: Blob): Promise<SiteZip> {
+  if (file.size > ZIP_MAX) throw new Error("That file is over 300 MB, which is more than a site ZIP should be.");
+  let zip: JSZip;
+  try { zip = await JSZip.loadAsync(await file.arrayBuffer()); } catch { throw new Error("That file isn't a ZIP the Studio can open."); }
+  // A ZIP that was unpacked and zipped again often has everything inside one folder: look there too.
+  const names = Object.keys(zip.files).filter((n) => !zip.files[n].dir);
+  const at = names.find((n) => /(^|\/)cms\/site\.json$/.test(n) && !n.includes("__MACOSX"));
+  if (!at) throw new Error("This isn't a ZIP made by Export ZIP (it has no cms/site.json).");
+  const root = at.slice(0, at.length - "cms/site.json".length);
+  const text = async (n: string, max: number) => { const f = zip.file(root + n); if (!f) return null; const b = await f.async("uint8array"); if (b.length > max) throw new Error(`${n} in the ZIP is too large.`); return new TextDecoder().decode(b); };
+  let info: any = null, content: any = null;
+  try { info = JSON.parse((await text("cms/site.json", 1024 * 1024)) || "null"); } catch { /* not JSON */ }
+  if (!info || typeof info.template !== "string") throw new Error("This ZIP's cms/site.json can't be read.");
+  const raw = await text("content.json", CONTENT_MAX);
+  if (raw == null) throw new Error("This ZIP has the site's pages but not its content (content.json), so there is nothing to load. Export it again from the project it came from.");
+  try { content = JSON.parse(raw); } catch { /* not JSON */ }
+  if (!content || typeof content !== "object" || Array.isArray(content)) throw new Error("This ZIP's content.json can't be read.");
+  const assets: SiteZip["assets"] = [], missing: string[] = [];
+  for (const p of collectAssetPaths(content)) {
+    // Only pictures in the uploads folder, by their plain file name.
+    if (!/^assets\/uploads\/[\w][\w.\-]{0,200}$/.test(p)) { missing.push(p); continue; }
+    const f = zip.file(root + p); if (!f) { missing.push(p); continue; }
+    const data = await f.async("uint8array");
+    if (data.length > ASSET_MAX) { missing.push(p); continue; }
+    assets.push({ path: p, data });
+  }
+  return { template: info.template, name: String(info.name || "").slice(0, 120), version: +info.version || 0, exportedAt: String(info.exportedAt || ""), content, assets, missing };
+}
+
 export async function zipSite(files: SiteFile[]): Promise<Blob> {
   const zip = new JSZip();
   for (const f of files) zip.file(f.path, f.data);

@@ -11,7 +11,7 @@ import { TEMPLATES } from "../schema";
 import type { Session } from "../lib/auth";
 import { GitHubRepo, explain } from "../lib/repo";
 import type { ProjectMeta, PublishTarget, Studio, StudioIndex, ExportRec } from "../lib/studio";
-import { buildSite, downloadBlob, loadDefaults, loadMergeBase, publishSite, zipName, zipSite } from "../lib/exporter";
+import { buildSite, downloadBlob, loadDefaults, loadMergeBase, publishSite, readSiteZip, zipName, zipSite, type SiteZip } from "../lib/exporter";
 import { adminFile } from "../schema/common";
 import { clone, fmtDate, merge, slugify, timeAgo } from "../lib/util";
 import { siteAddress, siteRepoFor } from "../lib/hosting";
@@ -160,7 +160,7 @@ export function ProjectView({ studio, index, project, session, onIndex }: { stud
     { id: "kit", label: "Brand kit", hint: "A visiting card, QR standee, pamphlet and festival posts drawn from this site's theme and logo, ready to print or post." },
     ...((project.publish || project.host) && !demo ? [{ id: "live" as Modal, label: "Live sites", hint: "When each live site last changed, and pull its content." }] : []),
     { id: "history", label: `History${project.exports.length ? ` (${project.exports.length})` : ""}`, hint: "Earlier versions you published or exported: download them or load one into the editor." },
-    { id: "export", label: "Export ZIP", hint: "Download the whole site as a ZIP file." },
+    { id: "export", label: "Export / Import ZIP", hint: "Download the whole site as a ZIP file, or load one back into this project." },
     ...(!demo ? [{ id: "write" as Modal, label: "Write text from a site", hint: "Write new, original text for your brand from a site in the same line of business." }] : []),
   ];
   const pinned = project.pinned ?? index.pinned ?? ["host"];
@@ -265,7 +265,7 @@ export function ProjectView({ studio, index, project, session, onIndex }: { stud
         </div>
       </div>
 
-      {modal === "export" && <ExportDialog {...{ studio, project, tpl, draft, dirty, save, onIndex, getBlob }} onClose={() => setModal("")} />}
+      {modal === "export" && <ExportDialog {...{ studio, project, tpl, draft, dirty, save, onIndex, getBlob }} onImported={(c, n) => { replaceDraft(c); setModal(""); toast(`Loaded into the editor${n ? ` with ${n} picture${n === 1 ? "" : "s"}` : ""}. Check it, then Save to keep it.`); }} onClose={() => setModal("")} />}
       {modal === "backend" && <ShopBackendDialog {...{ session, studio, project, draft, onIndex }} onClose={() => setModal("")} onConnect={async (url) => {
         draft.backend = { ...(draft.backend || {}), enabled: true, provider: "cloudflare", workerUrl: url };
         // Save first, then move both counters on together, so the editor and preview see it and it isn't "unsaved".
@@ -301,10 +301,34 @@ function Checks({ list }: { list: string[] }) {
   );
 }
 
-function ExportDialog({ studio, project, tpl, draft, dirty, save, onIndex, getBlob, onClose }: Common) {
+function ExportDialog({ studio, project, tpl, draft, dirty, save, onIndex, getBlob, onImported, onClose }: Common & { onImported: (content: any, pictures: number) => void }) {
   const toast = useToast();
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
+  // Import: a ZIP made by Export, read on this device; its content and pictures go into this project.
+  const [mode, setMode] = useState<"export" | "import">("export");
+  const [zipIn, setZipIn] = useState<SiteZip | null>(null), [zipName0, setZipName0] = useState(""), [zipErr, setZipErr] = useState(""), [step, setStep] = useState("");
+  const pick = async (f: File | undefined) => {
+    setZipIn(null); setZipErr(""); setZipName0(f?.name || ""); if (!f) return;
+    setStep("Reading the ZIP");
+    try {
+      const z = await readSiteZip(f);
+      if (z.template !== project.template) throw new Error(`This ZIP is a ${TEMPLATES[z.template]?.name || z.template} site, and this project is a ${tpl.name} one. Open (or create) a ${TEMPLATES[z.template]?.name || z.template} project and import it there.`);
+      setZipIn(z);
+    } catch (e: any) { setZipErr(e?.message || "Couldn't read that file."); }
+    setStep("");
+  };
+  const load = async () => {
+    if (!zipIn) return;
+    setBusy(true);
+    try {
+      // Pictures the project already has (the same file name) are left as they are.
+      const need: typeof zipIn.assets = [];
+      for (const a of zipIn.assets) { setStep("Checking pictures"); if (!(await getBlob(a.path).catch(() => null))) need.push(a); }
+      await studio.importAssets(project.id, need, (i, n) => setStep(`Adding picture ${i + 1} of ${n}`));
+      onImported(zipIn.content, zipIn.assets.length);
+    } catch (e) { toast(explain(e), "bad"); setBusy(false); setStep(""); }
+  };
   const checks = tpl.checks?.(draft) || [];
   const go = async () => {
     setBusy(true);
@@ -323,8 +347,28 @@ function ExportDialog({ studio, project, tpl, draft, dirty, save, onIndex, getBl
       setBusy(false);
     }
   };
+  const tabs = (
+    <div role="tablist" aria-label="Export or import" className="inline-flex self-start rounded-lg border border-ink-700 p-0.5 text-[13px]">
+      {(["export", "import"] as const).map((m) => <button key={m} type="button" role="tab" aria-selected={mode === m} disabled={busy} className={`rounded-md px-3 py-1.5 font-semibold ${mode === m ? "bg-ink-700 text-ink-50" : "text-ink-300 hover:text-ink-100"}`} onClick={() => setMode(m)}>{m === "export" ? "Export" : "Import"}</button>)}
+    </div>
+  );
+  if (mode === "import") return (
+    <Modal title="Export / Import ZIP" onClose={onClose} footer={<><button className="btn" onClick={onClose}>Cancel</button><button className="btn btn-pri" disabled={busy || !zipIn} onClick={load}>{busy ? (step || "Loading") + "…" : "Load into this project"}</button></>}>
+      {tabs}
+      <p className="text-sm text-ink-300">Choose a ZIP that was made with Export. Its content and pictures are loaded into this project's editor. The pages and scripts inside the ZIP are not used: the Studio builds those itself.</p>
+      <Field label="Site ZIP" htmlFor="im-zip"><input id="im-zip" type="file" accept=".zip,application/zip" className="input" disabled={busy} onChange={(e) => pick(e.target.files?.[0])} /></Field>
+      {step && !busy && <p role="status" className="hint">{step}…</p>}
+      {zipErr && <p role="alert" className="rounded-lg border border-red-400/40 bg-red-400/5 px-3 py-2.5 text-[13px] text-red-200">{zipErr}</p>}
+      {zipIn && <div aria-label="ZIP contents" className="rounded-lg border border-ink-700 px-3 py-2.5 text-[13px] text-ink-200">
+        <b className="text-ink-50">{zipIn.name || zipName0}</b>{zipIn.version ? ` · v${zipIn.version}` : ""}{zipIn.exportedAt && !isNaN(+new Date(zipIn.exportedAt)) ? ` · exported ${new Date(zipIn.exportedAt).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}` : ""}
+        <div className="mt-0.5 text-ink-400">{tpl.name} site · {zipIn.assets.length} picture{zipIn.assets.length === 1 ? "" : "s"}{zipIn.missing.length ? ` · ${zipIn.missing.length} picture${zipIn.missing.length === 1 ? "" : "s"} named in the content but not in the ZIP` : ""}</div>
+      </div>}
+      {zipIn && <p className="rounded-lg border border-amber-400/40 bg-amber-400/5 px-3 py-2.5 text-[13px] text-amber-100">This replaces what is in the editor now. Nothing is saved until you press <b>Save</b>, so your saved version stays if you leave without saving{dirty ? "; your unsaved changes would be lost" : ""}. Earlier versions also stay in History.</p>}
+    </Modal>
+  );
   return (
-    <Modal title="Export as ZIP" onClose={onClose} footer={<><button className="btn" onClick={onClose}>Cancel</button><button className="btn btn-pri" disabled={busy} onClick={go}>{busy ? "Building…" : `Download v${project.version + 1}`}</button></>}>
+    <Modal title="Export / Import ZIP" onClose={onClose} footer={<><button className="btn" onClick={onClose}>Cancel</button><button className="btn btn-pri" disabled={busy} onClick={go}>{busy ? "Building…" : `Download v${project.version + 1}`}</button></>}>
+      {tabs}
       <p className="text-sm text-ink-300">The ZIP is a complete website: every page, your content and images, and the site's own CMS at <code className="font-mono text-xs">{adminFile(draft)}</code>. Upload it to any GitHub repository to put it online.</p>
       <Checks list={checks} />
       <Field label="Version note (optional)" htmlFor="ex-note"><input id="ex-note" className="input" placeholder="e.g. Sent to client for review" value={note} onChange={(e) => setNote(e.target.value)} /></Field>

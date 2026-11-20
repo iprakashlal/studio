@@ -146,6 +146,12 @@ export class Studio {
     return { path };
   }
 
+  /** Pictures from an imported site ZIP, at the paths its content names (only the uploads folder). */
+  async importAssets(id: string, list: { path: string; data: Uint8Array }[], step?: (done: number, of: number) => void): Promise<void> {
+    const ok = list.filter((f) => /^assets\/uploads\/[\w][\w.\-]{0,200}$/.test(f.path));
+    for (let i = 0; i < ok.length; i++) { step?.(i, ok.length); await this.repo.putFile(`projects/${id}/${ok[i].path}`, bytesB64(ok[i].data), `Import ${ok[i].path.split("/").pop()}`); }
+  }
+
   /** An image of a project: the Studio's copy, or else the live site's (images uploaded in the site's own CMS stay there). */
   async assetBlob(id: string, path: string): Promise<Blob | null> {
     const b = await this.repo.getRaw(`projects/${id}/${path}`);

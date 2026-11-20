@@ -52,7 +52,10 @@ export function cfOauthOpen(cfg: CfOauthCfg): { done: Promise<CfOauthGot>; cance
     const back = await new Promise<{ code?: string; error?: string; text?: string }>((res, rej) => {
       const read = () => { try { const j = JSON.parse(localStorage.getItem(BACK) || "null"); if (j?.state === state) { end(); res(j); } } catch { /* not ours */ } };
       const on = (e: StorageEvent) => { if (e.key === BACK) read(); };
-      const t = setInterval(() => { read(); if (win.closed) setTimeout(() => { read(); end(); rej(new Error("The Cloudflare window was closed before it finished. Nothing was changed.")); }, 600); }, 500);
+      // Cloudflare's pages cut the link to the window that opened them, so from here the window can look closed while
+      // it is still open: wait for its answer (or Cancel, or ten minutes) and never judge by `win.closed`.
+      const started = Date.now();
+      const t = setInterval(() => { read(); if (Date.now() - started > 10 * 60000) { end(); rej(new Error("No answer came back from Cloudflare in ten minutes. Nothing was changed; press Connect Cloudflare to try again.")); } }, 500);
       const end = () => { clearInterval(t); removeEventListener("storage", on); try { localStorage.removeItem(BACK); } catch { /* private mode */ } };
       stop = () => { end(); try { win.close(); } catch { /* gone */ } rej(new Error("Cancelled. Nothing was changed.")); };
       addEventListener("storage", on);

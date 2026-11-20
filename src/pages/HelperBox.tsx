@@ -82,11 +82,11 @@ export function HelperStatus({ studioToken, nf }: { studioToken: string; nf: Net
     <div className="flex flex-col gap-2 text-sm">
       <div className="flex flex-wrap items-center gap-2">
         <span className={`h-2 w-2 rounded-full ${helperOk(shown) || viaDb ? "bg-emerald-400" : "bg-ink-500"}`} />
-        <span>Studio helper: {!shown && viaDb ? <b>not needed on this device</b> : shown ? <><b>{shown.kind === "cloudflare" ? "Cloudflare" : "Netlify"}</b> · <a className="text-brand-300 underline" href={shown.url} target="_blank" rel="noopener noreferrer">{shown.url.replace(/^https:\/\//, "")}</a></> : <span className="text-ink-400">not set up</span>}</span>
+        <span>Studio helper: {!shown && viaDb ? <b>connected through your Studio's database</b> : shown ? <><b>{shown.kind === "cloudflare" ? "Cloudflare" : "Netlify"}</b> · <a className="text-brand-300 underline" href={shown.url} target="_blank" rel="noopener noreferrer">{shown.url.replace(/^https:\/\//, "")}</a></> : <span className="text-ink-400">not set up</span>}</span>
         {shown && <button type="button" className="btn btn-sm ml-auto" onClick={() => { relayVault.clear(); setShown(null); location.reload(); }} title="Forget it on this device. Delete the Worker (or Netlify site) to remove it completely.">Forget</button>}
       </div>
-      <p className="pl-4 text-[12.5px] text-ink-400">The go-between: passes the Studio's requests to Cloudflare (which doesn't accept them straight from a web page). Holds no permissions and keeps none of your keys.</p>
-      {!shown && viaDb && <p className="pl-4 text-[12.5px] text-emerald-300">You are signed in to your Studio's database, which makes the Studio's Cloudflare calls with the token it keeps. A helper is only needed here to connect another Cloudflare account from this device, or to set up email sending.</p>}
+      {!(!shown && viaDb) && <p className="pl-4 text-[12.5px] text-ink-400">The go-between: passes the Studio's requests to Cloudflare (which doesn't accept them straight from a web page). Holds no permissions and keeps none of your keys.</p>}
+      {!shown && viaDb && <p className="pl-4 text-[12.5px] text-emerald-300">Nothing to set up on this device. You are signed in to your Studio's database, which passes the Studio's requests to Cloudflare itself, with the token it keeps. A separate helper is only needed here to connect another Cloudflare account from this device, or to set up email sending.</p>}
       {!shown && (viaDb ? <details className="pl-4 text-[12.5px] text-ink-400"><summary className="cursor-pointer select-none">Set up a helper on this device anyway</summary><div className="mt-2">{h.ui}</div></details> : h.ui)}
     </div>
   );

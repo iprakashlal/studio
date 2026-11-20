@@ -13,6 +13,7 @@ type Env = { DB: any; SECRET: string; RESEND_API_KEY?: string; MAIL_FROM?: strin
 const V = CFDB_VERSION;
 const CHUNK = 900_000;
 const enc = new TextEncoder();
+const dec = new TextDecoder();
 // Other Cloudflare accounts kept here (secrets CFX_<account id> = {"t": token, "n": name}), for sites hosted on them.
 function otherToken(env: any, account: string): string {
   if (!/^[\w-]{1,64}$/.test(account)) return "";
@@ -58,6 +59,41 @@ async function who(env: Env, req: Request): Promise<string | null> {
   if (!body || !sig) return null;
   if (b64u(await hmac(env.SECRET, "s:" + body)) !== sig) return null;
   try { const o = JSON.parse(new TextDecoder().decode(unb64u(body))); return o.x > Date.now() && emailOk(o.e) ? o.e : null; } catch { return null; }
+}
+// ---- Sign in with Google (see /auth/google…): the setting, the addresses it may be used from, and checking Google's token.
+async function gsCfg(env: Env): Promise<{ on?: boolean; clientId?: string; origins?: string[] }> { return (await getSetting(env, "_db", "google")) || {}; }
+/** Remembers an address (an https origin) someone signed in from with an email code, or the owner set this up from. */
+async function gsOrigin(env: Env, origin: string) {
+  if (!/^https:\/\/[a-z0-9.-]{1,200}(:\d{1,5})?$/i.test(origin)) return;
+  const g = await gsCfg(env), list = g.origins || [];
+  if (list.includes(origin)) return;
+  await putSetting(env, "_db", "google", { ...g, origins: [...list, origin].slice(-60) });
+}
+let gsKeys: { at: number; keys: any[] } | null = null;
+/** The verified email in a Google ID token made for `aud` with this `nonce`, or "" when anything about it is off. */
+async function gsEmail(idToken: string, aud: string, nonce: string): Promise<string> {
+  try {
+    const [h, b, sg] = idToken.split("."); if (!h || !b || !sg) return "";
+    const head = JSON.parse(dec.decode(unb64u(h))), c = JSON.parse(dec.decode(unb64u(b)));
+    if (head.alg !== "RS256") return "";
+    if (!gsKeys || Date.now() - gsKeys.at > 3600_000 || !gsKeys.keys.some((k) => k.kid === head.kid)) { const r = await fetch("https://www.googleapis.com/oauth2/v3/certs"); if (!r.ok) return ""; gsKeys = { at: Date.now(), keys: (((await r.json()) as any).keys || []) }; }
+    const jwk = gsKeys.keys.find((k) => k.kid === head.kid); if (!jwk) return "";
+    const key = await crypto.subtle.importKey("jwk", { kty: jwk.kty, n: jwk.n, e: jwk.e, alg: "RS256", ext: true }, { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, false, ["verify"]);
+    if (!(await crypto.subtle.verify("RSASSA-PKCS1-v1_5", key, unb64u(sg), enc.encode(h + "." + b)))) return "";
+    if ((c.iss !== "https://accounts.google.com" && c.iss !== "accounts.google.com") || c.aud !== aud || !(+c.exp * 1000 > Date.now()) || c.nonce !== nonce) return "";
+    if (c.email_verified !== true && c.email_verified !== "true") return "";
+    const email = String(c.email || "").trim().toLowerCase();
+    return emailOk(email) ? email : "";
+  } catch { return ""; }
+}
+/** The small page shown in the Google window: a message, and (when `finish`) the script that hands Google's token to this Worker. */
+function gsPage(title: string, text: string, finish = false): Response {
+  const esc = (x: string) => x.replace(/[&<>"]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" } as any)[ch]);
+  const script = finish ? `<script>(function(){var q=new URLSearchParams(location.hash.slice(1)),h=document.getElementById("h"),p=document.getElementById("p");try{history.replaceState(null,"",location.pathname)}catch(e){}
+function say(a,b){h.textContent=a;p.textContent=b}
+if(q.get("error")||!q.get("id_token")){say("Not signed in",q.get("error")==="access_denied"?"You closed Google's sign-in. You can close this window.":"Google didn't finish the sign-in. Close this window and try again.");return}
+fetch("/auth/google/finish",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id_token:q.get("id_token"),state:q.get("state")})}).then(function(r){return r.json().then(function(j){return{ok:r.ok,j:j}})}).then(function(x){if(x.ok){say("Signed in","You can close this window and go back.");setTimeout(function(){try{window.close()}catch(e){}},400)}else say("Not signed in",(x.j&&x.j.error)||"Something went wrong. Close this window and try again.")}).catch(function(){say("Not signed in","Couldn't reach the sign-in. Close this window and try again.")})})();</script>` : "";
+  return new Response(`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><meta name="referrer" content="no-referrer"><title>Sign in</title><style>body{font:16px/1.6 system-ui,sans-serif;max-width:420px;margin:18vh auto;padding:0 20px;color:#1d2433;text-align:center}p{color:#5b6475}</style><h1 id="h">${esc(title)}</h1><p id="p">${esc(text)}</p>${script}`, { status: 200, headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Frame-Options": "DENY" } });
 }
 const roleOf = async (env: Env, scope: string, email: string | null) => (email ? ((await env.DB.prepare("select role from members where scope = ? and email = ?").bind(scope, email).first()) as any)?.role || null : null);
 
@@ -979,7 +1015,7 @@ export default {
     if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
     const u = new URL(req.url), p = u.pathname.replace(/\/+$/, "") || "/";
     try {
-      if (p === "/") return json({ ok: true, service: "site-studio-db", v: V, mail: !!(env.RESEND_API_KEY && env.MAIL_FROM), ...(env.CF_TOKEN && env.CF_ACCOUNT ? { deploy: true, account: env.CF_ACCOUNT } : {}), ...(env.GH_TOKEN ? { gh: true } : {}), ...(env.AI ? { ai: true, pamphlet: 2 } : {}), reviews: true, look: 1, outline: 1, pictures: 1, connect: 2, translate: 4, approvals: 1, accounts: 2, cfx: 4, cfa: 1, studioPages: 1, del: 1, enqMail: 3, ...(otherAccounts(env).length ? { more: otherAccounts(env).length } : {}) });
+      if (p === "/") return json({ ok: true, service: "site-studio-db", v: V, mail: !!(env.RESEND_API_KEY && env.MAIL_FROM), ...(env.CF_TOKEN && env.CF_ACCOUNT ? { deploy: true, account: env.CF_ACCOUNT } : {}), ...(env.GH_TOKEN ? { gh: true } : {}), ...(env.AI ? { ai: true, pamphlet: 2 } : {}), reviews: true, look: 1, outline: 1, pictures: 1, connect: 2, translate: 4, approvals: 1, accounts: 2, cfx: 4, cfa: 1, google: 1, studioPages: 1, del: 1, enqMail: 3, ...(otherAccounts(env).length ? { more: otherAccounts(env).length } : {}) });
 
       // The owner's own AI API in the place of Workers AI, when a request asks for it.
       if (p.startsWith("/ai/") && u.searchParams.get("engine") === "custom") {
@@ -1043,7 +1079,56 @@ export default {
         if (c.tries >= 5) return err(429, "Too many tries. Ask for a new code.");
         if (b64u(await hmac(env.SECRET, "c:" + email + ":" + code)) !== c.hash) { await env.DB.prepare("update codes set tries = tries + 1 where email = ?").bind(email).run(); return err(403, "That code isn't right."); }
         await env.DB.prepare("delete from codes where email = ?").bind(email).run();
+        // The address this sign-in came from is now known: Sign in with Google is offered there (and only on such addresses).
+        try { await gsOrigin(env, req.headers.get("origin") || ""); } catch { /* the sign-in still stands */ }
         return json({ token: await sessionFor(env, email), email });
+      }
+      // ---- Sign in with Google, for emails that are already members (the same people who can get a code by email).
+      // No Google script on the page and no secret: Google sends a signed token to this Worker, which checks it.
+      if (p === "/auth/google" && req.method === "GET") { const g = await gsCfg(env); return json({ on: !!(g.on && g.clientId), clientId: g.clientId || "", redirect: u.origin + "/auth/google/cb" }); }
+      if (p === "/auth/google/set" && req.method === "POST") {
+        const e = await who(env, req); if (!e) return err(401, "Sign in first.");
+        // The Studio's owners; on a database with no Studio in it (a site's own), that site's owners.
+        const owner = await env.DB.prepare("select 1 from members where email = ? and role = 'owner' and scope like 'studio:%' limit 1").bind(e).first()
+          || (!(await env.DB.prepare("select 1 from members where scope like 'studio:%' limit 1").first()) && await env.DB.prepare("select 1 from members where email = ? and role = 'owner' limit 1").bind(e).first());
+        if (!owner) return err(403, "Only the owners can change how people sign in.");
+        const b = (await req.json()) as any, clientId = String(b.clientId || "").trim();
+        if (clientId && !/^[\w.-]{10,200}\.apps\.googleusercontent\.com$/.test(clientId)) return err(400, "That doesn't look like a Google client ID (it ends in .apps.googleusercontent.com).");
+        const g = await gsCfg(env); await putSetting(env, "_db", "google", { ...g, clientId, on: !!b.on && !!clientId });
+        try { await gsOrigin(env, req.headers.get("origin") || ""); } catch { /* saved all the same */ }
+        return json({ ok: true, on: !!b.on && !!clientId, clientId });
+      }
+      if (p === "/auth/google/start" && req.method === "GET") {
+        const g = await gsCfg(env), origin = String(u.searchParams.get("origin") || ""), nonce = String(u.searchParams.get("nonce") || "");
+        if (!g.on || !g.clientId) return gsPage("Sign in with Google isn't switched on here.", "Use your email and a code instead.");
+        if (!/^[A-Za-z0-9_-]{32,128}$/.test(nonce)) return gsPage("That sign-in link is incomplete.", "Go back and press Sign in with Google again.");
+        if (!(g.origins || []).includes(origin)) return gsPage("Sign in with a code once first.", "Sign in with Google works on an address after someone has signed in there with an email code.");
+        const body = b64u(enc.encode(JSON.stringify({ o: origin, n: nonce, x: Date.now() + 10 * 60000 }))), state = body + "." + b64u(await hmac(env.SECRET, "g:" + body));
+        return Response.redirect("https://accounts.google.com/o/oauth2/v2/auth?" + new URLSearchParams({ client_id: g.clientId, redirect_uri: u.origin + "/auth/google/cb", response_type: "id_token", scope: "openid email", nonce, state, prompt: "select_account" }), 302);
+      }
+      // Google sends the person back here with the token in the address's fragment, which only this page can read.
+      if (p === "/auth/google/cb" && req.method === "GET") return gsPage("Signing you in…", "One moment.", true);
+      if (p === "/auth/google/finish" && req.method === "POST") {
+        const b = (await req.json().catch(() => ({}))) as any, [body, sig] = String(b.state || "").split(".");
+        if (!body || !sig || b64u(await hmac(env.SECRET, "g:" + body)) !== sig) return err(400, "That sign-in didn't start here. Go back and press Sign in with Google again.");
+        let st: any = null; try { st = JSON.parse(dec.decode(unb64u(body))); } catch { /* refused below */ }
+        if (!st || st.x < Date.now()) return err(400, "That took too long. Go back and press Sign in with Google again.");
+        const g = await gsCfg(env); if (!g.on || !g.clientId) return err(403, "Sign in with Google isn't switched on here.");
+        const email = await gsEmail(String(b.id_token || ""), g.clientId, st.n);
+        if (!email) return err(403, "Google's answer couldn't be checked. Go back and try again.");
+        if (!(await env.DB.prepare("select 1 from members where email = ? limit 1").bind(email).first())) return err(403, `${email} isn't a member here. Ask the owner to add you, then sign in again.`);
+        // Kept for two minutes for the page that started it (it holds the other half), and given out once.
+        await putSetting(env, "_gs", b64u(await hmac(env.SECRET, "gn:" + st.n)), { token: await sessionFor(env, email), email, o: st.o, x: Date.now() + 2 * 60000 });
+        return json({ ok: true, email });
+      }
+      if (p === "/auth/google/poll" && req.method === "POST") {
+        const b = (await req.json().catch(() => ({}))) as any, nonce = String(b.nonce || "");
+        if (!/^[A-Za-z0-9_-]{32,128}$/.test(nonce)) return err(400, "Not a sign-in.");
+        const key = b64u(await hmac(env.SECRET, "gn:" + nonce)), r = await getSetting(env, "_gs", key);
+        if (!r) return json({ wait: true });
+        await putSetting(env, "_gs", key, null);
+        if (r.x < Date.now() || r.o !== (req.headers.get("origin") || "")) return err(403, "That sign-in can't be used here. Press Sign in with Google again.");
+        return json({ token: r.token, email: r.email });
       }
       if (p === "/me") {
         const e = await who(env, req); if (!e) return err(401, "Sign in first.");

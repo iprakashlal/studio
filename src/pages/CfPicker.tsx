@@ -272,7 +272,7 @@ export function useCfAccount(studioToken: string, nf: Netlify | null | undefined
         </>;
       })() : <>
         {accounts && accounts.length > 1 && <label className="flex flex-col gap-1"><span className="label">Cloudflare account</span><select className="input" aria-label="Cloudflare account" value={account} onChange={(e) => pickAccount(e.target.value)}>{accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select></label>}
-        {acc && <p className="text-emerald-300">Connected to {acc.name}.</p>}
+        {acc && !manage && <p className="text-emerald-300">Connected to {acc.name}.</p>}
       </>}
       {ocNote && <p role="status" aria-label="Connect Cloudflare result" className="text-emerald-300">{ocNote}</p>}
       {err && <p role="alert" className="text-red-300">{err}</p>}

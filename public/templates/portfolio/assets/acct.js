@@ -11,55 +11,117 @@
   /* An order's progress, as the customer reads it. */
   const LIVE = { new: 0, read: 0, replied: 1, accepted: 1, preparing: 2, ready: 3, out: 4, done: 5, archived: 5 };
   const STEPS = { restaurant: ["Received", "Accepted", "Being prepared", "Ready", "On the way", "Completed"], store: ["Received", "Confirmed", "Packed", "Ready to ship", "Shipped", "Delivered"] };
-  let cfg = null, can = null, me = null, skip = null, where = null, modal = null, data = null, timer = 0;
+  let cfg = null, can = null, me = null, demoMe = null, skip = null, where = null, modal = null, data = null, timer = 0;
   const ui = { tab: "", val: "", sent: false, via: "", msg: "", busy: false, open: "", view: "", saved: "", addrs: null };
   const key = () => "acct:" + cfg.site;
-  const post = (path, body) => fetch(cfg.api + "/" + path + "/" + encodeURIComponent(cfg.site), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const real = (path, body) => fetch(cfg.api + "/" + path + "/" + encodeURIComponent(cfg.site), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  /* In the Studio's preview there is no database: a made-up customer and two made-up orders stand in, so the look can be chosen. */
+  let demoProfile = null;
+  function demo(path, body) {
+    const ok = (j) => Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(j) }), it = (cfg.demoItems || []).slice(0, 3), day = 86400000;
+    if (/^e?otp\/send/.test(path)) return ok({ ok: true, via: body.via });
+    if (/^e?otp\/check/.test(path)) return ok({ ok: true, token: "demo" });
+    if (path === "acct/in") return ok({ ok: true, kind: body.phone ? "phone" : "email", key: body.phone ? "91" + digits(body.phone).slice(-10) : String(body.email).toLowerCase(), pass: Date.now() + day + ".demo" });
+    if (path === "acct/save") { demoProfile = { name: body.name, phone: body.phone || "", email: body.email || "", addresses: body.addresses || [] }; return ok({ ok: true, profile: demoProfile }); }
+    const P = demoProfile || { name: "Asha Rao", phone: "+91 98765 43210", email: "asha@example.com", addresses: [{ label: "Home", line1: "12 MG Road", line2: "Camp", city: "Pune", pin: "411001", state: "Maharashtra" }] }, m = cfg.money || ((n) => String(n));
+    return ok({ ok: true, ...P, count: 2, points: 120, loyalty: { worth: 1, min: 50, maxPct: 50 }, orders: [
+      { no: "SAMPLE-1002", at: new Date(Date.now() - 20 * 60000).toISOString(), total: m(640), status: "preparing", mode: cfg.kind === "store" ? "Shop order" : "Delivery", paid: true, pay: "Paid online", address: "12 MG Road, Pune", name: P.name, points: "Earned 32 points", items: it.map((x, i) => ({ n: x.n, q: i ? 1 : 2, i: x.i })), text: "" },
+      { no: "SAMPLE-1001", at: new Date(Date.now() - 6 * day).toISOString(), total: m(420), status: "done", mode: cfg.kind === "store" ? "Shop order" : "Pick-up", paid: false, pay: "", address: "", name: P.name, points: "Earned 21 points", items: it.slice(0, 1).map((x) => ({ n: x.n, q: 1, i: x.i })), text: "" }] });
+  }
+  const post = (path, body) => (cfg.demo ? demo(path, body) : real(path, body));
   const steps = () => STEPS[cfg.kind === "store" ? "store" : "restaurant"];
   const label = (o) => (o.status === "cancelled" ? "Cancelled" : steps()[LIVE[o.status] || 0]);
   const active = (o) => o.status !== "cancelled" && (LIVE[o.status] || 0) < 5;
 
+  /* The look follows the site's theme (its accent colour, corners, fonts, dark mode) and the owner's choices under
+     Theme & layout → Account customization (content.account.ui), set as data-… on the panel and the sign-in card. */
   const CSS = `
-.sa{--sa-r:var(--r,12px);font-family:var(--fb,inherit);color:var(--text,#1b1a17);display:grid;gap:14px;text-align:left;font-size:15px;line-height:1.5}
-.sa h3,.sa-title{margin:0;font-family:var(--fd,inherit);font-weight:700;font-size:21px;line-height:1.2;letter-spacing:-.01em}.sa p{margin:0}.sa .sa-soft{color:var(--soft,#6b665d);font-size:13.5px;line-height:1.5}
+.sa-ui{--sa-acc:var(--c1,var(--accent,#1f4d3a));--sa-on:var(--on-c1,var(--on-accent,#fff));--sa-r:var(--r,14px);--sa-bb:var(--sa-acc);--sa-bf:var(--sa-on);--sa-tint:color-mix(in srgb,var(--sa-acc) 12%,transparent)}
+.sa-ui[data-tone=ink]{--sa-acc:var(--text,#1b1a17);--sa-on:var(--bg,#fff);--sa-bb:var(--sa-acc);--sa-bf:var(--sa-on)}
+.sa-ui[data-tone=soft]{--sa-bb:var(--sa-tint);--sa-bf:var(--sa-acc)}
+.sa-ui[data-corners=soft]{--sa-r:16px}.sa-ui[data-corners=round]{--sa-r:26px}.sa-ui[data-corners=sharp]{--sa-r:2px}
+.sa{font-family:var(--fb,inherit);color:var(--text,#1b1a17);display:grid;gap:16px;text-align:left;font-size:15px;line-height:1.5}
+.sa h3,.sa-title{margin:0;font-family:var(--fd,inherit);font-weight:700;font-size:23px;line-height:1.18;letter-spacing:-.015em}.sa p{margin:0}.sa .sa-soft{color:var(--soft,#6b665d);font-size:13.5px;line-height:1.5}
+.sa-badge{width:52px;height:52px;border-radius:calc(var(--sa-r) + 4px);display:grid;place-items:center;background:var(--sa-tint);color:var(--sa-acc)}.sa-badge svg{width:26px;height:26px}
 .sa-seg{display:inline-flex;justify-self:start;border:1px solid var(--line,#ddd);border-radius:999px;padding:3px;gap:2px;max-width:100%}
-.sa-seg button{border:0;background:transparent;color:inherit;opacity:.72;font:inherit;font-size:13.5px;font-weight:600;padding:7px 15px;border-radius:999px;cursor:pointer;white-space:nowrap}
-.sa-seg button[aria-pressed=true],.sa-seg button[aria-selected=true]{background:var(--text,#1b1a17);color:var(--bg,#fff);opacity:1}.sa-seg.sm button{font-size:13px;padding:6px 13px}
-.sa-f{display:grid;gap:6px;min-width:0}.sa-f label{font-size:12.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--soft,#6b665d)}
-.sa-f input,.sa-in input{width:100%;box-sizing:border-box;border:1px solid var(--line,#ddd);background:var(--surface,#fff);color:inherit;border-radius:calc(var(--sa-r)*.6 + 4px);padding:12px 14px;font:inherit;font-size:16px;min-height:48px}
-.sa-f input:focus,.sa-in input:focus{outline:2px solid var(--c1,var(--accent,#1f4d3a));outline-offset:1px}.sa-f input[readonly]{opacity:.7}
-.sa-in{position:relative}.sa-in input{padding-right:124px}
-.sa-in button{position:absolute;right:6px;top:50%;transform:translateY(-50%);height:36px;padding:0 16px;border:0;border-radius:calc(var(--sa-r)*.5 + 2px);background:var(--text,#1b1a17);color:var(--bg,#fff);font:inherit;font-weight:700;font-size:14px;cursor:pointer;white-space:nowrap}
-.sa-in button[disabled],.sa-btn[disabled]{opacity:.5;cursor:default}
-.sa-link{justify-self:start;border:0;background:none;padding:0;color:inherit;font:inherit;font-size:13.5px;font-weight:600;text-decoration:underline;cursor:pointer;opacity:.8}
+.sa-seg button{border:0;background:transparent;color:inherit;opacity:.72;font:inherit;font-size:13.5px;font-weight:600;padding:7px 15px;border-radius:999px;cursor:pointer;white-space:nowrap;transition:background .18s,color .18s,opacity .18s}
+.sa-seg button[aria-pressed=true]{background:var(--sa-acc);color:var(--sa-on);opacity:1}.sa-seg.sm button{font-size:13px;padding:6px 13px}
+.sa-f{display:grid;gap:6px;min-width:0}.sa-f label{font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--soft,#6b665d)}
+.sa-f input,.sa-in input{width:100%;box-sizing:border-box;border:1.5px solid var(--line,#ddd);background:var(--surface,#fff);color:inherit;border-radius:calc(var(--sa-r)*.7 + 2px);padding:13px 15px;font:inherit;font-size:16px;min-height:52px;transition:border-color .15s,box-shadow .15s}
+.sa-f input:focus,.sa-in input:focus{outline:0;border-color:var(--sa-acc);box-shadow:0 0 0 4px var(--sa-tint)}.sa-f input[readonly]{opacity:.65}
+.sa-in{position:relative}.sa-in input{padding-right:128px}
+.sa-in button{position:absolute;right:7px;top:50%;transform:translateY(-50%);height:38px;padding:0 17px;border:0;border-radius:calc(var(--sa-r)*.55 + 2px);background:var(--sa-bb);color:var(--sa-bf);font:inherit;font-weight:700;font-size:14px;cursor:pointer;white-space:nowrap;transition:filter .15s,transform .15s}
+.sa-in button:hover,.sa-btn.pri:hover{filter:brightness(1.08)}.sa-in button[disabled],.sa-btn[disabled]{opacity:.5;cursor:default}
+.sa-link{justify-self:start;border:0;background:none;padding:0;color:inherit;font:inherit;font-size:13.5px;font-weight:600;text-decoration:underline;text-underline-offset:3px;cursor:pointer;opacity:.8}
 .sa-bad{color:#b3261e;font-size:13.5px;font-weight:600}html[data-dark=true] .sa-bad{color:#ff9e94}.sa-good{color:#1e7a46;font-size:13.5px;font-weight:600}html[data-dark=true] .sa-good{color:#7bd9a0}
-.sa-card{border:1px solid var(--line,#ddd);background:var(--surface,#fff);border-radius:calc(var(--sa-r) + 2px);padding:22px;max-width:460px}
-.sa-back{position:fixed;inset:0;z-index:2147483000;background:rgba(0,0,0,.5);display:flex;justify-content:flex-end}
-.sa-drawer{width:min(480px,100vw);height:100%;background:var(--bg,#fff);color:var(--text,#1b1a17);font-family:var(--fb,inherit);box-shadow:-20px 0 60px -20px rgba(0,0,0,.5);display:flex;flex-direction:column;animation:sa-in .22s ease-out}
-@keyframes sa-in{from{transform:translateX(24px);opacity:0}to{transform:none;opacity:1}}@media (prefers-reduced-motion:reduce){.sa-drawer{animation:none}}
-.sa-head{display:flex;align-items:center;gap:10px;padding:16px 18px;border-bottom:1px solid var(--line,#ddd);flex:none}.sa-head .sa-title{flex:1}
-.sa-x{border:1px solid var(--line,#ddd);background:transparent;color:inherit;border-radius:999px;width:38px;height:38px;font-size:19px;line-height:1;cursor:pointer;flex:none}
-.sa-body{flex:1;overflow-y:auto;padding:18px;display:grid;gap:16px;align-content:start}
-.sa-who{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:14px}.sa-who b{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
-.sa-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px}.sa-stat{border:1px solid var(--line,#ddd);background:var(--surface,#fff);border-radius:var(--sa-r);padding:11px 14px}
-.sa-stat b{display:block;font-family:var(--fd,inherit);font-size:22px;line-height:1.2}.sa-stat span{font-size:12.5px;color:var(--soft,#6b665d)}
-.sa-orders{display:grid;gap:10px}.sa-o{border:1px solid var(--line,#ddd);background:var(--surface,#fff);border-radius:var(--sa-r);overflow:hidden}
-.sa-o>button{display:grid;grid-template-columns:auto 1fr auto;gap:2px 12px;align-items:center;width:100%;text-align:left;border:0;background:none;color:inherit;font:inherit;padding:12px 14px;cursor:pointer}
-.sa-thumbs{grid-row:1/3;display:flex}.sa-thumbs img,.sa-thumbs i{width:44px;height:44px;border-radius:calc(var(--sa-r)*.5 + 2px);object-fit:cover;border:2px solid var(--surface,#fff);background:rgba(127,127,127,.16);margin-left:-14px;display:grid;place-items:center;font-style:normal;font-size:12px;font-weight:700;color:var(--soft,#6b665d)}.sa-thumbs>:first-child{margin-left:0}
-.sa-o b{font-size:14.5px}.sa-o .sa-when{grid-column:2;font-size:12.5px;color:var(--soft,#6b665d)}.sa-o .sa-amt{font-weight:700;text-align:right}
-.sa-chip{justify-self:end;font-size:11.5px;font-weight:700;border-radius:999px;padding:3px 9px;background:rgba(127,127,127,.14);white-space:nowrap}.sa-chip[data-s=done]{background:rgba(30,122,70,.14);color:#1e7a46}.sa-chip[data-s=cancelled]{background:rgba(179,38,30,.12);color:#b3261e}
-.sa-more{padding:0 14px 14px;display:grid;gap:10px}.sa-lines{margin:0;padding:0;list-style:none;display:grid;gap:6px}.sa-lines li{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;font-size:13.5px}
-.sa-lines img,.sa-lines i{width:36px;height:36px;border-radius:8px;object-fit:cover;background:rgba(127,127,127,.16)}.sa-more pre{margin:0;white-space:pre-wrap;font:inherit;font-size:13px;color:var(--soft,#6b665d)}
-.sa-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.sa-btn{border:1px solid var(--line,#ddd);background:transparent;color:inherit;border-radius:999px;padding:8px 15px;font:inherit;font-weight:700;font-size:13.5px;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center}
-.sa-btn.pri{background:var(--text,#1b1a17);color:var(--bg,#fff);border-color:transparent}
+.sa-safe{display:flex;gap:8px;align-items:center}.sa-safe svg{width:15px;height:15px;flex:none;opacity:.7}
+.sa-card{border:1px solid var(--line,#ddd);background:var(--surface,#fff);border-radius:calc(var(--sa-r) + 6px);padding:26px;max-width:460px;box-shadow:0 18px 50px -28px rgba(0,0,0,.35)}
+.sa-back{position:fixed;inset:0;z-index:2147483000;background:rgba(10,10,10,.5);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);display:flex;justify-content:flex-end;animation:sa-fade .2s ease-out}
+.sa-back[data-panel=left]{justify-content:flex-start}.sa-back[data-panel=sheet]{justify-content:center;align-items:center;padding:16px}
+.sa-drawer{width:min(480px,100vw);height:100%;background:var(--bg,#fff);color:var(--text,#1b1a17);font-family:var(--fb,inherit);box-shadow:0 0 70px -10px rgba(0,0,0,.45);display:flex;flex-direction:column;overflow:hidden;animation:sa-in .28s cubic-bezier(.2,.8,.2,1)}
+.sa-back[data-panel=left] .sa-drawer{animation-name:sa-inl}.sa-back[data-panel=full] .sa-drawer{width:100vw}
+.sa-back[data-panel=sheet] .sa-drawer{height:auto;max-height:min(92vh,880px);width:min(560px,100%);border-radius:calc(var(--sa-r) + 10px);animation-name:sa-up}
+@keyframes sa-in{from{transform:translateX(40px);opacity:0}to{transform:none;opacity:1}}@keyframes sa-inl{from{transform:translateX(-40px);opacity:0}to{transform:none;opacity:1}}@keyframes sa-up{from{transform:translateY(24px) scale(.98);opacity:0}to{transform:none;opacity:1}}@keyframes sa-fade{from{opacity:0}to{opacity:1}}
+@media (prefers-reduced-motion:reduce){.sa-drawer,.sa-back{animation:none}}
+.sa-head{display:flex;align-items:center;gap:10px;padding:14px 18px;flex:none}.sa-head .sa-title{flex:1;font-size:19px}
+.sa-x{border:0;background:rgba(127,127,127,.14);color:inherit;border-radius:999px;width:38px;height:38px;font-size:19px;line-height:1;cursor:pointer;flex:none;transition:background .15s,transform .2s}.sa-x:hover{background:rgba(127,127,127,.24);transform:rotate(90deg)}
+.sa-body{flex:1;overflow-y:auto;padding:4px 18px 22px;display:grid;gap:18px;align-content:start}
+/* who is signed in: a coloured banner, or a plain line with tiles */
+.sa-hero{position:relative;overflow:hidden;border-radius:calc(var(--sa-r) + 6px);padding:20px;background:linear-gradient(135deg,var(--sa-acc),color-mix(in srgb,var(--sa-acc) 68%,#000));color:var(--sa-on);display:grid;gap:16px}
+.sa-hero::after{content:"";position:absolute;right:-50px;top:-70px;width:200px;height:200px;border-radius:50%;background:rgba(255,255,255,.1);pointer-events:none}.sa-hero::before{content:"";position:absolute;right:40px;bottom:-90px;width:160px;height:160px;border-radius:50%;background:rgba(255,255,255,.07);pointer-events:none}
+.sa-me{display:flex;align-items:center;gap:13px;position:relative;z-index:1}.sa-av{width:50px;height:50px;border-radius:50%;display:grid;place-items:center;flex:none;font-family:var(--fd,inherit);font-weight:700;font-size:21px;background:rgba(255,255,255,.2);color:inherit;border:2px solid rgba(255,255,255,.35)}
+.sa-me b{display:block;font-family:var(--fd,inherit);font-size:19px;line-height:1.2}.sa-me span{font-size:13px;opacity:.85}.sa-me>div{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.sa-hero .sa-link{color:inherit;opacity:.9;font-size:13px}
+.sa-pills{display:flex;gap:8px;flex-wrap:wrap;position:relative;z-index:1}.sa-pill{background:rgba(255,255,255,.16);border-radius:999px;padding:7px 14px;font-size:13px;display:flex;gap:6px;align-items:baseline}.sa-pill b{font-size:16px;font-family:var(--fd,inherit)}
+.sa-ui[data-head=plain] .sa-hero{background:none;color:inherit;padding:0;border-radius:0;overflow:visible}.sa-ui[data-head=plain] .sa-hero::before,.sa-ui[data-head=plain] .sa-hero::after{display:none}
+.sa-ui[data-head=plain] .sa-av{background:var(--sa-tint);color:var(--sa-acc);border-color:transparent}.sa-ui[data-head=plain] .sa-pill{background:var(--surface,#fff);border:1px solid var(--line,#ddd)}
+/* tabs */
+.sa-tabs{display:flex;gap:4px;border-bottom:1.5px solid var(--line,#ddd);overflow-x:auto;scrollbar-width:none}.sa-tabs::-webkit-scrollbar{display:none}
+.sa-tabs button{position:relative;border:0;background:none;color:var(--soft,#6b665d);font:inherit;font-size:14px;font-weight:700;padding:10px 12px 12px;cursor:pointer;white-space:nowrap;transition:color .15s}
+.sa-tabs button::after{content:"";position:absolute;left:10px;right:10px;bottom:-1.5px;height:3px;border-radius:3px 3px 0 0;background:var(--sa-acc);transform:scaleX(0);transition:transform .22s cubic-bezier(.2,.8,.2,1)}
+.sa-tabs button[aria-selected=true]{color:var(--text,#1b1a17)}.sa-tabs button[aria-selected=true]::after{transform:none}.sa-tabs em{font-style:normal;font-size:11px;font-weight:700;background:var(--sa-acc);color:var(--sa-on);border-radius:999px;padding:1px 7px;margin-left:6px}
+.sa-ui[data-tabs=pills] .sa-tabs{border:0;gap:6px}.sa-ui[data-tabs=pills] .sa-tabs button{border-radius:999px;padding:8px 15px;background:rgba(127,127,127,.1)}.sa-ui[data-tabs=pills] .sa-tabs button::after{display:none}
+.sa-ui[data-tabs=pills] .sa-tabs button[aria-selected=true]{background:var(--sa-acc);color:var(--sa-on)}.sa-ui[data-tabs=pills] .sa-tabs button[aria-selected=true] em{background:var(--sa-on);color:var(--sa-acc)}
+.sa-ui[data-tabs=blocks] .sa-tabs{border:0;background:rgba(127,127,127,.1);border-radius:calc(var(--sa-r)*.7 + 2px);padding:4px;gap:2px}.sa-ui[data-tabs=blocks] .sa-tabs button{flex:1;border-radius:calc(var(--sa-r)*.55 + 1px);padding:9px 10px}.sa-ui[data-tabs=blocks] .sa-tabs button::after{display:none}
+.sa-ui[data-tabs=blocks] .sa-tabs button[aria-selected=true]{background:var(--surface,#fff);box-shadow:0 2px 8px -3px rgba(0,0,0,.25)}
+/* orders */
+.sa-orders{display:grid;gap:12px}.sa-o{background:var(--surface,#fff);border-radius:calc(var(--sa-r) + 2px);overflow:hidden;border:1px solid var(--line,#ddd);transition:box-shadow .2s,transform .2s}
+.sa-ui[data-cards=shadow] .sa-o,.sa-ui[data-cards=shadow] .sa-addr{border-color:transparent;box-shadow:0 1px 2px rgba(0,0,0,.06),0 10px 28px -18px rgba(0,0,0,.4)}.sa-ui[data-cards=shadow] .sa-o:hover{transform:translateY(-1px);box-shadow:0 1px 2px rgba(0,0,0,.06),0 16px 34px -18px rgba(0,0,0,.45)}
+.sa-ui[data-cards=filled] .sa-o,.sa-ui[data-cards=filled] .sa-addr{border-color:transparent;background:color-mix(in srgb,var(--sa-acc) 7%,var(--surface,#fff))}
+.sa-o>button{display:grid;grid-template-columns:auto 1fr auto;gap:2px 12px;align-items:center;width:100%;text-align:left;border:0;background:none;color:inherit;font:inherit;padding:14px 16px;cursor:pointer}
+.sa-thumbs{grid-row:1/3;display:flex}.sa-thumbs img,.sa-thumbs i{width:46px;height:46px;border-radius:calc(var(--sa-r)*.5 + 3px);object-fit:cover;border:2px solid var(--surface,#fff);background:var(--sa-tint);margin-left:-16px;display:grid;place-items:center;font-style:normal;font-size:13px;font-weight:700;color:var(--sa-acc)}.sa-thumbs>:first-child{margin-left:0}
+.sa-o b{font-size:14.5px}.sa-o .sa-when{grid-column:2;font-size:12.5px;color:var(--soft,#6b665d)}.sa-o .sa-amt{font-weight:800;text-align:right;font-family:var(--fd,inherit);font-size:16px}
+.sa-chip{justify-self:end;font-size:11.5px;font-weight:700;border-radius:999px;padding:3px 10px;background:var(--sa-tint);color:var(--sa-acc);white-space:nowrap}.sa-chip[data-s=done]{background:rgba(30,122,70,.14);color:#1e7a46}.sa-chip[data-s=cancelled]{background:rgba(179,38,30,.12);color:#b3261e}
+.sa-more{padding:2px 16px 16px;display:grid;gap:12px}.sa-lines{margin:0;padding:0;list-style:none;display:grid;gap:8px}.sa-lines li{display:grid;grid-template-columns:auto 1fr auto;gap:11px;align-items:center;font-size:14px}
+.sa-lines img,.sa-lines i{width:40px;height:40px;border-radius:calc(var(--sa-r)*.4 + 3px);object-fit:cover;background:var(--sa-tint)}.sa-more pre{margin:0;white-space:pre-wrap;font:inherit;font-size:13px;color:var(--soft,#6b665d)}
+.sa-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.sa-btn{border:1.5px solid var(--line,#ddd);background:transparent;color:inherit;border-radius:999px;padding:9px 16px;font:inherit;font-weight:700;font-size:13.5px;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:7px;transition:border-color .15s,filter .15s}.sa-btn:hover{border-color:var(--sa-acc)}.sa-btn svg{width:15px;height:15px}
+.sa-btn.pri{background:var(--sa-bb);color:var(--sa-bf);border-color:transparent;padding:12px 22px;font-size:14.5px}
+/* where the order is: a bar with a dot per step, or the steps one under another */
+.sa-bar{display:grid;gap:10px}.sa-bar ol{list-style:none;margin:0;padding:0;display:flex;align-items:center}.sa-bar li{flex:1;display:flex;align-items:center}.sa-bar li:last-child{flex:none}
+.sa-bar li::before{content:"";width:14px;height:14px;border-radius:50%;border:2px solid var(--line,#ccc);background:var(--surface,#fff);box-sizing:border-box;flex:none;transition:background .3s,border-color .3s}
+.sa-bar li::after{content:"";flex:1;height:3px;background:var(--line,#ccc);border-radius:3px;margin:0 3px}.sa-bar li:last-child::after{display:none}
+.sa-bar li[data-on]::before{background:var(--sa-acc);border-color:var(--sa-acc)}.sa-bar li[data-done]::after{background:var(--sa-acc)}.sa-bar li[data-now]::before{box-shadow:0 0 0 5px var(--sa-tint);animation:sa-pulse 1.8s ease-in-out infinite}
+@keyframes sa-pulse{50%{box-shadow:0 0 0 9px transparent}}@media (prefers-reduced-motion:reduce){.sa-bar li[data-now]::before{animation:none}}
+.sa-bar li span{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}.sa-now{display:flex;justify-content:space-between;gap:10px;align-items:baseline}.sa-now b{font-family:var(--fd,inherit);font-size:17px}.sa-now span{font-size:12.5px;color:var(--soft,#6b665d);white-space:nowrap}
 .sa-track{display:grid;gap:0;margin:2px 0 0;padding:0;list-style:none}.sa-track li{display:grid;grid-template-columns:18px 1fr;gap:10px;align-items:start;font-size:13.5px;color:var(--soft,#6b665d);padding-bottom:10px;position:relative}
 .sa-track li::before{content:"";width:12px;height:12px;border-radius:50%;border:2px solid var(--line,#ccc);background:var(--surface,#fff);margin:3px 0 0 1px;box-sizing:border-box}
 .sa-track li::after{content:"";position:absolute;left:6.5px;top:17px;bottom:-1px;width:2px;background:var(--line,#ccc)}.sa-track li:last-child{padding-bottom:0}.sa-track li:last-child::after{display:none}
-.sa-track li[data-on]{color:inherit;font-weight:600}.sa-track li[data-on]::before{background:var(--text,#1b1a17);border-color:var(--text,#1b1a17)}.sa-track li[data-on]::after{background:var(--text,#1b1a17)}.sa-track li[data-now]::before{box-shadow:0 0 0 4px rgba(127,127,127,.22)}
-.sa-form{display:grid;gap:12px}.sa-two{display:grid;grid-template-columns:1fr 1fr;gap:10px}@media (max-width:420px){.sa-two{grid-template-columns:1fr}}
-.sa-addr{border:1px solid var(--line,#ddd);background:var(--surface,#fff);border-radius:var(--sa-r);padding:14px;display:grid;gap:10px}.sa-addr .sa-row{justify-content:space-between}.sa-addr b{font-size:13.5px}
-.sa-empty{border:1px dashed var(--line,#ccc);border-radius:var(--sa-r);padding:22px;text-align:center;color:var(--soft,#6b665d);font-size:14px}
+.sa-track li[data-on]{color:inherit;font-weight:600}.sa-track li[data-on]::before{background:var(--sa-acc);border-color:var(--sa-acc)}.sa-track li[data-done]::after{background:var(--sa-acc)}.sa-track li[data-now]::before{box-shadow:0 0 0 4px var(--sa-tint)}
+.sa-form{display:grid;gap:14px}.sa-two{display:grid;grid-template-columns:1fr 1fr;gap:10px}@media (max-width:420px){.sa-two{grid-template-columns:1fr}}
+.sa-addr{border:1px solid var(--line,#ddd);background:var(--surface,#fff);border-radius:calc(var(--sa-r) + 2px);padding:16px;display:grid;gap:12px}.sa-addr .sa-row{justify-content:space-between}.sa-addr b{font-size:13.5px}
+.sa-empty{border-radius:calc(var(--sa-r) + 2px);padding:30px 22px;text-align:center;color:var(--soft,#6b665d);font-size:14px;background:var(--sa-tint);display:grid;gap:8px;justify-items:center}.sa-empty svg{width:34px;height:34px;color:var(--sa-acc);opacity:.8}
+.sa-sub{font-family:var(--fd,inherit);font-weight:700;font-size:16px}
 `;
+  const IC = {
+    user: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8.5" r="3.6"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0"/></svg>',
+    lock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="10.5" width="14" height="9.5" rx="2"/><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5"/></svg>',
+    bag: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 8h14l-1 12a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1Z"/><path d="M9 8V7a3 3 0 0 1 6 0v1"/></svg>',
+    down: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11M7.5 11 12 15.5 16.5 11M5 19.5h14"/></svg>',
+  };
+  /** The owner's choices for the look (content.account.ui), as attributes for the panel and the sign-in card. */
+  const U = () => (cfg && cfg.ui) || {};
+  const pickOf = (v, list) => (list.includes(v) ? v : list[0]);
+  const looks = () => { const u = U(); return ` data-tone="${pickOf(u.tone, ["accent", "ink", "soft"])}" data-head="${pickOf(u.head, ["banner", "plain"])}" data-cards="${pickOf(u.cards, ["shadow", "outline", "filled"])}" data-corners="${pickOf(u.corners, ["theme", "soft", "round", "sharp"])}" data-tabs="${pickOf(u.tabs, ["underline", "pills", "blocks"])}"`; };
   function style() { if (document.getElementById("sa-css")) return; const s = document.createElement("style"); s.id = "sa-css"; s.textContent = CSS; document.head.appendChild(s); }
 
   const kinds = () => (can ? [can.phone && can.phone.length ? "phone" : "", can.email ? "email" : ""].filter(Boolean) : []);
@@ -77,8 +139,9 @@
          <p class="sa-soft">Sent to <b>${esc(ui.val)}</b>. <button type="button" class="sa-link" data-sa="again">Change</button> · <button type="button" class="sa-link" data-sa="send">Send a new code</button></p>`
       : `<div class="sa-f"><label for="sa-val">${phone ? "Mobile number" : "Email address"}</label><div class="sa-in"><input id="sa-val" ${phone ? 'type="tel" inputmode="tel" autocomplete="tel" placeholder="Your mobile number"' : 'type="email" autocomplete="email" placeholder="you@example.com"'} value="${esc(ui.val)}"><button type="button" data-sa="send"${ui.busy ? " disabled" : ""}>Send code</button></div></div>
          ${phone && can.phone.length > 1 ? `<div class="sa-seg sm" role="group" aria-label="Send the code">${can.phone.map((v) => `<button type="button" data-sa="via" data-v="${v}" aria-pressed="${viaNow() === v}">${v === "wa" ? "WhatsApp" : "SMS"}</button>`).join("")}</div>` : ""}
-         <p class="sa-soft">We send a one-time code ${phone ? can.phone.map((v) => VIA[v]).join(" or ") : "to this address"}. No password to remember.</p>`;
-    return `<div class="sa${card ? " sa-card" : ""}" data-sa-form><div><h3>Sign in or create your account</h3><p class="sa-soft" style="margin-top:6px">New here? It is the same step: enter your ${ks.length > 1 ? "mobile number or email" : phone ? "mobile number" : "email address"} and we set you up.</p></div>
+         <p class="sa-soft sa-safe">${IC.lock}<span>We send a one-time code ${phone ? can.phone.map((v) => VIA[v]).join(" or ") : "to this address"}. No password to remember.</span></p>`;
+    const u = U(), title = String(u.signTitle || "").trim() || "Sign in or create your account", text = String(u.signText || "").trim() || `New here? It is the same step: enter your ${ks.length > 1 ? "mobile number or email" : phone ? "mobile number" : "email address"} and we set you up.`;
+    return `<div class="sa sa-ui${card ? " sa-card" : ""}"${looks()} data-sa-form><span class="sa-badge">${IC.user}</span><div><h3>${esc(title)}</h3><p class="sa-soft" style="margin-top:6px">${esc(text)}</p></div>
       ${ks.length > 1 && !ui.sent ? `<div class="sa-seg" role="group" aria-label="Sign in with">${ks.map((k) => `<button type="button" data-sa="tab" data-v="${k}" aria-pressed="${t === k}">${k === "phone" ? "Mobile" : "Email"}</button>`).join("")}</div>` : ""}
       ${box}${ui.msg ? `<p class="sa-bad" role="alert">${esc(ui.msg)}</p>` : ""}</div>`;
   }
@@ -88,14 +151,16 @@
   const lines = (o) => ((o.items || []).length ? `<ul class="sa-lines">${o.items.map((x) => `<li>${pic(x.i) ? `<img src="${esc(pic(x.i))}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">` : `<i></i>`}<span>${esc(x.n)}</span><b>× ${x.q}</b></li>`).join("")}</ul>` : o.text ? `<pre>${esc(o.text)}</pre>` : "");
   function track(o) {
     if (o.status === "cancelled") return `<p class="sa-bad">This order was cancelled.</p>`;
-    const at = LIVE[o.status] || 0, S = steps().filter((_, i) => !(cfg.kind !== "store" && i === 4 && !/deliver/i.test(o.mode || "")));
-    const idx = steps().map((_, i) => i).filter((i) => !(cfg.kind !== "store" && i === 4 && !/deliver/i.test(o.mode || "")));
-    return `<ol class="sa-track" aria-label="Where this order is">${S.map((s, k) => `<li${idx[k] <= at ? " data-on" : ""}${idx[k] === at ? ' data-now aria-current="step"' : ""}>${esc(s)}</li>`).join("")}</ol>`;
+    const at = LIVE[o.status] || 0, keep = (i) => !(cfg.kind !== "store" && i === 4 && !/deliver/i.test(o.mode || "")), idx = steps().map((_, i) => i).filter(keep), S = idx.map((i) => steps()[i]);
+    const li = (s, k) => `<li${idx[k] <= at ? " data-on" : ""}${idx[k] < at ? " data-done" : ""}${idx[k] === at ? ' data-now aria-current="step"' : ""}>`;
+    if (pickOf(U().track, ["bar", "steps"]) === "steps") return `<ol class="sa-track" aria-label="Where this order is">${S.map((s, k) => li(s, k) + esc(s) + "</li>").join("")}</ol>`;
+    const now = Math.max(0, idx.indexOf(at) < 0 ? idx.filter((i) => i <= at).length - 1 : idx.indexOf(at)), next = S[now + 1];
+    return `<div class="sa-bar"><div class="sa-now"><b>${esc(S[now])}</b><span>Step ${now + 1} of ${S.length}${next ? " · next: " + esc(next) : ""}</span></div><ol aria-label="Where this order is">${S.map((s, k) => li(s, k) + `<span>${esc(s)}</span></li>`).join("")}</ol></div>`;
   }
   function orderHTML(o, live) {
     const open = live || ui.open === o.no, t = cfg.track && cfg.track(o);
     return `<div class="sa-o" data-order="${esc(o.no)}"><button type="button" data-sa="toggle" data-v="${esc(o.no)}" aria-expanded="${open}">${thumbs(o)}<b>${esc(o.no)}</b><span class="sa-amt">${esc(o.total)}</span><span class="sa-when">${esc(when(o.at))}${o.mode ? " · " + esc(o.mode) : ""}</span><span class="sa-chip" data-s="${esc(o.status === "cancelled" ? "cancelled" : (LIVE[o.status] || 0) >= 5 ? "done" : "")}">${esc(label(o))}${o.paid ? " · Paid" : ""}</span></button>
-      ${open ? `<div class="sa-more">${live ? track(o) : ""}${lines(o)}${o.points ? `<p class="sa-soft" style="font-weight:600">${esc(o.points)}</p>` : ""}<div class="sa-row"><button type="button" class="sa-btn" data-sa="bill" data-v="${esc(o.no)}">Download bill</button>${t ? `<a class="sa-btn" href="${esc(t)}">Open tracking page</a>` : ""}</div></div>` : ""}</div>`;
+      ${open ? `<div class="sa-more">${live ? track(o) : ""}${lines(o)}${o.points ? `<p class="sa-soft" style="font-weight:600">${esc(o.points)}</p>` : ""}<div class="sa-row"><button type="button" class="sa-btn" data-sa="bill" data-v="${esc(o.no)}">${IC.down}Download bill</button>${t ? `<a class="sa-btn" href="${esc(t)}">Open tracking page</a>` : ""}</div></div>` : ""}</div>`;
   }
   const blankAddr = () => ({ label: "", line1: "", line2: "", city: "", pin: "", state: "" });
   function profileHTML(d) {
@@ -105,7 +170,7 @@
       ${f("sa-name", "Name", d.name, 'autocomplete="name" maxlength="100"')}
       <div class="sa-two">${f("sa-phone", "Mobile number", d.phone, byMail ? 'type="tel" inputmode="tel" autocomplete="tel"' : "readonly")}${f("sa-email", "Email address", d.email, byMail ? "readonly" : 'type="email" autocomplete="email"')}</div>
       <p class="sa-soft">You sign in with your ${byMail ? "email address" : "mobile number"}, so that one can't be changed here.</p>
-      <p class="sa-soft" style="font-weight:700;color:inherit">${many ? "Saved addresses" : "Your address"}</p>
+      <p class="sa-sub">${many ? "Saved addresses" : "Your address"}</p>
       ${A.map((a, i) => `<div class="sa-addr" data-addr="${i}">${many ? `<div class="sa-row"><b>Address ${i + 1}</b>${A.length > 1 ? `<button type="button" class="sa-link" data-sa="deladdr" data-v="${i}">Remove</button>` : ""}</div>${f("sa-a-label-" + i, "Name for it (optional)", a.label, 'placeholder="Home, Office…" maxlength="30"')}` : ""}
         ${f("sa-a-line1-" + i, "Address", a.line1, 'autocomplete="address-line1"')}${f("sa-a-line2-" + i, "Area or landmark (optional)", a.line2, 'autocomplete="address-line2"')}
         <div class="sa-two">${f("sa-a-city-" + i, "City", a.city, 'autocomplete="address-level2"')}${f("sa-a-pin-" + i, "PIN code", a.pin, 'inputmode="numeric" autocomplete="postal-code"')}</div>${many ? f("sa-a-state-" + i, "State", a.state, 'autocomplete="address-level1"') : ""}</div>`).join("")}
@@ -119,18 +184,18 @@
     if (d.error) return `<div class="sa"><p class="sa-bad" role="alert">${esc(d.error)}</p></div>`;
     const live = d.orders.filter(active), past = d.orders.filter((o) => !active(o)), view = ui.view || (live.length ? "now" : "orders");
     const L = d.loyalty, worth = L && L.worth > 0 ? Math.round(d.points * L.worth * 100) / 100 : 0, m = cfg.money || ((n) => String(n));
-    const tabs = [["now", "Current order" + (live.length > 1 ? "s" : "")], ["orders", "Order history"], ["profile", "Profile"]];
-    return `<div class="sa"><div class="sa-who"><b>${esc(d.name || show(me.key))}${d.name ? `<span class="sa-soft" style="display:block;font-weight:400">${esc(show(me.key))}</span>` : ""}</b><button type="button" class="sa-link" data-sa="out">Sign out</button></div>
-      <div class="sa-stats">${L ? `<div class="sa-stat"><b>${d.points}</b><span>point${d.points === 1 ? "" : "s"}${worth ? ` · worth up to ${esc(m(worth))}` : ""}</span></div>` : ""}<div class="sa-stat"><b>${d.count}</b><span>order${d.count === 1 ? "" : "s"}</span></div></div>
-      <div class="sa-seg" role="tablist" aria-label="My account">${tabs.map(([k, l]) => `<button type="button" role="tab" data-sa="view" data-v="${k}" aria-selected="${view === k}">${l}${k === "now" && live.length ? ` (${live.length})` : ""}</button>`).join("")}</div>
-      ${view === "now" ? (live.length ? `<div class="sa-orders">${live.map((o) => orderHTML(o, true)).join("")}</div><p class="sa-soft">This updates by itself while it is open.</p>` : `<div class="sa-empty">No order in progress.</div>`)
-        : view === "orders" ? (past.length || live.length ? `<div class="sa-orders">${[...live, ...past].map((o) => orderHTML(o, false)).join("")}</div>` : `<div class="sa-empty">No orders yet. They show here once you place one while signed in.</div>`)
+    const tabs = [["now", "Current order" + (live.length > 1 ? "s" : "")], ["orders", "Order history"], ["profile", "Profile"]], nm = String(d.name || "").trim();
+    return `<div class="sa"><div class="sa-hero"><div class="sa-me"><span class="sa-av" aria-hidden="true">${esc((nm || show(me.key).replace(/^\+/, "")).slice(0, 1).toUpperCase())}</span><div><b>${nm ? "Hi, " + esc(nm.split(" ")[0]) : "Welcome"}</b><span>${esc(show(me.key))}</span></div><button type="button" class="sa-link" data-sa="out">Sign out</button></div>
+      <div class="sa-pills">${L ? `<span class="sa-pill"><b>${d.points}</b>point${d.points === 1 ? "" : "s"}${worth ? ` · worth up to ${esc(m(worth))}` : ""}</span>` : ""}<span class="sa-pill"><b>${d.count}</b>order${d.count === 1 ? "" : "s"}</span></div></div>
+      <div class="sa-tabs" role="tablist" aria-label="My account">${tabs.map(([k, l]) => `<button type="button" role="tab" data-sa="view" data-v="${k}" aria-selected="${view === k}">${l}${k === "now" && live.length ? `<em>${live.length}</em>` : ""}</button>`).join("")}</div>
+      ${view === "now" ? (live.length ? `<div class="sa-orders">${live.map((o) => orderHTML(o, true)).join("")}</div><p class="sa-soft">This updates by itself while it is open.</p>` : `<div class="sa-empty">${IC.bag}<span>No order in progress.</span></div>`)
+        : view === "orders" ? (past.length || live.length ? `<div class="sa-orders">${[...live, ...past].map((o) => orderHTML(o, false)).join("")}</div>` : `<div class="sa-empty">${IC.bag}<span>No orders yet. They show here once you place one while signed in.</span></div>`)
         : profileHTML(d)}</div>`;
   }
   function draw() {
     style();
     if (where && document.contains(where) && !me) where.innerHTML = formHTML(true);
-    if (modal) { const b = modal.querySelector(".sa-body"), y = b.scrollTop; b.innerHTML = me ? acctHTML() : formHTML(false); b.scrollTop = y; modal.querySelector(".sa-title").textContent = me ? "My account" : "Sign in"; }
+    if (modal) { const b = modal.querySelector(".sa-body"), y = b.scrollTop; b.innerHTML = me ? acctHTML() : formHTML(false); b.scrollTop = y; modal.querySelector(".sa-title").textContent = me ? "My account" : ""; }
   }
   const keepVal = () => { const i = document.getElementById("sa-val"); if (i) ui.val = i.value.trim(); };
   /** What is typed in the profile form, read back into the working copy (so a redraw keeps it). */
@@ -192,7 +257,7 @@ pre{white-space:pre-wrap;font:inherit;font-size:14px;margin:6px 0 0}.tot{display
       else {
         const r2 = await post("acct/in", phone ? { phone: ui.val, otp: j.token } : { email: ui.val, eotp: j.token }), j2 = await r2.json().catch(() => null);
         if (!r2.ok || !j2 || !j2.pass) ui.msg = (j2 && j2.error) || "Couldn't sign you in. Please try again.";
-        else { me = { key: j2.key, kind: j2.kind, pass: j2.pass, typed: ui.val }; try { localStorage.setItem(key(), JSON.stringify(me)); } catch (e) { /* private window */ } ui.sent = false; ui.val = ""; ui.busy = false; ui.view = ""; data = null; draw(); await load(); changed(); return; }
+        else { me = { key: j2.key, kind: j2.kind, pass: j2.pass, typed: ui.val }; if (cfg.demo) demoMe = me; else try { localStorage.setItem(key(), JSON.stringify(me)); } catch (e) { /* private window */ } ui.sent = false; ui.val = ""; ui.busy = false; ui.view = ""; data = null; draw(); await load(); changed(); return; }
       }
     } catch (e) { ui.msg = "Couldn't reach us just now. Check your connection."; }
     ui.busy = false; draw(); const f = document.getElementById(ui.sent ? "sa-code" : "sa-val"); if (f) f.focus();
@@ -203,7 +268,7 @@ pre{white-space:pre-wrap;font:inherit;font-size:14px;margin:6px 0 0}.tot{display
 
   /* The profile is kept on the device too, so a checkout can fill itself in before the account has loaded. */
   let prof = null;
-  function keepProfile() { prof = data && !data.error ? { name: data.name || "", phone: data.phone || "", email: data.email || "", addresses: data.addresses || [] } : prof; try { if (prof) localStorage.setItem(key() + ":p", JSON.stringify(prof)); } catch (e) { /* private window */ } }
+  function keepProfile() { prof = data && !data.error ? { name: data.name || "", phone: data.phone || "", email: data.email || "", addresses: data.addresses || [] } : prof; try { if (prof && !cfg.demo) localStorage.setItem(key() + ":p", JSON.stringify(prof)); } catch (e) { /* private window */ } }
   async function load(quiet) {
     if (!me) return;
     try { const r = await post("acct/me", { key: me.key, pass: me.pass }), j = await r.json().catch(() => null);
@@ -217,19 +282,21 @@ pre{white-space:pre-wrap;font:inherit;font-size:14px;margin:6px 0 0}.tot{display
   const asked = () => /^#account$/i.test(location.hash);
   function open(view) {
     if (!cfg || !can) return; style();
-    if (!modal) { modal = document.createElement("div"); modal.className = "sa-back"; modal.innerHTML = `<aside class="sa-drawer" role="dialog" aria-modal="true" aria-label="My account"><div class="sa-head"><span class="sa-title">My account</span><button type="button" class="sa-x" data-sa="close" aria-label="Close">×</button></div><div class="sa-body"></div></aside>`;
+    if (!modal) { modal = document.createElement("div"); modal.className = "sa-back"; modal.setAttribute("data-panel", pickOf(U().panel, ["right", "left", "sheet", "full"])); modal.innerHTML = `<aside class="sa-drawer sa-ui"${looks()} role="dialog" aria-modal="true" aria-label="My account"><div class="sa-head"><span class="sa-title">My account</span><button type="button" class="sa-x" data-sa="close" aria-label="Close">×</button></div><div class="sa-body"></div></aside>`;
       modal.addEventListener("mousedown", (e) => { if (e.target === modal) shut(); }); document.body.appendChild(modal);
       clearInterval(timer); timer = setInterval(() => { if (modal && me && data && !data.error && data.orders.some(active)) load(true); }, 20000); }
     ui.msg = ""; ui.saved = ""; ui.view = typeof view === "string" ? view : ""; draw(); if (me) load(); else { const f = document.getElementById("sa-val"); if (f) f.focus(); }
   }
   function shut() { clearInterval(timer); if (modal) { modal.remove(); modal = null; } if (asked()) try { history.replaceState(null, "", location.pathname + location.search); } catch (e) { /* the address stays */ } }
   addEventListener("hashchange", () => { if (asked() && cfg && can && !modal) open(); });
-  function out() { me = null; data = null; prof = null; ui.addrs = null; try { localStorage.removeItem(key()); localStorage.removeItem(key() + ":p"); } catch (e) { /* private window */ } shut(); changed(); draw(); }
+  function out() { me = null; demoMe = null; data = null; prof = null; ui.addrs = null; try { localStorage.removeItem(key()); localStorage.removeItem(key() + ":p"); } catch (e) { /* private window */ } shut(); changed(); draw(); }
 
   window.SiteAcct = {
     /** { api, site, kind ("restaurant" | "store"), acct (from the database's "what can this site do"), addresses (several can be kept),
      *    money(n), img(path), track(order), biz { name, address, phone, email, gstin }, onChange(user) } */
-    init(o) { cfg = o; can = o.acct || null; me = null; prof = null; try { me = JSON.parse(localStorage.getItem(key()) || "null"); } catch (e) { me = null; }
+    init(o) { cfg = o; can = o.acct || null; me = null; prof = null;
+      if (o.demo) { me = demoMe; if (modal) { modal.setAttribute("data-panel", pickOf(U().panel, ["right", "left", "sheet", "full"])); const d = modal.querySelector(".sa-drawer"); for (const [k, v] of Object.entries({ tone: ["accent", "ink", "soft"], head: ["banner", "plain"], cards: ["shadow", "outline", "filled"], corners: ["theme", "soft", "round", "sharp"], tabs: ["underline", "pills", "blocks"] })) d.setAttribute("data-" + k, pickOf(U()[k], v)); draw(); } return; }
+      try { me = JSON.parse(localStorage.getItem(key()) || "null"); } catch (e) { me = null; }
       if (me && !(+String(me.pass).split(".")[0] > Date.now() && me.key)) me = null;
       if (me && can && !kinds().includes(me.kind)) me = null;
       if (me) try { prof = JSON.parse(localStorage.getItem(key() + ":p") || "null"); } catch (e) { prof = null; }

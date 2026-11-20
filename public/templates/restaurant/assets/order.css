@@ -145,3 +145,12 @@ html.ord-lock .fx-badge{display:none!important}html.ord-cart .fx-badge{bottom:84
 /* Customer accounts: the sign-in step before checkout */
 #od-acct .sa-card{border:0;padding:6px 0;max-width:none;background:transparent}.od-me{margin:0}
 .of-codein{margin-top:2px}.of-codein input{letter-spacing:.08em}
+
+/* Checkout sections: cards (the usual), numbered steps, or plain (Theme & layout → Account customization) */
+.od-form[data-look=cards] fieldset,.od-form[data-look=steps] fieldset{background:var(--surface);border-radius:calc(var(--r)*.8 + 8px);padding:0 16px 18px;box-shadow:0 0 0 1px var(--line),0 14px 30px -24px rgba(0,0,0,.45);gap:10px}
+.od-form[data-look=cards] legend,.od-form[data-look=steps] legend{float:left;box-sizing:border-box;padding:16px 0 6px;font-family:var(--fd);font-size:17.5px;letter-spacing:-.01em}
+.od-form[data-look=steps]{counter-reset:odst}.od-form[data-look=steps] fieldset{counter-increment:odst}
+.od-form[data-look=steps] legend{justify-content:flex-start;gap:10px}.od-form[data-look=steps] legend::before{content:counter(odst);width:26px;height:26px;border-radius:50%;display:grid;place-items:center;flex:none;background:var(--c1);color:var(--on-c1);font:700 13px/1 var(--fb)}
+.od-form .of input:focus,.od-form .of select:focus,.od-form .of textarea:focus{outline:0;border-color:var(--c1);box-shadow:0 0 0 4px color-mix(in srgb,var(--c1) 14%,transparent)}
+.od-form .of-vbtn{background:var(--c1);color:var(--on-c1)}.of-via button[aria-pressed=true]{background:var(--c1);color:var(--on-c1)}
+.od-me{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin:0;padding:10px 14px;border-radius:calc(var(--r)*.8 + 6px);background:color-mix(in srgb,var(--c1) 9%,transparent);font-size:13.5px}.od-me .chip{cursor:pointer}

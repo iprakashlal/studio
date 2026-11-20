@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ThemeDrawer, ThemeGallery, ThemeSwatch } from "../themes/ThemeGallery";
 import { ThemeFromRef } from "./ThemeFromRef";
+import { BulkPhotos } from "./BulkPhotos";
 import { Translations } from "./Translations";
 import type { Made } from "../lib/themefrom";
 import { LinkedInImport } from "./LinkedInImport";
@@ -218,6 +219,8 @@ export function FieldView({ f, obj, base }: { f: F; obj: any; base: string }) {
       return <AdminSectionsField />;
     case "codeTemplate":
       return <CodeTemplateField />;
+    case "bulkPhotos":
+      return <BulkPhotos kind={f.kind} />;
     case "legalPages":
       return <LegalPagesField />;
     case "a11yCheck":

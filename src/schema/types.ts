@@ -49,6 +49,8 @@ export type Field =
   | { t: "codeTemplate" }
   /** Legal & privacy: writes the privacy policy and terms pages from the business's details. */
   | { t: "legalPages" }
+  /** Many photos at once, each assigned to a dish or a product. */
+  | { t: "bulkPhotos"; kind: "dish" | "product" }
   /** Legal & privacy: checks the page in the preview for accessibility problems. */
   | { t: "a11yCheck" }
   /** Import name, experience, education and skills from a LinkedIn profile PDF or data export. */

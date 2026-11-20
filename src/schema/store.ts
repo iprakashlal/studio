@@ -73,6 +73,7 @@ const schema: Category[] = [
     id: "products", label: "Products", group: "Catalogue", desc: "Everything you sell. Each product gets its own page.",
     cards: [
       { title: "Fill in from a PDF or pamphlet", studio: true, fields: [{ t: "pamphlet" }] },
+      { title: "Product photos in bulk", fields: [{ t: "bulkPhotos", kind: "product" }] },
       { title: "Products", fields: [{ t: "list", path: "products", title: (it) => `${it.name || "Untitled"} · ${Number(it.price) || 0}${it.featured ? " · featured" : ""}${it.stock === "out" ? " · sold out" : ""}${it.sample ? " · sample" : ""}`,
         add: () => ({ id: uid("p"), slug: "", name: "New product", category: "", price: 999, compareAt: 0, images: [], short: "", description: "", features: [], optionName: "", options: [], stock: "in", featured: false, badge: "" }),
         item: [

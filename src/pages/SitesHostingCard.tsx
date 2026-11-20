@@ -26,6 +26,11 @@ export function SitesHostingCard({ session, studio, index, onIndex }: { session:
   const toast = useToast(), confirm = useConfirm();
   const sites = useMemo(() => index.projects.filter((p) => p.host || p.publish), [index.projects]);
   const [db, setDb] = useState<{ api: string; studio: string } | null | undefined>(undefined);
+  // Each site is one line until it is opened. Which ones are open ("all", or their ids) is remembered on this device.
+  const [openSites, setOpenSites] = useState<string>(() => { try { return localStorage.getItem("studio-sites-open") || ""; } catch { return ""; } });
+  const isOpen = (id: string) => openSites === "all" || openSites.split(",").includes(id);
+  const keepOpen = (v: string) => { setOpenSites(v); try { localStorage.setItem("studio-sites-open", v); } catch { /* private window */ } };
+  const toggleSite = (id: string, all: string[]) => { const cur = openSites === "all" ? all : openSites.split(",").filter(Boolean); keepOpen((cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]).join(",")); };
   const [info, setInfo] = useState<{ /** The database runs this build's version. */ cur: boolean; cfx: boolean; imp: boolean; pages: boolean; del: boolean; mail: boolean; main: string | null; accounts: Acc[]; signed: boolean; gh: boolean; workers: string[] | null } | null>(null);
   const [mainName, setMainName] = useState("");
   /** Databases that sites keep on their own Cloudflare accounts (not the Studio's database): each is updated by itself. */
@@ -231,6 +236,7 @@ export function SitesHostingCard({ session, studio, index, onIndex }: { session:
               <div key={kind} className="flex flex-col gap-1.5">
                 <div className="flex flex-wrap items-center gap-2">
                   <h4 className="text-[12px] font-bold uppercase tracking-wide text-ink-400">{heading} · {q ? `${hit.length} of ${all.length}` : all.length}</h4>
+                  {hit.length > 0 && <button type="button" className="text-[12px] font-semibold text-ink-400 underline-offset-2 hover:text-ink-100 hover:underline" onClick={() => keepOpen(hit.every((x) => isOpen(x.id)) ? "" : "all")}>{hit.every((x) => isOpen(x.id)) ? "Close all" : "Open all"}</button>}
                   {all.length > PER && <input type="search" className="input ml-auto h-8 w-full max-w-[240px] py-1 text-[13px]" placeholder={`Search ${heading.replace(/^On /, "")} sites`} aria-label={`Search sites: ${heading}`} value={find[kind] || ""} onChange={(e) => { setFind({ ...find, [kind]: e.target.value }); setPageOf({ ...pageOf, [kind]: 0 }); }} />}
                 </div>
                 {!hit.length && <p className="rounded-lg border border-ink-700 p-3 text-[13px] text-ink-400">No site matches “{find[kind]}”.</p>}
@@ -242,10 +248,13 @@ export function SitesHostingCard({ session, studio, index, onIndex }: { session:
                     // The site's own database (not the Studio's): whether it runs this build, with its own update button.
                     const sdb = otherDb ? siteDbs.find((d) => d.api === h!.cf!.api.replace(/\/+$/, "")) : undefined;
                     return (
-                      <li key={p.id} className="grid gap-x-4 gap-y-2 p-3 text-[13px] sm:grid-cols-[minmax(0,1fr)_auto]" data-site={p.id}>
+                      <li key={p.id} data-shut={isOpen(p.id) ? undefined : ""} className="grid gap-x-4 gap-y-2 p-3 text-[13px] sm:grid-cols-[minmax(0,1fr)_auto] [&[data-shut]>button]:hidden [&[data-shut]>div>:not(:first-child)]:hidden" data-site={p.id}>
                         <div className="flex min-w-0 flex-col gap-1.5">
                           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                            <button type="button" className="-ml-1 grid h-6 w-6 flex-none place-items-center rounded-md text-ink-400 hover:bg-ink-800 hover:text-ink-100" aria-expanded={isOpen(p.id)} aria-label={`${isOpen(p.id) ? "Hide" : "Show"} the details of ${p.name}`} onClick={() => toggleSite(p.id, hit.map((x) => x.id))}><span aria-hidden className={`inline-block text-[10px] transition-transform ${isOpen(p.id) ? "" : "-rotate-90"}`}>▼</span></button>
                             <a className="font-semibold text-ink-100 underline-offset-2 hover:underline" href={`#/p/${p.id}`}>{p.name}</a>
+                            {!isOpen(p.id) && sdb && !sdb.cur && <span className="chip border-amber-400/50 px-2 py-0.5 text-[11px] text-amber-200">Database: older build</span>}
+                            {!isOpen(p.id) && !every && <span className="chip border-amber-400/50 px-2 py-0.5 text-[11px] text-amber-200">Publishing needs attention</span>}
                             {h && p.publish && <span className="rounded-full border border-ink-600 px-2 py-0.5 text-[11px]">+ GitHub copy</span>}
                             {h ? <a className="truncate text-brand-300 underline" href={siteAddress(h)} target="_blank" rel="noopener noreferrer">{siteAddress(h).replace(/^https:\/\//, "")}</a> : p.publish && <span className="truncate font-mono text-[12px] text-ink-400">{p.publish.owner}/{p.publish.repo}</span>}
                           </div>

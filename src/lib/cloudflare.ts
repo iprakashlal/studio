@@ -47,7 +47,7 @@ export class Cloudflare {
     for (let attempt = 0; ; attempt++) {
       const r = this.via ? await this.via(q) : await relayCall(this.relay!, q);
       let j: any = null; try { j = JSON.parse(r.body); } catch { /* not JSON */ }
-      if (r.status === 401 || r.status === 403 || j?.errors?.some((e: any) => e.code === 10000 || e.code === 9109)) throw new CfError("Cloudflare refused the token. Create one with the “Edit Cloudflare Workers” template and paste it again.", r.status);
+      if (r.status === 401 || r.status === 403 || j?.errors?.some((e: any) => e.code === 10000 || e.code === 9109)) throw new CfError("Cloudflare refused the token. Create one with the “Edit Cloudflare Workers” template and paste it again. (If you used Connect Cloudflare, press it again: that sign-in lasts a short while.)", r.status);
       if (j?.success) return j.result as T;
       const e = j?.errors?.[0], code = e?.code || 0;
       const passing = r.status >= 500 || code === 10013 || /unknown error/i.test(e?.message || "");

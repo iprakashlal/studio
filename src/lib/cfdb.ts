@@ -11,7 +11,20 @@ import { vault } from "./vault";
 import type { CfOauthKeep } from "./cfoauth";
 
 /** The Cloudflare account on this device (one token for hosting, the database and Workers) and the database's setup. */
-export const cfAccountVault = vault<{ token: string; /** Set when the token is a Cloudflare sign-in this device renews (see cfoauth.ts). */ oauth?: CfOauthKeep; account?: string; resendKey?: string; mailFrom?: string; setup?: CfDbSetup; /** Databases set up on other Cloudflare accounts (a site's own database on its own account). */ setups?: CfDbSetup[]; more?: CfMoreToken[] }>("cfdb");
+type CfKept = { token: string; /** Set when the token is a Cloudflare sign-in this device renews (see cfoauth.ts). */ oauth?: CfOauthKeep; account?: string; resendKey?: string; mailFrom?: string; setup?: CfDbSetup; /** Databases set up on other Cloudflare accounts (a site's own database on its own account). */ setups?: CfDbSetup[]; more?: CfMoreToken[]; /** Other accounts whose token this device knows is kept on the database (ids only). */ inDb?: string[] };
+const cfRawVault = vault<CfKept>("cfdb");
+/** Tokens in use in this tab only (a Cloudflare sign-in): never written to the device, whoever saves. */
+export const cfMemTokens = new Set<string>();
+export const cfAccountVault = {
+  ...cfRawVault,
+  async save(v: CfKept, studioToken: string) {
+    if (cfMemTokens.has(v.token) || (v.more || []).some((m) => cfMemTokens.has(m.token))) {
+      const old = await cfRawVault.load(studioToken);
+      v = { ...v, token: cfMemTokens.has(v.token) ? (old?.token && !cfMemTokens.has(old.token) ? old.token : "") : v.token, ...(v.more ? { more: v.more.filter((m) => !cfMemTokens.has(m.token)) } : {}) };
+    }
+    return cfRawVault.save(v, studioToken);
+  },
+};
 /** The database setup this device knows for a database address (the Studio's, or a site's own on another account). */
 export const cfSetupFor = (v: { setup?: CfDbSetup; setups?: CfDbSetup[] } | null | undefined, api: string): CfDbSetup | null => {
   const c = (u: string) => u.replace(/\/+$/, "");

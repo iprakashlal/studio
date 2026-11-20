@@ -96,7 +96,7 @@ export function useCfAccount(studioToken: string, nf: Netlify | null | undefined
     setErr(""); setOcNote("");
     let flow: ReturnType<typeof cfOauthOpen>;
     try { flow = cfOauthOpen(oc); } catch (e: any) { setErr(e?.message || "Couldn't open Cloudflare."); return; }
-    setOcFlow(flow); setOcBusy("Waiting for you to press Allow on Cloudflare");
+    setOcFlow(flow); setOcBusy("Waiting for you to press Allow in the Cloudflare window (if you closed it, press Cancel)");
     try {
       const got = await flow.done; setOcFlow(null);
       setOcBusy("Reading your accounts");

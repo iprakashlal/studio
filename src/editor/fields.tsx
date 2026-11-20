@@ -939,6 +939,18 @@ function AdminSectionsField() {
           </div>
         </fieldset>
       ))}
+      <fieldset className="rounded-lg border border-ink-700 p-3" aria-label="Codes this site may send">
+        <legend className="px-1.5 text-[11px] font-bold uppercase tracking-wider text-ink-400">Codes by WhatsApp and SMS</legend>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="flex flex-col gap-1 text-[13px]"><span className="font-semibold text-ink-100">Sign-in codes for this site's admin page</span>
+            <select className="input py-1.5 text-[13px]" aria-label="Sign-in codes for this site's admin page" value={root.cms.msg?.login ?? "both"} onChange={(e) => { root.cms.msg = { ...(root.cms.msg || {}), login: e.target.value }; bump(); }}>
+              <option value="email">Email only</option><option value="wa">Email, and WhatsApp</option><option value="sms">Email, and SMS</option><option value="both">Email, WhatsApp and SMS</option></select></label>
+          <label className="flex flex-col gap-1 text-[13px]"><span className="font-semibold text-ink-100">Codes for customers at checkout</span>
+            <select className="input py-1.5 text-[13px]" aria-label="Codes for customers at checkout" value={root.cms.msg?.checkout ?? "both"} onChange={(e) => { root.cms.msg = { ...(root.cms.msg || {}), checkout: e.target.value }; bump(); }}>
+              <option value="none">None (no mobile verification)</option><option value="wa">WhatsApp only</option><option value="sms">SMS only</option><option value="both">WhatsApp or SMS (the customer chooses when both are set up)</option></select></label>
+        </div>
+        <p className="mt-2 text-[12.5px] text-ink-400">What this site's owner may switch on under WhatsApp and SMS in their admin page. A way that isn't allowed is greyed out there (the SMS card is hidden when SMS isn't allowed for anything), and the site's database refuses to send those codes. Sign-in always works by email. Email verification at checkout is a separate switch under the checkout settings. Applies the next time you publish.</p>
+      </fieldset>
       <fieldset className="rounded-lg border border-ink-700 p-3" aria-label="Extras for this site's admin page">
         <legend className="px-1.5 text-[11px] font-bold uppercase tracking-wider text-ink-400">Extras (off unless ticked)</legend>
         <label className="flex items-start gap-2 text-[13px]"><input type="checkbox" className="mt-0.5 accent-brand-500" checked={allow.includes("customEngine")} onChange={() => { root.cms.allow = allow.includes("customEngine") ? allow.filter((x) => x !== "customEngine") : [...allow, "customEngine"]; bump(); }} />

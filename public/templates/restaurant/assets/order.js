@@ -22,7 +22,10 @@
   try { const t = new URLSearchParams(location.search).get("table"); if (t) { ui.form.table = t.slice(0, 12); ui.table = true; } } catch (e) {}
 
   /** What the site's database offers this page: a WhatsApp code for the guest's number, and online payment (its public key id). */
-  let can = { otp: false, pts: false, em: false, rz: "", pg: [] }, canAsked = false;
+  let can = { otp: false, pts: false, em: false, via: ["wa"], rz: "", pg: [] }, canAsked = false;
+  /** How a code for the mobile number can be sent here: on WhatsApp, by SMS, or either (the guest then chooses). */
+  const VIA = { wa: "on WhatsApp", sms: "by SMS" }, viaNow = () => (can.via.includes(ui.otpVia) ? ui.otpVia : can.via[0] || "wa");
+  const viaBtns = (lead) => can.via.length > 1 ? `<div class="od-code">${can.via.map((v) => `<button type="button" class="btn sec" data-act="otpsend" data-via="${v}">${lead} ${VIA[v]}</button>`).join("")}</div>` : `<button type="button" class="btn sec" data-act="otpsend" data-via="${can.via[0] || "wa"}">${lead} ${VIA[can.via[0] || "wa"]}</button>`;
   /** Gateways other than Razorpay: the guest pays on the gateway's own page and comes back here. */
   const GW = { cf: { key: "cashfree", name: "Cashfree", label: "Pay online with Cashfree (UPI, card, netbanking)" }, pe: { key: "phonepe", name: "PhonePe", label: "Pay with PhonePe (UPI, card, netbanking)" }, st: { key: "stripe", name: "Stripe", label: "Pay by card (Stripe)" }, pp: { key: "paypal", name: "PayPal", label: "Pay with PayPal" } };
   const digits = (v) => String(v || "").replace(/\D/g, "").slice(-10);
@@ -252,7 +255,7 @@
     if (!ps.some((p) => p.id === f.pay)) f.pay = ps.length ? ps[0].id : "";
     return `<form class="od-form" id="od-form" novalidate>
       <fieldset><legend>Your details</legend>${inp("name", "Name", 'autocomplete="name" required')}${inp("phone", "Mobile number" + (must().phone ? "" : " (optional)"), 'type="tel" inputmode="tel" autocomplete="tel"' + (must().phone ? " required" : ""))}${must().askEmail ? inp("email", "Email" + (must().email ? "" : " (optional)"), 'type="email" autocomplete="email"' + (must().email ? " required" : "")) : ""}${can.em && must().askEmail ? `<div class="od-otp" id="od-eotp">${etok() ? (etok().startsWith("s:") ? "" : `<p class="od-ok">Email address verified.</p>`) : ui.eSent ? `<div class="of"><label for="of-ecode">Code we emailed you</label><div class="od-code"><input id="of-ecode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="6 digits"><button type="button" class="btn sec" data-act="eotpcheck">Verify</button></div></div><button type="button" class="link od-more" data-act="eotpsend">Send a new code</button>` : `<button type="button" class="btn sec" data-act="eotpsend">Verify this email address</button><p class="od-live">We email a 6-digit code to this address before taking the order${must().email ? "" : " (only if you give an email address)"}.</p>`}${ui.eMsg ? `<p class="od-bad" role="alert">${esc(ui.eMsg)}</p>` : ""}</div>` : ""}${must().either ? `<p class="od-live">Give your mobile number or your email address (or both), so we can reach you about the order.</p>` : ""}
-        ${can.otp || (can.pts && loy().on) ? `<div class="od-otp" id="od-otp">${verified() ? `<p class="od-ok">Mobile number verified on WhatsApp.</p>` : ui.otpSent ? `<div class="of"><label for="of-code">Code we sent you on WhatsApp</label><div class="od-code"><input id="of-code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="6 digits"><button type="button" class="btn sec" data-act="otpcheck">Verify</button></div></div><button type="button" class="link od-more" data-act="otpsend">Send a new code</button>` : can.otp ? `<button type="button" class="btn sec" data-act="otpsend">Verify this number on WhatsApp</button><p class="od-live">We send a 6-digit code to this number on WhatsApp before taking the order.</p>` : `<button type="button" class="btn sec" data-act="otpsend">Verify this number to use your points</button><p class="od-live">Optional. We send a 6-digit code to this number on WhatsApp, then show the points you can take off this order.</p>`}${ui.otpMsg ? `<p class="od-bad" role="alert">${esc(ui.otpMsg)}</p>` : ""}</div>` : ""}${ptsBox()}</fieldset>
+        ${can.otp || (can.pts && loy().on) ? `<div class="od-otp" id="od-otp">${verified() ? `<p class="od-ok">Mobile number verified.</p>` : ui.otpSent ? `<div class="of"><label for="of-code">Code we sent you ${VIA[viaNow()]}</label><div class="od-code"><input id="of-code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="6 digits"><button type="button" class="btn sec" data-act="otpcheck">Verify</button></div></div>${can.via.map((v) => `<button type="button" class="link od-more" data-act="otpsend" data-via="${v}">Send a new code ${VIA[v]}</button>`).join(" ")}` : can.otp ? `${viaBtns("Verify this number")}<p class="od-live">We send a 6-digit code to this number ${can.via.map((v) => VIA[v]).join(" or ")} before taking the order.</p>` : `${viaBtns("Use my points: send a code")}<p class="od-live">Optional. We send a 6-digit code to this number ${can.via.map((v) => VIA[v]).join(" or ")}, then show the points you can take off this order.</p>`}${ui.otpMsg ? `<p class="od-bad" role="alert">${esc(ui.otpMsg)}</p>` : ""}</div>` : ""}${ptsBox()}</fieldset>
       ${m === "delivery" ? `<fieldset><legend>Delivery address</legend>${inp("line1", "Flat, house or building", 'autocomplete="address-line1" required')}${inp("area", "Street and area", 'autocomplete="address-line2" required')}<div class="of2">${inp("landmark", "Landmark (optional)")}${inp("pin", "PIN code", 'inputmode="numeric" autocomplete="postal-code" maxlength="10"' + (o.askPin !== false ? " required" : ""))}</div>
         <div class="od-tips" role="radiogroup" aria-label="Save this address as">${["Home", "Work", "Other"].map((l) => `<button type="button" class="chip" role="radio" data-act="label" data-id="${l}" aria-checked="${f.label === l}">${l}</button>`).join("")}</div>
         <p class="od-bad" id="od-area" role="alert"${!b.area.ok && (f.pin || f.area) ? "" : " hidden"}>${esc(o.areaNote || "Sorry, we don't deliver to that area yet. Choose Pick up, or call us.")}</p></fieldset>` : ""}
@@ -394,7 +397,7 @@
       if (!b.area.ok) return bad("pin", o.areaNote || "Sorry, we don't deliver to that area yet.");
     }
     if (m === "dinein" && !String(f.table).trim()) return bad("table", "Please enter your table number.");
-    if (can.otp && !A.PREVIEW && !verified()) return bad("phone", "Please verify your mobile number on WhatsApp first.");
+    if (can.otp && !A.PREVIEW && !verified()) return bad("phone", "Please verify your mobile number first.");
     if (can.em && !A.PREVIEW && elow() && !etok()) { if (!ui.eSent) return eotp(true).then(() => { if (etok()) return place(); ui.err = "We've emailed you a code. Enter it above to verify your email address."; over(true); const c = $("#of-ecode", root); c && c.focus(); }); return bad("ecode", "Enter the code we emailed you to verify your email address."); }
     if (!sl.some((s) => s.v === f.when)) return bad("when", "Please choose a time.");
     if (b.short) return bad("name", `The minimum order is ${txt(b.min)}.`);
@@ -503,9 +506,9 @@
     if (!send && !/^\d{6}$/.test(code)) { ui.otpMsg = "Enter the 6-digit code."; return over(true); }
     ui.otpMsg = "";
     try {
-      const r = await fetch(be.cf + "/otp/" + (send ? "send" : "check") + "/" + encodeURIComponent(be.site), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ phone, code }) }), j = await r.json().catch(() => null);
+      const r = await fetch(be.cf + "/otp/" + (send ? "send" : "check") + "/" + encodeURIComponent(be.site), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ phone, code, via: viaNow() }) }), j = await r.json().catch(() => null);
       if (!r.ok) ui.otpMsg = (j && j.error) || "That didn't work. Please try again.";
-      else if (send) { ui.otpSent = true; A.toast("Code sent on WhatsApp"); }
+      else if (send) { ui.otpSent = true; if (j && j.via) ui.otpVia = j.via; A.toast("Code sent " + VIA[viaNow()]); }
       else { ui.otp = { phone: digits(phone), token: j.token }; ui.otpSent = false; ui.err = ""; loadPts(); }
     } catch (e) { ui.otpMsg = "Couldn't reach us just now. Check your connection."; }
     over(true); const c = $("#of-code", root); c && c.focus();
@@ -556,7 +559,7 @@
     else if (a === "label") { sync(); ui.form.label = id; over(true); }
     else if (a === "checkout") { const c = $("#od-cutlery", root); if (c) ui.form.cutlery = c.checked; ui.err = ""; ui.drawer = "checkout"; over(); }
     else if (a === "place") place();
-    else if (a === "otpsend" || a === "otpcheck") otp(a === "otpsend");
+    else if (a === "otpsend" || a === "otpcheck") { const v = t.getAttribute && t.getAttribute("data-via"); if (v) ui.otpVia = v; otp(a === "otpsend"); }
     else if (a === "eotpsend" || a === "eotpcheck") eotp(a === "eotpsend");
     else if (a === "unpay") { ui.err = ""; ui.drawer = "checkout"; over(); }
     else if (a === "paid") {
@@ -593,7 +596,7 @@
     if (ui.drawer === "done" && ui.done) track(ui.done);
     const be = A.backend();
     if (!bind.back) { bind.back = true; cameBack(); }
-    if (!canAsked && !A.PREVIEW && be && be.cf) { canAsked = true; fetch(be.cf + "/site/" + encodeURIComponent(be.site) + "/can", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((j) => { if (j) { can = { otp: !!j.otp, pts: !!j.pts, em: !!j.em, rz: String(j.rz || ""), pg: Array.isArray(j.pg) ? j.pg : [] }; if (ui.drawer === "checkout") { sync(); over(true); } } }).catch(() => {}); }
+    if (!canAsked && !A.PREVIEW && be && be.cf) { canAsked = true; fetch(be.cf + "/site/" + encodeURIComponent(be.site) + "/can", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((j) => { if (j) { can = { otp: !!j.otp, pts: !!j.pts, em: !!j.em, via: Array.isArray(j.via) && j.via.length ? j.via.filter((v) => v === "wa" || v === "sms") : ["wa"], rz: String(j.rz || ""), pg: Array.isArray(j.pg) ? j.pg : [] }; if (ui.drawer === "checkout") { sync(); over(true); } } }).catch(() => {}); }
   }
   window.RestOrder = { page, bind };
 })();

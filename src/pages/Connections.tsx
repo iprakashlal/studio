@@ -5,7 +5,11 @@ import { useEffect, useRef, useState } from "react";
 import { cfCall, cfRole, cfSendCode, cfSession, cfSignedIn, cfVerifyCode, resendTestOnly, signedInApi } from "../lib/cfdb";
 import { Field, Toggle, useToast } from "../ui/kit";
 
-type Kind = "ai" | "wa" | "rz" | "cf" | "pe" | "st" | "pp" | "pos";
+type Kind = "ai" | "wa" | "rz" | "cf" | "pe" | "st" | "pp" | "pos" | "sms";
+/** What the Studio lets this site use a way of messaging for (content.cms.msg). */
+export type MsgAllow = { login: boolean; checkout: boolean };
+export const msgAllow = (cms: any, way: "wa" | "sms"): MsgAllow => { const m = cms?.msg || {}, ok = (v: unknown) => v == null || v === "" || v === way || v === "both"; return { login: ok(m.login), checkout: ok(m.checkout) }; };
+const OFF_BY_STUDIO = " (switched off for this site by your Studio)";
 type Saved = Record<Kind, Record<string, any> | null>;
 export type Where = { api: string; scope: string };
 
@@ -69,7 +73,7 @@ export function AiApiForm({ where }: { where: Where | null | undefined }) {
 
 const WA_FLAGS: Record<string, [string, string][]> = {
   studio: [["login", "Send Studio sign-in codes on WhatsApp too"]],
-  site: [["login", "Send this site's admin sign-in codes on WhatsApp too"], ["enquiryAlert", "Message me when an enquiry or booking arrives"], ["orderAlert", "Message me when an order is placed"], ["orderOtp", "Ask guests to verify their mobile number with a WhatsApp code before ordering (restaurant Order now page)"]],
+  site: [["login", "Send this site's admin sign-in codes on WhatsApp too"], ["enquiryAlert", "Message me when an enquiry or booking arrives"], ["orderAlert", "Message me when an order is placed"], ["orderOtp", "Ask customers to verify their mobile number with a WhatsApp code before ordering (restaurant Order now page and shop checkout)"]],
 };
 type WaFound = { id: string; phones: { id: string; number: string; name: string }[]; templates: { name: string; status: string; category: string; language: string }[] };
 const WA_LINKS: [string, string, string][] = [
@@ -79,7 +83,8 @@ const WA_LINKS: [string, string, string][] = [
 ];
 /** WhatsApp through Meta's Cloud API. `kind`: the Studio's own sign-in, or a site (sign-in, alerts, a guest's code).
     Set up from the token alone: Connect asks Meta for the account, its numbers and its templates, and fills the form in. */
-export function WhatsAppForm({ where, kind }: { where: Where | null | undefined; kind: "studio" | "site" }) {
+export function WhatsAppForm({ where, kind, allow }: { where: Where | null | undefined; kind: "studio" | "site"; /** What the Studio lets this site use WhatsApp codes for. */ allow?: MsgAllow }) {
+  const barred = (k: string) => !!allow && ((k === "login" && !allow.login) || (k === "orderOtp" && !allow.checkout));
   const toast = useToast(), { saved, err, save, mark } = useSaved(where || null), keep = useRef(false);
   const blank = { on: false, phoneId: "", waba: "", token: "", cc: "91", lang: "en", to: "", phones: "", tplOtp: "", tplOrder: "", tplEnquiry: "", login: false, orderOtp: false, orderAlert: false, enquiryAlert: false };
   const [f, setF] = useState<Record<string, any>>(blank), [busy, setBusy] = useState(""), [found, setFound] = useState<WaFound[] | null>(null), [note, setNote] = useState(""), [testTo, setTestTo] = useState(""), [hand, setHand] = useState(false);
@@ -164,7 +169,7 @@ export function WhatsAppForm({ where, kind }: { where: Where | null | undefined;
           {(!acct || !acct.id) && <Field label="Template language" htmlFor="wa-lang" hint="The language code your templates were approved in, for example en or en_US."><input id="wa-lang" className="input" value={f.lang} onChange={set("lang")} /></Field>}
         </div>}
         <fieldset className="flex flex-col gap-2 rounded-lg border border-ink-700 p-3"><legend className="label px-1">Use it for</legend>
-          {WA_FLAGS[kind].map(([k, l]) => <label key={k} className="flex items-start gap-2.5 text-sm"><input type="checkbox" className="mt-0.5" checked={!!f[k]} onChange={(e) => setF({ ...f, [k]: e.target.checked })} /><span>{l}</span></label>)}
+          {WA_FLAGS[kind].map(([k, l]) => <label key={k} className={`flex items-start gap-2.5 text-sm ${barred(k) ? "opacity-60" : ""}`}><input type="checkbox" className="mt-0.5" disabled={barred(k)} checked={!!f[k] && !barred(k)} onChange={(e) => setF({ ...f, [k]: e.target.checked })} /><span>{l}{barred(k) ? OFF_BY_STUDIO : ""}</span></label>)}
         </fieldset>
         {acct?.id && missing.length > 0 && <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-400/40 bg-amber-400/5 px-3 py-2 text-[13px] text-amber-100" role="status"><span>{waiting.length ? `Waiting for Meta to approve: ${waiting.join(", ")}.` : `Your account has no approved template yet for ${missing.map((m) => (m === "otp" ? "codes" : m === "order" ? "order alerts" : "enquiry alerts")).join(", ")}.`}</span>{!waiting.length && <button type="button" className="btn btn-sm btn-pri" disabled={!!busy} onClick={makeTemplates}>{busy === "Creating" ? "Creating…" : "Create the templates for me"}</button>}</div>}
         {needOtp && tplField("wa-otp", "Template for codes (Authentication)", "tplOtp", "AUTHENTICATION", acct ? "An approved Authentication template with a copy-code button." : "WhatsApp Manager → Message templates → Create → Authentication → Copy code. Type its name here exactly.")}
@@ -252,6 +257,54 @@ export function PetpoojaForm({ where }: { where: Where | null | undefined }) {
     </Shell>
   );
 }
+/** SMS (text messages) through the owner's own MSG91 or Twilio account: codes for signing in and for checkout. */
+export function SmsForm({ where, kind, allow }: { where: Where | null | undefined; kind: "studio" | "site"; allow?: MsgAllow }) {
+  const toast = useToast(), { saved, err, save } = useSaved(where || null);
+  const blank = { on: false, provider: "msg91", key: "", tpl: "", varName: "var1", sender: "", sid: "", from: "", text: "{code} is your verification code for {site}.", cc: "91", phones: "", login: false, orderOtp: false };
+  const [f, setF] = useState<Record<string, any>>(blank), [busy, setBusy] = useState(""), [testTo, setTestTo] = useState("");
+  useEffect(() => { const z = saved?.sms; setF(z ? { ...blank, ...z, provider: z.provider || "msg91", varName: z.varName || "var1", text: z.text || blank.text, cc: z.cc || "91", key: "" } : blank); }, [saved]); // eslint-disable-line react-hooks/exhaustive-deps
+  const lead = <>Optional. Codes go out as text messages through your own account with an SMS company (MSG91 or Twilio), which charges you per message. In India an SMS must use a template registered on DLT; MSG91 walks you through that. Nothing is sent by SMS unless this is switched on and a box below is ticked; email keeps working as before.</>;
+  if (where === undefined) return <Shell title="SMS" lead={lead}><Missing why="Checking your database…" /></Shell>;
+  if (!where) return <Shell title="SMS" lead={lead}><Missing why={kind === "studio" ? "SMS is kept on the Studio's Cloudflare database. Host the Studio on Cloudflare (Settings → Hostings) and sign in there as its owner." : "SMS needs this site hosted on your Cloudflare database, and you signed in to it on this device as its owner."} /></Shell>;
+  if (err) return <Shell title="SMS" lead={lead}><Missing why={err} /></Shell>;
+  const z = saved?.sms, set = (k: string) => (e: any) => setF({ ...f, [k]: e.target.value }), tw = f.provider === "twilio";
+  const barred = (k: string) => !!allow && ((k === "login" && !allow.login) || (k === "orderOtp" && !allow.checkout));
+  const flags: [string, string][] = kind === "studio" ? [["login", "Send Studio sign-in codes by SMS too"]] : [["login", "Send this site's admin sign-in codes by SMS too"], ["orderOtp", "Ask customers to verify their mobile number with an SMS code before ordering (restaurant Order now page and shop checkout)"]];
+  const filled = (!!f.key.trim() || !!z?.key) && (tw ? !!String(f.sid).trim() && !!String(f.from).trim() : !!String(f.tpl).trim()), ok = !f.on || filled;
+  const doSave = async () => { setBusy("Saving"); try { const v: any = { ...f, key: f.key.trim() }; for (const k of ["login", "orderOtp"]) if (barred(k)) v[k] = false; await save("sms", v); setF((x) => ({ ...x, key: "" })); toast(f.on ? "SMS is saved and on." : "Saved. SMS is off."); } catch (e: any) { toast(e?.status === 400 ? "This needs the database updated once (Settings → Hostings → Update this database)." : e?.message || "Couldn't save that.", "bad"); } setBusy(""); };
+  const test = async () => { setBusy("Testing"); try { const r = await cfCall<any>(where.api, "/set/sms?scope=" + encodeURIComponent(where.scope), { method: "POST", body: JSON.stringify({ to: testTo }) }); if (r?.error) throw new Error(r.error); toast("Sent. A test code (123456) should arrive by SMS in a moment."); } catch (e: any) { toast(e?.status === 404 ? "This needs the database updated once (Settings → Hostings → Update this database)." : e?.message || "The test wasn't sent.", "bad"); } setBusy(""); };
+  return (
+    <Shell title="SMS" on={!!(z?.on && z.key)} lead={lead}>
+      <Toggle id={"sms-on-" + kind} checked={!!f.on} onChange={(v: boolean) => setF({ ...f, on: v })} label="Use SMS" />
+      {f.on && <>
+        <Field label="SMS company" htmlFor="sms-prov"><select id="sms-prov" className="input" value={f.provider} onChange={set("provider")}><option value="msg91">MSG91 (India, DLT templates)</option><option value="twilio">Twilio (worldwide)</option></select></Field>
+        <div className="grid gap-3 sm:grid-cols-2">
+          {tw ? <>
+            <Field label="Account SID" htmlFor="sms-sid" hint="On Twilio's console home page; it starts with AC."><input id="sms-sid" className="input font-mono text-[13px]" value={f.sid} onChange={set("sid")} /></Field>
+            <Secret id="sms-key" label="Auth token" saved={!!z?.key} value={f.key} onChange={(v) => setF({ ...f, key: v })} />
+            <Field label="Send from" htmlFor="sms-from" hint="Your Twilio number with its country code (+1…), or a Messaging Service SID (MG…)."><input id="sms-from" className="input" value={f.from} onChange={set("from")} /></Field>
+            <Field label="Country code for 10-digit numbers" htmlFor="sms-cc"><input id="sms-cc" className="input" inputMode="numeric" value={f.cc} onChange={set("cc")} /></Field>
+            <div className="sm:col-span-2"><Field label="The message" htmlFor="sms-text" hint="{code} becomes the 6-digit code and {site} the name. Where SMS templates must be registered (India: DLT), use the registered wording exactly."><input id="sms-text" className="input" value={f.text} onChange={set("text")} /></Field></div>
+          </> : <>
+            <Secret id="sms-key" label="Auth key" saved={!!z?.key} value={f.key} onChange={(v) => setF({ ...f, key: v })} hint={z?.key ? "A key is saved. Leave this empty to keep it, or type a new one to replace it." : "MSG91 → your name (top right) → Authkey. It goes straight to your database and is stored encrypted."} />
+            <Field label="Template ID (flow)" htmlFor="sms-tpl" hint="MSG91 → SMS → Templates: the ID of your approved code template."><input id="sms-tpl" className="input font-mono text-[13px]" value={f.tpl} onChange={set("tpl")} /></Field>
+            <Field label="Name of the code's variable" htmlFor="sms-var" hint="As written in the template between ## marks, for example var1 or OTP."><input id="sms-var" className="input" value={f.varName} onChange={set("varName")} /></Field>
+            <Field label="Sender ID (optional)" htmlFor="sms-sender" hint="Your 6-letter DLT header. Leave empty to use the one saved with the template."><input id="sms-sender" className="input" value={f.sender} onChange={set("sender")} /></Field>
+            <Field label="Country code for 10-digit numbers" htmlFor="sms-cc"><input id="sms-cc" className="input" inputMode="numeric" value={f.cc} onChange={set("cc")} /></Field>
+          </>}
+        </div>
+        <fieldset className="flex flex-col gap-2 rounded-lg border border-ink-700 p-3"><legend className="label px-1">Use it for</legend>
+          {flags.map(([k, l]) => <label key={k} className={`flex items-start gap-2.5 text-sm ${barred(k) ? "opacity-60" : ""}`}><input type="checkbox" className="mt-0.5" disabled={barred(k)} checked={!!f[k] && !barred(k)} onChange={(e) => setF({ ...f, [k]: e.target.checked })} /><span>{l}{barred(k) ? OFF_BY_STUDIO : ""}</span></label>)}
+        </fieldset>
+        {f.login && !barred("login") && <Field label="Who gets sign-in codes by SMS" htmlFor="sms-phones" hint="One per line: the email they sign in with, an equals sign, their mobile number. Anyone not listed gets the email only."><textarea id="sms-phones" className="input min-h-[70px] font-mono text-[13px]" placeholder={"owner@example.com = +91 98xxxxxxxx"} value={f.phones} onChange={set("phones")} /></Field>}
+        {kind === "site" && <p className="text-[12.5px] text-ink-400">If WhatsApp is also set up to verify customers, the checkout lets each customer choose WhatsApp or SMS.</p>}
+        {z?.on && z.key && <div className="flex flex-wrap items-end gap-2"><div className="min-w-[200px] flex-1"><Field label="Try it: send a test code to" htmlFor="sms-test" hint="Uses what is saved: press Save first after a change."><input id="sms-test" className="input" inputMode="tel" placeholder="+91 98xxxxxxxx" value={testTo} onChange={(e) => setTestTo(e.target.value)} /></Field></div><button type="button" className="btn btn-sm" disabled={!!busy || testTo.replace(/\D/g, "").length < 10} onClick={test}>{busy === "Testing" ? "Sending…" : "Send test"}</button></div>}
+      </>}
+      <div className="flex gap-2"><button type="button" className="btn btn-sm btn-pri" disabled={!ok || !!busy} onClick={doSave}>{busy === "Saving" ? "Saving…" : "Save"}</button>{z && <button type="button" className="btn btn-sm btn-danger ml-auto" disabled={!!busy} onClick={async () => { setBusy("Removing"); try { await save("sms", null); toast("SMS removed."); } catch (e: any) { toast(e?.message || "Couldn't remove that.", "bad"); } setBusy(""); }}>Remove</button>}</div>
+    </Shell>
+  );
+}
+
 /** Kept for the places that ask for Razorpay by name. */
 export function RazorpayForm({ where }: { where: Where | null | undefined; plain?: boolean }) { return <GatewayForm where={where} gw="rz" />; }
 
@@ -300,12 +353,15 @@ export function SiteDbSignIn({ cf, small, what = "see and change what is kept th
 }
 
 /** A site's "Payments & WhatsApp" section (site admin and the Studio's editor). */
-export function SiteConnections({ cf, template }: { cf?: { api: string; site: string } | null; template: string }) {
+export function SiteConnections({ cf, template, cms, site }: { cf?: { api: string; site: string } | null; template: string; /** The site's content.cms (what the Studio allows it). */ cms?: any; /** True in the site's own admin page. */ site?: boolean }) {
+  const aw = msgAllow(cms, "wa"), as = msgAllow(cms, "sms");
   const signed = useSiteDbSigned(cf), where = cf && signed ? { api: cf.api, scope: "site:" + cf.site } : null;
   return <div className="flex max-w-3xl flex-col gap-4">
     {cf && !signed && <SiteDbSignIn cf={cf} what={template === "restaurant" ? "show the boxes for Petpooja's and WhatsApp's keys" : "show the boxes for WhatsApp's keys"} />}
     {template === "restaurant" && <section className="card flex flex-col gap-2 p-5"><h3 className="text-[15px] font-extrabold">Restaurant backend</h3><p className="text-sm text-ink-300">Orders, payments and messages run on the site's own Cloudflare database: it saves each order under Purchased orders, works out what an order costs from your menu, confirms online payments with your payment gateway, passes orders to Petpooja, and sends WhatsApp messages. Keys you enter here stay on that database, encrypted. The payment gateways (Razorpay, Cashfree, PhonePe, Stripe, PayPal) and their keys are under Payments.</p></section>}
-    {template === "restaurant" && <PetpoojaForm where={where} />}<WhatsAppForm where={where} kind="site" /></div>;
+    {template === "restaurant" && <PetpoojaForm where={where} />}<WhatsAppForm where={where} kind="site" allow={aw} />
+    {/* In the site's own admin page SMS shows only when the Studio lets the site use it for something. */}
+    {!(site && !as.login && !as.checkout) && <SmsForm where={where} kind="site" allow={as} />}</div>;
 }
 /** The Studio's own database, looked up once. */
 export function useStudioWhere() { const [w, setW] = useState<Where | null | undefined>(undefined); useEffect(() => { let on = true; studioWhere().then((x) => on && setW(x)); return () => { on = false; }; }, []); return w; }

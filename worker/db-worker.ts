@@ -395,6 +395,8 @@ const SETTINGS: Record<string, { secret: string[]; text: string[]; flags: string
   pp: { secret: ["secret"], text: ["clientId"], flags: ["test"] },
   // Petpooja (the restaurant's billing system): orders placed on the site go to it, and it sends back each order's status.
   pos: { secret: ["secret", "token"], text: ["appKey", "restId", "url"], flags: ["on"] },
+  // SMS (text messages) through the owner's own account with MSG91 or Twilio: codes for signing in and for checkout.
+  sms: { secret: ["key"], text: ["provider", "tpl", "varName", "sender", "sid", "from", "text", "cc", "phones"], flags: ["on", "login", "orderOtp"] },
 };
 async function aesKey(env: Env) { return crypto.subtle.importKey("raw", await crypto.subtle.digest("SHA-256", enc.encode("settings:" + env.SECRET)), "AES-GCM", false, ["encrypt", "decrypt"]); }
 async function getSetting(env: Env, scope: string, name: string): Promise<any | null> {
@@ -515,6 +517,34 @@ const WA_TPL: Record<string, (lang: string) => any> = {
 };
 const waReady = (c: any) => !!(c && c.on && c.token && String(c.phoneId || "").trim());
 /** "name@site.com = +91 98…" lines: the WhatsApp number of each person who signs in. */
+/* ---- SMS: a code sent as a text message through the owner's own MSG91 (India, DLT templates) or Twilio account. */
+const smsReady = (z: any) => !!(z && z.on && z.key && (z.provider === "twilio" ? String(z.sid || "").trim() && String(z.from || "").trim() : String(z.tpl || "").trim()));
+async function smsSend(z: any, to: string, code: string, brand: string) {
+  if (z.provider === "twilio") {
+    const body = (String(z.text || "").trim() || "{code} is your verification code for {site}.").replace(/\{code\}/g, code).replace(/\{site\}/g, brand).slice(0, 300), from = String(z.from).trim();
+    const f = new URLSearchParams({ To: "+" + to, Body: body }); f.set(/^MG[0-9a-f]{32}$/i.test(from) ? "MessagingServiceSid" : "From", from);
+    const r = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${encodeURIComponent(String(z.sid).trim())}/Messages.json`, { method: "POST", headers: { Authorization: "Basic " + btoa(String(z.sid).trim() + ":" + z.key), "Content-Type": "application/x-www-form-urlencoded" }, body: f.toString() });
+    if (!r.ok) { let m = ""; try { m = String(((await r.json()) as any)?.message || ""); } catch { /* not JSON */ } throw new Error(`Twilio didn't accept the message (${r.status})${m ? ": " + m.slice(0, 200) : ""}`); }
+    return;
+  }
+  // MSG91 "flow": the template approved on DLT, with the code in its variable (the name is tried as typed, in capitals and in small letters).
+  const v = String(z.varName || "var1").trim() || "var1", rec: any = { mobiles: to, [v]: code, [v.toUpperCase()]: code, [v.toLowerCase()]: code }, tpl = String(z.tpl).trim();
+  const r = await fetch("https://control.msg91.com/api/v5/flow/", { method: "POST", headers: { authkey: z.key, "Content-Type": "application/json", accept: "application/json" }, body: JSON.stringify({ template_id: tpl, flow_id: tpl, ...(String(z.sender || "").trim() ? { sender: String(z.sender).trim() } : {}), short_url: "0", recipients: [rec] }) });
+  let j: any = null; try { j = await r.json(); } catch { /* not JSON */ }
+  if (!r.ok || !j || j.type !== "success") throw new Error(`MSG91 didn't accept the message (${r.status})${j?.message ? ": " + String(j.message).slice(0, 200) : ""}`);
+}
+/** What the Studio lets a site use for codes (content.cms.msg): sign-in codes besides email, and checkout codes. Unset: everything. */
+function msgPolicy(c: any): { login: { wa: boolean; sms: boolean }; checkout: { wa: boolean; sms: boolean } } {
+  const m = c?.cms?.msg || {}, of = (v: unknown) => ({ wa: v == null || v === "" || v === "wa" || v === "both", sms: v == null || v === "" || v === "sms" || v === "both" });
+  return { login: of(m.login), checkout: of(m.checkout) };
+}
+/** How a site can send a checkout code just now: WhatsApp, SMS or both, and whether every customer has to verify. */
+async function codeWays(env: Env, site: string, c?: any) {
+  const w = await getSetting(env, "site:" + site, "wa").catch(() => null), z = await getSetting(env, "site:" + site, "sms").catch(() => null);
+  const pol = msgPolicy(c === undefined ? await siteContent(env, site).catch(() => null) : c).checkout;
+  const wa = pol.wa && waReady(w) && !!String(w.tplOtp || "").trim(), sms = pol.sms && smsReady(z);
+  return { w, z, wa, sms, any: wa || sms, need: (wa && !!w.orderOtp) || (sms && !!z.orderOtp), cc: String(w?.cc || z?.cc || "91") };
+}
 const waPhoneOf = (lines: unknown, email: string) => { for (const l of String(lines || "").split(/\n/)) { const i = l.indexOf("="); if (i > 0 && l.slice(0, i).trim().toLowerCase() === email) return l.slice(i + 1).trim(); } return ""; };
 /** Tells the owner on WhatsApp about a new order or enquiry, when they switched that on. Says what happened. */
 async function waAlert(env: Env, site: string, data: Record<string, string>): Promise<string> {
@@ -602,7 +632,7 @@ export function posItems(c: any, q: any): { items: any[]; sub: number } | { erro
 /** A guest's verified points balance: their number proved with the code sent on WhatsApp (the same proof an order
  *  needs), then looked up here. 0 when the proof is missing or stale. */
 async function pointsBal(env: Env, site: string, phone: unknown, token: unknown): Promise<{ key: string; bal: number; ok: boolean }> {
-  const w = await getSetting(env, "site:" + site, "wa").catch(() => null), num = waNum(phone, w?.cc), [exp, sig] = String(token || "").split(".");
+  const cc = (await getSetting(env, "site:" + site, "wa").catch(() => null))?.cc || (await getSetting(env, "site:" + site, "sms").catch(() => null))?.cc, num = waNum(phone, cc), [exp, sig] = String(token || "").split(".");
   if (!num || !(+exp > Date.now()) || sig !== b64u(await hmac(env.SECRET, "otp:" + site + ":" + num + ":" + exp))) return { key: num, bal: 0, ok: false };
   const r: any = await env.DB.prepare("select points from customers where site = ? and ckey = ?").bind(site, num).first();
   return { key: num, bal: Math.max(0, +r?.points || 0), ok: true };
@@ -610,7 +640,7 @@ async function pointsBal(env: Env, site: string, phone: unknown, token: unknown)
 /** Keeps the customer of an order (by mobile number, else email), counts the order, and settles its points: spent ones
  *  come off, new ones are earned on what was paid for the goods. Gives back a line for the order's record. */
 async function custOrder(env: Env, site: string, c: any, data: Record<string, string>, cart: any): Promise<string> {
-  const w = await getSetting(env, "site:" + site, "wa").catch(() => null);
+  const w = { cc: (await getSetting(env, "site:" + site, "wa").catch(() => null))?.cc || (await getSetting(env, "site:" + site, "sms").catch(() => null))?.cc };
   const key = waNum(data.phone, w?.cc) || String(data.email || "").trim().toLowerCase().slice(0, 120); if (!key) return "";
   if (await env.DB.prepare("select 1 from points where site = ? and order_no = ? limit 1").bind(site, data.order_no).first()) return "";
   const L = loyOf(c), verified = data._phone ? 1 : 0, now = new Date().toISOString();
@@ -914,15 +944,19 @@ export default {
           }
         }
         // The same code on WhatsApp too, when the Studio or the site has that switched on and knows this person's number.
-        let onWa = false;
+        let onWa = false, onSms = false;
         const waScope = typeof forSite === "string" && /^[a-z0-9][a-z0-9-]{0,59}$/.test(forSite) ? "site:" + forSite : typeof forStudio === "string" && /^[a-z0-9][a-z0-9-]{0,59}$/.test(forStudio) ? "studio:" + forStudio : "";
         if (waScope && (await env.DB.prepare("select 1 from members where email = ? and scope = ? limit 1").bind(email, waScope).first())) {
           const w = await getSetting(env, waScope, "wa").catch(() => null), num = waReady(w) && w.login && String(w.tplOtp || "").trim() ? waNum(waPhoneOf(w.phones, email), w.cc) : "";
-          if (num) try { await waSend(w, num, w.tplOtp, [code], code); onWa = true; } catch { /* the email still goes */ }
+          // what the Studio lets this site use for sign-in codes (a Studio's own sign-in may use both)
+          const pol = waScope.startsWith("site:") ? msgPolicy(await siteContent(env, waScope.slice(5)).catch(() => null)).login : { wa: true, sms: true };
+          if (num && pol.wa) try { await waSend(w, num, w.tplOtp, [code], code); onWa = true; } catch { /* the email still goes */ }
+          const z = await getSetting(env, waScope, "sms").catch(() => null), sn = pol.sms && smsReady(z) && z.login ? waNum(waPhoneOf(z.phones, email), z.cc) : "";
+          if (sn) try { await smsSend(z, sn, code, env.NAME || "your account"); onSms = true; } catch { /* the email still goes */ }
         }
         try { await sendMail(env, email, subject, WRAP(`<h2 style="margin:0 0 12px;font-size:20px">${hesc(heading)}</h2>${paras(intro)}<p style="font-size:28px;font-weight:700;letter-spacing:6px;margin:0 0 14px">${code}</p>${paras(footer, "margin:0 0 8px;color:#667;font-size:13px")}`)); }
-        catch (e) { if (!onWa) throw e; }
-        return json({ ok: true, ...(onWa ? { whatsapp: true } : {}) });
+        catch (e) { if (!onWa && !onSms) throw e; }
+        return json({ ok: true, ...(onWa ? { whatsapp: true } : {}), ...(onSms ? { sms: true } : {}) });
       }
       if (p === "/auth/verify" && req.method === "POST") {
         const b = (await req.json()) as any; const email = String(b.email || "").trim().toLowerCase(), code = String(b.code || "").trim();
@@ -1011,8 +1045,8 @@ export default {
       if (/^\/site\/[a-z0-9][a-z0-9-]{0,59}\/can$/.test(p) && req.method === "GET") {
         const site = p.split("/")[2], w = await getSetting(env, "site:" + site, "wa").catch(() => null), z = await getSetting(env, "site:" + site, "rz").catch(() => null);
         const pg: string[] = []; for (const g of ["cf", "pe", "st", "pp"]) if (pgReady(g, await getSetting(env, "site:" + site, g).catch(() => null))) pg.push(g);
-        const canCode = !!(waReady(w) && String(w.tplOtp || "").trim()), sc = await siteContent(env, site).catch(() => null);
-        return json({ otp: canCode && !!w.orderOtp, pts: canCode && loyOf(sc).on, em: emailCheckOn(env, sc), rz: z?.on && z.secret && z.keyId ? String(z.keyId) : "", pg });
+        const sc = await siteContent(env, site).catch(() => null), cw = await codeWays(env, site, sc), canCode = cw.any;
+        return json({ otp: cw.need, pts: canCode && loyOf(sc).on, via: [cw.wa ? "wa" : "", cw.sms ? "sms" : ""].filter(Boolean), em: emailCheckOn(env, sc), rz: z?.on && z.secret && z.keyId ? String(z.keyId) : "", pg });
       }
       if (/^\/points\/[a-z0-9][a-z0-9-]{0,59}$/.test(p) && req.method === "POST") {
         const site = p.split("/")[2], b = (await req.json()) as any, L = loyOf(await siteContent(env, site));
@@ -1051,10 +1085,12 @@ export default {
         return json({ ok: true, token: exp + "." + b64u(await hmac(env.SECRET, "eotp:" + site + ":" + em + ":" + exp)) });
       }
       if (/^\/otp\/(send|check)\/[a-z0-9][a-z0-9-]{0,59}$/.test(p) && req.method === "POST") {
-        const site = p.split("/")[3], b = (await req.json()) as any, w = await getSetting(env, "site:" + site, "wa");
+        const site = p.split("/")[3], b = (await req.json()) as any, sc = await siteContent(env, site).catch(() => null), cw = await codeWays(env, site, sc), w = cw.w;
         // Codes go out where the site asks guests to verify, or where points can be spent (a guest verifies to use theirs).
-        if (!(waReady(w) && String(w.tplOtp || "").trim() && (w.orderOtp || loyOf(await siteContent(env, site).catch(() => null)).on))) return err(404, "Not found.");
-        const num = waNum(b.phone, w.cc); if (!num) return err(400, "Enter your mobile number with its country code.");
+        if (!(cw.any && (cw.need || loyOf(sc).on))) return err(404, "Not found.");
+        // on WhatsApp or by SMS: the one asked for when the site has both, else the one it has
+        const via = b.via === "sms" && cw.sms ? "sms" : b.via === "wa" && cw.wa ? "wa" : cw.wa ? "wa" : "sms";
+        const num = waNum(b.phone, cw.cc); if (!num) return err(400, "Enter your mobile number with its country code.");
         const k = "o:" + site + ":" + num, now = Date.now();
         if (p.startsWith("/otp/send/")) {
           const prev: any = await env.DB.prepare("select sent from otps where k = ?").bind(k).first();
@@ -1064,8 +1100,9 @@ export default {
           if ((n?.n || 0) >= 80) return err(429, "Too many codes were asked for. Please try again later, or call us.");
           const code = String(100000 + (crypto.getRandomValues(new Uint32Array(1))[0] % 900000));
           await env.DB.prepare("insert into otps (k, hash, expires, tries, sent) values (?, ?, ?, 0, ?) on conflict (k) do update set hash = excluded.hash, expires = excluded.expires, tries = 0, sent = excluded.sent").bind(k, b64u(await hmac(env.SECRET, k + ":" + code)), now + 10 * 60_000, now).run();
-          try { await waSend(w, num, w.tplOtp, [code], code); } catch { return err(502, "We couldn't send the code on WhatsApp just now. Check the number, or call us to order."); }
-          return json({ ok: true });
+          try { if (via === "sms") await smsSend(cw.z, num, code, siteName(sc, site)); else await waSend(w, num, w.tplOtp, [code], code); }
+          catch { return err(502, `We couldn't send the code ${via === "sms" ? "by SMS" : "on WhatsApp"} just now. Check the number${cw.wa && cw.sms ? ", try the other way" : ""}, or call us to order.`); }
+          return json({ ok: true, via });
         }
         const c: any = await env.DB.prepare("select hash, expires, tries from otps where k = ?").bind(k).first();
         if (!c || c.expires < now) return err(403, "The code has expired. Ask for a new one.");
@@ -1073,7 +1110,8 @@ export default {
         if (c.hash !== b64u(await hmac(env.SECRET, k + ":" + String(b.code || "").trim()))) { await env.DB.prepare("update otps set tries = tries + 1 where k = ?").bind(k).run(); return err(403, "That code isn't right."); }
         await env.DB.prepare("update otps set expires = 0 where k = ?").bind(k).run();
         const exp = now + 45 * 60_000;
-        return json({ ok: true, token: exp + "." + b64u(await hmac(env.SECRET, "otp:" + site + ":" + num + ":" + exp)) });
+        // (the ".s" on the end only says the code went by SMS, for the order's record)
+        return json({ ok: true, token: exp + "." + b64u(await hmac(env.SECRET, "otp:" + site + ":" + num + ":" + exp)) + (via === "sms" ? ".s" : "") });
       }
       // ---- Petpooja reports an order's status (accepted, ready, dispatched, delivered, cancelled). The address carries a key only this database can make.
       if (/^\/hook\/pos\/[a-z0-9][a-z0-9-]{0,59}$/.test(p) && req.method === "POST") {
@@ -1135,12 +1173,12 @@ export default {
         if (!Object.keys(data).length) return err(400, "The form was empty.");
         if (data.order_no) {
           // The guest's mobile number, proved with a code on WhatsApp, when the site asks for that.
-          const w = await getSetting(env, "site:" + site, "wa").catch(() => null);
-          if (waReady(w) && String(w.tplOtp || "").trim()) {
-            const num = waNum(data.phone, w.cc), [exp, sig] = String(data.otp_token || "").split(".");
+          const cw = await codeWays(env, site);
+          if (cw.any) {
+            const num = waNum(data.phone, cw.cc), [exp, sig, how] = String(data.otp_token || "").split(".");
             const proved = !!num && +exp > Date.now() && sig === b64u(await hmac(env.SECRET, "otp:" + site + ":" + num + ":" + exp));
             // Required where the site asks every guest for it; otherwise taken when given (a guest who verified to spend points).
-            if (proved) data._phone = "Verified on WhatsApp"; else if (w.orderOtp) return err(403, "Please verify your mobile number first.");
+            if (proved) data._phone = how === "s" ? "Verified by SMS" : "Verified on WhatsApp"; else if (cw.need) return err(403, "Please verify your mobile number first.");
           }
           delete data.otp_token;
           // an email address that must be proved (the site's own setting): the proof, or the pass given when the code could not be sent
@@ -1175,7 +1213,7 @@ export default {
           }
         }
         // A restaurant that uses Petpooja: the order is handed to it now, and its answer is kept with the order.
-        if (data.order_no && q.cart && typeof q.cart === "object") q.cart._bal = data._phone && +q.cart.points > 0 ? Math.max(0, +((await env.DB.prepare("select points from customers where site = ? and ckey = ?").bind(site, waNum(data.phone, (await getSetting(env, "site:" + site, "wa").catch(() => null))?.cc)).first()) as any)?.points || 0) : 0;
+        if (data.order_no && q.cart && typeof q.cart === "object") q.cart._bal = data._phone && +q.cart.points > 0 ? Math.max(0, +((await env.DB.prepare("select points from customers where site = ? and ckey = ?").bind(site, waNum(data.phone, (await codeWays(env, site)).cc)).first()) as any)?.points || 0) : 0;
         if (data.order_no && q.cart && typeof q.cart === "object") {
           const pz = await getSetting(env, "site:" + site, "pos").catch(() => null);
           if (posReady(pz)) { const pc = await siteContent(env, site); if (isRest(pc)) data._pos = await posSend(env, site, pz, pc, q.cart, data, u.origin); }
@@ -1258,8 +1296,15 @@ export default {
       if (!role) return err(403, `${email} isn't a member of this ${scope.startsWith("site:") ? "site" : "Studio"}.`);
 
       // ---- connections (the owner's own AI API, WhatsApp, Razorpay): owners set them; the keys are never sent back
-      if (p === "/set" || p === "/set/test" || p === "/set/wa") {
+      if (p === "/set" || p === "/set/test" || p === "/set/wa" || p === "/set/sms") {
         if (role !== "owner") return err(403, "Only an owner can change connections.");
+        // SMS: a test code to the owner's own phone, with what is saved.
+        if (p === "/set/sms" && req.method === "POST") {
+          const b = (await req.json()) as any, z = await getSetting(env, scope, "sms"), to = waNum(b.to, z?.cc);
+          if (!smsReady(z)) return json({ error: "Switch SMS on, fill in the boxes and press Save first." });
+          if (!to) return json({ error: "Enter the mobile number to send the test to." });
+          try { await smsSend(z, to, "123456", env.NAME || "your site"); return json({ ok: true }); } catch (e: any) { return json({ error: String(e?.message || e).slice(0, 300) }); }
+        }
         // WhatsApp set up from the token: find the account, make the templates, send a test code.
         if (p === "/set/wa" && req.method === "POST") {
           const b = (await req.json()) as any, old = (await getSetting(env, scope, "wa")) || {}, token = String(b.token || "").trim() || String(old.token || "");

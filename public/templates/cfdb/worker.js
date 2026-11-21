@@ -12,6 +12,9 @@ create index if not exists enquiries_site on enquiries (site, created_at);
 create table if not exists stock (site text not null, item text not null, qty integer not null default 0, low integer not null default 0, updated_at text not null, primary key (site, item));
 create table if not exists stock_log (id integer primary key autoincrement, site text not null, item text not null, delta integer not null, qty integer not null, why text not null default '', ref text not null default '', at text not null);
 create index if not exists stock_log_site on stock_log (site, id);
+create table if not exists carts (site text not null, ckey text not null, tok text not null, email text not null, name text not null default '', phone text not null default '', lines text not null default '[]', items text not null default '[]', total real not null default 0, cur text not null default '', back text not null default '', status text not null default 'open', sent integer not null default 0, sent_at text, order_no text not null default '', created_at text not null, updated_at text not null, primary key (site, ckey));
+create index if not exists carts_tok on carts (tok);
+create index if not exists carts_open on carts (status, updated_at);
 create table if not exists workers (worker text primary key, scope text not null);
 create table if not exists repos (repo text primary key, scope text not null);
 create table if not exists approvals (token text primary key, scope text not null, project text not null, name text not null, template text not null, content text not null, note text not null default '', status text not null default 'open', decided_by text not null default '', decided_at text, created_by text not null default '', created_at text not null);
@@ -19,7 +22,7 @@ create index if not exists approvals_project on approvals (scope, project, creat
 create table if not exists approval_notes (id integer primary key autoincrement, token text not null, who text not null, body text not null, page text not null default '', kind text not null default 'comment', created_at text not null);
 create index if not exists approval_notes_token on approval_notes (token, id);
 `;
-var CFDB_VERSION = 45;
+var CFDB_VERSION = 46;
 var CFDB_WORKER_NAME = "picaffectz-db";
 
 // src/lib/lookdigest.ts
@@ -1070,6 +1073,9 @@ async function ensure(env) {
     env.DB.prepare("create table if not exists stock (site text not null, item text not null, qty integer not null default 0, low integer not null default 0, updated_at text not null, primary key (site, item))"),
     env.DB.prepare("create table if not exists stock_log (id integer primary key autoincrement, site text not null, item text not null, delta integer not null, qty integer not null, why text not null default '', ref text not null default '', at text not null)"),
     env.DB.prepare("create index if not exists stock_log_site on stock_log (site, id)"),
+    env.DB.prepare("create table if not exists carts (site text not null, ckey text not null, tok text not null, email text not null, name text not null default '', phone text not null default '', lines text not null default '[]', items text not null default '[]', total real not null default 0, cur text not null default '', back text not null default '', status text not null default 'open', sent integer not null default 0, sent_at text, order_no text not null default '', created_at text not null, updated_at text not null, primary key (site, ckey))"),
+    env.DB.prepare("create index if not exists carts_tok on carts (tok)"),
+    env.DB.prepare("create index if not exists carts_open on carts (status, updated_at)"),
     env.DB.prepare("create table if not exists payments (rz_order text primary key, site text not null, order_no text not null, amount integer not null, status text not null default 'created', created_at text not null)")
   ]);
   ensured = true;
@@ -1654,6 +1660,73 @@ async function stockLowMail(env, site, c, low) {
   if (!to.length) return;
   const out = low.filter((x) => x.qty <= 0), few = low.filter((x) => x.qty > 0);
   await sendMail(env, to, `${out.length ? "Sold out: " + out.map((x) => x.name).join(", ") : "Running low: " + few.map((x) => x.name).join(", ")}`.slice(0, 150), WRAP(`<h2 style="margin:0 0 12px;font-size:20px">Stock at ${hesc(siteName(c, site))}</h2>${out.length ? paras("Sold out:\n" + out.map((x) => "\u2022 " + x.name).join("\n")) : ""}${few.length ? paras("Running low:\n" + few.map((x) => `\u2022 ${x.name}: ${x.qty} left`).join("\n")) : ""}${paras("Add stock under Inventory in your site's admin page.", "margin:0 0 8px;color:#667;font-size:13px")}`));
+}
+var recOn = (c) => !!c?.recovery?.on;
+var recKey = (email) => email.trim().toLowerCase();
+var recMoney = (c, n) => {
+  const cur = siteCur(c);
+  try {
+    return new Intl.NumberFormat("en-IN", { style: "currency", currency: cur, maximumFractionDigits: n % 1 ? 2 : 0 }).format(n);
+  } catch {
+    return cur + " " + n;
+  }
+};
+var recTok = () => {
+  const a = new Uint8Array(16);
+  crypto.getRandomValues(a);
+  return [...a].map((x) => x.toString(16).padStart(2, "0")).join("");
+};
+async function recSend(env, site, c, row, origin) {
+  const R = c?.recovery || {}, shop = siteName(c, site), items = (() => {
+    try {
+      return JSON.parse(row.items);
+    } catch {
+      return [];
+    }
+  })();
+  const base = String(R.url || "").trim().replace(/[?#].*$/, ""), back = /^https:\/\//.test(base) ? base : String(row.back || "");
+  if (!/^https:\/\//.test(back)) throw new Error("No shop address to link to.");
+  const link = back + "?rc=" + row.tok, stop = origin + "/cart/" + site + "/" + row.tok + "/stop";
+  const list = items.slice(0, 12).map((x) => `\u2022 ${x.n}${x.q > 1 ? " \xD7 " + x.q : ""}`).join("\n") + (items.length > 12 ? `
+\u2022 and ${items.length - 12} more` : "");
+  const vars = { name: oneLine(row.name).split(" ")[0] || "there", items: list, total: recMoney(c, +row.total || 0), shop, offer: oneLine(String(R.offer || "")) };
+  const subject = oneLine(fill(String(R.subject || "You left something in your cart at {shop}"), vars)).slice(0, 150);
+  const text = fill(String(R.body || "Hi {name},\n\nYou left these in your cart at {shop}:\n\n{items}\n\nTotal: {total}\n\n{offer}"), vars).replace(/\n{3,}/g, "\n\n");
+  const html = WRAP(`${paras(text)}<p style="margin:18px 0"><a href="${hesc(link)}" style="background:#111;color:#fff;padding:11px 20px;border-radius:8px;text-decoration:none;display:inline-block">${hesc(String(R.button || "Back to my cart"))}</a></p><p style="margin:0;color:#889;font-size:12px">Don't want these reminders? <a href="${hesc(stop)}" style="color:#889">Stop them</a>.</p>`);
+  await sendMail(env, row.email, subject, html, void 0);
+}
+var recLast = 0;
+async function recSweep(env, origin, force = false) {
+  const now = Date.now();
+  if (!force && now - recLast < (env.REC_GAP ?? 24e4)) return 0;
+  recLast = now;
+  if (!env.RESEND_API_KEY || !env.MAIL_FROM) return 0;
+  const rows = (await env.DB.prepare("select * from carts where status = 'open' and sent < 2 and email != '' and updated_at < ? and updated_at > ? order by updated_at limit 60").bind(new Date(now - 18e5).toISOString(), new Date(now - 7 * 864e5).toISOString()).all()).results || [];
+  const cache = /* @__PURE__ */ new Map(), day2 = /* @__PURE__ */ new Map();
+  let sent = 0;
+  for (const r of rows) {
+    if (sent >= 20) break;
+    if (!cache.has(r.site)) cache.set(r.site, await siteContent(env, r.site).catch(() => null));
+    const c = cache.get(r.site), R = c?.recovery;
+    if (!recOn(c) || R.auto === false) continue;
+    const after = Math.max(0.5, Math.min(72, +R.after || 1)) * 36e5, again = R.again === 0 || R.again === "0" ? 0 : Math.max(2, Math.min(240, +R.again || 24)) * 36e5;
+    const last = Date.parse(r.sent ? r.sent_at : r.updated_at) || 0;
+    if (now - last < (r.sent ? again : after) || r.sent && !again) continue;
+    if (!day2.has(r.site)) day2.set(r.site, +((await env.DB.prepare("select count(*) n from carts where site = ? and sent_at > ?").bind(r.site, new Date(now - 864e5).toISOString()).first())?.n || 0));
+    if ((day2.get(r.site) || 0) >= 50) continue;
+    try {
+      await recSend(env, r.site, c, r, origin);
+    } catch {
+      await env.DB.prepare("update carts set sent = 2, sent_at = ? where site = ? and ckey = ?").bind((/* @__PURE__ */ new Date()).toISOString(), r.site, r.ckey).run();
+      continue;
+    }
+    await env.DB.prepare("update carts set sent = sent + 1, sent_at = ? where site = ? and ckey = ?").bind((/* @__PURE__ */ new Date()).toISOString(), r.site, r.ckey).run();
+    day2.set(r.site, (day2.get(r.site) || 0) + 1);
+    sent++;
+  }
+  if (Math.random() < 0.02) await env.DB.prepare("delete from carts where updated_at < ?").bind(new Date(now - 45 * 864e5).toISOString()).run().catch(() => {
+  });
+  return sent;
 }
 var cleanAddr = (a) => {
   const t = (v, n = 120) => oneLine(String(v ?? "")).replace(/\s+/g, " ").slice(0, n);
@@ -2528,11 +2601,58 @@ var db_worker_default = {
         }
         return json({ status: hit.status, paid, ...track ? { track } : {} });
       }
+      if (/^\/cart\/[a-z0-9][a-z0-9-]{0,59}$/.test(p) && req.method === "POST") {
+        const site = p.split("/")[2], b = await req.json().catch(() => ({}));
+        await ensure(env);
+        const c = await siteContent(env, site).catch(() => null);
+        if (!recOn(c)) return json({ ok: true, off: true });
+        const email2 = String(b.email || "").trim().slice(0, 120);
+        if (!EMAIL_RE.test(email2)) return json({ ok: true });
+        const lines = Array.isArray(b.lines) ? b.lines.slice(0, 40) : [], key = recKey(email2);
+        if (!lines.length) {
+          await env.DB.prepare("delete from carts where site = ? and ckey = ? and status = 'open'").bind(site, key).run();
+          return json({ ok: true });
+        }
+        const items = (Array.isArray(b.items) ? b.items : []).slice(0, 40).map((x) => ({ n: oneLine(String(x?.n || "")).slice(0, 100), q: Math.max(1, Math.min(999, Math.round(+x?.q || 1))) })).filter((x) => x.n);
+        const total = Math.max(0, Math.min(1e7, +b.total || 0)), now = (/* @__PURE__ */ new Date()).toISOString();
+        let back = "";
+        try {
+          const u2 = new URL(String(b.back || ""));
+          const o = req.headers.get("origin");
+          if (u2.protocol === "https:" && (!o || o === u2.origin)) back = (u2.origin + u2.pathname).slice(0, 300);
+        } catch {
+        }
+        const old = await env.DB.prepare("select status, lines, tok from carts where site = ? and ckey = ?").bind(site, key).first();
+        if (old?.status === "stop") return json({ ok: true });
+        const ls = JSON.stringify(lines).slice(0, 12e3), same = old && old.lines === ls && old.status === "open";
+        await env.DB.prepare("insert into carts (site, ckey, tok, email, name, phone, lines, items, total, cur, back, status, sent, order_no, created_at, updated_at) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', 0, '', ?, ?) on conflict (site, ckey) do update set name = excluded.name, phone = excluded.phone, lines = excluded.lines, items = excluded.items, total = excluded.total, back = excluded.back, status = 'open', order_no = '', " + (same ? "" : "sent = 0, sent_at = null, ") + "updated_at = " + (same ? "carts.updated_at" : "excluded.updated_at")).bind(site, key, recTok(), email2.toLowerCase(), oneLine(String(b.name || "")).slice(0, 80), oneLine(String(b.phone || "")).slice(0, 30), ls, JSON.stringify(items).slice(0, 6e3), total, siteCur(c), back, now, now).run();
+        const sw = recSweep(env, new URL(req.url).origin).catch(() => 0);
+        if (ctx?.waitUntil) ctx.waitUntil(sw);
+        else await sw;
+        return json({ ok: true });
+      }
+      if (/^\/cart\/[a-z0-9][a-z0-9-]{0,59}\/[a-f0-9]{32}$/.test(p) && req.method === "GET") {
+        const [, , site, tok] = p.split("/");
+        await ensure(env);
+        const r = await env.DB.prepare("select lines, status from carts where site = ? and tok = ?").bind(site, tok).first();
+        if (!r || r.status === "recovered") return json({ lines: [] });
+        return json({ lines: JSON.parse(r.lines) });
+      }
+      if (/^\/cart\/[a-z0-9][a-z0-9-]{0,59}\/[a-f0-9]{32}\/stop$/.test(p) && req.method === "GET") {
+        const [, , site, tok] = p.split("/");
+        await ensure(env);
+        await env.DB.prepare("update carts set status = 'stop' where site = ? and tok = ? and status = 'open'").bind(site, tok).run();
+        return new Response(`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><body style="font:16px system-ui;max-width:420px;margin:15vh auto;padding:0 20px"><h2>No more reminders</h2><p>We won't email you about this cart again.</p>`, { headers: { "Content-Type": "text/html; charset=utf-8" } });
+      }
       if (/^\/stock\/[a-z0-9][a-z0-9-]{0,59}$/.test(p) && req.method === "GET") {
         const site = p.split("/")[2];
         await ensure(env);
         const s = {};
         for (const r of (await env.DB.prepare("select item, qty from stock where site = ? limit 3000").bind(site).all()).results || []) s[String(r.item)] = Math.max(0, Math.min(99, +r.qty || 0));
+        {
+          const sw = recSweep(env, new URL(req.url).origin).catch(() => 0);
+          if (ctx?.waitUntil) ctx.waitUntil(sw);
+        }
         return new Response(JSON.stringify({ s }), { headers: { ...cors, "Content-Type": "application/json", "Cache-Control": "no-store" } });
       }
       if (/^\/track\/[a-z0-9][a-z0-9-]{0,59}$/.test(p) && req.method === "POST") {
@@ -2671,6 +2791,8 @@ var db_worker_default = {
         }
         const made = await env.DB.prepare("insert into enquiries (site, data, page, created_at) values (?, ?, ?, ?) returning id").bind(site, JSON.stringify(data), String(q.page || "").slice(0, 200), (/* @__PURE__ */ new Date()).toISOString()).first();
         const rowId = made?.id;
+        if (data.order_no && EMAIL_RE.test(String(data.email || ""))) await env.DB.prepare("update carts set status = 'recovered', order_no = ?, updated_at = ? where site = ? and ckey = ? and status != 'recovered'").bind(String(data.order_no).slice(0, 30), (/* @__PURE__ */ new Date()).toISOString(), site, recKey(String(data.email))).run().catch(() => {
+        });
         if (lowNow.length) {
           const lm = stockLowMail(env, site, stockC, lowNow).catch(() => {
           });
@@ -3338,6 +3460,34 @@ var db_worker_default = {
         if (b.paid) d._paid = "yes";
         else delete d._paid;
         await env.DB.prepare("update enquiries set data = ? where id = ? and site = ?").bind(JSON.stringify(d), b.id, site).run();
+        return json({ ok: true });
+      }
+      if (p === "/rc/list") {
+        const site = scope.replace(/^site:/, "");
+        await ensure(env);
+        const rows = (await env.DB.prepare("select ckey, email, name, phone, items, total, status, sent, sent_at, order_no, updated_at from carts where site = ? order by updated_at desc limit 300").bind(site).all()).results || [];
+        const c = await siteContent(env, site).catch(() => null);
+        return json({ on: recOn(c), mail: !!(env.RESEND_API_KEY && env.MAIL_FROM), rows: rows.map((r) => ({ ...r, items: JSON.parse(r.items) })) });
+      }
+      if (p === "/rc/send" && req.method === "POST") {
+        const b = await req.json(), site = scope.replace(/^site:/, "");
+        await ensure(env);
+        const r = await env.DB.prepare("select * from carts where site = ? and ckey = ?").bind(site, String(b.key || "")).first();
+        if (!r) return err(404, "That cart isn't here any more.");
+        if (r.status === "recovered") return err(409, "That shopper has already ordered.");
+        const c = await siteContent(env, site).catch(() => null);
+        if (!c) return err(409, "Publish the site first.");
+        try {
+          await recSend(env, site, c, r, new URL(req.url).origin);
+        } catch (e) {
+          return err(502, String(e?.message || e));
+        }
+        await env.DB.prepare("update carts set sent = sent + 1, sent_at = ?, status = case when status = 'stop' then 'open' else status end where site = ? and ckey = ?").bind((/* @__PURE__ */ new Date()).toISOString(), site, r.ckey).run();
+        return json({ ok: true });
+      }
+      if (p === "/rc/drop" && req.method === "POST") {
+        const b = await req.json(), site = scope.replace(/^site:/, "");
+        await env.DB.prepare("delete from carts where site = ? and ckey = ?").bind(site, String(b.key || "")).run();
         return json({ ok: true });
       }
       if (p === "/st/list") {

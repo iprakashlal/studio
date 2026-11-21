@@ -424,6 +424,9 @@ async function ensure(env: Env) {
     env.DB.prepare("create table if not exists stock (site text not null, item text not null, qty integer not null default 0, low integer not null default 0, updated_at text not null, primary key (site, item))"),
     env.DB.prepare("create table if not exists stock_log (id integer primary key autoincrement, site text not null, item text not null, delta integer not null, qty integer not null, why text not null default '', ref text not null default '', at text not null)"),
     env.DB.prepare("create index if not exists stock_log_site on stock_log (site, id)"),
+    env.DB.prepare("create table if not exists carts (site text not null, ckey text not null, tok text not null, email text not null, name text not null default '', phone text not null default '', lines text not null default '[]', items text not null default '[]', total real not null default 0, cur text not null default '', back text not null default '', status text not null default 'open', sent integer not null default 0, sent_at text, order_no text not null default '', created_at text not null, updated_at text not null, primary key (site, ckey))"),
+    env.DB.prepare("create index if not exists carts_tok on carts (tok)"),
+    env.DB.prepare("create index if not exists carts_open on carts (status, updated_at)"),
     env.DB.prepare("create table if not exists payments (rz_order text primary key, site text not null, order_no text not null, amount integer not null, status text not null default 'created', created_at text not null)"),
   ]);
   ensured = true;
@@ -830,6 +833,46 @@ async function stockLowMail(env: Env, site: string, c: any, low: { name: string;
   if (!to.length) return;
   const out = low.filter((x) => x.qty <= 0), few = low.filter((x) => x.qty > 0);
   await sendMail(env, to, `${out.length ? "Sold out: " + out.map((x) => x.name).join(", ") : "Running low: " + few.map((x) => x.name).join(", ")}`.slice(0, 150), WRAP(`<h2 style="margin:0 0 12px;font-size:20px">Stock at ${hesc(siteName(c, site))}</h2>${out.length ? paras("Sold out:\n" + out.map((x) => "• " + x.name).join("\n")) : ""}${few.length ? paras("Running low:\n" + few.map((x) => `• ${x.name}: ${x.qty} left`).join("\n")) : ""}${paras("Add stock under Inventory in your site's admin page.", "margin:0 0 8px;color:#667;font-size:13px")}`));
+}
+/* ---- Abandoned carts (content.recovery): a shopper who typed their email at checkout and left leaves their cart here; a
+   reminder with a link that puts it back goes out after an hour (and again a day later, if the owner wants). An order
+   from the same email closes the cart as recovered. Reminders are sent by a sweep that runs whenever the site is used
+   (no clock needed), at most one every few minutes, at most 50 emails a day per site, and every email has a stop link. */
+const recOn = (c: any) => !!c?.recovery?.on;
+const recKey = (email: string) => email.trim().toLowerCase();
+const recMoney = (c: any, n: number) => { const cur = siteCur(c); try { return new Intl.NumberFormat("en-IN", { style: "currency", currency: cur, maximumFractionDigits: n % 1 ? 2 : 0 }).format(n); } catch { return cur + " " + n; } };
+const recTok = () => { const a = new Uint8Array(16); crypto.getRandomValues(a); return [...a].map((x) => x.toString(16).padStart(2, "0")).join(""); };
+async function recSend(env: Env, site: string, c: any, row: any, origin: string): Promise<void> {
+  const R = c?.recovery || {}, shop = siteName(c, site), items: { n: string; q: number }[] = (() => { try { return JSON.parse(row.items); } catch { return []; } })();
+  const base = String(R.url || "").trim().replace(/[?#].*$/, ""), back = /^https:\/\//.test(base) ? base : String(row.back || "");
+  if (!/^https:\/\//.test(back)) throw new Error("No shop address to link to.");
+  const link = back + "?rc=" + row.tok, stop = origin + "/cart/" + site + "/" + row.tok + "/stop";
+  const list = items.slice(0, 12).map((x) => `• ${x.n}${x.q > 1 ? " × " + x.q : ""}`).join("\n") + (items.length > 12 ? `\n• and ${items.length - 12} more` : "");
+  const vars = { name: oneLine(row.name).split(" ")[0] || "there", items: list, total: recMoney(c, +row.total || 0), shop, offer: oneLine(String(R.offer || "")) };
+  const subject = oneLine(fill(String(R.subject || "You left something in your cart at {shop}"), vars)).slice(0, 150);
+  const text = fill(String(R.body || "Hi {name},\n\nYou left these in your cart at {shop}:\n\n{items}\n\nTotal: {total}\n\n{offer}"), vars).replace(/\n{3,}/g, "\n\n");
+  const html = WRAP(`${paras(text)}<p style="margin:18px 0"><a href="${hesc(link)}" style="background:#111;color:#fff;padding:11px 20px;border-radius:8px;text-decoration:none;display:inline-block">${hesc(String(R.button || "Back to my cart"))}</a></p><p style="margin:0;color:#889;font-size:12px">Don't want these reminders? <a href="${hesc(stop)}" style="color:#889">Stop them</a>.</p>`);
+  await sendMail(env, row.email, subject, html, undefined);
+}
+let recLast = 0;
+/** Sends the reminders that are due. Runs at most every 4 minutes per instance, whenever the site is used. */
+async function recSweep(env: Env, origin: string, force = false): Promise<number> {
+  const now = Date.now(); if (!force && now - recLast < ((env as any).REC_GAP ?? 240_000)) return 0; recLast = now; if (!env.RESEND_API_KEY || !env.MAIL_FROM) return 0;
+  const rows = (((await env.DB.prepare("select * from carts where status = 'open' and sent < 2 and email != '' and updated_at < ? and updated_at > ? order by updated_at limit 60").bind(new Date(now - 1800_000).toISOString(), new Date(now - 7 * 86400_000).toISOString()).all()).results) || []) as any[];
+  const cache = new Map<string, any>(), day = new Map<string, number>(); let sent = 0;
+  for (const r of rows) {
+    if (sent >= 20) break;
+    if (!cache.has(r.site)) cache.set(r.site, await siteContent(env, r.site).catch(() => null));
+    const c = cache.get(r.site), R = c?.recovery; if (!recOn(c) || R.auto === false) continue;
+    const after = Math.max(0.5, Math.min(72, +R.after || 1)) * 3600_000, again = R.again === 0 || R.again === "0" ? 0 : Math.max(2, Math.min(240, +R.again || 24)) * 3600_000;
+    const last = Date.parse(r.sent ? r.sent_at : r.updated_at) || 0; if (now - last < (r.sent ? again : after) || (r.sent && !again)) continue;
+    if (!day.has(r.site)) day.set(r.site, +(((await env.DB.prepare("select count(*) n from carts where site = ? and sent_at > ?").bind(r.site, new Date(now - 86400_000).toISOString()).first()) as any)?.n || 0));
+    if ((day.get(r.site) || 0) >= 50) continue;
+    try { await recSend(env, r.site, c, r, origin); } catch { await env.DB.prepare("update carts set sent = 2, sent_at = ? where site = ? and ckey = ?").bind(new Date().toISOString(), r.site, r.ckey).run(); continue; }
+    await env.DB.prepare("update carts set sent = sent + 1, sent_at = ? where site = ? and ckey = ?").bind(new Date().toISOString(), r.site, r.ckey).run(); day.set(r.site, (day.get(r.site) || 0) + 1); sent++;
+  }
+  if (Math.random() < 0.02) await env.DB.prepare("delete from carts where updated_at < ?").bind(new Date(now - 45 * 86400_000).toISOString()).run().catch(() => {});
+  return sent;
 }
 const cleanAddr = (a: any) => { const t = (v: unknown, n = 120) => oneLine(String(v ?? "")).replace(/\s+/g, " ").slice(0, n); return { label: t(a?.label, 30), line1: t(a?.line1), line2: t(a?.line2), city: t(a?.city, 60), pin: t(a?.pin, 12), state: t(a?.state, 60) }; };
 /* ---- Customer accounts (content.account): a customer signs in with a code sent to their mobile number or email address,
@@ -1487,10 +1530,39 @@ export default {
         let paid = "", track: any = null; try { const hd = JSON.parse(hit.data); paid = String(hd._paid || ""); track = trackShown(trackOf(hd)); } catch { /* none */ }
         return json({ status: hit.status, paid, ...(track ? { track } : {}) });
       }
+      // ---- abandoned carts: the page saves the cart once an email is typed, and restores it from the link in the reminder
+      if (/^\/cart\/[a-z0-9][a-z0-9-]{0,59}$/.test(p) && req.method === "POST") {
+        const site = p.split("/")[2], b = (await req.json().catch(() => ({}))) as any; await ensure(env);
+        const c = await siteContent(env, site).catch(() => null); if (!recOn(c)) return json({ ok: true, off: true });
+        const email = String(b.email || "").trim().slice(0, 120); if (!EMAIL_RE.test(email)) return json({ ok: true });
+        const lines = Array.isArray(b.lines) ? b.lines.slice(0, 40) : [], key = recKey(email);
+        if (!lines.length) { await env.DB.prepare("delete from carts where site = ? and ckey = ? and status = 'open'").bind(site, key).run(); return json({ ok: true }); }
+        const items = (Array.isArray(b.items) ? b.items : []).slice(0, 40).map((x: any) => ({ n: oneLine(String(x?.n || "")).slice(0, 100), q: Math.max(1, Math.min(999, Math.round(+x?.q || 1))) })).filter((x: any) => x.n);
+        const total = Math.max(0, Math.min(10_000_000, +b.total || 0)), now = new Date().toISOString();
+        let back = ""; try { const u = new URL(String(b.back || "")); const o = req.headers.get("origin"); if (u.protocol === "https:" && (!o || o === u.origin)) back = (u.origin + u.pathname).slice(0, 300); } catch { /* no link */ }
+        const old: any = await env.DB.prepare("select status, lines, tok from carts where site = ? and ckey = ?").bind(site, key).first(); if (old?.status === "stop") return json({ ok: true });
+        const ls = JSON.stringify(lines).slice(0, 12000), same = old && old.lines === ls && old.status === "open";
+        await env.DB.prepare("insert into carts (site, ckey, tok, email, name, phone, lines, items, total, cur, back, status, sent, order_no, created_at, updated_at) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', 0, '', ?, ?) on conflict (site, ckey) do update set name = excluded.name, phone = excluded.phone, lines = excluded.lines, items = excluded.items, total = excluded.total, back = excluded.back, status = 'open', order_no = '', " + (same ? "" : "sent = 0, sent_at = null, ") + "updated_at = " + (same ? "carts.updated_at" : "excluded.updated_at"))
+          .bind(site, key, recTok(), email.toLowerCase(), oneLine(String(b.name || "")).slice(0, 80), oneLine(String(b.phone || "")).slice(0, 30), ls, JSON.stringify(items).slice(0, 6000), total, siteCur(c), back, now, now).run();
+        const sw = recSweep(env, new URL(req.url).origin).catch(() => 0); if (ctx?.waitUntil) ctx.waitUntil(sw); else await sw;
+        return json({ ok: true });
+      }
+      if (/^\/cart\/[a-z0-9][a-z0-9-]{0,59}\/[a-f0-9]{32}$/.test(p) && req.method === "GET") {
+        const [, , site, tok] = p.split("/"); await ensure(env);
+        const r: any = await env.DB.prepare("select lines, status from carts where site = ? and tok = ?").bind(site, tok).first();
+        if (!r || r.status === "recovered") return json({ lines: [] });
+        return json({ lines: JSON.parse(r.lines) });
+      }
+      if (/^\/cart\/[a-z0-9][a-z0-9-]{0,59}\/[a-f0-9]{32}\/stop$/.test(p) && req.method === "GET") {
+        const [, , site, tok] = p.split("/"); await ensure(env);
+        await env.DB.prepare("update carts set status = 'stop' where site = ? and tok = ? and status = 'open'").bind(site, tok).run();
+        return new Response('<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><body style="font:16px system-ui;max-width:420px;margin:15vh auto;padding:0 20px"><h2>No more reminders</h2><p>We won\'t email you about this cart again.</p>', { headers: { "Content-Type": "text/html; charset=utf-8" } });
+      }
       // ---- what is left of each counted item, for the site's pages (never more than "plenty": 99)
       if (/^\/stock\/[a-z0-9][a-z0-9-]{0,59}$/.test(p) && req.method === "GET") {
         const site = p.split("/")[2]; await ensure(env);
         const s: Record<string, number> = {}; for (const r of ((await env.DB.prepare("select item, qty from stock where site = ? limit 3000").bind(site).all()).results || []) as any[]) s[String(r.item)] = Math.max(0, Math.min(99, +r.qty || 0));
+        { const sw = recSweep(env, new URL(req.url).origin).catch(() => 0); if (ctx?.waitUntil) ctx.waitUntil(sw); }
         return new Response(JSON.stringify({ s }), { headers: { ...cors, "Content-Type": "application/json", "Cache-Control": "no-store" } });
       }
       // ---- where a shop order's parcel is: POST /track/<site> { no, k | contact | key + pass }. The order's own key
@@ -1588,6 +1660,7 @@ export default {
         // The enquiry is saved either way; the email is a copy, so a mail failure never fails the form. What happened
         // to the email is noted on the enquiry (_mail: keys starting with "_" never come from the visitor).
         const rowId = made?.id;
+        if (data.order_no && EMAIL_RE.test(String(data.email || ""))) await env.DB.prepare("update carts set status = 'recovered', order_no = ?, updated_at = ? where site = ? and ckey = ? and status != 'recovered'").bind(String(data.order_no).slice(0, 30), new Date().toISOString(), site, recKey(String(data.email))).run().catch(() => {});
         if (lowNow.length) { const lm = stockLowMail(env, site, stockC, lowNow).catch(() => {}); if (ctx?.waitUntil) ctx.waitUntil(lm); else await lm; }
         const mail = Promise.all([notifyEnquiry(env, site, data, String(q.page || "").slice(0, 200)).catch((e: any) => "Not emailed: " + String(e?.message || e).slice(0, 300)), waAlert(env, site, data).catch(() => "")])
           .then(([said, wa]) => ((said || wa) && rowId ? env.DB.prepare("update enquiries set data = ? where id = ? and site = ?").bind(JSON.stringify({ ...data, ...(said ? { _mail: said } : {}), ...(wa ? { _wa: wa } : {}) }), rowId, site).run() : null)).catch(() => {});
@@ -2120,6 +2193,26 @@ export default {
         if (b.paid) d._paid = "yes"; else delete d._paid;
         await env.DB.prepare("update enquiries set data = ? where id = ? and site = ?").bind(JSON.stringify(d), b.id, site).run();
         return json({ ok: true });
+      }
+      // ---- Abandoned carts: the list, a reminder sent now, and a cart taken off the list.
+      if (p === "/rc/list") {
+        const site = scope.replace(/^site:/, ""); await ensure(env);
+        const rows = (await env.DB.prepare("select ckey, email, name, phone, items, total, status, sent, sent_at, order_no, updated_at from carts where site = ? order by updated_at desc limit 300").bind(site).all()).results || [];
+        const c = await siteContent(env, site).catch(() => null);
+        return json({ on: recOn(c), mail: !!(env.RESEND_API_KEY && env.MAIL_FROM), rows: (rows as any[]).map((r) => ({ ...r, items: JSON.parse(r.items) })) });
+      }
+      if (p === "/rc/send" && req.method === "POST") {
+        const b = (await req.json()) as any, site = scope.replace(/^site:/, ""); await ensure(env);
+        const r: any = await env.DB.prepare("select * from carts where site = ? and ckey = ?").bind(site, String(b.key || "")).first(); if (!r) return err(404, "That cart isn't here any more.");
+        if (r.status === "recovered") return err(409, "That shopper has already ordered.");
+        const c = await siteContent(env, site).catch(() => null); if (!c) return err(409, "Publish the site first.");
+        try { await recSend(env, site, c, r, new URL(req.url).origin); } catch (e: any) { return err(502, String(e?.message || e)); }
+        await env.DB.prepare("update carts set sent = sent + 1, sent_at = ?, status = case when status = 'stop' then 'open' else status end where site = ? and ckey = ?").bind(new Date().toISOString(), site, r.ckey).run();
+        return json({ ok: true });
+      }
+      if (p === "/rc/drop" && req.method === "POST") {
+        const b = (await req.json()) as any, site = scope.replace(/^site:/, "");
+        await env.DB.prepare("delete from carts where site = ? and ckey = ?").bind(site, String(b.key || "")).run(); return json({ ok: true });
       }
       // ---- Inventory: what is counted and how many are left; the owner sets, adds or stops counting; the log of changes.
       if (p === "/st/list") {

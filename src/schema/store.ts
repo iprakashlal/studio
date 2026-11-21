@@ -132,6 +132,18 @@ const schema: Category[] = [
       { title: "Shipping", fields: [g2({ t: "number", path: "settings.shippingFee", label: "Shipping fee", min: 0 }, { t: "number", path: "settings.freeShippingOver", label: "Free shipping over (0 = never)", min: 0 })] },
       { title: "Tax", fields: [g3({ t: "number", path: "settings.taxPercent", label: "Tax %", min: 0, step: 0.1 }, { t: "text", path: "settings.taxLabel", label: "Tax name" }, { t: "toggle", path: "settings.taxIncluded", label: "Prices include tax" })] },
       { title: "Order numbers", fields: [{ t: "text", path: "settings.orderPrefix", label: "Order number prefix", hint: "Orders look like PREFIX-1105-4821." }] },
+      { title: "Abandoned carts", fields: [
+        { t: "toggle", path: "recovery.on", label: "Remind shoppers who leave their cart (they must have typed their email at checkout)" },
+        { t: "when", path: "recovery.on", is: "true", fields: [
+          g2({ t: "number", path: "recovery.after", label: "First reminder after (hours)", min: 1, step: 1, hint: "Empty means 1." }, { t: "number", path: "recovery.again", label: "Second reminder after (hours)", min: 0, step: 1, hint: "Empty means 24. 0 sends only one." }),
+          { t: "text", path: "recovery.subject", label: "Email subject", ph: "You left something in your cart at {shop}" },
+          { t: "textarea", path: "recovery.body", label: "Email text", hint: "Use {name}, {items}, {total}, {shop} and {offer}. The button back to the cart is added for you. Empty uses the standard wording." },
+          g2({ t: "text", path: "recovery.offer", label: "Offer line (optional)", ph: "Use code COMEBACK10 for 10% off" }, { t: "text", path: "recovery.button", label: "Button label", ph: "Back to my cart" }),
+          { t: "text", path: "recovery.url", label: "Address of this page (optional)", ph: "https://yourshop.com/checkout.html", hint: "Where the button goes. Empty uses the page the shopper was on." },
+          { t: "toggle", path: "recovery.auto", label: "Send reminders by themselves (off: only when you press “Remind now”)" },
+        ] },
+        { t: "note", text: "Carts and the Remind now button are under Abandoned carts (in the menu, under Selling). Every email has a link to stop reminders, an order from the same email closes the cart, and a site sends at most 50 reminders a day. Reminders are sent while the site is being visited, so a very quiet site may send them a little late. It runs on the site's own Cloudflare database, so the site must be hosted there and published once after this is switched on." },
+      ] },
       { title: "Inventory", fields: [
         { t: "toggle", path: "inventory.on", label: "Count stock (products you give a quantity sell out by themselves)" },
         { t: "when", path: "inventory.on", is: "true", fields: [

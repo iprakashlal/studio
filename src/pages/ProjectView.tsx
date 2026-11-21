@@ -7,6 +7,7 @@ import { EnquiriesPanel, enquiriesCfg } from "../site-admin/EnquiriesPanel";
 import { CustomerPanel } from "../site-admin/CustomerPanel";
 import { SiteConnections } from "./Connections";
 import { InventoryPanel } from "../site-admin/InventoryPanel";
+import { RecoveryPanel } from "../site-admin/RecoveryPanel";
 import { WarrantyPanel } from "../site-admin/WarrantyPanel";
 import { GOTO_EVENT } from "../editor/Editor";
 import { TEMPLATES } from "../schema";
@@ -187,6 +188,10 @@ export function ProjectView({ studio, index, project, session, onIndex }: { stud
     ...(project.template === "store" || project.template === "restaurant" ? [{
       id: "inventory", label: "Inventory", group: project.template === "restaurant" ? "Selling" : "Forms & records", desc: project.template === "restaurant" ? "How many of each dish are left: orders take from it, and a dish sells out by itself." : "How many of each product are left: orders take from it, and a product sells out by itself.",
       render: () => <InventoryPanel cf={project.host?.cf} kind={project.template === "restaurant" ? "restaurant" : "store"} on={!!draft?.inventory?.on} />,
+    }] : []),
+    ...(project.template === "store" || project.template === "restaurant" ? [{
+      id: "recovery", label: "Abandoned carts", group: project.template === "restaurant" ? "Selling" : "Forms & records", desc: "Shoppers who typed their email at checkout and left: remind them, and see who came back.",
+      render: () => <RecoveryPanel cf={project.host?.cf} kind={project.template === "restaurant" ? "restaurant" : "store"} on={!!draft?.recovery?.on} />,
     }] : []),
     ...(project.template === "store" || project.template === "restaurant" ? [{
       id: "customer-data", label: "Customer Data", group: project.template === "restaurant" ? "Selling" : "Forms & records", desc: "Everyone who has ordered: their details, orders, what they spent and their points.",

@@ -411,7 +411,7 @@
   }
   /* Reviews (content.reviews, hosted sites): the average on each dish, and in its sheet the reviews and a way to write one. */
   let REV = null; const RVL = {}, rvOn = () => !A.PREVIEW && !!(C.reviews && C.reviews.on && A.backend() && A.backend().cf);
-  const rvStars = (n) => { n = Math.round(+n || 0); return `<span class="stars" role="img" aria-label="${n} out of 5 stars">${"★".repeat(n)}${"☆".repeat(5 - n)}</span>`; };
+  const rvStars = (n) => { n = Math.round(+n || 0); return `<span class="stars" role="img" aria-label="${n} out of 5 stars">${"★".repeat(n)}<i class="off">${"★".repeat(5 - n)}</i></span>`; };
   const rvApi = () => { const be = A.backend(); return be.cf + "/rev/" + encodeURIComponent(be.site); };
   const rvLoad = () => { if (!rvOn()) return; fetch(rvApi(), { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((j) => { if (j && j.s && Object.keys(j.s).length) { REV = j.s; if (!ui.sheet && !ui.drawer) { const y = scrollY; menu(); scrollTo(0, y); } } }).catch(() => {}); };
   const rvFetch = (id) => { if (!rvOn()) return; fetch(rvApi() + "?item=" + encodeURIComponent(id), { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((j) => { if (j) { RVL[id] = j; if (ui.sheet && ui.sheet.id === id) over(true); } }).catch(() => {}); };

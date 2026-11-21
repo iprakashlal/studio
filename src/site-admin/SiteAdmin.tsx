@@ -10,6 +10,7 @@ import { SiteConnections } from "../pages/Connections";
 import { InventoryPanel } from "./InventoryPanel";
 import { RecoveryPanel } from "./RecoveryPanel";
 import { ReviewsPanel } from "./ReviewsPanel";
+import { PeoplePanel } from "./PeoplePanel";
 import { WarrantyPanel } from "./WarrantyPanel";
 import { GOTO_EVENT } from "../editor/Editor";
 import { TEMPLATES } from "../schema";
@@ -376,6 +377,7 @@ function Workspace({ info, onInfo, repo, account, onSignOut, hosted, ghToken }: 
     ...(tpl.id === "store" || tpl.id === "business" ? [
       { id: "warranty-records", label: "Warranty records", group: "Forms & records", desc: "Products' numbers, warranty and service status, for the site's warranty & status check.", render: () => <WarrantyPanel repo={repo} cfg={draft?.warranty} /> },
     ] : []),
+    ...(hosted && "api" in hosted ? [{ id: "people", label: "Who can sign in", group: "Settings", desc: "The emails that can open this admin page, with a code sent to them.", render: () => <PeoplePanel cf={hosted} /> }] : []),
     { id: "backup", label: "Backup & reset", group: "Settings", desc: "Copy, restore or reset the site's content.", render: () => <BackupPanel draft={draft} onReplace={(c) => { setDraft(clone(c)); bump(); }} loadDefaults={async () => clone(saved)} hosted={!!hosted} /> },
     { id: "account", label: "Account", group: "Settings", desc: "Your login on this device.", render: () => account },
   ], [draft, saved, account, tpl.id, hosted, ghToken, repo]);

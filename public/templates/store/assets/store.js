@@ -158,7 +158,11 @@ function loadScript(src) {
 }
 const CF = () => !!(C.backend && C.backend.provider === "cloudflare");
 const httpsUrl = (u) => /^https:\/\/[^\s]+$/.test(u || "");
-const BE = () => !!(C.backend && C.backend.enabled && (CF() ? httpsUrl(C.backend.workerUrl) : httpsUrl(C.backend.supabaseUrl) && C.backend.anonKey));
+/* A shop hosted on its own Cloudflare database (the page carries #site-host) does everything there, like the restaurant:
+   accounts, orders, payments, points. The older shop backend (Supabase, or the GitHub-file Worker) is only for shops
+   that are not hosted that way, so the two never run side by side. */
+const DBHOST = () => !!(HOST && HOST.api && HOST.site);
+const BE = () => !DBHOST() && !!(C.backend && C.backend.enabled && (CF() ? httpsUrl(C.backend.workerUrl) : httpsUrl(C.backend.supabaseUrl) && C.backend.anonKey));
 const ACCOUNTS = () => BE() && !!C.backend.accounts;
 const sbUrl = () => String(C.backend.supabaseUrl).replace(/\/+$/, "");
 const fnBase = () => (CF() ? String(C.backend.workerUrl).replace(/\/+$/, "") : `${sbUrl()}/functions/v1/shop`);
@@ -1401,6 +1405,7 @@ async function placeServerOrder(form, fd, lines, m) {
    ============================================================ */
 async function bindAccount() {
   const box = $("#acct"); if (!box) return;
+  if (DBHOST() && !PREVIEW) { location.replace("index.html#account"); return; }
   if (!ACCOUNTS()) { box.innerHTML = `<div class="empty"><p>Customer accounts aren't switched on for this shop.</p><a class="btn pri" href="shop.html">Go to the shop</a></div>`; return; }
   if (PREVIEW) return drawSignIn(box);
   try { await sbInit(); } catch (e) { box.innerHTML = `<div class="empty"><p>Your account couldn't load. Check your connection and try again.</p></div>`; return; }

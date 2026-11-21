@@ -285,7 +285,7 @@ const schema: Category[] = [
         { t: "toggle", path: "backend.requireLogin", label: "Require sign-in to check out (only when sign-in is on)" },
         g2({ t: "text", path: "accountPage.title", label: "Account page title" }, { t: "text", path: "nav.account", label: "Menu label" }),
         { t: "textarea", path: "accountPage.signInText", label: "Sign-in text" },
-        { t: "note", text: "Customers sign in with a 6-digit code sent to their email. Each customer gets an account number like AC-100001. Switched off, the shop has no sign-in, account page or wishlist at all, and exports leave the account page out." },
+        { t: "note", text: "This is for shops that use the older Supabase or GitHub-file backend. A shop hosted on its own Cloudflare database ignores these switches and uses User accounts (in the menu, under Selling) instead, the same as a restaurant. Customers sign in with a 6-digit code sent to their email. Each customer gets an account number like AC-100001. Switched off, the shop has no sign-in, account page or wishlist at all, and exports leave the account page out." },
       ] },
     ],
   },

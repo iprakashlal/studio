@@ -427,6 +427,8 @@ async function ensure(env: Env) {
     env.DB.prepare("create table if not exists carts (site text not null, ckey text not null, tok text not null, email text not null, name text not null default '', phone text not null default '', lines text not null default '[]', items text not null default '[]', total real not null default 0, cur text not null default '', back text not null default '', status text not null default 'open', sent integer not null default 0, sent_at text, order_no text not null default '', created_at text not null, updated_at text not null, primary key (site, ckey))"),
     env.DB.prepare("create index if not exists carts_tok on carts (tok)"),
     env.DB.prepare("create index if not exists carts_open on carts (status, updated_at)"),
+    env.DB.prepare("create table if not exists reviews (id integer primary key autoincrement, site text not null, item text not null, label text not null default '', name text not null, email text not null default '', rating integer not null, title text not null default '', body text not null, verified integer not null default 0, status text not null default 'pending', reply text not null default '', reply_at text, created_at text not null)"),
+    env.DB.prepare("create index if not exists reviews_item on reviews (site, item, status)"),
     env.DB.prepare("create table if not exists payments (rz_order text primary key, site text not null, order_no text not null, amount integer not null, status text not null default 'created', created_at text not null)"),
   ]);
   ensured = true;
@@ -873,6 +875,18 @@ async function recSweep(env: Env, origin: string, force = false): Promise<number
   }
   if (Math.random() < 0.02) await env.DB.prepare("delete from carts where updated_at < ?").bind(new Date(now - 45 * 86400_000).toISOString()).run().catch(() => {});
   return sent;
+}
+/* ---- Product and dish reviews (content.reviews): shoppers rate and write about a product or dish on its page. Each review
+   waits for the owner's approval unless that is switched off; one from an email that ordered the item is marked as a
+   verified buyer. Only a first name and initial are shown, never the email address. */
+const revOn = (c: any) => !!c?.reviews?.on;
+const revName = (n: string) => { const w = oneLine(n).split(" ").filter(Boolean); return w.length > 1 ? w[0] + " " + w[w.length - 1][0].toUpperCase() + "." : w[0] || "Customer"; };
+const revShown = (r: any) => ({ id: r.id, name: revName(r.name), rating: r.rating, title: r.title, body: r.body, verified: !!r.verified, reply: r.reply || "", at: String(r.created_at).slice(0, 10) });
+async function ownerTo(env: Env, site: string, c: any, pref: unknown): Promise<string[]> {
+  const addrs = (v: unknown) => String(v || "").split(/[,;\s]+/).map((x) => x.trim()).filter((x) => EMAIL_RE.test(x)).slice(0, 5);
+  let to = addrs(pref); if (!to.length) to = addrs(c?.contact?.form?.notifyTo); if (!to.length) to = addrs(c?.contact?.email);
+  if (!to.length) to = addrs((((await env.DB.prepare("select email from members where scope = ? order by role = 'owner' desc limit 3").bind("site:" + site).all()).results || []) as any[]).map((r) => r.email).join(","));
+  return to;
 }
 const cleanAddr = (a: any) => { const t = (v: unknown, n = 120) => oneLine(String(v ?? "")).replace(/\s+/g, " ").slice(0, n); return { label: t(a?.label, 30), line1: t(a?.line1), line2: t(a?.line2), city: t(a?.city, 60), pin: t(a?.pin, 12), state: t(a?.state, 60) }; };
 /* ---- Customer accounts (content.account): a customer signs in with a code sent to their mobile number or email address,
@@ -1530,6 +1544,40 @@ export default {
         let paid = "", track: any = null; try { const hd = JSON.parse(hit.data); paid = String(hd._paid || ""); track = trackShown(trackOf(hd)); } catch { /* none */ }
         return json({ status: hit.status, paid, ...(track ? { track } : {}) });
       }
+      // ---- reviews: GET /rev/<site> gives every item's average, GET /rev/<site>?item= its approved reviews, POST adds one
+      if (/^\/rev\/[a-z0-9][a-z0-9-]{0,59}$/.test(p) && req.method === "GET") {
+        const site = p.split("/")[2], item = (u.searchParams.get("item") || "").slice(0, 200); await ensure(env);
+        const hdr = { ...cors, "Content-Type": "application/json", "Cache-Control": "no-store" };
+        if (!item) {
+          const s: Record<string, [number, number]> = {}; for (const r of ((await env.DB.prepare("select item, avg(rating) a, count(*) n from reviews where site = ? and status = 'live' group by item limit 3000").bind(site).all()).results || []) as any[]) s[String(r.item)] = [Math.round(+r.a * 10) / 10, +r.n];
+          return new Response(JSON.stringify({ s }), { headers: hdr });
+        }
+        const rows = ((await env.DB.prepare("select id, name, rating, title, body, verified, reply, created_at from reviews where site = ? and item = ? and status = 'live' order by id desc limit 60").bind(site, item).all()).results || []) as any[];
+        const hist = [0, 0, 0, 0, 0]; let sum = 0; for (const r of rows) { hist[Math.max(1, Math.min(5, r.rating)) - 1]++; sum += r.rating; }
+        return new Response(JSON.stringify({ n: rows.length, a: rows.length ? Math.round((sum / rows.length) * 10) / 10 : 0, hist, list: rows.slice(0, 30).map(revShown) }), { headers: hdr });
+      }
+      if (/^\/rev\/[a-z0-9][a-z0-9-]{0,59}$/.test(p) && req.method === "POST") {
+        const site = p.split("/")[2], b = (await req.json().catch(() => ({}))) as any; await ensure(env);
+        const c = await siteContent(env, site).catch(() => null); if (!revOn(c)) return err(404, "Reviews aren't switched on for this site.");
+        if (String(b.hp || "")) return json({ ok: true, status: "pending" });
+        const it = stockItems(c).find((x) => !x.opt && x.item === String(b.item || "")); if (!it) return err(404, "We couldn't find that item.");
+        const rating = Math.round(+b.rating), body = String(b.body || "").replace(/\r/g, "").trim().slice(0, 1500), name = oneLine(String(b.name || "")).slice(0, 60), title = oneLine(String(b.title || "")).slice(0, 100), email = String(b.email || "").trim().toLowerCase().slice(0, 120);
+        if (!(rating >= 1 && rating <= 5)) return err(400, "Choose a star rating.");
+        if (!name) return err(400, "Please give your name.");
+        if (body.length < 3) return err(400, "Please write a few words about it.");
+        if (email && !EMAIL_RE.test(email)) return err(400, "That email address doesn't look right.");
+        if (c.reviews.needEmail !== false && !email) return err(400, "Please give your email address (it is never shown).");
+        const hour = new Date(Date.now() - 3600_000).toISOString();
+        if (+(((await env.DB.prepare("select count(*) n from reviews where site = ? and created_at > ?").bind(site, hour).first()) as any)?.n || 0) >= 40) return err(429, "Too many reviews just now. Please try again in a while.");
+        if (email && (await env.DB.prepare("select 1 x from reviews where site = ? and item = ? and email = ?").bind(site, it.item, email).first())) return err(409, "You've already reviewed this.");
+        let verified = 0;
+        if (email) { const nm = JSON.stringify(it.name.split(" · ")[0]).slice(1, -1); verified = (await env.DB.prepare("select 1 x from enquiries where site = ? and status != 'cancelled' and instr(data, '\"order_no\"') > 0 and instr(lower(data), ?) > 0 and instr(data, ?) > 0 limit 1").bind(site, email, nm).first()) ? 1 : 0; }
+        if (c.reviews.buyersOnly && !verified) return err(403, "Only people who have ordered this can review it. Use the email address you ordered with.");
+        const live = c.reviews.auto === true || (c.reviews.trustBuyers && verified);
+        await env.DB.prepare("insert into reviews (site, item, label, name, email, rating, title, body, verified, status, created_at) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").bind(site, it.item, it.name.slice(0, 120), name, email, rating, title, body, verified, live ? "live" : "pending", new Date().toISOString()).run();
+        if (!live && c.reviews.alert !== false && env.RESEND_API_KEY && env.MAIL_FROM) { const to = await ownerTo(env, site, c, c.reviews.alertTo); if (to.length) { const mm = sendMail(env, to, `New review to approve: ${it.name}`.slice(0, 150), WRAP(`<h2 style="margin:0 0 12px;font-size:20px">New review for ${hesc(it.name)}</h2>${paras(`${"★".repeat(rating)}${"☆".repeat(5 - rating)}  ${name}${verified ? " (verified buyer)" : ""}\n${title ? title + "\n" : ""}\n${body}`)}${paras("Approve or hide it under Reviews in your site's admin page.", "margin:0 0 8px;color:#667;font-size:13px")}`)).catch(() => {}); if (ctx?.waitUntil) ctx.waitUntil(mm); else await mm; } }
+        return json({ ok: true, status: live ? "live" : "pending" });
+      }
       // ---- abandoned carts: the page saves the cart once an email is typed, and restores it from the link in the reminder
       if (/^\/cart\/[a-z0-9][a-z0-9-]{0,59}$/.test(p) && req.method === "POST") {
         const site = p.split("/")[2], b = (await req.json().catch(() => ({}))) as any; await ensure(env);
@@ -2108,7 +2156,7 @@ export default {
             .bind(token, scope, project, oneLine(String(b.name || "Project")).slice(0, 120), String(b.template || "").slice(0, 40), content, String(b.note || "").trim().slice(0, 2000), email, new Date().toISOString()).run();
           return json({ token });
         }
-        if (p === "/rv/list") {
+        if (p === "/rw/list") {
           const rows = ((await env.DB.prepare("select token, name, note, status, decided_by, decided_at, created_by, created_at from approvals where scope = ? and project = ? order by created_at desc limit 20").bind(scope, project).all()).results || []) as any[];
           for (const r of rows) r.notes = (await env.DB.prepare("select id, who, body, page, kind, created_at from approval_notes where token = ? order by id limit 300").bind(r.token).all()).results || [];
           return json(rows);
@@ -2193,6 +2241,24 @@ export default {
         if (b.paid) d._paid = "yes"; else delete d._paid;
         await env.DB.prepare("update enquiries set data = ? where id = ? and site = ?").bind(JSON.stringify(d), b.id, site).run();
         return json({ ok: true });
+      }
+      // ---- Reviews: every review for the owner to approve, hide, answer or delete.
+      if (p === "/rw/list") {
+        const site = scope.replace(/^site:/, ""); await ensure(env);
+        const rows = (await env.DB.prepare("select id, item, label, name, email, rating, title, body, verified, status, reply, created_at from reviews where site = ? order by id desc limit 500").bind(site).all()).results || [];
+        const c = await siteContent(env, site).catch(() => null);
+        return json({ on: revOn(c), moderate: c?.reviews?.auto !== true, rows });
+      }
+      if (p === "/rw/set" && req.method === "POST") {
+        const b = (await req.json()) as any, site = scope.replace(/^site:/, ""), id = +b.id;
+        const r: any = await env.DB.prepare("select id from reviews where id = ? and site = ?").bind(id, site).first(); if (!r) return err(404, "That review isn't here any more.");
+        if (b.status != null) { if (!["live", "pending", "hidden"].includes(String(b.status))) return err(400, "Which state?"); await env.DB.prepare("update reviews set status = ? where id = ? and site = ?").bind(String(b.status), id, site).run(); }
+        if (b.reply != null) { const t = String(b.reply).trim().slice(0, 800); await env.DB.prepare("update reviews set reply = ?, reply_at = ? where id = ? and site = ?").bind(t, t ? new Date().toISOString() : null, id, site).run(); }
+        return json({ ok: true });
+      }
+      if (p === "/rw/del" && req.method === "POST") {
+        const b = (await req.json()) as any, site = scope.replace(/^site:/, "");
+        await env.DB.prepare("delete from reviews where id = ? and site = ?").bind(+b.id, site).run(); return json({ ok: true });
       }
       // ---- Abandoned carts: the list, a reminder sent now, and a cart taken off the list.
       if (p === "/rc/list") {

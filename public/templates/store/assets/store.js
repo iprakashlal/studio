@@ -257,6 +257,38 @@ function ph(seed, cls = "") {
 const pimg = (p, i = 0) => (p.images && p.images[i] ? `<img src="${esc(imgUrl(p.images[i]))}" alt="${esc(p.name)}" loading="lazy">` : ph(p.name));
 
 let cart = store.get("cart", []);
+/* Reviews (content.reviews, hosted shops): the average under each product, and on its page the reviews, with a form to write one. */
+const revOn = () => !PREVIEW && !!(C.reviews && C.reviews.on && HOST && HOST.api && HOST.site);
+let REV = null;
+const stars = (a) => { const n = Math.round(Number(a) || 0); return `<span class="stars" role="img" aria-label="${n} out of 5 stars">${"★".repeat(n)}${"☆".repeat(5 - n)}</span>`; };
+function revLoad() { if (!revOn()) return Promise.resolve(); return fetch(HOST.api + "/rev/" + encodeURIComponent(HOST.site), { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((j) => { if (j && j.s) REV = j.s; }).catch(() => {}); }
+function revDraw(p) {
+  const el = $("#rv"); if (!el) return; const api = HOST.api + "/rev/" + encodeURIComponent(HOST.site), me = store.get("me", {});
+  let said = "";
+  const draw = () => fetch(api + "?item=" + encodeURIComponent(p.id), { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((j) => {
+    j = j || { n: 0, a: 0, hist: [0, 0, 0, 0, 0], list: [] }; const open = el.querySelector("#rv-form") && !el.querySelector("#rv-form").hidden;
+    el.innerHTML = `<div class="sec-h"><h2 style="font-size:28px">Reviews</h2></div>
+      <div class="rv-top">${j.n ? `<div class="rv-sum"><b>${j.a}</b>${stars(j.a)}<small>${j.n} review${j.n === 1 ? "" : "s"}</small></div><div class="rv-bars">${[5, 4, 3, 2, 1].map((k) => `<div><span>${k}★</span><i><u style="width:${Math.round((100 * j.hist[k - 1]) / j.n)}%"></u></i><span>${j.hist[k - 1]}</span></div>`).join("")}</div>` : `<p class="soft">No reviews yet. Be the first to write one.</p>`}<button class="btn" type="button" id="rv-open" aria-expanded="false">Write a review</button></div>
+      <p class="rv-said" role="status">${esc(said)}</p>
+      <form class="rv-form" id="rv-form" hidden novalidate><fieldset class="rv-pick"><legend>Your rating</legend>${[1, 2, 3, 4, 5].map((k) => `<label><input type="radio" name="rating" value="${k}"><span aria-hidden="true">★</span><b class="vh">${k} star${k === 1 ? "" : "s"}</b></label>`).join("")}</fieldset>
+        <div class="two-f"><label>Your name<input class="in" name="name" maxlength="60" autocomplete="name" value="${esc(me.name || "")}"></label><label>Email <small class="soft">(never shown)</small><input class="in" name="email" type="email" maxlength="120" autocomplete="email" value="${esc(me.email || "")}"></label></div>
+        <label>Headline <small class="soft">(optional)</small><input class="in" name="title" maxlength="100"></label><label>Your review<textarea class="in" name="body" rows="4" maxlength="1500"></textarea></label>
+        <input class="vh" name="hp" tabindex="-1" autocomplete="off" aria-hidden="true"><p class="err" id="rv-err" role="alert"></p><button class="btn pri" type="submit">Send review</button></form>
+      <ul class="rv-list">${j.list.map((r) => `<li><div>${stars(r.rating)}${r.verified ? ` <em class="rv-v">Verified buyer</em>` : ""}</div>${r.title ? `<h3>${esc(r.title)}</h3>` : ""}<p>${esc(r.body).replace(/\n/g, "<br>")}</p><small>${esc(r.name)} · ${esc(r.at)}</small>${r.reply ? `<blockquote><b>Reply from ${esc((C.brand && C.brand.name) || "the shop")}</b><br>${esc(r.reply)}</blockquote>` : ""}</li>`).join("")}</ul>`;
+    const f = $("#rv-form", el), o = $("#rv-open", el); if (open) { f.hidden = false; o.setAttribute("aria-expanded", "true"); }
+    o.onclick = () => { f.hidden = !f.hidden; o.setAttribute("aria-expanded", String(!f.hidden)); if (!f.hidden) f.querySelector("input[name=name]").focus(); };
+    f.onsubmit = async (e) => {
+      e.preventDefault(); const g = (n) => String(f.elements[n].value || "").trim(), er = $("#rv-err", el), b = f.querySelector("button[type=submit]"), rating = (f.querySelector("input[name=rating]:checked") || {}).value;
+      if (!rating) { er.textContent = "Choose a star rating."; return; } er.textContent = ""; b.disabled = true; b.textContent = "Sending…";
+      try {
+        const r = await fetch(api, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ item: p.id, rating: +rating, name: g("name"), email: g("email"), title: g("title"), body: g("body"), hp: g("hp") }) }), x = await r.json().catch(() => ({}));
+        if (!r.ok) { er.textContent = x.error || "Couldn't send your review. Please try again."; b.disabled = false; b.textContent = "Send review"; return; }
+        store.set("me", { ...store.get("me", {}), name: g("name") || me.name, email: g("email") || me.email }); said = x.status === "live" ? "Thank you! Your review is up." : "Thank you! Your review will show once it has been approved."; draw();
+      } catch (_) { er.textContent = "Couldn't send your review. Please try again."; b.disabled = false; b.textContent = "Send review"; }
+    };
+  }).catch(() => {});
+  draw();
+}
 /* Abandoned carts (content.recovery, hosted shops): once an email address is typed at checkout, the cart is kept on the
    shop's database so a reminder can bring the shopper back. The link in the reminder (?rc=…) puts the cart back. */
 const recoOn = () => !PREVIEW && !!(C.recovery && C.recovery.on && HOST && HOST.api && HOST.site);
@@ -663,7 +695,7 @@ function footer() {
 }
 function pcard(p) {
   const badge = p.stock === "out" ? `<span class="badge out">Sold out</span>` : onSale(p) ? `<span class="badge sale">Sale</span>` : p.badge ? `<span class="badge">${esc(p.badge)}</span>` : "";
-  return `<a class="pcard" href="${productUrl(p)}"><div class="im">${badge}${pimg(p)}</div><div><h3>${esc(p.name)}</h3>${p.short ? `<p class="s">${esc(p.short)}</p>` : ""}</div><div class="price">${kindsOf(p).length ? "From " + esc(money(Math.min(...kindsOf(p).map((k) => k.price)))) : esc(money(p.price)) + (onSale(p) ? `<s>${esc(money(p.compareAt))}</s>` : "")}</div></a>`;
+  return `<a class="pcard" href="${productUrl(p)}"><div class="im">${badge}${pimg(p)}</div><div><h3>${esc(p.name)}</h3>${REV && REV[p.id] ? `<p class="rvs">${stars(REV[p.id][0])} <small>${REV[p.id][0]} (${REV[p.id][1]})</small></p>` : ""}${p.short ? `<p class="s">${esc(p.short)}</p>` : ""}</div><div class="price">${kindsOf(p).length ? "From " + esc(money(Math.min(...kindsOf(p).map((k) => k.price)))) : esc(money(p.price)) + (onSale(p) ? `<s>${esc(money(p.compareAt))}</s>` : "")}</div></a>`;
 }
 
 /* ============================================================
@@ -747,6 +779,7 @@ const PAGES = {
       ${p.description ? `<div class="desc">${paras(p.description)}</div>` : ""}
       ${Number(C.settings.freeShippingOver) > 0 ? `<p class="soft" style="font-size:14px">Free shipping on orders over ${esc(money(C.settings.freeShippingOver))}.</p>` : ""}
     </div></div>
+    ${revOn() ? `<section class="rv" id="rv" aria-label="Reviews" style="padding-bottom:56px"></section>` : ""}
     ${related.length ? `<section style="padding-bottom:72px"><div class="sec-h"><h2 style="font-size:28px">You may also like</h2></div><div class="grid">${related.map(pcard).join("")}</div></section>` : ""}</div>`;
   },
   cart() {
@@ -1137,6 +1170,7 @@ function bindShop() {
 function bindProduct() {
   const box = $(".pd"); if (!box) return;
   const p = prodBy(box.dataset.pid), max = Math.max(1, Number(C.settings.maxQty) || 10);
+  if (revOn()) revDraw(p);
   let qty = 1, opt = p.options && p.options.length ? p.options[0] : "", kind = "";
   // Varieties: one must be chosen before the price is final and the product can be added.
   const KS = kindsOf(p), full = () => [kind, opt].filter(Boolean).join(" · "), ready = () => !KS.length || !!kind;
@@ -1492,6 +1526,7 @@ else {
     C = merge(DEFAULT, j); render();
   }).catch(() => { clearTimeout(giveUp); if (!shown) render(); })
     // what is left of each counted product, once the content is in (a placed order's page has nothing to redraw)
+    .then(() => { if (revOn() && PAGE !== "product") revLoad().then(() => { if (REV && Object.keys(REV).length && !$(".done") && !$("#trackf") && !(document.activeElement && /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName))) render(); }); })
     .then(() => { if (stockOn()) stockLoad().then(() => { if (STOCK && !$(".done") && !$("#trackf") && !(document.activeElement && /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName))) render(); }); });
 }
 if (!HAND) addEventListener("hashchange", () => { if (PAGE === "account") render(); });

@@ -168,6 +168,7 @@
     return `<li class="oc${d.soldOut ? " sold" : ""}" data-id="${esc(x.id)}" data-diet="${esc(d.diet || "")}" data-fav="${fav}" data-q="${esc((d.name + " " + (d.desc || "") + " " + (d.tag || "") + " " + x.cat.name).toLowerCase())}">
       <button type="button" class="oc-pic" data-act="open" data-id="${esc(x.id)}" aria-label="${esc(d.name)}: details"${d.soldOut ? " disabled" : ""}>${im ? `<img src="${esc(im)}" alt="" loading="lazy">` : A.ph(d.name)}${d.tag ? `<em class="oc-tag">${esc(d.tag)}</em>` : ""}</button>
       <div class="oc-b"><div class="oc-t"><h3>${A.dietMark(d.diet)}<span>${esc(d.name)}</span></h3><button type="button" class="oc-fav" data-act="fav" data-id="${esc(x.id)}" aria-pressed="${fav}" aria-label="${fav ? "Remove " + esc(d.name) + " from favourites" : "Save " + esc(d.name) + " as a favourite"}">${SV.heart}</button></div>
+        ${REV && REV[x.id] ? `<p class="oc-rv">${rvStars(REV[x.id][0])} <small>${REV[x.id][0]} (${REV[x.id][1]})</small></p>` : ""}
         ${d.desc ? `<p class="oc-d">${A.rich(d.desc)}</p>${long ? `<button type="button" class="oc-more" data-act="more" aria-expanded="false">Show more</button>` : ""}` : ""}
         <div class="oc-f"><div><b class="oc-p">${x.V.length ? "From " : ""}${fmt(x.base)}</b>${custom ? `<small>Customisation available</small>` : ""}</div>
           ${d.soldOut ? `<span class="oc-out">Sold out</span>` : n && !custom ? stepper(x.id, n) : `<button type="button" class="btn sec oc-add" data-act="add" data-id="${esc(x.id)}" aria-label="Add ${esc(d.name)}">+ Add${n ? ` <i>${n}</i>` : ""}</button>`}</div></div></li>`;
@@ -227,6 +228,7 @@
       <div class="osh-body"><div class="osh-top">${im ? `<img class="osh-img" src="${esc(im)}" alt="">` : ""}<div class="osh-info"><div class="oc-t"><h2>${A.dietMark(d.diet)}<span>${esc(d.name)}</span></h2><button type="button" class="oc-fav" data-act="fav" data-id="${esc(x.id)}" aria-pressed="${fav}" aria-label="${fav ? "Remove from favourites" : "Save as a favourite"}">${SV.heart}</button></div>
           ${d.desc ? `<p class="osh-d">${A.rich(d.desc)}</p>` : ""}${d.allergens ? `<p class="osh-a">Contains: ${esc(d.allergens)}</p>` : ""}
           <span class="ostep big" role="group" aria-label="Quantity"><button type="button" data-act="sq" data-id="-1" aria-label="One fewer"${s.qty <= 1 ? " disabled" : ""}>−</button><b aria-live="polite">${s.qty}</b><button type="button" data-act="sq" data-id="1" aria-label="One more">+</button></span></div></div>
+        ${rvBlock(x)}
         ${O().dishNotes !== false ? `<label class="osh-note"><span class="vh">Special instructions</span><input type="text" id="osh-note" maxlength="140" placeholder="Add special instructions…" value="${esc(s.note)}"></label>` : ""}
         ${x.V.length ? `<fieldset class="osh-g"><legend><span>${x.need ? "Choose a variety" : "Choose one"}</span><small>Required</small></legend>${x.V.map((v, i) => `<label class="osh-o"><input type="radio" name="osh-v" value="${i}"${i === s.v ? " checked" : ""}><span>${esc(v.label)}</span><b>${fmt(v.price)}</b></label>`).join("")}</fieldset>` : ""}
         ${x.G.map((g, gi) => { const sel = s.g[gi] || [], full = g.max > 0 && sel.length >= g.max; return `<fieldset class="osh-g"><legend><span>${esc(g.title)}</span><small>${g.need ? "Required · " : ""}${sel.length}/${g.max || g.opts.length}</small></legend>${g.opts.map((op, oi) => `<label class="osh-o${full && !sel.includes(oi) ? " off" : ""}"><input type="checkbox" data-g="${gi}" value="${oi}"${sel.includes(oi) ? " checked" : ""}${full && !sel.includes(oi) ? " disabled" : ""}><span>${esc(op.label)}</span><b>${op.price ? "+ " + fmt(op.price) : "Free"}</b></label>`).join("")}</fieldset>`; }).join("")}</div>
@@ -403,7 +405,32 @@
     const l = key ? cart.find((x) => x.key === key) : [...cart].reverse().find((x) => x.id === id); if (!l) return;
     l.qty += by; if (l.qty <= 0) cart = cart.filter((x) => x !== l); else if (l.qty > 50) l.qty = 50; save();
   }
-  const openSheet = (id) => { const x = byId(id); if (!x || x.d.soldOut) return; ui.sheet = { id, qty: 1, v: x.need ? -1 : 0, g: {}, note: "" }; over(); };
+  /* Reviews (content.reviews, hosted sites): the average on each dish, and in its sheet the reviews and a way to write one. */
+  let REV = null; const RVL = {}, rvOn = () => !A.PREVIEW && !!(C.reviews && C.reviews.on && A.backend() && A.backend().cf);
+  const rvStars = (n) => { n = Math.round(+n || 0); return `<span class="stars" role="img" aria-label="${n} out of 5 stars">${"★".repeat(n)}${"☆".repeat(5 - n)}</span>`; };
+  const rvApi = () => { const be = A.backend(); return be.cf + "/rev/" + encodeURIComponent(be.site); };
+  const rvLoad = () => { if (!rvOn()) return; fetch(rvApi(), { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((j) => { if (j && j.s && Object.keys(j.s).length) { REV = j.s; if (!ui.sheet && !ui.drawer) { const y = scrollY; menu(); scrollTo(0, y); } } }).catch(() => {}); };
+  const rvFetch = (id) => { if (!rvOn()) return; fetch(rvApi() + "?item=" + encodeURIComponent(id), { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((j) => { if (j) { RVL[id] = j; if (ui.sheet && ui.sheet.id === id) over(true); } }).catch(() => {}); };
+  const rvBlock = (x) => {
+    if (!rvOn()) return ""; const j = RVL[x.id], f = ui.rvf || (ui.rvf = { open: false, rating: 0, name: ui.form.name || "", email: ui.form.email || "", title: "", body: "", msg: "", err: "", busy: false });
+    return `<section class="osh-rv" aria-label="Reviews"><div class="rv-h"><h3>Reviews</h3>${j && j.n ? `<span>${rvStars(j.a)} <b>${j.a}</b> <small>(${j.n})</small></span>` : ""}<button type="button" class="btn sec" data-act="rvopen" aria-expanded="${f.open}">Write a review</button></div>
+      ${f.msg ? `<p class="rv-said" role="status">${esc(f.msg)}</p>` : ""}
+      ${f.open ? `<div class="rv-form"><div class="rv-pick" role="group" aria-label="Your rating">${[1, 2, 3, 4, 5].map((k) => `<button type="button" data-act="rvstar" data-id="${k}" aria-pressed="${f.rating === k}" aria-label="${k} star${k === 1 ? "" : "s"}" class="${k <= f.rating ? "on" : ""}">★</button>`).join("")}</div>
+        <label>Your name<input data-rv="name" maxlength="60" value="${esc(f.name)}"></label><label>Email <small>(never shown)</small><input data-rv="email" type="email" maxlength="120" value="${esc(f.email)}"></label>
+        <label>Headline <small>(optional)</small><input data-rv="title" maxlength="100" value="${esc(f.title)}"></label><label>Your review<textarea data-rv="body" rows="3" maxlength="1500">${esc(f.body)}</textarea></label>
+        <input data-rv="hp" class="vh" tabindex="-1" autocomplete="off" aria-hidden="true">${f.err ? `<p class="od-err" role="alert">${esc(f.err)}</p>` : ""}<button type="button" class="btn pri" data-act="rvsend"${f.busy ? " disabled" : ""}>${f.busy ? "Sending…" : "Send review"}</button></div>` : ""}
+      ${j && j.list.length ? `<ul class="rv-list">${j.list.map((r) => `<li><div>${rvStars(r.rating)}${r.verified ? ` <em class="rv-v">Verified</em>` : ""}</div>${r.title ? `<b>${esc(r.title)}</b>` : ""}<p>${esc(r.body)}</p><small>${esc(r.name)} · ${esc(r.at)}</small>${r.reply ? `<blockquote><b>Reply</b><br>${esc(r.reply)}</blockquote>` : ""}</li>`).join("")}</ul>` : j ? `<p class="rv-none">No reviews yet.</p>` : ""}</section>`;
+  };
+  async function rvSend() {
+    const f = ui.rvf, x = ui.sheet && byId(ui.sheet.id); if (!f || !x || f.busy) return;
+    if (!f.rating) { f.err = "Choose a star rating."; return over(true); } f.err = ""; f.busy = true; over(true);
+    try {
+      const r = await fetch(rvApi(), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ item: x.id, rating: f.rating, name: f.name, email: f.email, title: f.title, body: f.body, hp: f.hp || "" }) }), j = await r.json().catch(() => ({}));
+      f.busy = false; if (!r.ok) { f.err = j.error || "Couldn't send your review. Please try again."; return over(true); }
+      ui.form.name = ui.form.name || f.name; ui.form.email = ui.form.email || f.email; f.msg = j.status === "live" ? "Thank you! Your review is up." : "Thank you! Your review will show once it has been approved."; f.open = false; f.rating = 0; f.title = ""; f.body = ""; rvFetch(x.id); over(true);
+    } catch (e) { f.busy = false; f.err = "Couldn't send your review. Please try again."; over(true); }
+  }
+  const openSheet = (id) => { const x = byId(id); if (!x || x.d.soldOut) return; ui.sheet = { id, qty: 1, v: x.need ? -1 : 0, g: {}, note: "" }; if (ui.rvf) { ui.rvf.open = false; ui.rvf.msg = ""; ui.rvf.err = ""; } over(); rvFetch(id); };
   const close = () => { const b = ui.back; ui.sheet = null; ui.drawer = ""; ui.err = ""; over(); if (b && b.isConnected) b.focus({ preventScroll: true }); };
   /** The words of the consent tick box (Legal & privacy → Consent on forms), or "" when it is off. */
   const agree = () => (A.consentWords ? A.consentWords() : "");
@@ -574,6 +601,9 @@
     if (a === "mode") { ui.mode = id; ui.modePicked = true; st.set("mode", id); const y = scrollY; const host = root.parentNode; host.innerHTML = page(A); bind(A); scrollTo(0, y); }
     else if (a === "add") { const x = byId(id); if (!x) return; if (x.V.length || x.G.length) openSheet(id); else { addLine(x, { qty: 1, v: 0, g: {}, note: "" }); menu(); over(); } }
     else if (a === "open") openSheet(id);
+    else if (a === "rvopen") { const f = ui.rvf; if (f) { f.open = !f.open; f.msg = ""; } over(true); }
+    else if (a === "rvstar") { if (ui.rvf) ui.rvf.rating = +id; over(true); }
+    else if (a === "rvsend") rvSend();
     else if (a === "inc" || a === "dec") { change(id, t.dataset.key, a === "inc" ? 1 : -1); menu(); over(true); }
     else if (a === "fav") { toggleFav(id); if (ui.sheet) over(true); menu(); }
     else if (a === "more") { const p = t.previousElementSibling, on = !p.classList.contains("all"); p.classList.toggle("all", on); t.textContent = on ? "Show less" : "Show more"; t.setAttribute("aria-expanded", String(on)); }
@@ -611,6 +641,7 @@
       const t = e.target;
       if (t.id === "ord-q") { ui.q = t.value; filter(); }
       else if (t.dataset && t.dataset.f) ui.form[t.dataset.f] = t.value;
+      else if (t.dataset && t.dataset.rv && ui.rvf) ui.rvf[t.dataset.rv] = t.value;
     });
     root.addEventListener("change", (e) => {
       const t = e.target;
@@ -628,7 +659,7 @@
     if (window.SiteFX && window.SiteFX.stick) window.SiteFX.stick($(".ord-bar", root), "--ord-top", root);
     filter(); over(true);
     if (ui.drawer === "done" && ui.done) track(ui.done);
-    const be = A.backend();
+    const be = A.backend(); if (!bind.rv) { bind.rv = true; rvLoad(); }
     // Abandoned carts (content.recovery): the cart is kept once an email address is typed; the reminder's link (?rc=…) puts it back.
     { const rc = /[?&]rc=([a-f0-9]{32})(?:&|$)/.exec(location.search), rb = be && be.cf && be.site ? be : null;
       if (rc && rb) { const u = new URL(location.href); u.searchParams.delete("rc"); history.replaceState(null, "", u.href);

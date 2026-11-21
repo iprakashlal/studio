@@ -58,7 +58,7 @@ export type SiteState =
   | { kind: "pull" | "conflict"; siteAt: string | null };
 export type CategoryRec = { id: string; name: string; color: string };
 /** The Studio's own name and logo (logo: a file in the data repository). */
-export type StudioBrand = { name: string; logo?: string; v?: number; /** Colour the Studio from the logo: the logo's main colour (#rrggbb). */ tint?: string; /** Light or dark Studio (dark when unset). */ mode?: "light" | "dark" };
+export type StudioBrand = { name: string; logo?: string; v?: number; /** Colour the Studio from the logo: the logo's main colour (#rrggbb). */ tint?: string; /** Light or dark Studio (dark when unset). */ mode?: "light" | "dark"; /** The logo's movement ("" or unset: still). */ anim?: string };
 export type StudioIndex = { version: 1; categories: CategoryRec[]; projects: ProjectMeta[]; /** The engine behind the AI helpers (lib/ai.ts); Cloudflare AI when not set. */ ai?: { engine: "system" | "cloudflare" | "custom" }; /** A client Studio: what its partner hid (see lib/features.ts). */ clientFeatures?: { hide: string[]; themes?: number; themeList?: Record<string, string[]>; max?: Record<string, number> }; /** Which numbers the dashboard shows (lib/dashstats.ts). */ dash?: { stats: string[] }; brand?: StudioBrand; /** The "Powered by" badge every site shows (its look; each site only turns it on or off). */ badge?: import("./badge").BadgeCfg; /** Admin menus per template: renamed, reordered, combined sections. */ menus?: import("./menus").Menus; /** Where this Studio was moved (Netlify + Supabase). */ hosted?: import("./studiohost").HostedStudio; /** Client Studios (Studio Partners). */ partners?: import("./partners").PartnerRec[]; /** Project tools shown in the project's top bar (the rest are in Settings → Publish & tools). */ pinned?: string[] };
 
 export const CATEGORY_COLORS = ["#5B7CFF", "#3FB97A", "#F2A541", "#F06A6A", "#B57BFF", "#34C3D9", "#E86FB0", "#9AA6BC"];
@@ -243,11 +243,11 @@ export class Studio {
 
   /** Saves the Studio's name and logo (a PNG data URL, "" to remove it) for every device. tint: the logo's colour to
    *  theme the Studio with, "" for the standard colours, undefined to leave it as it is. mode: light or dark (undefined: unchanged). */
-  async saveBrand(name: string, logo: string | null, tint?: string, mode?: "light" | "dark"): Promise<StudioIndex> {
+  async saveBrand(name: string, logo: string | null, tint?: string, mode?: "light" | "dark", anim?: string): Promise<StudioIndex> {
     const files: { path: string; base64: string }[] = [];
     if (logo) files.push({ path: "studio-assets/logo.png", base64: logo.split(",")[1] });
     return this.updateIndex((i) => {
-      i.brand = { name: name.trim(), v: Date.now(), ...(logo ? { logo: "studio-assets/logo.png" } : logo === "" ? {} : i.brand?.logo ? { logo: i.brand.logo } : {}), ...((tint === undefined ? i.brand?.tint : tint) ? { tint: tint === undefined ? i.brand!.tint : tint } : {}), ...((mode ?? i.brand?.mode) === "light" ? { mode: "light" as const } : {}) };
+      i.brand = { name: name.trim(), v: Date.now(), ...(logo ? { logo: "studio-assets/logo.png" } : logo === "" ? {} : i.brand?.logo ? { logo: i.brand.logo } : {}), ...((tint === undefined ? i.brand?.tint : tint) ? { tint: tint === undefined ? i.brand!.tint : tint } : {}), ...((mode ?? i.brand?.mode) === "light" ? { mode: "light" as const } : {}), ...((anim ?? i.brand?.anim) ? { anim: anim ?? i.brand!.anim } : {}) };
     }, "Update the Studio's name and logo", files);
   }
 

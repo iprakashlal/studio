@@ -976,6 +976,31 @@
       pageAnim = { sig: sig, host: host, el: hero, a: animMount(host, kind, o) };
     }
   }
+  /** Brand → Logo motion: a quiet movement on the site's logo (in the menu and above the hero), all the time, once
+   *  when the page opens, or when pointed at. Still for visitors who ask their device for less motion. */
+  var LOGO_ANIMS = { float: 3.4, pulse: 2.6, spin: 9, swing: 2.8, bounce: 2.4, flip: 4.5, jelly: 2.2, glow: 2.8, shine: 3.6 };
+  function logoMotion(opts, root) {
+    var B = (opts.c && opts.c.brand) || {}, kind = LOGO_ANIMS[B.logoAnim] ? B.logoAnim : "", on = B.logoAnimOn === "hover" || B.logoAnimOn === "load" ? B.logoAnimOn : "", sp = B.logoAnimSpeed === "slow" ? 1.6 : B.logoAnimSpeed === "lively" ? 0.6 : 1;
+    Array.prototype.forEach.call(document.querySelectorAll("[data-la]"), function (n) { n.removeAttribute("data-la"); n.removeAttribute("data-la-on"); n.style.animationDuration = ""; });
+    if (!kind || RM) return;
+    if (!document.getElementById("fx-la")) {
+      var st4 = document.createElement("style"); st4.id = "fx-la";
+      st4.textContent = "@keyframes la-float{0%,100%{transform:translateY(0)}50%{transform:translateY(-12%)}}@keyframes la-pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.1)}}@keyframes la-spin{to{transform:rotate(360deg)}}" +
+        "@keyframes la-swing{0%,100%{transform:rotate(-8deg)}50%{transform:rotate(8deg)}}@keyframes la-bounce{0%,100%{transform:translateY(0)}30%{transform:translateY(-24%)}50%{transform:translateY(0)}65%{transform:translateY(-10%)}80%{transform:translateY(0)}}" +
+        "@keyframes la-flip{0%,55%{transform:perspective(420px) rotateY(0)}85%,100%{transform:perspective(420px) rotateY(360deg)}}@keyframes la-jelly{0%,100%{transform:scale(1,1)}25%{transform:scale(1.14,.88)}50%{transform:scale(.9,1.1)}75%{transform:scale(1.06,.95)}}" +
+        "@keyframes la-glow{0%,100%{filter:drop-shadow(0 0 0 rgba(0,0,0,0))}50%{filter:drop-shadow(0 0 10px var(--c1,var(--accent,#5b7cff)))}}@keyframes la-shine{0%,62%,100%{filter:brightness(1) saturate(1)}78%{filter:brightness(1.7) saturate(1.25)}}" +
+        "[data-la]{transform-origin:50% 50%;animation-timing-function:ease-in-out;animation-iteration-count:infinite;will-change:transform}[data-la=spin]{animation-timing-function:linear}[data-la=swing]{transform-origin:50% 0}" +
+        Object.keys(LOGO_ANIMS).map(function (k) { return "[data-la=" + k + "]:not([data-la-on=hover]),a:hover [data-la=" + k + "][data-la-on=hover],[data-la=" + k + "][data-la-on=hover]:hover{animation-name:la-" + k + "}"; }).join("") +
+        "[data-la][data-la-on=load]{animation-iteration-count:2}@media (prefers-reduced-motion:reduce){[data-la]{animation:none!important}}";
+      document.head.appendChild(st4);
+    }
+    var seen = [];
+    Array.prototype.forEach.call(document.querySelectorAll("header .brand .logo, header .brand .mark, nav .brand .logo, nav .brand .mark, .brand > .logo, .brand > .mark, .vx-logo, header .logo, .site-hero-logo > img, .site-hero-logo > video"), function (n) {
+      if (seen.some(function (x) { return x.contains(n) || n.contains(x); }) || n.closest("footer,[hidden]")) return;
+      seen.push(n); n.setAttribute("data-la", kind); if (on) n.setAttribute("data-la-on", on); n.style.animationDuration = (LOGO_ANIMS[kind] * sp).toFixed(2) + "s";
+      if (getComputedStyle(n).display === "inline") n.style.display = "inline-block";
+    });
+  }
   function sectionBgs(opts, root) {
     var map = opts.bgs; if (!map || typeof map !== "object") return;
     var url = opts.asset || function (v) { return v && (v.url || v.path) || ""; };
@@ -1122,6 +1147,7 @@
     try { legalBits(opts, root); } catch (e) { /* never worth a broken page */ }
     try { sectionBgs(opts, root); } catch (e) { /* a background is never worth a broken page */ }
     try { pageBg(opts, root); } catch (e) { /* a background is never worth a broken page */ }
+    try { logoMotion(opts, root); } catch (e) { /* nor is a moving logo */ }
     ensureStyle(); wire();
     try { badge(opts.badge); } catch (e) {}
     var c = cfg(), sig = JSON.stringify(c), changed = sig !== st.sig;

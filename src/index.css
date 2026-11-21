@@ -75,3 +75,25 @@
 @keyframes hub-landed { 0% { background: rgb(var(--brand-500, 91 124 255) / .28); box-shadow: 0 0 0 2px rgb(var(--brand-500, 91 124 255) / .7); } 100% { background: transparent; box-shadow: 0 0 0 2px transparent; } }
 .hub-landed { animation: hub-landed 1.4s ease-out; }
 @media (prefers-reduced-motion: reduce) { .hub-landed { animation: none; } }
+
+/* The Studio's logo in motion (Settings → Customize → Studio name & logo → Logo animation). */
+@keyframes sla-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-12%); } }
+@keyframes sla-pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.1); } }
+@keyframes sla-spin { to { transform: rotate(360deg); } }
+@keyframes sla-swing { 0%, 100% { transform: rotate(-8deg); } 50% { transform: rotate(8deg); } }
+@keyframes sla-bounce { 0%, 100% { transform: translateY(0); } 30% { transform: translateY(-24%); } 50% { transform: translateY(0); } 65% { transform: translateY(-10%); } 80% { transform: translateY(0); } }
+@keyframes sla-flip { 0%, 55% { transform: perspective(420px) rotateY(0); } 85%, 100% { transform: perspective(420px) rotateY(360deg); } }
+@keyframes sla-jelly { 0%, 100% { transform: scale(1, 1); } 25% { transform: scale(1.14, 0.88); } 50% { transform: scale(0.9, 1.1); } 75% { transform: scale(1.06, 0.95); } }
+@keyframes sla-glow { 0%, 100% { filter: drop-shadow(0 0 0 transparent); } 50% { filter: drop-shadow(0 0 8px rgb(var(--brand-400, 122 150 255))); } }
+@keyframes sla-shine { 0%, 62%, 100% { filter: brightness(1); } 78% { filter: brightness(1.7) saturate(1.25); } }
+[data-logo-anim] { animation: 3s ease-in-out infinite; transform-origin: 50% 50%; }
+[data-logo-anim="float"] { animation-name: sla-float; animation-duration: 3.4s; }
+[data-logo-anim="pulse"] { animation-name: sla-pulse; animation-duration: 2.6s; }
+[data-logo-anim="spin"] { animation-name: sla-spin; animation-duration: 9s; animation-timing-function: linear; }
+[data-logo-anim="swing"] { animation-name: sla-swing; animation-duration: 2.8s; transform-origin: 50% 0; }
+[data-logo-anim="bounce"] { animation-name: sla-bounce; animation-duration: 2.4s; }
+[data-logo-anim="flip"] { animation-name: sla-flip; animation-duration: 4.5s; }
+[data-logo-anim="jelly"] { animation-name: sla-jelly; animation-duration: 2.2s; }
+[data-logo-anim="glow"] { animation-name: sla-glow; animation-duration: 2.8s; }
+[data-logo-anim="shine"] { animation-name: sla-shine; animation-duration: 3.6s; }
+@media (prefers-reduced-motion: reduce) { [data-logo-anim] { animation: none; } }

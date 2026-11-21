@@ -162,7 +162,9 @@ const schema: Category[] = [
         { t: "note", text: "With a shop backend, the backend checks the PIN and the fee again when the order is placed. Publish the site and update the backend once after changing these (Accounts & backend)." },
       ] },
       { title: "Couriers and tracking", fields: [
-        { t: "note", text: "When an order ships, open it under Orders, choose the courier and type its tracking number: the customer sees a “Track your parcel” link on their order and in the shipped email. Orders also has buttons that open each courier's booking page with the address ready to paste. Booking itself happens on the courier's own site." },
+        { t: "note", text: "When an order ships, open it under Purchased orders, choose the courier (Blue Dart, Delhivery, DTDC, Xpressbees, Ecom Express, Ekart, India Post and more) and type its tracking number, then press “Save and mark as shipped”: the customer is emailed, and sees the courier, the number and a tracking link on their order page and under My account." },
+        { t: "note", text: "To show where the parcel is, scan by scan, connect your courier's or tracking service's API under Couriers, WhatsApp & SMS → Courier tracking: Blue Dart, Delhivery, DTDC, Xpressbees and Ecom Express directly; Shiprocket, NimbusPost and iThink Logistics for what you book through them; ClickPost, AfterShip, TrackingMore, Ship24 and 17TRACK for almost any courier; or any other tracking API by its address. Orders then move to Out for delivery and Completed by themselves." },
+        { t: "note", text: "Customers can look an order up with its number and the mobile number or email they ordered with at checkout.html?track=1 on your shop. Add it to your menu or footer as a custom link named “Track order”." },
       ] },
     ],
   },

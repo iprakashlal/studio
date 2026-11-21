@@ -312,6 +312,47 @@ function trackInfo(o) {
   const link = safeUrl(t.link || t.url || "");
   return `<p class="note" style="margin-top:10px">Shipped with <b>${esc(t.name || "courier")}</b>${t.awb ? `, tracking number <b style="font-family:monospace">${esc(t.awb)}</b>` : ""}.${link ? ` <a class="link" href="${esc(link)}" target="_blank" rel="noopener">Track your parcel ↗</a>` : ""}</p>`;
 }
+/* Where the parcel is, for a shop hosted on the Studio's database: the courier and tracking number the shop saved on
+   the order, and (when the shop has connected a tracking service) each scan, newest first. */
+const SHIP_STEPS = [["booked", "Order placed"], ["picked", "Shipped"], ["transit", "On the way"], ["out", "Out for delivery"], ["delivered", "Delivered"]];
+const shipCan = () => !PREVIEW && !!(HOST && HOST.api && HOST.site);
+const shipAsk = (body) => fetch(HOST.api + "/track/" + encodeURIComponent(HOST.site), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).then((r) => r.json().then((j) => { if (!r.ok) throw new Error((j && j.error) || "We couldn't find that order."); return j; }));
+const shipWhen = (v) => { const d = new Date(v); return !v ? "" : isNaN(+d) ? String(v) : /^\d{4}-\d{2}-\d{2}$/.test(String(v)) ? d.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" }) : d.toLocaleString(undefined, { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" }); };
+function shipHTML(j) {
+  const T = j.track, L = j.live, cancelled = j.status === "cancelled";
+  // without live scans, the order's own status says how far it is
+  const at = cancelled ? -1 : L ? Math.max(0, SHIP_STEPS.findIndex(([k]) => k === (L.st === "failed" ? "out" : L.st === "returned" ? "transit" : L.st))) : j.status === "done" ? 4 : j.status === "out" ? (T ? 2 : 1) : T ? 1 : 0;
+  const link = safeUrl((L && L.link) || (T && T.link) || "");
+  return `<div class="box shipbox" data-ship="${esc(j.no || "")}"><h2 style="font-size:20px">Where your order is</h2>
+    ${cancelled ? `<p class="note"><b>This order was cancelled.</b></p>` : `<ol class="track" aria-label="Delivery progress">${SHIP_STEPS.map(([, l], i) => `<li class="${i <= at ? "on" : ""}"${i === at ? ' aria-current="step"' : ""}><i></i><span>${l}</span></li>`).join("")}</ol>`}
+    ${L ? `<p style="margin:0"><b data-ship-state="${esc(L.st)}">${esc(L.label || L.say)}</b>${L.say && L.say !== L.label ? ` <span class="soft">· ${esc(L.say)}</span>` : ""}${L.eta ? `<br><span class="soft">Expected by ${esc(shipWhen(L.eta))}</span>` : ""}</p>` : ""}
+    ${T ? `<p class="note" style="margin:0">${T.awb ? `Shipped with <b>${esc(T.name)}</b>, tracking number <b style="font-family:monospace">${esc(T.awb)}</b>.` : `Shipped with <b>${esc(T.name)}</b>.`}${link ? ` <a class="link" href="${esc(link)}" target="_blank" rel="noopener">Track on the courier's site ↗</a>` : ""}</p>` : cancelled ? "" : `<p class="note" style="margin:0">${j.status === "done" ? "This order is complete." : "We are getting your order ready. The courier and tracking number show here once it ships."}</p>`}
+    ${L && L.ev && L.ev.length ? `<ol class="shipev" aria-label="Parcel history">${L.ev.map((e, i) => `<li${i === 0 ? ' class="on"' : ""}><i></i><div><b>${esc(e.text)}</b><span class="soft">${esc([e.place, shipWhen(e.at)].filter(Boolean).join(" · "))}</span></div></li>`).join("")}</ol>` : ""}
+    ${L && L.at ? `<p class="soft" style="font-size:12.5px;margin:0">Checked ${esc(shipWhen(new Date(L.at).toISOString()))}. <button type="button" class="link" data-ship-again style="background:none;border:0;padding:0;cursor:pointer;font:inherit">Check again</button></p>` : ""}</div>`;
+}
+/** Fills `el` with the order's tracking (and again when "Check again" is pressed). Quiet when the order isn't found. */
+function shipInto(el, body, o = {}) {
+  if (!el || !shipCan()) return Promise.resolve(null);
+  if (!document.getElementById("shipcss")) { const st = document.createElement("style"); st.id = "shipcss"; st.textContent = ".shipev{list-style:none;margin:0;padding:0;display:grid;gap:0}.shipev li{display:grid;grid-template-columns:16px 1fr;gap:12px;padding-bottom:14px;position:relative}.shipev li i{width:10px;height:10px;border-radius:50%;background:var(--line);margin:6px 0 0 3px}.shipev li.on i{background:var(--accent);box-shadow:0 0 0 4px color-mix(in srgb,var(--accent) 22%,transparent)}.shipev li::after{content:\"\";position:absolute;left:7.5px;top:18px;bottom:0;width:1px;background:var(--line)}.shipev li:last-child{padding-bottom:0}.shipev li:last-child::after{display:none}.shipev b{display:block;font-size:14.5px}.shipev span{font-size:13px}.shipbox .track{margin:4px 0 6px}@media(max-width:520px){.shipbox .track span{font-size:10.5px}}"; document.head.appendChild(st); }
+  return shipAsk(body).then((j) => { el.innerHTML = shipHTML(j); const again = el.querySelector("[data-ship-again]"); if (again) again.onclick = () => { again.textContent = "Checking…"; shipInto(el, body, o); }; return j; })
+    .catch((x) => { if (o.say) el.innerHTML = `<p class="err" role="alert">${esc(x.message || "We couldn't find that order.")}</p>`; return null; });
+}
+/** "Track an order" (checkout.html?track): the order number and the mobile number or email it was placed with. */
+function trackPage() {
+  const q = new URLSearchParams(location.search), no = q.get("order") || q.get("no") || "", last = store.get("orders", [])[0];
+  return `<section class="page-h"><div class="wrap"><h1 class="fit">Track your order</h1></div></section><div class="wrap" style="padding-bottom:80px;max-width:720px">
+    <form class="form box" id="trackf" novalidate><div class="f"><label for="tr-no">Order number</label><input class="in" id="tr-no" autocomplete="off" autocapitalize="characters" placeholder="${esc(last ? last.id : "ORD-0101-1234")}" value="${esc(no || (last ? last.id : ""))}" required></div>
+    <div class="f"><label for="tr-c">Mobile number or email you ordered with</label><input class="in" id="tr-c" autocomplete="tel" value="${esc(last && last.c ? last.c.phone || last.c.email || "" : "")}" required></div>
+    <button class="btn pri" type="submit">Track</button><p class="soft" style="font-size:13px;margin:0">${shipCan() ? "It is on your order confirmation." : "Order tracking works on the published shop."}</p></form>
+    <div id="trackout" style="margin-top:22px" aria-live="polite"></div></div>`;
+}
+function bindTrack() {
+  const f = $("#trackf"), out = $("#trackout"); if (!f) return;
+  const go = () => { const no = $("#tr-no").value.trim().toUpperCase(), c = $("#tr-c").value.trim(); if (!no || !c) { out.innerHTML = `<p class="err" role="alert">Enter the order number and the mobile number or email you ordered with.</p>`; return; }
+    const loc = store.get("orders", []).find((x) => x.id === no); out.innerHTML = `<p class="soft">Looking for your order…</p>`; shipInto(out, { no, contact: c, ...(loc && loc.k ? { k: loc.k } : {}) }, { say: true }); };
+  f.onsubmit = (e) => { e.preventDefault(); go(); };
+  if ($("#tr-no").value && $("#tr-c").value && new URLSearchParams(location.search).get("order")) go();
+}
 /* GST invoice (assets/invoice.js), opened from an order. */
 const gstOn = () => !!(C.gst && C.gst.on);
 const invBtn = (id) => (gstOn() ? `<button type="button" class="btn" data-inv="${esc(id)}">Download invoice</button>` : "");
@@ -679,6 +720,7 @@ const PAGES = {
       <a class="btn pri block" href="checkout.html"${below ? ' aria-disabled="true" style="pointer-events:none;opacity:.45"' : ""}>Checkout</a><a class="link" style="text-align:center" href="shop.html">Continue shopping</a></aside></div>`;
   },
   checkout() {
+    if (new URLSearchParams(location.search).has("track")) return trackPage();
     const lines = cartLines(), q = new URLSearchParams(location.search).get("order");
     if (q) {
       const o = store.get("orders", []).find((x) => x.id === q);
@@ -834,6 +876,7 @@ function orderDone(o) {
       <div class="buy">${invBtn(o.id)}${viaWa ? `<a class="btn pri" href="https://wa.me/${wa}?text=${encodeURIComponent(txt)}" target="_blank" rel="noopener">Send on WhatsApp</a>` : ""}${viaMail ? `<a class="btn${viaWa ? "" : " pri"}" href="mailto:${esc(mail)}?subject=${encodeURIComponent(`Order ${o.id}`)}&body=${encodeURIComponent(txt)}">Send by email</a>` : ""}</div>
       ${!viaWa && !viaMail ? `<p class="note">Copy the order below and send it to ${esc(C.contact.email || "us")}.</p>` : ""}
       <pre class="msg" id="msg">${esc(txt)}</pre><button class="btn" type="button" data-copy-msg>Copy order details</button></div></div></div>
+    ${o.saved && shipCan() ? `<div id="shipslot" data-no="${esc(o.id)}"></div><a class="link" href="checkout.html?track=1&order=${encodeURIComponent(o.id)}">Track this order later</a>` : ""}
     <a class="link" href="shop.html">Continue shopping</a></div></div>`;
 }
 
@@ -1084,6 +1127,7 @@ function bindCart() {
   $$("[data-rm]").forEach((b) => (b.onclick = () => { const l = lines[+b.dataset.rm]; cart = cart.filter((x) => !(x.id === l.id && x.opt === l.opt)); saveCart(); render(); }));
 }
 function bindCheckout() {
+  if ($("#trackf")) return bindTrack();
   const remote = $("#remote");
   if (remote) {
     sbInit().then(() => fn("status", { order_no: remote.dataset.o, access_key: remote.dataset.k })).then((st) => {
@@ -1111,6 +1155,7 @@ function bindCheckout() {
     const qr = $("#qr");
     if (qr) { const o = store.get("orders", []).find((x) => x.id === new URLSearchParams(location.search).get("order")); if (o && window.QRCode) { try { new window.QRCode(qr, { text: upiLink(o), width: 200, height: 200, correctLevel: window.QRCode.CorrectLevel.M }); } catch (e) { qr.outerHTML = `<p class="note">The QR code couldn't load. Use the UPI ID instead.</p>`; } } else if (!window.QRCode) qr.outerHTML = `<p class="note">The QR code couldn't load. Use the UPI ID instead.</p>`; }
     const cm = $("[data-copy-msg]"); if (cm) cm.onclick = () => copy($("#msg").textContent, "Order details copied");
+    { const slot = $("#shipslot"), so = slot && store.get("orders", []).find((x) => x.id === slot.dataset.no); if (so) shipInto(slot, { no: so.id, ...(so.k ? { k: so.k } : { contact: so.c.phone || so.c.email }) }); }
     return;
   }
   const form = $("#co");
@@ -1161,7 +1206,7 @@ function bindCheckout() {
 }
 /** What the shop's database keeps for an order (it shows under Purchased orders). */
 let AGREED = ""; // the consent given at checkout, saved with the order
-const orderData = (o) => ({ ...(AGREED ? { consent: AGREED } : {}), type: "Order", order_no: o.id, name: o.c.name, phone: o.c.phone, email: o.c.email, mode: "Shop order", address: [o.c.address, o.c.city, o.c.pin, o.c.state].filter(Boolean).join(", "),
+const orderData = (o) => ({ ...(AGREED ? { consent: AGREED } : {}), type: "Order", order_no: o.id, ...(o.k ? { okey: o.k } : {}), name: o.c.name, phone: o.c.phone, email: o.c.email, mode: "Shop order", address: [o.c.address, o.c.city, o.c.pin, o.c.state].filter(Boolean).join(", "),
   items: o.items.map((i) => `${i.qty} × ${i.name}${i.opt ? ` (${i.opt})` : ""} = ${money(i.price * i.qty)}`).join("\n"), total: money(o.t.total), payment: o.utr ? "UPI, paid before ordering" : o.rz || o.pg ? `Paid online (${GWNAME[o.method]})` : o.methodLabel, utr: o.utr || "",
   ...(o.rz ? { rz_order: o.rz.razorpay_order_id, rz_payment: o.rz.razorpay_payment_id, rz_sig: o.rz.razorpay_signature } : {}), ...(o.pg ? { pay_gw: o.pg.gw, pay_ref: o.pg.ref } : {}), notes: o.c.notes, ...(o.otp ? { otp_token: o.otp } : {}), ...(o.et ? { email_token: o.et } : {}), ...(o.ac ? { acct_token: o.ac } : {}), message: orderText(o) });
 /** The order as the database can price it again (what was bought, and the points asked for). */
@@ -1170,6 +1215,8 @@ const sendOrder = (o) => fetch(HOST.api + "/enquire/" + encodeURIComponent(HOST.
 async function placeOrder(o) {
   // A shop hosted on the Studio's database keeps the order under Purchased orders too.
   if (!PREVIEW && HOST && HOST.api && HOST.site && o.saved == null) {
+    // the order's own key: this device can ask where the parcel is with it
+    if (!o.k) { try { o.k = [...crypto.getRandomValues(new Uint8Array(16))].map((x) => x.toString(16).padStart(2, "0")).join(""); } catch (e) { /* tracked by number and phone instead */ } }
     try { const r = await sendOrder(o); o.saved = r.ok; if (r.ok && o.rz) o.paid = true; } catch (e) { o.saved = false; }
   }
   store.set("orders", [o, ...store.get("orders", [])].slice(0, 10));

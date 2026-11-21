@@ -28,6 +28,7 @@ function otherAccounts(env: any): { id: string; name: string }[] {
 import { CFDB_SCHEMA, CFDB_VERSION, CFDB_WORKER_NAME } from "../src/lib/cfdbSchema";
 import { digestPage, sheetLinks } from "../src/lib/lookdigest";
 import { socialFromText } from "../src/lib/social";
+import { COURIERS, TRACKERS, TRACKER_FIELDS, TRACK_STATES, TrackError, courierLink, courierName, pickTracker, trackLive, trackerReady, type Live } from "../src/lib/tracking";
 export const SCHEMA = CFDB_SCHEMA;
 
 const cors = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, content-type, x-sha", "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS", "Access-Control-Max-Age": "86400", "Access-Control-Expose-Headers": "x-sha, x-updated" };
@@ -436,6 +437,9 @@ const SETTINGS: Record<string, { secret: string[]; text: string[]; flags: string
   // SMS (text messages) through the owner's own account with MSG91 or Twilio: codes for signing in and for checkout.
   sms: { secret: ["key"], text: ["provider", "tpl", "varName", "sender", "sid", "from", "text", "cc", "phones", "chan", "email"], flags: ["on", "login", "orderOtp"] },
 };
+// Courier tracking (shops): one connection per service the shop has an account with (tk_<service>), and what to do with what they say.
+for (const id of Object.keys(TRACKERS)) SETTINGS["tk_" + id] = TRACKER_FIELDS;
+SETTINGS.ship = { secret: [], text: [], flags: ["manual", "quiet"] };
 async function aesKey(env: Env) { return crypto.subtle.importKey("raw", await crypto.subtle.digest("SHA-256", enc.encode("settings:" + env.SECRET)), "AES-GCM", false, ["encrypt", "decrypt"]); }
 async function getSetting(env: Env, scope: string, name: string): Promise<any | null> {
   await ensure(env);
@@ -451,6 +455,49 @@ async function putSetting(env: Env, scope: string, name: string, value: any | nu
   await env.DB.prepare("insert into settings (scope, name, value, updated_at) values (?, ?, ?, ?) on conflict (scope, name) do update set value = excluded.value, updated_at = excluded.updated_at")
     .bind(scope, name, btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""), new Date().toISOString()).run();
 }
+// ---------------------------------------------------------------- where a shop order's parcel is
+/** The shipment saved on an order: { c: courier, awb, url, name, at }. */
+const trackOf = (d: any): any | null => { try { const t = JSON.parse(String(d?._track || "")); return t && (t.awb || t.url) ? t : null; } catch { return null; } };
+/** What the customer may see of it. */
+const trackShown = (t: any) => (t ? { c: String(t.c || "other"), name: t.c === "other" || !COURIERS[t.c] ? String(t.name || "Courier") : courierName(t.c), awb: String(t.awb || ""), link: /^https:\/\//.test(String(t.url || "")) ? String(t.url) : courierLink(t.c, String(t.awb || "")) } : null);
+async function shipSaved(env: Env, site: string): Promise<Record<string, any>> {
+  await ensure(env); const o: Record<string, any> = {};
+  for (const r of ((await env.DB.prepare("select name from settings where scope = ? and name like 'tk!_%' escape '!'").bind("site:" + site).all()).results || []) as any[]) { const id = String(r.name).slice(3); if (TRACKERS[id]) { const z = await getSetting(env, "site:" + site, r.name).catch(() => null); if (z) o[id] = z; } }
+  return o;
+}
+const SHIP_OPEN = ["new", "read", "accepted", "preparing", "ready"];
+/** Asks the tracking service where the parcel is (at most every 20 minutes; a delivered parcel is not asked about again),
+ *  keeps the answer with the order, and moves the order on when the parcel has left or arrived. */
+async function shipLive(env: Env, site: string, rowId: number, d: any, status: string, force = false): Promise<{ live: (Live & { t: number; via: string }) | null; why: string; status: string }> {
+  const t = trackOf(d); if (!t || !t.awb) return { live: null, why: "", status };
+  let had: any = null; try { had = JSON.parse(String(d._trk || "")); } catch { /* never asked */ }
+  if (had && (had.st === "delivered" || (!force && Date.now() - (+had.t || 0) < 20 * 60_000))) return { live: had, why: "", status };
+  // A service that failed a moment ago is not asked again at once (the page asks every time it is opened).
+  if (!force && !had && +d._trk_bad > Date.now() - 5 * 60_000) return { live: null, why: String(d._trk_why || ""), status };
+  const saved = await shipSaved(env, site), id = pickTracker(saved, String(t.c || ""));
+  if (!id) return { live: had, why: Object.keys(saved).length ? "No tracking connection covers this courier." : "", status };
+  let live: Live;
+  try { live = await trackLive(id, saved[id], String(t.awb), String(t.c || "")); }
+  catch (e: any) {
+    const why = e instanceof TrackError ? e.message : "The tracking service couldn't be read.";
+    if (!had) await env.DB.prepare("update enquiries set data = ? where id = ? and site = ?").bind(JSON.stringify({ ...d, _trk_bad: String(Date.now()), _trk_why: why }), rowId, site).run().catch(() => {});
+    return { live: had, why, status };
+  }
+  const keep = { ...live, ev: live.ev.slice(0, 25), t: Date.now(), via: id }, nd = { ...d, _trk: JSON.stringify(keep) }; delete nd._trk_bad; delete nd._trk_why;
+  const opt = await getSetting(env, "site:" + site, "ship").catch(() => null);
+  let next = status;
+  if (!opt?.manual) { if (live.st === "delivered" && [...SHIP_OPEN, "out"].includes(status)) next = "done"; else if (["picked", "transit", "out"].includes(live.st) && SHIP_OPEN.includes(status)) next = "out"; }
+  await env.DB.prepare("update enquiries set data = ?, status = ? where id = ? and site = ?").bind(JSON.stringify(nd), next, rowId, site).run();
+  return { live: keep, why: "", status: next };
+}
+/** The email a customer gets when their order ships: the courier, the tracking number and where to follow it. */
+async function shippedMail(env: Env, site: string, d: any) {
+  const to = emailKey(d.email), t = trackShown(trackOf(d)); if (!to || !t || !env.RESEND_API_KEY || !env.MAIL_FROM) return "";
+  const c = await siteContent(env, site).catch(() => null), name = siteName(c, site);
+  await sendMail(env, to, `Your order ${oneLine(String(d.order_no))} has shipped`.slice(0, 150), WRAP(`<h2 style="margin:0 0 12px;font-size:20px">Your order is on its way</h2>${paras(`Hi ${oneLine(String(d.name || "there"))}, your order ${oneLine(String(d.order_no))} from ${name} has shipped with ${t.name}.${t.awb ? "\nTracking number: " + t.awb : ""}`)}${t.link ? `<p style="margin:0 0 12px"><a href="${hesc(t.link)}" style="display:inline-block;background:#111;color:#fff;text-decoration:none;padding:10px 16px;border-radius:8px">Track your parcel</a></p>` : ""}${paras("Thank you for shopping with us.", "margin:0 0 8px;color:#667;font-size:13px")}`));
+  return "Shipping email sent to " + to;
+}
+
 /** What a browser may see of a setting: everything but the secrets (those only say whether one is saved). */
 function maskSetting(name: string, v: any) {
   const S = SETTINGS[name], o: any = {}; if (!v) return null;
@@ -1253,7 +1300,7 @@ export default {
           const rows = ((await env.DB.prepare(`select data, status, created_at from enquiries where site = ? and (${nos.map(() => "instr(data, ?) > 0").join(" or ")}) order by created_at desc limit 40`).bind(site, ...nos.map((n) => `"order_no":${JSON.stringify(n)}`)).all()).results || []) as any[];
           for (const r of rows) { let d: any = null; try { d = JSON.parse(r.data); } catch { continue; } if (!nos.includes(String(d.order_no))) continue;
             let items: any[] = []; try { items = JSON.parse(String(d._items || "[]")).slice(0, 40); } catch { /* an older order: its text is shown */ }
-            orders.push({ no: String(d.order_no), at: r.created_at, total: String(d.total || ""), status: String(r.status || "new"), mode: String(d.mode || ""), paid: d._paid === "yes", pay: String(d.payment || d.pay || ""), address: String(d.address || ""), name: String(d.name || ""), points: String(d._points || ""), items, text: String(d.items || d.order || d.message || "").slice(0, 2000) }); }
+            orders.push({ no: String(d.order_no), at: r.created_at, total: String(d.total || ""), status: String(r.status || "new"), mode: String(d.mode || ""), paid: d._paid === "yes", pay: String(d.payment || d.pay || ""), address: String(d.address || ""), name: String(d.name || ""), points: String(d._points || ""), ...(trackOf(d) ? { track: trackShown(trackOf(d)) } : {}), items, text: String(d.items || d.order || d.message || "").slice(0, 2000) }); }
         }
         const L = loyOf(sc);
         return json({ ok: true, name: row?.name || "", phone: byMail ? row?.phone || "" : "+" + key, email: byMail ? key : row?.email || "", addresses, count: +row?.orders || 0, points: Math.max(0, +row?.points || 0), loyalty: L.on ? { worth: L.worth, min: L.min, maxPct: L.maxPct } : null, orders });
@@ -1368,8 +1415,27 @@ export default {
         const rows = ((await env.DB.prepare("select status, data from enquiries where site = ? and data like ? order by id desc limit 5").bind(site, `%"order_no":"${no}"%`).all()).results || []) as any[];
         const hit = rows.find((r) => { try { const d = JSON.parse(r.data); return d.order_no === no && d.okey === k; } catch { return false; } });
         if (!hit) return err(404, "Not found.");
-        let paid = ""; try { paid = String(JSON.parse(hit.data)._paid || ""); } catch { /* none */ }
-        return json({ status: hit.status, paid });
+        let paid = "", track: any = null; try { const hd = JSON.parse(hit.data); paid = String(hd._paid || ""); track = trackShown(trackOf(hd)); } catch { /* none */ }
+        return json({ status: hit.status, paid, ...(track ? { track } : {}) });
+      }
+      // ---- where a shop order's parcel is: POST /track/<site> { no, k | contact | key + pass }. The order's own key
+      //      opens it (the device that ordered), or the mobile number or email the order was placed with.
+      if (/^\/track\/[a-z0-9][a-z0-9-]{0,59}$/.test(p) && req.method === "POST") {
+        const site = p.split("/")[2], b = (await req.json().catch(() => ({}))) as any, no = String(b.no || "").trim().toUpperCase();
+        if (!/^[A-Z0-9][A-Z0-9-]{3,29}$/.test(no)) return err(404, "We couldn't find that order. Check the order number.");
+        // lookups by contact are counted, so order numbers can't be guessed at speed
+        const byKey = /^[a-f0-9]{16,64}$/.test(String(b.k || ""));
+        if (!byKey) { const now = Date.now(), k = "trk:" + site + ":" + Math.floor(now / 3600_000); const n: any = await env.DB.prepare("select tries from otps where k = ?").bind(k).first(); if ((n?.tries || 0) >= 400) return err(429, "Too many lookups just now. Please try again later.");
+          await env.DB.prepare("insert into otps (k, hash, expires, tries, sent) values (?, '', ?, 1, ?) on conflict (k) do update set tries = tries + 1").bind(k, now + 2 * 3600_000, now).run(); }
+        const rows = ((await env.DB.prepare("select id, status, data, created_at from enquiries where site = ? and data like ? order by id desc limit 5").bind(site, `%"order_no":"${no}"%`).all()).results || []) as any[];
+        let cust = ""; if (b.key && (await custOk(env, site, String(b.key), b.pass))) cust = String(b.key);
+        const same = (d: any, c: string) => { const e = emailKey(c); if (e) return e === emailKey(d.email); const a = String(c || "").replace(/\D/g, ""), z = String(d.phone || "").replace(/\D/g, ""); return a.length >= 8 && z.length >= 8 && a.slice(-10) === z.slice(-10); };
+        let hit: any = null, hd: any = null;
+        for (const r of rows) { let d: any; try { d = JSON.parse(r.data); } catch { continue; } if (d.order_no !== no) continue; if ((byKey && d.okey === b.k) || (cust && same(d, cust.includes("@") ? cust : "+" + cust)) || (b.contact && same(d, String(b.contact)))) { hit = r; hd = d; break; } }
+        if (!hit) return err(404, "We couldn't find that order. Check the order number and the mobile number or email you ordered with.");
+        const got = await shipLive(env, site, hit.id, hd, hit.status).catch(() => ({ live: null, why: "", status: hit.status }));
+        const L = got.live;
+        return json({ no, at: hit.created_at, status: got.status, total: String(hd.total || ""), paid: hd._paid === "yes", track: trackShown(trackOf(hd)), live: L ? { st: L.st, label: TRACK_STATES[L.st] || L.say, say: L.say, eta: L.eta, link: L.link, ev: L.ev, at: L.t } : null });
       }
       if (p.startsWith("/enquire/") && req.method === "POST") {
         const site = p.split("/")[2]; if (!/^[a-z0-9][a-z0-9-]{0,59}$/.test(site)) return err(404, "Not found.");
@@ -1550,6 +1616,11 @@ export default {
         }
         if (p === "/set" && req.method === "GET") { const o: any = {}; for (const n of Object.keys(SETTINGS)) o[n] = maskSetting(n, await getSetting(env, scope, n)); return json(o); }
         const b = (await req.json()) as any, name = String(b.name || ""), S = SETTINGS[name]; if (!S) return err(400, "Unknown connection.");
+        if (p === "/set/test" && name.startsWith("tk_")) {
+          const id = name.slice(3), z = await getSetting(env, scope, name); if (!trackerReady(id, { ...z, on: true })) return json({ error: "Fill in the boxes and press Save first." });
+          try { const live = await trackLive(id, z, String(b.awb || ""), String(b.courier || (TRACKERS[id].kind === "courier" ? id : "other"))); return json({ ok: true, live: { st: live.st, label: TRACK_STATES[live.st] || live.say, say: live.say, eta: live.eta, ev: live.ev.slice(0, 5), n: live.ev.length } }); }
+          catch (e: any) { return json({ error: e instanceof TrackError ? e.message : "The tracking service's answer couldn't be read." }); }
+        }
         if (p === "/set/test") {
           if (name !== "ai") return err(400, "Nothing to test.");
           const c = await getSetting(env, scope, "ai"); if (!c?.key || !c.model || !publicUrl(String(c.base || "").trim())) return json({ error: "Fill in the address, the model and the key first." });
@@ -1563,6 +1634,7 @@ export default {
         // A secret left empty keeps the one already saved.
         for (const k of S.secret) v[k] = String(b.value[k] || "").trim().slice(0, 600) || old[k] || "";
         if (name === "ai" && v.base && !publicUrl(v.base)) return err(400, "The API address must be a public https:// address.");
+        if (name.startsWith("tk_") && v.url && !publicUrl(v.url.replace(/\{(awb|courier)\}/g, "x"))) return err(400, "The tracking address must be a public https:// address.");
         await putSetting(env, scope, name, v);
         return json({ ok: true, value: maskSetting(name, v) });
       }
@@ -1965,6 +2037,23 @@ export default {
         if (b.paid) d._paid = "yes"; else delete d._paid;
         await env.DB.prepare("update enquiries set data = ? where id = ? and site = ?").bind(JSON.stringify(d), b.id, site).run();
         return json({ ok: true });
+      }
+      // A shop order's shipment: the courier and its tracking number (and, with `ship`, the order is marked as sent and the customer told).
+      if ((p === "/e/track" || p === "/e/track/live") && req.method === "POST") {
+        const b = (await req.json()) as any, site = scope.replace(/^site:/, "");
+        const row: any = await env.DB.prepare("select data, status from enquiries where id = ? and site = ?").bind(b.id, site).first(); if (!row) return err(404, "Not found.");
+        const d = JSON.parse(row.data); if (!d.order_no) return err(400, "That isn't an order.");
+        if (p === "/e/track/live") { const g = await shipLive(env, site, b.id, d, row.status, true); return json({ live: g.live ? { ...g.live, label: TRACK_STATES[g.live.st] || g.live.say } : null, why: g.why, status: g.status }); }
+        const c = COURIERS[String(b.courier)] ? String(b.courier) : "other", awb = String(b.awb || "").trim().slice(0, 40), url = String(b.url || "").trim().slice(0, 400);
+        if (awb && !/^[A-Za-z0-9][A-Za-z0-9 _-]{3,39}$/.test(awb)) return err(400, "That doesn't look like a tracking number.");
+        if (url && !publicUrl(url)) return err(400, "The tracking link must be a public https:// address.");
+        delete d._trk; delete d._trk_bad; delete d._trk_why;
+        if (!awb && !url) delete d._track; else d._track = JSON.stringify({ c, awb, url, name: oneLine(String(b.name || "")).slice(0, 60), at: new Date().toISOString() });
+        let status = row.status, said = "";
+        if (b.ship && d._track && SHIP_OPEN.includes(status)) status = "out";
+        if (b.ship && d._track && !d._ship_mail) { const opt = await getSetting(env, scope, "ship").catch(() => null); if (!opt?.quiet) { said = await shippedMail(env, site, d).catch((e: any) => "Not emailed: " + String(e?.message || e).slice(0, 200)); if (said) d._ship_mail = said; } }
+        await env.DB.prepare("update enquiries set data = ?, status = ? where id = ? and site = ?").bind(JSON.stringify(d), status, b.id, site).run();
+        return json({ ok: true, status, data: d, mail: said });
       }
       if ((p === "/e/status" || p === "/e/delete") && req.method === "POST") {
         const b = (await req.json()) as any; const site = scope.replace(/^site:/, "");

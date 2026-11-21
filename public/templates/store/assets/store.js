@@ -976,6 +976,8 @@ function maintGate(again) {
     }).catch(() => { mntPass = true; again(); });
   return true;
 }
+let lastHtml = "", waitIdx = null;
+function keepWaiting() { waitIdx = new Set(); $$(".rv.wait").forEach((e) => { const i = +e.dataset.rvi; if (i >= 0) waitIdx.add(i); }); }
 function render() {
   stockMark();
   askCan(); previewAcct();
@@ -986,7 +988,11 @@ function render() {
   if (PAGE !== "product") setTitle(PAGE === "home" ? "" : { shop: C.shop.title, cart: C.nav.cart, checkout: C.checkout.title, portfolio: C.nav.portfolio, policies: "Policies", account: (C.accountPage || {}).title, warranty: (C.warranty || {}).title, page: (spHere() || {}).title }[PAGE] || "");
   applyMeta();
   const fn = PAGES[PAGE] || PAGES.home;
-  $("#app").innerHTML = `<a class="skip" href="#main">Skip to content</a>${header()}<main id="main">${fn()}</main>${footer()}`;
+  const html = `<a class="skip" href="#main">Skip to content</a>${header()}<main id="main">${fn()}</main>${footer()}`;
+  /* A redraw that would produce exactly what is already on screen is skipped: it only made images and animations blink. */
+  if (!PREVIEW && html === lastHtml && $("#app").firstChild) return;
+  lastHtml = html; keepWaiting();
+  $("#app").innerHTML = html;
   if (SC && SC.drawn) SC.drawn($("#app"), C);
   bind();
   reveal();
@@ -1007,10 +1013,10 @@ let revealed = 0;
 function reveal() {
   const st = C.theme.motionStyle;
   if (!st || st === "none" || matchMedia("(prefers-reduced-motion: reduce)").matches || !("IntersectionObserver" in window)) return;
-  if (revealed++ > 0) return; // the entrance plays once: a later render (database answered, signed in) keeps what is shown
+  const first = revealed++ === 0; if (!first && !(waitIdx && waitIdx.size)) return; // the entrance plays once; a redraw while it is still running carries on from where it was, so nothing pops
   const els = $$(".hero .htx, .hero .art, .sec-h, .pcard, .cat, .quote, .banner, .wcard, .ctaband, .page-h .wrap, .pd .gal, .pd .info, .box, .sum, .ocard");
   const io = new IntersectionObserver((es) => es.forEach((e) => { if (e.isIntersecting) { e.target.classList.remove("wait"); io.unobserve(e.target); } }), { threshold: 0.08 });
-  els.forEach((el, i) => { el.classList.add("rv", "wait"); el.style.transitionDelay = (i % 4) * 70 + "ms"; io.observe(el); });
+  els.forEach((el, i) => { if (!first && !waitIdx.has(i)) return; el.dataset.rvi = i; el.classList.add("rv", "wait"); el.style.transitionDelay = (i % 4) * 70 + "ms"; io.observe(el); });
 }
 function bind() {
   const mb = $(".menubtn"), nav = $("#nav");

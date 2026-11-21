@@ -885,6 +885,7 @@ function maintGate(again) {
 let STOCK = null;
 function stockMark() { if (!STOCK) return; for (const k of (C.food && C.food.categories) || []) for (const d of k.items || []) { const id = slug(k.name) + "/" + slug(d.name); if (id in STOCK) { d._left = STOCK[id]; if (STOCK[id] <= 0) d.soldOut = true; } } }
 function stockLoad() { const on = !PREVIEW && C.inventory && C.inventory.on && HOST && HOST.api && HOST.site; if (!on) return Promise.resolve(false); return fetch(HOST.api + "/stock/" + encodeURIComponent(HOST.site), { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((j) => { if (j && j.s) { STOCK = j.s; return true; } return false; }).catch(() => false); }
+let lastHtml = "", drawn = false;
 function render() {
   stockMark();
   // A several-page link opened while the site is one page goes to that section.
@@ -901,7 +902,12 @@ function render() {
   const body = special ? special() : ids.filter((id) => RENDER[id] && shown(id)).map((id) => RENDER[id]()).join("");
   const bar = mobileBar();
   document.documentElement.classList.toggle("has-mbar", !!bar);
-  $("#app").innerHTML = `<a class="skip" href="#main">Skip to content</a>${noticeHTML()}${navHTML()}<main id="main">${multi() && !special && PAGE !== "home" ? pageHead() : ""}${body}</main>${footerHTML()}${bar}`;
+  const html = `<a class="skip" href="#main">Skip to content</a>${noticeHTML()}${navHTML()}<main id="main">${multi() && !special && PAGE !== "home" ? pageHead() : ""}${body}</main>${footerHTML()}${bar}`;
+  /* A redraw that gives what is already on screen is skipped, and one that lands while the entrance is still running carries on from where it was: both used to make the page blink. */
+  if (!PREVIEW && html === lastHtml && $("#app").firstChild) return;
+  lastHtml = html; const pend = drawn ? new Set($$(".rv").map((e, i) => (e.classList.contains("in") ? -1 : i))) : null; drawn = true;
+  $("#app").innerHTML = html;
+  if (pend) $$(".rv").forEach((e, i) => { if (!pend.has(i)) e.classList.add("in"); });
   if (SC && SC.drawn) SC.drawn($("#app"), C);
   bind();
   if (PAGE === "order" && window.RestOrder && orderOn()) window.RestOrder.bind(ORDER_API);

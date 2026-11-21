@@ -495,10 +495,11 @@ function previewAcct() {
     if (!had) render(); }).catch(() => {});
 }
 function askCan() {
-  if (askCan.done || PREVIEW || !(HOST && HOST.api && HOST.site) || (PAGE !== "checkout" && !(C.account && C.account.on))) return; askCan.done = true;
-  fetch(HOST.api + "/site/" + encodeURIComponent(HOST.site) + "/can", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((j) => { if (!j) return; CAN = { rz: String(j.rz || ""), pg: Array.isArray(j.pg) ? j.pg : [], pts: !!j.pts, em: !!j.em, otp: !!j.otp, via: Array.isArray(j.via) && j.via.length ? j.via.filter((v) => v === "wa" || v === "sms") : ["wa"] }; if (PAGE === "checkout") { if (!cameBack() && (CAN.rz || CAN.pg.length || CAN.otp)) render(); else { ptsDraw(); evDraw(); } }
-    if (j.acct) loadAcct().then(() => { const redo = () => { if (!ME()) { PTS.info = null; PTS.use = false; } if (!$(".done")) render(); ptsMine(); };
-      SiteAcct.init({ api: HOST.api, site: HOST.site, kind: "store", addresses: true, ui: (C.account && C.account.ui) || {}, acct: j.acct, money: (n) => money(n), img: (path) => imgUrl({ path }), biz: (() => { const L = C.legal || {}, K = C.contact || {}; return { name: L.name || (C.brand && C.brand.name) || "", address: L.address || K.address || "", phone: L.phone || K.phone || "", email: L.email || K.email || "", gstin: L.gstin || "" }; })(), onChange: redo }); redo(); }).catch(() => {}); }).catch(() => {});
+  if (askCan.done || PREVIEW || !(HOST && HOST.api && HOST.site) || (PAGE !== "checkout" && !(C.account && C.account.on))) return; askCan.done = true; askCan.waiting = PAGE === "checkout" && !!(C.account && C.account.on);
+  const fin = () => { if (askCan.waiting) { askCan.waiting = false; if (!$(".done")) render(); } };
+  fetch(HOST.api + "/site/" + encodeURIComponent(HOST.site) + "/can", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((j) => { if (!j) return fin(); CAN = { rz: String(j.rz || ""), pg: Array.isArray(j.pg) ? j.pg : [], pts: !!j.pts, em: !!j.em, otp: !!j.otp, via: Array.isArray(j.via) && j.via.length ? j.via.filter((v) => v === "wa" || v === "sms") : ["wa"] }; if (PAGE === "checkout") { if (!cameBack() && (CAN.rz || CAN.pg.length || CAN.otp)) render(); else { ptsDraw(); evDraw(); } }
+    if (!j.acct) fin(); else loadAcct().then(() => { const redo = () => { if (!ME()) { PTS.info = null; PTS.use = false; } if (!$(".done")) render(); ptsMine(); };
+      SiteAcct.init({ api: HOST.api, site: HOST.site, kind: "store", addresses: true, ui: (C.account && C.account.ui) || {}, acct: j.acct, money: (n) => money(n), img: (path) => imgUrl({ path }), biz: (() => { const L = C.legal || {}, K = C.contact || {}; return { name: L.name || (C.brand && C.brand.name) || "", address: L.address || K.address || "", phone: L.phone || K.phone || "", email: L.email || K.email || "", gstin: L.gstin || "" }; })(), onChange: redo }); askCan.waiting = false; redo(); }).catch(fin); }).catch(fin);
 }
 function methods() {
   const P = C.payments, out = [], own = (n) => `You pay on ${n}'s secure page and come back here. The order is placed as soon as you've paid.`;
@@ -730,6 +731,7 @@ const PAGES = {
     if (!lines.length) return `<section class="page-h"><div class="wrap"><h1>${esc(C.checkout.title)}</h1></div></section><div class="wrap" style="padding-bottom:80px"><div class="empty"><p>Your cart is empty.</p><a class="btn pri" href="shop.html">Start shopping</a></div></div>`;
     const K = C.checkout, ms = methods(), t = totals(lines);
 
+    if (askCan.waiting) return `<section class="page-h"><div class="wrap"><h1 class="fit">${ml(K.title)}</h1></div></section><div class="wrap" style="padding-bottom:80px"><div class="sk-wrap" role="status" aria-label="Loading"><i class="sk-b s"></i><i class="sk-b"></i><i class="sk-b"></i><i class="sk-b h"></i></div></div>`;
     if (mustSign()) return `<section class="page-h"><div class="wrap"><h1 class="fit">${ml(K.title)}</h1></div></section><div class="wrap" style="padding-bottom:80px"><div id="sa-gate"></div></div>`;
     { const k = window.SiteAcct && !ME() && SiteAcct.skipped(); if (k) { EV.tok = k.token; EV.email = k.email; } }
     const SP = ME() ? SiteAcct.profile() : null, SA = (SP && SP.addresses) || [], sa = SA[Math.min(ADDR_AT, SA.length - 1)] || null;

@@ -162,3 +162,7 @@ html.ord-lock .fx-badge{display:none!important}html.ord-cart .fx-badge{bottom:84
 .rv-pick{display:flex;gap:2px}.rv-pick button{border:0;background:none;font-size:30px;line-height:1;color:var(--line,#ccc);cursor:pointer;padding:0 2px}.rv-pick button.on{color:var(--accent2,#E9B949)}
 .rv-list{list-style:none;margin:0;padding:0;display:grid;gap:14px}.rv-list li{padding-bottom:12px;border-bottom:1px solid var(--line,#e5e0d6);font-size:14.5px}.rv-list p{margin:4px 0}.rv-list small{color:var(--soft,#777)}.rv-v{font-style:normal;font-size:11.5px;font-weight:800;color:var(--accent,#1F4D3A);margin-left:6px}.rv-list blockquote{margin:8px 0 0;padding:8px 12px;border-left:3px solid var(--accent,#1F4D3A);font-size:13.5px}.rv-none{margin:0;color:var(--soft,#777);font-size:14px}
 .vh{position:absolute!important;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+/* Shown while the site finds out whether sign-in is on (checkout) or the customer's account loads. */
+.sk-wrap{display:grid;gap:14px;max-width:560px}.sk-b{display:block;height:46px;border-radius:12px;background:linear-gradient(100deg,rgba(128,128,128,.12) 30%,rgba(128,128,128,.24) 50%,rgba(128,128,128,.12) 70%);background-size:300% 100%;animation:sk-sh 1.3s linear infinite}
+.sk-b.s{height:16px;width:38%;border-radius:8px}.sk-b.t{height:24px;width:62%}.sk-b.h{height:110px}@keyframes sk-sh{from{background-position:100% 0}to{background-position:0 0}}

@@ -36,6 +36,7 @@
   const ME = () => (window.SiteAcct && SiteAcct.on() ? SiteAcct.user() : null);
   /** How the checkout's sections are drawn (Theme & layout → Account customization): cards, numbered steps, or plain. */
   const coLook = () => { const v = A.C().account && A.C().account.ui && A.C().account.ui.checkout; return ["cards", "steps", "plain"].includes(v) ? v : "cards"; };
+  let acctWait = false; // true while the site finds out whether sign-in is on, so checkout never flashes its form first
   const mustSign = () => !!(window.SiteAcct && SiteAcct.on() && !SiteAcct.user() && !SiteAcct.skipped() && !A.PREVIEW);
   const applyMe = (fresh) => { const m = ME(), k = window.SiteAcct && SiteAcct.skipped(), f = ui.form; if (m && m.kind === "phone") f.phone = m.typed || "+" + m.key; if (m && m.kind === "email") f.email = m.key; if (!m && k) { f.email = k.email; ui.eotp = { email: k.email, token: k.token }; }
     // their saved name, other contact and address fill the form where it is still empty
@@ -281,6 +282,7 @@
     const b = bill(), o = O(), m = mode(), f = ui.form, sl = slots(), ps = pays();
     if (!sl.some((s) => s.v === f.when)) f.when = sl.length ? sl[0].v : "";
     if (!ps.some((p) => p.id === f.pay)) f.pay = ps.length ? ps[0].id : "";
+    if (acctWait) return `<div class="sk-wrap" role="status" aria-label="Loading"><i class="sk-b s"></i><i class="sk-b"></i><i class="sk-b"></i><i class="sk-b h"></i></div>`;
     if (mustSign()) return `<div id="od-acct"></div>`; // sign in first: the form follows
     return `<form class="od-form" id="od-form" data-look="${esc(coLook())}" novalidate>${ME() ? `<p class="od-me"><span>Signed in as <b>${esc(/@/.test(ME().key) ? ME().key : "+" + ME().key)}</b></span><button type="button" class="chip" data-act="acct">My account</button></p>` : ""}
       <fieldset><legend>Your details</legend>${inp("name", "Name", 'autocomplete="name" required')}${phoneBox()}${must().askEmail ? emailBox() : ""}${must().either ? `<p class="od-live">Give your mobile number or your email address (or both), so we can reach you about the order.</p>` : ""}
@@ -675,10 +677,10 @@
       SiteAcct.init({ demo: true, api: "", site: "preview", kind: "restaurant", ui: C.account.ui || {}, acct: { by, phone: by === "email" ? [] : ["wa"], email: by !== "phone" }, money: (n) => fmt(n), img: (path) => A.imgUrl({ path }), demoItems: dishes, biz: { name: (C.brand && C.brand.name) || "" }, onChange: again });
       if (!$('[data-act="acct"]', root)) again();
     }).catch(() => {});
-    if (!canAsked && !A.PREVIEW && be && be.cf) { canAsked = true; fetch(be.cf + "/site/" + encodeURIComponent(be.site) + "/can", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((j) => { if (j) { can = { otp: !!j.otp, pts: !!j.pts, em: !!j.em, via: Array.isArray(j.via) && j.via.length ? j.via.filter((v) => v === "wa" || v === "sms") : ["wa"], rz: String(j.rz || ""), pg: Array.isArray(j.pg) ? j.pg : [] }; if (ui.drawer === "checkout") { sync(); over(true); }
+    if (!canAsked && !A.PREVIEW && be && be.cf) { canAsked = true; acctWait = !!(C.account && C.account.on); const fin = () => { if (acctWait) { acctWait = false; if (ui.drawer === "checkout") { sync(); over(true); } } }; fetch(be.cf + "/site/" + encodeURIComponent(be.site) + "/can", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((j) => { if (!j) fin(); if (j) { can = { otp: !!j.otp, pts: !!j.pts, em: !!j.em, via: Array.isArray(j.via) && j.via.length ? j.via.filter((v) => v === "wa" || v === "sms") : ["wa"], rz: String(j.rz || ""), pg: Array.isArray(j.pg) ? j.pg : [] }; if (ui.drawer === "checkout") { sync(); over(true); }
       // customer accounts: sign-in before checkout, and "My account" in the toolbar
-      if (j.acct) loadAcct().then(() => { const redo = () => { sync(); applyMe(true); if (!ME()) ui.pts = null; const host = root.parentNode, y = scrollY; host.innerHTML = page(A); bind(A); scrollTo(0, y); loadPts(); };
-        SiteAcct.init({ api: be.cf, site: be.site, kind: "restaurant", ui: (C.account && C.account.ui) || {}, acct: j.acct, money: (n) => fmt(n), img: (path) => A.imgUrl({ path }), biz: (() => { const L = C.legal || {}, K = C.contact || {}; return { name: L.name || (C.brand && C.brand.name) || "", address: L.address || K.address || "", phone: L.phone || K.phone || "", email: L.email || K.email || "", gstin: L.gstin || "" }; })(), onChange: redo }); redo(); }).catch(() => {}); } }).catch(() => {}); }
+      if (!j.acct) fin(); else loadAcct().then(() => { const redo = () => { sync(); applyMe(true); if (!ME()) ui.pts = null; const host = root.parentNode, y = scrollY; host.innerHTML = page(A); bind(A); scrollTo(0, y); loadPts(); };
+        SiteAcct.init({ api: be.cf, site: be.site, kind: "restaurant", ui: (C.account && C.account.ui) || {}, acct: j.acct, money: (n) => fmt(n), img: (path) => A.imgUrl({ path }), biz: (() => { const L = C.legal || {}, K = C.contact || {}; return { name: L.name || (C.brand && C.brand.name) || "", address: L.address || K.address || "", phone: L.phone || K.phone || "", email: L.email || K.email || "", gstin: L.gstin || "" }; })(), onChange: redo }); acctWait = false; redo(); }).catch(fin); } }).catch(fin); }
   }
   window.RestOrder = { page, bind };
 })();

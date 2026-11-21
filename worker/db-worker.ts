@@ -61,6 +61,22 @@ async function who(env: Env, req: Request): Promise<string | null> {
   if (b64u(await hmac(env.SECRET, "s:" + body)) !== sig) return null;
   try { const o = JSON.parse(new TextDecoder().decode(unb64u(body))); return o.x > Date.now() && emailOk(o.e) ? o.e : null; } catch { return null; }
 }
+// ---- PIN sign-in: when the owners switch it on, a member who has set a PIN signs in with email + PIN instead of an emailed
+// code, but only on a device that has already signed in with a code (it holds a secret the database remembers as a hash).
+// Five wrong PINs lock that person's PIN sign-in for 15 minutes; the emailed code always works.
+const pinOn = async (env: Env) => !!((await getSetting(env, "_db", "pin").catch(() => null)) as any)?.on;
+const pinWeak = (pin: string) => /^(\d)\1+$/.test(pin) || "0123456789".includes(pin) || "9876543210".includes(pin) || ["1212", "2580", "0852", "121212", "123123", "112233"].includes(pin);
+const pinHash = async (env: Env, email: string, salt: string, pin: string) => b64u(await hmac(env.SECRET, "pin:" + email + ":" + salt + ":" + pin));
+const devHash = async (env: Env, dev: string) => b64u(await hmac(env.SECRET, "dev:" + dev));
+async function pinDevice(env: Env, email: string) {
+  const dev = b64u(crypto.getRandomValues(new Uint8Array(24)));
+  await env.DB.prepare("insert into pin_dev (email, dev, at) values (?, ?, ?)").bind(email, await devHash(env, dev), Date.now()).run();
+  await env.DB.prepare("delete from pin_dev where email = ? and dev not in (select dev from pin_dev where email = ? order by at desc limit 8)").bind(email, email).run();
+  return dev;
+}
+const isDbOwner = async (env: Env, e: string) => !!(await env.DB.prepare("select 1 from members where email = ? and role = 'owner' and scope like 'studio:%' limit 1").bind(e).first())
+  || (!(await env.DB.prepare("select 1 from members where scope like 'studio:%' limit 1").first()) && !!(await env.DB.prepare("select 1 from members where email = ? and role = 'owner' limit 1").bind(e).first()));
+
 // ---- Sign in with Google (see /auth/google…): the setting, the addresses it may be used from, and checking Google's token.
 async function gsCfg(env: Env): Promise<{ on?: boolean; clientId?: string; origins?: string[] }> { return (await getSetting(env, "_db", "google")) || {}; }
 /** Remembers an address (an https origin) someone signed in from with an email code, or the owner set this up from. */
@@ -429,6 +445,8 @@ async function ensure(env: Env) {
     env.DB.prepare("create index if not exists carts_open on carts (status, updated_at)"),
     env.DB.prepare("create table if not exists reviews (id integer primary key autoincrement, site text not null, item text not null, label text not null default '', name text not null, email text not null default '', rating integer not null, title text not null default '', body text not null, verified integer not null default 0, status text not null default 'pending', reply text not null default '', reply_at text, created_at text not null)"),
     env.DB.prepare("create index if not exists reviews_item on reviews (site, item, status)"),
+    env.DB.prepare("create table if not exists pins (email text primary key, salt text not null, hash text not null, tries integer not null default 0, locked integer not null default 0, set_at text not null)"),
+    env.DB.prepare("create table if not exists pin_dev (email text not null, dev text not null, at integer not null, primary key (email, dev))"),
     env.DB.prepare("create table if not exists payments (rz_order text primary key, site text not null, order_no text not null, amount integer not null, status text not null default 'created', created_at text not null)"),
   ]);
   ensured = true;
@@ -1253,7 +1271,7 @@ export default {
         await env.DB.prepare("delete from codes where email = ?").bind(email).run();
         // The address this sign-in came from is now known: Sign in with Google is offered there (and only on such addresses).
         try { await gsOrigin(env, req.headers.get("origin") || ""); } catch { /* the sign-in still stands */ }
-        return json({ token: await sessionFor(env, email), email });
+        return json({ token: await sessionFor(env, email), email, ...((await pinOn(env)) ? { dev: await pinDevice(env, email) } : {}) });
       }
       // ---- Sign in with Google, for emails that are already members (the same people who can get a code by email).
       // No Google script on the page and no secret: Google sends a signed token to this Worker, which checks it.
@@ -1301,6 +1319,55 @@ export default {
         await putSetting(env, "_gs", key, null);
         if (r.x < Date.now() || r.o !== (req.headers.get("origin") || "")) return err(403, "That sign-in can't be used here. Press Sign in with Google again.");
         return json({ token: r.token, email: r.email });
+      }
+      // ---- PIN sign-in (see pinOn above)
+      if (p === "/auth/pin" && req.method === "GET") {
+        const e = await who(env, req), on = await pinOn(env);
+        return json({ on, ...(e ? { has: !!(await env.DB.prepare("select 1 from pins where email = ?").bind(e).first()) } : {}) });
+      }
+      if (p === "/auth/pin/set-on" && req.method === "POST") {
+        const e = await who(env, req); if (!e) return err(401, "Sign in first.");
+        if (!(await isDbOwner(env, e))) return err(403, "Only the owners can change how people sign in.");
+        const b = (await req.json().catch(() => ({}))) as any; await putSetting(env, "_db", "pin", { on: !!b.on });
+        return json({ ok: true, on: !!b.on });
+      }
+      if (p === "/auth/pin/save" && req.method === "POST") {
+        const e = await who(env, req); if (!e) return err(401, "Sign in first.");
+        if (!(await pinOn(env))) return err(403, "PIN sign-in isn't switched on.");
+        const b = (await req.json().catch(() => ({}))) as any, pin = String(b.pin || "");
+        if (!/^\d{4,6}$/.test(pin)) return err(400, "A PIN is 4 to 6 digits.");
+        if (pinWeak(pin)) return err(400, "That PIN is too easy to guess (like 1234 or 1111). Choose another.");
+        const salt = b64u(crypto.getRandomValues(new Uint8Array(12)));
+        await env.DB.prepare("insert into pins (email, salt, hash, tries, locked, set_at) values (?, ?, ?, 0, 0, ?) on conflict (email) do update set salt = excluded.salt, hash = excluded.hash, tries = 0, locked = 0, set_at = excluded.set_at").bind(e, salt, await pinHash(env, e, salt, pin), new Date().toISOString()).run();
+        return json({ ok: true, dev: await pinDevice(env, e) });
+      }
+      if (p === "/auth/pin/device" && req.method === "POST") { // this device signed in another way (Google): let it use the PIN too
+        const e = await who(env, req); if (!e) return err(401, "Sign in first.");
+        if (!(await pinOn(env)) || !(await env.DB.prepare("select 1 from pins where email = ?").bind(e).first())) return err(404, "No PIN.");
+        return json({ ok: true, dev: await pinDevice(env, e) });
+      }
+      if (p === "/auth/pin/remove" && req.method === "POST") {
+        const e = await who(env, req); if (!e) return err(401, "Sign in first.");
+        await env.DB.batch([env.DB.prepare("delete from pins where email = ?").bind(e), env.DB.prepare("delete from pin_dev where email = ?").bind(e)]);
+        return json({ ok: true });
+      }
+      if (p === "/auth/pin/login" && req.method === "POST") {
+        const b = (await req.json().catch(() => ({}))) as any, email = String(b.email || "").trim().toLowerCase(), pin = String(b.pin || ""), dev = String(b.dev || "");
+        const no = () => err(403, "That PIN isn't right, or this device hasn't signed in with a code yet. Use an emailed code instead.");
+        if (!(await pinOn(env))) return err(403, "PIN sign-in isn't switched on.");
+        if (!emailOk(email) || !/^\d{4,6}$/.test(pin) || !/^[\w-]{20,60}$/.test(dev)) return no();
+        const row: any = await env.DB.prepare("select salt, hash, locked from pins where email = ?").bind(email).first();
+        const dv = row && (await env.DB.prepare("select 1 from pin_dev where email = ? and dev = ?").bind(email, await devHash(env, dev)).first());
+        if (!row || !dv) return no();
+        if (row.locked > Date.now()) return err(429, `Too many wrong PINs. PIN sign-in is paused for ${Math.ceil((row.locked - Date.now()) / 60000)} minutes; use an emailed code instead.`);
+        if (await pinHash(env, email, row.salt, pin) !== row.hash) {
+          const r: any = await env.DB.prepare("update pins set tries = tries + 1 where email = ? returning tries").bind(email).first(), left = 5 - (r?.tries || 5);
+          if (left <= 0) { await env.DB.prepare("update pins set tries = 0, locked = ? where email = ?").bind(Date.now() + 15 * 60_000, email).run(); return err(429, "Too many wrong PINs. PIN sign-in is paused for 15 minutes; use an emailed code instead."); }
+          return err(403, `That PIN isn't right. ${left} ${left === 1 ? "try" : "tries"} left.`);
+        }
+        if (!(await env.DB.prepare("select 1 from members where email = ? limit 1").bind(email).first())) return no();
+        await env.DB.prepare("update pins set tries = 0, locked = 0 where email = ?").bind(email).run();
+        return json({ token: await sessionFor(env, email), email });
       }
       if (p === "/me") {
         const e = await who(env, req); if (!e) return err(401, "Sign in first.");

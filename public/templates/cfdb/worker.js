@@ -17,6 +17,8 @@ create index if not exists carts_tok on carts (tok);
 create index if not exists carts_open on carts (status, updated_at);
 create table if not exists reviews (id integer primary key autoincrement, site text not null, item text not null, label text not null default '', name text not null, email text not null default '', rating integer not null, title text not null default '', body text not null, verified integer not null default 0, status text not null default 'pending', reply text not null default '', reply_at text, created_at text not null);
 create index if not exists reviews_item on reviews (site, item, status);
+create table if not exists pins (email text primary key, salt text not null, hash text not null, tries integer not null default 0, locked integer not null default 0, set_at text not null);
+create table if not exists pin_dev (email text not null, dev text not null, at integer not null, primary key (email, dev));
 create table if not exists workers (worker text primary key, scope text not null);
 create table if not exists repos (repo text primary key, scope text not null);
 create table if not exists approvals (token text primary key, scope text not null, project text not null, name text not null, template text not null, content text not null, note text not null default '', status text not null default 'open', decided_by text not null default '', decided_at text, created_by text not null default '', created_at text not null);
@@ -24,7 +26,7 @@ create index if not exists approvals_project on approvals (scope, project, creat
 create table if not exists approval_notes (id integer primary key autoincrement, token text not null, who text not null, body text not null, page text not null default '', kind text not null default 'comment', created_at text not null);
 create index if not exists approval_notes_token on approval_notes (token, id);
 `;
-var CFDB_VERSION = 47;
+var CFDB_VERSION = 48;
 var CFDB_WORKER_NAME = "picaffectz-db";
 
 // src/lib/lookdigest.ts
@@ -638,6 +640,17 @@ async function who(env, req) {
     return null;
   }
 }
+var pinOn = async (env) => !!(await getSetting(env, "_db", "pin").catch(() => null))?.on;
+var pinWeak = (pin) => /^(\d)\1+$/.test(pin) || "0123456789".includes(pin) || "9876543210".includes(pin) || ["1212", "2580", "0852", "121212", "123123", "112233"].includes(pin);
+var pinHash = async (env, email, salt, pin) => b64u(await hmac(env.SECRET, "pin:" + email + ":" + salt + ":" + pin));
+var devHash = async (env, dev) => b64u(await hmac(env.SECRET, "dev:" + dev));
+async function pinDevice(env, email) {
+  const dev = b64u(crypto.getRandomValues(new Uint8Array(24)));
+  await env.DB.prepare("insert into pin_dev (email, dev, at) values (?, ?, ?)").bind(email, await devHash(env, dev), Date.now()).run();
+  await env.DB.prepare("delete from pin_dev where email = ? and dev not in (select dev from pin_dev where email = ? order by at desc limit 8)").bind(email, email).run();
+  return dev;
+}
+var isDbOwner = async (env, e) => !!await env.DB.prepare("select 1 from members where email = ? and role = 'owner' and scope like 'studio:%' limit 1").bind(e).first() || !await env.DB.prepare("select 1 from members where scope like 'studio:%' limit 1").first() && !!await env.DB.prepare("select 1 from members where email = ? and role = 'owner' limit 1").bind(e).first();
 async function gsCfg(env) {
   return await getSetting(env, "_db", "google") || {};
 }
@@ -1080,6 +1093,8 @@ async function ensure(env) {
     env.DB.prepare("create index if not exists carts_open on carts (status, updated_at)"),
     env.DB.prepare("create table if not exists reviews (id integer primary key autoincrement, site text not null, item text not null, label text not null default '', name text not null, email text not null default '', rating integer not null, title text not null default '', body text not null, verified integer not null default 0, status text not null default 'pending', reply text not null default '', reply_at text, created_at text not null)"),
     env.DB.prepare("create index if not exists reviews_item on reviews (site, item, status)"),
+    env.DB.prepare("create table if not exists pins (email text primary key, salt text not null, hash text not null, tries integer not null default 0, locked integer not null default 0, set_at text not null)"),
+    env.DB.prepare("create table if not exists pin_dev (email text not null, dev text not null, at integer not null, primary key (email, dev))"),
     env.DB.prepare("create table if not exists payments (rz_order text primary key, site text not null, order_no text not null, amount integer not null, status text not null default 'created', created_at text not null)")
   ]);
   ensured = true;
@@ -2253,7 +2268,7 @@ var db_worker_default = {
           await gsOrigin(env, req.headers.get("origin") || "");
         } catch {
         }
-        return json({ token: await sessionFor(env, email2), email: email2 });
+        return json({ token: await sessionFor(env, email2), email: email2, ...await pinOn(env) ? { dev: await pinDevice(env, email2) } : {} });
       }
       if (p === "/auth/google" && req.method === "GET") {
         const g = await gsCfg(env);
@@ -2308,6 +2323,62 @@ var db_worker_default = {
         await putSetting(env, "_gs", key, null);
         if (r.x < Date.now() || r.o !== (req.headers.get("origin") || "")) return err(403, "That sign-in can't be used here. Press Sign in with Google again.");
         return json({ token: r.token, email: r.email });
+      }
+      if (p === "/auth/pin" && req.method === "GET") {
+        const e = await who(env, req), on = await pinOn(env);
+        return json({ on, ...e ? { has: !!await env.DB.prepare("select 1 from pins where email = ?").bind(e).first() } : {} });
+      }
+      if (p === "/auth/pin/set-on" && req.method === "POST") {
+        const e = await who(env, req);
+        if (!e) return err(401, "Sign in first.");
+        if (!await isDbOwner(env, e)) return err(403, "Only the owners can change how people sign in.");
+        const b = await req.json().catch(() => ({}));
+        await putSetting(env, "_db", "pin", { on: !!b.on });
+        return json({ ok: true, on: !!b.on });
+      }
+      if (p === "/auth/pin/save" && req.method === "POST") {
+        const e = await who(env, req);
+        if (!e) return err(401, "Sign in first.");
+        if (!await pinOn(env)) return err(403, "PIN sign-in isn't switched on.");
+        const b = await req.json().catch(() => ({})), pin = String(b.pin || "");
+        if (!/^\d{4,6}$/.test(pin)) return err(400, "A PIN is 4 to 6 digits.");
+        if (pinWeak(pin)) return err(400, "That PIN is too easy to guess (like 1234 or 1111). Choose another.");
+        const salt = b64u(crypto.getRandomValues(new Uint8Array(12)));
+        await env.DB.prepare("insert into pins (email, salt, hash, tries, locked, set_at) values (?, ?, ?, 0, 0, ?) on conflict (email) do update set salt = excluded.salt, hash = excluded.hash, tries = 0, locked = 0, set_at = excluded.set_at").bind(e, salt, await pinHash(env, e, salt, pin), (/* @__PURE__ */ new Date()).toISOString()).run();
+        return json({ ok: true, dev: await pinDevice(env, e) });
+      }
+      if (p === "/auth/pin/device" && req.method === "POST") {
+        const e = await who(env, req);
+        if (!e) return err(401, "Sign in first.");
+        if (!await pinOn(env) || !await env.DB.prepare("select 1 from pins where email = ?").bind(e).first()) return err(404, "No PIN.");
+        return json({ ok: true, dev: await pinDevice(env, e) });
+      }
+      if (p === "/auth/pin/remove" && req.method === "POST") {
+        const e = await who(env, req);
+        if (!e) return err(401, "Sign in first.");
+        await env.DB.batch([env.DB.prepare("delete from pins where email = ?").bind(e), env.DB.prepare("delete from pin_dev where email = ?").bind(e)]);
+        return json({ ok: true });
+      }
+      if (p === "/auth/pin/login" && req.method === "POST") {
+        const b = await req.json().catch(() => ({})), email2 = String(b.email || "").trim().toLowerCase(), pin = String(b.pin || ""), dev = String(b.dev || "");
+        const no = () => err(403, "That PIN isn't right, or this device hasn't signed in with a code yet. Use an emailed code instead.");
+        if (!await pinOn(env)) return err(403, "PIN sign-in isn't switched on.");
+        if (!emailOk(email2) || !/^\d{4,6}$/.test(pin) || !/^[\w-]{20,60}$/.test(dev)) return no();
+        const row = await env.DB.prepare("select salt, hash, locked from pins where email = ?").bind(email2).first();
+        const dv = row && await env.DB.prepare("select 1 from pin_dev where email = ? and dev = ?").bind(email2, await devHash(env, dev)).first();
+        if (!row || !dv) return no();
+        if (row.locked > Date.now()) return err(429, `Too many wrong PINs. PIN sign-in is paused for ${Math.ceil((row.locked - Date.now()) / 6e4)} minutes; use an emailed code instead.`);
+        if (await pinHash(env, email2, row.salt, pin) !== row.hash) {
+          const r = await env.DB.prepare("update pins set tries = tries + 1 where email = ? returning tries").bind(email2).first(), left = 5 - (r?.tries || 5);
+          if (left <= 0) {
+            await env.DB.prepare("update pins set tries = 0, locked = ? where email = ?").bind(Date.now() + 15 * 6e4, email2).run();
+            return err(429, "Too many wrong PINs. PIN sign-in is paused for 15 minutes; use an emailed code instead.");
+          }
+          return err(403, `That PIN isn't right. ${left} ${left === 1 ? "try" : "tries"} left.`);
+        }
+        if (!await env.DB.prepare("select 1 from members where email = ? limit 1").bind(email2).first()) return no();
+        await env.DB.prepare("update pins set tries = 0, locked = 0 where email = ?").bind(email2).run();
+        return json({ token: await sessionFor(env, email2), email: email2 });
       }
       if (p === "/me") {
         const e = await who(env, req);

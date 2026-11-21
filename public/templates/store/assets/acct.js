@@ -55,6 +55,7 @@
 .sa-link{justify-self:start;border:0;background:none;padding:0;color:inherit;font:inherit;font-size:13.5px;font-weight:600;text-decoration:underline;text-underline-offset:3px;cursor:pointer;opacity:.8}
 .sa-bad{color:#b3261e;font-size:13.5px;font-weight:600}html[data-dark=true] .sa-bad{color:#ff9e94}.sa-good{color:#1e7a46;font-size:13.5px;font-weight:600}html[data-dark=true] .sa-good{color:#7bd9a0}
 .sa-safe{display:flex;gap:8px;align-items:center}.sa-safe svg{width:15px;height:15px;flex:none;opacity:.7}
+.sa-sk{display:block;height:46px;border-radius:12px;background:linear-gradient(100deg,rgba(128,128,128,.12) 30%,rgba(128,128,128,.24) 50%,rgba(128,128,128,.12) 70%);background-size:300% 100%;animation:sa-sh 1.3s linear infinite}.sa-sk.t{height:26px;width:60%}.sa-sk.h{height:96px}@keyframes sa-sh{from{background-position:100% 0}to{background-position:0 0}}
 .sa-card{border:1px solid var(--line,#ddd);background:var(--surface,#fff);border-radius:calc(var(--sa-r) + 6px);padding:26px;max-width:460px;box-shadow:0 18px 50px -28px rgba(0,0,0,.35)}
 .sa-back{position:fixed;inset:0;z-index:2147483000;background:rgba(10,10,10,.5);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);display:flex;justify-content:flex-end;animation:sa-fade .2s ease-out}
 .sa-back[data-panel=left]{justify-content:flex-start}.sa-back[data-panel=sheet]{justify-content:center;align-items:center;padding:16px}
@@ -192,7 +193,7 @@
   }
   function acctHTML() {
     const d = data;
-    if (!d) return `<div class="sa"><p class="sa-soft">Loading your account…</p></div>`;
+    if (!d) return `<div class="sa" role="status" aria-label="Loading your account"><i class="sa-sk t"></i><i class="sa-sk h"></i><i class="sa-sk"></i><i class="sa-sk"></i></div>`;
     if (d.error) return `<div class="sa"><p class="sa-bad" role="alert">${esc(d.error)}</p></div>`;
     const live = d.orders.filter(active), past = d.orders.filter((o) => !active(o)), view = ui.view || (live.length ? "now" : "orders");
     const L = d.loyalty, worth = L && L.worth > 0 ? Math.round(d.points * L.worth * 100) / 100 : 0, m = cfg.money || ((n) => String(n));

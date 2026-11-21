@@ -662,3 +662,7 @@ html[data-crumbs=off] :is(.crumbs,.sp-crumbs,.solo-top){display:none}
 .two-f{display:grid;grid-template-columns:1fr 1fr;gap:12px}@media(max-width:560px){.two-f{grid-template-columns:1fr}}
 .rv-list{list-style:none;margin:0;padding:0;display:grid;gap:18px}.rv-list li{padding-bottom:18px;border-bottom:1px solid var(--line)}.rv-list h3{margin:6px 0 2px;font-size:16px}.rv-list p{margin:4px 0 6px}.rv-list small{color:var(--soft)}.rv-v{font-style:normal;font-size:12px;font-weight:800;color:var(--accent);margin-left:6px}.rv-list blockquote{margin:10px 0 0;padding:10px 14px;border-left:3px solid var(--accent);background:var(--surface);border-radius:0 8px 8px 0;font-size:14px}
 .vh{position:absolute!important;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+/* Shown while the site finds out whether sign-in is on (checkout) or the customer's account loads. */
+.sk-wrap{display:grid;gap:14px;max-width:560px}.sk-b{display:block;height:46px;border-radius:12px;background:linear-gradient(100deg,rgba(128,128,128,.12) 30%,rgba(128,128,128,.24) 50%,rgba(128,128,128,.12) 70%);background-size:300% 100%;animation:sk-sh 1.3s linear infinite}
+.sk-b.s{height:16px;width:38%;border-radius:8px}.sk-b.t{height:24px;width:62%}.sk-b.h{height:110px}@keyframes sk-sh{from{background-position:100% 0}to{background-position:0 0}}

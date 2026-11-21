@@ -650,6 +650,7 @@ function maintGate(again) {
     }).catch(() => { mntPass = true; again(); });
   return true;
 }
+let lastHtml = "", drawn = false;
 function render() {
   // A several-page link opened while the site is one page goes to that section.
   // A section's own page: only while its link still says so; otherwise the visitor goes to that section on the main page.
@@ -663,7 +664,12 @@ function render() {
   const solo = soloSections();
   const ids = special ? [] : multi() ? (PAGE === "home" ? C.sections.map((s) => s.id).filter((id) => PAGE_SECTIONS.home.includes(id)) : PAGE_SECTIONS[PAGE]) : C.sections.map((s) => s.id).filter((id) => !solo.has(id));
   const body = special ? special() : ids.filter((id) => RENDER[id] && shown(id)).map((id) => RENDER[id]()).join("");
-  $("#app").innerHTML = `<a class="skip" href="#main">Skip to content</a>${navHTML()}<main id="main">${multi() && !special && PAGE !== "home" ? pageHead() : ""}${body}</main>${footerHTML()}`;
+  const html = `<a class="skip" href="#main">Skip to content</a>${navHTML()}<main id="main">${multi() && !special && PAGE !== "home" ? pageHead() : ""}${body}</main>${footerHTML()}`;
+  /* A redraw that gives what is already on screen is skipped, and one that lands while the entrance is still running carries on from where it was: both used to make the page blink. */
+  if (!PREVIEW && html === lastHtml && $("#app").firstChild) return;
+  lastHtml = html; const pend = drawn ? new Set($$(".rv").map((e, i) => (e.classList.contains("in") ? -1 : i))) : null; drawn = true;
+  $("#app").innerHTML = html;
+  if (pend) $$(".rv").forEach((e, i) => { if (!pend.has(i)) e.classList.add("in"); });
   if (SC && SC.drawn) SC.drawn($("#app"), C);
   bind();
   if (PAGE === "warranty") swMount();

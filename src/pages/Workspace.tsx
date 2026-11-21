@@ -27,7 +27,7 @@ import { PartnersTab } from "./PartnersTab";
 import { BADGE_DEFAULT, cleanBadge, setCurrentBadge, type BadgeCfg } from "../lib/badge";
 import { MARK_URI } from "../ui/logo";
 import { FoldAll, FoldCards } from "../ui/fold";
-import { BrandMark, DEFAULT_NAME, brand as currentBrand, setBrand, shrinkImage, useBrand } from "../lib/brand";
+import { LOGO_ANIMS, BrandMark, DEFAULT_NAME, brand as currentBrand, setBrand, shrinkImage, useBrand } from "../lib/brand";
 import { PushUpdatesCard, PushUpdatesHost } from "./PushUpdates";
 import { Dashboard } from "./Dashboard";
 import { ProjectView } from "./ProjectView";
@@ -93,7 +93,7 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
     (async () => {
       let logo = "";
       if (sb.logo) { const blob = await repo.getRaw(sb.logo).catch(() => null); if (blob) logo = await new Promise<string>((ok) => { const r = new FileReader(); r.onload = () => ok(String(r.result || "")); r.onerror = () => ok(""); r.readAsDataURL(new Blob([blob], { type: "image/png" })); }); }
-      setBrand({ name: sb.name, logo, v: sb.v, tint: sb.tint || "", mode: sb.mode === "light" ? "light" : "dark" });
+      setBrand({ name: sb.name, logo, v: sb.v, tint: sb.tint || "", mode: sb.mode === "light" ? "light" : "dark", anim: sb.anim || "" });
     })();
   }, [index?.brand?.v]);
 
@@ -244,13 +244,14 @@ function BrandCard({ studio, onIndex }: { studio: Studio; onIndex: (i: StudioInd
   const tint = chosen, waiting = pick === "logo" && !!shown && accent === undefined;
   const [mode, setMode] = useState<"dark" | "light">(b.mode === "light" ? "light" : "dark");
   const pal = chosen ? tintPalette(chosen, mode) : null;
-  const same = tint.toLowerCase() === (b.tint || "").toLowerCase() && mode === (b.mode || "dark");
+  const [anim, setAnim] = useState(b.anim || "");
+  const same = tint.toLowerCase() === (b.tint || "").toLowerCase() && mode === (b.mode || "dark") && anim === (b.anim || "");
   const save = async () => {
     setBusy(true);
     try {
-      const i = await studio.saveBrand(name.trim() || DEFAULT_NAME, logo, tint, mode);
+      const i = await studio.saveBrand(name.trim() || DEFAULT_NAME, logo, tint, mode, anim);
       onIndex(i);
-      setBrand({ name: name.trim() || DEFAULT_NAME, logo: shown, v: i.brand?.v, tint, mode });
+      setBrand({ name: name.trim() || DEFAULT_NAME, logo: shown, v: i.brand?.v, tint, mode, anim });
       setLogo(null);
       toast(tint ? `Saved. The Studio now wears ${pick === "logo" ? "the logo's colours" : "the new colours"}${mode === "light" ? " in light mode" : ""} on every device you sign in on.` : "Saved. Every device you sign in on shows the new name and logo.");
     } catch (e) { toast(explain(e), "bad"); }
@@ -261,7 +262,7 @@ function BrandCard({ studio, onIndex }: { studio: Studio; onIndex: (i: StudioInd
       <h3 className="text-[15px] font-extrabold">Studio name & logo</h3>
       <Field label="Studio name" htmlFor="b-name" hint="Shown in the header, the browser tab, the sign-in screen and the shareable theme gallery."><input id="b-name" className="input" value={name} maxLength={40} onChange={(e) => setName(e.target.value)} /></Field>
       <div className="flex flex-wrap items-center gap-3">
-        <div className="grid h-16 w-16 place-items-center overflow-hidden rounded-xl border border-ink-600 bg-ink-950">{shown ? <img src={shown} alt="Studio logo" className="h-full w-full object-cover" /> : <Logo size={10} />}</div>
+        <div className="grid h-16 w-16 place-items-center rounded-xl border border-ink-600 bg-ink-950"><span data-logo-anim={anim || undefined} className="grid h-full w-full place-items-center overflow-hidden rounded-xl">{shown ? <img src={shown} alt="Studio logo" className="h-full w-full object-cover" /> : <Logo size={10} />}</span></div>
         <label className="btn btn-sm relative cursor-pointer">Upload logo / icon<input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" className="sr-only" onChange={async (e) => { const f = e.target.files?.[0]; e.target.value = ""; if (!f) return; try { setLogo(await shrinkImage(f)); } catch (x) { toast(explain(x), "bad"); } }} /></label>
         {shown && <button type="button" className="btn btn-sm" onClick={() => setLogo("")}>Remove</button>}
         <span className="hint">A square image works best. It's also the browser-tab icon.</span>
@@ -293,6 +294,7 @@ function BrandCard({ studio, onIndex }: { studio: Studio; onIndex: (i: StudioInd
               <span className="hint">{same ? "In use." : "Save to use it on every device."}</span>
             </div>}
       </div>
+      <Field label="Logo animation" htmlFor="b-anim" hint="A quiet movement on the Studio's logo in the header and on the sign-in screen. The little preview above shows it. Still for anyone who asks their device for less motion."><select id="b-anim" className="input" value={anim} onChange={(e) => setAnim(e.target.value)}>{LOGO_ANIMS.map(([k, l]) => <option key={k || "none"} value={k}>{l}</option>)}</select></Field>
       <button type="button" className="btn btn-pri self-start" disabled={busy || waiting || (name.trim() === b.name && logo === null && same)} onClick={save}>{busy ? "Saving…" : "Save name & look"}</button>
     </section>
   );

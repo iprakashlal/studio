@@ -11,25 +11,17 @@ Made with Site Studio. A multi-page shop with its own content manager.
 | `checkout.html` | Customer details, payment method, order confirmation |
 | `portfolio.html` | Your story and past work |
 | `policies.html` | Shipping, refund, privacy and terms |
-| `account.html` | Customer sign-in, order tracking, wishlist and details (needs the backend) |
-| `admin.html` | The shop's own CMS, including Orders and Customers |
-| `supabase/` | Optional backend, choice 1: Supabase database setup, server function and `SETUP.md` |
-| `cloudflare/` | Optional backend, choice 2: a free Cloudflare Worker that keeps orders as files in a private GitHub repo (`worker.js`, `SETUP.md`) |
+| `admin.html` | The shop's own CMS, including Purchased orders, Customer Data, Inventory, Abandoned carts and Reviews |
 
 ## How orders work
 
-### With the shop backend (recommended)
-Choose a backend under **Accounts & backend** in `admin.html`:
-- **Supabase**: a free database project. Follow `supabase/SETUP.md`.
-- **Cloudflare Worker + GitHub files**: no database; orders are JSON files in a private GitHub repo. Follow `cloudflare/SETUP.md`.
+### On the shop's own Cloudflare database (recommended)
+Host the shop from the Studio (Host to External Services → Cloudflare database). Everything then runs on that database, exactly as for a restaurant:
+- Customers sign in with a code sent to their mobile (WhatsApp or SMS) or email, and see their orders, bills, points and saved addresses under **My account**.
+- Razorpay, Cashfree, PhonePe, Stripe and PayPal charge the exact total; the amount is worked out on the server.
+- Orders appear under **Purchased orders**; stock, abandoned-cart reminders, reviews, courier tracking and customer data are all in the site's admin page.
 
-Both work the same way, with Resend for email:
-- Customers can sign in with an email code to track orders, keep a wishlist and save their details. Each gets an account number like AC-100001.
-- Razorpay and Stripe charge the exact order total. Customers and you get an email as soon as a payment goes through.
-- Cash-on-delivery orders email both of you straight away. UPI and PayPal orders wait until you press **Mark paid** in **Orders**.
-- **Orders** and **Customers** in `admin.html` list everything, searchable by order number, account number or email, with one-tap WhatsApp messages to customers.
-
-### Without the backend
+### Without a database
 The site has no server, so it can't store orders or take card details itself.
 
 1. The shopper fills in their details and chooses a payment method.

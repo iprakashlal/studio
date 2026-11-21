@@ -25,14 +25,10 @@
     "assets/menu.js",
     "assets/lang.js",
     "assets/video.js",
-    "assets/social.js", "assets/acct.js",
+    "assets/social.js",
+    "assets/acct.js",
     "assets/invoice.js",
-    "README.md",
-    "supabase/schema.sql",
-    "supabase/functions/shop/index.ts",
-    "supabase/SETUP.md",
-    "cloudflare/worker.js",
-    "cloudflare/SETUP.md"
+    "README.md"
   ],
   "starters": [
     {
@@ -43,10 +39,6 @@
     }
   ],
   "when": {
-    "account.html": [
-      "backend.enabled",
-      "backend.accounts"
-    ],
     "warranty.html": [
       "warranty.enabled"
     ]

@@ -174,12 +174,10 @@ src/
   lib/          GitHub client, encryption, studio storage, exporter,
                 supa.ts (Supabase repo + setup SQL), netlify.ts (deploy, domain, DNS), hosting.ts
   ui/           Buttons, dialogs, toasts, login screens
-worker/         shop-worker.ts: the Cloudflare backend (GitHub files); bundled with the shared
-                shop function by scripts/build-worker.mjs into templates/store/cloudflare/worker.js
+worker/         db-worker.ts: the per-site Cloudflare database Worker (orders, accounts, payments, stock, reviews…)
 public/templates/
   portfolio/    index.html, content.json, starters/, manifest.json
-  store/        8 pages, assets/store.js, assets/store.css, content.json, manifest.json,
-                supabase/ (schema.sql, functions/shop/index.ts, SETUP.md)
+  store/        8 pages, assets/store.js, assets/store.css, content.json, manifest.json
                 cloudflare/ (worker.js, SETUP.md)
 ```
 

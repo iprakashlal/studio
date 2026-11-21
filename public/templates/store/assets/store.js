@@ -77,8 +77,7 @@ const DEFAULT = {
     { id: "terms", title: "Terms", text: "Prices include applicable taxes unless stated. Orders are confirmed once payment is received or, for cash on delivery, once we confirm with you." },
   ],
   footer: { text: "Made in small batches." },
-  backend: { enabled: false, provider: "supabase", workerUrl: "", supabaseUrl: "", anonKey: "", accounts: true, wishlist: true, requireLogin: false },
-  accountPage: { title: "Your account", signInText: "Enter your email and we'll send you a 6-digit code. No password needed." },
+
 };
 
 const FONTS = {
@@ -147,95 +146,17 @@ const store = {
 };
 
 /* ============================================================
-   BACKEND (optional): Supabase, or a Cloudflare Worker that keeps
-   orders as files in a private GitHub repo. Same routes either way.
+   PAYMENT SCRIPTS AND THE SHOP'S DATABASE
    ============================================================ */
-const SUPA_JS = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js";
 const RZP_JS = "https://checkout.razorpay.com/v1/checkout.js";
 const scripts = {};
 function loadScript(src) {
   return (scripts[src] ||= new Promise((res, rej) => { const s = document.createElement("script"); s.src = src; s.onload = res; s.onerror = () => { delete scripts[src]; rej(new Error("load")); }; document.head.appendChild(s); }));
 }
-const CF = () => !!(C.backend && C.backend.provider === "cloudflare");
 const httpsUrl = (u) => /^https:\/\/[^\s]+$/.test(u || "");
-/* A shop hosted on its own Cloudflare database (the page carries #site-host) does everything there, like the restaurant:
-   accounts, orders, payments, points. The older shop backend (Supabase, or the GitHub-file Worker) is only for shops
-   that are not hosted that way, so the two never run side by side. */
+/* The shop runs on its own Cloudflare database (the page carries #site-host), like the restaurant: accounts, orders,
+   payments, points, stock, reviews and tracking all live there. */
 const DBHOST = () => !!(HOST && HOST.api && HOST.site);
-const BE = () => !DBHOST() && !!(C.backend && C.backend.enabled && (CF() ? httpsUrl(C.backend.workerUrl) : httpsUrl(C.backend.supabaseUrl) && C.backend.anonKey));
-const ACCOUNTS = () => BE() && !!C.backend.accounts;
-const sbUrl = () => String(C.backend.supabaseUrl).replace(/\/+$/, "");
-const fnBase = () => (CF() ? String(C.backend.workerUrl).replace(/\/+$/, "") : `${sbUrl()}/functions/v1/shop`);
-let SB = null, USER = null, PROFILE = null, WISH = null, sbReady = null;
-// Cloudflare: a signed session token from the Worker, kept on this device.
-const cfKey = () => "shop-cf:" + basePath;
-let CFT = null, CF_CH = null, cfMe = null;
-const cfGet = () => { try { return localStorage.getItem(cfKey()); } catch (e) { return null; } };
-const cfSet = (t) => { CFT = t; try { t ? localStorage.setItem(cfKey(), t) : localStorage.removeItem(cfKey()); } catch (e) {} };
-function cfApply(r) { USER = r.user ? { id: r.user.id, email: r.user.email } : null; PROFILE = r.profile || null; WISH = new Set(r.wishlist || []); }
-function cfLoadMe() {
-  if (!CFT) { USER = PROFILE = WISH = null; return Promise.resolve(null); }
-  return (cfMe ||= fn("me", {}).then((r) => { cfApply(r); return r; }, (e) => { cfMe = null; if (/sign in/i.test(e.message)) { cfSet(null); USER = PROFILE = WISH = null; return null; } throw e; }));
-}
-function sbInit() {
-  if (!BE() || PREVIEW) return Promise.resolve(null);
-  return (sbReady ||= (async () => {
-    if (CF()) { CFT = cfGet(); await cfLoadMe(); return true; }
-    await loadScript(SUPA_JS);
-    SB = window.supabase.createClient(sbUrl(), C.backend.anonKey, { auth: { persistSession: true, storageKey: "shop-auth:" + basePath, detectSessionInUrl: false } });
-    const { data } = await SB.auth.getSession();
-    USER = data.session ? data.session.user : null;
-    return SB;
-  })().catch((e) => { sbReady = null; throw e; }));
-}
-async function bearer() { if (CF()) return CFT; if (!SB) return null; const { data } = await SB.auth.getSession(); return data.session ? data.session.access_token : null; }
-async function fn(route, body) {
-  const t = await bearer();
-  let r;
-  const headers = CF() ? { "Content-Type": "application/json", ...(t ? { Authorization: "Bearer " + t } : {}) } : { "Content-Type": "application/json", apikey: C.backend.anonKey, Authorization: "Bearer " + (t || C.backend.anonKey) };
-  try { r = await fetch(`${fnBase()}/${route}`, { method: "POST", headers, body: JSON.stringify(body) }); }
-  catch (e) { throw new Error("Couldn't reach the shop. Check your connection and try again."); }
-  const j = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(j.error || "Something went wrong. Please try again.");
-  return j;
-}
-async function loadProfile() { if (CF()) { await cfLoadMe(); return PROFILE; } if (!SB || !USER) return (PROFILE = null); const { data } = await SB.from("profiles").select("*").eq("id", USER.id).maybeSingle(); return (PROFILE = data || null); }
-async function loadWish() { if (CF()) { await cfLoadMe(); return WISH; } if (!SB || !USER) return (WISH = null); const { data } = await SB.from("wishlists").select("product_id"); return (WISH = new Set((data || []).map((r) => r.product_id))); }
-/** Account actions, one implementation per backend. Each throws an Error with a message for the shopper. */
-const api = {
-  async sendCode(email) {
-    if (CF()) { CF_CH = (await fn("auth-send", { email })).challenge; return; }
-    const { error } = await SB.auth.signInWithOtp({ email, options: { shouldCreateUser: true } });
-    if (error) throw new Error(/rate|seconds/i.test(error.message) ? "Please wait a minute before asking for another code." : "We couldn't send a code. Check the email and try again.");
-  },
-  async verify(email, code) {
-    if (CF()) { const r = await fn("auth-verify", { challenge: CF_CH, code }); cfSet(r.token); cfMe = Promise.resolve(r); cfApply(r); return; }
-    const { data, error } = await SB.auth.verifyOtp({ email, token: code, type: "email" });
-    if (error || !data.user) throw new Error("That code is wrong or has expired. Try again or ask for a new one.");
-    USER = data.user;
-  },
-  async signOut() { if (CF()) { cfSet(null); cfMe = null; } else await SB.auth.signOut(); USER = null; PROFILE = null; WISH = null; },
-  async wish(pid, on) {
-    if (CF()) { WISH = new Set((await fn("wishlist", { action: on ? "add" : "remove", product_id: pid })).wishlist); return; }
-    const { error } = on ? await SB.from("wishlists").insert({ user_id: USER.id, product_id: pid }) : await SB.from("wishlists").delete().eq("user_id", USER.id).eq("product_id", pid);
-    if (error) throw new Error("Couldn't update your wishlist. Try again.");
-    if (on) WISH.add(pid); else WISH.delete(pid);
-  },
-  async myOrders() {
-    if (CF()) return (await fn("my-orders", {})).orders;
-    const { data, error } = await SB.from("orders").select("order_no,created_at,status,payment_status,method,totals,items").order("created_at", { ascending: false });
-    if (error) throw new Error("Your orders couldn't load. Try again.");
-    return data || [];
-  },
-  async saveProfile(patch) {
-    if (CF()) { PROFILE = (await fn("profile-update", patch)).profile; return; }
-    const { error } = await SB.from("profiles").update(patch).eq("id", USER.id);
-    if (error) throw new Error("Couldn't save your details. Try again.");
-    PROFILE = { ...PROFILE, ...patch };
-  },
-};
-const emailOk = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(v || "").trim());
-function updateLocalOrder(id, patch) { store.set("orders", store.get("orders", []).map((o) => (o.id === id ? { ...o, ...patch } : o))); }
 
 /* ============================================================
    CATALOGUE + CART
@@ -463,15 +384,15 @@ function totals(lines = cartLines(), pin = curPin()) {
 /** Which of email and phone a shopper must give (Checkout → “A shopper must give”): email, phone, both or either one.
  *  Left alone, it is as before: email always, and the phone when it is asked for. A shop with accounts always needs the email. */
 function mustGive() {
-  const K = C.checkout || {}, n = ["email", "phone", "both", "either"].includes(K.need) ? K.need : "", acc = BE() || !!USER;
-  const v = !!CAN.otp && !BE() && !PREVIEW; // every shopper verifies their number: it is always asked for
+  const K = C.checkout || {}, n = ["email", "phone", "both", "either"].includes(K.need) ? K.need : "";
+  const v = !!CAN.otp && !PREVIEW; // every shopper verifies their number: it is always asked for
   if (!n) return { email: true, phone: v || !!K.askPhone, askPhone: v || !!K.askPhone || !!ME(), either: false }; // (signed in: the other contact is asked for too)
-  return { email: acc || n === "email" || n === "both", phone: v || n === "phone" || n === "both", askPhone: true, either: n === "either" && !acc && !v };
+  return { email: n === "email" || n === "both", phone: v || n === "phone" || n === "both", askPhone: true, either: n === "either" && !v };
 }
 /* Email check (Checkout → “Verify the email address”): a 6-digit code is emailed, and the order carries the proof.
    If the shop's database can't send the code at all, it gives a pass instead, so shoppers are never locked out. */
 const EV = { tok: "", email: "", sent: false, msg: "" };
-const evCan = () => !!CAN.em && !BE() && !PREVIEW && !!(HOST && HOST.api && HOST.site);
+const evCan = () => !!CAN.em && !PREVIEW && !!(HOST && HOST.api && HOST.site);
 const evEmail = () => { const i = $("#email"); return String(i ? i.value : EV.email).trim().toLowerCase(); };
 const evTok = () => (EV.tok && EV.email === evEmail() && +EV.tok.replace(/^s:/, "").split(".")[0] > Date.now() + 60000 ? EV.tok : "");
 /* “Verify” sits inside the box it verifies (a tick once done); the code row and the notes open under the box. */
@@ -504,7 +425,7 @@ async function evAct(send) {
 const PTS = { tok: "", phone: "", info: null, use: false, sent: false, msg: "", via: "" };
 const VIA = { wa: "on WhatsApp", sms: "by SMS" }, viaNow = () => (CAN.via.includes(PTS.via) ? PTS.via : CAN.via[0] || "wa");
 const ptsOn = () => !!(C.loyalty && C.loyalty.on) && !!CAN.pts; // points can be spent here
-const ptsCan = () => (ptsOn() || !!CAN.otp) && !BE() && !PREVIEW && !!(HOST && HOST.api && HOST.site) && (mustGive().askPhone || !!ME());
+const ptsCan = () => (ptsOn() || !!CAN.otp) && !PREVIEW && !!(HOST && HOST.api && HOST.site) && (mustGive().askPhone || !!ME());
 const ptsPhone = () => { const i = $("#phone"); return i ? i.value : PTS.phone; };
 /** Enough to show and spend points: a verified number, or being signed in. */
 const ptsOK = () => ptsProved() || !!ME();
@@ -552,7 +473,7 @@ async function ptsAct(send) {
 /** Gateways the shop's own database (Host to External Services) can charge with the owner's keys: the exact total, confirmed by itself. */
 let CAN = { rz: "", pg: [], pts: false, em: false, otp: false, via: ["wa"] };
 const GWID = { razorpay: "rz", cashfree: "cf", phonepe: "pe", stripe: "st", paypal: "pp" }, GWNAME = { razorpay: "Razorpay", cashfree: "Cashfree", phonepe: "PhonePe", stripe: "Stripe", paypal: "PayPal" };
-const dbPay = (m) => !BE() && !PREVIEW && !!(HOST && HOST.api && HOST.site) && (m === "razorpay" ? !!CAN.rz : CAN.pg.includes(GWID[m]));
+const dbPay = (m) => !PREVIEW && !!(HOST && HOST.api && HOST.site) && (m === "razorpay" ? !!CAN.rz : CAN.pg.includes(GWID[m]));
 /* Customer accounts (assets/acct.js, content.account): the shopper signs in before checkout, and "My account" in the
    header shows their orders and points. A signed-in phone number or email address counts as verified. */
 const ME = () => (window.SiteAcct && SiteAcct.on() ? SiteAcct.user() : null);
@@ -568,13 +489,13 @@ async function ptsMine() { // a signed-in shopper's points, without another code
 const coLook = () => { const v = C.account && C.account.ui && C.account.ui.checkout; return ["cards", "steps", "plain"].includes(v) ? v : "cards"; };
 /* The Studio's preview has no database: a made-up account stands in, so the look can be chosen. */
 function previewAcct() {
-  if (!PREVIEW || !(C.account && C.account.on) || BE()) return;
+  if (!PREVIEW || !(C.account && C.account.on)) return;
   loadAcct().then(() => { const by = C.account.by === "email" || C.account.by === "either" ? C.account.by : "phone", had = !!(window.SiteAcct && SiteAcct.on());
     SiteAcct.init({ demo: true, api: "", site: "preview", kind: "store", addresses: true, ui: C.account.ui || {}, acct: { by, phone: by === "email" ? [] : ["wa"], email: by !== "phone" }, money: (n) => money(n), img: (path) => imgUrl({ path }), demoItems: (C.products || []).slice(0, 3).map((p) => ({ n: p.name, i: (p.images && p.images[0] && p.images[0].path) || "" })), biz: { name: (C.brand && C.brand.name) || "" }, onChange: () => render() });
     if (!had) render(); }).catch(() => {});
 }
 function askCan() {
-  if (askCan.done || PREVIEW || BE() || !(HOST && HOST.api && HOST.site) || (PAGE !== "checkout" && !(C.account && C.account.on))) return; askCan.done = true;
+  if (askCan.done || PREVIEW || !(HOST && HOST.api && HOST.site) || (PAGE !== "checkout" && !(C.account && C.account.on))) return; askCan.done = true;
   fetch(HOST.api + "/site/" + encodeURIComponent(HOST.site) + "/can", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((j) => { if (!j) return; CAN = { rz: String(j.rz || ""), pg: Array.isArray(j.pg) ? j.pg : [], pts: !!j.pts, em: !!j.em, otp: !!j.otp, via: Array.isArray(j.via) && j.via.length ? j.via.filter((v) => v === "wa" || v === "sms") : ["wa"] }; if (PAGE === "checkout") { if (!cameBack() && (CAN.rz || CAN.pg.length || CAN.otp)) render(); else { ptsDraw(); evDraw(); } }
     if (j.acct) loadAcct().then(() => { const redo = () => { if (!ME()) { PTS.info = null; PTS.use = false; } if (!$(".done")) render(); ptsMine(); };
       SiteAcct.init({ api: HOST.api, site: HOST.site, kind: "store", addresses: true, ui: (C.account && C.account.ui) || {}, acct: j.acct, money: (n) => money(n), img: (path) => imgUrl({ path }), biz: (() => { const L = C.legal || {}, K = C.contact || {}; return { name: L.name || (C.brand && C.brand.name) || "", address: L.address || K.address || "", phone: L.phone || K.phone || "", email: L.email || K.email || "", gstin: L.gstin || "" }; })(), onChange: redo }); redo(); }).catch(() => {}); }).catch(() => {});
@@ -582,10 +503,10 @@ function askCan() {
 function methods() {
   const P = C.payments, out = [], own = (n) => `You pay on ${n}'s secure page and come back here. The order is placed as soon as you've paid.`;
   if (P.upi.enabled && vpaOk(P.upi.vpa) && C.settings.currency === "INR") out.push({ id: "upi", label: P.upi.label, desc: "Scan a QR code or open your UPI app. The amount is filled in." });
-  if (P.razorpay.enabled && (BE() || dbPay("razorpay") || httpsOk(P.razorpay.link))) out.push({ id: "razorpay", label: P.razorpay.label, desc: BE() || dbPay("razorpay") ? "Card, UPI, netbanking or wallet, in Razorpay's secure window." : "Pay on Razorpay's secure page." });
+  if (P.razorpay.enabled && (dbPay("razorpay") || httpsOk(P.razorpay.link))) out.push({ id: "razorpay", label: P.razorpay.label, desc: dbPay("razorpay") ? "Card, UPI, netbanking or wallet, in Razorpay's secure window." : "Pay on Razorpay's secure page." });
   if (P.cashfree.enabled && dbPay("cashfree")) out.push({ id: "cashfree", label: P.cashfree.label, desc: own("Cashfree") });
   if (P.phonepe.enabled && dbPay("phonepe")) out.push({ id: "phonepe", label: P.phonepe.label, desc: own("PhonePe") });
-  if (P.stripe.enabled && (BE() || dbPay("stripe") || httpsOk(P.stripe.link))) out.push({ id: "stripe", label: P.stripe.label, desc: dbPay("stripe") ? own("Stripe") : "Pay on Stripe's secure page." });
+  if (P.stripe.enabled && (dbPay("stripe") || httpsOk(P.stripe.link))) out.push({ id: "stripe", label: P.stripe.label, desc: dbPay("stripe") ? own("Stripe") : "Pay on Stripe's secure page." });
   if (P.paypal.enabled && (dbPay("paypal") || ppOk(P.paypal.username))) out.push({ id: "paypal", label: P.paypal.label, desc: dbPay("paypal") ? own("PayPal") : "Pay on PayPal with the amount filled in." });
   if (P.cod.enabled) out.push({ id: "cod", label: P.cod.label, desc: P.cod.note });
   return out;
@@ -682,7 +603,7 @@ function header() {
   return `${B.showAnnouncement && B.announcement ? `<div class="announce">${ml(B.announcement)}</div>` : ""}
   <header class="hdr"><div class="wrap" style="position:relative">
     <a class="brand" href="index.html"><span class="mark" style="${markCss()}">${B.logoVideo ? `<video src="${esc(imgUrl(B.logoVideo))}"${B.logo ? ` poster="${esc(imgUrl(B.logo))}"` : ""} autoplay muted loop playsinline aria-hidden="true" style="${B.logoFit === "wide" ? `height:${markH()}px;width:auto;max-width:min(${markH() * 6}px,52vw);object-fit:contain` : "width:100%;height:100%;object-fit:cover"};display:block"></video>` : B.logo ? `<img src="${esc(imgUrl(B.logo))}" alt=""${B.logoFit === "wide" ? ` style="height:${markH()}px;width:auto;max-width:min(${markH() * 6}px,52vw);object-fit:contain"` : ""}>` : esc(initials)}</span>${B.showName === false && (B.logo || B.logoVideo) ? "" : `<b>${esc(B.name)}</b>`}</a>
-    <nav class="nav" id="nav" aria-label="Main"><a href="index.html"${cur("home")}>${esc(N.home)}</a><a href="shop.html"${cur("shop")}>${esc(N.shop)}</a>${swOn() && C.warranty.inNav ? `<a href="warranty.html"${cur("warranty")}>${esc(C.warranty.navLabel || "Warranty")}</a>` : ""}${N.showPortfolio ? `<a href="portfolio.html"${cur("portfolio")}>${esc(N.portfolio)}</a>` : ""}${spList().filter((p) => p.inNav).map((p) => `<a href="${esc(spHref(p))}"${PAGE === "page" && spSlug(p) === spSlug({ slug: spCur() }) ? ' aria-current="page"' : ""}>${esc(p.navLabel || p.title)}</a>`).join("")}${ACCOUNTS() ? `<a href="account.html"${cur("account")}>${esc(N.account)}</a>` : ""}</nav>
+    <nav class="nav" id="nav" aria-label="Main"><a href="index.html"${cur("home")}>${esc(N.home)}</a><a href="shop.html"${cur("shop")}>${esc(N.shop)}</a>${swOn() && C.warranty.inNav ? `<a href="warranty.html"${cur("warranty")}>${esc(C.warranty.navLabel || "Warranty")}</a>` : ""}${N.showPortfolio ? `<a href="portfolio.html"${cur("portfolio")}>${esc(N.portfolio)}</a>` : ""}${spList().filter((p) => p.inNav).map((p) => `<a href="${esc(spHref(p))}"${PAGE === "page" && spSlug(p) === spSlug({ slug: spCur() }) ? ' aria-current="page"' : ""}>${esc(p.navLabel || p.title)}</a>`).join("")}</nav>
     ${window.SiteAcct && SiteAcct.on() ? `<a class="cartlink acctlink" href="#" data-acct><span class="t">${ME() ? "My account" : "Sign in"}</span></a>` : ""}
     <a class="cartlink" href="cart.html"${cur("cart")}><span class="t">${esc(N.cart)}</span><span class="n" data-cartcount>${cartCount()}</span></a>
     <button class="menubtn" type="button" aria-controls="nav" aria-expanded="false" aria-label="Menu">☰</button>
@@ -778,7 +699,6 @@ const PAGES = {
       ${pinBox()}
       ${p.stock !== "out" ? `<div class="opt"><span class="lbl">Quantity</span><div class="buy"><div class="qty"><button type="button" data-q="-1" aria-label="Fewer">−</button><output id="qty" aria-live="polite">1</output><button type="button" data-q="1" aria-label="More">+</button></div>
         <button class="btn pri" type="button" id="add">Add to cart</button><button class="btn" type="button" id="buynow">Buy now</button></div></div>` : `<a class="btn" href="shop.html">See other products</a>`}
-      ${ACCOUNTS() && C.backend.wishlist ? `<button class="btn wish" type="button" id="wish" aria-pressed="false">♡ Save to wishlist</button>` : ""}
       ${p.features && p.features.length ? `<ul class="feat">${p.features.map((f) => `<li>${esc(f)}</li>`).join("")}</ul>` : ""}
       ${p.description ? `<div class="desc">${paras(p.description)}</div>` : ""}
       ${Number(C.settings.freeShippingOver) > 0 ? `<p class="soft" style="font-size:14px">Free shipping on orders over ${esc(money(C.settings.freeShippingOver))}.</p>` : ""}
@@ -805,19 +725,18 @@ const PAGES = {
     if (q) {
       const o = store.get("orders", []).find((x) => x.id === q);
       if (o) return orderDone(o);
-      const k = new URLSearchParams(location.search).get("k");
-      if (k && BE()) return `<div class="wrap"><div class="done" id="remote" data-k="${esc(k)}" data-o="${esc(q)}"><p class="soft">Loading your order…</p></div></div>`;
+
     }
     if (!lines.length) return `<section class="page-h"><div class="wrap"><h1>${esc(C.checkout.title)}</h1></div></section><div class="wrap" style="padding-bottom:80px"><div class="empty"><p>Your cart is empty.</p><a class="btn pri" href="shop.html">Start shopping</a></div></div>`;
     const K = C.checkout, ms = methods(), t = totals(lines);
-    if (ACCOUNTS() && C.backend.requireLogin && !USER && !PREVIEW) return `<section class="page-h"><div class="wrap"><h1 class="fit">${ml(K.title)}</h1></div></section><div class="wrap" style="padding-bottom:80px"><div class="box" style="max-width:520px"><h2>Sign in to check out</h2><p class="soft">We'll send a 6-digit code to your email. Your orders then appear in your account.</p><a class="btn pri" href="account.html?next=checkout.html">Sign in</a></div></div>`;
+
     if (mustSign()) return `<section class="page-h"><div class="wrap"><h1 class="fit">${ml(K.title)}</h1></div></section><div class="wrap" style="padding-bottom:80px"><div id="sa-gate"></div></div>`;
     { const k = window.SiteAcct && !ME() && SiteAcct.skipped(); if (k) { EV.tok = k.token; EV.email = k.email; } }
     const SP = ME() ? SiteAcct.profile() : null, SA = (SP && SP.addresses) || [], sa = SA[Math.min(ADDR_AT, SA.length - 1)] || null;
     const saved = SP ? { ...(SP.name ? { name: SP.name } : {}), ...(ME().kind === "phone" && SP.email ? { email: SP.email } : {}), ...(ME().kind === "email" && SP.phone ? { phone: SP.phone } : {}), ...(sa ? { address: [sa.line1, sa.line2].filter(Boolean).join(", "), city: sa.city, pin: sa.pin, state: sa.state } : {}) } : {};
-    const me = { ...store.get("me", {}), ...saved, ...(PROFILE ? { name: PROFILE.name || "", phone: PROFILE.phone || "", ...(PROFILE.address || {}) } : {}), ...(USER ? { email: USER.email } : {}), ...(ME() ? (ME().kind === "phone" ? { phone: ME().typed || "+" + ME().key } : { email: ME().key }) : window.SiteAcct && SiteAcct.skipped() ? { email: SiteAcct.skipped().email } : {}) };
+    const me = { ...store.get("me", {}), ...saved, ...(ME() ? (ME().kind === "phone" ? { phone: ME().typed || "+" + ME().key } : { email: ME().key }) : window.SiteAcct && SiteAcct.skipped() ? { email: SiteAcct.skipped().email } : {}) };
     const V = { email: ["ev", evSlot(), evBox()], phone: ["pv", pvSlot(), pvBox()] };
-    const fld = (id, label, type = "text", req = true, full = false, ac = "") => `<div class="f${full ? " full" : ""}"><label for="${id}">${esc(label)}${req ? "" : ' <span class="soft">(optional)</span>'}</label>${V[id] ? `<div class="in-v${V[id][1] ? " has" : ""}">` : ""}<input class="in" id="${id}" name="${id}" type="${type}"${req ? " required" : ""}${ac ? ` autocomplete="${ac}"` : ""}${(id === "email" && USER) || (ME() && ME().kind === id) ? " readonly" : ""} value="${esc(me[id] || "")}">${V[id] ? `<span id="${V[id][0]}slot">${V[id][1]}</span></div>` : ""}<span class="err" id="${id}-e"></span>${V[id] ? `<div class="vbox" id="${V[id][0]}box">${V[id][2]}</div>` : ""}</div>`;
+    const fld = (id, label, type = "text", req = true, full = false, ac = "") => `<div class="f${full ? " full" : ""}"><label for="${id}">${esc(label)}${req ? "" : ' <span class="soft">(optional)</span>'}</label>${V[id] ? `<div class="in-v${V[id][1] ? " has" : ""}">` : ""}<input class="in" id="${id}" name="${id}" type="${type}"${req ? " required" : ""}${ac ? ` autocomplete="${ac}"` : ""}${(ME() && ME().kind === id) ? " readonly" : ""} value="${esc(me[id] || "")}">${V[id] ? `<span id="${V[id][0]}slot">${V[id][1]}</span></div>` : ""}<span class="err" id="${id}-e"></span>${V[id] ? `<div class="vbox" id="${V[id][0]}box">${V[id][2]}</div>` : ""}</div>`;
     return `<section class="page-h"><div class="wrap"><h1 class="fit">${ml(K.title)}</h1>${K.intro ? `<p>${ml(K.intro)}</p>` : ""}</div></section>
     <form class="wrap two" id="co" data-look="${esc(coLook())}" novalidate><div class="form">
       <div class="box"><h2>Your details</h2>${ME() ? `<p class="soft" style="font-size:13.5px;margin:-6px 0 12px">Signed in as <b>${esc(/@/.test(ME().key) ? ME().key : "+" + ME().key)}</b> · <a href="#" data-acct>My account</a></p>` : ""}<div class="fgrid">${fld("name", "Full name", "text", true, false, "name")}${fld("email", "Email", "email", mustGive().email, false, "email")}${mustGive().askPhone ? fld("phone", "Phone", "tel", mustGive().phone, false, "tel") : ""}</div>${mustGive().either ? `<p class="soft" style="font-size:13.5px;margin-top:8px">Give your email address or your phone number (or both), so we can reach you about the order.</p>` : ""}</div>
@@ -827,7 +746,7 @@ const PAGES = {
     </div>
     <aside class="sum"><h2>Order</h2><div class="mini">${lines.map((l) => `<div class="it"><div class="im">${pimg(l.p)}</div><div>${esc(l.p.name)}${l.opt ? `<br><span class="soft">${esc(l.opt)}</span>` : ""} × ${l.qty}</div><b>${esc(money(l.p.price * l.qty))}</b></div>`).join("")}</div><div id="sumrows">${summaryRows(t)}</div><div id="ptsbox">${ptsBox()}</div>
       ${consentWords("") ? `<label class="co-consent"><input type="checkbox" id="co-consent"> <span>${esc(consentWords(""))}</span></label>` : ""}
-      <p class="err" id="co-err" role="alert"></p><button class="btn pri block" type="submit">${esc(K.button)}</button><p class="soft" style="font-size:13px">${BE() ? "You'll see the exact total before you pay." : "Nothing is charged yet. You'll pay and send the order on the next screen."}</p></aside></form>`;
+      <p class="err" id="co-err" role="alert"></p><button class="btn pri block" type="submit">${esc(K.button)}</button><p class="soft" style="font-size:13px">Nothing is charged yet. You'll pay and send the order on the next screen.</p></aside></form>`;
   },
   portfolio() {
     const P = C.portfolio;
@@ -887,57 +806,7 @@ function upiLink(o) {
   const U = C.payments.upi;
   return `upi://pay?pa=${String(U.vpa).trim()}&pn=${encodeURIComponent(U.payeeName || C.brand.name)}&am=${Number(o.t.total).toFixed(2)}&cu=INR&tn=${encodeURIComponent(o.id)}`;
 }
-function serverDone(o) {
-  const K = C.checkout, P = C.payments, wa = digits(C.orders.whatsapp), total = esc(money(o.t.total));
-  const paid = o.payment_status === "paid", cod = o.payment_status === "cod";
-  let pay = "";
-  if (paid) pay = `<p class="note"><b>Payment received.</b> ${o.c.email ? `We've emailed a confirmation to ${esc(o.c.email)}.` : `We'll reach you on ${esc(o.c.phone)} about your order.`}</p>`;
-  else if (cod) pay = `<p>${esc(P.cod.note || "Pay when your order arrives.")} Keep <b>${total}</b> ready.</p><p class="note">${o.c.email ? `We've emailed your order confirmation to ${esc(o.c.email)}.` : `We'll reach you on ${esc(o.c.phone)} about your order.`}</p>`;
-  else if (o.method === "razorpay") pay = `<p>Your payment isn't complete yet.</p><button class="btn pri" type="button" id="payrz">Pay ${total} now</button>`;
-  else if (o.method === "stripe") pay = `<p>If you've just paid, this page updates in a moment.</p>${o.stripeUrl ? `<a class="btn pri" href="${esc(o.stripeUrl)}">Pay ${total} on Stripe</a>` : ""}`;
-  else if (o.method === "upi") pay = `<p>Scan the code in any UPI app, or pay to the UPI ID. The amount and order number are filled in.</p><div class="qr" id="qr" aria-label="UPI QR code"></div><div class="copyrow"><code>${esc(P.upi.vpa)}</code><button type="button" data-copy="${esc(P.upi.vpa)}">Copy UPI ID</button></div><a class="btn pri" href="${esc(upiLink(o))}">Open UPI app</a><p class="note">Check your UPI app shows <b>${esc(P.upi.payeeName || C.brand.name)}</b> and <b>${total}</b>. Once we confirm your payment, we'll email you at ${esc(o.c.email)}.</p>`;
-  else if (o.method === "paypal") pay = `<p>PayPal opens with the amount filled in. Add the order number <b>${esc(o.id)}</b> as the note.</p><a class="btn pri" href="https://www.paypal.me/${encodeURIComponent(P.paypal.username)}/${Number(o.t.total)}${esc(C.settings.currency)}" target="_blank" rel="noopener">Pay ${total} with PayPal ↗</a><p class="note">Once we confirm your payment, we'll email you at ${esc(o.c.email)}.</p>`;
-  if (!paid && !cod && (o.method === "upi" || o.method === "paypal")) {
-    const what = o.method === "upi" ? "UPI transaction ID (UTR)" : "PayPal transaction ID";
-    pay += o.reported
-      ? `<p class="note"><b>Thanks, we've got your reference ${esc(o.utr || "")}.</b> We'll ${o.c.email ? `email you at ${esc(o.c.email)}` : `reach you on ${esc(o.c.phone)}`} as soon as we've confirmed the payment.</p>`
-      : `<form id="utr" class="form" novalidate style="border-top:1px solid var(--line);padding-top:16px"><div class="f"><label for="utr-in">Paid already? Enter the ${what}</label><input class="in" id="utr-in" inputmode="${o.method === "upi" ? "numeric" : "text"}" autocomplete="off" placeholder="${o.method === "upi" ? "12-digit number from your UPI app" : "Transaction ID"}"><span class="err" id="utr-e" role="alert"></span></div><button class="btn" type="submit">Send reference</button><p class="soft" style="font-size:13px">We'll check it and email you a confirmation.</p></form>`;
-  }
-  const title = paid || cod ? K.successTitle : "Your order is saved";
-  return `<div class="wrap"><div class="done"><p class="eyebrow">Order ${esc(o.id)}</p><h1>${esc(title)}</h1>
-    <div><span class="lbl">Your order number</span><br><span class="oid">${esc(o.id)}</span></div>
-    <div class="box"><div class="step"><i>${paid || cod ? "✓" : "1"}</i><div><h2 style="font-size:22px">${paid ? "Paid" : cod ? "Pay on delivery" : `Pay ${total}`}</h2>${pay}</div></div></div>
-    <div class="box"><h2 style="font-size:20px">Your order</h2><div class="mini">${o.items.map((i) => `<div class="it" style="grid-template-columns:minmax(0,1fr) auto"><div>${esc(i.name)}${i.opt ? ` <span class="soft">(${esc(i.opt)})</span>` : ""} × ${i.qty}</div><b>${esc(money(i.price * i.qty))}</b></div>`).join("")}</div>${summaryRows({ ...o.t, left: 0 })}</div>
-    ${trackInfo(o)}
-    <div class="buy">${invBtn(o.id)}${ACCOUNTS() ? `<a class="btn" href="account.html#orders">Track in your account</a>` : ""}${wa ? `<a class="btn" href="https://wa.me/${wa}?text=${encodeURIComponent(`Hi, about my order ${o.id}`)}" target="_blank" rel="noopener">Message us on WhatsApp</a>` : ""}</div>
-    <a class="link" href="shop.html">Continue shopping</a></div></div>`;
-}
-async function openRazorpay(o) {
-  if (!o.rz) return toast("This payment can't be restarted here. Contact us to pay.");
-  try { await loadScript(RZP_JS); } catch (e) { return toast("Razorpay couldn't load. Check your connection and try again."); }
-  const rz = new window.Razorpay({
-    key: o.rz.key, amount: o.rz.amount, currency: o.rz.currency, name: o.rz.name, order_id: o.rz.order_id, prefill: o.rz.prefill, notes: { order_no: o.id }, theme: { color: C.theme.accent },
-    handler: async (resp) => {
-      try { const st = await fn("razorpay-verify", { order_no: o.id, ...resp }); updateLocalOrder(o.id, { payment_status: st.payment_status, status: st.status }); cart = []; saveCart(); render(); toast("Payment received"); }
-      catch (e) { toast(esc(e.message)); }
-    },
-  });
-  rz.open();
-}
-const statusChecked = new Set();
-async function refreshStatus(o, tries) {
-  // Wait for the shop's real settings: the first paint uses built-in defaults with the backend off.
-  if (!BE() || PREVIEW || !o.server || !o.k || o.payment_status === "paid" || o.payment_status === "cod" || statusChecked.has(o.id + tries)) return;
-  statusChecked.add(o.id + tries);
-  try {
-    await sbInit();
-    const st = await fn("status", { order_no: o.id, access_key: o.k });
-    if (st.payment_status !== o.payment_status) { updateLocalOrder(o.id, { payment_status: st.payment_status, status: st.status }); if (st.payment_status === "paid") { cart = []; saveCart(); } render(); return; }
-  } catch (e) {}
-  if (o.method === "stripe" && tries < 5) setTimeout(() => refreshStatus(o, tries + 1), 3000);
-}
 function orderDone(o) {
-  if (o.server) return serverDone(o);
   const K = C.checkout, P = C.payments, O = C.orders, txt = orderText(o);
   const wa = digits(O.whatsapp), mail = O.email;
   const viaWa = wa && O.sendVia !== "email", viaMail = mail && O.sendVia !== "whatsapp";
@@ -1073,7 +942,7 @@ function menuGo(it) {
   if (t === "page") { const p = spList().find((x) => x.id === it.page); return p ? { url: spHref(p), on: PAGE === "page" && spSlug(p) === spSlug({ slug: spCur() }) } : { url: "" }; }
   if (t === "cat") { const c = C.categories.find((x) => x.id === it.cat); let cur = ""; try { cur = new URLSearchParams(location.search).get("c") || ""; } catch (e) {} return c ? { url: "shop.html?c=" + encodeURIComponent(c.id), on: PAGE === "shop" && cur === c.id } : { url: "shop.html" }; }
   if (t === "warranty") return swOn() ? at("warranty.html", "warranty") : { url: "" };
-  if (t === "account") return ACCOUNTS() ? at("account.html", "account") : { url: "" };
+  if (t === "account") return { url: "index.html#account" };
   const file = { home: "index.html", shop: "shop.html", portfolio: "portfolio.html", policies: "policies.html", cart: "cart.html" }[t];
   return file ? at(file, t) : { url: "" };
 }
@@ -1144,7 +1013,6 @@ function bind() {
   if (PAGE === "cart") bindCart();
   { const g = $("#sa-gate"); if (g && window.SiteAcct) SiteAcct.gate(g); }
   if (PAGE === "checkout") bindCheckout();
-  if (PAGE === "account") bindAccount();
   if (PAGE === "warranty") swMount();
   if (PAGE === "page" && window.SitePages) window.SitePages.after(spHere());
   heroLogo(); video(); social(); menu(); lang(); consent(); addons(); festival();
@@ -1190,22 +1058,6 @@ function bindProduct() {
   $$("[data-q]").forEach((b) => (b.onclick = () => { const cap = capNow(); qty = Math.min(cap, Math.max(1, qty + Number(b.dataset.q))); $("#qty").textContent = qty; if (Number(b.dataset.q) > 0 && qty >= cap && stockLeft(p.id, full()) != null && cap < Math.max(1, Number(C.settings.maxQty) || 10)) toast(`Only ${cap} left`); }));
   const add = $("#add"); if (add) add.onclick = () => { if (!ready()) return; addToCart(p.id, full(), qty); toast(`Added to cart · <a href="cart.html">View cart</a>`); };
   const bn = $("#buynow"); if (bn) bn.onclick = () => { if (!ready()) return; addToCart(p.id, full(), qty); location.href = "checkout.html"; };
-  const wb = $("#wish");
-  if (wb) {
-    const show = () => { const on = !!(WISH && WISH.has(p.id)); wb.setAttribute("aria-pressed", on); wb.textContent = on ? "♥ Saved to wishlist" : "♡ Save to wishlist"; };
-    if (!PREVIEW) sbInit().then(loadWish).then(show).catch(() => {});
-    wb.onclick = async () => {
-      if (PREVIEW) return toast("The wishlist works on the live site.");
-      try { await sbInit(); } catch (e) { return toast("Couldn't reach the shop. Try again."); }
-      if (!USER) { location.href = `account.html?next=${encodeURIComponent("product.html" + location.search)}`; return; }
-      wb.disabled = true;
-      const on = WISH && WISH.has(p.id);
-      try { await api.wish(p.id, !on); } catch (x) { wb.disabled = false; return toast(esc(x.message)); }
-      wb.disabled = false;
-      show();
-      toast(on ? "Removed from your wishlist" : `Saved · <a href="account.html#wishlist">View wishlist</a>`);
-    };
-  }
 }
 function bindCart() {
   const lines = cartLines(), max = Math.max(1, Number(C.settings.maxQty) || 10);
@@ -1214,30 +1066,8 @@ function bindCart() {
 }
 function bindCheckout() {
   if ($("#trackf")) return bindTrack();
-  const remote = $("#remote");
-  if (remote) {
-    sbInit().then(() => fn("status", { order_no: remote.dataset.o, access_key: remote.dataset.k })).then((st) => {
-      const o = { id: st.order_no, k: remote.dataset.k, server: true, method: st.method, methodLabel: st.method, items: st.items, t: st.totals, c: { email: "you" }, payment_status: st.payment_status, status: st.status };
-      remote.outerHTML = serverDone(o).replace(/^<div class="wrap">|<\/div>$/g, "");
-    }).catch(() => { remote.innerHTML = `<p>We couldn't find that order. Check the link in your email, or contact us.</p>`; });
-    return;
-  }
   const done = $(".done");
   if (done) {
-    const cur = store.get("orders", []).find((x) => x.id === new URLSearchParams(location.search).get("order"));
-    if (cur && cur.server) {
-      refreshStatus(cur, 0);
-      const pr = $("#payrz"); if (pr) pr.onclick = () => openRazorpay(cur);
-      const uf = $("#utr");
-      if (uf) uf.onsubmit = async (e) => {
-        e.preventDefault();
-        const v = $("#utr-in").value.replace(/[\s-]/g, ""), er = $("#utr-e"), b = $("#utr button");
-        if (!/^[A-Za-z0-9]{6,30}$/.test(v)) { er.textContent = cur.method === "upi" ? "Enter the 12-digit UTR from your UPI app." : "Enter the transaction ID from PayPal."; return; }
-        b.disabled = true; b.textContent = "Sending…"; er.textContent = "";
-        try { const st = await fn("upi-reference", { order_no: cur.id, access_key: cur.k, utr: v }); updateLocalOrder(cur.id, { reported: true, utr: v, payment_status: st.payment_status, status: st.status }); render(); toast("Reference sent"); }
-        catch (x) { er.textContent = x.message; b.disabled = false; b.textContent = "Send reference"; }
-      };
-    }
     const qr = $("#qr");
     if (qr) { const o = store.get("orders", []).find((x) => x.id === new URLSearchParams(location.search).get("order")); if (o && window.QRCode) { try { new window.QRCode(qr, { text: upiLink(o), width: 200, height: 200, correctLevel: window.QRCode.CorrectLevel.M }); } catch (e) { qr.outerHTML = `<p class="note">The QR code couldn't load. Use the UPI ID instead.</p>`; } } else if (!window.QRCode) qr.outerHTML = `<p class="note">The QR code couldn't load. Use the UPI ID instead.</p>`; }
     const cm = $("[data-copy-msg]"); if (cm) cm.onclick = () => copy($("#msg").textContent, "Order details copied");
@@ -1245,7 +1075,6 @@ function bindCheckout() {
     return;
   }
   const form = $("#co");
-  if (BE() && !PREVIEW && !sbReady) { sbInit().then(loadProfile).then(() => render()).catch(() => {}); }
   if (!form) return;
   form.onsubmit = async (e) => {
     e.preventDefault();
@@ -1280,7 +1109,6 @@ function bindCheckout() {
       if (fd.pm === "cod" && !q.cod) { $("#co-err").textContent = "Cash on delivery isn't available for that PIN code. Please choose another way to pay."; return; }
     }
     const lines = cartLines(), ms = methods(), m = ms.find((x) => x.id === fd.pm);
-    if (BE() && !PREVIEW) return placeServerOrder(form, fd, lines, m);
     const o = { id: newOrderId(), at: new Date().toISOString(), method: m ? m.id : "none", methodLabel: m ? m.label : "To be arranged",
       items: lines.map((l) => ({ id: l.p.id, name: l.p.name, opt: l.opt, qty: l.qty, price: Number(l.p.price) })), t: totals(lines), ...(ptsProved() && PTS.tok ? { otp: PTS.tok } : {}), ...(ME() ? { ac: ME().pass } : {}), ...(evCan() && evTok() ? { et: evTok() } : {}),
       c: { name: fd.name || "", email: fd.email || "", phone: fd.phone || "", address: fd.address || "", city: fd.city || "", pin: fd.pin || "", state: fd.state || "", notes: fd.notes || "", gstin: String(fd.gstin || "").trim().toUpperCase().slice(0, 15) } };
@@ -1378,120 +1206,6 @@ function payFirst(o, then) {
   };
   $("#pf-utr", d).focus();
 }
-async function placeServerOrder(form, fd, lines, m) {
-  const btn = $('button[type="submit"]', form), err = $("#co-err");
-  if (!m) { err.textContent = "Online ordering isn't set up yet. Please contact us to order."; return; }
-  btn.disabled = true; btn.textContent = "Placing order…"; err.textContent = "";
-  const c = { name: fd.name || "", email: (USER && USER.email) || fd.email || "", phone: fd.phone || "", address: fd.address || "", city: fd.city || "", pin: fd.pin || "", state: fd.state || "", notes: fd.notes || "", gstin: String(fd.gstin || "").trim().toUpperCase().slice(0, 15) };
-  try {
-    await sbInit();
-    const r = await fn("create-order", { method: m.id, items: lines.map((l) => ({ id: l.p.id, opt: l.opt, qty: l.qty })), customer: c });
-    const o = { id: r.order_no, k: r.access_key, server: true, at: new Date().toISOString(), method: r.method, methodLabel: m.label, items: r.items, t: r.totals, c, payment_status: r.method === "cod" ? "cod" : "unpaid", status: r.method === "cod" ? "processing" : "pending", stripeUrl: r.stripe ? r.stripe.url : "", rz: r.razorpay || null };
-    store.set("me", { name: c.name, email: c.email, phone: c.phone, address: c.address, city: c.city, pin: c.pin, state: c.state });
-    store.set("orders", [o, ...store.get("orders", [])].slice(0, 10));
-    if (USER && PROFILE && (!PROFILE.name || !PROFILE.phone)) api.saveProfile({ name: PROFILE.name || c.name, phone: PROFILE.phone || c.phone, address: (PROFILE.address && PROFILE.address.address) ? PROFILE.address : { address: c.address, city: c.city, pin: c.pin, state: c.state } }).catch(() => {});
-    if (["cod", "upi", "paypal"].includes(r.method)) { cart = []; saveCart(); }
-    if (r.stripe) { location.href = r.stripe.url; return; }
-    history.pushState(null, "", `checkout.html?order=${encodeURIComponent(o.id)}`);
-    render(); scrollTo(0, 0);
-    if (r.razorpay) openRazorpay(o);
-  } catch (x) {
-    err.textContent = x.message; btn.disabled = false; btn.textContent = C.checkout.button;
-  }
-}
-
-/* ============================================================
-   ACCOUNT PAGE
-   ============================================================ */
-async function bindAccount() {
-  const box = $("#acct"); if (!box) return;
-  if (DBHOST() && !PREVIEW) { location.replace("index.html#account"); return; }
-  if (!ACCOUNTS()) { box.innerHTML = `<div class="empty"><p>Customer accounts aren't switched on for this shop.</p><a class="btn pri" href="shop.html">Go to the shop</a></div>`; return; }
-  if (PREVIEW) return drawSignIn(box);
-  try { await sbInit(); } catch (e) { box.innerHTML = `<div class="empty"><p>Your account couldn't load. Check your connection and try again.</p></div>`; return; }
-  if (!USER) return drawSignIn(box);
-  await Promise.all([loadProfile(), loadWish()]).catch(() => {});
-  drawAccount(box);
-}
-function drawSignIn(box, email = "") {
-  box.innerHTML = `<div class="box" style="max-width:480px"><h2>Sign in</h2><p class="soft">${esc(C.accountPage.signInText)}</p>
-    <form id="otp1" class="form" novalidate><div class="f"><label for="ae">Email</label><input class="in" id="ae" type="email" autocomplete="email" required value="${esc(email || store.get("me", {}).email || "")}"><span class="err" id="ae-e" role="alert"></span></div><button class="btn pri" type="submit">Send code</button></form></div>`;
-  $("#otp1").onsubmit = async (e) => {
-    e.preventDefault();
-    const em = $("#ae").value.trim().toLowerCase(), er = $("#ae-e"), b = $("#otp1 button");
-    if (!emailOk(em)) { er.textContent = "Enter a valid email address."; return; }
-    if (PREVIEW) { toast("Sign-in works on the live site."); return; }
-    b.disabled = true; b.textContent = "Sending…"; er.textContent = "";
-    try { await api.sendCode(em); } catch (x) { er.textContent = x.message; b.disabled = false; b.textContent = "Send code"; return; }
-    drawCode(box, em);
-  };
-}
-function drawCode(box, email) {
-  box.innerHTML = `<div class="box" style="max-width:480px"><h2>Check your email</h2><p class="soft">We sent a 6-digit code to <b>${esc(email)}</b>.</p>
-    <form id="otp2" class="form" novalidate><div class="f"><label for="ac">Code</label><input class="in" id="ac" inputmode="numeric" autocomplete="one-time-code" maxlength="6" required style="font-size:22px;letter-spacing:.3em;font-family:var(--fm)"><span class="err" id="ac-e" role="alert"></span></div><button class="btn pri" type="submit">Sign in</button></form>
-    <button class="rm" type="button" id="otpback">Use a different email</button></div>`;
-  $("#ac").focus();
-  $("#otpback").onclick = () => drawSignIn(box, email);
-  $("#otp2").onsubmit = async (e) => {
-    e.preventDefault();
-    const code = $("#ac").value.replace(/\D/g, ""), er = $("#ac-e"), b = $("#otp2 button");
-    if (code.length !== 6) { er.textContent = "Enter the 6-digit code from the email."; return; }
-    b.disabled = true; b.textContent = "Signing in…";
-    try { await api.verify(email, code); } catch (x) { er.textContent = x.message; b.disabled = false; b.textContent = "Sign in"; return; }
-    const next = new URLSearchParams(location.search).get("next");
-    if (next && /^[a-z]+\.html(\?[^#]*)?$/.test(next)) { location.href = next; return; }
-    await Promise.all([loadProfile(), loadWish()]).catch(() => {});
-    render();
-  };
-}
-const ST_LABEL = { pending: "Awaiting payment", processing: "Being packed", shipped: "Shipped", delivered: "Delivered", cancelled: "Cancelled" };
-function track(o) {
-  if (o.status === "cancelled") return `<p class="badge-x">Cancelled</p>`;
-  const paid = o.payment_status === "paid" || o.payment_status === "cod";
-  const lvl = { pending: 0, processing: 2, shipped: 3, delivered: 4 }[o.status] ?? 0;
-  const steps = [["Placed", true], [o.payment_status === "cod" ? "Confirmed" : "Paid", paid], ["Packed", lvl >= 2 && paid], ["Shipped", lvl >= 3], ["Delivered", lvl >= 4]];
-  return `<ol class="track" aria-label="Order progress">${steps.map(([l, d]) => `<li class="${d ? "on" : ""}"><i></i><span>${l}</span></li>`).join("")}</ol>`;
-}
-function drawAccount(box) {
-  const tabs = [["orders", "Orders"], ...(C.backend.wishlist ? [["wishlist", "Wishlist"]] : []), ["details", "Account details"]];
-  let tab = (location.hash || "#orders").slice(1); if (!tabs.some((t) => t[0] === tab)) tab = "orders";
-  box.innerHTML = `<div class="acct-h"><div><p class="eyebrow">${PROFILE ? `Account ${esc(PROFILE.account_no)}` : "Account"}</p><h2 style="font-size:30px">Hi ${esc((PROFILE && PROFILE.name) || USER.email.split("@")[0])}</h2><p class="soft">${esc(USER.email)}</p></div><button class="btn" type="button" id="signout">Sign out</button></div>
-    <div class="chips" role="tablist" aria-label="Account sections" style="margin:22px 0">${tabs.map(([id, l]) => `<button class="chip" type="button" role="tab" data-tab="${id}" aria-selected="${id === tab}" aria-pressed="${id === tab}">${l}</button>`).join("")}</div><div id="tabp"></div>`;
-  $("#signout").onclick = async () => { await api.signOut(); render(); };
-  $$("[data-tab]").forEach((b) => (b.onclick = () => { history.replaceState(null, "", "#" + b.dataset.tab); drawAccount(box); }));
-  const tp = $("#tabp");
-  if (tab === "orders") {
-    tp.innerHTML = `<p class="soft">Loading your orders…</p>`;
-    api.myOrders().then((data) => {
-      window.__accOrders = data || [];
-      tp.innerHTML = data && data.length ? `<div class="olist">${data.map((o) => `<article class="ocard"><div class="ocard-h"><div><b>Order ${esc(o.order_no)}</b><span class="soft">${new Date(o.created_at).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })} · ${esc(ST_LABEL[o.status] || o.status)}</span></div><b>${esc(money(o.totals.total))}</b></div>${track(o)}${trackInfo(o)}${gstOn() ? `<div style="margin-top:10px">${invBtn(o.order_no)}</div>` : ""}
-        <ul class="oitems">${o.items.map((i) => `<li>${esc(i.name)}${i.opt ? ` <span class="soft">(${esc(i.opt)})</span>` : ""} × ${i.qty}</li>`).join("")}</ul></article>`).join("")}</div>`
-        : `<div class="empty"><p>No orders yet.</p><a class="btn pri" href="shop.html">Start shopping</a></div>`;
-    }, () => { tp.innerHTML = `<p>Your orders couldn't load. Try again.</p>`; });
-  } else if (tab === "wishlist") {
-    const list = C.products.filter((p) => WISH && WISH.has(p.id));
-    tp.innerHTML = list.length ? `<div class="grid">${list.map((p) => `<div style="display:flex;flex-direction:column;gap:8px">${pcard(p)}<button class="rm" type="button" data-unwish="${esc(p.id)}" style="align-self:flex-start">Remove</button></div>`).join("")}</div>` : `<div class="empty"><p>Your wishlist is empty. Tap “Save to wishlist” on any product.</p><a class="btn pri" href="shop.html">Browse products</a></div>`;
-    $$("[data-unwish]", tp).forEach((b) => (b.onclick = async () => { try { await api.wish(b.dataset.unwish, false); } catch (x) { return toast(esc(x.message)); } drawAccount(box); }));
-  } else {
-    const a = (PROFILE && PROFILE.address) || {}, v = (k) => esc(k);
-    tp.innerHTML = `<form id="det" class="box" style="max-width:640px" novalidate><div class="fgrid">
-      <div class="f"><label for="dn">Full name</label><input class="in" id="dn" autocomplete="name" value="${v((PROFILE && PROFILE.name) || "")}"></div>
-      <div class="f"><label for="dp">Phone</label><input class="in" id="dp" type="tel" autocomplete="tel" value="${v((PROFILE && PROFILE.phone) || "")}"></div>
-      <div class="f full"><label for="da">Address</label><input class="in" id="da" autocomplete="street-address" value="${v(a.address || "")}"></div>
-      <div class="f"><label for="dc">City</label><input class="in" id="dc" autocomplete="address-level2" value="${v(a.city || "")}"></div>
-      <div class="f"><label for="dz">PIN / postcode</label><input class="in" id="dz" autocomplete="postal-code" value="${v(a.pin || "")}"></div>
-      <div class="f"><label for="ds">State</label><input class="in" id="ds" autocomplete="address-level1" value="${v(a.state || "")}"></div>
-      <div class="f"><label>Account number</label><input class="in" readonly value="${v((PROFILE && PROFILE.account_no) || "")}"></div></div>
-      <button class="btn pri" type="submit" style="align-self:flex-start">Save details</button></form>`;
-    $("#det").onsubmit = async (e) => {
-      e.preventDefault();
-      const patch = { name: $("#dn").value.trim().slice(0, 120), phone: $("#dp").value.trim().slice(0, 30), address: { address: $("#da").value.trim(), city: $("#dc").value.trim(), pin: $("#dz").value.trim(), state: $("#ds").value.trim() } };
-      try { await api.saveProfile(patch); } catch (x) { return toast(esc(x.message)); }
-      toast("Details saved");
-    };
-  }
-}
-
 addEventListener("popstate", render);
 
 /* ============================================================
@@ -1534,7 +1248,6 @@ else {
     .then(() => { if (revOn() && PAGE !== "product") revLoad().then(() => { if (REV && Object.keys(REV).length && !$(".done") && !$("#trackf") && !(document.activeElement && /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName))) render(); }); })
     .then(() => { if (stockOn()) stockLoad().then(() => { if (STOCK && !$(".done") && !$("#trackf") && !(document.activeElement && /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName))) render(); }); });
 }
-if (!HAND) addEventListener("hashchange", () => { if (PAGE === "account") render(); });
 if (SC) SC.untrack();
 })();
 

@@ -15,8 +15,6 @@ import type { ProjectMeta, Studio } from "./studio";
 import { STUDIO_BUILD } from "../build-info";
 import { badgeVersion } from "./badge";
 import { currentMenus, menuVersion } from "./menus";
-import { relayVault } from "./relay";
-import { Cloudflare, cfVault } from "./cloudflare";
 
 export type LiveTarget = { key: string; project: ProjectMeta; kind: "hosted" | "github" | "worker"; label: string; url: string; repo: Repo | null };
 export type TargetState =
@@ -33,14 +31,12 @@ export function liveTargets(projects: ProjectMeta[], token: string): LiveTarget[
     if (p.host) out.push({ key: p.id + ":hosted", project: p, kind: "hosted", label: PAGES_LABEL[p.host.kind] || "Netlify", url: siteAddress(p.host), repo: hostRepo(p.host) });
     if (p.publish) out.push({ key: p.id + ":github", project: p, kind: "github", label: "GitHub Pages", url: ghUrl(p.publish), repo: new GitHubRepo(p.publish, ghPublish.token(token)) });
     // The shop's server code, when the Studio set up its Cloudflare Worker.
-    if (p.worker) out.push({ key: p.id + ":worker", project: p, kind: "worker", label: "Shop server (Cloudflare Worker)", url: p.worker.url, repo: null });
   }
   return out;
 }
 
 /** Which Studio build the live site was made with, read from its cms/site.json. */
 export async function checkTarget(t: LiveTarget): Promise<TargetState> {
-  if (t.kind === "worker") { const w = t.project.worker!; return w.build === STUDIO_BUILD.id ? { s: "current", at: w.deployedAt || "" } : { s: "old", at: w.deployedAt || null, build: w.build || null }; }
   try {
     const f = await t.repo!.getJSON<any>("cms/site.json");
     const b = f?.data?.studioBuild;
@@ -54,19 +50,6 @@ const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 /** Rebuilds one live site with this Studio build, keeping the site's own content. */
 export async function pushTarget(t: LiveTarget, o: { studio: Studio; pages: (h: NonNullable<ProjectMeta["host"]>) => Promise<Pages | null>; step: (d: string) => void; token?: string }) {
   const p = t.project, tpl = TEMPLATES[p.template];
-  if (t.kind === "worker") {
-    // New code only: the Worker's settings and secrets stay as they are.
-    const w = p.worker!;
-    const relay = o.token ? await relayVault.load(o.token) : null, cf = o.token ? await cfVault.load(o.token) : null;
-    if (!relay || !cf?.token) throw new Error("Open the shop project → Shop backend on this device once (it needs the Studio helper and your Cloudflare token).");
-    o.step("Getting the new server code");
-    const r = await fetch(`templates/store/cloudflare/worker.js?v=${STUDIO_BUILD.id}`, { cache: "no-store" });
-    if (!r.ok) throw new Error("Couldn't load the Worker code from the Studio.");
-    o.step("Uploading to Cloudflare");
-    await new Cloudflare(relay, cf.token).upload(w.account, w.name, await r.text(), { keep: true });
-    await o.studio.updateMeta(p.id, { worker: { ...w, build: STUDIO_BUILD.id, deployedAt: new Date().toISOString() } }, "Update the shop's Cloudflare Worker");
-    return;
-  }
   const defaults = await loadMergeBase(p.template);
   const draft = merge(defaults, (await o.studio.loadContent(p.id)) || {});
   const getBlob = (path: string) => o.studio.assetBlob(p.id, path);

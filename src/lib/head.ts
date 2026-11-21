@@ -16,7 +16,7 @@ const oneLine = (s: unknown) => String(s ?? "").replace(/\s*\n\s*/g, " ").trim()
 export function storePageLabel(file: string, c: any): string {
   const m: Record<string, string> = {
     "shop.html": c?.shop?.title, "product.html": "Product", "cart.html": c?.nav?.cart, "checkout.html": c?.checkout?.title,
-    "portfolio.html": c?.nav?.portfolio, "policies.html": "Policies", "account.html": c?.accountPage?.title,
+    "portfolio.html": c?.nav?.portfolio, "policies.html": "Policies",
   };
   return oneLine(m[file] || "");
 }

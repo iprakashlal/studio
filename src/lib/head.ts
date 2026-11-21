@@ -88,7 +88,7 @@ export function bakeHead(html: string, c: any, opts: { file: string; label?: str
   // A site with an intro or page transition says so in the page itself, so the very first visit opens on the intro's
   // panel and never on the loading outline (the script reads this before the content has arrived).
   const th = c?.theme || {}, hexOk = (x: unknown) => /^#[0-9a-f]{3,8}$/i.test(String(x || ""));
-  const intro = (th.loader && th.loader !== "none") || (th.layout === "velocity" && c?.velocity?.preloader !== false && c?.velocity);
+  const intro = (th.loader && th.loader !== "none" && th.loaderOn !== "menu") || (th.layout === "velocity" && c?.velocity?.preloader !== false && c?.velocity);
   if (intro) tags.push(`<meta name="site-intro" content="${esc([th.loader === "split" ? "split" : "curtain", hexOk(th.introBg) ? th.introBg : hexOk(th.deep) ? th.deep : hexOk(th.bg) ? th.bg : "", hexOk(th.introFg) ? th.introFg : ""].join("|"))}">`);
 
   let out = html.replace(MARK, "").replace(/<style id="site-boot">[^<]*<\/style>\n?/g, "").replace(/<meta name="description"[^>]*>\n?/gi, "");

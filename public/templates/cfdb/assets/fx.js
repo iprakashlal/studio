@@ -309,6 +309,13 @@
   }
 
   /* ---------------------------------------------------------------- loader */
+  // "Page load only": the intro plays on the first page of a visit and not again on pages reached through the menu;
+  // "Menu links only": no intro on a page load at all (the page-to-page cover still plays).
+  function skipIntro(c) {
+    if (c.loaderOn === "menu") return true;
+    if (c.loaderOn === "load" && !PREVIEW) { try { return sessionStorage.getItem("fx-intro-seen") === "1"; } catch (x) {} }
+    return false;
+  }
   function playLoader(kind, brand) {
     var c = colors();
     var letters = chars(String(brand || "")).slice(0, 24).map(function (ch, i) { return '<span style="--i:' + i + '">' + (ch === " " ? "&nbsp;" : escHtml(ch)) + "</span>"; }).join("");
@@ -1336,9 +1343,9 @@
     // A signature theme with its own preloader is already on screen: the waiting panel just goes.
     else if (cover && document.getElementById("vxLoad")) { cover.remove(); cover = null; st.loaderPlayed = true; }
     else if (cover) { st.loaderPlayed = true; revealCover(); delay = 350; }
-    else if (c.loader !== "none" && c.loaderOn !== "menu" && !RM) {
+    else if (c.loader !== "none" && !skipIntro(c) && !RM) {
       var play = PREVIEW ? c.loader !== st.loader : !st.loaderPlayed && Date.now() - T0 < 5000;
-      if (play) { st.loaderPlayed = true; playLoader(c.loader, opts.brand || document.title); delay = c.loader === "counter" ? 1250 : 950; }
+      if (play) { st.loaderPlayed = true; if (c.loaderOn === "load") try { sessionStorage.setItem("fx-intro-seen", "1"); } catch (x) {} playLoader(c.loader, opts.brand || document.title); delay = c.loader === "counter" ? 1250 : 950; }
     }
     st.loader = c.loader;
     // Remembered on this device, so the next visit starts on the intro's panel (see skeleton()).
@@ -1377,7 +1384,7 @@
     if (!root || root.firstElementChild) return null;
     // A site with an intro screen: its panel closes at once (in the colours remembered on this device), so the visitor
     // sees the intro from the first moment and never the outline before it. The intro then plays on that same panel.
-    if (!cover && !st.bootTried && !RM && !PREVIEW) {
+    if (!cover && !st.bootTried && !RM && !PREVIEW && !skipIntro(cfg())) {
       st.bootTried = true;
       try {
         var m = JSON.parse(localStorage.getItem("site-intro:" + location.pathname.replace(/[^/]*$/, "")) || "null"), okc = /^(#[0-9a-f]{3,8}|rgba?\([0-9., %]+\))$/i;

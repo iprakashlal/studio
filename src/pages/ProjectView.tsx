@@ -183,23 +183,23 @@ export function ProjectView({ studio, index, project, session, onIndex }: { stud
       render: () => <EnquiriesPanel cfg={project.host?.cf ? null : enquiriesCfg(draft, project.host?.sb)} cf={project.host?.cf} account={project.host?.account} hosted={!!project.host} email={draft?.contact?.email} form={draft?.contact?.form} ghToken={ghPublish.token(session.token)} inStudio only="enquiries" />,
     }] : []),
     ...(project.template === "store" || project.template === "restaurant" ? [{
-      id: "purchased", label: "Purchased orders", group: project.template === "restaurant" ? "Selling" : "Forms & records", desc: "Every order placed on the website: what was bought, by whom, how it is paid, and where it has got to.",
+      id: "purchased", label: "Purchased orders", group: "Selling", desc: "Every order placed on the website: what was bought, by whom, how it is paid, and where it has got to.",
       render: () => <EnquiriesPanel only="orders" cfg={project.host?.cf ? null : enquiriesCfg(draft, project.host?.sb)} cf={project.host?.cf} account={project.host?.account} hosted={!!project.host} email={draft?.contact?.email} form={draft?.contact?.form} ghToken={ghPublish.token(session.token)} inStudio />,
     }] : []),
     ...(project.template === "store" || project.template === "restaurant" ? [{
-      id: "inventory", label: "Inventory", group: project.template === "restaurant" ? "Selling" : "Forms & records", desc: project.template === "restaurant" ? "How many of each dish are left: orders take from it, and a dish sells out by itself." : "How many of each product are left: orders take from it, and a product sells out by itself.",
+      id: "inventory", label: "Inventory", group: "Forms & records", desc: project.template === "restaurant" ? "How many of each dish are left: orders take from it, and a dish sells out by itself." : "How many of each product are left: orders take from it, and a product sells out by itself.",
       render: () => <InventoryPanel cf={project.host?.cf} kind={project.template === "restaurant" ? "restaurant" : "store"} on={!!draft?.inventory?.on} />,
     }] : []),
     ...(project.template === "store" || project.template === "restaurant" ? [{
-      id: "recovery", label: "Abandoned carts", group: project.template === "restaurant" ? "Selling" : "Forms & records", desc: "Shoppers who typed their email at checkout and left: remind them, and see who came back.",
+      id: "recovery", label: "Abandoned carts", group: "Selling", desc: "Shoppers who typed their email at checkout and left: remind them, and see who came back.",
       render: () => <RecoveryPanel cf={project.host?.cf} kind={project.template === "restaurant" ? "restaurant" : "store"} on={!!draft?.recovery?.on} />,
     }] : []),
     ...(project.template === "store" || project.template === "restaurant" ? [{
-      id: "reviews", label: "Reviews", group: project.template === "restaurant" ? "Selling" : "Forms & records", desc: "What customers wrote about your " + (project.template === "restaurant" ? "dishes" : "products") + ": approve, hide, reply.",
+      id: "reviews", label: "Reviews", group: "Forms & records", desc: "What customers wrote about your " + (project.template === "restaurant" ? "dishes" : "products") + ": approve, hide, reply.",
       render: () => <ReviewsPanel cf={project.host?.cf} kind={project.template === "restaurant" ? "restaurant" : "store"} on={!!draft?.reviews?.on} />,
     }] : []),
     ...(project.template === "store" || project.template === "restaurant" ? [{
-      id: "customer-data", label: "Customer Data", group: project.template === "restaurant" ? "Selling" : "Forms & records", desc: "Everyone who has ordered: their details, orders, what they spent and their points.",
+      id: "customer-data", label: "Customer Data", group: "Forms & records", desc: "Everyone who has ordered: their details, orders, what they spent and their points.",
       render: () => <CustomerPanel cf={project.host?.cf} currency={draft?.food?.currency || draft?.settings?.currency || "₹"} points={!!draft?.loyalty?.on} />,
     }] : []),
     ...(project.template !== "portfolio" ? [{

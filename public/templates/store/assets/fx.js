@@ -775,7 +775,7 @@
   // ---- Moving backgrounds and patterns, drawn here with no library: for a section (sectionBg[key].kind "anim" or
   // "pattern") and for the page or its hero (theme.animBg). They take the theme's colours, pause when out of sight
   // or when the tab is hidden, and stay still for visitors who ask their device for less motion.
-  var ANIMS = { motion: 1, sand: 1, synth: 1, liquid: 1, terrain: 1, aurora: 1, stars: 1 };
+  var ANIMS = { motion: 1, sand: 1, synth: 1, liquid: 1, terrain: 1, aurora: 1, stars: 1, flow: 1, silk: 1, bubbles: 1, rain: 1, fireflies: 1, ripple: 1, petals: 1, hex: 1, orbit: 1, warp: 1 };
   var PATTERNS = { dots: 1, grid: 1, lines: 1, columns: 1, diagonal: 1, cross: 1, waves: 1, rings: 1, topo: 1, gingham: 1, stripes: 1, mesh: 1, grain: 1 };
   function rgbOf(str) { var m = /rgba?\(\s*([\d.]+)[ ,]+([\d.]+)[ ,]+([\d.]+)(?:[ ,/]+([\d.]+%?))?/.exec(String(str || "")); if (!m) return null; var a = m[4] == null ? 1 : /%$/.test(m[4]) ? parseFloat(m[4]) / 100 : +m[4]; return a < 0.05 ? null : [Math.round(+m[1]), Math.round(+m[2]), Math.round(+m[3])]; }
   /** The colours to draw with: the theme's two accents, and the colour behind `el` (its own, else the nearest one above it). */
@@ -806,6 +806,9 @@
     var K = animCols(host, o.bg), c1 = K.c1, c2 = K.c2, bg = K.bg, dark = K.dark, ink = dark ? [255, 255, 255] : [20, 22, 26];
     var W = 0, H = 0, D = 1, S = {}, speed = o.speed === "lively" ? 1.9 : o.speed === "slow" ? 0.55 : 1, strength = Math.max(0.2, Math.min(1, (+o.strength || 100) / 100));
     cv.style.opacity = String(strength);
+    // Where the pointer is over this background (0 to 1 each way): several of them answer to it.
+    var M = { x: 0.5, y: 0.5, on: false };
+    function onMove(e) { var r = cv.getBoundingClientRect(); if (!r.width || !r.height) return; var x = (e.clientX - r.left) / r.width, y = (e.clientY - r.top) / r.height; M.on = x >= 0 && x <= 1 && y >= 0 && y <= 1; if (M.on) { M.x = x; M.y = y; } }
     function size() {
       var r = host.getBoundingClientRect(); D = Math.min(1.5, window.devicePixelRatio || 1) * (kind === "liquid" || kind === "aurora" ? 0.5 : 1);
       var w = Math.max(2, Math.round(r.width * D)), h = Math.max(2, Math.round(r.height * D));
@@ -910,6 +913,151 @@
         g.lineWidth = Math.max(1, D);
         for (i = 0; i < P.length; i++) for (j = i + 1; j < P.length; j++) { var dx = P[i].x - P[j].x, dy = P[i].y - P[j].y, d = Math.sqrt(dx * dx + dy * dy); if (d < link) { g.strokeStyle = RGBA(MIX(c1, c2, 0.5), ((1 - d / link) * 0.42).toFixed(3)); g.beginPath(); g.moveTo(P[i].x, P[i].y); g.lineTo(P[j].x, P[j].y); g.stroke(); } }
         P.forEach(function (q) { var tw = 0.5 + 0.5 * Math.sin(t * 1.3 * q.p.sp + q.p.ph); g.fillStyle = RGBA(q.p.c, (0.45 + tw * 0.5).toFixed(3)); g.beginPath(); g.arc(q.x, q.y, D * (1.6 + tw * 1.6), 0, 6.2832); g.fill(); });
+      },
+      // thousands of fine trails following an unseen current; the pointer stirs them
+      flow: function (t) {
+        var n = Math.max(250, Math.min(1000, Math.round(W * H / (D * D) / 1500))), i, p, fresh = !S.p, cols = [c1, c2, ink];
+        if (fresh) { S.p = []; for (i = 0; i < n; i++) S.p.push({ x: h2(i, 41) * W, y: h2(i, 42) * H, k: h2(i, 43) < 0.46 ? 0 : h2(i, 43) < 0.92 ? 1 : 2, life: 40 + h2(i, 44) * 160 }); g.clearRect(0, 0, W, H); }
+        var steps = fresh ? 60 : 1, v = 2.4 * D * Math.min(1.6, Math.max(0.6, speed)), R = 170 * D, mx = M.x * W, my = M.y * H;
+        g.lineCap = "round"; g.lineWidth = Math.max(1, D * 1.1);
+        for (var s = 0; s < steps; s++) {
+          g.globalCompositeOperation = "destination-out"; g.fillStyle = "rgba(0,0,0,0.055)"; g.fillRect(0, 0, W, H); g.globalCompositeOperation = "source-over";
+          for (var k = 0; k < 3; k++) {
+            g.strokeStyle = RGBA(cols[k], k === 2 ? 0.3 : 0.55); g.beginPath();
+            for (i = 0; i < S.p.length; i++) {
+              p = S.p[i]; if (p.k !== k) continue;
+              var a = fbm(p.x / (320 * D), p.y / (320 * D) + t * 0.025) * 6.2832 * 2, dx = Math.cos(a) * v, dy = Math.sin(a) * v;
+              if (M.on) { var ex = p.x - mx, ey = p.y - my, d2 = ex * ex + ey * ey; if (d2 < R * R) { var f = (1 - Math.sqrt(d2) / R) * v * 1.6, d = Math.sqrt(d2) + 0.01; dx += -ey / d * f; dy += ex / d * f; } }
+              g.moveTo(p.x, p.y); p.x += dx; p.y += dy; g.lineTo(p.x, p.y);
+              if (--p.life < 0 || p.x < -6 || p.x > W + 6 || p.y < -6 || p.y > H + 6) { S.q = (S.q || 0) + 1; p.x = h2(i, 45 + S.q) * W; p.y = h2(i, 46 + S.q * 1.7) * H; p.life = 60 + h2(i, 47 + S.q) * 160; }
+            }
+            g.stroke();
+          }
+        }
+      },
+      // sheets of fine lines that roll like silk; they lift toward the pointer
+      silk: function (t) {
+        g.clearRect(0, 0, W, H);
+        var n = 26, i, x, step = W / 70, mx = M.x * W, my = M.y * H, sg = W * 0.09;
+        g.lineWidth = Math.max(1, D * 1.15);
+        for (i = 0; i < n; i++) {
+          var z = i / (n - 1); g.strokeStyle = RGBA(MIX(c1, c2, z), (0.1 + 0.42 * Math.sin(z * 3.1416)).toFixed(3)); g.beginPath();
+          for (x = -step; x <= W + step; x += step) {
+            var u = x / W, y = H * 0.5 + (z - 0.5) * H * 0.34 + Math.sin(u * 4.2 + t * 0.5 + z * 2.6) * Math.cos(u * 1.7 - t * 0.23 + z * 1.4) * H * 0.2 * (0.45 + z) + Math.sin(u * 9 - t * 0.7 + z * 5) * H * 0.012;
+            if (M.on) y += Math.exp(-((x - mx) * (x - mx)) / (2 * sg * sg)) * (my - y) * 0.32;
+            if (x <= -step + 0.01) g.moveTo(x, y); else g.lineTo(x, y);
+          }
+          g.stroke();
+        }
+      },
+      // bubbles rising, each with its own wobble and a glint of light
+      bubbles: function (t) {
+        g.clearRect(0, 0, W, H);
+        var n = Math.max(16, Math.min(46, Math.round(W * H / (D * D) / 30000))), i;
+        for (i = 0; i < n; i++) {
+          var r = (7 + h2(i, 51) * h2(i, 52) * 46) * D, span = H + r * 2 + 20, v = (16 + h2(i, 53) * 34) * D * (46 * D / (r + 20 * D) + 0.5), y = H + r - ((t * v + h2(i, 54) * span) % span), x = h2(i, 55) * W + Math.sin(t * (0.5 + h2(i, 56)) + i) * 16 * D;
+          var c = h2(i, 57) > 0.5 ? c1 : c2, fade = Math.min(1, (y + r) / (H * 0.25)), near = M.on ? Math.max(0, 1 - Math.sqrt(Math.pow(x - M.x * W, 2) + Math.pow(y - M.y * H, 2)) / (150 * D)) : 0;
+          r *= 1 + near * 0.35;
+          g.fillStyle = RGBA(c, (0.07 + near * 0.1) * fade); g.strokeStyle = RGBA(c, (0.5 + near * 0.3) * fade); g.lineWidth = Math.max(1, D * 1.3);
+          g.beginPath(); g.arc(x, y, r, 0, 6.2832); g.fill(); g.stroke();
+          g.strokeStyle = RGBA(ink, 0.5 * fade); g.lineWidth = Math.max(1, r * 0.09); g.beginPath(); g.arc(x, y, r * 0.66, 3.6, 4.6); g.stroke();
+        }
+      },
+      // columns of digits falling at their own pace
+      rain: function (t) {
+        g.clearRect(0, 0, W, H);
+        var cw = 18 * D, cols = Math.ceil(W / cw), rows = Math.ceil(H / cw) + 1, i, j, tail = 16;
+        g.font = "600 " + Math.round(13 * D) + "px ui-monospace,Menlo,Consolas,monospace"; g.textAlign = "center"; g.textBaseline = "middle";
+        for (i = 0; i < cols; i++) {
+          if (h2(i, 61) < 0.22) continue;
+          var v = 5 + h2(i, 62) * 11, span = rows + tail + 6 + h2(i, 63) * 20, head = (t * v + h2(i, 64) * span) % span, hi = Math.floor(head), c = h2(i, 65) > 0.5 ? c1 : c2;
+          for (j = 0; j < tail; j++) {
+            var row = hi - j; if (row < 0 || row > rows) continue;
+            var ch = h2(i * 7.1, row + Math.floor(t * 2 + h2(i, row) * 5)) > 0.5 ? "1" : "0";
+            g.fillStyle = j === 0 ? RGBA(MIX(c, ink, 0.6), 0.95) : RGBA(c, (0.72 * (1 - j / tail)).toFixed(3));
+            g.fillText(ch, i * cw + cw / 2, row * cw + cw / 2);
+          }
+        }
+      },
+      // soft lights that wander and breathe; they brighten near the pointer
+      fireflies: function (t) {
+        g.clearRect(0, 0, W, H);
+        var n = Math.max(18, Math.min(48, Math.round(W * H / (D * D) / 26000))), i;
+        for (i = 0; i < n; i++) {
+          var sp = 0.4 + h2(i, 71), ph = h2(i, 72) * 6.28;
+          var x = (h2(i, 73) + Math.sin(t * 0.13 * sp + ph) * 0.12 + Math.sin(t * 0.37 * sp + ph * 2.3) * 0.035) * W, y = (h2(i, 74) + Math.cos(t * 0.11 * sp + ph * 1.4) * 0.12 + Math.sin(t * 0.41 * sp + ph) * 0.03) * H;
+          var pulse = Math.pow(0.5 + 0.5 * Math.sin(t * 1.15 * sp + ph), 3), near = M.on ? Math.max(0, 1 - Math.sqrt(Math.pow(x - M.x * W, 2) + Math.pow(y - M.y * H, 2)) / (220 * D)) : 0;
+          var lit = Math.min(1, pulse + near), r = (9 + lit * 30) * D, c = h2(i, 75) > 0.5 ? c1 : c2, gr = g.createRadialGradient(x, y, 0, x, y, r);
+          gr.addColorStop(0, RGBA(c, 0.2 + lit * 0.6)); gr.addColorStop(0.35, RGBA(c, 0.08 + lit * 0.22)); gr.addColorStop(1, RGBA(c, 0));
+          g.fillStyle = gr; g.beginPath(); g.arc(x, y, r, 0, 6.2832); g.fill();
+          g.fillStyle = RGBA(MIX(c, ink, dark ? 0.7 : 0.1), 0.35 + lit * 0.6); g.beginPath(); g.arc(x, y, D * (1.2 + lit * 1.4), 0, 6.2832); g.fill();
+        }
+      },
+      // rings spreading like rain on still water; moving the pointer starts more
+      ripple: function (t) {
+        g.clearRect(0, 0, W, H);
+        var big = Math.max(W, H) * 0.42, i, k;
+        function ring(x, y, age, c, size) { for (k = 0; k < 3; k++) { var a = age - k * 0.09; if (a <= 0) continue; g.strokeStyle = RGBA(c, (Math.pow(1 - a, 1.4) * (0.85 - k * 0.2)).toFixed(3)); g.lineWidth = Math.max(1, D * (2.2 - k * 0.5) * (1 - a * 0.5)); g.beginPath(); g.ellipse(x, y, a * size, a * size * 0.62, 0, 0, 6.2832); g.stroke(); } }
+        for (i = 0; i < 8; i++) { var u = t * 0.16 + i / 8, cyc = Math.floor(u), age = u - cyc; ring(h2(cyc + i * 13.7, 81) * W, h2(cyc + i * 13.7, 82) * H, age, i % 2 ? c1 : c2, big * (0.5 + h2(cyc, i + 83) * 0.6)); }
+        if (M.on) { if (!S.r) S.r = []; var mx = M.x * W, my = M.y * H, lastR = S.r[S.r.length - 1]; if (!lastR || Math.abs(lastR.x - mx) + Math.abs(lastR.y - my) > 70 * D) { S.r.push({ x: mx, y: my, t: t }); if (S.r.length > 10) S.r.shift(); } }
+        if (S.r) S.r.forEach(function (q) { var age = (t - q.t) / 2.6; if (age > 0 && age < 1) ring(q.x, q.y, age, MIX(c1, c2, 0.5), big * 0.45); });
+      },
+      // petals tumbling down on a light breeze
+      petals: function (t) {
+        g.clearRect(0, 0, W, H);
+        var n = Math.max(18, Math.min(60, Math.round(W * H / (D * D) / 17000))), i;
+        for (i = 0; i < n; i++) {
+          var r = (9 + h2(i, 91) * 15) * D, span = H + r * 6, v = (20 + h2(i, 92) * 30) * D, y = ((t * v + h2(i, 93) * span) % span) - r * 3, ph = h2(i, 94) * 6.28;
+          var x = ((h2(i, 95) * W + t * 9 * D + Math.sin(t * 0.7 + ph) * 34 * D) % (W + r * 4)) - r * 2, c = h2(i, 96) > 0.5 ? c1 : c2;
+          g.save(); g.translate(x, y); g.rotate(t * (0.4 + h2(i, 97) * 0.8) + ph); g.scale(1, 0.25 + 0.75 * Math.abs(Math.cos(t * (0.9 + h2(i, 98)) + ph)));
+          g.fillStyle = RGBA(c, 0.3 + h2(i, 99) * 0.34); g.beginPath(); g.moveTo(0, -r); g.bezierCurveTo(r * 0.95, -r * 0.55, r * 0.7, r * 0.75, 0, r); g.bezierCurveTo(-r * 0.7, r * 0.75, -r * 0.95, -r * 0.55, 0, -r); g.fill();
+          g.strokeStyle = RGBA(c, 0.5); g.lineWidth = Math.max(1, D * 0.8); g.beginPath(); g.moveTo(0, -r * 0.7); g.lineTo(0, r * 0.8); g.stroke();
+          g.restore();
+        }
+      },
+      // a honeycomb that lights up in passing waves, and under the pointer
+      hex: function (t) {
+        g.clearRect(0, 0, W, H);
+        var s = 30 * D, w = s * 1.732, hh = s * 1.5, rows = Math.ceil(H / hh) + 2, cols = Math.ceil(W / w) + 2, r, q, k, mx = M.x * W, my = M.y * H;
+        var ox = W * (0.5 + 0.38 * Math.sin(t * 0.17)), oy = H * (0.5 + 0.38 * Math.cos(t * 0.13));
+        function path(cx, cy, rad) { g.moveTo(cx, cy - rad); for (k = 1; k < 6; k++) g.lineTo(cx + Math.sin(k * 1.0472) * rad, cy - Math.cos(k * 1.0472) * rad); g.closePath(); }
+        g.lineWidth = Math.max(1, D); g.strokeStyle = RGBA(c1, dark ? 0.16 : 0.13); g.beginPath();
+        for (r = -1; r < rows; r++) for (q = -1; q < cols; q++) path(q * w + (r & 1 ? w / 2 : 0), r * hh, s - D);
+        g.stroke();
+        for (r = -1; r < rows; r++) for (q = -1; q < cols; q++) {
+          var cx = q * w + (r & 1 ? w / 2 : 0), cy = r * hh, d = Math.sqrt((cx - ox) * (cx - ox) + (cy - oy) * (cy - oy)) / D;
+          var lit = Math.pow(Math.max(0, Math.sin(d * 0.016 - t * 1.5) * 0.6 + fbm(q * 0.31 + t * 0.12, r * 0.31) * 0.9 - 0.42), 1.4);
+          if (M.on) lit += Math.max(0, 1 - Math.sqrt((cx - mx) * (cx - mx) + (cy - my) * (cy - my)) / (150 * D)) * 0.8;
+          if (lit < 0.03) continue;
+          g.fillStyle = RGBA(MIX(c1, c2, h2(q, r)), Math.min(0.62, lit * 0.6).toFixed(3)); g.beginPath(); path(cx, cy, (s - D * 2) * Math.min(1, 0.55 + lit)); g.fill();
+        }
+      },
+      // planets circling a small sun, each leaving a short trail
+      orbit: function (t) {
+        g.clearRect(0, 0, W, H);
+        var cx = W * 0.5 + (M.on ? (M.x - 0.5) * W * 0.06 : 0), cy = H * 0.52 + (M.on ? (M.y - 0.5) * H * 0.06 : 0), R = Math.max(W, H) * 0.56, i, n = 8;
+        g.save(); g.translate(cx, cy); g.rotate(-0.32);
+        var sun = g.createRadialGradient(0, 0, 0, 0, 0, R * 0.09); sun.addColorStop(0, RGBA(c2, 0.9)); sun.addColorStop(0.35, RGBA(c1, 0.45)); sun.addColorStop(1, RGBA(c1, 0)); g.fillStyle = sun; g.beginPath(); g.arc(0, 0, R * 0.09, 0, 6.2832); g.fill();
+        for (i = 0; i < n; i++) {
+          var rx = R * (0.13 + i * 0.115), ry = rx * 0.36, c = i % 2 ? c2 : c1, a = t * (0.55 / (0.6 + i * 0.5)) + i * 1.9;
+          g.strokeStyle = RGBA(c, 0.2); g.lineWidth = Math.max(1, D); g.beginPath(); g.ellipse(0, 0, rx, ry, 0, 0, 6.2832); g.stroke();
+          g.strokeStyle = RGBA(c, 0.6); g.lineWidth = Math.max(1.5, D * 2); g.beginPath(); g.ellipse(0, 0, rx, ry, 0, a - 0.55, a); g.stroke();
+          var px = Math.cos(a) * rx, py = Math.sin(a) * ry, pr = D * (3 + h2(i, 101) * 5) * (1 + 0.35 * Math.sin(a));
+          g.shadowColor = RGBA(c, 0.8); g.shadowBlur = pr * 3; g.fillStyle = RGBA(c, 0.95); g.beginPath(); g.arc(px, py, pr, 0, 6.2832); g.fill(); g.shadowBlur = 0;
+        }
+        g.restore();
+      },
+      // stars streaming past, as if flying through them; the pointer steers
+      warp: function (t) {
+        g.clearRect(0, 0, W, H);
+        var tx = W * (0.5 + (M.on ? (M.x - 0.5) * 0.3 : 0)), ty = H * (0.5 + (M.on ? (M.y - 0.5) * 0.3 : 0));
+        S.cx = S.cx == null ? tx : S.cx + (tx - S.cx) * 0.06; S.cy = S.cy == null ? ty : S.cy + (ty - S.cy) * 0.06;
+        var n = Math.max(90, Math.min(260, Math.round(W * H / (D * D) / 5200))), i, far = Math.sqrt(W * W + H * H) * 0.62; g.lineCap = "round";
+        for (i = 0; i < n; i++) {
+          var a = h2(i, 111) * 6.2832, z = (h2(i, 112) + t * 0.11 * (0.5 + h2(i, 113))) % 1, r1 = z * z * far, r0 = Math.max(0, z - 0.035 - z * 0.05), c = h2(i, 114) < 0.4 ? c1 : h2(i, 114) < 0.8 ? c2 : ink; r0 = r0 * r0 * far;
+          g.strokeStyle = RGBA(c, (Math.min(1, 0.08 + z * 0.9) * (c === ink ? 0.45 : 0.8)).toFixed(3)); g.lineWidth = Math.max(1, D * (0.5 + z * 1.6));
+          g.beginPath(); g.moveTo(S.cx + Math.cos(a) * r0, S.cy + Math.sin(a) * r0); g.lineTo(S.cx + Math.cos(a) * r1, S.cy + Math.sin(a) * r1); g.stroke();
+        }
       }
     };
     var draw = DRAW[kind] || DRAW.motion, raf = 0, seen = true, alive = true, t0 = performance.now(), last = 0;
@@ -921,11 +1069,12 @@
     }
     function still() { size(); try { draw(7.3); } catch (e) { /* stays empty */ } }
     var io = null, ro = null;
-    function stop() { alive = false; if (raf) cancelAnimationFrame(raf); if (io) io.disconnect(); if (ro) ro.disconnect(); }
+    function stop() { alive = false; if (raf) cancelAnimationFrame(raf); if (io) io.disconnect(); if (ro) ro.disconnect(); window.removeEventListener("pointermove", onMove); }
     if (RM || o.still) { still(); if (window.ResizeObserver) { ro = new ResizeObserver(function () { if (cv.isConnected) still(); else stop(); }); ro.observe(host); } }
     else {
       if (window.IntersectionObserver) { io = new IntersectionObserver(function (es) { seen = es[es.length - 1].isIntersecting; }); io.observe(host); }
       still(); raf = requestAnimationFrame(frame);
+      if (matchMedia("(hover: hover)").matches) window.addEventListener("pointermove", onMove, { passive: true });
     }
     return { stop: stop };
   }
@@ -978,7 +1127,7 @@
   }
   /** Brand → Logo motion: a quiet movement on the site's logo (in the menu and above the hero), all the time, once
    *  when the page opens, or when pointed at. Still for visitors who ask their device for less motion. */
-  var LOGO_ANIMS = { float: 3.4, pulse: 2.6, spin: 9, swing: 2.8, bounce: 2.4, flip: 4.5, jelly: 2.2, glow: 2.8, shine: 3.6 };
+  var LOGO_ANIMS = { float: 3.4, pulse: 2.6, spin: 9, swing: 2.8, bounce: 2.4, flip: 4.5, jelly: 2.2, glow: 2.8, shine: 3.6, heartbeat: 1.8, wobble: 2.4, tada: 2.6, rubber: 2.4, tilt: 5, drop: 4, pop: 3.2, neon: 3.4, hue: 6, glitch: 3.2 };
   function logoMotion(opts, root) {
     var B = (opts.c && opts.c.brand) || {}, kind = LOGO_ANIMS[B.logoAnim] ? B.logoAnim : "", on = B.logoAnimOn === "hover" || B.logoAnimOn === "load" ? B.logoAnimOn : "", sp = B.logoAnimSpeed === "slow" ? 1.6 : B.logoAnimSpeed === "lively" ? 0.6 : 1;
     Array.prototype.forEach.call(document.querySelectorAll("[data-la]"), function (n) { n.removeAttribute("data-la"); n.removeAttribute("data-la-on"); n.style.animationDuration = ""; });
@@ -989,7 +1138,8 @@
         "@keyframes la-swing{0%,100%{transform:rotate(-8deg)}50%{transform:rotate(8deg)}}@keyframes la-bounce{0%,100%{transform:translateY(0)}30%{transform:translateY(-24%)}50%{transform:translateY(0)}65%{transform:translateY(-10%)}80%{transform:translateY(0)}}" +
         "@keyframes la-flip{0%,55%{transform:perspective(420px) rotateY(0)}85%,100%{transform:perspective(420px) rotateY(360deg)}}@keyframes la-jelly{0%,100%{transform:scale(1,1)}25%{transform:scale(1.14,.88)}50%{transform:scale(.9,1.1)}75%{transform:scale(1.06,.95)}}" +
         "@keyframes la-glow{0%,100%{filter:drop-shadow(0 0 0 rgba(0,0,0,0))}50%{filter:drop-shadow(0 0 10px var(--c1,var(--accent,#5b7cff)))}}@keyframes la-shine{0%,62%,100%{filter:brightness(1) saturate(1)}78%{filter:brightness(1.7) saturate(1.25)}}" +
-        "[data-la]{transform-origin:50% 50%;animation-timing-function:ease-in-out;animation-iteration-count:infinite;will-change:transform}[data-la=spin]{animation-timing-function:linear}[data-la=swing]{transform-origin:50% 0}" +
+        "@keyframes la-heartbeat{0%,40%,100%{transform:scale(1)}10%{transform:scale(1.16)}20%{transform:scale(1)}30%{transform:scale(1.1)}}@keyframes la-wobble{0%,100%{transform:translateX(0) rotate(0)}15%{transform:translateX(-9%) rotate(-6deg)}30%{transform:translateX(7%) rotate(4deg)}45%{transform:translateX(-5%) rotate(-3deg)}60%{transform:translateX(3%) rotate(2deg)}75%{transform:translateX(-1%) rotate(-1deg)}}@keyframes la-tada{0%,55%,100%{transform:scale(1) rotate(0)}6%,12%{transform:scale(.9) rotate(-4deg)}18%,30%,42%{transform:scale(1.14) rotate(4deg)}24%,36%{transform:scale(1.14) rotate(-4deg)}}@keyframes la-rubber{0%,60%,100%{transform:scale(1,1)}15%{transform:scale(1.25,.75)}24%{transform:scale(.78,1.22)}33%{transform:scale(1.14,.86)}42%{transform:scale(.95,1.05)}50%{transform:scale(1.04,.96)}}@keyframes la-tilt{0%,100%{transform:perspective(380px) rotateX(14deg) rotateY(0)}25%{transform:perspective(380px) rotateX(0) rotateY(18deg)}50%{transform:perspective(380px) rotateX(-14deg) rotateY(0)}75%{transform:perspective(380px) rotateX(0) rotateY(-18deg)}}@keyframes la-drop{0%{transform:translateY(-70%) scale(1,1);opacity:0}12%{transform:translateY(0) scale(1,1);opacity:1}17%{transform:translateY(0) scale(1.16,.8)}23%{transform:translateY(-14%) scale(.96,1.05)}30%,100%{transform:translateY(0) scale(1,1);opacity:1}}@keyframes la-pop{0%{transform:scale(.4);opacity:0}12%{transform:scale(1.18);opacity:1}18%{transform:scale(.94)}24%,100%{transform:scale(1);opacity:1}}@keyframes la-neon{0%,18%,22%,25%,53%,57%,100%{opacity:1;filter:drop-shadow(0 0 3px var(--c1,var(--accent,#5b7cff))) drop-shadow(0 0 11px var(--c1,var(--accent,#5b7cff)))}20%,24%,55%{opacity:.45;filter:none}}@keyframes la-hue{from{filter:hue-rotate(0deg)}to{filter:hue-rotate(360deg)}}@keyframes la-glitch{0%,6%,42%,48%,100%{transform:none;filter:none;clip-path:none}1%{transform:translate(-5%,2%) skewX(-8deg);filter:hue-rotate(80deg) saturate(1.6)}2.5%{transform:translate(5%,-2%) skewX(6deg);clip-path:inset(12% 0 46% 0)}4%{transform:translate(-3%,0);clip-path:inset(58% 0 8% 0);filter:hue-rotate(-70deg) saturate(1.6)}43.5%{transform:translate(4%,1%) skewX(5deg);filter:hue-rotate(60deg)}45.5%{transform:translate(-4%,-1%);clip-path:inset(30% 0 30% 0)}}" +
+        "[data-la]{transform-origin:50% 50%;animation-timing-function:ease-in-out;animation-iteration-count:infinite;will-change:transform}[data-la=spin],[data-la=hue]{animation-timing-function:linear}[data-la=glitch]{animation-timing-function:steps(1,end)}[data-la=swing]{transform-origin:50% 0}" +
         Object.keys(LOGO_ANIMS).map(function (k) { return "[data-la=" + k + "]:not([data-la-on=hover]),a:hover [data-la=" + k + "][data-la-on=hover],[data-la=" + k + "][data-la-on=hover]:hover{animation-name:la-" + k + "}"; }).join("") +
         "[data-la][data-la-on=load]{animation-iteration-count:2}@media (prefers-reduced-motion:reduce){[data-la]{animation:none!important}}";
       document.head.appendChild(st4);

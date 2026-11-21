@@ -86,6 +86,16 @@
 @keyframes sla-jelly { 0%, 100% { transform: scale(1, 1); } 25% { transform: scale(1.14, 0.88); } 50% { transform: scale(0.9, 1.1); } 75% { transform: scale(1.06, 0.95); } }
 @keyframes sla-glow { 0%, 100% { filter: drop-shadow(0 0 0 transparent); } 50% { filter: drop-shadow(0 0 8px rgb(var(--brand-400, 122 150 255))); } }
 @keyframes sla-shine { 0%, 62%, 100% { filter: brightness(1); } 78% { filter: brightness(1.7) saturate(1.25); } }
+@keyframes sla-heartbeat { 0%,40%,100%{transform:scale(1)}10%{transform:scale(1.16)}20%{transform:scale(1)}30%{transform:scale(1.1)} }
+@keyframes sla-wobble { 0%,100%{transform:translateX(0) rotate(0)}15%{transform:translateX(-9%) rotate(-6deg)}30%{transform:translateX(7%) rotate(4deg)}45%{transform:translateX(-5%) rotate(-3deg)}60%{transform:translateX(3%) rotate(2deg)}75%{transform:translateX(-1%) rotate(-1deg)} }
+@keyframes sla-tada { 0%,55%,100%{transform:scale(1) rotate(0)}6%,12%{transform:scale(.9) rotate(-4deg)}18%,30%,42%{transform:scale(1.14) rotate(4deg)}24%,36%{transform:scale(1.14) rotate(-4deg)} }
+@keyframes sla-rubber { 0%,60%,100%{transform:scale(1,1)}15%{transform:scale(1.25,.75)}24%{transform:scale(.78,1.22)}33%{transform:scale(1.14,.86)}42%{transform:scale(.95,1.05)}50%{transform:scale(1.04,.96)} }
+@keyframes sla-tilt { 0%,100%{transform:perspective(380px) rotateX(14deg) rotateY(0)}25%{transform:perspective(380px) rotateX(0) rotateY(18deg)}50%{transform:perspective(380px) rotateX(-14deg) rotateY(0)}75%{transform:perspective(380px) rotateX(0) rotateY(-18deg)} }
+@keyframes sla-drop { 0%{transform:translateY(-70%) scale(1,1);opacity:0}12%{transform:translateY(0) scale(1,1);opacity:1}17%{transform:translateY(0) scale(1.16,.8)}23%{transform:translateY(-14%) scale(.96,1.05)}30%,100%{transform:translateY(0) scale(1,1);opacity:1} }
+@keyframes sla-pop { 0%{transform:scale(.4);opacity:0}12%{transform:scale(1.18);opacity:1}18%{transform:scale(.94)}24%,100%{transform:scale(1);opacity:1} }
+@keyframes sla-neon { 0%,18%,22%,25%,53%,57%,100%{opacity:1;filter:drop-shadow(0 0 3px rgb(var(--brand-400, 122 150 255))) drop-shadow(0 0 11px rgb(var(--brand-400, 122 150 255)))}20%,24%,55%{opacity:.45;filter:none} }
+@keyframes sla-hue { from{filter:hue-rotate(0deg)}to{filter:hue-rotate(360deg)} }
+@keyframes sla-glitch { 0%,6%,42%,48%,100%{transform:none;filter:none;clip-path:none}1%{transform:translate(-5%,2%) skewX(-8deg);filter:hue-rotate(80deg) saturate(1.6)}2.5%{transform:translate(5%,-2%) skewX(6deg);clip-path:inset(12% 0 46% 0)}4%{transform:translate(-3%,0);clip-path:inset(58% 0 8% 0);filter:hue-rotate(-70deg) saturate(1.6)}43.5%{transform:translate(4%,1%) skewX(5deg);filter:hue-rotate(60deg)}45.5%{transform:translate(-4%,-1%);clip-path:inset(30% 0 30% 0)} }
 [data-logo-anim] { animation: 3s ease-in-out infinite; transform-origin: 50% 50%; }
 [data-logo-anim="float"] { animation-name: sla-float; animation-duration: 3.4s; }
 [data-logo-anim="pulse"] { animation-name: sla-pulse; animation-duration: 2.6s; }
@@ -96,4 +106,14 @@
 [data-logo-anim="jelly"] { animation-name: sla-jelly; animation-duration: 2.2s; }
 [data-logo-anim="glow"] { animation-name: sla-glow; animation-duration: 2.8s; }
 [data-logo-anim="shine"] { animation-name: sla-shine; animation-duration: 3.6s; }
+[data-logo-anim="heartbeat"] { animation-name: sla-heartbeat; animation-duration: 1.8s; }
+[data-logo-anim="wobble"] { animation-name: sla-wobble; animation-duration: 2.4s; }
+[data-logo-anim="tada"] { animation-name: sla-tada; animation-duration: 2.6s; }
+[data-logo-anim="rubber"] { animation-name: sla-rubber; animation-duration: 2.4s; }
+[data-logo-anim="tilt"] { animation-name: sla-tilt; animation-duration: 5s; }
+[data-logo-anim="drop"] { animation-name: sla-drop; animation-duration: 4s; }
+[data-logo-anim="pop"] { animation-name: sla-pop; animation-duration: 3.2s; }
+[data-logo-anim="neon"] { animation-name: sla-neon; animation-duration: 3.4s; }
+[data-logo-anim="hue"] { animation-name: sla-hue; animation-duration: 6s; animation-timing-function: linear; }
+[data-logo-anim="glitch"] { animation-name: sla-glitch; animation-duration: 3.2s; animation-timing-function: steps(1, end); }
 @media (prefers-reduced-motion: reduce) { [data-logo-anim] { animation: none; } }

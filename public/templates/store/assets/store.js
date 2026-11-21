@@ -14,7 +14,7 @@ if (SC) SC.track();
 const DEFAULT = {
   theme: { bg: "#FAF7F2", surface: "#FFFFFF", text: "#1B1A17", soft: "#6B665D", line: "#E7E1D6", accent: "#1F4D3A", accent2: "#E9B949", sale: "#B4441B", fontDisplay: "Fraunces", fontBody: "Manrope", radius: 14,
     preset: "ivory-classic", layout: "split", nav: "pill", cards: "soft", buttons: "rounded", motionStyle: "none", pattern: "none", ornament: "none", heading: "normal", shead: "plain", width: "normal", grid: "auto", product: "classic",
-    cursor: "none", loader: "none", textfx: "none", hoverfx: "none", scrollfx: "none", overlay: "none", herofx: "none",
+    cursor: "none", loader: "none", textfx: "none", hoverfx: "none", scrollfx: "none", overlay: "none", herofx: "none", loaderOn: "both",
     introBg: "", introFg: "", introTitle: "", introFont: "display", introCase: "upper", logoRadius: 26, scrollEase: "light", lineBreaks: "typed" },
   warranty: { enabled: false, title: "Warranty & service status", intro: "Enter the number on your invoice or product to see its warranty and service status.", navLabel: "Warranty", inNav: true, inFooter: true,
     label: "Serial or invoice number", placeholder: "", verify: "none", verifyLabel: "", button: "Check status", notFound: "We couldn't find that number. Check it and try again.", help: "Need help? Contact us and we'll look it up.",
@@ -526,7 +526,7 @@ function applyTheme(t) {
   r.setProperty("--logo-r", Math.max(0, Math.min(50, t.logoRadius ?? 26)) + "%");
   MOTIF = window.SiteMotifs ? SiteMotifs.resolve(t, "cafe") : "geometric";
   const d = document.documentElement.dataset; d.motif = moOn() ? MOTIF : "geometric";
-  for (const k of ["layout", "heroArt", "nav", "cards", "buttons", "motionStyle", "pattern", "ornament", "heading", "shead", "width", "grid", "product", "cursor", "loader", "textfx", "hoverfx", "scrollfx", "overlay", "herofx"]) d[k] = String(t[k] || "");
+  for (const k of ["layout", "heroArt", "nav", "cards", "buttons", "motionStyle", "pattern", "ornament", "heading", "shead", "width", "grid", "product", "cursor", "loader", "textfx", "hoverfx", "scrollfx", "overlay", "herofx", "loaderOn"]) d[k] = String(t[k] || "");
   d.scrollease = t.scrollEase || "light"; d.linebreaks = t.lineBreaks || "typed"; d.menu = String(t.navMode || ""); d.menumob = String(t.navModeMob || "");
   d.crumbs = (C.nav || {}).crumbs === false ? "off" : "on"; d.introfont = t.introFont || "display"; d.introcase = t.introCase || "upper";
   r.setProperty("--r", (+t.radius || 0) + "px");

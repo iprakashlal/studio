@@ -1,6 +1,6 @@
 import type { Card, Field } from "../schema/types";
 import { ANIM_BG_FIELDS } from "../schema/animbg";
-import { AXES, FX_AXES, HERO_FX_AXIS, MOTIF_AXIS, SCROLL_EASE_AXIS, THEMES, type Axis } from "./catalog";
+import { AXES, FX_AXES, HERO_FX_AXIS, LOADER_ON_AXIS, MOTIF_AXIS, SCROLL_EASE_AXIS, THEMES, type Axis } from "./catalog";
 
 const sel = (a: Axis): Field => ({ t: "select", path: "theme." + a.key, label: a.label, options: a.options.map(([value, label]) => ({ value, label })) });
 
@@ -36,7 +36,7 @@ export function themeCards(extra: Axis[], note: string, layout: Axis = AXES.layo
     { title: "Interactions", fields: [
       { t: "note", text: "Award-style effects: a custom cursor, an intro that also animates links between pages, heading reveals, hover physics, smooth scrolling and a screen texture. Themes tagged Motion set these for you. Cursor and hover effects only run with a mouse; visitors who ask for reduced motion get a still page." },
       g(sel(FX_AXES.cursor), sel(FX_AXES.loader), sel(FX_AXES.textfx), sel(FX_AXES.hoverfx), sel(FX_AXES.scrollfx), sel(FX_AXES.overlay)),
-      sel(HERO_FX_AXIS), { t: "note", text: "Hero graphic effect is a slow, quiet loop on the hero's picture or graphic, drawn in your theme's accent colours. It stays still for visitors who ask their device for less motion." },
+      sel(LOADER_ON_AXIS), sel(HERO_FX_AXIS), { t: "note", text: "Hero graphic effect is a slow, quiet loop on the hero's picture or graphic, drawn in your theme's accent colours. It stays still for visitors who ask their device for less motion." },
       { t: "when", path: "theme.scrollfx", is: "smooth", fields: [sel(SCROLL_EASE_AXIS)] },
       { t: "when", path: "theme.scrollfx", is: "skew", fields: [sel(SCROLL_EASE_AXIS)] },
       { t: "note", text: "Scrolling feels heavy? Pick Light, or set Scrolling to Normal. Smooth scrolling only changes mouse wheels: trackpads and phones always scroll the normal way." },

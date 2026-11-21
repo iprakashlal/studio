@@ -60,6 +60,7 @@ export function onColor(hex: string): string {
 }
 
 /** Hero graphic effect: a quiet animation loop on the hero's picture or graphic, in the theme's colours. A site's own choice (themes leave it alone). */
+export const LOADER_ON_AXIS: Axis = { key: "loaderOn", label: "Show the transition on", options: [["both", "Page load and menu links"], ["load", "Page load only (first visit)"], ["menu", "Menu links only (between pages)"]] };
 export const HERO_FX_AXIS: Axis = { key: "herofx", label: "Hero graphic effect", options: [["none", "None"], ["float", "Gentle float"], ["breathe", "Slow zoom (breathing)"], ["sway", "Soft sway"], ["follow", "Follows the pointer (depth)"],
   ["halo", "Glowing halo"], ["orbit", "Orbiting rings"], ["ripple", "Ripple rings"], ["sparkle", "Floating sparkles"], ["shine", "Light sweep"], ["morph", "Liquid edge"]] };
 export const FX_KEYS = ["cursor", "loader", "textfx", "hoverfx", "scrollfx", "overlay"] as const;

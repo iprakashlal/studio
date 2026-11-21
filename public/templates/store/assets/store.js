@@ -187,7 +187,7 @@ let cart = store.get("cart", []);
 /* Reviews (content.reviews, hosted shops): the average under each product, and on its page the reviews, with a form to write one. */
 const revOn = () => !PREVIEW && !!(C.reviews && C.reviews.on && HOST && HOST.api && HOST.site);
 let REV = null;
-const stars = (a) => { const n = Math.round(Number(a) || 0); return `<span class="stars" role="img" aria-label="${n} out of 5 stars">${"★".repeat(n)}${"☆".repeat(5 - n)}</span>`; };
+const stars = (a) => { const n = Math.round(Number(a) || 0); return `<span class="stars" role="img" aria-label="${n} out of 5 stars">${"★".repeat(n)}<i class="off">${"★".repeat(5 - n)}</i></span>`; };
 function revLoad() { if (!revOn()) return Promise.resolve(); return fetch(HOST.api + "/rev/" + encodeURIComponent(HOST.site), { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((j) => { if (j && j.s) REV = j.s; }).catch(() => {}); }
 function revDraw(p) {
   const el = $("#rv"); if (!el) return; const api = HOST.api + "/rev/" + encodeURIComponent(HOST.site), me = store.get("me", {});
@@ -195,13 +195,13 @@ function revDraw(p) {
   const draw = () => fetch(api + "?item=" + encodeURIComponent(p.id), { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((j) => {
     j = j || { n: 0, a: 0, hist: [0, 0, 0, 0, 0], list: [] }; const open = el.querySelector("#rv-form") && !el.querySelector("#rv-form").hidden;
     el.innerHTML = `<div class="sec-h"><h2 style="font-size:28px">Reviews</h2></div>
-      <div class="rv-top">${j.n ? `<div class="rv-sum"><b>${j.a}</b>${stars(j.a)}<small>${j.n} review${j.n === 1 ? "" : "s"}</small></div><div class="rv-bars">${[5, 4, 3, 2, 1].map((k) => `<div><span>${k}★</span><i><u style="width:${Math.round((100 * j.hist[k - 1]) / j.n)}%"></u></i><span>${j.hist[k - 1]}</span></div>`).join("")}</div>` : `<p class="soft">No reviews yet. Be the first to write one.</p>`}<button class="btn" type="button" id="rv-open" aria-expanded="false">Write a review</button></div>
+      <div class="rv-top">${j.n ? `<div class="rv-sum"><b>${j.a}</b>${stars(j.a)}<small>${j.n} review${j.n === 1 ? "" : "s"}</small></div><div class="rv-bars">${[5, 4, 3, 2, 1].map((k) => `<div><span>${k}★</span><i><u style="width:${Math.round((100 * j.hist[k - 1]) / j.n)}%"></u></i><span>${j.hist[k - 1]}</span></div>`).join("")}</div>` : `<p class="soft">No reviews yet. Be the first to write one.</p>`}<button class="btn pri" type="button" id="rv-open" aria-expanded="false">Write a review</button></div>
       <p class="rv-said" role="status">${esc(said)}</p>
-      <form class="rv-form" id="rv-form" hidden novalidate><fieldset class="rv-pick"><legend>Your rating</legend>${[1, 2, 3, 4, 5].map((k) => `<label><input type="radio" name="rating" value="${k}"><span aria-hidden="true">★</span><b class="vh">${k} star${k === 1 ? "" : "s"}</b></label>`).join("")}</fieldset>
+      <form class="rv-form" id="rv-form" hidden novalidate><fieldset class="rv-pick"><legend>Your rating</legend><div class="rv-stars">${[5, 4, 3, 2, 1].map((k) => `<label><input type="radio" name="rating" value="${k}"><span aria-hidden="true">★</span><b class="vh">${k} star${k === 1 ? "" : "s"}</b></label>`).join("")}</div></fieldset>
         <div class="two-f"><label>Your name<input class="in" name="name" maxlength="60" autocomplete="name" value="${esc(me.name || "")}"></label><label>Email <small class="soft">(never shown)</small><input class="in" name="email" type="email" maxlength="120" autocomplete="email" value="${esc(me.email || "")}"></label></div>
         <label>Headline <small class="soft">(optional)</small><input class="in" name="title" maxlength="100"></label><label>Your review<textarea class="in" name="body" rows="4" maxlength="1500"></textarea></label>
         <input class="vh" name="hp" tabindex="-1" autocomplete="off" aria-hidden="true"><p class="err" id="rv-err" role="alert"></p><button class="btn pri" type="submit">Send review</button></form>
-      <ul class="rv-list">${j.list.map((r) => `<li><div>${stars(r.rating)}${r.verified ? ` <em class="rv-v">Verified buyer</em>` : ""}</div>${r.title ? `<h3>${esc(r.title)}</h3>` : ""}<p>${esc(r.body).replace(/\n/g, "<br>")}</p><small>${esc(r.name)} · ${esc(r.at)}</small>${r.reply ? `<blockquote><b>Reply from ${esc((C.brand && C.brand.name) || "the shop")}</b><br>${esc(r.reply)}</blockquote>` : ""}</li>`).join("")}</ul>`;
+      <ul class="rv-list">${j.list.map((r) => `<li class="rv-c"><div class="rv-who"><span class="rv-av" aria-hidden="true">${esc(String(r.name || "?").trim().slice(0, 1).toUpperCase())}</span><div><b>${esc(r.name)}</b><small>${esc(r.at)}</small></div>${stars(r.rating)}</div>${r.verified ? `<em class="rv-v">✓ Verified buyer</em>` : ""}${r.title ? `<h3>${esc(r.title)}</h3>` : ""}<p>${esc(r.body).replace(/\n/g, "<br>")}</p>${r.reply ? `<blockquote><b>Reply from ${esc((C.brand && C.brand.name) || "the shop")}</b><br>${esc(r.reply)}</blockquote>` : ""}</li>`).join("")}</ul>`;
     const f = $("#rv-form", el), o = $("#rv-open", el); if (open) { f.hidden = false; o.setAttribute("aria-expanded", "true"); }
     o.onclick = () => { f.hidden = !f.hidden; o.setAttribute("aria-expanded", String(!f.hidden)); if (!f.hidden) f.querySelector("input[name=name]").focus(); };
     f.onsubmit = async (e) => {
@@ -624,7 +624,7 @@ function footer() {
 }
 function pcard(p) {
   const badge = p.stock === "out" ? `<span class="badge out">Sold out</span>` : onSale(p) ? `<span class="badge sale">Sale</span>` : p.badge ? `<span class="badge">${esc(p.badge)}</span>` : "";
-  return `<a class="pcard" href="${productUrl(p)}"><div class="im">${badge}${pimg(p)}</div><div><h3>${esc(p.name)}</h3>${REV && REV[p.id] ? `<p class="rvs">${stars(REV[p.id][0])} <small>${REV[p.id][0]} (${REV[p.id][1]})</small></p>` : ""}${p.short ? `<p class="s">${esc(p.short)}</p>` : ""}</div><div class="price">${kindsOf(p).length ? "From " + esc(money(Math.min(...kindsOf(p).map((k) => k.price)))) : esc(money(p.price)) + (onSale(p) ? `<s>${esc(money(p.compareAt))}</s>` : "")}</div></a>`;
+  return `<a class="pcard" href="${productUrl(p)}"><div class="im">${badge}${pimg(p)}</div><div><h3>${esc(p.name)}</h3>${REV && REV[p.id] ? `<p class="rvs">${stars(REV[p.id][0])}<b>${REV[p.id][0]}</b><small>(${REV[p.id][1]})</small></p>` : ""}${p.short ? `<p class="s">${esc(p.short)}</p>` : ""}</div><div class="price">${kindsOf(p).length ? "From " + esc(money(Math.min(...kindsOf(p).map((k) => k.price)))) : esc(money(p.price)) + (onSale(p) ? `<s>${esc(money(p.compareAt))}</s>` : "")}</div></a>`;
 }
 
 /* ============================================================

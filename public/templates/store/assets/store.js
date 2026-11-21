@@ -257,6 +257,23 @@ function ph(seed, cls = "") {
 const pimg = (p, i = 0) => (p.images && p.images[i] ? `<img src="${esc(imgUrl(p.images[i]))}" alt="${esc(p.name)}" loading="lazy">` : ph(p.name));
 
 let cart = store.get("cart", []);
+/* Abandoned carts (content.recovery, hosted shops): once an email address is typed at checkout, the cart is kept on the
+   shop's database so a reminder can bring the shopper back. The link in the reminder (?rc=…) puts the cart back. */
+const recoOn = () => !PREVIEW && !!(C.recovery && C.recovery.on && HOST && HOST.api && HOST.site);
+let recoT = 0;
+function recoSave() {
+  clearTimeout(recoT); recoT = setTimeout(() => {
+    if (!recoOn()) return; const g = (i) => { const e = $("#co #" + i); return e ? String(e.value || "").trim() : ""; }, email = g("email"); if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return;
+    const lines = cartLines(); if (!$("#co") || $(".done")) return;
+    fetch(HOST.api + "/cart/" + encodeURIComponent(HOST.site), { method: "POST", headers: { "Content-Type": "application/json" }, keepalive: true, body: JSON.stringify({ email, name: g("name"), phone: g("phone"), lines: lines.map((l) => ({ id: l.id, opt: l.opt || "", qty: l.qty })), items: lines.map((l) => ({ n: l.p.name + (l.opt ? " (" + l.opt + ")" : ""), q: l.qty })), total: lines.reduce((n, l) => n + (Number(l.p.price) || 0) * l.qty, 0), back: location.origin + location.pathname.replace(/[^/]*$/, "") + "checkout.html" }) }).catch(() => {});
+  }, 600);
+}
+document.addEventListener("focusout", (e) => { const t = e.target; if (t && t.closest && t.closest("#co") && /^(email|name|phone)$/.test(t.id)) recoSave(); });
+(function recoBack() {
+  const m = /[?&]rc=([a-f0-9]{32})(?:&|$)/.exec(location.search); if (!m || !HOST || !HOST.api || !HOST.site) return;
+  const go = () => { const u = new URL(location.href); u.searchParams.delete("rc"); location.replace(u.href); };
+  fetch(HOST.api + "/cart/" + encodeURIComponent(HOST.site) + "/" + m[1]).then((r) => (r.ok ? r.json() : null)).then((j) => { if (j && Array.isArray(j.lines) && j.lines.length) store.set("cart", j.lines.filter((l) => l && l.id).map((l) => ({ id: String(l.id), opt: String(l.opt || ""), qty: Math.max(1, Math.min(99, +l.qty || 1)) }))); go(); }).catch(go);
+})();
 const saveCart = () => { store.set("cart", cart); $$("[data-cartcount]").forEach((el) => { el.textContent = cartCount(); }); };
 const cartCount = () => cart.reduce((n, l) => n + l.qty, 0);
 /** A product's varieties with their own prices (p.kindsOn, p.kinds): the buyer must choose one, and it sets the price. */

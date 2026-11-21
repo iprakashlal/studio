@@ -629,6 +629,13 @@
     filter(); over(true);
     if (ui.drawer === "done" && ui.done) track(ui.done);
     const be = A.backend();
+    // Abandoned carts (content.recovery): the cart is kept once an email address is typed; the reminder's link (?rc=…) puts it back.
+    { const rc = /[?&]rc=([a-f0-9]{32})(?:&|$)/.exec(location.search), rb = be && be.cf && be.site ? be : null;
+      if (rc && rb) { const u = new URL(location.href); u.searchParams.delete("rc"); history.replaceState(null, "", u.href);
+        fetch(rb.cf + "/cart/" + encodeURIComponent(rb.site) + "/" + rc[1]).then((r) => (r.ok ? r.json() : null)).then((j) => { const ok = new Set(D.filter((x) => !x.d.soldOut).map((x) => x.id)); const ls = j && Array.isArray(j.lines) ? j.lines.filter((l) => l && ok.has(l.id) && +l.qty > 0) : []; if (ls.length) { cart = ls; save(); ui.drawer = "cart"; over(true); } }).catch(() => {}); }
+      let rt = 0; root.addEventListener("focusout", (e) => { const t = e.target; if (!t || !t.dataset || !/^(email|name|phone)$/.test(t.dataset.f || "") || !(C.recovery && C.recovery.on) || A.PREVIEW || !rb) return; clearTimeout(rt); rt = setTimeout(() => {
+        sync(); const em = String(ui.form.email || "").trim(); if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em) || !cart.length || ui.drawer === "done") return;
+        fetch(rb.cf + "/cart/" + encodeURIComponent(rb.site), { method: "POST", headers: { "Content-Type": "application/json" }, keepalive: true, body: JSON.stringify({ email: em, name: ui.form.name, phone: ui.form.phone, lines: cart, items: cart.map((l) => ({ n: l.name, q: l.qty })), total: bill().total, back: location.origin + location.pathname }) }).catch(() => {}); }, 600); }); }
     if (!bind.back) { bind.back = true; cameBack(); }
     // The Studio's preview has no database: a made-up account stands in, so the look can be chosen.
     if (A.PREVIEW && C.account && C.account.on) loadAcct().then(() => {

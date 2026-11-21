@@ -8,6 +8,7 @@ import { EnquiriesPanel, enquiriesCfg } from "./EnquiriesPanel";
 import { CustomerPanel } from "./CustomerPanel";
 import { SiteConnections } from "../pages/Connections";
 import { InventoryPanel } from "./InventoryPanel";
+import { RecoveryPanel } from "./RecoveryPanel";
 import { WarrantyPanel } from "./WarrantyPanel";
 import { GOTO_EVENT } from "../editor/Editor";
 import { TEMPLATES } from "../schema";
@@ -377,6 +378,7 @@ function Workspace({ info, onInfo, repo, account, onSignOut, hosted, ghToken }: 
     ] : []),
     ...((tpl.id === "restaurant" || tpl.id === "store") && !(tpl.id === "store" && saved?.backend?.enabled) ? [
       { id: "inventory", label: "Inventory", group: tpl.id === "restaurant" ? "Selling" : "Forms & records", desc: tpl.id === "restaurant" ? "How many of each dish are left: orders take from it, and a dish sells out by itself." : "How many of each product are left: orders take from it, and a product sells out by itself.", render: () => <InventoryPanel cf={hosted && "api" in hosted ? hosted : undefined} kind={tpl.id === "restaurant" ? "restaurant" : "store"} on={!!saved?.inventory?.on} /> },
+      { id: "recovery", label: "Abandoned carts", group: tpl.id === "restaurant" ? "Selling" : "Forms & records", desc: "Shoppers who typed their email at checkout and left: remind them, and see who came back.", render: () => <RecoveryPanel cf={hosted && "api" in hosted ? hosted : undefined} kind={tpl.id === "restaurant" ? "restaurant" : "store"} on={!!saved?.recovery?.on} /> },
       { id: "customer-data", label: "Customer Data", group: tpl.id === "restaurant" ? "Selling" : "Forms & records", desc: "Everyone who has ordered: their details, orders, what they spent and their points.", render: () => <CustomerPanel cf={hosted && "api" in hosted ? hosted : undefined} currency={saved?.food?.currency || saved?.settings?.currency || "₹"} points={!!saved?.loyalty?.on} /> },
     ] : []),
     ...(tpl.id === "store" || tpl.id === "business" ? [

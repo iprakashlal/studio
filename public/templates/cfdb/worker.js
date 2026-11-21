@@ -9,6 +9,9 @@ create table if not exists chunks (scope text not null, path text not null, n in
 create table if not exists codes (email text primary key, hash text not null, expires integer not null, tries integer not null default 0, sent integer not null default 0);
 create table if not exists enquiries (id integer primary key autoincrement, site text not null, data text not null, page text not null default '', status text not null default 'new', created_at text not null);
 create index if not exists enquiries_site on enquiries (site, created_at);
+create table if not exists stock (site text not null, item text not null, qty integer not null default 0, low integer not null default 0, updated_at text not null, primary key (site, item));
+create table if not exists stock_log (id integer primary key autoincrement, site text not null, item text not null, delta integer not null, qty integer not null, why text not null default '', ref text not null default '', at text not null);
+create index if not exists stock_log_site on stock_log (site, id);
 create table if not exists workers (worker text primary key, scope text not null);
 create table if not exists repos (repo text primary key, scope text not null);
 create table if not exists approvals (token text primary key, scope text not null, project text not null, name text not null, template text not null, content text not null, note text not null default '', status text not null default 'open', decided_by text not null default '', decided_at text, created_by text not null default '', created_at text not null);
@@ -16,7 +19,7 @@ create index if not exists approvals_project on approvals (scope, project, creat
 create table if not exists approval_notes (id integer primary key autoincrement, token text not null, who text not null, body text not null, page text not null default '', kind text not null default 'comment', created_at text not null);
 create index if not exists approval_notes_token on approval_notes (token, id);
 `;
-var CFDB_VERSION = 44;
+var CFDB_VERSION = 45;
 var CFDB_WORKER_NAME = "picaffectz-db";
 
 // src/lib/lookdigest.ts
@@ -1063,6 +1066,10 @@ async function ensure(env) {
     // what a signed-in customer keeps about themselves beyond their name and contacts (their saved addresses)
     env.DB.prepare("create table if not exists profiles (site text not null, ckey text not null, data text not null default '{}', primary key (site, ckey))"),
     env.DB.prepare("create table if not exists otps (k text primary key, hash text not null, expires integer not null, tries integer not null default 0, sent integer not null default 0)"),
+    // inventory: how many of each item are left, and every change to that
+    env.DB.prepare("create table if not exists stock (site text not null, item text not null, qty integer not null default 0, low integer not null default 0, updated_at text not null, primary key (site, item))"),
+    env.DB.prepare("create table if not exists stock_log (id integer primary key autoincrement, site text not null, item text not null, delta integer not null, qty integer not null, why text not null default '', ref text not null default '', at text not null)"),
+    env.DB.prepare("create index if not exists stock_log_site on stock_log (site, id)"),
     env.DB.prepare("create table if not exists payments (rz_order text primary key, site text not null, order_no text not null, amount integer not null, status text not null default 'created', created_at text not null)")
   ]);
   ensured = true;
@@ -1545,6 +1552,108 @@ function orderItems(c, cart) {
     }
   }
   return out;
+}
+var invOn = (c) => !!c?.inventory?.on;
+var stockKey = (id, opt) => {
+  const a = String(id || "").trim().slice(0, 130), b = oneLine(String(opt || "")).toLowerCase().slice(0, 60);
+  return b ? a + "|" + b : a;
+};
+function stockItems(c) {
+  const out = [];
+  if (isRest(c)) {
+    for (const k of c?.food?.categories || []) for (const d of k?.items || []) {
+      if (!d || !String(d.name || "").trim()) continue;
+      const id = rslug(k.name) + "/" + rslug(d.name), nm = oneLine(String(d.name)).slice(0, 90);
+      out.push({ item: id, name: nm, group: oneLine(String(k.name || "")).slice(0, 60), opt: false });
+      for (const v of Array.isArray(d.variants) ? d.variants : []) if (v && String(v.label || "").trim()) out.push({ item: stockKey(id, v.label), name: nm + " \xB7 " + oneLine(String(v.label)).slice(0, 40), group: "", opt: true });
+    }
+  } else {
+    const cats = new Map((Array.isArray(c?.categories) ? c.categories : []).map((x) => [String(x?.id || ""), oneLine(String(x?.name || ""))]));
+    for (const p of Array.isArray(c?.products) ? c.products : []) {
+      if (!p || !p.id) continue;
+      const nm = oneLine(String(p.name || "")).slice(0, 90);
+      out.push({ item: String(p.id), name: nm, group: cats.get(String(p.category || "")) || "", opt: false });
+      for (const o of [...p.kindsOn && Array.isArray(p.kinds) ? p.kinds : [], ...Array.isArray(p.options) ? p.options : []]) {
+        const l = oneLine(String(typeof o === "string" ? o : o?.label || o?.name || ""));
+        if (l) out.push({ item: stockKey(p.id, l), name: nm + " \xB7 " + l.slice(0, 40), group: "", opt: true });
+      }
+    }
+  }
+  return out.slice(0, 1500);
+}
+async function stockNeed(env, site, c, cart) {
+  await ensure(env);
+  const lines = (Array.isArray(cart?.items) ? cart.items.slice(0, 40) : []).map((l) => ({ base: stockKey(l?.id), own: [String(l?.opt || l?.variant || ""), ...String(l?.opt || "").split(" \xB7 ")].filter((x, i, a) => x.trim() && a.indexOf(x) === i).map((x) => stockKey(l?.id, x)), q: Math.max(1, Math.min(999, Math.floor(+l?.qty || 1))) })).filter((l) => l.base);
+  const need = /* @__PURE__ */ new Map(), rows = /* @__PURE__ */ new Map();
+  if (!lines.length) return { need, rows };
+  const keys = [...new Set(lines.flatMap((l) => [l.base, ...l.own]))];
+  for (const r of (await env.DB.prepare(`select item, qty, low from stock where site = ? and item in (${keys.map(() => "?").join(",")})`).bind(site, ...keys).all()).results || []) rows.set(String(r.item), { qty: +r.qty || 0, low: +r.low || 0 });
+  const names = new Map(stockItems(c).map((x) => [x.item, x.name]));
+  for (const l of lines) {
+    const k = l.own.find((x) => rows.has(x)) || (rows.has(l.base) ? l.base : "");
+    if (!k) continue;
+    const had = need.get(k);
+    need.set(k, { q: (had?.q || 0) + l.q, name: names.get(k) || names.get(l.base) || "that item" });
+  }
+  return { need, rows };
+}
+var stockSorry = (name, left) => left > 0 ? `Sorry, only ${left} left of ${name}. Change the quantity in your cart and try again.` : `Sorry, ${name} has just sold out. Remove it from your cart to go on.`;
+async function stockCheck(env, site, c, cart) {
+  const { need, rows } = await stockNeed(env, site, c, cart);
+  for (const [k, n] of need) {
+    const left = rows.get(k).qty;
+    if (left < n.q) return stockSorry(n.name, Math.max(0, left));
+  }
+  return "";
+}
+async function stockTake(env, site, c, cart, ref, force = false) {
+  const { need, rows } = await stockNeed(env, site, c, cart), now = (/* @__PURE__ */ new Date()).toISOString(), taken = [], low = [];
+  let short = "";
+  for (const [k, n] of need) {
+    const r = await env.DB.prepare("update stock set qty = qty - ?, updated_at = ? where site = ? and item = ? and qty >= ?").bind(n.q, now, site, k, n.q).run();
+    if (r?.meta?.changes) {
+      taken.push([k, n.q]);
+      continue;
+    }
+    const left = Math.max(0, +(await env.DB.prepare("select qty from stock where site = ? and item = ?").bind(site, k).first())?.qty || 0);
+    short = short || stockSorry(n.name, left);
+    if (!force) {
+      await stockBack(env, site, taken, ref, "Order not placed");
+      return { taken: [], short, low: [] };
+    }
+    if (left > 0) {
+      await env.DB.prepare("update stock set qty = 0, updated_at = ? where site = ? and item = ?").bind(now, site, k).run();
+      taken.push([k, left]);
+    }
+  }
+  if (!taken.length) return { taken, short, low };
+  const after = /* @__PURE__ */ new Map();
+  for (const r of (await env.DB.prepare(`select item, qty from stock where site = ? and item in (${taken.map(() => "?").join(",")})`).bind(site, ...taken.map((t) => t[0])).all()).results || []) after.set(String(r.item), +r.qty || 0);
+  await env.DB.batch(taken.map(([k, q]) => env.DB.prepare("insert into stock_log (site, item, delta, qty, why, ref, at) values (?, ?, ?, ?, 'Order', ?, ?)").bind(site, k, -q, after.get(k) ?? 0, ref.slice(0, 40), now)));
+  for (const [k, q] of taken) {
+    const a = after.get(k) ?? 0, lw = rows.get(k)?.low || 0;
+    if (a <= lw && a + q > lw || a === 0 && q > 0) low.push({ name: need.get(k).name, qty: a });
+  }
+  return { taken, short, low };
+}
+async function stockBack(env, site, taken, ref, why) {
+  const now = (/* @__PURE__ */ new Date()).toISOString();
+  for (const [k, q] of taken) {
+    if (!(q > 0)) continue;
+    const r = await env.DB.prepare("update stock set qty = qty + ?, updated_at = ? where site = ? and item = ? returning qty").bind(q, now, site, k).first();
+    if (r) await env.DB.prepare("insert into stock_log (site, item, delta, qty, why, ref, at) values (?, ?, ?, ?, ?, ?, ?)").bind(site, k, q, +r.qty || 0, why.slice(0, 60), ref.slice(0, 40), now).run();
+  }
+}
+async function stockLowMail(env, site, c, low) {
+  if (!low.length || c?.inventory?.alert === false || !env.RESEND_API_KEY || !env.MAIL_FROM) return;
+  const addrs = (v) => String(v || "").split(/[,;\s]+/).map((x) => x.trim()).filter((x) => EMAIL_RE.test(x)).slice(0, 5);
+  let to = addrs(c?.inventory?.alertTo);
+  if (!to.length) to = addrs(c?.contact?.form?.notifyTo);
+  if (!to.length) to = addrs(c?.contact?.email);
+  if (!to.length) to = addrs(((await env.DB.prepare("select email from members where scope = ? order by role = 'owner' desc limit 3").bind("site:" + site).all()).results || []).map((r) => r.email).join(","));
+  if (!to.length) return;
+  const out = low.filter((x) => x.qty <= 0), few = low.filter((x) => x.qty > 0);
+  await sendMail(env, to, `${out.length ? "Sold out: " + out.map((x) => x.name).join(", ") : "Running low: " + few.map((x) => x.name).join(", ")}`.slice(0, 150), WRAP(`<h2 style="margin:0 0 12px;font-size:20px">Stock at ${hesc(siteName(c, site))}</h2>${out.length ? paras("Sold out:\n" + out.map((x) => "\u2022 " + x.name).join("\n")) : ""}${few.length ? paras("Running low:\n" + few.map((x) => `\u2022 ${x.name}: ${x.qty} left`).join("\n")) : ""}${paras("Add stock under Inventory in your site's admin page.", "margin:0 0 8px;color:#667;font-size:13px")}`));
 }
 var cleanAddr = (a) => {
   const t = (v, n = 120) => oneLine(String(v ?? "")).replace(/\s+/g, " ").slice(0, n);
@@ -2367,6 +2476,10 @@ var db_worker_default = {
         q._bal = +q.points > 0 ? (await pointsBal(env, site, q.phone, q.otp, { email: q.email, acct: q.acct })).bal : 0;
         const bill = rest ? restBill(c, q) : Array.isArray(c?.products) ? shopBill(c, q) : { error: "This site doesn't take orders." };
         if ("error" in bill) return err(409, bill.error);
+        if (invOn(c)) {
+          const sorry = await stockCheck(env, site, c, { items: q.items });
+          if (sorry) return err(409, sorry);
+        }
         if (Math.abs(bill.total - (+q.total || 0)) > 0.5) return err(409, rest ? "The menu or its prices changed while you were ordering. Refresh the page and check your cart." : "Prices or delivery charges changed while you were ordering. Refresh the page and check your cart.");
         const n = await env.DB.prepare("select count(*) n from payments where site = ? and created_at > ?").bind(site, new Date(Date.now() - 36e5).toISOString()).first();
         if ((n?.n || 0) >= 200) return err(429, "Too many payments were started. Please try again in a while.");
@@ -2414,6 +2527,13 @@ var db_worker_default = {
         } catch {
         }
         return json({ status: hit.status, paid, ...track ? { track } : {} });
+      }
+      if (/^\/stock\/[a-z0-9][a-z0-9-]{0,59}$/.test(p) && req.method === "GET") {
+        const site = p.split("/")[2];
+        await ensure(env);
+        const s = {};
+        for (const r of (await env.DB.prepare("select item, qty from stock where site = ? limit 3000").bind(site).all()).results || []) s[String(r.item)] = Math.max(0, Math.min(99, +r.qty || 0));
+        return new Response(JSON.stringify({ s }), { headers: { ...cors, "Content-Type": "application/json", "Cache-Control": "no-store" } });
       }
       if (/^\/track\/[a-z0-9][a-z0-9-]{0,59}$/.test(p) && req.method === "POST") {
         const site = p.split("/")[2], b = await req.json().catch(() => ({})), no = String(b.no || "").trim().toUpperCase();
@@ -2519,6 +2639,17 @@ var db_worker_default = {
             delete data.pay_ref;
           }
         }
+        let lowNow = [], stockC = null;
+        if (data.order_no && q.cart && typeof q.cart === "object") {
+          stockC = await siteContent(env, site).catch(() => null);
+          if (invOn(stockC)) {
+            const paid = data._paid === "yes", tk = await stockTake(env, site, stockC, q.cart, String(data.order_no), paid);
+            if (tk.short && !paid) return err(409, tk.short);
+            if (tk.taken.length) data._stock = JSON.stringify(tk.taken);
+            if (tk.short) data._stock_short = "Not enough stock when this paid order came in. " + tk.short.replace(/ (Change|Remove).*$/, "");
+            lowNow = tk.low;
+          }
+        }
         if (data.order_no && q.cart && typeof q.cart === "object") q.cart._bal = data._phone && +q.cart.points > 0 ? Math.max(0, +(await env.DB.prepare("select points from customers where site = ? and ckey = ?").bind(site, waNum(data.phone, (await codeWays(env, site)).cc)).first())?.points || 0) : 0;
         if (data.order_no && q.cart && typeof q.cart === "object") {
           const pz = await getSetting(env, "site:" + site, "pos").catch(() => null);
@@ -2540,6 +2671,12 @@ var db_worker_default = {
         }
         const made = await env.DB.prepare("insert into enquiries (site, data, page, created_at) values (?, ?, ?, ?) returning id").bind(site, JSON.stringify(data), String(q.page || "").slice(0, 200), (/* @__PURE__ */ new Date()).toISOString()).first();
         const rowId = made?.id;
+        if (lowNow.length) {
+          const lm = stockLowMail(env, site, stockC, lowNow).catch(() => {
+          });
+          if (ctx?.waitUntil) ctx.waitUntil(lm);
+          else await lm;
+        }
         const mail = Promise.all([notifyEnquiry(env, site, data, String(q.page || "").slice(0, 200)).catch((e) => "Not emailed: " + String(e?.message || e).slice(0, 300)), waAlert(env, site, data).catch(() => "")]).then(([said, wa]) => (said || wa) && rowId ? env.DB.prepare("update enquiries set data = ? where id = ? and site = ?").bind(JSON.stringify({ ...data, ...said ? { _mail: said } : {}, ...wa ? { _wa: wa } : {} }), rowId, site).run() : null).catch(() => {
         });
         if (ctx?.waitUntil) ctx.waitUntil(mail);
@@ -3203,6 +3340,38 @@ var db_worker_default = {
         await env.DB.prepare("update enquiries set data = ? where id = ? and site = ?").bind(JSON.stringify(d), b.id, site).run();
         return json({ ok: true });
       }
+      if (p === "/st/list") {
+        const site = scope.replace(/^site:/, "");
+        await ensure(env);
+        const rows = (await env.DB.prepare("select item, qty, low, updated_at from stock where site = ? order by item limit 3000").bind(site).all()).results || [];
+        const log = (await env.DB.prepare("select item, delta, qty, why, ref, at from stock_log where site = ? order by id desc limit 200").bind(site).all()).results || [];
+        const c = await siteContent(env, site).catch(() => null);
+        return json({ on: invOn(c), items: c ? stockItems(c) : [], rows, log });
+      }
+      if (p === "/st/set" && req.method === "POST") {
+        const site = scope.replace(/^site:/, ""), b = await req.json(), now = (/* @__PURE__ */ new Date()).toISOString(), why = oneLine(String(b.why || "")).slice(0, 60);
+        await ensure(env);
+        const list = (Array.isArray(b.items) ? b.items : []).slice(0, 600);
+        let n = 0;
+        for (const it of list) {
+          const item = String(it?.item || "").trim().slice(0, 200);
+          if (!item) continue;
+          if (it.off) {
+            await env.DB.prepare("delete from stock where site = ? and item = ?").bind(site, item).run();
+            await env.DB.prepare("insert into stock_log (site, item, delta, qty, why, ref, at) values (?, ?, 0, 0, 'No longer counted', '', ?)").bind(site, item, now).run();
+            n++;
+            continue;
+          }
+          const had = await env.DB.prepare("select qty, low from stock where site = ? and item = ?").bind(site, item).first();
+          const int = (v) => Math.max(0, Math.min(1e6, Math.round(+v || 0)));
+          const qty = it.add != null && isFinite(+it.add) ? int((+had?.qty || 0) + Math.round(+it.add)) : it.qty != null && isFinite(+it.qty) ? int(it.qty) : +had?.qty || 0, low = it.low != null && isFinite(+it.low) ? int(it.low) : +had?.low || 0;
+          if (had && +had.qty === qty && +had.low === low) continue;
+          await env.DB.prepare("insert into stock (site, item, qty, low, updated_at) values (?, ?, ?, ?, ?) on conflict (site, item) do update set qty = excluded.qty, low = excluded.low, updated_at = excluded.updated_at").bind(site, item, qty, low, now).run();
+          if (!had || +had.qty !== qty) await env.DB.prepare("insert into stock_log (site, item, delta, qty, why, ref, at) values (?, ?, ?, ?, ?, ?, ?)").bind(site, item, qty - (+had?.qty || 0), qty, why || (had ? it.add != null ? +it.add >= 0 ? "Stock added" : "Stock taken off" : "Counted" : "Started counting"), String(email || "").slice(0, 40), now).run();
+          n++;
+        }
+        return json({ ok: true, changed: n });
+      }
       if ((p === "/e/track" || p === "/e/track/live") && req.method === "POST") {
         const b = await req.json(), site = scope.replace(/^site:/, "");
         const row = await env.DB.prepare("select data, status from enquiries where id = ? and site = ?").bind(b.id, site).first();
@@ -3238,7 +3407,31 @@ var db_worker_default = {
         const site = scope.replace(/^site:/, "");
         if (p === "/e/status") {
           if (!["new", "read", "replied", "archived", "accepted", "preparing", "ready", "out", "done", "cancelled"].includes(b.status)) return err(400, "Unknown status.");
-          await env.DB.prepare("update enquiries set status = ? where id = ? and site = ?").bind(b.status, b.id, site).run();
+          const row = await env.DB.prepare("select data, status from enquiries where id = ? and site = ?").bind(b.id, site).first();
+          let nd = null;
+          if (row && b.status === "cancelled" !== (row.status === "cancelled")) {
+            try {
+              const d = JSON.parse(row.data), tk = JSON.parse(String(d._stock || "[]"));
+              if (Array.isArray(tk) && tk.length) {
+                if (b.status === "cancelled" && !d._stock_back) {
+                  await stockBack(env, site, tk, String(d.order_no || ""), "Order cancelled");
+                  d._stock_back = "yes";
+                  nd = JSON.stringify(d);
+                } else if (b.status !== "cancelled" && d._stock_back) {
+                  const now = (/* @__PURE__ */ new Date()).toISOString();
+                  for (const [k, q] of tk) {
+                    const r = await env.DB.prepare("update stock set qty = max(0, qty - ?), updated_at = ? where site = ? and item = ? returning qty").bind(q, now, site, k).first();
+                    if (r) await env.DB.prepare("insert into stock_log (site, item, delta, qty, why, ref, at) values (?, ?, ?, ?, 'Order brought back', ?, ?)").bind(site, k, -q, +r.qty || 0, String(d.order_no || "").slice(0, 40), now).run();
+                  }
+                  delete d._stock_back;
+                  nd = JSON.stringify(d);
+                }
+              }
+            } catch {
+            }
+          }
+          if (nd) await env.DB.prepare("update enquiries set status = ?, data = ? where id = ? and site = ?").bind(b.status, nd, b.id, site).run();
+          else await env.DB.prepare("update enquiries set status = ? where id = ? and site = ?").bind(b.status, b.id, site).run();
         } else await env.DB.prepare("delete from enquiries where id = ? and site = ?").bind(b.id, site).run();
         return json({ ok: true });
       }

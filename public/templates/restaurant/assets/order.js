@@ -497,7 +497,10 @@
       try {
         const data = orderData(od);
         const how = await A.postEnquiry(data, "order.html", cartOf(od)); od.sent = !!how; od.live = how === "cf"; if ((od.rz || od.pg) && od.sent) od.paid = true;
-      } catch (e) { od.sent = false; }
+      } catch (e) {
+        // a dish ran out while the guest was ordering: the order isn't placed, and they are told what to change
+        if (e && e.soldOut && !od.rz && !od.pg) { ui.busy = false; ui.err = e.message; over(true); return; }
+        od.sent = false; }
     }
     shown(od);
   }

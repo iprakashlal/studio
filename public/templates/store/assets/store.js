@@ -263,9 +263,35 @@ const cartCount = () => cart.reduce((n, l) => n + l.qty, 0);
 const kindsOf = (p) => (p && p.kindsOn ? (p.kinds || []).filter((k) => k && String(k.label || "").trim() && isFinite(Number(k.price)) && Number(k.price) >= 0).map((k) => ({ label: String(k.label).trim(), price: Number(k.price) })) : []);
 /** The product as bought on one cart line: with varieties, its price is the chosen variety's (the first part of the line's option). */
 function asBought(p, opt) { const K = kindsOf(p); if (!K.length) return p; const k = K.find((x) => x.label === String(opt || "").split(" · ")[0].trim()); return k ? { ...p, price: k.price, compareAt: 0 } : null; }
-function cartLines() { return cart.map((l) => ({ ...l, p: asBought(prodBy(l.id), l.opt) })).filter((l) => l.p && l.p.stock !== "out"); }
+/* Inventory (content.inventory.on, hosted shops): what the shop's database says is left of each counted product, or
+   of one of its options. A product with nothing left shows as sold out, a few left says how many, and the cart can't
+   hold more than there is. The database checks again when the order is placed. */
+let STOCK = null;
+const stockOn = () => !PREVIEW && !!(C.inventory && C.inventory.on && HOST && HOST.api && HOST.site);
+/** How many are left of a product (with this option chosen), or null when it isn't counted. */
+function stockLeft(id, opt) {
+  if (!STOCK) return null;
+  const o = String(opt || ""), tries = [o, ...o.split(" · ")].filter((x, i, a) => x.trim() && a.indexOf(x) === i).map((x) => id + "|" + x.replace(/\s+/g, " ").trim().toLowerCase().slice(0, 60));
+  for (const k of [...tries, String(id)]) if (k in STOCK) return STOCK[k];
+  return null;
+}
+/** Marks the products as the stock says (each time the page is drawn, so a reloaded page keeps the marks). */
+function stockMark() {
+  if (!STOCK) return; const few = Math.max(0, Number((C.inventory || {}).leftAt != null && (C.inventory || {}).leftAt !== "" ? C.inventory.leftAt : 5) || 0);
+  for (const p of C.products || []) {
+    const base = String(p.id) in STOCK ? STOCK[p.id] : null, opts = [...kindsOf(p).map((k) => k.label), ...(p.options || [])], own = opts.map((o) => stockLeft(p.id, o)), counted = own.filter((n, i) => (p.id + "|" + String(opts[i]).replace(/\s+/g, " ").trim().toLowerCase().slice(0, 60)) in STOCK);
+    if (base == null && !counted.length) continue;
+    // every option counted and none left, or the product itself has none
+    const left = base != null ? base : counted.length === opts.length ? counted.reduce((a, b) => a + b, 0) : null;
+    p._left = left; if (left === 0) p.stock = "out"; else if (left != null && left <= few) { p.stock = "low"; } else if (p.stock !== "out" && left != null) p.stock = "in";
+  }
+}
+function stockLoad() { if (!stockOn()) return Promise.resolve(); return fetch(HOST.api + "/stock/" + encodeURIComponent(HOST.site), { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((j) => { if (j && j.s) { STOCK = j.s; stockMark(); } }).catch(() => {}); }
+/** The most of one line the cart may hold: the shop's own limit, and what is left. */
+const lineMax = (id, opt) => { const n = stockLeft(id, opt); return Math.max(1, Math.min(Math.max(1, Number(C.settings.maxQty) || 10), n == null ? Infinity : Math.max(1, n))); };
+function cartLines() { return cart.map((l) => ({ ...l, p: asBought(prodBy(l.id), l.opt) })).filter((l) => l.p && l.p.stock !== "out" && stockLeft(l.id, l.opt) !== 0).map((l) => { const n = stockLeft(l.id, l.opt); return n != null && l.qty > n ? { ...l, qty: n } : l; }); }
 function addToCart(id, opt, qty) {
-  const max = Math.max(1, Number(C.settings.maxQty) || 10);
+  const max = lineMax(id, opt);
   const ex = cart.find((l) => l.id === id && l.opt === opt);
   if (ex) ex.qty = Math.min(max, ex.qty + qty); else cart.push({ id, opt, qty: Math.min(max, qty) });
   saveCart();
@@ -692,7 +718,7 @@ const PAGES = {
       ${imgs.length > 1 ? `<div class="thumbs">${imgs.map((im, i) => `<button type="button" data-i="${i}" aria-pressed="${i === 0}" aria-label="Photo ${i + 1}"><img src="${esc(imgUrl(im))}" alt=""></button>`).join("")}</div>` : ""}</div>
     <div class="info">${p.badge ? `<p class="eyebrow">${esc(p.badge)}</p>` : ""}<h1>${esc(p.name)}</h1>
       <div class="price" id="pd-price" aria-live="polite">${kindsOf(p).length ? "From " + esc(money(Math.min(...kindsOf(p).map((k) => k.price)))) : esc(money(p.price)) + (onSale(p) ? `<s>${esc(money(p.compareAt))}</s><span class="off">${Math.round((1 - p.price / p.compareAt) * 100)}% off</span>` : "")}</div>
-      <p class="stock ${p.stock}">${p.stock === "out" ? "Sold out" : p.stock === "low" ? "Only a few left" : "In stock"}</p>
+      <p class="stock ${p.stock}" id="pd-stock">${p.stock === "out" ? "Sold out" : p.stock === "low" ? (p._left > 0 ? `Only ${p._left} left` : "Only a few left") : "In stock"}</p>
       ${p.short ? `<p style="font-size:17px">${esc(p.short)}</p>` : ""}
       ${kindsOf(p).length ? `<div class="opt"><span class="lbl" id="kindl">${esc(p.kindName || "Variety")} <small class="soft">(choose one)</small></span><div class="kindbtns optbtns-k" role="group" aria-labelledby="kindl">${kindsOf(p).map((k) => `<button type="button" data-k="${esc(k.label)}" aria-pressed="false">${esc(k.label)} · ${esc(money(k.price))}</button>`).join("")}</div></div>` : ""}
       ${p.options && p.options.length ? `<div class="opt"><span class="lbl" id="optl">${esc(p.optionName || "Option")}</span><div class="optbtns" role="group" aria-labelledby="optl">${p.options.map((o, i) => `<button type="button" data-o="${esc(o)}" aria-pressed="${i === 0}">${esc(o)}</button>`).join("")}</div></div>` : ""}
@@ -1020,6 +1046,7 @@ function maintGate(again) {
   return true;
 }
 function render() {
+  stockMark();
   askCan(); previewAcct();
   if (langGate()) return;
   applyTheme(C.theme);
@@ -1101,7 +1128,11 @@ function bindProduct() {
   gate();
   $$(".thumbs button").forEach((b) => (b.onclick = () => { $("#mainimg").innerHTML = `<img src="${esc(imgUrl(p.images[+b.dataset.i]))}" alt="${esc(p.name)}">`; $$(".thumbs button").forEach((x) => x.setAttribute("aria-pressed", x === b)); }));
   $$(".optbtns button").forEach((b) => (b.onclick = () => { opt = b.dataset.o; $$(".optbtns button").forEach((x) => x.setAttribute("aria-pressed", x === b)); }));
-  $$("[data-q]").forEach((b) => (b.onclick = () => { qty = Math.min(max, Math.max(1, qty + Number(b.dataset.q))); $("#qty").textContent = qty; }));
+  // what is left of the chosen option caps the quantity; an option with none left can't be chosen
+  const capNow = () => lineMax(p.id, full());
+  if (STOCK) $$(".kindbtns button, .optbtns button").forEach((b) => { if (stockLeft(p.id, b.dataset.k || b.dataset.o) === 0 && ((p.id + "|" + String(b.dataset.k || b.dataset.o).replace(/\s+/g, " ").trim().toLowerCase().slice(0, 60)) in STOCK)) { b.disabled = true; b.setAttribute("data-out", ""); b.title = "Sold out"; b.style.opacity = ".45"; b.style.textDecoration = "line-through"; if (b.getAttribute("aria-pressed") === "true") { b.setAttribute("aria-pressed", "false"); if (b.dataset.o === opt) { const nx = $$(".optbtns button").find((x) => !x.disabled && x !== b); opt = nx ? nx.dataset.o : ""; if (nx) nx.setAttribute("aria-pressed", "true"); } } } });
+  $$(".kindbtns button, .optbtns button").forEach((b) => b.addEventListener("click", () => { qty = Math.min(qty, capNow()); const q = $("#qty"); if (q) q.textContent = qty; }));
+  $$("[data-q]").forEach((b) => (b.onclick = () => { const cap = capNow(); qty = Math.min(cap, Math.max(1, qty + Number(b.dataset.q))); $("#qty").textContent = qty; if (Number(b.dataset.q) > 0 && qty >= cap && stockLeft(p.id, full()) != null && cap < Math.max(1, Number(C.settings.maxQty) || 10)) toast(`Only ${cap} left`); }));
   const add = $("#add"); if (add) add.onclick = () => { if (!ready()) return; addToCart(p.id, full(), qty); toast(`Added to cart · <a href="cart.html">View cart</a>`); };
   const bn = $("#buynow"); if (bn) bn.onclick = () => { if (!ready()) return; addToCart(p.id, full(), qty); location.href = "checkout.html"; };
   const wb = $("#wish");
@@ -1123,7 +1154,7 @@ function bindProduct() {
 }
 function bindCart() {
   const lines = cartLines(), max = Math.max(1, Number(C.settings.maxQty) || 10);
-  $$("[data-line]").forEach((b) => (b.onclick = () => { const l = lines[+b.dataset.line], c = cart.find((x) => x.id === l.id && x.opt === l.opt); c.qty = Math.min(max, Math.max(1, c.qty + Number(b.dataset.d))); saveCart(); render(); }));
+  $$("[data-line]").forEach((b) => (b.onclick = () => { const l = lines[+b.dataset.line], c = cart.find((x) => x.id === l.id && x.opt === l.opt); c.qty = Math.min(max, lineMax(l.id, l.opt), Math.max(1, c.qty + Number(b.dataset.d))); saveCart(); render(); }));
   $$("[data-rm]").forEach((b) => (b.onclick = () => { const l = lines[+b.dataset.rm]; cart = cart.filter((x) => !(x.id === l.id && x.opt === l.opt)); saveCart(); render(); }));
 }
 function bindCheckout() {
@@ -1217,7 +1248,10 @@ async function placeOrder(o) {
   if (!PREVIEW && HOST && HOST.api && HOST.site && o.saved == null) {
     // the order's own key: this device can ask where the parcel is with it
     if (!o.k) { try { o.k = [...crypto.getRandomValues(new Uint8Array(16))].map((x) => x.toString(16).padStart(2, "0")).join(""); } catch (e) { /* tracked by number and phone instead */ } }
-    try { const r = await sendOrder(o); o.saved = r.ok; if (r.ok && o.rz) o.paid = true; } catch (e) { o.saved = false; }
+    try { const r = await sendOrder(o);
+      // Something sold out while the customer was checking out: the order isn't placed, and they are told what to change.
+      if (r.status === 409 && !o.rz && !o.pg) { const j = await r.json().catch(() => null), msg = (j && j.error) || "Something in your cart has just sold out. Check your cart and try again."; for (const id of ["#co-err", "#pf-e"]) { const e = $(id); if (e) e.textContent = msg; } $$("#co button[type=submit], #pf-ok").forEach((b) => { b.disabled = false; if (b.id !== "pf-ok") b.textContent = C.checkout.button || "Place order"; }); toast(esc(msg)); stockLoad(); return false; }
+      o.saved = r.ok; if (r.ok && o.rz) o.paid = true; } catch (e) { o.saved = false; }
   }
   store.set("orders", [o, ...store.get("orders", [])].slice(0, 10));
   cart = []; saveCart();
@@ -1439,7 +1473,9 @@ else {
     if (txt === shown) return;
     const j = JSON.parse(txt); if (SC && SC.take(j, { ...SCO, drawn: !!shown, text: txt })) return;
     C = merge(DEFAULT, j); render();
-  }).catch(() => { clearTimeout(giveUp); if (!shown) render(); });
+  }).catch(() => { clearTimeout(giveUp); if (!shown) render(); })
+    // what is left of each counted product, once the content is in (a placed order's page has nothing to redraw)
+    .then(() => { if (stockOn()) stockLoad().then(() => { if (STOCK && !$(".done") && !$("#trackf") && !(document.activeElement && /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName))) render(); }); });
 }
 if (!HAND) addEventListener("hashchange", () => { if (PAGE === "account") render(); });
 if (SC) SC.untrack();

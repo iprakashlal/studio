@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { Repo } from "../lib/repo";
 import { explain } from "../lib/repo";
 import { adminFile, missingExtra, newId, newSalt, normNumber, parseCsv, saveRecords, toCsv, unlock, type WAdmin, type WRecord, type WStatus, type WVerify } from "../lib/warranty";
-import { Field, Spinner, useConfirm, useToast } from "../ui/kit";
+import { Field, useConfirm, useToast, SkelPanel } from "../ui/kit";
 
 const today = () => new Date().toISOString().slice(0, 10);
 const blank = (status: string): WRecord => ({ id: newId(), number: "", product: "", purchased: today(), months: 12, status, history: [], updated: new Date().toISOString() });
@@ -79,7 +79,7 @@ export function WarrantyPanel({ repo, cfg, why }: { repo: Repo | null; cfg: any;
 
   if (!repo) return <section className="card p-5 text-sm text-ink-300">{why || "Publish the site first: records are saved straight to the live site."}</section>;
   if (loadErr) return <section className="card p-5 text-sm text-red-300" role="alert">Couldn't read the records: {loadErr}</section>;
-  if (file === undefined) return <section className="card p-5"><Spinner label="Loading the records…" /></section>;
+  if (file === undefined) return <SkelPanel label="Loading the records" chips={false} />;
   const off = !cfg?.enabled && <p className="rounded-lg border border-amber-400/40 bg-amber-400/5 px-3 py-2 text-[13px] text-amber-100">The check isn't shown on the site yet. Turn it on in <b>Warranty &amp; status</b> (this menu), then save or publish.</p>;
 
   if (!file) return (

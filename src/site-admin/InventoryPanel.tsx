@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { cfCall } from "../lib/cfdb";
 import { SiteDbSignIn, useSiteDbSigned } from "../pages/Connections";
-import { Spinner, useToast } from "../ui/kit";
+import { useToast, SkelPanel } from "../ui/kit";
 
 // Inventory (shop and restaurant on a Cloudflare database): how many of each product or dish are left. An item is
 // counted once it is given a quantity here; everything else sells without a limit. Orders take from the count as they
@@ -51,7 +51,7 @@ export function InventoryPanel({ cf, kind, on }: { cf?: { api: string; site: str
   const Empty = ({ children }: { children: React.ReactNode }) => <section className="card max-w-3xl p-5 text-sm text-ink-300" aria-label="Inventory"><h3 className="mb-1 text-[15px] font-extrabold text-ink-100">Inventory</h3>{children}</section>;
   if (!cf) return <Empty>Stock is kept on the site's own Cloudflare database. Host this site on Cloudflare (Host to External Services) and you can count your {things} here.</Empty>;
   if (!signed) return <div className="max-w-3xl"><SiteDbSignIn cf={cf} what="show its stock" /></div>;
-  if (!d) return <div className="flex items-center gap-2 text-sm text-ink-300"><Spinner /> Loading the stock…</div>;
+  if (!d) return <SkelPanel label="Loading the stock" chips={false} rows={6} />;
   const chip = (s: string) => s === "out" ? "border-red-400/50 text-red-200" : s === "low" ? "border-amber-400/60 text-amber-200" : s === "ok" ? "border-emerald-400/50 text-emerald-200" : "border-ink-600 text-ink-400";
   const liveOn = on ?? d.on;
   return (

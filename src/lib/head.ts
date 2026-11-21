@@ -85,6 +85,11 @@ export function bakeHead(html: string, c: any, opts: { file: string; label?: str
     meta(/^(og|fb|article|product):/i.test(n) ? "property" : "name", n, m.content);
   }
   if (/^#[0-9a-f]{3,8}$/i.test(opts.bg || "")) tags.push(`<style id="site-boot">html{background:${opts.bg};--bg:${opts.bg}}</style>`);
+  // A site with an intro or page transition says so in the page itself, so the very first visit opens on the intro's
+  // panel and never on the loading outline (the script reads this before the content has arrived).
+  const th = c?.theme || {}, hexOk = (x: unknown) => /^#[0-9a-f]{3,8}$/i.test(String(x || ""));
+  const intro = (th.loader && th.loader !== "none") || (th.layout === "velocity" && c?.velocity?.preloader !== false && c?.velocity);
+  if (intro) tags.push(`<meta name="site-intro" content="${esc([th.loader === "split" ? "split" : "curtain", hexOk(th.introBg) ? th.introBg : hexOk(th.deep) ? th.deep : hexOk(th.bg) ? th.bg : "", hexOk(th.introFg) ? th.introFg : ""].join("|"))}">`);
 
   let out = html.replace(MARK, "").replace(/<style id="site-boot">[^<]*<\/style>\n?/g, "").replace(/<meta name="description"[^>]*>\n?/gi, "");
   out = out.replace(/<title>[^<]*<\/title>/i, `<title>${esc(title)}</title>\n<!-- site-meta -->\n${tags.join("\n")}\n<!-- /site-meta -->`);
@@ -93,6 +98,6 @@ export function bakeHead(html: string, c: any, opts: { file: string; label?: str
 
 /** True when anything baked into the pages differs between two versions of the content. */
 export function headChanged(a: any, b: any): boolean {
-  const pick = (c: any) => JSON.stringify([c?.seo || {}, c?.theme?.bg, c?.brand?.name, c?.brand?.logoText, c?.shop?.title, c?.nav, c?.checkout?.title, c?.accountPage?.title]);
+  const pick = (c: any) => JSON.stringify([c?.seo || {}, c?.theme?.bg, c?.theme?.loader, c?.theme?.layout, c?.theme?.introBg, c?.theme?.introFg, c?.theme?.deep, c?.velocity?.preloader, c?.brand?.name, c?.brand?.logoText, c?.shop?.title, c?.nav, c?.checkout?.title, c?.accountPage?.title]);
   return pick(a) !== pick(b);
 }

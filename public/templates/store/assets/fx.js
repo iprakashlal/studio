@@ -1204,6 +1204,11 @@
       st.bootTried = true;
       try {
         var m = JSON.parse(localStorage.getItem("site-intro:" + location.pathname.replace(/[^/]*$/, "")) || "null"), okc = /^(#[0-9a-f]{3,8}|rgba?\([0-9., %]+\))$/i;
+        // A first visit has nothing remembered: the page itself says whether it has an intro (written in when it was published).
+        if (!(m && m.k && okc.test(m.bg || ""))) {
+          var hint = document.querySelector('meta[name="site-intro"]'), hp = hint ? String(hint.getAttribute("content") || "").split("|") : null;
+          if (hp && hp[0]) { var pbg = okc.test(hp[1] || "") ? hp[1] : getComputedStyle(document.documentElement).backgroundColor; m = okc.test(pbg || "") && !/rgba\(0, 0, 0, 0\)/.test(pbg) ? { k: hp[0], bg: pbg, fg: hp[2] } : null; }
+        }
         if (m && m.k && okc.test(m.bg || "")) {
           ensureStyle();
           var bk = m.k === "split" ? "split" : "curtain";

@@ -1098,7 +1098,7 @@ function applyTheme(t){
   CT=t;MOTIF=window.SiteMotifs?SiteMotifs.resolve(t,"tech"):"geometric";
   KIT=resolveKit(t);document.documentElement.dataset.kit=KIT;
   const d=document.documentElement.dataset;d.motif=moOn()?MOTIF:"geometric";
-  for(const k of ["layout","heroArt","nav","cards","buttons","motionStyle","pattern","ornament","heading","shead","width","about","skills","work","cursor","loader","textfx","hoverfx","scrollfx","overlay","herofx"])d[k]=String(t[k]||"");
+  for(const k of ["layout","heroArt","nav","cards","buttons","motionStyle","pattern","ornament","heading","shead","width","about","skills","work","cursor","loader","textfx","hoverfx","scrollfx","overlay","herofx","loaderOn"])d[k]=String(t[k]||"");
   d.menu=String(t.navMode||"");d.menumob=String(t.navModeMob||"");
   d.scrollease=t.scrollEase||"light";d.linebreaks=t.lineBreaks||"typed";d.introfont=t.introFont||"display";d.introcase=t.introCase||"upper";
 }

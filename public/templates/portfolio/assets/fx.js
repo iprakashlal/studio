@@ -6,6 +6,7 @@
    after every render:
      data-cursor    none | dot | blend | spotlight | trail | ring | glow | cross | square
      data-loader    none | curtain | counter | split | wipe | iris | columns | fade | portal   (also animates page-to-page links)
+     data-loader-on both | load | menu    where it plays: first page load and menu links, only the first page load, or only menu links
      data-textfx    none | lines | letters | scramble | words | flip | wave | wipe
      data-hoverfx   none | lift | magnetic | tilt | shine | spot | zoom | offset
      data-scrollfx  none | progress | smooth | skew | reveal | ring | dots
@@ -45,7 +46,7 @@
 
   function cfg() {
     var d = doc.dataset;
-    return { cursor: d.cursor || "none", loader: d.loader || "none", text: d.textfx || "none", hover: d.hoverfx || "none", scroll: d.scrollfx || "none", overlay: d.overlay || "none", herofx: d.herofx || "none" };
+    return { cursor: d.cursor || "none", loader: d.loader || "none", text: d.textfx || "none", hover: d.hoverfx || "none", scroll: d.scrollfx || "none", overlay: d.overlay || "none", herofx: d.herofx || "none", loaderOn: d.loaderOn || "both" };
   }
   function cssVar(n) { return getComputedStyle(doc).getPropertyValue(n).trim(); }
   function colors() {
@@ -652,7 +653,7 @@
   /* ---------------------------------------------------------------- page links */
   function onClick(e) {
     var c = cfg();
-    if (c.loader === "none" || RM || PREVIEW || e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    if (c.loader === "none" || c.loaderOn === "load" || RM || PREVIEW || e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
     var a = e.target.closest && e.target.closest("a[href]");
     if (!a || a.target && a.target !== "_self" || a.hasAttribute("download")) return;
     var u; try { u = new URL(a.href, location.href); } catch (x) { return; }
@@ -1335,13 +1336,13 @@
     // A signature theme with its own preloader is already on screen: the waiting panel just goes.
     else if (cover && document.getElementById("vxLoad")) { cover.remove(); cover = null; st.loaderPlayed = true; }
     else if (cover) { st.loaderPlayed = true; revealCover(); delay = 350; }
-    else if (c.loader !== "none" && !RM) {
+    else if (c.loader !== "none" && c.loaderOn !== "menu" && !RM) {
       var play = PREVIEW ? c.loader !== st.loader : !st.loaderPlayed && Date.now() - T0 < 5000;
       if (play) { st.loaderPlayed = true; playLoader(c.loader, opts.brand || document.title); delay = c.loader === "counter" ? 1250 : 950; }
     }
     st.loader = c.loader;
     // Remembered on this device, so the next visit starts on the intro's panel (see skeleton()).
-    if (!PREVIEW) try { var ik = "site-intro:" + location.pathname.replace(/[^/]*$/, ""); var vxl = document.getElementById("vxLoad"); if (c.loader !== "none") { var ic = colors(); localStorage.setItem(ik, JSON.stringify({ k: c.loader, bg: ic.deep, fg: ic.on })); } else if (vxl) { st.ownIntro = true; var vcs = getComputedStyle(vxl); localStorage.setItem(ik, JSON.stringify({ k: "curtain", bg: vcs.backgroundColor, fg: vcs.color })); } else if (!st.ownIntro) localStorage.removeItem(ik); } catch (e) {}
+    if (!PREVIEW) try { var ik = "site-intro:" + location.pathname.replace(/[^/]*$/, ""); var vxl = document.getElementById("vxLoad"); if (c.loader !== "none" && c.loaderOn === "menu") localStorage.removeItem(ik); else if (c.loader !== "none") { var ic = colors(); localStorage.setItem(ik, JSON.stringify({ k: c.loader, bg: ic.deep, fg: ic.on })); } else if (vxl) { st.ownIntro = true; var vcs = getComputedStyle(vxl); localStorage.setItem(ik, JSON.stringify({ k: "curtain", bg: vcs.backgroundColor, fg: vcs.color })); } else if (!st.ownIntro) localStorage.removeItem(ik); } catch (e) {}
     setupText(root, c, animate, delay);
     setupScrollExtras(root, c);
     setupHeroFx(root, c);

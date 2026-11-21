@@ -87,7 +87,33 @@ export async function cfCall<T = any>(api: string, path: string, init: RequestIn
 /** `site`: the site whose admin page is asking, so the email uses that site's own sign-in template. */
 export const cfSendCode = (api: string, email: string, site?: string, studio?: string) => cfCall(api, "/auth/code", { method: "POST", auth: false, body: JSON.stringify({ email, ...(site ? { site } : {}), ...(studio ? { studio } : {}) }) });
 export async function cfVerifyCode(api: string, email: string, code: string) {
-  const j = await cfCall<{ token: string; email: string }>(api, "/auth/verify", { method: "POST", auth: false, body: JSON.stringify({ email, code }) });
+  const j = await cfCall<{ token: string; email: string; dev?: string }>(api, "/auth/verify", { method: "POST", auth: false, body: JSON.stringify({ email, code }) });
+  cfSession.save(api, { email: j.email, token: j.token });
+  if (j.dev) cfPinDev.set(api, j.email, j.dev);
+  return j.email;
+}
+// ---- PIN sign-in: email + PIN instead of a code, on a device that has already signed in with a code (the Worker's /auth/pin…)
+const PD = (api: string, email: string) => "site-pin-dev:" + clean(api) + ":" + email.trim().toLowerCase(), PL = (api: string) => "site-pin-last:" + clean(api);
+export const cfPinDev = {
+  get(api: string, email: string): string | null { try { return localStorage.getItem(PD(api, email)); } catch { return null; } },
+  set(api: string, email: string, dev: string) { try { localStorage.setItem(PD(api, email), dev); localStorage.setItem(PL(api), email.trim().toLowerCase()); } catch { /* private mode */ } },
+  /** The email last signed in here that holds a device secret: offered first on the PIN screen. */
+  last(api: string): string | null { try { const e = localStorage.getItem(PL(api)); return e && localStorage.getItem(PD(api, e)) ? e : null; } catch { return null; } },
+  forget(api: string, email: string) { try { localStorage.removeItem(PD(api, email)); } catch { /* private mode */ } },
+};
+/** Is PIN sign-in on for this database, and (when signed in) has this person set one? A database that predates it says off. */
+export const cfPinInfo = (api: string): Promise<{ on: boolean; has?: boolean }> => cfCall<{ on: boolean; has?: boolean }>(api, "/auth/pin").then((j) => ({ on: !!j?.on, ...(j && "has" in j ? { has: !!j.has } : {}) })).catch(() => ({ on: false }));
+export const cfPinSetOn = (api: string, on: boolean) => cfCall<{ ok: true; on: boolean }>(api, "/auth/pin/set-on", { method: "POST", body: JSON.stringify({ on }) });
+export async function cfPinSave(api: string, pin: string) {
+  const j = await cfCall<{ dev: string }>(api, "/auth/pin/save", { method: "POST", body: JSON.stringify({ pin }) });
+  const e = cfSession.load(api)?.email; if (e && j.dev) cfPinDev.set(api, e, j.dev);
+}
+export async function cfPinRemove(api: string) { await cfCall(api, "/auth/pin/remove", { method: "POST", body: "{}" }); const e = cfSession.load(api)?.email; if (e) cfPinDev.forget(api, e); }
+/** A device that signed in another way (Google) gets the PIN too, when this person has one. */
+export async function cfPinEnroll(api: string) { const e = cfSession.load(api)?.email; if (!e || cfPinDev.get(api, e)) return; try { const j = await cfCall<{ dev: string }>(api, "/auth/pin/device", { method: "POST", body: "{}" }); cfPinDev.set(api, e, j.dev); } catch { /* no PIN set: nothing to do */ } }
+export async function cfPinLogin(api: string, email: string, pin: string) {
+  const dev = cfPinDev.get(api, email); if (!dev) throw new CfDbError("This device hasn't signed in with a code yet. Use an emailed code once.");
+  const j = await cfCall<{ token: string; email: string }>(api, "/auth/pin/login", { method: "POST", auth: false, body: JSON.stringify({ email: email.trim().toLowerCase(), pin, dev }) });
   cfSession.save(api, { email: j.email, token: j.token });
   return j.email;
 }

@@ -5,12 +5,16 @@ import { cfRole, resendTestOnly, cfSendCode, cfSession, cfSignedIn, cfVerifyCode
 import type { CfSiteCfg } from "../lib/supa";
 import { Field, Logo, Spinner, useToast } from "../ui/kit";
 import { GoogleButton } from "../ui/GoogleSignIn";
+import { PinLogin, PinSetup, pinNeedsSetup } from "../ui/PinSignIn";
+import { cfPinDev, cfPinInfo } from "../lib/cfdb";
 
 export function CfGate({ cf, brand, onIn }: { cf: CfSiteCfg; brand: string; onIn: () => void }) {
   const [email, setEmail] = useState(""), [code, setCode] = useState(""), [sent, setSent] = useState(false), [busy, setBusy] = useState(true), [err, setErr] = useState("");
+  const [pinMode, setPinMode] = useState(false), [after, setAfter] = useState<null | (() => void)>(null);
+  useEffect(() => { if (cfPinDev.last(cf.api)) cfPinInfo(cf.api).then((i) => { if (i.on) setPinMode(true); }); }, []);
   const admit = async () => {
     const who = await cfSignedIn(cf.api);
-    if (who && (await cfRole(cf.api, "site:" + cf.site))) return onIn();
+    if (who && (await cfRole(cf.api, "site:" + cf.site))) { if (await pinNeedsSetup(cf.api).catch(() => false)) { setAfter(() => onIn); return; } return onIn(); }
     cfSession.clear(cf.api);
     setErr(`${who || "This email"} can't edit this site. Ask the site's owner to add it as an editor.`);
   };
@@ -31,7 +35,7 @@ export function CfGate({ cf, brand, onIn }: { cf: CfSiteCfg; brand: string; onIn
     <div className="grid min-h-screen place-items-center px-4 py-10">
       <div className="card flex w-full max-w-sm flex-col gap-4 p-6">
         <div className="flex items-center gap-2.5 font-extrabold"><Logo />{brand}</div>
-        {busy && !sent && !email ? <Spinner label="Checking your sign-in…" /> : !sent ? (
+        {after ? <PinSetup api={cf.api} onDone={after} /> : pinMode && !sent ? <PinLogin api={cf.api} onIn={admit} onCode={() => setPinMode(false)} /> : busy && !sent && !email ? <Spinner label="Checking your sign-in…" /> : !sent ? (
           <form className="flex flex-col gap-3" onSubmit={send}>
             <p className="text-sm text-ink-300">Sign in with your email. We'll send a 6-digit code.</p>
             <Field label="Email" htmlFor="cf-in-email"><input id="cf-in-email" className="input" type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} /></Field>
@@ -45,7 +49,7 @@ export function CfGate({ cf, brand, onIn }: { cf: CfSiteCfg; brand: string; onIn
             <button type="button" className="btn btn-ghost btn-sm" disabled={busy} onClick={() => { setSent(false); setCode(""); }}>Use another email or send a new code</button>
           </form>
         )}
-        {!(busy && !sent && !email) && <GoogleButton api={cf.api} disabled={busy} onIn={admit} />}
+        {!after && !pinMode && !(busy && !sent && !email) && <GoogleButton api={cf.api} disabled={busy} onIn={admit} />}
         {err && <p role="alert" className="rounded-lg border border-amber-400/40 bg-amber-400/5 px-3 py-2 text-[13px] text-amber-100">{err}</p>}
         {own && !sent && <button type="button" className="btn btn-sm self-start" disabled={busy} onClick={() => send(undefined, own)}>Send the code to {own}</button>}
         <a href="./" className="text-sm text-ink-400 hover:text-ink-100">← Back to the website</a>

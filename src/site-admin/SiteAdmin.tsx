@@ -21,13 +21,11 @@ import { blobToBytes, clone, safeFileName, textToB64 } from "../lib/util";
 import { adminFile } from "../schema/common";
 import { pagesViaDb } from "../lib/pages";
 import { bakeHead, headChanged, pageLabel } from "../lib/head";
-import ACCOUNT_HTML from "../../public/templates/store/account.html?raw";
 import { Editor } from "../editor/Editor";
 import { Preview } from "../editor/Preview";
 import { BackupPanel } from "../editor/BackupPanel";
 import { AccountPanel, Gate } from "../ui/gate";
 import { Logo, SkelEditor, useConfirm, useToast } from "../ui/kit";
-import { CustomersPanel, OrdersPanel } from "./ShopPanels";
 
 const NS = "site-cms";
 /** host: set when the site is hosted outside GitHub, with its content in Supabase. */
@@ -187,8 +185,8 @@ function Workspace({ info, onInfo, repo, account, onSignOut, hosted, ghToken }: 
   // Click-to-edit from the preview: on small screens, switch to the editor to show the field.
   useEffect(() => { const on = () => setPane("edit"); addEventListener(GOTO_EVENT, on); return () => removeEventListener(GOTO_EVENT, on); }, []);
   const [assets, setAssets] = useState<Record<string, string>>({});
-  const [cat, setCat] = useState("");
-  const wide = cat === "shop-orders" || cat === "shop-customers";
+  const [, setCat] = useState("");
+  const wide = false;
 
   const load = useCallback(async () => {
     setErr("");
@@ -333,10 +331,6 @@ function Workspace({ info, onInfo, repo, account, onSignOut, hosted, ghToken }: 
       setDraftSha(null);
       setDraftAt("");
       setSavedV(at);
-      // Turning customer accounts on later adds the Account page the export left out.
-      if (tpl.id === "store" && draft.backend?.enabled && draft.backend?.accounts && !(await repo.getText("account.html"))) {
-        await repo.putFile("account.html", textToB64(ACCOUNT_HTML), "Add customer account page");
-      }
       toast(oldAdmin !== newAdmin ? "Published. The editor's address has changed: see the note at the top." : "Published. The live site updates in about a minute.");
     } catch (e: any) {
       await conflict(e, "content.json", setSha);
@@ -364,20 +358,16 @@ function Workspace({ info, onInfo, repo, account, onSignOut, hosted, ghToken }: 
   };
 
   const extras = useMemo(() => [
-    ...(tpl.id === "store" ? [
-      { id: "shop-orders", label: "Purchased orders", group: "Selling", desc: "Every order from checkout. Update status, confirm UPI payments and message customers.", render: () => <OrdersPanel content={saved} /> },
-      { id: "shop-customers", label: "Customers", group: "Shop", desc: "Signed-up customers by account number and email, with their orders.", render: () => <CustomersPanel content={saved} /> },
-    ] : []),
     ...(tpl.id === "business" || tpl.id === "restaurant" ? [
       { id: "enquiries", label: "Enquiries", group: "Forms & records", desc: tpl.id === "restaurant" ? "Table-booking and event requests sent through your website's form." : "Messages sent through your website's enquiry form.", render: () => <EnquiriesPanel cfg={hosted && "api" in hosted ? null : enquiriesCfg(saved, hosted)} cf={hosted && "api" in hosted ? hosted : undefined} hosted={!!hosted} email={saved?.contact?.email} form={saved?.contact?.form} ghToken={ghToken} only="enquiries" /> },
     ] : []),
     ...(tpl.id !== "portfolio" ? [
       { id: "connections", label: tpl.id === "restaurant" ? "Restaurant backend" : tpl.id === "store" ? "Couriers, WhatsApp & SMS" : "WhatsApp & SMS", group: tpl.id === "restaurant" ? "Selling" : "Forms & records", desc: tpl.id === "restaurant" ? "What runs the Order now page behind the scenes, on your own Cloudflare database: Petpooja, and WhatsApp for alerts and codes. Payment gateway keys are under Payments." : "Optional: WhatsApp alerts when an enquiry or order arrives, and codes on WhatsApp or by SMS.", render: () => <SiteConnections cf={hosted && "api" in hosted ? hosted : null} template={tpl.id} cms={saved?.cms} site /> },
     ] : []),
-    ...((tpl.id === "restaurant" || tpl.id === "store") && !(tpl.id === "store" && saved?.backend?.enabled) ? [
+    ...((tpl.id === "restaurant" || tpl.id === "store") ? [
       { id: "purchased", label: "Purchased orders", group: "Selling", desc: "Every order placed on your website: what was bought, by whom, how it is paid, and where it has got to.", render: () => <EnquiriesPanel only="orders" cfg={hosted && "api" in hosted ? null : enquiriesCfg(saved, hosted)} cf={hosted && "api" in hosted ? hosted : undefined} hosted={!!hosted} email={saved?.contact?.email} form={saved?.contact?.form} ghToken={ghToken} /> },
     ] : []),
-    ...((tpl.id === "restaurant" || tpl.id === "store") && !(tpl.id === "store" && saved?.backend?.enabled) ? [
+    ...((tpl.id === "restaurant" || tpl.id === "store") ? [
       { id: "inventory", label: "Inventory", group: "Forms & records", desc: tpl.id === "restaurant" ? "How many of each dish are left: orders take from it, and a dish sells out by itself." : "How many of each product are left: orders take from it, and a product sells out by itself.", render: () => <InventoryPanel cf={hosted && "api" in hosted ? hosted : undefined} kind={tpl.id === "restaurant" ? "restaurant" : "store"} on={!!saved?.inventory?.on} /> },
       { id: "recovery", label: "Abandoned carts", group: "Selling", desc: "Shoppers who typed their email at checkout and left: remind them, and see who came back.", render: () => <RecoveryPanel cf={hosted && "api" in hosted ? hosted : undefined} kind={tpl.id === "restaurant" ? "restaurant" : "store"} on={!!saved?.recovery?.on} /> },
       { id: "reviews", label: "Reviews", group: "Forms & records", desc: "What customers wrote about your " + (tpl.id === "restaurant" ? "dishes" : "products") + ": approve, hide, reply.", render: () => <ReviewsPanel cf={hosted && "api" in hosted ? hosted : undefined} kind={tpl.id === "restaurant" ? "restaurant" : "store"} on={!!saved?.reviews?.on} /> },

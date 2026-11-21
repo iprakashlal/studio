@@ -1,7 +1,6 @@
 import { studioDirty } from "../lib/studioupdate";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { currentBadge } from "../lib/badge";
-import { ShopBackendDialog } from "./ShopBackendDialog";
 import { EnquiryInboxDialog } from "./EnquiryInboxDialog";
 import { EnquiriesPanel, enquiriesCfg } from "../site-admin/EnquiriesPanel";
 import { CustomerPanel } from "../site-admin/CustomerPanel";
@@ -35,7 +34,7 @@ import { BrandKitDialog } from "./BrandKitDialog";
 import { ApprovalDialog } from "./ApprovalDialog";
 import { Field, Modal, SkelEditor, Toggle, useConfirm, useToast } from "../ui/kit";
 
-type Modal = "" | "export" | "publish" | "host" | "live" | "history" | "details" | "backend" | "inbox" | "write" | "pamphlet" | "reviews" | "kit" | "approve";
+type Modal = "" | "export" | "publish" | "host" | "live" | "history" | "details" | "inbox" | "write" | "pamphlet" | "reviews" | "kit" | "approve";
 
 export function ProjectView({ studio, index, project, session, onIndex }: { studio: Studio; index: StudioIndex; project: ProjectMeta; session: Session; onIndex: (i: StudioIndex) => void }) {
   const toast = useToast();
@@ -259,7 +258,6 @@ export function ProjectView({ studio, index, project, session, onIndex }: { stud
             <button type="button" aria-pressed={pane === "edit"} className={`btn btn-sm border-0 ${pane === "edit" ? "bg-ink-700" : "bg-transparent"}`} onClick={() => setPane("edit")}>Edit</button>
             <button type="button" aria-pressed={pane === "preview"} className={`btn btn-sm border-0 ${pane === "preview" ? "bg-ink-700" : "bg-transparent"}`} onClick={() => setPane("preview")}>Preview</button>
           </div>
-          {project.template === "store" && !studio.repo.demo && <button type="button" className="btn btn-sm" onClick={() => setModal("backend")} title="Set up the shop server (Cloudflare Worker), its private orders repository and email (Resend) from here">{project.worker ? "Shop backend ✓" : "Shop backend"}</button>}
           {project.template === "business" && !studio.repo.demo && <button type="button" className="btn btn-sm" onClick={() => setModal("inbox")} title="Save the enquiry form's enquiries as JSON files in a private GitHub repository (no email)">{project.inbox ? "Enquiry inbox ✓" : "Enquiry inbox"}</button>}
           {tools.filter((t) => pinned.includes(t.id)).map((t) => <button key={t.id} type="button" className="btn btn-sm" onClick={() => setModal(t.id)} title={t.hint}>{t.label}</button>)}
           <button type="button" className="btn btn-pri btn-sm" disabled={!dirty || saving} onClick={() => save()}>Save</button>
@@ -284,11 +282,6 @@ export function ProjectView({ studio, index, project, session, onIndex }: { stud
       </div>
 
       {modal === "export" && <ExportDialog {...{ studio, project, tpl, draft, dirty, save, onIndex, getBlob }} onImported={(c, n) => { replaceDraft(c); setModal(""); toast(`Loaded into the editor${n ? ` with ${n} picture${n === 1 ? "" : "s"}` : ""}. Check it, then Save to keep it.`); }} onClose={() => setModal("")} />}
-      {modal === "backend" && <ShopBackendDialog {...{ session, studio, project, draft, onIndex }} onClose={() => setModal("")} onConnect={async (url) => {
-        draft.backend = { ...(draft.backend || {}), enabled: true, provider: "cloudflare", workerUrl: url };
-        // Save first, then move both counters on together, so the editor and preview see it and it isn't "unsaved".
-        if (await save(true)) { setV((n) => n + 1); setSavedV((n) => n + 1); } else bump();
-      }} />}
       {modal === "inbox" && <EnquiryInboxDialog {...{ session, studio, project, onIndex }} onClose={() => setModal("")} onConnect={async (url) => {
         draft.contact = draft.contact || {}; draft.contact.form = { ...(draft.contact.form || {}), enabled: true, saveTo: "file", fileUrl: url };
         if (await save(true)) { setV((n) => n + 1); setSavedV((n) => n + 1); } else bump();

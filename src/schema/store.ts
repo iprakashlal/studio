@@ -189,7 +189,6 @@ const schema: Category[] = [
           { t: "when", path: "shipping.rest", is: "no", fields: [{ t: "text", path: "shipping.blockMsg", label: "What shoppers are told", ph: "Sorry, we don't deliver to that PIN code yet." }] },
           { t: "text", path: "shipping.checkLabel", label: "Label above the PIN box", ph: "Check delivery to your PIN code" },
         ] },
-        { t: "note", text: "With a shop backend, the backend checks the PIN and the fee again when the order is placed. Publish the site and update the backend once after changing these (Accounts & backend)." },
       ] },
       { title: "Couriers and tracking", fields: [
         { t: "note", text: "When an order ships, open it under Purchased orders, choose the courier (Blue Dart, Delhivery, DTDC, Xpressbees, Ecom Express, Ekart, India Post and more) and type its tracking number, then press “Save and mark as shipped”: the customer is emailed, and sees the courier, the number and a tracking link on their order page and under My account." },
@@ -234,7 +233,7 @@ const schema: Category[] = [
     id: "payments", label: "Payments", group: "Selling", desc: "Turn on the ways customers can pay. A gateway shows at checkout once its keys are saved. The keys are kept on the shop's own Cloudflare database (Host to External Services), encrypted.",
     cards: [
       { title: "UPI", fields: [{ t: "toggle", path: "payments.upi.enabled", label: "Accept UPI (INR only)" }, g2({ t: "text", path: "payments.upi.vpa", label: "UPI ID", ph: "name@bank", check: "vpa" }, { t: "text", path: "payments.upi.payeeName", label: "Payee name (as your bank shows it)" }),
-        { t: "text", path: "payments.upi.label", label: "Label at checkout" }, { t: "note", text: "The customer pays first: checkout shows a UPI QR code and app button with the exact order total and order number, and the order is placed only when they enter the payment's 12-digit reference number (UTR). On a shop hosted on your Cloudflare database the order then appears under Purchased orders as “Payment to check”; find the reference in your UPI app and press Payment received. With the shop backend on, the customer enters the UTR after ordering and you tap Mark paid. For confirmation with no checking at all, turn on Razorpay, which includes UPI." }] },
+        { t: "text", path: "payments.upi.label", label: "Label at checkout" }, { t: "note", text: "The customer pays first: checkout shows a UPI QR code and app button with the exact order total and order number, and the order is placed only when they enter the payment's 12-digit reference number (UTR). On a shop hosted on your Cloudflare database the order then appears under Purchased orders as “Payment to check”; find the reference in your UPI app and press Payment received. For confirmation with no checking at all, turn on Razorpay, which includes UPI." }] },
       { title: "Razorpay", fields: [{ t: "toggle", path: "payments.razorpay.enabled", label: "Accept Razorpay (UPI, cards, netbanking): confirmed automatically" },
         { t: "connection", kind: "rz" },
         { t: "note", text: "Razorpay tells your database by itself that the money arrived, so the order is placed and marked Paid with no checking by you. The amount is worked out by your database from your products, delivery charges and tax, not by the customer's phone. Razorpay charges its usual fee per payment. Prices in INR only. Try it with a rzp_test_ key first: test mode takes no real money." },
@@ -256,37 +255,6 @@ const schema: Category[] = [
         { t: "note", text: "The customer pays on PayPal's page and comes back to the shop; your database then collects the payment and only then places the order, marked Paid, under Purchased orders. PayPal doesn't take INR: use it for a shop priced in USD, EUR or GBP." },
         { t: "text", path: "payments.paypal.label", label: "Label at checkout" }] },
       { title: "Cash on delivery", fields: [{ t: "toggle", path: "payments.cod.enabled", label: "Offer cash on delivery" }, g2({ t: "text", path: "payments.cod.label", label: "Label at checkout" }, { t: "text", path: "payments.cod.note", label: "Note" })] },
-    ],
-  },
-  {
-    id: "backend", label: "Accounts & backend", group: "Selling", desc: "Connect a backend for customer accounts, automatic order emails and secure card checkout with the exact amount. Pick Supabase, or a free Cloudflare Worker that keeps orders as files in a private GitHub repository.",
-    cards: [
-      { title: "Shop backend", fields: [
-        { t: "toggle", path: "backend.enabled", label: "Use the shop backend" },
-        { t: "select", path: "backend.provider", label: "Backend", options: [
-          { value: "supabase", label: "Supabase (free database)" },
-          { value: "cloudflare", label: "Cloudflare Worker + GitHub files (free)" },
-        ] },
-        { t: "when", path: "backend.provider", is: "cloudflare", fields: [
-          { t: "text", path: "backend.workerUrl", label: "Worker URL", ph: "https://shop.yourname.workers.dev", check: "https", hint: "Cloudflare → Workers & Pages → your worker → the workers.dev address at the top." },
-          { t: "note", text: "Follow cloudflare/SETUP.md in the exported site: make a private GitHub repo for orders (e.g. shop-data), paste cloudflare/worker.js into a new Worker, and add the GitHub token, Resend, Razorpay and Stripe keys as the Worker's secrets. Secret keys never go in this CMS." },
-          { t: "note", text: "Orders, customers and wishlists are saved as JSON files in that private repo, one commit per change. Good for small shops: up to a few thousand orders. Owner sign-in uses OWNER_EMAIL (or ADMIN_EMAILS) set on the Worker.", tone: "info" },
-        ] },
-        { t: "when", path: "backend.provider", not: "cloudflare", fields: [
-          { t: "text", path: "backend.supabaseUrl", label: "Project URL", ph: "https://abcd1234.supabase.co", check: "https", hint: "Supabase → Project Settings → API → Project URL." },
-          { t: "text", path: "backend.anonKey", label: "Public (anon) key", hint: "Supabase → Project Settings → API → anon public. It's safe to publish: access rules protect the data. Never paste the service_role key here." },
-          { t: "note", text: "Follow supabase/SETUP.md in the exported site: run schema.sql, deploy the shop function, and add your Resend, Razorpay and Stripe keys as function secrets. Secret keys never go in this CMS." },
-        ] },
-        { t: "note", text: "With the backend on, Razorpay and Stripe charge the exact order total in their secure checkout, with the keys set on that backend. A UPI payment is confirmed when you tap Mark paid in Orders. Customers and you get emails as soon as a payment goes through.", tone: "info" },
-      ] },
-      { title: "Customer accounts", fields: [
-        { t: "toggle", path: "backend.accounts", label: "Let customers sign in to track orders and manage their details" },
-        { t: "toggle", path: "backend.wishlist", label: "Wishlist for signed-in customers" },
-        { t: "toggle", path: "backend.requireLogin", label: "Require sign-in to check out (only when sign-in is on)" },
-        g2({ t: "text", path: "accountPage.title", label: "Account page title" }, { t: "text", path: "nav.account", label: "Menu label" }),
-        { t: "textarea", path: "accountPage.signInText", label: "Sign-in text" },
-        { t: "note", text: "This is for shops that use the older Supabase or GitHub-file backend. A shop hosted on its own Cloudflare database ignores these switches and uses User accounts (in the menu, under Selling) instead, the same as a restaurant. Customers sign in with a 6-digit code sent to their email. Each customer gets an account number like AC-100001. Switched off, the shop has no sign-in, account page or wishlist at all, and exports leave the account page out." },
-      ] },
     ],
   },
   {
@@ -353,15 +321,6 @@ export function prepareStore(c: any) {
   c.seo = { titlePattern: "{page} · {site}", keywords: "", author: "", image: null, siteUrl: "", themeColor: "", noindex: false, googleVerification: "", meta: [], ...(c.seo && typeof c.seo === "object" ? c.seo : {}) };
 }
 
-/** Reads the payload of a Supabase key (a JWT) to catch a pasted service_role key. */
-function atobSafe(jwt: string): string {
-  try {
-    return atob(String(jwt).split(".")[1].replace(/-/g, "+").replace(/_/g, "/"));
-  } catch {
-    return "";
-  }
-}
-
 export const storeTemplate: TemplateDef = {
   id: "store",
   name: "Shop",
@@ -375,7 +334,6 @@ export const storeTemplate: TemplateDef = {
     { file: "checkout.html", label: "Checkout" },
     { file: "portfolio.html", label: "Portfolio" },
     { file: "policies.html", label: "Policies" },
-    { file: "account.html", label: "Account" },
   ],
   schema,
   colorKeys: [{ key: "accent", label: "Accent" }, { key: "accent2", label: "Second accent" }, { key: "sale", label: "Sale" }, { key: "text", label: "Text" }, { key: "surface", label: "Cards" }],
@@ -386,16 +344,11 @@ export const storeTemplate: TemplateDef = {
   checks: (c) => {
     const w: string[] = [];
     const p = c?.payments || {};
-    const cf = c?.backend?.provider === "cloudflare";
-    const be = !!(c?.backend?.enabled && (cf ? httpsOk(c.backend.workerUrl) : httpsOk(c.backend.supabaseUrl) && c.backend.anonKey));
-    const live = (p.upi?.enabled && vpaOk(p.upi.vpa)) || (p.razorpay?.enabled && (be || httpsOk(p.razorpay.link))) || (p.stripe?.enabled && (be || httpsOk(p.stripe.link))) || (p.paypal?.enabled && paypalOk(p.paypal.username)) || p.cod?.enabled
+    const live = (p.upi?.enabled && vpaOk(p.upi.vpa)) || (p.razorpay?.enabled && httpsOk(p.razorpay.link)) || (p.stripe?.enabled && httpsOk(p.stripe.link)) || (p.paypal?.enabled && paypalOk(p.paypal.username)) || p.cod?.enabled
       // A gateway whose keys are on the shop's own database: the editor can't see the keys, so the switch counts.
-      || (!be && (p.razorpay?.enabled || p.cashfree?.enabled || p.phonepe?.enabled || p.stripe?.enabled || p.paypal?.enabled));
-    if (c?.backend?.enabled && !be) w.push(cf ? "The shop backend is switched on but its Worker URL is missing." : "The shop backend is switched on but its Project URL or public key is missing.");
-    if (cf && /github\.com|github\.io/.test(c?.backend?.workerUrl || "")) w.push("The Worker URL looks like a GitHub address. Use the workers.dev address of your Cloudflare Worker.");
-    if (!cf && c?.backend?.anonKey && /service_role/.test(atobSafe(c.backend.anonKey))) w.push("The key under Accounts & backend is a service_role key. Replace it with the anon public key now.");
+      || ((p.razorpay?.enabled || p.cashfree?.enabled || p.phonepe?.enabled || p.stripe?.enabled || p.paypal?.enabled));
     if (!live) w.push("No payment method is switched on with valid details.");
-    if (!be && !c?.orders?.whatsapp && !c?.orders?.email) w.push("No WhatsApp number or email is set to receive orders.");
+    if (!c?.orders?.whatsapp && !c?.orders?.email) w.push("No WhatsApp number or email is set to receive orders.");
     if (!(c?.products || []).length) w.push("The shop has no products.");
     const samples = (c?.products || []).filter((x: any) => x.sample).length;
     if (samples) w.push(`${samples} sample product${samples > 1 ? "s are" : " is"} still in the catalogue.`);

@@ -10,8 +10,6 @@ import { useToast } from "../ui/kit";
 /** Panels that aren't schema sections: they can be renamed, moved and regrouped, but not combined. */
 const EXTRAS: Record<string, { id: string; label: string; group: string; desc: string; note?: string }[]> = {
   store: [
-    { id: "shop-orders", label: "Orders", group: "Shop", desc: "", note: "admin page" },
-    { id: "shop-customers", label: "Customers", group: "Shop", desc: "", note: "admin page" },
     { id: "warranty-records", label: "Warranty records", group: "Content", desc: "" },
   ],
   business: [{ id: "enquiries", label: "Enquiries", group: "Content", desc: "" }, { id: "warranty-records", label: "Warranty records", group: "Content", desc: "" }],

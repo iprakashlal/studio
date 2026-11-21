@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { cfCall } from "../lib/cfdb";
 import { SiteDbSignIn, useSiteDbSigned } from "../pages/Connections";
 import { fmtDate } from "../lib/util";
-import { Spinner, useToast } from "../ui/kit";
+import { Skel, useToast, SkelPanel } from "../ui/kit";
 
 // Customer Data (restaurant and shop on a Cloudflare database): everyone who has ordered, kept by mobile number (else
 // email) with their orders, what they spent and their points. The owner can search, change points, export and delete.
@@ -73,7 +73,7 @@ export function CustomerPanel({ cf, currency = "₹", points }: { cf?: { api: st
         </div>
       </div>
       {err && <p role="alert" className="rounded-lg border border-amber-400/40 bg-amber-400/5 px-3 py-2 text-sm text-amber-100">{err}</p>}
-      {rows === null ? <Spinner /> : !rows.length && !err ? <p className="card p-5 text-sm text-ink-300">{find ? "No customer matches that search." : "No customers yet. They appear here from the first order placed on the site."}</p> : rows.length > 0 && (
+      {rows === null ? <SkelPanel label="Loading the customers" chips={false} rows={5} /> : !rows.length && !err ? <p className="card p-5 text-sm text-ink-300">{find ? "No customer matches that search." : "No customers yet. They appear here from the first order placed on the site."}</p> : rows.length > 0 && (
         <div className="card overflow-x-auto p-0">
           <table className="w-full min-w-[860px] text-left text-[13.5px]">
             <thead className="text-[11px] uppercase tracking-wider text-ink-400"><tr><th className="px-4 py-2.5">Customer</th><th className="px-3 py-2.5">Mobile</th><th className="px-3 py-2.5">Email</th><th className="px-3 py-2.5 text-right">Orders</th><th className="px-3 py-2.5 text-right">Spent</th><th className="px-3 py-2.5 text-right">Points</th><th className="px-3 py-2.5">Last order</th><th className="px-3 py-2.5" /></tr></thead>
@@ -96,7 +96,7 @@ export function CustomerPanel({ cf, currency = "₹", points }: { cf?: { api: st
                       <button type="button" className="btn btn-sm" disabled={!!busy || !+delta} onClick={() => void adjust(r, -1)}>Take off</button>
                       <span className="ml-auto flex items-center gap-2">{ask === r.ckey ? <><span className="text-[13px] text-ink-200">Delete this customer and their points? Their orders stay under Purchased orders.</span><button type="button" className="btn btn-sm border-red-400/50 text-red-200" disabled={!!busy} onClick={() => void remove(r)}>Yes, delete</button><button type="button" className="btn btn-sm" onClick={() => setAsk("")}>Keep</button></> : <button type="button" className="btn btn-sm border-red-400/50 text-red-200" onClick={() => setAsk(r.ckey)}>Delete this customer</button>}</span>
                     </div>
-                    <div className="text-[13px]"><b className="text-ink-200">Points history</b>{log === null ? <Spinner /> : !log.length ? <p className="text-ink-400">Nothing yet.</p> : <ul className="mt-1 flex flex-col gap-1" aria-label="Points history">{log.map((x, i) => <li key={i} className="flex flex-wrap gap-x-3 text-ink-300"><span className={`w-14 text-right font-semibold tabular-nums ${x.delta < 0 ? "text-amber-200" : "text-emerald-200"}`}>{x.delta > 0 ? "+" : ""}{x.delta}</span><span>{x.why}{x.order_no ? ` (${x.order_no})` : ""}</span><span className="text-ink-500">{fmtDate(x.at)}</span></li>)}</ul>}</div>
+                    <div className="text-[13px]"><b className="text-ink-200">Points history</b>{log === null ? <span role="status" aria-label="Loading"><Skel className="mt-1 h-3.5 w-2/3" /></span> : !log.length ? <p className="text-ink-400">Nothing yet.</p> : <ul className="mt-1 flex flex-col gap-1" aria-label="Points history">{log.map((x, i) => <li key={i} className="flex flex-wrap gap-x-3 text-ink-300"><span className={`w-14 text-right font-semibold tabular-nums ${x.delta < 0 ? "text-amber-200" : "text-emerald-200"}`}>{x.delta > 0 ? "+" : ""}{x.delta}</span><span>{x.why}{x.order_no ? ` (${x.order_no})` : ""}</span><span className="text-ink-500">{fmtDate(x.at)}</span></li>)}</ul>}</div>
                     <p className="text-[12.5px] text-ink-400">Customer since {fmtDate(r.first_at)}.</p>
                   </div></td></tr>}
               </>))}

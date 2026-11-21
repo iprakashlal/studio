@@ -115,6 +115,15 @@ export function SkelLines({ n = 3, className = "" }: { n?: number; className?: s
 export function SkelRows({ n = 4, label = "Loading" }: { n?: number; label?: string }) {
   return <div role="status" aria-label={label} className="flex flex-col divide-y divide-ink-700 rounded-xl border border-ink-700">{Array.from({ length: n }, (_, i) => <div key={i} className="flex items-center gap-3 p-3"><Skel className="h-9 w-9 flex-none rounded-lg" /><div className="flex min-w-0 flex-1 flex-col gap-2"><Skel className={`h-3.5 ${i % 2 ? "w-1/2" : "w-2/3"}`} /><Skel className="h-3 w-1/3" /></div><Skel className="h-7 w-20 flex-none rounded-lg" /></div>)}</div>;
 }
+/** A site-admin panel while its records load: the heading, a row of filter chips and placeholder rows. */
+export function SkelPanel({ label = "Loading", rows = 4, chips = true }: { label?: string; rows?: number; chips?: boolean }) {
+  return (
+    <div role="status" aria-label={label} className="flex max-w-4xl flex-col gap-4">
+      {chips && <div className="flex flex-wrap gap-2"><Skel className="h-8 w-24 rounded-full" /><Skel className="h-8 w-20 rounded-full" /><Skel className="h-8 w-28 rounded-full" /></div>}
+      <div className="flex flex-col divide-y divide-ink-700 rounded-xl border border-ink-700">{Array.from({ length: rows }, (_, i) => <div key={i} className="flex items-center gap-3 p-4"><div className="flex min-w-0 flex-1 flex-col gap-2"><Skel className="h-4 w-1/2" /><Skel className="h-3 w-3/4" /></div><Skel className="h-6 w-16 rounded-full" /></div>)}</div>
+    </div>
+  );
+}
 /** The dashboard's shape while the project list loads: the stat tiles, the filters and a grid of project cards. */
 export function SkelDashboard({ note }: { note?: string }) {
   return (

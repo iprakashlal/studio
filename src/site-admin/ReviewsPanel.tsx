@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { cfCall } from "../lib/cfdb";
 import { SiteDbSignIn, useSiteDbSigned } from "../pages/Connections";
-import { Spinner, useToast } from "../ui/kit";
+import { useToast, SkelPanel } from "../ui/kit";
 
 // Reviews (shop and restaurant on a Cloudflare database): what customers wrote about each product or dish. The owner
 // approves or hides each one, can answer it, and can delete it. Only approved reviews show on the site.
@@ -22,7 +22,7 @@ export function ReviewsPanel({ cf, kind, on }: { cf?: { api: string; site: strin
   const Empty = ({ children }: { children: React.ReactNode }) => <section className="card max-w-3xl p-5 text-sm text-ink-300" aria-label="Reviews"><h3 className="mb-1 text-[15px] font-extrabold text-ink-100">Reviews</h3>{children}</section>;
   if (!cf) return <Empty>Reviews need the site on its own Cloudflare database. Connect one under Settings → Hostings, then publish.</Empty>;
   if (!signed) return <Empty><p className="mb-3">Sign in to this site's database to see the reviews.</p><SiteDbSignIn cf={cf} /></Empty>;
-  if (!d) return <Empty><Spinner /></Empty>;
+  if (!d) return <SkelPanel label="Loading the reviews" />;
   const n = { pending: d.rows.filter((r) => r.status === "pending").length, live: d.rows.filter((r) => r.status === "live").length, hidden: d.rows.filter((r) => r.status === "hidden").length };
   const rows = d.rows.filter((r) => view === "all" || r.status === view), avg = n.live ? d.rows.filter((r) => r.status === "live").reduce((a, r) => a + r.rating, 0) / n.live : 0;
   const stars = (k: number) => <span className="text-amber-300" aria-label={`${k} out of 5`}>{"★".repeat(k)}<span className="text-ink-600">{"★".repeat(5 - k)}</span></span>;

@@ -2,7 +2,7 @@
 // own admin page and in the Studio. Only emails listed in site_admins for the site can read them.
 import { Fragment, createContext, useContext, useEffect, useMemo, useState } from "react";
 import { enquiriesSql, isAdmin, sbClient, sendCode, setupSql, signedInEmail, verifyCode, type SbCfg } from "../lib/supa";
-import { Field, Spinner, useConfirm, useToast, SkelRows } from "../ui/kit";
+import { Field, useConfirm, useToast, SkelRows, SkelPanel } from "../ui/kit";
 import { inboxCall, type InboxEnquiry } from "../lib/inbox";
 import { cfSignedIn, siteEnquiries, resendTestOnly } from "../lib/cfdb";
 import { COURIERS, TRACKERS, TRACK_STATES, courierLink, courierName } from "../lib/tracking";
@@ -120,9 +120,9 @@ function Connected({ cfg, hosted }: { cfg: SbCfg; hosted: boolean }) {
     if (error) return toast(error.message, "bad");
     setRows((x) => (x || []).filter((y) => y.id !== r.id)); toast("Deleted");
   };
-  if (me === undefined) return <Spinner label="Connecting to Supabase…" />;
+  if (me === undefined) return <SkelPanel label="Connecting" chips={false} />;
   if (!me) return <SignIn cfg={cfg} onIn={setMe} />;
-  if (admin === null && !err) return <Spinner label="Checking your access…" />;
+  if (admin === null && !err) return <SkelPanel label="Checking your access" chips={false} />;
   if (err) return <section className="card flex max-w-xl flex-col gap-3 p-5"><p className="text-sm text-red-300">{err}</p><button className="btn self-start" onClick={load}>Try again</button></section>;
   if (!admin) return (
     <section className="card flex max-w-xl flex-col gap-3 p-5 text-sm text-ink-300">

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { cfCall } from "../lib/cfdb";
 import { SiteDbSignIn, useSiteDbSigned } from "../pages/Connections";
-import { Spinner, useToast } from "../ui/kit";
+import { useToast, SkelPanel } from "../ui/kit";
 
 // Abandoned carts (shop and restaurant on a Cloudflare database): shoppers who typed their email at checkout and left.
 // A reminder goes out by itself after the wait set under Selling; here the owner sees who, what and how much, can send
@@ -23,7 +23,7 @@ export function RecoveryPanel({ cf, kind, on }: { cf?: { api: string; site: stri
   const Empty = ({ children }: { children: React.ReactNode }) => <section className="card max-w-3xl p-5 text-sm text-ink-300" aria-label="Abandoned carts"><h3 className="mb-1 text-[15px] font-extrabold text-ink-100">Abandoned carts</h3>{children}</section>;
   if (!cf) return <Empty>Abandoned-cart reminders need the site on its own Cloudflare database. Connect one under Settings → Hostings, then publish.</Empty>;
   if (!signed) return <Empty><p className="mb-3">Sign in to this site's database to see the carts.</p><SiteDbSignIn cf={cf} /></Empty>;
-  if (!d) return <Empty><Spinner /></Empty>;
+  if (!d) return <SkelPanel label="Loading the carts" />;
   const rows = d.rows.filter((r) => view === "all" || (view === "recovered" ? r.status === "recovered" : r.status !== "recovered")), got = d.rows.filter((r) => r.status === "recovered" && r.sent > 0);
   const money = (n: number) => new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(n);
   return (

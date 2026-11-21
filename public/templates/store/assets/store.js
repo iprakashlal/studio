@@ -188,6 +188,9 @@ let cart = store.get("cart", []);
 const revOn = () => !PREVIEW && !!(C.reviews && C.reviews.on && HOST && HOST.api && HOST.site);
 let REV = null;
 const stars = (a) => { const n = Math.round(Number(a) || 0); return `<span class="stars" role="img" aria-label="${n} out of 5 stars">${"★".repeat(n)}<i class="off">${"★".repeat(5 - n)}</i></span>`; };
+const revRow = (id) => (REV && REV[id] ? `<p class="rvs" data-rv="${esc(id)}">${stars(REV[id][0])}<b>${REV[id][0]}</b><small>(${REV[id][1]})</small></p>` : revOn() ? `<p class="rvs" data-rv="${esc(id)}" hidden></p>` : "");
+/* Ratings arriving after the page is drawn are written into the cards in place: redrawing the page made it flicker. */
+function revFill() { document.querySelectorAll(".rvs[data-rv]").forEach((e) => { const r = REV && REV[e.dataset.rv]; if (r) { e.innerHTML = `${stars(r[0])}<b>${r[0]}</b><small>(${r[1]})</small>`; e.hidden = false; } }); }
 function revLoad() { if (!revOn()) return Promise.resolve(); return fetch(HOST.api + "/rev/" + encodeURIComponent(HOST.site), { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((j) => { if (j && j.s) REV = j.s; }).catch(() => {}); }
 function revDraw(p) {
   const el = $("#rv"); if (!el) return; const api = HOST.api + "/rev/" + encodeURIComponent(HOST.site), me = store.get("me", {});
@@ -624,7 +627,7 @@ function footer() {
 }
 function pcard(p) {
   const badge = p.stock === "out" ? `<span class="badge out">Sold out</span>` : onSale(p) ? `<span class="badge sale">Sale</span>` : p.badge ? `<span class="badge">${esc(p.badge)}</span>` : "";
-  return `<a class="pcard" href="${productUrl(p)}"><div class="im">${badge}${pimg(p)}</div><div><h3>${esc(p.name)}</h3>${REV && REV[p.id] ? `<p class="rvs">${stars(REV[p.id][0])}<b>${REV[p.id][0]}</b><small>(${REV[p.id][1]})</small></p>` : ""}${p.short ? `<p class="s">${esc(p.short)}</p>` : ""}</div><div class="price">${kindsOf(p).length ? "From " + esc(money(Math.min(...kindsOf(p).map((k) => k.price)))) : esc(money(p.price)) + (onSale(p) ? `<s>${esc(money(p.compareAt))}</s>` : "")}</div></a>`;
+  return `<a class="pcard" href="${productUrl(p)}"><div class="im">${badge}${pimg(p)}</div><div><h3>${esc(p.name)}</h3>${revRow(p.id)}${p.short ? `<p class="s">${esc(p.short)}</p>` : ""}</div><div class="price">${kindsOf(p).length ? "From " + esc(money(Math.min(...kindsOf(p).map((k) => k.price)))) : esc(money(p.price)) + (onSale(p) ? `<s>${esc(money(p.compareAt))}</s>` : "")}</div></a>`;
 }
 
 /* ============================================================
@@ -1250,7 +1253,7 @@ else {
     C = merge(DEFAULT, j); render();
   }).catch(() => { clearTimeout(giveUp); if (!shown) render(); })
     // what is left of each counted product, once the content is in (a placed order's page has nothing to redraw)
-    .then(() => { if (revOn() && PAGE !== "product") revLoad().then(() => { if (REV && Object.keys(REV).length && !$(".done") && !$("#trackf") && !(document.activeElement && /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName))) render(); }); })
+    .then(() => { if (revOn() && PAGE !== "product") revLoad().then(revFill); })
     .then(() => { if (stockOn()) stockLoad().then(() => { if (STOCK && !$(".done") && !$("#trackf") && !(document.activeElement && /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName))) render(); }); });
 }
 if (SC) SC.untrack();

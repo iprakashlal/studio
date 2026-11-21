@@ -618,6 +618,7 @@ export function accountLookCard(kind: "restaurant" | "store"): Card {
   const S = (path: string, label: string, pairs: [string, string][]): Field => ({ t: "select", path: "account.ui." + path, label, options: o(pairs) });
   return { title: "Account customization", fields: [
     { t: "note", text: `How the sign-in step, “My account” and the checkout look. They always use this theme's accent colour, corners, fonts and dark mode; the choices below shape the rest. To see them in the preview, switch accounts on (Selling → User accounts), then tap “Sign in” ${kind === "restaurant" ? "on the Order now page" : "in the header"}: the preview signs you in with any number and any code, and shows a sample account.` },
+    { t: "previewPages", text: "Show it in the live preview (with sample data; any number and any code signs in):", pages: kind === "restaurant" ? [{ file: "order.html?preview=cart", label: "Checkout" }, { file: "order.html?preview=signin", label: "Sign-in step" }, { file: "order.html?preview=account", label: "My account" }] : [{ file: "checkout.html?preview=cart", label: "Checkout" }, { file: "checkout.html?preview=signin", label: "Sign-in step" }, { file: "index.html?preview=account", label: "My account" }] },
     { t: "grid", cols: 2, fields: [
       S("panel", "“My account” opens as", [["", "A panel from the right"], ["left", "A panel from the left"], ["sheet", "A card in the middle"], ["full", "The whole screen"]]),
       S("head", "Top of “My account”", [["", "A coloured banner with a greeting"], ["plain", "Plain, no banner"]]),

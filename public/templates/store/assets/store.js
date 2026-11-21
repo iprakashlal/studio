@@ -132,6 +132,8 @@ const spHref = (p) => "page.html?p=" + encodeURIComponent(spSlug(p));
 const spCur = () => { try { return new URLSearchParams(location.search).get("p") || ""; } catch (e) { return ""; } };
 const spHere = () => (window.SitePages && window.SitePages.find(C, spCur(), PREVIEW)) || null;
 const PREVIEW = window.name === "cms-preview" && window.parent !== window;
+/** In the Studio's preview: ?preview=cart | signin | account shows the checkout with a sample cart, the checkout's sign-in step, or "My account". */
+const PV = PREVIEW ? (new URLSearchParams(location.search).get("preview") || "") : "";
 
 function money(v) {
   const cur = C.settings.currency || "INR", n = Number(v) || 0;
@@ -263,7 +265,7 @@ function stockMark() {
 function stockLoad() { if (!stockOn()) return Promise.resolve(); return fetch(HOST.api + "/stock/" + encodeURIComponent(HOST.site), { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((j) => { if (j && j.s) { STOCK = j.s; stockMark(); } }).catch(() => {}); }
 /** The most of one line the cart may hold: the shop's own limit, and what is left. */
 const lineMax = (id, opt) => { const n = stockLeft(id, opt); return Math.max(1, Math.min(Math.max(1, Number(C.settings.maxQty) || 10), n == null ? Infinity : Math.max(1, n))); };
-function cartLines() { return cart.map((l) => ({ ...l, p: asBought(prodBy(l.id), l.opt) })).filter((l) => l.p && l.p.stock !== "out" && stockLeft(l.id, l.opt) !== 0).map((l) => { const n = stockLeft(l.id, l.opt); return n != null && l.qty > n ? { ...l, qty: n } : l; }); }
+function cartLines() { return (PV && !cart.length && C.products[0] ? [{ id: C.products[0].id, opt: "", qty: 2 }] : cart).map((l) => ({ ...l, p: asBought(prodBy(l.id), l.opt) })).filter((l) => l.p && l.p.stock !== "out" && stockLeft(l.id, l.opt) !== 0).map((l) => { const n = stockLeft(l.id, l.opt); return n != null && l.qty > n ? { ...l, qty: n } : l; }); }
 function addToCart(id, opt, qty) {
   const max = lineMax(id, opt);
   const ex = cart.find((l) => l.id === id && l.opt === opt);
@@ -478,7 +480,7 @@ const dbPay = (m) => !PREVIEW && !!(HOST && HOST.api && HOST.site) && (m === "ra
    header shows their orders and points. A signed-in phone number or email address counts as verified. */
 const ME = () => (window.SiteAcct && SiteAcct.on() ? SiteAcct.user() : null);
 let ADDR_AT = 0; // which saved address the checkout is using
-const mustSign = () => !!(window.SiteAcct && SiteAcct.on() && !SiteAcct.user() && !SiteAcct.skipped() && !PREVIEW);
+const mustSign = () => !!(window.SiteAcct && SiteAcct.on() && !SiteAcct.user() && !SiteAcct.skipped() && (!PREVIEW || PV === "signin"));
 let acctP = null;
 const loadAcct = () => (acctP ||= new Promise((ok, no) => { if (window.SiteAcct) return ok(); const s = document.createElement("script"); s.src = "assets/acct.js"; s.onload = () => ok(); s.onerror = no; document.head.appendChild(s); }));
 async function ptsMine() { // a signed-in shopper's points, without another code
@@ -491,7 +493,8 @@ const coLook = () => { const v = C.account && C.account.ui && C.account.ui.check
 function previewAcct() {
   if (!PREVIEW || !(C.account && C.account.on)) return;
   loadAcct().then(() => { const by = C.account.by === "email" || C.account.by === "either" ? C.account.by : "phone", had = !!(window.SiteAcct && SiteAcct.on());
-    SiteAcct.init({ demo: true, api: "", site: "preview", kind: "store", addresses: true, ui: C.account.ui || {}, acct: { by, phone: by === "email" ? [] : ["wa"], email: by !== "phone" }, money: (n) => money(n), img: (path) => imgUrl({ path }), demoItems: (C.products || []).slice(0, 3).map((p) => ({ n: p.name, i: (p.images && p.images[0] && p.images[0].path) || "" })), biz: { name: (C.brand && C.brand.name) || "" }, onChange: () => render() });
+    SiteAcct.init({ demo: true, signedIn: PV === "account", api: "", site: "preview", kind: "store", addresses: true, ui: C.account.ui || {}, acct: { by, phone: by === "email" ? [] : ["wa"], email: by !== "phone" }, money: (n) => money(n), img: (path) => imgUrl({ path }), demoItems: (C.products || []).slice(0, 3).map((p) => ({ n: p.name, i: (p.images && p.images[0] && p.images[0].path) || "" })), biz: { name: (C.brand && C.brand.name) || "" }, onChange: () => render() });
+    if (PV === "account" && !previewAcct.opened) { previewAcct.opened = true; SiteAcct.open(); }
     if (!had) render(); }).catch(() => {});
 }
 function askCan() {
@@ -977,7 +980,7 @@ function render() {
   applyTheme(C.theme);
   if (maintGate(render)) return;
   if (!PREVIEW && PAGE === "warranty" && !swOn()) { location.replace("index.html"); return; }
-  if (PAGE !== "product") setTitle(PAGE === "home" ? "" : { shop: C.shop.title, cart: C.nav.cart, checkout: C.checkout.title, portfolio: C.nav.portfolio, policies: "Policies", account: C.accountPage.title, warranty: C.warranty.title, page: (spHere() || {}).title }[PAGE] || "");
+  if (PAGE !== "product") setTitle(PAGE === "home" ? "" : { shop: C.shop.title, cart: C.nav.cart, checkout: C.checkout.title, portfolio: C.nav.portfolio, policies: "Policies", account: (C.accountPage || {}).title, warranty: (C.warranty || {}).title, page: (spHere() || {}).title }[PAGE] || "");
   applyMeta();
   const fn = PAGES[PAGE] || PAGES.home;
   $("#app").innerHTML = `<a class="skip" href="#main">Skip to content</a>${header()}<main id="main">${fn()}</main>${footer()}`;
@@ -1221,7 +1224,7 @@ if (PREVIEW) {
     const d = e.data || {};
     if (d.type === "cms:content" && d.content && typeof d.content === "object") { if (SC && SC.take(d.content, { ...SCO, drawn: DREW })) return; DREW = true; ASSETS = d.assets || {}; const y = scrollY; C = merge(DEFAULT, d.content); render(); scrollTo(0, y); }
   });
-  window.parent.postMessage({ type: "cms:ready", page: (location.pathname.split("/").pop() || "index.html") + (PAGE === "page" && spCur() ? "?p=" + encodeURIComponent(spCur()) : MNT_Q ? "?maintenance=1" : "") }, location.origin);
+  window.parent.postMessage({ type: "cms:ready", page: (location.pathname.split("/").pop() || "index.html") + (PAGE === "page" && spCur() ? "?p=" + encodeURIComponent(spCur()) : MNT_Q ? "?maintenance=1" : PV ? "?preview=" + PV : "") }, location.origin);
 }
 // The live site never shows the template's sample design: it waits for content.json (a returning visitor
 // gets the copy saved on the previous page at once), and only falls back to the defaults if loading fails.

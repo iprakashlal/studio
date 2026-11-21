@@ -60,6 +60,8 @@ export type Field =
   | { t: "pamphlet"; /** Its own wording (the restaurant's menu reader). */ text?: string; button?: string }
   /** Studio only: "Add reviews from Google" (business and shop testimonials). */
   | { t: "googleReviews" }
+  /** Buttons that show a page in the live preview: { file, label } (e.g. the checkout with a sample cart). */
+  | { t: "previewPages"; pages: { file: string; label: string }[]; text?: string }
   /** Languages: the table of the site's texts and their translations (content.i18n.t). */
   | { t: "translations" };
 

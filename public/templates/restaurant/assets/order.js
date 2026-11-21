@@ -37,7 +37,9 @@
   /** How the checkout's sections are drawn (Theme & layout → Account customization): cards, numbered steps, or plain. */
   const coLook = () => { const v = A.C().account && A.C().account.ui && A.C().account.ui.checkout; return ["cards", "steps", "plain"].includes(v) ? v : "cards"; };
   let acctWait = false; // true while the site finds out whether sign-in is on, so checkout never flashes its form first
-  const mustSign = () => !!(window.SiteAcct && SiteAcct.on() && !SiteAcct.user() && !SiteAcct.skipped() && !A.PREVIEW);
+  /** In the Studio's preview: ?preview=cart | signin | account shows the checkout with a sample cart, its sign-in step, or "My account". */
+  const pvOf = () => (A && A.PREVIEW ? new URLSearchParams(location.search).get("preview") || "" : "");
+  const mustSign = () => !!(window.SiteAcct && SiteAcct.on() && !SiteAcct.user() && !SiteAcct.skipped() && (!A.PREVIEW || pvOf() === "signin"));
   const applyMe = (fresh) => { const m = ME(), k = window.SiteAcct && SiteAcct.skipped(), f = ui.form; if (m && m.kind === "phone") f.phone = m.typed || "+" + m.key; if (m && m.kind === "email") f.email = m.key; if (!m && k) { f.email = k.email; ui.eotp = { email: k.email, token: k.token }; }
     // their saved name, other contact and address fill the form where it is still empty
     const P = m && SiteAcct.profile(); if (!P) return; const a = (P.addresses || [])[0] || {};
@@ -670,11 +672,14 @@
         sync(); const em = String(ui.form.email || "").trim(); if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em) || !cart.length || ui.drawer === "done") return;
         fetch(rb.cf + "/cart/" + encodeURIComponent(rb.site), { method: "POST", headers: { "Content-Type": "application/json" }, keepalive: true, body: JSON.stringify({ email: em, name: ui.form.name, phone: ui.form.phone, lines: cart, items: cart.map((l) => ({ n: l.name, q: l.qty })), total: bill().total, back: location.origin + location.pathname }) }).catch(() => {}); }, 600); }); }
     if (!bind.back) { bind.back = true; cameBack(); }
+    // The Studio's preview: a sample cart (not saved) with the checkout open, so its look can be chosen.
+    if (pvOf() && !bind.pv) { bind.pv = true; const x = D.find((d) => !d.d.soldOut && !d.need) || D[0]; if (!cart.length && x) cart.push({ key: x.id + "|||", id: x.id, name: x.d.name, diet: x.d.diet || "", variant: "", addons: [], note: "", qty: 2, unit: x.base }); if (pvOf() !== "account" && cart.length) { ui.drawer = "checkout"; over(true); } }
     // The Studio's preview has no database: a made-up account stands in, so the look can be chosen.
     if (A.PREVIEW && C.account && C.account.on) loadAcct().then(() => {
       const by = C.account.by === "email" || C.account.by === "either" ? C.account.by : "phone", again = () => { sync(); applyMe(true); const host = root.parentNode, y = scrollY; host.innerHTML = page(A); bind(A); scrollTo(0, y); };
       const dishes = (C.food.categories || []).flatMap((k) => k.items || []).filter((d) => d && d.name).slice(0, 3).map((d) => ({ n: d.name, i: (d.image && d.image.path) || "" }));
-      SiteAcct.init({ demo: true, api: "", site: "preview", kind: "restaurant", ui: C.account.ui || {}, acct: { by, phone: by === "email" ? [] : ["wa"], email: by !== "phone" }, money: (n) => fmt(n), img: (path) => A.imgUrl({ path }), demoItems: dishes, biz: { name: (C.brand && C.brand.name) || "" }, onChange: again });
+      SiteAcct.init({ demo: true, signedIn: pvOf() === "account", api: "", site: "preview", kind: "restaurant", ui: C.account.ui || {}, acct: { by, phone: by === "email" ? [] : ["wa"], email: by !== "phone" }, money: (n) => fmt(n), img: (path) => A.imgUrl({ path }), demoItems: dishes, biz: { name: (C.brand && C.brand.name) || "" }, onChange: again });
+      if (pvOf() === "account" && !bind.pvo) { bind.pvo = true; SiteAcct.open(); }
       if (!$('[data-act="acct"]', root)) again();
     }).catch(() => {});
     if (!canAsked && !A.PREVIEW && be && be.cf) { canAsked = true; acctWait = !!(C.account && C.account.on); const fin = () => { if (acctWait) { acctWait = false; if (ui.drawer === "checkout") { sync(); over(true); } } }; fetch(be.cf + "/site/" + encodeURIComponent(be.site) + "/can", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((j) => { if (!j) fin(); if (j) { can = { otp: !!j.otp, pts: !!j.pts, em: !!j.em, via: Array.isArray(j.via) && j.via.length ? j.via.filter((v) => v === "wa" || v === "sms") : ["wa"], rz: String(j.rz || ""), pg: Array.isArray(j.pg) ? j.pg : [] }; if (ui.drawer === "checkout") { sync(); over(true); }

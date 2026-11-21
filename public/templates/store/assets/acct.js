@@ -309,7 +309,7 @@ pre{white-space:pre-wrap;font:inherit;font-size:14px;margin:6px 0 0}.tot{display
     /** { api, site, kind ("restaurant" | "store"), acct (from the database's "what can this site do"), addresses (several can be kept),
      *    money(n), img(path), track(order), biz { name, address, phone, email, gstin }, onChange(user) } */
     init(o) { cfg = o; can = o.acct || null; me = null; prof = null;
-      if (o.demo) { me = demoMe; if (modal) { modal.setAttribute("data-panel", pickOf(U().panel, ["right", "left", "sheet", "full"])); const d = modal.querySelector(".sa-drawer"); for (const [k, v] of Object.entries({ tone: ["accent", "ink", "soft"], head: ["banner", "plain"], cards: ["shadow", "outline", "filled"], corners: ["theme", "soft", "round", "sharp"], tabs: ["underline", "pills", "blocks"] })) d.setAttribute("data-" + k, pickOf(U()[k], v)); draw(); } return; }
+      if (o.demo) { me = demoMe || (o.signedIn ? (demoMe = { key: "919876543210", kind: "phone", pass: Date.now() + 864e5 + ".demo", typed: "+91 98765 43210" }) : null); if (modal) { modal.setAttribute("data-panel", pickOf(U().panel, ["right", "left", "sheet", "full"])); const d = modal.querySelector(".sa-drawer"); for (const [k, v] of Object.entries({ tone: ["accent", "ink", "soft"], head: ["banner", "plain"], cards: ["shadow", "outline", "filled"], corners: ["theme", "soft", "round", "sharp"], tabs: ["underline", "pills", "blocks"] })) d.setAttribute("data-" + k, pickOf(U()[k], v)); draw(); } return; }
       try { me = JSON.parse(localStorage.getItem(key()) || "null"); } catch (e) { me = null; }
       if (me && !(+String(me.pass).split(".")[0] > Date.now() && me.key)) me = null;
       if (me && can && !kinds().includes(me.kind)) me = null;

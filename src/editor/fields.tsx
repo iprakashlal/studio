@@ -32,6 +32,8 @@ export type EditorCtx = {
 export const PAMPHLET_EVENT = "studio:pamphlet";
 /** Asks the project view to open "Add reviews from Google". */
 export const GOOGLE_EVENT = "studio:google-reviews";
+/** Asks the live preview to show a page: detail { file }. */
+export const PREVIEW_PAGE_EVENT = "studio:preview-page";
 export const Ctx = createContext<EditorCtx>(null as any);
 const useCtx = () => useContext(Ctx);
 
@@ -228,6 +230,13 @@ export function FieldView({ f, obj, base }: { f: F; obj: any; base: string }) {
       return <LegalPagesField />;
     case "a11yCheck":
       return <A11yCheckField />;
+    case "previewPages":
+      return (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-brand-500/40 bg-brand-500/5 p-3">
+          <p className="min-w-0 flex-[1_1_100%] text-[13px] text-ink-300">{f.text || "See it in the live preview:"}</p>
+          {f.pages.map((pg) => <button key={pg.file} type="button" className="btn btn-sm" onClick={() => dispatchEvent(new CustomEvent(PREVIEW_PAGE_EVENT, { detail: { file: pg.file } }))}>{pg.label}</button>)}
+        </div>
+      );
     case "googleReviews":
       return (
         <div className="flex flex-wrap items-center gap-3 rounded-lg border border-brand-500/40 bg-brand-500/5 p-3">

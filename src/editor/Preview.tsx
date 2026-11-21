@@ -16,7 +16,11 @@ function previewPages(tpl: TemplateDef, content: any): { file: string; label: st
     .map((p: any) => ({ slug: pageSlug(p?.slug || p?.title) || p?.id, title: String(p?.title || "").replace(/\s+/g, " ").trim() }))
     .filter((p: any) => p.slug && p.title);
   const seen = new Set<string>();
-  return [...tpl.pages, { file: "index.html?maintenance=1", label: "Maintenance page" }, ...extra.filter((p: any) => !seen.has(p.slug) && seen.add(p.slug)).map((p: any) => ({ file: `${tpl.pageFile || "page.html"}?p=${encodeURIComponent(p.slug)}`, label: `Page: ${p.title}` }))];
+  // With customer accounts on: the screens a customer meets (sample data), so their look can be chosen live.
+  const acct = content?.account?.on ? (tpl.id === "store"
+    ? [{ file: "checkout.html?preview=cart", label: "Checkout (sample cart)" }, { file: "checkout.html?preview=signin", label: "Checkout: sign-in step" }, { file: "index.html?preview=account", label: "My account (sample)" }]
+    : tpl.id === "restaurant" ? [{ file: "order.html?preview=cart", label: "Checkout (sample cart)" }, { file: "order.html?preview=signin", label: "Checkout: sign-in step" }, { file: "order.html?preview=account", label: "My account (sample)" }] : []) : [];
+  return [...tpl.pages, ...acct, { file: "index.html?maintenance=1", label: "Maintenance page" }, ...extra.filter((p: any) => !seen.has(p.slug) && seen.add(p.slug)).map((p: any) => ({ file: `${tpl.pageFile || "page.html"}?p=${encodeURIComponent(p.slug)}`, label: `Page: ${p.title}` }))];
 }
 
 // The template pages run in an iframe named "cms-preview". They announce themselves with
@@ -82,6 +86,8 @@ export function Preview({ tpl, base, content, version, assets, editable = true }
     setPage(file);
     setSrc(pageUrl(base, file, file === page ? Date.now() : 0));
   };
+
+  useEffect(() => { const on = (e: Event) => { const f = (e as CustomEvent).detail?.file; if (typeof f === "string") go(f); }; addEventListener("studio:preview-page", on); return () => removeEventListener("studio:preview-page", on); });
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-ink-950">

@@ -1331,7 +1331,8 @@
 
     unboot();
     // entrance: page cover from the previous page, or the theme's loader
-    var animate = !RM && (!PREVIEW || changed), delay = 0;
+    // The entrance plays once per page load: a later render of the same page (after the database answers, a sign-in, a language change) keeps what is already shown instead of playing it again.
+    var animate = !RM && (PREVIEW ? changed : !st.animated), delay = 0; if (animate && !PREVIEW) st.animated = true;
     if (cover && c.loader !== "none" && !RM) {
       // Arriving from another page of the site: the panels are already closed, so play the site's full intro
       // (the name rises in letter by letter, then the panels open) exactly as on the first visit.

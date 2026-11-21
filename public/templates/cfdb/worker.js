@@ -16,7 +16,7 @@ create index if not exists approvals_project on approvals (scope, project, creat
 create table if not exists approval_notes (id integer primary key autoincrement, token text not null, who text not null, body text not null, page text not null default '', kind text not null default 'comment', created_at text not null);
 create index if not exists approval_notes_token on approval_notes (token, id);
 `;
-var CFDB_VERSION = 43;
+var CFDB_VERSION = 44;
 var CFDB_WORKER_NAME = "picaffectz-db";
 
 // src/lib/lookdigest.ts
@@ -230,6 +230,349 @@ function socialFromText(text) {
   return [...out.values()];
 }
 
+// src/lib/tracking.ts
+var COURIERS = {
+  bluedart: ["Blue Dart", "https://www.bluedart.com/trackdartresultthirdparty?trackFor=0&trackNo={awb}"],
+  delhivery: ["Delhivery", "https://www.delhivery.com/track-v2/package/{awb}"],
+  dtdc: ["DTDC", "https://www.dtdc.in/trace.asp"],
+  xpressbees: ["Xpressbees", "https://www.xpressbees.com/shipment/tracking?awbNo={awb}"],
+  ecom: ["Ecom Express", "https://ecomexpress.in/tracking/?awb_field={awb}"],
+  ekart: ["Ekart", "https://ekartlogistics.com/shipmenttrack/{awb}"],
+  indiapost: ["India Post", "https://www.indiapost.gov.in/_layouts/15/dop.portal.tracking/trackconsignment.aspx"],
+  shadowfax: ["Shadowfax", "https://tracker.shadowfax.in/#/track/{awb}"],
+  amazon: ["Amazon Shipping", "https://track.amazon.in/tracking/{awb}"],
+  professional: ["The Professional Couriers", "https://www.tpcindia.com/track-info.aspx?id={awb}"],
+  trackon: ["Trackon", "https://trackon.in/"],
+  maruti: ["Shree Maruti Courier", "https://www.shreemaruti.com/track-your-shipment/"],
+  tirupati: ["Shree Tirupati Courier", "https://www.shreetirupaticourier.net/"],
+  gati: ["Gati", "https://www.gati.com/track-by-docket/"],
+  safexpress: ["Safexpress", "https://www.safexpress.com/"],
+  tci: ["TCI Express", "https://www.tciexpress.in/"],
+  vxpress: ["V-Xpress", "https://www.vxpress.in/track/"],
+  smartr: ["Smartr Logistics", "https://smartr.in/tracking.html"],
+  fedex: ["FedEx", "https://www.fedex.com/fedextrack/?trknbr={awb}"],
+  dhl: ["DHL Express", "https://www.dhl.com/in-en/home/tracking.html?tracking-id={awb}"],
+  aramex: ["Aramex", "https://www.aramex.com/in/en/track/results?ShipmentNumber={awb}"],
+  ups: ["UPS", "https://www.ups.com/track?tracknum={awb}"],
+  shiprocket: ["Shiprocket", "https://shiprocket.co/tracking/{awb}"],
+  nimbuspost: ["NimbusPost", "https://ship.nimbuspost.com/shipping/tracking/{awb}"],
+  ithink: ["iThink Logistics", "https://www.ithinklogistics.com/track-order/"],
+  shipmozo: ["Shipmozo", "https://www.shipmozo.com/track-order/"],
+  shipyaari: ["Shipyaari", "https://www.shipyaari.com/tracking"],
+  other: ["Another courier", ""]
+};
+var courierName = (c) => (COURIERS[c] || COURIERS.other)[0];
+var courierLink = (c, awb) => {
+  const u = (COURIERS[c] || ["", ""])[1];
+  return u ? u.replace("{awb}", encodeURIComponent(awb)) : "";
+};
+var TRACKERS = {
+  bluedart: { name: "Blue Dart", kind: "courier", needs: ["key", "secret", "user", "account"] },
+  delhivery: { name: "Delhivery", kind: "courier", needs: ["key"] },
+  dtdc: { name: "DTDC", kind: "courier", needs: ["key"] },
+  xpressbees: { name: "Xpressbees", kind: "courier", needs: ["user", "secret"] },
+  ecom: { name: "Ecom Express", kind: "courier", needs: ["user", "secret"] },
+  shiprocket: { name: "Shiprocket", kind: "agg", needs: ["user", "secret"] },
+  nimbuspost: { name: "NimbusPost", kind: "agg", needs: ["user", "secret"] },
+  ithink: { name: "iThink Logistics", kind: "agg", needs: ["key", "secret"] },
+  clickpost: { name: "ClickPost", kind: "multi", needs: ["user", "key"] },
+  aftership: { name: "AfterShip", kind: "multi", needs: ["key"] },
+  trackingmore: { name: "TrackingMore", kind: "multi", needs: ["key"] },
+  ship24: { name: "Ship24", kind: "multi", needs: ["key"] },
+  track17: { name: "17TRACK", kind: "multi", needs: ["key"] },
+  custom: { name: "Another tracking API", kind: "custom", needs: ["url"] }
+};
+var TRACKER_FIELDS = { secret: ["key", "secret"], text: ["user", "account", "url", "hdr", "codes"], flags: ["on"] };
+var trackerReady = (id, z) => !!(z && z.on && TRACKERS[id] && TRACKERS[id].needs.every((k) => String(z[k] || "").trim()));
+var TRACK_STATES = { booked: "Booked", picked: "Picked up", transit: "In transit", out: "Out for delivery", delivered: "Delivered", failed: "Delivery attempted", returned: "Returning to the shop", unknown: "Waiting for the first scan" };
+var S = (v, n = 200) => String(v ?? "").replace(/\s+/g, " ").trim().slice(0, n);
+function trackState(text) {
+  const t = String(text || "").replace(/([a-z])([A-Z])/g, "$1 $2").replace(/[_-]+/g, " ").toLowerCase();
+  if (/\brto\b|return(ed|ing)? to (origin|shipper|sender|seller)|returned|reverse|undelivered.*return/.test(t)) return "returned";
+  if (/not delivered|undelivered|un delivered|delivery (failed|attempt|exception)|attempt(ed)?\b|failed|refused|rejected|consignee (not|un)|address (issue|incomplete|not found)|exception|on hold|held/.test(t)) return "failed";
+  if (/out for delivery|\bofd\b|with delivery (agent|boy|executive)|dispatched for delivery/.test(t)) return "out";
+  if (/\bdelivered\b|delivery (done|complete|successful)|shipment delivered|\bdlvd\b/.test(t)) return "delivered";
+  if (/in transit|intransit|transit|arriv|depart|reached|received at|bagg|connected|forwarded|dispatched|shipped|hub|facility|sorting|linehaul|on the way|en route|customs|manifested to/.test(t)) return "transit";
+  if (/pick(ed)? ?up|pickup (done|complete)|collected|shipment picked|inscan|in scan|soft data|accepted at/.test(t)) return "picked";
+  if (/manifest|booked|created|label|info received|information received|pending|not yet|awaiting|ready (to|for) (ship|pickup)|order placed|data received/.test(t)) return "booked";
+  return "";
+}
+function when(a, b) {
+  let s = S(a, 60), t = S(b, 20);
+  if (!s) return "";
+  if (/^\d{10}$/.test(s)) return new Date(+s * 1e3).toISOString();
+  if (/^\d{13}$/.test(s)) return (/* @__PURE__ */ new Date(+s)).toISOString();
+  if (/^\d{8}$/.test(s)) s = `${s.slice(4)}-${s.slice(2, 4)}-${s.slice(0, 2)}`;
+  let m = /^(\d{1,2})[-/. ](\d{1,2})[-/. ](\d{4})(.*)$/.exec(s);
+  if (m) s = `${m[3]}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}${m[4]}`;
+  if (/^\d{4}$/.test(t)) t = t.slice(0, 2) + ":" + t.slice(2);
+  if (t && !/[T ]\d{1,2}:\d{2}/.test(s)) s += " " + t;
+  m = /^(\d{4}-\d{2}-\d{2})[T ](\d{1,2}:\d{2}(?::\d{2})?)(?:\.\d+)?\s*(am|pm)?$/i.exec(s);
+  if (m) {
+    let [h, mi, se] = m[2].split(":");
+    if (m[3]) {
+      let n = +h % 12;
+      if (/pm/i.test(m[3])) n += 12;
+      h = String(n);
+    }
+    const d2 = /* @__PURE__ */ new Date(`${m[1]}T${h.padStart(2, "0")}:${mi}:${se || "00"}+05:30`);
+    if (!isNaN(+d2)) return d2.toISOString();
+  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  const d = new Date(s);
+  return isNaN(+d) ? S(a, 40) + (t ? " " + t : "") : d.toISOString();
+}
+function day(a) {
+  let s = S(a, 60);
+  if (!s) return "";
+  let m = /^(\d{4}-\d{2}-\d{2})/.exec(s);
+  if (m) return m[1];
+  if (/^\d{8}$/.test(s)) return `${s.slice(4)}-${s.slice(2, 4)}-${s.slice(0, 2)}`;
+  m = /^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})/.exec(s);
+  if (m) return `${m[3]}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}`;
+  const d = /* @__PURE__ */ new Date(s.replace(/-/g, " ") + " UTC");
+  return isNaN(+d) ? "" : d.toISOString().slice(0, 10);
+}
+var DATE_KEY = /date|time|stamp|_at$|^at$|when|occur/i;
+var TEXT_KEY = /status|activity|remark|message|description|detail|action|scan$|^scan|event|instruction|desc/i;
+var PLACE_KEY = /location|city|place|origin|hub|centre|center|branch|office/i;
+function findScans(j) {
+  let best = [], n = 0;
+  const walk = (v, depth) => {
+    if (!v || typeof v !== "object" || depth > 7 || ++n > 4e3) return;
+    if (Array.isArray(v)) {
+      const rows = v.map((x) => x && typeof x === "object" && !Array.isArray(x) && Object.keys(x).length === 1 && typeof Object.values(x)[0] === "object" ? Object.values(x)[0] : x).filter((x) => x && typeof x === "object" && !Array.isArray(x));
+      if (rows.length && rows.every((r) => Object.keys(r).some((k) => DATE_KEY.test(k)) && Object.keys(r).some((k) => TEXT_KEY.test(k))) && rows.length > best.length) best = rows;
+      v.forEach((x) => walk(x, depth + 1));
+    } else Object.values(v).forEach((x) => walk(x, depth + 1));
+  };
+  walk(j, 0);
+  const pick = (r, re, not) => {
+    for (const k of Object.keys(r)) if (re.test(k) && !(not && not.test(k)) && r[k] != null && typeof r[k] !== "object" && String(r[k]).trim()) return r[k];
+    return "";
+  };
+  return best.map((r) => {
+    const dk = Object.keys(r).filter((k) => DATE_KEY.test(k) && r[k] != null && typeof r[k] !== "object"), d = dk.find((k) => /date|stamp|_at$|^at$|when|occur/i.test(k)) || dk[0], tm = dk.find((k) => k !== d && /time/i.test(k));
+    return { at: when(d ? r[d] : "", tm ? r[tm] : ""), text: S(pick(r, TEXT_KEY, /code|id$|type$|date|time/i) || pick(r, TEXT_KEY, /date|time/i)), place: S(pick(r, PLACE_KEY), 80) };
+  }).filter((e) => e.text);
+}
+function norm(p) {
+  let ev = (p.ev || []).filter((e) => e && e.text).map((e) => ({ at: S(e.at, 40), text: S(e.text), place: S(e.place, 80) }));
+  if (!ev.length && p.raw) ev = findScans(p.raw);
+  const t = (e) => {
+    const d = Date.parse(e.at);
+    return isNaN(d) ? 0 : d;
+  };
+  if (ev.length > 1 && ev.every((e) => t(e))) ev.sort((a, b) => t(b) - t(a));
+  else if (ev.length > 1 && t(ev[0]) && t(ev[ev.length - 1]) && t(ev[0]) < t(ev[ev.length - 1])) ev.reverse();
+  const say = S(p.say, 120) || (ev[0] ? ev[0].text : ""), st = trackState(say) || (ev[0] ? trackState(ev[0].text) : "") || (ev.length ? "transit" : "unknown");
+  const link = S(p.link, 400);
+  return { st, say: say || TRACK_STATES[st], eta: st === "delivered" ? "" : day(p.eta), link: /^https:\/\//.test(link) ? link : "", ev: ev.slice(0, 40) };
+}
+var TrackError = class extends Error {
+};
+async function ask(url, init = {}, as = "json") {
+  const c = new AbortController(), timer = setTimeout(() => c.abort(), 12e3);
+  let r;
+  try {
+    r = await fetch(url, { ...init, signal: c.signal, redirect: "follow" });
+  } catch (e) {
+    throw new TrackError(e?.name === "AbortError" ? "The tracking service took too long to answer." : "The tracking service couldn't be reached.");
+  } finally {
+    clearTimeout(timer);
+  }
+  const text = (await r.text()).slice(0, 4e5);
+  if (as === "text") {
+    if (!r.ok) throw new TrackError(`The tracking service answered ${r.status}.`);
+    return text;
+  }
+  let j = null;
+  try {
+    j = JSON.parse(text);
+  } catch {
+  }
+  if (!r.ok) throw new TrackError(r.status === 401 || r.status === 403 ? "The tracking service refused the keys. Check them under Courier tracking." : r.status === 404 ? "The tracking service doesn't know that tracking number yet." : r.status === 429 ? "The tracking service is asking us to slow down. Try again in a few minutes." : `The tracking service answered ${r.status}${j && (j.message || j.error) ? ": " + S(typeof (j.message || j.error) === "string" ? j.message || j.error : JSON.stringify(j.message || j.error), 160) : ""}.`);
+  if (j == null) throw new TrackError("The tracking service sent an answer that couldn't be read.");
+  return j;
+}
+var post = (body, headers = {}) => ({ method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json", ...headers }, body: JSON.stringify(body) });
+var E = encodeURIComponent;
+var arr = (v) => Array.isArray(v) ? v : v && typeof v === "object" ? [v] : [];
+var SLUGS = {
+  aftership: { bluedart: "bluedart", delhivery: "delhivery", dtdc: "dtdc", xpressbees: "xpressbees", ecom: "ecom-express", ekart: "ekart", indiapost: "india-post", shadowfax: "shadowfax", gati: "gati-kwe", professional: "professional-couriers", trackon: "trackon", fedex: "fedex", dhl: "dhl", aramex: "aramex", ups: "ups", shiprocket: "shiprocket", safexpress: "safexpress", amazon: "amazon-logistics-in" },
+  trackingmore: { bluedart: "bluedart", delhivery: "delhivery", dtdc: "dtdc", xpressbees: "xpressbees", ecom: "ecom-express", ekart: "ekart", indiapost: "india-post", shadowfax: "shadowfax", gati: "gati-kwe", professional: "professional-couriers", trackon: "trackon", fedex: "fedex", dhl: "dhl", aramex: "aramex", ups: "ups", shiprocket: "shiprocket", safexpress: "safexpress", maruti: "shree-maruti", tirupati: "shree-tirupati", smartr: "smartr-logistics" },
+  clickpost: { bluedart: "5", delhivery: "4", dtdc: "9", xpressbees: "6", ecom: "3", ekart: "24", indiapost: "22", shadowfax: "11", fedex: "1", aramex: "2", gati: "16" }
+};
+function slug(id, z, courier) {
+  for (const part of String(z.codes || "").split(/[,\n;]+/)) {
+    const [k, v] = part.split("=").map((x) => x.trim());
+    if (k && v && k.toLowerCase() === courier) return v;
+  }
+  return (SLUGS[id] || {})[courier] || "";
+}
+var ASK = {
+  // Blue Dart (API gateway): a sign-in token from the client ID and secret, then the tracking query with the
+  // account's login ID and tracking licence key.
+  bluedart: async (z, awb) => {
+    const base = "https://apigateway.bluedart.com/in/transportation";
+    const tok = await ask(base + "/token/v1/login", { headers: { ClientID: z.key, clientSecret: z.secret, Accept: "application/json" } });
+    const jwt = tok.JWTToken || tok.jwtToken || tok.token;
+    if (!jwt) throw new TrackError("Blue Dart didn't accept the client ID and secret.");
+    const j = await ask(`${base}/tracking/v1/shipment?handler=tnt&loginid=${E(z.user)}&numbers=${E(awb)}&format=json&lickey=${E(z.account)}&scan=1&action=custawbquery&verno=1&awb=awb`, { headers: { JWTToken: jwt, Accept: "application/json" } });
+    const s = arr(j?.ShipmentData?.Shipment)[0] || arr(j?.ShipmentData)[0] || {};
+    if (s.Status && /incorrect|invalid|not found|no (data|record)/i.test(String(s.Status)) && !s.Scans) throw new TrackError("Blue Dart doesn't know that waybill number yet.");
+    return norm({ say: s.Status, eta: s.ExpectedDelivery || s.ExpectedDeliveryDate, raw: j, ev: arr(s.Scans).map((x) => x.ScanDetail || x).flatMap(arr).map((d) => ({ at: when(d.ScanDate, d.ScanTime), text: d.Scan, place: d.ScannedLocation })) });
+  },
+  delhivery: async (z, awb) => {
+    const j = await ask(`https://track.delhivery.com/api/v1/packages/json/?waybill=${E(awb)}`, { headers: { Authorization: "Token " + z.key, Accept: "application/json" } });
+    const s = arr(j?.ShipmentData)[0]?.Shipment;
+    if (!s) throw new TrackError(S(j?.Error || j?.rmk, 160) || "Delhivery doesn't know that waybill number yet.");
+    return norm({ say: s.Status?.Status, eta: s.ExpectedDeliveryDate || s.PromisedDeliveryDate, raw: j, ev: arr(s.Scans).map((x) => x.ScanDetail || x).map((d) => ({ at: when(d.ScanDateTime || d.StatusDateTime), text: d.Instructions && d.Instructions !== d.Scan ? `${d.Scan}: ${d.Instructions}` : d.Scan, place: d.ScannedLocation })) });
+  },
+  dtdc: async (z, awb) => {
+    const j = await ask(z.url && /^https:\/\//.test(z.url) ? z.url : "https://blktracksvc.dtdc.com/dtdc-api/rest/JSONCnTrk/getTrackDetails", post({ trkType: "cnno", strcnno: awb, addtnlDtl: "Y" }, { "X-Access-Token": z.key }));
+    if (j?.statusFlag === false || j?.status && /fail/i.test(String(j.status)) && !j.trackDetails) throw new TrackError(S(j?.errorDetails?.[0]?.value || j?.message, 160) || "DTDC doesn't know that consignment number yet.");
+    const h = j?.trackHeader || {};
+    return norm({ say: h.strStatus, eta: h.strExpectedDeliveryDate || h.strRevExpectedDeliveryDate, raw: j, ev: arr(j?.trackDetails).map((d) => ({ at: when(d.strActionDate, d.strActionTime), text: d.strAction + (d.sTrRemarks || d.strRemarks ? ": " + (d.sTrRemarks || d.strRemarks) : ""), place: d.strOrigin || d.strDestination })) });
+  },
+  // Xpressbees and NimbusPost run the same API: sign in with the account's email and password, then ask.
+  xpressbees: (z, awb) => beesLike("https://shipment.xpressbees.com/api", "/shipments2/track/", z, awb, "Xpressbees"),
+  nimbuspost: (z, awb) => beesLike("https://api.nimbuspost.com/v1", "/shipments/track/", z, awb, "NimbusPost"),
+  ecom: async (z, awb) => {
+    const x = await ask(`https://plapi.ecomexpress.in/track_me/api/mawbd/?awb=${E(awb)}&username=${E(z.user)}&password=${E(z.secret)}`, {}, "text");
+    const field = (src, name) => {
+      const m = new RegExp(`<field[^>]*name="${name}"[^>]*>([^<]*)</field>`, "i").exec(src);
+      return m ? m[1].replace(/&amp;/g, "&").trim() : "";
+    };
+    const scans = [...x.matchAll(/<object[^>]*model="scan_stages"[^>]*>([\s\S]*?)<\/object>/gi)].map((m) => ({ at: when(field(m[1], "updated_on")), text: field(m[1], "status") || field(m[1], "reason_code"), place: field(m[1], "location_city") || field(m[1], "scan_location") || field(m[1], "location") }));
+    const say = field(x, "status") || field(x, "tracking_status");
+    if (!say && !scans.length) throw new TrackError(/auth|unauthori|invalid/i.test(x.slice(0, 400)) ? "Ecom Express refused the username and password." : "Ecom Express doesn't know that AWB number yet.");
+    return norm({ say, eta: field(x, "expected_date"), ev: scans });
+  },
+  shiprocket: async (z, awb) => {
+    const tok = (await ask("https://apiv2.shiprocket.in/v1/external/auth/login", post({ email: z.user, password: z.secret }))).token;
+    if (!tok) throw new TrackError("Shiprocket didn't accept the API user's email and password.");
+    const j = await ask(`https://apiv2.shiprocket.in/v1/external/courier/track/awb/${E(awb)}`, { headers: { Authorization: "Bearer " + tok, Accept: "application/json" } });
+    const d = j?.tracking_data || {};
+    if (d.track_status === 0 && !arr(d.shipment_track_activities).length && !arr(d.shipment_track).length) throw new TrackError(S(d.error, 160) || "Shiprocket has no scans for that AWB number yet.");
+    return norm({ say: arr(d.shipment_track)[0]?.current_status, eta: d.etd || arr(d.shipment_track)[0]?.edd, link: d.track_url, raw: j, ev: arr(d.shipment_track_activities).map((a) => ({ at: when(a.date), text: a["sr-status-label"] && a["sr-status-label"] !== "NA" ? a["sr-status-label"] : a.activity, place: a.location })) });
+  },
+  ithink: async (z, awb) => {
+    const j = await ask("https://api.ithinklogistics.com/api_v3/order/track.json", post({ data: { awb_number_list: awb, access_token: z.key, secret_key: z.secret } }));
+    const d = j?.data?.[awb] || Object.values(j?.data || {})[0];
+    if (!d || d.message && !d.scan_details && !d.current_status) throw new TrackError(S(d?.message || j?.html_message || j?.message, 160) || "iThink Logistics doesn't know that AWB number yet.");
+    return norm({ say: d.current_status, eta: d.expected_delivery_date, raw: j, ev: arr(d.scan_details).map((s) => ({ at: when(s.status_date_time || s.scan_date_time), text: s.status_remark && s.status_remark !== s.status ? `${s.status}: ${s.status_remark}` : s.status, place: s.status_location || s.scan_location })) });
+  },
+  clickpost: async (z, awb, courier) => {
+    const cp = slug("clickpost", z, courier) || S(z.account, 12);
+    if (!cp) throw new TrackError(`ClickPost needs its carrier number for this courier. Add it under Courier tracking \u2192 ClickPost \u2192 courier codes (for example ${courier}=5).`);
+    const j = await ask(`https://api.clickpost.in/api/v2/track-order/?username=${E(z.user)}&key=${E(z.key)}&waybill=${E(awb)}&cp_id=${E(cp)}`);
+    const r = j?.result?.[awb] || Object.values(j?.result || {})[0];
+    if (!r || r.valid === false) throw new TrackError(S(j?.meta?.message, 160) || "ClickPost doesn't know that AWB number yet.");
+    const one = (s) => ({ at: when(s.timestamp || s.created_at), text: s.clickpost_status_description || s.remark || s.status, place: s.location });
+    return norm({ say: r.latest_status?.clickpost_status_description || r.latest_status?.remark, eta: r.additional?.courier_partner_edd, raw: j, ev: arr(r.scans).map(one) });
+  },
+  aftership: async (z, awb, courier) => {
+    const H = { "as-api-key": z.key, Accept: "application/json" }, base = "https://api.aftership.com/tracking/2025-07/trackings", sl = slug("aftership", z, courier);
+    const find = async () => arr((await ask(`${base}?tracking_numbers=${E(awb)}`, { headers: H }))?.data?.trackings)[0];
+    let t = await find();
+    if (!t) {
+      await ask(base, post({ tracking_number: awb, ...sl ? { slug: sl } : {} }, H)).catch((e) => {
+        if (!/already/i.test(String(e?.message))) throw e;
+      });
+      t = await find();
+    }
+    if (!t) throw new TrackError("AfterShip has started following that parcel. Its scans show here in a few minutes.");
+    return norm({ say: t.subtag_message || t.tag, eta: t.courier_estimated_delivery_date?.estimated_delivery_date || t.aftership_estimated_delivery_date?.estimated_delivery_date || t.expected_delivery, link: t.courier_tracking_link, raw: t, ev: arr(t.checkpoints).map((c) => ({ at: when(c.checkpoint_time), text: c.message || c.subtag_message, place: c.location || [c.city, c.state].filter(Boolean).join(", ") })) });
+  },
+  trackingmore: async (z, awb, courier) => {
+    const H = { "Tracking-Api-Key": z.key, Accept: "application/json" }, base = "https://api.trackingmore.com/v4/trackings", sl = slug("trackingmore", z, courier);
+    const find = async () => arr((await ask(`${base}/get?tracking_numbers=${E(awb)}`, { headers: H }))?.data)[0];
+    let t = await find();
+    if (!t) {
+      if (!sl) throw new TrackError("TrackingMore needs its code for this courier. Add it under Courier tracking \u2192 TrackingMore \u2192 courier codes.");
+      await ask(base + "/create", post({ tracking_number: awb, courier_code: sl }, H)).catch((e) => {
+        if (!/exist/i.test(String(e?.message))) throw e;
+      });
+      t = await find();
+    }
+    if (!t) throw new TrackError("TrackingMore has started following that parcel. Its scans show here in a few minutes.");
+    const info = [...arr(t.destination_info?.trackinfo), ...arr(t.origin_info?.trackinfo)];
+    return norm({ say: t.latest_event || t.delivery_status, eta: t.scheduled_delivery_date, raw: t, ev: info.map((c) => ({ at: when(c.checkpoint_date), text: c.tracking_detail, place: c.location })) });
+  },
+  ship24: async (z, awb) => {
+    const j = await ask("https://api.ship24.com/public/v1/trackers/track", post({ trackingNumber: awb }, { Authorization: "Bearer " + z.key }));
+    const t = arr(j?.data?.trackings)[0];
+    if (!t) throw new TrackError("Ship24 doesn't know that tracking number yet.");
+    return norm({ say: arr(t.events)[0]?.status || t.shipment?.statusMilestone, eta: t.shipment?.delivery?.estimatedDeliveryDate, raw: t, ev: arr(t.events).map((e) => ({ at: when(e.occurrenceDatetime || e.datetime), text: e.status, place: e.location })) });
+  },
+  track17: async (z, awb) => {
+    const H = { "17token": z.key }, base = "https://api.17track.net/track/v2.2";
+    const get = async () => arr((await ask(base + "/gettrackinfo", post([{ number: awb }], H)))?.data?.accepted)[0];
+    let t = await get();
+    if (!t) {
+      await ask(base + "/register", post([{ number: awb }], H));
+      t = await get();
+    }
+    const info = t?.track_info;
+    if (!info) throw new TrackError("17TRACK has started following that parcel. Its scans show here in a few minutes.");
+    return norm({ say: info.latest_event?.description || info.latest_status?.status, eta: info.time_metrics?.estimated_delivery_date?.to, raw: info, ev: arr(info.tracking?.providers).flatMap((p) => arr(p.events)).map((e) => ({ at: when(e.time_iso || e.time_utc), text: e.description, place: e.location })) });
+  },
+  // The shop's own choice: any address that answers with JSON. {awb} and {courier} in the address are filled in; an
+  // optional header ("Name: value") carries the key. The scans are found wherever they sit in the answer.
+  custom: async (z, awb, courier) => {
+    const url = String(z.url || "").replace(/\{awb\}/g, E(awb)).replace(/\{courier\}/g, E(courier));
+    if (!/^https:\/\//.test(url)) throw new TrackError("The tracking address must start with https://.");
+    const headers = { Accept: "application/json" }, h = /^([\w-]{1,60})\s*:\s*(.*)$/.exec(String(z.hdr || "").trim());
+    if (h) headers[h[1]] = h[2].replace(/\{key\}/g, String(z.key || ""));
+    else if (z.key) headers.Authorization = "Bearer " + z.key;
+    const j = await ask(url, { headers });
+    const deep = (re) => {
+      let out = "";
+      const walk = (v, d) => {
+        if (out || !v || typeof v !== "object" || d > 4) return;
+        for (const [k, x] of Object.entries(v)) {
+          if (out) return;
+          if (re.test(k) && x != null && typeof x !== "object" && String(x).trim()) out = String(x);
+          else if (x && typeof x === "object" && !Array.isArray(x)) walk(x, d + 1);
+        }
+      };
+      walk(j, 0);
+      return out;
+    };
+    const live = norm({ say: deep(/^(current_?status|latest_?status|status|shipment_?status|state)$/i), eta: deep(/^(edd|eta|etd|expected_?delivery(_?date)?|estimated_?delivery(_?date)?)$/i), link: deep(/^(track(ing)?_?(url|link))$/i), raw: j });
+    if (live.st === "unknown" && !live.ev.length) throw new TrackError("That address answered, but no status or scans could be found in its answer.");
+    return live;
+  }
+};
+async function beesLike(base, path, z, awb, name) {
+  const lg = await ask(base + "/users/login", post({ email: z.user, password: z.secret })), tok = typeof lg?.data === "string" ? lg.data : lg?.data?.token || lg?.token;
+  if (!tok) throw new TrackError(`${name} didn't accept the email and password.`);
+  const j = await ask(base + path + E(awb), { headers: { Authorization: "Bearer " + tok, Accept: "application/json" } });
+  const d = j?.data;
+  if (!d || j.status === false) throw new TrackError(S(j?.message, 160) || `${name} doesn't know that AWB number yet.`);
+  return norm({ say: d.status, eta: d.edd || d.expected_delivery_date, raw: j, ev: arr(d.history).map((h) => ({ at: when(h.event_time), text: h.message || h.status_code, place: h.location })) });
+}
+function pickTracker(saved, courier) {
+  const ok = (id) => trackerReady(id, saved[id]);
+  if (TRACKERS[courier] && ok(courier)) return courier;
+  for (const kind of ["multi", "custom"]) for (const id of Object.keys(TRACKERS)) if (TRACKERS[id].kind === kind && ok(id)) return id;
+  const aggs = Object.keys(TRACKERS).filter((id) => TRACKERS[id].kind === "agg" && ok(id));
+  return aggs.length === 1 ? aggs[0] : "";
+}
+async function trackLive(id, z, awb, courier) {
+  const f = ASK[id];
+  if (!f) throw new TrackError("Unknown tracking service.");
+  const n = String(awb || "").trim();
+  if (!/^[A-Za-z0-9][A-Za-z0-9 _-]{3,39}$/.test(n)) throw new TrackError("That doesn't look like a tracking number.");
+  try {
+    return await f(z, n, courier);
+  } catch (e) {
+    if (e instanceof TrackError) throw e;
+    throw new TrackError("The tracking service's answer couldn't be read.");
+  }
+}
+
 // worker/db-worker.ts
 var V = CFDB_VERSION;
 var CHUNK = 9e5;
@@ -378,8 +721,8 @@ var siteName = (c, site) => oneLine(String(c?.brand?.name || c?.brand?.logoText 
 async function notifyEnquiry(env, site, data, page) {
   const c = await siteContent(env, site);
   if (!c) return "";
-  const F = c?.contact?.form || {}, E = c?.emails && typeof c.emails === "object" ? c.emails : {};
-  const wantOwner = F.notify === true || F.notifyAsk !== 1, wantReply = E.reply?.on === true && EMAIL_RE.test(data.email || "");
+  const F = c?.contact?.form || {}, E2 = c?.emails && typeof c.emails === "object" ? c.emails : {};
+  const wantOwner = F.notify === true || F.notifyAsk !== 1, wantReply = E2.reply?.on === true && EMAIL_RE.test(data.email || "");
   if (!wantOwner && !wantReply) return "";
   if (!env.RESEND_API_KEY || !env.MAIL_FROM) return wantOwner ? "Not emailed: email (Resend) isn't set up on this site's database." : "";
   const since = new Date(Date.now() - 36e5).toISOString();
@@ -398,8 +741,8 @@ async function notifyEnquiry(env, site, data, page) {
   const jobs = [];
   if (wantOwner && owners.length) {
     const subject = data.order_no ? oneLine(`New order ${data.order_no}${data.total ? " (" + data.total + ")" : ""} from ${vars.name || "your website"}`).slice(0, 150) : oneLine(fill(String(F.notifySubject || "New enquiry from {name}"), { ...vars, name: vars.name || "your website" })).slice(0, 150) || "New enquiry";
-    const intro = fill(String(E.enquiry?.intro || "New enquiry from the {site} website."), vars);
-    const foot = fill(String(E.enquiry?.footer || "It is also saved under Enquiries in the site's admin page."), vars) + (EMAIL_RE.test(data.email || "") ? " Reply to this email to answer the visitor." : "");
+    const intro = fill(String(E2.enquiry?.intro || "New enquiry from the {site} website."), vars);
+    const foot = fill(String(E2.enquiry?.footer || "It is also saved under Enquiries in the site's admin page."), vars) + (EMAIL_RE.test(data.email || "") ? " Reply to this email to answer the visitor." : "");
     jobs.push(sendMail(env, owners, subject, WRAP(paras(intro) + table + paras(foot, "margin:0 0 8px;color:#667;font-size:13px")), EMAIL_RE.test(data.email || "") ? data.email : void 0).then(() => {
       said = "Emailed to " + owners.join(", ") + ".";
     }, (e) => {
@@ -410,9 +753,9 @@ async function notifyEnquiry(env, site, data, page) {
     const mine = await env.DB.prepare("select count(*) n from enquiries where site = ? and created_at > ? and instr(lower(data), ?) > 0").bind(site, since, JSON.stringify(String(data.email).toLowerCase())).first();
     if ((mine?.n || 0) <= 3) {
       const v2 = { ...vars, name: vars.name || "there" };
-      const subject = oneLine(fill(String(E.reply.subject || "Thank you for contacting {site}"), v2)).slice(0, 150) || "Thank you";
-      const body = fill(String(E.reply.message || "Hi {name},\n\nThank you for your message. We have received it and will get back to you soon.\n\n{site}"), v2);
-      const copy = E.reply.copy === true ? `<p style="margin:14px 0 6px;color:#667;font-size:13px">${hesc(String(E.reply.copyLabel || "What you sent us"))}</p>${table}` : "";
+      const subject = oneLine(fill(String(E2.reply.subject || "Thank you for contacting {site}"), v2)).slice(0, 150) || "Thank you";
+      const body = fill(String(E2.reply.message || "Hi {name},\n\nThank you for your message. We have received it and will get back to you soon.\n\n{site}"), v2);
+      const copy = E2.reply.copy === true ? `<p style="margin:14px 0 6px;color:#667;font-size:13px">${hesc(String(E2.reply.copyLabel || "What you sent us"))}</p>${table}` : "";
       jobs.push(sendMail(env, String(data.email).trim(), subject, WRAP(paras(body) + copy), owners[0] || (EMAIL_RE.test(c?.contact?.email || "") ? c.contact.email : void 0)));
     }
   }
@@ -502,10 +845,10 @@ async function googleReviews(q) {
       if (!id) return { error: `Google found no place for "${text}". Try the name with its area and city.` };
     }
     const d = await placesCall(key, `https://places.googleapis.com/v1/places/${encodeURIComponent(id)}`, null, "id,displayName,formattedAddress,rating,userRatingCount,reviews,googleMapsUri");
-    const S = (v, n) => String(v ?? "").trim().slice(0, n);
+    const S2 = (v, n) => String(v ?? "").trim().slice(0, n);
     return {
-      place: { id: d.id, name: S(d.displayName?.text, 120), address: S(d.formattedAddress, 200), rating: +d.rating || 0, count: +d.userRatingCount || 0, url: S(d.googleMapsUri, 300) },
-      reviews: (d.reviews || []).map((r) => ({ rating: +r.rating || 0, text: S(r.text?.text || r.originalText?.text, 1500), author: S(r.authorAttribution?.displayName, 80), authorUrl: S(r.authorAttribution?.uri, 300), when: S(r.relativePublishTimeDescription, 40), time: S(r.publishTime, 40) })).filter((r) => r.text && r.author)
+      place: { id: d.id, name: S2(d.displayName?.text, 120), address: S2(d.formattedAddress, 200), rating: +d.rating || 0, count: +d.userRatingCount || 0, url: S2(d.googleMapsUri, 300) },
+      reviews: (d.reviews || []).map((r) => ({ rating: +r.rating || 0, text: S2(r.text?.text || r.originalText?.text, 1500), author: S2(r.authorAttribution?.displayName, 80), authorUrl: S2(r.authorAttribution?.uri, 300), when: S2(r.relativePublishTimeDescription, 40), time: S2(r.publishTime, 40) })).filter((r) => r.text && r.author)
     };
   } catch (e) {
     return { error: e?.message || String(e) };
@@ -513,12 +856,12 @@ async function googleReviews(q) {
 }
 var VISION = ["@cf/meta/llama-4-scout-17b-16e-instruct", "@cf/meta/llama-3.2-11b-vision-instruct"];
 async function readImage(env, dataUri) {
-  const ask = "Transcribe ALL the text in this product pamphlet image exactly as printed: product names, prices, specifications, features, model numbers, contact details. Keep tables as 'label: value' lines. Output only the text.";
+  const ask2 = "Transcribe ALL the text in this product pamphlet image exactly as printed: product names, prices, specifications, features, model numbers, contact details. Keep tables as 'label: value' lines. Output only the text.";
   let last;
   for (const model of VISION) {
     try {
       if (model.includes("3.2")) await env.AI.run(model, { prompt: "agree" }).catch(() => null);
-      const r = await env.AI.run(model, { messages: [{ role: "user", content: [{ type: "text", text: ask }, { type: "image_url", image_url: { url: dataUri } }] }], max_tokens: 2048 });
+      const r = await env.AI.run(model, { messages: [{ role: "user", content: [{ type: "text", text: ask2 }, { type: "image_url", image_url: { url: dataUri } }] }], max_tokens: 2048 });
       const t = String(r?.response ?? "").trim();
       if (t) return t;
     } catch (e) {
@@ -626,15 +969,15 @@ async function readPamphlet(env, q) {
   const sys = `You turn a business's own product pamphlet into catalogue entries. Return ONLY JSON shaped like ${PRODUCT_KEYS}. One entry per distinct product or model. Rules: use only what the pamphlet says; never invent prices, numbers, ratings, certifications or features; copy prices, model numbers and specification values exactly as printed; leave a field empty ("" or []) when the pamphlet doesn't say; category is a short group name the pamphlet suggests (or ""); summary is one or two plain sentences; features are short points; specs are label/value pairs from tables or lists; page is the page number (from the --- PAGE n --- markers) where the product appears, or 1. Skip company contact details, terms and general marketing text.`;
   const model = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
   const user = (q.hint ? "Note from the owner: " + String(q.hint).slice(0, 500) + "\n\n" : "") + "PAMPHLET TEXT:\n" + all;
-  const S = (v, n = 2e3) => typeof v === "string" || typeof v === "number" ? String(v).trim().slice(0, n) : "";
+  const S2 = (v, n = 2e3) => typeof v === "string" || typeof v === "number" ? String(v).trim().slice(0, n) : "";
   const clean = (list) => list.map((p) => ({
-    name: S(p?.name ?? p?.product_name ?? p?.productName ?? p?.product ?? p?.model ?? p?.title, 120),
-    category: S(p?.category, 60),
-    summary: S(p?.summary ?? p?.description, 400),
-    price: S(p?.price, 60),
-    features: (Array.isArray(p?.features) ? p.features : []).map((x) => S(x, 160)).filter(Boolean).slice(0, 12),
-    details: S(p?.details, 3e3),
-    specs: specList(p?.specs ?? p?.specifications).map((x) => ({ label: S(x?.label, 80), value: S(x?.value, 200) })).filter((x) => x.label || x.value).slice(0, 30),
+    name: S2(p?.name ?? p?.product_name ?? p?.productName ?? p?.product ?? p?.model ?? p?.title, 120),
+    category: S2(p?.category, 60),
+    summary: S2(p?.summary ?? p?.description, 400),
+    price: S2(p?.price, 60),
+    features: (Array.isArray(p?.features) ? p.features : []).map((x) => S2(x, 160)).filter(Boolean).slice(0, 12),
+    details: S2(p?.details, 3e3),
+    specs: specList(p?.specs ?? p?.specifications).map((x) => ({ label: S2(x?.label, 80), value: S2(x?.value, 200) })).filter((x) => x.label || x.value).slice(0, 30),
     page: Math.max(1, Math.min(99, parseInt(p?.page, 10) || 1))
   })).filter((p) => p.name).slice(0, 60);
   let products = [], guessed = false;
@@ -663,7 +1006,7 @@ async function translateTexts(env, q) {
   if (!/^[\p{L} ()-]{2,40}$/u.test(to) || !texts.length) return { error: "Choose a language and some text." };
   const sys = `You translate the text of a small business website from ${from} into ${to}, written in ${to}'s own script. Rules: translate naturally, the way a good ${to} website for Indian customers reads, not word for word; keep brand and product names, people's names, numbers, prices, units, emails, web addresses and emoji exactly as they are; keep every line break and every marker exactly where it is (**bold**, ==highlight==, __underline__, {accent:\u2026}, list dashes, #, | table bars, HTML tags, {placeholders} in curly brackets); short labels stay short; never add notes or explanations. You receive a JSON object {"texts": {"1": "\u2026", "2": "\u2026"}} and answer with only a JSON object {"t": {"1": "\u2026", "2": "\u2026"}} with the same numbers, each holding the translation of the text with that number.`;
   let failed = "";
-  const ask = async (idx) => {
+  const ask2 = async (idx) => {
     const got = /* @__PURE__ */ new Map();
     try {
       const r = await env.AI.run("@cf/meta/llama-3.3-70b-instruct-fp8-fast", { messages: [{ role: "system", content: sys }, { role: "user", content: JSON.stringify({ texts: Object.fromEntries(idx.map((i) => [String(i + 1), texts[i]])) }) }], max_tokens: 6e3, temperature: 0.2, response_format: { type: "json_object" } });
@@ -701,11 +1044,11 @@ async function translateTexts(env, q) {
     return got;
   };
   const all = texts.map((_, i) => i), half = Math.ceil(all.length / 2);
-  const first = await Promise.all((all.length > 6 ? [all.slice(0, half), all.slice(half)] : [all]).map(ask));
+  const first = await Promise.all((all.length > 6 ? [all.slice(0, half), all.slice(half)] : [all]).map(ask2));
   const done = /* @__PURE__ */ new Map();
   for (const m of first) for (const [k, v] of m) done.set(k, v);
   const missing = all.filter((i) => !done.has(i));
-  if (missing.length) for (const [k, v] of await ask(missing)) done.set(k, v);
+  if (missing.length) for (const [k, v] of await ask2(missing)) done.set(k, v);
   if (!done.size && failed) return { error: /neuron|quota|limit|429|capacity/i.test(failed) ? "Today's free AI allowance on this Cloudflare account is used up. Press Translate again after it resets (midnight UTC), or type translations in." : "The translator didn't answer (" + failed.slice(0, 120) + ")." };
   return { t: all.map((i) => done.get(i) ?? null) };
 }
@@ -737,6 +1080,8 @@ var SETTINGS = {
   // SMS (text messages) through the owner's own account with MSG91 or Twilio: codes for signing in and for checkout.
   sms: { secret: ["key"], text: ["provider", "tpl", "varName", "sender", "sid", "from", "text", "cc", "phones", "chan", "email"], flags: ["on", "login", "orderOtp"] }
 };
+for (const id of Object.keys(TRACKERS)) SETTINGS["tk_" + id] = TRACKER_FIELDS;
+SETTINGS.ship = { secret: [], text: [], flags: ["manual", "quiet"] };
 async function aesKey(env) {
   return crypto.subtle.importKey("raw", await crypto.subtle.digest("SHA-256", enc.encode("settings:" + env.SECRET)), "AES-GCM", false, ["encrypt", "decrypt"]);
 }
@@ -765,12 +1110,74 @@ async function putSetting(env, scope, name, value) {
   for (let i = 0; i < all.length; i += 8e3) s += String.fromCharCode(...all.subarray(i, i + 8e3));
   await env.DB.prepare("insert into settings (scope, name, value, updated_at) values (?, ?, ?, ?) on conflict (scope, name) do update set value = excluded.value, updated_at = excluded.updated_at").bind(scope, name, btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""), (/* @__PURE__ */ new Date()).toISOString()).run();
 }
+var trackOf = (d) => {
+  try {
+    const t = JSON.parse(String(d?._track || ""));
+    return t && (t.awb || t.url) ? t : null;
+  } catch {
+    return null;
+  }
+};
+var trackShown = (t) => t ? { c: String(t.c || "other"), name: t.c === "other" || !COURIERS[t.c] ? String(t.name || "Courier") : courierName(t.c), awb: String(t.awb || ""), link: /^https:\/\//.test(String(t.url || "")) ? String(t.url) : courierLink(t.c, String(t.awb || "")) } : null;
+async function shipSaved(env, site) {
+  await ensure(env);
+  const o = {};
+  for (const r of (await env.DB.prepare("select name from settings where scope = ? and name like 'tk!_%' escape '!'").bind("site:" + site).all()).results || []) {
+    const id = String(r.name).slice(3);
+    if (TRACKERS[id]) {
+      const z = await getSetting(env, "site:" + site, r.name).catch(() => null);
+      if (z) o[id] = z;
+    }
+  }
+  return o;
+}
+var SHIP_OPEN = ["new", "read", "accepted", "preparing", "ready"];
+async function shipLive(env, site, rowId, d, status, force = false) {
+  const t = trackOf(d);
+  if (!t || !t.awb) return { live: null, why: "", status };
+  let had = null;
+  try {
+    had = JSON.parse(String(d._trk || ""));
+  } catch {
+  }
+  if (had && (had.st === "delivered" || !force && Date.now() - (+had.t || 0) < 20 * 6e4)) return { live: had, why: "", status };
+  if (!force && !had && +d._trk_bad > Date.now() - 5 * 6e4) return { live: null, why: String(d._trk_why || ""), status };
+  const saved = await shipSaved(env, site), id = pickTracker(saved, String(t.c || ""));
+  if (!id) return { live: had, why: Object.keys(saved).length ? "No tracking connection covers this courier." : "", status };
+  let live;
+  try {
+    live = await trackLive(id, saved[id], String(t.awb), String(t.c || ""));
+  } catch (e) {
+    const why = e instanceof TrackError ? e.message : "The tracking service couldn't be read.";
+    if (!had) await env.DB.prepare("update enquiries set data = ? where id = ? and site = ?").bind(JSON.stringify({ ...d, _trk_bad: String(Date.now()), _trk_why: why }), rowId, site).run().catch(() => {
+    });
+    return { live: had, why, status };
+  }
+  const keep = { ...live, ev: live.ev.slice(0, 25), t: Date.now(), via: id }, nd = { ...d, _trk: JSON.stringify(keep) };
+  delete nd._trk_bad;
+  delete nd._trk_why;
+  const opt = await getSetting(env, "site:" + site, "ship").catch(() => null);
+  let next = status;
+  if (!opt?.manual) {
+    if (live.st === "delivered" && [...SHIP_OPEN, "out"].includes(status)) next = "done";
+    else if (["picked", "transit", "out"].includes(live.st) && SHIP_OPEN.includes(status)) next = "out";
+  }
+  await env.DB.prepare("update enquiries set data = ?, status = ? where id = ? and site = ?").bind(JSON.stringify(nd), next, rowId, site).run();
+  return { live: keep, why: "", status: next };
+}
+async function shippedMail(env, site, d) {
+  const to = emailKey(d.email), t = trackShown(trackOf(d));
+  if (!to || !t || !env.RESEND_API_KEY || !env.MAIL_FROM) return "";
+  const c = await siteContent(env, site).catch(() => null), name = siteName(c, site);
+  await sendMail(env, to, `Your order ${oneLine(String(d.order_no))} has shipped`.slice(0, 150), WRAP(`<h2 style="margin:0 0 12px;font-size:20px">Your order is on its way</h2>${paras(`Hi ${oneLine(String(d.name || "there"))}, your order ${oneLine(String(d.order_no))} from ${name} has shipped with ${t.name}.${t.awb ? "\nTracking number: " + t.awb : ""}`)}${t.link ? `<p style="margin:0 0 12px"><a href="${hesc(t.link)}" style="display:inline-block;background:#111;color:#fff;text-decoration:none;padding:10px 16px;border-radius:8px">Track your parcel</a></p>` : ""}${paras("Thank you for shopping with us.", "margin:0 0 8px;color:#667;font-size:13px")}`));
+  return "Shipping email sent to " + to;
+}
 function maskSetting(name, v) {
-  const S = SETTINGS[name], o = {};
+  const S2 = SETTINGS[name], o = {};
   if (!v) return null;
-  for (const k of S.text) o[k] = String(v[k] ?? "");
-  for (const k of S.flags) o[k] = !!v[k];
-  for (const k of S.secret) o[k] = !!v[k];
+  for (const k of S2.text) o[k] = String(v[k] ?? "");
+  for (const k of S2.flags) o[k] = !!v[k];
+  for (const k of S2.secret) o[k] = !!v[k];
   return o;
 }
 async function anySetting(env, name) {
@@ -1024,9 +1431,9 @@ var loyOf = (c) => {
   return { on: !!L.on, earn: Math.max(0, +L.earn || 0), worth: Math.max(0, +L.worth || 0), min: Math.max(0, Math.floor(+L.min || 0)), maxPct: Math.max(0, Math.min(100, L.maxPct == null || L.maxPct === "" ? 50 : +L.maxPct || 0)) };
 };
 function pointsFor(c, want, bal, amount) {
-  const L = loyOf(c), ask = Math.min(Math.floor(+want || 0), Math.floor(bal || 0));
-  if (!L.on || !(L.worth > 0) || ask <= 0 || ask < L.min || !(amount > 0)) return { points: 0, off: 0 };
-  const points = Math.max(0, Math.min(ask, Math.floor(amount * L.maxPct / 100 / L.worth)));
+  const L = loyOf(c), ask2 = Math.min(Math.floor(+want || 0), Math.floor(bal || 0));
+  if (!L.on || !(L.worth > 0) || ask2 <= 0 || ask2 < L.min || !(amount > 0)) return { points: 0, off: 0 };
+  const points = Math.max(0, Math.min(ask2, Math.floor(amount * L.maxPct / 100 / L.worth)));
   return { points, off: Math.round(points * L.worth * 100) / 100 };
 }
 function restBill(c, q) {
@@ -1277,10 +1684,10 @@ async function posSend(env, site, z, c, q, data, origin) {
 var POS_STATUS = { "-1": "cancelled", "1": "accepted", "2": "accepted", "3": "accepted", "4": "out", "5": "ready", "10": "done" };
 function rchoices(d) {
   const ok = (v) => v && String(v.label || "").trim() && !isNaN(rnum(v.price));
-  const S = (d.variants || []).filter(ok), K = d.kindsOn ? (Array.isArray(d.kinds) ? d.kinds : []).filter(ok) : [];
+  const S2 = (d.variants || []).filter(ok), K = d.kindsOn ? (Array.isArray(d.kinds) ? d.kinds : []).filter(ok) : [];
   if (!K.length) return (d.variants || []).filter((v) => v && v.label && !isNaN(rnum(v.price))).map((v) => ({ label: String(v.label), price: rnum(v.price), posId: String(v.posId || "").trim() }));
-  const s0 = S.length ? rnum(S[0].price) : 0, t = (v) => String(v.label).trim();
-  return S.length ? K.flatMap((k) => S.map((v) => ({ label: t(k) + " \xB7 " + t(v), price: rnum(k.price) + rnum(v.price) - s0, posId: String(k.posId || v.posId || "").trim() }))) : K.map((k) => ({ label: t(k), price: rnum(k.price), posId: String(k.posId || "").trim() }));
+  const s0 = S2.length ? rnum(S2[0].price) : 0, t = (v) => String(v.label).trim();
+  return S2.length ? K.flatMap((k) => S2.map((v) => ({ label: t(k) + " \xB7 " + t(v), price: rnum(k.price) + rnum(v.price) - s0, posId: String(k.posId || v.posId || "").trim() }))) : K.map((k) => ({ label: t(k), price: rnum(k.price), posId: String(k.posId || "").trim() }));
 }
 function kindPrice(p, opt) {
   const K = p?.kindsOn ? (Array.isArray(p.kinds) ? p.kinds : []).filter((k2) => k2 && String(k2.label || "").trim() && isFinite(Number(k2.price)) && Number(k2.price) >= 0) : [];
@@ -1289,10 +1696,10 @@ function kindPrice(p, opt) {
   return k ? Number(k.price) : NaN;
 }
 function shopBill(c, q) {
-  const S = c?.settings || {}, P = new Map((Array.isArray(c?.products) ? c.products : []).filter((p) => p && p.id).map((p) => [String(p.id), p]));
+  const S2 = c?.settings || {}, P = new Map((Array.isArray(c?.products) ? c.products : []).filter((p) => p && p.id).map((p) => [String(p.id), p]));
   const lines = Array.isArray(q?.items) ? q.items.slice(0, 100) : [];
   if (!lines.length) return { error: "The cart is empty." };
-  const max = Math.max(1, Number(S.maxQty) || 10);
+  const max = Math.max(1, Number(S2.maxQty) || 10);
   let sub = 0;
   for (const l of lines) {
     const p = P.get(String(l?.id || "")), price = kindPrice(p, l?.opt);
@@ -1315,9 +1722,9 @@ function shopBill(c, q) {
     } else if (H.rest === "no") return { error: "We don't deliver to that PIN code." };
     else fee = num(H.restFee);
   }
-  const over = freeOver != null ? freeOver : Number(S.freeShippingOver), free = over > 0 && sub >= over;
+  const over = freeOver != null ? freeOver : Number(S2.freeShippingOver), free = over > 0 && sub >= over;
   const pt = pointsFor(c, q.points, +q._bal || 0, sub);
-  const ship = free ? 0 : fee != null ? fee : Number(S.shippingFee) || 0, pct = Number(S.taxPercent) || 0, taxAdd = pct && !S.taxIncluded ? Math.round((sub - pt.off) * pct) / 100 : 0;
+  const ship = free ? 0 : fee != null ? fee : Number(S2.shippingFee) || 0, pct = Number(S2.taxPercent) || 0, taxAdd = pct && !S2.taxIncluded ? Math.round((sub - pt.off) * pct) / 100 : 0;
   return { total: Math.round((sub - pt.off + ship + taxAdd) * 100) / 100, points: pt.points, pointsOff: pt.off, net: Math.round((sub - pt.off) * 100) / 100 };
 }
 var PG = { rz: { name: "Razorpay", key: "razorpay", inr: true }, cf: { name: "Cashfree", key: "cashfree", inr: true }, pe: { name: "PhonePe", key: "phonepe", inr: true }, st: { name: "Stripe", key: "stripe" }, pp: { name: "PayPal", key: "paypal" } };
@@ -1521,7 +1928,7 @@ async function writeSite(env, q) {
   const user = `${notes ? "About " + brand + " (from the owner, use this): " + notes + "\n\n" : ""}REFERENCE OUTLINE (for topics only, do not copy):
 ${src.slice(0, 7e3)}`;
   const model = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
-  const ask = async (messages) => {
+  const ask2 = async (messages) => {
     const r = await env.AI.run(model, { messages, max_tokens: 3e3, temperature: 0.8, response_format: { type: "json_object" } });
     const t = typeof r?.response === "string" ? r.response : JSON.stringify(r?.response ?? r);
     try {
@@ -1534,14 +1941,14 @@ ${src.slice(0, 7e3)}`;
   };
   let brief;
   try {
-    brief = await ask([{ role: "system", content: sys }, { role: "user", content: user }]);
+    brief = await ask2([{ role: "system", content: sys }, { role: "user", content: user }]);
   } catch (e) {
     return { error: /neuron|quota|limit|429/i.test(String(e?.message || e)) ? "Today's free AI allowance is used up. Try again tomorrow." : "Couldn't write the text: " + (e?.message || e) };
   }
   let flagged = copiedBits(brief, src);
   if (flagged.length) {
     try {
-      const again = await ask([
+      const again = await ask2([
         { role: "system", content: sys },
         { role: "user", content: user },
         { role: "assistant", content: JSON.stringify(brief) },
@@ -1590,15 +1997,15 @@ var db_worker_default = {
             if (T.footer) footer = fill(String(T.footer), vars);
           }
         } else if (typeof forStudio === "string" && /^[a-z0-9][a-z0-9-]{0,59}$/.test(forStudio) && await env.DB.prepare("select 1 from members where email = ? and scope = ? limit 1").bind(email2, "studio:" + forStudio).first()) {
-          let E = null;
+          let E2 = null;
           try {
             const f = await readFile(env, "studio:" + forStudio, "public/emails.json");
-            if (f) E = JSON.parse(new TextDecoder().decode(f.bytes));
+            if (f) E2 = JSON.parse(new TextDecoder().decode(f.bytes));
           } catch {
           }
-          const T = E?.signin;
+          const T = E2?.signin;
           if (T && typeof T === "object") {
-            const nm = oneLine(String(E.name || env.NAME || "the Studio")).slice(0, 80), vars = { studio: nm, site: nm, email: email2 };
+            const nm = oneLine(String(E2.name || env.NAME || "the Studio")).slice(0, 80), vars = { studio: nm, site: nm, email: email2 };
             if (T.subject) {
               subject = oneLine(fill(String(T.subject), vars)).slice(0, 150) || subject;
               heading = subject;
@@ -1854,7 +2261,7 @@ var db_worker_default = {
               items = JSON.parse(String(d._items || "[]")).slice(0, 40);
             } catch {
             }
-            orders.push({ no: String(d.order_no), at: r.created_at, total: String(d.total || ""), status: String(r.status || "new"), mode: String(d.mode || ""), paid: d._paid === "yes", pay: String(d.payment || d.pay || ""), address: String(d.address || ""), name: String(d.name || ""), points: String(d._points || ""), items, text: String(d.items || d.order || d.message || "").slice(0, 2e3) });
+            orders.push({ no: String(d.order_no), at: r.created_at, total: String(d.total || ""), status: String(r.status || "new"), mode: String(d.mode || ""), paid: d._paid === "yes", pay: String(d.payment || d.pay || ""), address: String(d.address || ""), name: String(d.name || ""), points: String(d._points || ""), ...trackOf(d) ? { track: trackShown(trackOf(d)) } : {}, items, text: String(d.items || d.order || d.message || "").slice(0, 2e3) });
           }
         }
         const L = loyOf(sc);
@@ -1999,12 +2406,53 @@ var db_worker_default = {
           }
         });
         if (!hit) return err(404, "Not found.");
-        let paid = "";
+        let paid = "", track = null;
         try {
-          paid = String(JSON.parse(hit.data)._paid || "");
+          const hd = JSON.parse(hit.data);
+          paid = String(hd._paid || "");
+          track = trackShown(trackOf(hd));
         } catch {
         }
-        return json({ status: hit.status, paid });
+        return json({ status: hit.status, paid, ...track ? { track } : {} });
+      }
+      if (/^\/track\/[a-z0-9][a-z0-9-]{0,59}$/.test(p) && req.method === "POST") {
+        const site = p.split("/")[2], b = await req.json().catch(() => ({})), no = String(b.no || "").trim().toUpperCase();
+        if (!/^[A-Z0-9][A-Z0-9-]{3,29}$/.test(no)) return err(404, "We couldn't find that order. Check the order number.");
+        const byKey = /^[a-f0-9]{16,64}$/.test(String(b.k || ""));
+        if (!byKey) {
+          const now = Date.now(), k = "trk:" + site + ":" + Math.floor(now / 36e5);
+          const n = await env.DB.prepare("select tries from otps where k = ?").bind(k).first();
+          if ((n?.tries || 0) >= 400) return err(429, "Too many lookups just now. Please try again later.");
+          await env.DB.prepare("insert into otps (k, hash, expires, tries, sent) values (?, '', ?, 1, ?) on conflict (k) do update set tries = tries + 1").bind(k, now + 2 * 36e5, now).run();
+        }
+        const rows = (await env.DB.prepare("select id, status, data, created_at from enquiries where site = ? and data like ? order by id desc limit 5").bind(site, `%"order_no":"${no}"%`).all()).results || [];
+        let cust = "";
+        if (b.key && await custOk(env, site, String(b.key), b.pass)) cust = String(b.key);
+        const same = (d, c) => {
+          const e = emailKey(c);
+          if (e) return e === emailKey(d.email);
+          const a = String(c || "").replace(/\D/g, ""), z = String(d.phone || "").replace(/\D/g, "");
+          return a.length >= 8 && z.length >= 8 && a.slice(-10) === z.slice(-10);
+        };
+        let hit = null, hd = null;
+        for (const r of rows) {
+          let d;
+          try {
+            d = JSON.parse(r.data);
+          } catch {
+            continue;
+          }
+          if (d.order_no !== no) continue;
+          if (byKey && d.okey === b.k || cust && same(d, cust.includes("@") ? cust : "+" + cust) || b.contact && same(d, String(b.contact))) {
+            hit = r;
+            hd = d;
+            break;
+          }
+        }
+        if (!hit) return err(404, "We couldn't find that order. Check the order number and the mobile number or email you ordered with.");
+        const got = await shipLive(env, site, hit.id, hd, hit.status).catch(() => ({ live: null, why: "", status: hit.status }));
+        const L = got.live;
+        return json({ no, at: hit.created_at, status: got.status, total: String(hd.total || ""), paid: hd._paid === "yes", track: trackShown(trackOf(hd)), live: L ? { st: L.st, label: TRACK_STATES[L.st] || L.say, say: L.say, eta: L.eta, link: L.link, ev: L.ev, at: L.t } : null });
       }
       if (p.startsWith("/enquire/") && req.method === "POST") {
         const site = p.split("/")[2];
@@ -2228,8 +2676,18 @@ var db_worker_default = {
           for (const n of Object.keys(SETTINGS)) o[n] = maskSetting(n, await getSetting(env, scope, n));
           return json(o);
         }
-        const b = await req.json(), name = String(b.name || ""), S = SETTINGS[name];
-        if (!S) return err(400, "Unknown connection.");
+        const b = await req.json(), name = String(b.name || ""), S2 = SETTINGS[name];
+        if (!S2) return err(400, "Unknown connection.");
+        if (p === "/set/test" && name.startsWith("tk_")) {
+          const id = name.slice(3), z = await getSetting(env, scope, name);
+          if (!trackerReady(id, { ...z, on: true })) return json({ error: "Fill in the boxes and press Save first." });
+          try {
+            const live = await trackLive(id, z, String(b.awb || ""), String(b.courier || (TRACKERS[id].kind === "courier" ? id : "other")));
+            return json({ ok: true, live: { st: live.st, label: TRACK_STATES[live.st] || live.say, say: live.say, eta: live.eta, ev: live.ev.slice(0, 5), n: live.ev.length } });
+          } catch (e) {
+            return json({ error: e instanceof TrackError ? e.message : "The tracking service's answer couldn't be read." });
+          }
+        }
         if (p === "/set/test") {
           if (name !== "ai") return err(400, "Nothing to test.");
           const c = await getSetting(env, scope, "ai");
@@ -2246,10 +2704,11 @@ var db_worker_default = {
           return json({ ok: true });
         }
         const old = await getSetting(env, scope, name) || {}, v = {};
-        for (const k of S.text) v[k] = String(b.value[k] ?? old[k] ?? "").slice(0, 3e3).trim();
-        for (const k of S.flags) v[k] = b.value[k] == null ? !!old[k] : !!b.value[k];
-        for (const k of S.secret) v[k] = String(b.value[k] || "").trim().slice(0, 600) || old[k] || "";
+        for (const k of S2.text) v[k] = String(b.value[k] ?? old[k] ?? "").slice(0, 3e3).trim();
+        for (const k of S2.flags) v[k] = b.value[k] == null ? !!old[k] : !!b.value[k];
+        for (const k of S2.secret) v[k] = String(b.value[k] || "").trim().slice(0, 600) || old[k] || "";
         if (name === "ai" && v.base && !publicUrl(v.base)) return err(400, "The API address must be a public https:// address.");
+        if (name.startsWith("tk_") && v.url && !publicUrl(v.url.replace(/\{(awb|courier)\}/g, "x"))) return err(400, "The tracking address must be a public https:// address.");
         await putSetting(env, scope, name, v);
         return json({ ok: true, value: maskSetting(name, v) });
       }
@@ -2743,6 +3202,36 @@ var db_worker_default = {
         else delete d._paid;
         await env.DB.prepare("update enquiries set data = ? where id = ? and site = ?").bind(JSON.stringify(d), b.id, site).run();
         return json({ ok: true });
+      }
+      if ((p === "/e/track" || p === "/e/track/live") && req.method === "POST") {
+        const b = await req.json(), site = scope.replace(/^site:/, "");
+        const row = await env.DB.prepare("select data, status from enquiries where id = ? and site = ?").bind(b.id, site).first();
+        if (!row) return err(404, "Not found.");
+        const d = JSON.parse(row.data);
+        if (!d.order_no) return err(400, "That isn't an order.");
+        if (p === "/e/track/live") {
+          const g = await shipLive(env, site, b.id, d, row.status, true);
+          return json({ live: g.live ? { ...g.live, label: TRACK_STATES[g.live.st] || g.live.say } : null, why: g.why, status: g.status });
+        }
+        const c = COURIERS[String(b.courier)] ? String(b.courier) : "other", awb = String(b.awb || "").trim().slice(0, 40), url = String(b.url || "").trim().slice(0, 400);
+        if (awb && !/^[A-Za-z0-9][A-Za-z0-9 _-]{3,39}$/.test(awb)) return err(400, "That doesn't look like a tracking number.");
+        if (url && !publicUrl(url)) return err(400, "The tracking link must be a public https:// address.");
+        delete d._trk;
+        delete d._trk_bad;
+        delete d._trk_why;
+        if (!awb && !url) delete d._track;
+        else d._track = JSON.stringify({ c, awb, url, name: oneLine(String(b.name || "")).slice(0, 60), at: (/* @__PURE__ */ new Date()).toISOString() });
+        let status = row.status, said = "";
+        if (b.ship && d._track && SHIP_OPEN.includes(status)) status = "out";
+        if (b.ship && d._track && !d._ship_mail) {
+          const opt = await getSetting(env, scope, "ship").catch(() => null);
+          if (!opt?.quiet) {
+            said = await shippedMail(env, site, d).catch((e) => "Not emailed: " + String(e?.message || e).slice(0, 200));
+            if (said) d._ship_mail = said;
+          }
+        }
+        await env.DB.prepare("update enquiries set data = ?, status = ? where id = ? and site = ?").bind(JSON.stringify(d), status, b.id, site).run();
+        return json({ ok: true, status, data: d, mail: said });
       }
       if ((p === "/e/status" || p === "/e/delete") && req.method === "POST") {
         const b = await req.json();

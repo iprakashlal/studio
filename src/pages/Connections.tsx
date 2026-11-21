@@ -5,8 +5,9 @@ import { GoogleSignInCard } from "../ui/GoogleSignIn";
 import { useEffect, useRef, useState } from "react";
 import { cfCall, cfRole, cfSendCode, cfSession, cfSignedIn, cfVerifyCode, resendTestOnly, signedInApi } from "../lib/cfdb";
 import { Field, Toggle, useToast } from "../ui/kit";
+import { COURIERS, TRACKERS } from "../lib/tracking";
 
-type Kind = "ai" | "wa" | "rz" | "cf" | "pe" | "st" | "pp" | "pos" | "sms";
+type Kind = "ai" | "wa" | "rz" | "cf" | "pe" | "st" | "pp" | "pos" | "sms" | "ship" | `tk_${string}`;
 /** What the Studio lets this site use a way of messaging for (content.cms.msg). */
 export type MsgAllow = { login: boolean; checkout: boolean };
 export const msgAllow = (cms: any, way: "wa" | "sms"): MsgAllow => { const m = cms?.msg || {}, ok = (v: unknown) => v == null || v === "" || v === way || v === "both"; return { login: ok(m.login), checkout: ok(m.checkout) }; };
@@ -374,6 +375,70 @@ export function SiteDbSignIn({ cf, small, what = "see and change what is kept th
   </section>;
 }
 
+/** What each tracking service calls the things it needs, and where the shop finds them. */
+const TK_UI: Record<string, { f: Record<string, string>; where: string; codes?: boolean; opt?: string[] }> = {
+  bluedart: { f: { key: "Client ID (API key)", secret: "Client secret", user: "Login ID", account: "Tracking licence key" }, where: "Blue Dart gives these with an API account: ask your Blue Dart account manager for “API gateway access for tracking”. The login ID and licence key are the ones of your customer account." },
+  delhivery: { f: { key: "API token" }, where: "Delhivery One → Settings → API setup (or ask your Delhivery account manager for the live API token)." },
+  dtdc: { f: { key: "Tracking API token" }, where: "DTDC gives a tracking token (X-Access-Token) with an API account: ask your DTDC branch or account manager." },
+  xpressbees: { f: { user: "Account email", secret: "Password" }, where: "The email and password of your Xpressbees shipping account." },
+  ecom: { f: { user: "API username", secret: "API password" }, where: "Ecom Express gives an API username and password with your account." },
+  shiprocket: { f: { user: "API user's email", secret: "API user's password" }, where: "Shiprocket → Settings → API → Add new API user. Use that API user here, not your own sign-in. It follows every courier you book through Shiprocket." },
+  nimbuspost: { f: { user: "Account email", secret: "Password" }, where: "NimbusPost → Settings → API. It follows every courier you book through NimbusPost." },
+  ithink: { f: { key: "Access token", secret: "Secret key" }, where: "iThink Logistics → Settings → API keys. It follows every courier you book through iThink." },
+  clickpost: { f: { user: "Username", key: "API key" }, where: "ClickPost → Settings → API keys. ClickPost numbers each courier: add yours under courier codes if a courier isn't found.", codes: true },
+  aftership: { f: { key: "API key" }, where: "AfterShip → Tracking → Settings → API keys. It follows almost any courier, Blue Dart, Ekart and India Post among them.", codes: true },
+  trackingmore: { f: { key: "API key" }, where: "TrackingMore → Developer → API key. It follows almost any courier.", codes: true },
+  ship24: { f: { key: "API key" }, where: "Ship24 → Dashboard → API keys. It finds the courier from the tracking number by itself." },
+  track17: { f: { key: "Security key" }, where: "17TRACK → API → Settings → Security key. It finds the courier from the tracking number by itself." },
+  custom: { f: { url: "Address to ask ({awb} is the tracking number)", hdr: "Header to send (optional)", key: "Key (optional)" }, where: "Any address that answers with JSON, for a courier or tool not listed. Write the header as “Name: value”; {key} in it is replaced by the key. With a key and no header, the key is sent as “Authorization: Bearer …”.", opt: ["hdr", "key"] },
+};
+const TK_KIND: Record<string, string> = { courier: "Couriers (their own API)", agg: "Shipping aggregators", multi: "Multi-courier trackers", custom: "Anything else" };
+/** Shops: connect the courier's or tracking service's API, so orders show where the parcel is and move on by themselves. */
+export function CourierTrackingForm({ where }: { where: Where | null | undefined }) {
+  const toast = useToast(), { saved, err, save } = useSaved(where || null);
+  const ids = Object.keys(TRACKERS), on = (id: string) => !!(saved as any)?.["tk_" + id]?.on;
+  const [id, setId] = useState("bluedart"), [f, setF] = useState<Record<string, any>>({}), [busy, setBusy] = useState(""), [awb, setAwb] = useState(""), [res, setRes] = useState<any>(null);
+  const z: any = (saved as any)?.["tk_" + id], U = TK_UI[id], T = TRACKERS[id], sh: any = (saved as any)?.ship;
+  useEffect(() => { setF({ user: txt(z?.user), account: txt(z?.account), url: txt(z?.url), hdr: txt(z?.hdr), codes: txt(z?.codes), key: "", secret: "" }); setRes(null); }, [saved, id]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { const first = ids.find(on); if (first) setId(first); }, [!!saved]); // eslint-disable-line react-hooks/exhaustive-deps
+  const lead = <>Connect the courier you ship with, or a tracking service, and each order shows <b className="text-ink-100">where the parcel is</b>: to the customer on their order page and under My account, and to you under Purchased orders. An order moves to Out for delivery and to Completed by itself as the courier scans it. Without a connection, customers still get the courier's own tracking link.</>;
+  if (where === undefined) return <Shell title="Courier tracking" lead={lead}><Missing why="Checking your database…" /></Shell>;
+  if (!where) return <Shell title="Courier tracking" lead={lead}><Missing why="Tracking keys are kept on the site's own Cloudflare database. Host this site on Cloudflare (Host to External Services), and sign in to it on this device as its owner; the boxes for the keys then show here." /></Shell>;
+  if (err) return <Shell title="Courier tracking" lead={lead}><Missing why={err} /></Shell>;
+  if (saved && !("ship" in (saved as any))) return <Shell title="Courier tracking" lead={lead}><Missing why="This site's database is an older version that doesn't know courier tracking yet. Update it once: Settings → Hostings → Sites and hosting accounts, next to this site (Data → Update this database). Then come back here." /></Shell>;
+  const isSecret = (k: string) => k === "key" || k === "secret", need = T.needs.filter((k) => !(U.opt || []).includes(k));
+  const ok = need.every((k) => String(f[k] || "").trim() || (isSecret(k) && z?.[k])) && (id !== "custom" || /^https:\/\/\S+\{awb\}/.test(String(f.url || "").trim()) || /^https:\/\//.test(String(f.url || "").trim()));
+  const fields = [...T.needs, ...Object.keys(U.f).filter((k) => !T.needs.includes(k))];
+  const live = ids.filter(on);
+  return <Shell title="Courier tracking" on={saved ? live.length > 0 : undefined} lead={lead}>
+    {live.length > 0 && <p className="flex flex-wrap items-center gap-1.5 text-[13px] text-ink-300" aria-label="Connected tracking services">Connected: {live.map((k) => <button key={k} type="button" className={`chip ${k === id ? "border-brand-400/60 text-brand-200" : "border-emerald-400/50 text-emerald-200"}`} onClick={() => setId(k)}>{TRACKERS[k].name}</button>)}</p>}
+    <Field label="Tracking service" htmlFor="tk-id" hint="You can connect more than one: a courier's own connection is used for that courier, a multi-courier tracker for the rest.">
+      <select id="tk-id" className="input" value={id} onChange={(e) => setId(e.target.value)}>{Object.entries(TK_KIND).map(([kind, label]) => <optgroup key={kind} label={label}>{ids.filter((k) => TRACKERS[k].kind === kind).map((k) => <option key={k} value={k}>{TRACKERS[k].name}{on(k) ? " (connected)" : ""}</option>)}</optgroup>)}</select></Field>
+    <div className="flex flex-col gap-3 rounded-lg border border-ink-600 p-3" aria-label={`${T.name} keys`}>
+      <div className="grid gap-3 sm:grid-cols-2">
+        {fields.map((k) => isSecret(k)
+          ? <Secret key={k} id={`tk-${k}`} label={U.f[k] || k} saved={!!z?.[k]} value={f[k] || ""} onChange={(v) => setF({ ...f, [k]: v })} />
+          : <div key={k} className={k === "url" || k === "hdr" ? "sm:col-span-2" : ""}><Field label={U.f[k] || k} htmlFor={`tk-${k}`}><input id={`tk-${k}`} className="input font-mono" autoComplete="off" placeholder={k === "url" ? "https://api.example.com/track?awb={awb}" : k === "hdr" ? "X-Api-Key: {key}" : ""} value={f[k] || ""} onChange={(e) => setF({ ...f, [k]: e.target.value })} /></Field></div>)}
+        {U.codes && <div className="sm:col-span-2"><Field label="Courier codes (optional)" htmlFor="tk-codes" hint={`Only if a courier isn't found: this service's own code for it, as courier=code, separated by commas. The couriers are named: ${Object.keys(COURIERS).filter((c) => c !== "other").slice(0, 8).join(", ")}…`}><input id="tk-codes" className="input font-mono" autoComplete="off" placeholder="bluedart=bluedart, dtdc=dtdc" value={f.codes || ""} onChange={(e) => setF({ ...f, codes: e.target.value })} /></Field></div>}
+      </div>
+      <p className="text-[12.5px] text-ink-400">{U.where} The keys go to your own database, stored encrypted, and are never put in the site.</p>
+      <div className="flex flex-wrap gap-2">
+        <button type="button" className="btn btn-sm btn-pri" disabled={!ok || !!busy} onClick={async () => { setBusy("save"); try { await save(("tk_" + id) as Kind, { user: String(f.user || "").trim(), account: String(f.account || "").trim(), url: String(f.url || "").trim(), hdr: String(f.hdr || "").trim(), codes: String(f.codes || "").trim(), key: String(f.key || "").trim(), secret: String(f.secret || "").trim(), on: true }); toast(`${T.name} tracking saved.`); } catch (e: any) { toast(e?.message || "Couldn't save it.", "bad"); } setBusy(""); }}>{busy === "save" ? "Saving…" : z ? "Save" : "Connect"}</button>
+        {z && <button type="button" className="btn btn-sm btn-danger ml-auto" disabled={!!busy} onClick={async () => { setBusy("rm"); try { await save(("tk_" + id) as Kind, null); toast(`${T.name} tracking removed.`); } catch (e: any) { toast(e?.message || "Couldn't remove it.", "bad"); } setBusy(""); }}>Remove</button>}
+      </div>
+      {z && <WithButton label="Try it with a real tracking number" htmlFor="tk-awb" hint="Use the number of a parcel you have already sent. Nothing is changed on any order."
+        button={<button type="button" className="btn" disabled={!!busy || awb.trim().length < 4} onClick={async () => { setBusy("test"); setRes(null); try { setRes(await cfCall<any>(where.api, "/set/test?scope=" + encodeURIComponent(where.scope), { method: "POST", body: JSON.stringify({ name: "tk_" + id, awb: awb.trim() }) })); } catch (e: any) { setRes({ error: e?.message || "Couldn't reach your database." }); } setBusy(""); }}>{busy === "test" ? "Asking…" : "Test"}</button>}>
+        <input id="tk-awb" className="input min-w-0 flex-1 font-mono" autoComplete="off" value={awb} onChange={(e) => setAwb(e.target.value)} /></WithButton>}
+      {res && (res.error
+        ? <p role="status" className="rounded-lg border border-amber-400/40 px-3 py-2 text-[13px] text-amber-100" data-tk-res="bad">{res.error}</p>
+        : <div role="status" className="rounded-lg border border-emerald-400/40 px-3 py-2 text-[13px] text-emerald-100" data-tk-res="ok"><b>It works: {res.live.label}</b>{res.live.say && res.live.say !== res.live.label ? ` · ${res.live.say}` : ""}{res.live.eta ? ` · expected ${res.live.eta}` : ""} · {res.live.n} scan{res.live.n === 1 ? "" : "s"}{(res.live.ev || []).length > 0 && <ul className="mt-1 list-disc pl-5 text-emerald-100/80">{res.live.ev.map((e: any, i: number) => <li key={i}>{[e.text, e.place, e.at].filter(Boolean).join(" · ")}</li>)}</ul>}</div>)}
+    </div>
+    <Toggle id="ship-auto" checked={!sh?.manual} onChange={async (v: boolean) => { try { await save("ship", { manual: !v, quiet: !!sh?.quiet }); } catch (e: any) { toast(e?.message || "Couldn't save it.", "bad"); } }} label="Move orders on by themselves (Out for delivery when the courier picks up, Completed when delivered)" />
+    <Toggle id="ship-mail" checked={!sh?.quiet} onChange={async (v: boolean) => { try { await save("ship", { manual: !!sh?.manual, quiet: !v }); } catch (e: any) { toast(e?.message || "Couldn't save it.", "bad"); } }} label="Email the customer the courier and tracking link when an order is marked as shipped" />
+    <p className="hint">Customers can also look an order up at <span className="font-mono">checkout.html?track=1</span> on your shop with its order number and the mobile number or email they ordered with: add it to your menu or footer as a custom link named “Track order”.</p>
+  </Shell>;
+}
+
 /** A site's "Payments & WhatsApp" section (site admin and the Studio's editor). */
 export function SiteConnections({ cf, template, cms, site }: { cf?: { api: string; site: string } | null; template: string; /** The site's content.cms (what the Studio allows it). */ cms?: any; /** True in the site's own admin page. */ site?: boolean }) {
   const aw = msgAllow(cms, "wa"), as = msgAllow(cms, "sms");
@@ -381,7 +446,7 @@ export function SiteConnections({ cf, template, cms, site }: { cf?: { api: strin
   return <div className="flex max-w-3xl flex-col gap-4">
     {cf && !signed && <SiteDbSignIn cf={cf} what={template === "restaurant" ? "show the boxes for Petpooja's and WhatsApp's keys" : "show the boxes for WhatsApp's keys"} />}
     {template === "restaurant" && <section className="card flex flex-col gap-2 p-5"><h3 className="text-[15px] font-extrabold">Restaurant backend</h3><p className="text-sm text-ink-300">Orders, payments and messages run on the site's own Cloudflare database: it saves each order under Purchased orders, works out what an order costs from your menu, confirms online payments with your payment gateway, passes orders to Petpooja, and sends WhatsApp messages. Keys you enter here stay on that database, encrypted. The payment gateways (Razorpay, Cashfree, PhonePe, Stripe, PayPal) and their keys are under Payments.</p></section>}
-    {template === "restaurant" && <PetpoojaForm where={where} />}<WhatsAppForm where={where} kind="site" allow={aw} />
+    {template === "restaurant" && <PetpoojaForm where={where} />}{template === "store" && <CourierTrackingForm where={where} />}<WhatsAppForm where={where} kind="site" allow={aw} />
     {/* In the site's own admin page SMS shows only when the Studio lets the site use it for something. */}
     {!(site && !as.login && !as.checkout) && <SmsForm where={where} kind="site" allow={as} />}
     {cf && signed && <GoogleSignInCard api={cf.api} what="this site's admin page (and anything else that signs in to the same database)" />}</div>;

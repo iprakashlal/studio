@@ -160,7 +160,19 @@
   function orderHTML(o, live) {
     const open = live || ui.open === o.no, t = cfg.track && cfg.track(o);
     return `<div class="sa-o" data-order="${esc(o.no)}"><button type="button" data-sa="toggle" data-v="${esc(o.no)}" aria-expanded="${open}">${thumbs(o)}<b>${esc(o.no)}</b><span class="sa-amt">${esc(o.total)}</span><span class="sa-when">${esc(when(o.at))}${o.mode ? " · " + esc(o.mode) : ""}</span><span class="sa-chip" data-s="${esc(o.status === "cancelled" ? "cancelled" : (LIVE[o.status] || 0) >= 5 ? "done" : "")}">${esc(label(o))}${o.paid ? " · Paid" : ""}</span></button>
-      ${open ? `<div class="sa-more">${live ? track(o) : ""}${lines(o)}${o.points ? `<p class="sa-soft" style="font-weight:600">${esc(o.points)}</p>` : ""}<div class="sa-row"><button type="button" class="sa-btn" data-sa="bill" data-v="${esc(o.no)}">${IC.down}Download bill</button>${t ? `<a class="sa-btn" href="${esc(t)}">Open tracking page</a>` : ""}</div></div>` : ""}</div>`;
+      ${open ? `<div class="sa-more">${live ? track(o) : ""}${o.track ? `<p class="sa-soft" data-sa-ship>Shipped with <b>${esc(o.track.name)}</b>${o.track.awb ? `, tracking number <b style="font-family:ui-monospace,monospace">${esc(o.track.awb)}</b>` : ""}. <button type="button" class="sa-btn" data-sa="ship" data-v="${esc(o.no)}">Track parcel</button></p><div data-sa-shipout="${esc(o.no)}"></div>` : ""}${lines(o)}${o.points ? `<p class="sa-soft" style="font-weight:600">${esc(o.points)}</p>` : ""}<div class="sa-row"><button type="button" class="sa-btn" data-sa="bill" data-v="${esc(o.no)}">${IC.down}Download bill</button>${t ? `<a class="sa-btn" href="${esc(t)}">Open tracking page</a>` : ""}</div></div>` : ""}</div>`;
+  }
+  /* Where a shipped order's parcel is: each scan the shop's tracking service has, newest first (else the courier's own page). */
+  function shipDraw(o, el) {
+    const t = o.track, link = t && /^https:\/\//.test(t.link || "") ? t.link : "";
+    const fall = (why) => { el.innerHTML = `<p class="sa-soft">${esc(why)}${link ? ` <a href="${esc(link)}" target="_blank" rel="noopener">Track on ${esc(t.name)}'s site ↗</a>` : ""}</p>`; };
+    if (cfg.demo || !me) return fall("Live tracking shows on the published site.");
+    el.innerHTML = `<p class="sa-soft">Asking the courier…</p>`;
+    const dt = (v) => { const d = new Date(v); return !v ? "" : isNaN(+d) ? String(v) : d.toLocaleString(undefined, { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" }); };
+    real("track", { no: o.no, key: me.key, pass: me.pass }).then((r) => r.json().then((j) => ({ r, j }))).then(({ r, j }) => {
+      const L = r.ok && j && j.live; if (!L) return fall("The courier's own page has the latest.");
+      el.innerHTML = `<div class="sa-ship"><p><b>${esc(L.label || L.say)}</b>${L.eta ? ` <span class="sa-soft">· expected by ${esc(new Date(L.eta).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" }))}</span>` : ""}</p>${(L.ev || []).length ? `<ol class="sa-track" aria-label="Parcel history">${L.ev.slice(0, 12).map((e, i) => `<li${i === 0 ? " data-on data-now" : ""}><span><b style="font-weight:600;color:inherit">${esc(e.text)}</b><br><span class="sa-soft" style="font-weight:400">${esc([e.place, dt(e.at)].filter(Boolean).join(" · "))}</span></span></li>`).join("")}</ol>` : ""}${link || L.link ? `<p><a href="${esc(L.link || link)}" target="_blank" rel="noopener">Track on ${esc(t.name)}'s site ↗</a></p>` : ""}</div>`;
+    }).catch(() => fall("We couldn't reach the courier just now."));
   }
   const blankAddr = () => ({ label: "", line1: "", line2: "", city: "", pin: "", state: "" });
   function profileHTML(d) {
@@ -227,6 +239,7 @@ pre{white-space:pre-wrap;font:inherit;font-size:14px;margin:6px 0 0}.tot{display
     if (a === "toggle") { ui.open = ui.open === v ? "" : v; return draw(); }
     if (a === "view") { readProfile(); ui.view = v; ui.msg = ""; ui.saved = ""; return draw(); }
     if (a === "bill") { const o = data && data.orders.find((x) => x.no === v); if (o) bill(o); return; }
+    if (a === "ship") { const o = data && data.orders.find((x) => x.no === v), el = modal && [].find.call(modal.querySelectorAll("[data-sa-shipout]"), (n) => n.getAttribute("data-sa-shipout") === v); if (o && el) shipDraw(o, el); return; }
     if (a === "addaddr") { readProfile(); ui.addrs.push(blankAddr()); return draw(); }
     if (a === "deladdr") { readProfile(); ui.addrs.splice(+v, 1); return draw(); }
     if (a === "save") {

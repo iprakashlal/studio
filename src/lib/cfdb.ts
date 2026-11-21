@@ -428,5 +428,13 @@ export async function siteEnquiries(cf: { api: string; site: string }, account?:
     /** The owner has seen (or not) an order's payment arrive. */
     paid: async (id: number, paid: boolean) => { br ? await br({ sub: "paid", id, paid }) : await cfCall(cf.api, "/e/paid?" + scope, { method: "POST", body: JSON.stringify({ id, paid }) }); },
     remove: async (id: number) => { br ? await br({ sub: "delete", id }) : await cfCall(cf.api, "/e/delete?" + scope, { method: "POST", body: JSON.stringify({ id }) }); },
+    /** A shop order's shipment: its courier and tracking number (with `ship`, the order is marked as sent and the customer emailed). */
+    track: async (id: number, b: { courier: string; awb: string; url?: string; name?: string; ship?: boolean }): Promise<{ status: string; data: Record<string, string>; mail: string }> => {
+      if (br) throw new Error("Sign in to this site's admin page on this device to save tracking (its database is on another Cloudflare account).");
+      return cfCall(cf.api, "/e/track?" + scope, { method: "POST", body: JSON.stringify({ id, ...b }) }); },
+    /** Where the parcel is now, asked of the shop's tracking service. */
+    live: async (id: number): Promise<{ live: any | null; why: string; status: string }> => {
+      if (br) throw new Error("Sign in to this site's admin page on this device to check tracking.");
+      return cfCall(cf.api, "/e/track/live?" + scope, { method: "POST", body: JSON.stringify({ id }) }); },
   };
 }

@@ -5,6 +5,7 @@ import { enquiriesSql, isAdmin, sbClient, sendCode, setupSql, signedInEmail, ver
 import { Field, Spinner, useConfirm, useToast, SkelRows } from "../ui/kit";
 import { inboxCall, type InboxEnquiry } from "../lib/inbox";
 import { cfSignedIn, siteEnquiries, resendTestOnly } from "../lib/cfdb";
+import { COURIERS, TRACKERS, TRACK_STATES, courierLink, courierName } from "../lib/tracking";
 import type { CfSiteCfg } from "../lib/supa";
 
 type Enquiry = { id: number; site: string; data: Record<string, string>; page: string; status: string; created_at: string };
@@ -163,10 +164,47 @@ function SignIn({ cfg, onIn }: { cfg: SbCfg; onIn: (email: string) => void }) {
   );
 }
 
+type Ship = { save: (r: Row, b: { courier: string; awb: string; url?: string; name?: string; ship?: boolean }) => Promise<{ mail: string } | null>; live: (r: Row) => Promise<{ live: any | null; why: string } | null> };
+const shipOf = (d: any): { c: string; awb: string; url: string; name: string } | null => { try { const t = JSON.parse(String(d?._track || "")); return t && (t.awb || t.url) ? t : null; } catch { return null; } };
+const liveOf = (d: any): any | null => { try { return JSON.parse(String(d?._trk || "")); } catch { return null; } };
+const shipWhen = (v: string) => { const dt = new Date(v); return !v ? "" : isNaN(+dt) ? v : dt.toLocaleString(undefined, { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" }); };
+/** A shop order's shipment: the courier and tracking number, and where the parcel is now. */
+function ShipBox({ r, ship }: { r: Row; ship: Ship }) {
+  const d = r.data || {}, tk = shipOf(d);
+  const [courier, setCourier] = useState(tk?.c || "bluedart"), [awb, setAwb] = useState(tk?.awb || ""), [url, setUrl] = useState(tk?.url || ""), [name, setName] = useState(tk?.name || ""), [busy, setBusy] = useState(""), [why, setWhy] = useState("");
+  const L = liveOf(d), sent = !["new", "read", "accepted", "preparing", "ready"].includes(r.status);
+  const save = async (shipIt: boolean) => { setBusy(shipIt ? "ship" : "save"); setWhy(""); await ship.save(r, { courier, awb: awb.trim(), url: url.trim(), name: name.trim(), ship: shipIt }); setBusy(""); };
+  const check = async () => { setBusy("live"); setWhy(""); const g = await ship.live(r); setBusy(""); if (g && !g.live) setWhy(g.why || "No tracking connection is set up for this courier yet (Courier tracking, under WhatsApp & SMS). The customer still gets the courier's own tracking link."); else if (g?.why) setWhy(g.why); };
+  const link = url.trim() || courierLink(courier, awb.trim());
+  return (
+    <section className="flex flex-col gap-3 rounded-lg border border-ink-600 p-3" aria-label="Shipment">
+      <b className="flex flex-wrap items-center gap-2 text-sm text-ink-100">Shipment{tk && <span className="chip border-emerald-400/50 text-emerald-200">{tk.c === "other" ? tk.name || "Courier" : courierName(tk.c)}{tk.awb ? " · " + tk.awb : ""}</span>}{L && <span className="chip border-sky-400/50 text-sky-200" data-live={L.st}>{TRACK_STATES[L.st] || L.say}</span>}</b>
+      <div className="grid gap-3 sm:grid-cols-[minmax(0,12rem)_minmax(0,1fr)]">
+        <Field label="Courier" htmlFor={`sh-c-${r.id}`}><select id={`sh-c-${r.id}`} className="input py-2" value={courier} onChange={(e) => setCourier(e.target.value)}>{Object.entries(COURIERS).map(([k, [n]]) => <option key={k} value={k}>{n}</option>)}</select></Field>
+        <Field label="Tracking number (AWB)" htmlFor={`sh-a-${r.id}`}><input id={`sh-a-${r.id}`} className="input py-2 font-mono" autoComplete="off" value={awb} onChange={(e) => setAwb(e.target.value)} /></Field>
+        {courier === "other" && <Field label="Courier's name" htmlFor={`sh-n-${r.id}`}><input id={`sh-n-${r.id}`} className="input py-2" value={name} onChange={(e) => setName(e.target.value)} /></Field>}
+        <div className={courier === "other" ? "" : "sm:col-span-2"}><Field label="Tracking link (optional)" htmlFor={`sh-u-${r.id}`} hint={courier === "other" ? "Where the customer can follow the parcel." : "Empty uses the courier's own tracking page."}><input id={`sh-u-${r.id}`} className="input py-2" placeholder={courierLink(courier, awb.trim() || "…") || "https://"} value={url} onChange={(e) => setUrl(e.target.value)} /></Field></div>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        {!sent && <button type="button" className="btn btn-sm btn-pri" disabled={!!busy || (!awb.trim() && !url.trim())} onClick={() => save(true)}>{busy === "ship" ? "Saving…" : "Save and mark as shipped"}</button>}
+        <button type="button" className={`btn btn-sm ${sent ? "btn-pri" : ""}`} disabled={!!busy || (!awb.trim() && !url.trim() && !tk)} onClick={() => save(false)}>{busy === "save" ? "Saving…" : !awb.trim() && !url.trim() && tk ? "Remove tracking" : "Save tracking"}</button>
+        {tk?.awb && <button type="button" className="btn btn-sm" disabled={!!busy} onClick={check}>{busy === "live" ? "Asking the courier…" : "Check where it is"}</button>}
+        {link && /^https:\/\//.test(link) && <a className="btn btn-sm" href={link} target="_blank" rel="noopener noreferrer">Courier's page ↗</a>}
+      </div>
+      {d._ship_mail && <p className={`text-[12.5px] ${/^Not emailed/.test(d._ship_mail) ? "text-amber-200" : "text-ink-400"}`}>{d._ship_mail}</p>}
+      {why && <p role="status" className="rounded-lg border border-amber-400/40 px-3 py-2 text-[13px] text-amber-100">{why}</p>}
+      {L && <div className="flex flex-col gap-1.5 text-[13px]" data-shiplive>
+        <p className="text-ink-200"><b>{TRACK_STATES[L.st] || L.say}</b>{L.say && L.say !== TRACK_STATES[L.st] ? " · " + L.say : ""}{L.eta ? ` · expected ${L.eta}` : ""} <span className="text-ink-500">(checked {shipWhen(new Date(+L.t || Date.now()).toISOString())}{TRACKERS[L.via] ? " with " + TRACKERS[L.via].name : ""})</span></p>
+        {(L.ev || []).length > 0 && <ol className="flex flex-col gap-1 border-l border-ink-600 pl-3">{(L.ev as any[]).slice(0, 8).map((e, i) => <li key={i} className={i === 0 ? "text-ink-100" : "text-ink-400"}>{e.text}<span className="text-ink-500">{[e.place, shipWhen(e.at)].filter(Boolean).length ? " · " + [e.place, shipWhen(e.at)].filter(Boolean).join(" · ") : ""}</span></li>)}</ol>}
+      </div>}
+      <p className="text-[12.5px] text-ink-500">“Save and mark as shipped” sets the order to Out for delivery and emails the customer the courier and tracking link. They also see it on their order page and under My account.</p>
+    </section>
+  );
+}
 type Row = { id: string | number; data: Record<string, string>; page?: string; status: string; created_at: string };
 
 /** The list of enquiries with filters, search, status, reply, delete and CSV, for either store. */
-function EnquiryList<R extends Row>({ rows: every, setStatus, remove, load, name, who, orders, setPaid }: { rows: R[]; setStatus: (r: R, s: string) => void; remove: (r: R) => void; load: () => void; name: string; who: React.ReactNode; /** This inbox keeps an order's steps (the Cloudflare database does). */ orders?: boolean; setPaid?: (r: R, paid: boolean) => void }) {
+function EnquiryList<R extends Row>({ rows: every, setStatus, remove, load, name, who, orders, setPaid, ship }: { /** Shop orders can carry a shipment (the site's database keeps it). */ ship?: Ship; rows: R[]; setStatus: (r: R, s: string) => void; remove: (r: R) => void; load: () => void; name: string; who: React.ReactNode; /** This inbox keeps an order's steps (the Cloudflare database does). */ orders?: boolean; setPaid?: (r: R, paid: boolean) => void }) {
   const only = useContext(OnlyCtx);
   const rows = useMemo(() => (only === "orders" ? every.filter((r) => isOrder(r.data)) : only === "enquiries" ? every.filter((r) => !isOrder(r.data)) : every), [every, only]);
   const [filter, setFilter] = useState("open");
@@ -228,6 +266,7 @@ function EnquiryList<R extends Row>({ rows: every, setStatus, remove, load, name
                     {d._paid ? <><b>Payment received.</b> UPI reference {d.utr}.</> : <><b>The guest says they paid {d.total} by UPI, reference {d.utr}.</b> Find that reference and amount in your UPI app or bank statement before you send the order out.</>}
                     {setPaid && <button type="button" className={`btn btn-sm ml-2 ${d._paid ? "" : "btn-pri"}`} onClick={() => setPaid(r, !d._paid)}>{d._paid ? "Not received after all" : "Payment received"}</button>}
                   </p>}
+                  {ord && ship && /shop/i.test(String(d.mode || "")) && r.status !== "cancelled" && <ShipBox r={r} ship={ship} />}
                   <div className="flex flex-wrap items-center gap-2">
                     {nx && <button type="button" className="btn btn-sm btn-pri" onClick={() => setStatus(r, nx[0])}>{nx[1]}</button>}
                     {d.email && !ord && <a className="btn btn-sm btn-pri" href={`mailto:${d.email}?subject=${encodeURIComponent("Re: your enquiry")}`} onClick={() => setStatus(r, "replied")}>Reply by email</a>}
@@ -299,5 +338,9 @@ function CfInbox({ cf, account }: { cf: CfSiteCfg; account?: string }) {
     setRows((x) => (x || []).map((y) => (y.id === r.id ? { ...y, data: { ...y.data, _paid: paid ? "yes" : "" } } : y)));
     try { await (await siteEnquiries(cf, account)).paid(Number(r.id), paid); toast(paid ? "Marked as paid. The guest's order page shows it." : "Marked as not received."); } catch (e: any) { toast(e?.message || "Couldn't update it.", "bad"); load(); }
   };
-  return <EnquiryList rows={rows} setStatus={setStatus} setPaid={setPaid} remove={remove} load={load} orders name={cf.site} who={<>Signed in as {who} · {rows.length} enquir{rows.length === 1 ? "y" : "ies"} for <b className="text-ink-200">{cf.site}</b></>} />;
+  const ship: Ship = {
+    save: async (r, b) => { try { const g = await (await siteEnquiries(cf, account)).track(Number(r.id), b); setRows((x) => (x || []).map((y) => (y.id === r.id ? { ...y, status: g.status, data: g.data } : y))); toast(b.ship ? (g.mail && !/^Not emailed/.test(g.mail) ? "Marked as shipped. The customer has been emailed." : "Marked as shipped.") : b.awb || b.url ? "Tracking saved." : "Tracking removed."); return g; } catch (e: any) { toast(e?.message || "Couldn't save the tracking.", "bad"); return null; } },
+    live: async (r) => { try { const g = await (await siteEnquiries(cf, account)).live(Number(r.id)); if (g.live) setRows((x) => (x || []).map((y) => (y.id === r.id ? { ...y, status: g.status, data: { ...y.data, _trk: JSON.stringify(g.live) } } : y))); return g; } catch (e: any) { toast(e?.message || "Couldn't check the tracking.", "bad"); return null; } },
+  };
+  return <EnquiryList rows={rows} ship={ship} setStatus={setStatus} setPaid={setPaid} remove={remove} load={load} orders name={cf.site} who={<>Signed in as {who} · {rows.length} enquir{rows.length === 1 ? "y" : "ies"} for <b className="text-ink-200">{cf.site}</b></>} />;
 }

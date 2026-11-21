@@ -1001,7 +1001,7 @@ let revealed = 0;
 function reveal() {
   const st = C.theme.motionStyle;
   if (!st || st === "none" || matchMedia("(prefers-reduced-motion: reduce)").matches || !("IntersectionObserver" in window)) return;
-  if (PREVIEW && revealed++ > 0) return;
+  if (revealed++ > 0) return; // the entrance plays once: a later render (database answered, signed in) keeps what is shown
   const els = $$(".hero .htx, .hero .art, .sec-h, .pcard, .cat, .quote, .banner, .wcard, .ctaband, .page-h .wrap, .pd .gal, .pd .info, .box, .sum, .ocard");
   const io = new IntersectionObserver((es) => es.forEach((e) => { if (e.isIntersecting) { e.target.classList.remove("wait"); io.unobserve(e.target); } }), { threshold: 0.08 });
   els.forEach((el, i) => { el.classList.add("rv", "wait"); el.style.transitionDelay = (i % 4) * 70 + "ms"; io.observe(el); });

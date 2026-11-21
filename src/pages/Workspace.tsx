@@ -1,5 +1,6 @@
 import { Explorer, ExplorerCard } from "../ui/Explorer";
 import { StudioGoogleCard } from "./StudioGoogle";
+import { StudioPeopleCard } from "./StudioPeople";
 import { SitesHostingCard } from "./SitesHostingCard";
 import { AiEngineCard, StudioWhatsAppCard } from "./AiEngine";
 import { setAiEngine } from "../lib/ai";
@@ -170,6 +171,7 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
             {!hid("badge") && <BadgeCard studio={studio} saved={index.badge} onIndex={setIndex} />}
             {!hid("pages") && <StudioPagesCard repo={repo} />}
             <StudioEmailCard repo={repo} />
+            {session.cfg.owner === "cloudflare" && <StudioPeopleCard />}
             {session.cfg.owner === "cloudflare" && <StudioGoogleCard />}
             <ExplorerCard />
             {!hid("menus") && <MenusCard studio={studio} menus={index.menus || {}} onIndex={setIndex} />}

@@ -1112,7 +1112,7 @@ if (PREVIEW) {
     const d = e.data || {};
     if (d.type === "cms:content" && d.content && typeof d.content === "object") { if (SC && SC.take(d.content, { ...SCO, drawn: DREW })) return; DREW = true; ASSETS = d.assets || {}; const y = scrollY; C = merge(DEFAULT, d.content); render(); scrollTo(0, y); }
   });
-  window.parent.postMessage({ type: "cms:ready", page: (location.pathname.split("/").pop() || "index.html") + (PAGE === "page" && spCur() ? "?p=" + encodeURIComponent(spCur()) : MNT_Q ? "?maintenance=1" : "") }, location.origin);
+  window.parent.postMessage({ type: "cms:ready", page: (location.pathname.split("/").pop() || "index.html") + (PAGE === "page" && spCur() ? "?p=" + encodeURIComponent(spCur()) : MNT_Q ? "?maintenance=1" : PREVIEW && new URLSearchParams(location.search).get("preview") ? "?preview=" + new URLSearchParams(location.search).get("preview") : "") }, location.origin);
   if (!(SC && SC.wait())) { DREW = true; render(); }
 } else {
   const CKEY = "site-content:" + location.pathname.replace(/[^/]*$/, "");

@@ -21,6 +21,7 @@ import { STUDIO_BUILD } from "../build-info";
 import { Field, ProgressBar, Spinner, partOf, useToast } from "../ui/kit";
 import { NetlifyAccount } from "./HostDialog";
 import { BringAcross } from "./BringAcross";
+import { studioUpdate, useStudioUpdate } from "../lib/studioupdate";
 import { autoUpdatePref } from "../lib/autoupdate";
 
 const slug = (s: string) => String(s || "").toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 30);
@@ -242,27 +243,27 @@ function MoveStudio({ studio, index, session, nf, setNf, onIndex, hosted = false
 }
 
 function HostedHere({ session, nf, setNf, index }: { session: Session; nf: Netlify | null; setNf: (n: Netlify | null) => void; index: StudioIndex }) {
-  const toast = useToast();
+
   const where: PagesKind = index.hosted?.pages || "netlify";
   const cfAcc = useCfAccount(session.token, nf, true);
   const [viaDb, setViaDb] = useState<Pages | null>(null);
   const pagesOk = where === "netlify" ? !!nf : cfAcc.ready || !!viaDb;
   const [cfg, setCfg] = useState<StudioHostCfg | null>(null), [latest, setLatest] = useState<string | null>(null), [mine, setMine] = useState<string | null>(null);
-  const [step, setStep] = useState(""), [err, setErr] = useState("");
+  // The update is the Studio's one job (it carries on when this screen is left); this card only shows it.
+  const job = useStudioUpdate(), step = job.running ? job.step : "", err = job.err;
   const [auto, setAuto] = useState(autoUpdatePref.on);
   useEffect(() => { loadHostConfig().then((c) => { setCfg(c); if (c?.source) appFiles(c.source).then((m) => setLatest(m.build)).catch(() => setLatest(null)); }); appFiles(appBase()).then((m) => setMine(m.build)).catch(() => setMine(STUDIO_BUILD.id)); }, []);
   // Without the token here, the Studio updates itself through its own database (Publish from any device).
   useEffect(() => { if (where === "cloudflare" && !cfAcc.ready && cfg?.kind === "cloudflare") pagesViaDb(cfg.api, "studio:" + cfg.studio).then(setViaDb).catch(() => setViaDb(null)); }, [where, cfAcc.ready, cfg?.kind]);
-  const update = async () => {
+  const update = () => {
     if (!pagesOk || !cfg?.source) return;
-    setErr("");
-    try {
+    studioUpdate.clearError();
+    studioUpdate.start(async (setStep) => {
       const siteId = index.hosted?.siteId;
       if (!siteId) throw new Error(`Couldn't find this Studio's site on the connected ${PAGES_LABEL[where]} account.`);
-      await deployStudioApp(!cfAcc.ready && viaDb ? viaDb : await pagesFrom(where, nf, cfAcc, index.hosted?.account, setStep), { siteId, siteName: "", source: cfg.source, config: cfg }, setStep);
-      toast("Updated. Reloading…"); setTimeout(() => location.reload(), 1200);
-    } catch (e: any) { setErr(e?.message || "Couldn't update."); }
-    setStep("");
+      await deployStudioApp(!cfAcc.ready && viaDb ? viaDb : await pagesFrom(where, nf, cfAcc, index.hosted?.account, setStep), { siteId, siteName: "", source: cfg.source!, config: cfg }, setStep);
+      return true;
+    });
   };
   return (
     <div className="flex flex-col gap-4">
@@ -274,7 +275,8 @@ function HostedHere({ session, nf, setNf, index }: { session: Session; nf: Netli
         <h3 className="text-[15px] font-extrabold">Studio updates</h3>
         <p className="text-sm text-ink-300">This Studio: build <code className="font-mono text-xs">{mine || "…"}</code>. Latest: <code className="font-mono text-xs">{latest || "…"}</code>{latest && mine && latest === mine ? " · up to date" : ""}.</p>
         {where === "netlify" ? !nf && <NetlifyAccount session={session} onToken={(t) => setNf(t ? new Netlify(t) : null)} /> : !cfAcc.ready && (viaDb ? <p className="text-sm text-emerald-300">Updates go through your Cloudflare database: no token needed on this device.</p> : cfAcc.ui)}
-        <button type="button" className="btn btn-pri self-start" disabled={!pagesOk || !cfg?.source || !!step || (!!latest && latest === mine)} onClick={update}>{step ? "Updating…" : "Update to the latest Studio"}</button>
+        <button type="button" className="btn btn-pri self-start" disabled={!pagesOk || !cfg?.source || job.running || job.ready || (!!latest && latest === mine)} onClick={update}>{job.running ? "Updating…" : job.ready ? "Updated" : "Update to the latest Studio"}</button>
+        {job.running && <p className="hint">You can leave this screen or switch browser tabs: the update carries on and then opens your projects.</p>}
         {step && <ProgressBar value={/^Reading the Studio/.test(step) ? 8 : /^Creating the Studio/.test(step) ? 15 : /^Uploading the Studio/.test(step) ? partOf(step, 20, 98) : null} label="Updating this Studio" detail={step + "…"} />}
         <label className="flex items-start gap-2 text-sm"><input type="checkbox" className="mt-1 accent-brand-400" checked={auto} onChange={(e) => { autoUpdatePref.set(e.target.checked); setAuto(e.target.checked); }} />
           <span><b>Update automatically</b> <span className="text-ink-400">— when this Studio opens on this device and a newer build is out, it updates itself (your projects aren't touched). Needs the Cloudflare token on this device, or Publish from any device turned on.</span></span></label>

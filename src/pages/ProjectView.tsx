@@ -1,3 +1,4 @@
+import { studioDirty } from "../lib/studioupdate";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { currentBadge } from "../lib/badge";
 import { ShopBackendDialog } from "./ShopBackendDialog";
@@ -114,6 +115,8 @@ export function ProjectView({ studio, index, project, session, onIndex }: { stud
   };
 
   const dirty = v !== savedV;
+  // The Studio's own update never reloads over unsaved changes.
+  useEffect(() => { studioDirty.on = dirty; return () => { studioDirty.on = false; }; }, [dirty]);
   useEffect(() => {
     const on = (e: BeforeUnloadEvent) => { if (dirty) { e.preventDefault(); e.returnValue = ""; } };
     addEventListener("beforeunload", on);

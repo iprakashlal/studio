@@ -881,7 +881,12 @@ function maintGate(again) {
     }).catch(() => { mntPass = true; again(); });
   return true;
 }
+/* Inventory (content.inventory.on, hosted sites): a dish the database says has none left shows as sold out. */
+let STOCK = null;
+function stockMark() { if (!STOCK) return; for (const k of (C.food && C.food.categories) || []) for (const d of k.items || []) { const id = slug(k.name) + "/" + slug(d.name); if (id in STOCK) { d._left = STOCK[id]; if (STOCK[id] <= 0) d.soldOut = true; } } }
+function stockLoad() { const on = !PREVIEW && C.inventory && C.inventory.on && HOST && HOST.api && HOST.site; if (!on) return Promise.resolve(false); return fetch(HOST.api + "/stock/" + encodeURIComponent(HOST.site), { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((j) => { if (j && j.s) { STOCK = j.s; return true; } return false; }).catch(() => false); }
 function render() {
+  stockMark();
   // A several-page link opened while the site is one page goes to that section.
   if (PAGE === "order" && !PREVIEW && !orderOn()) { location.replace(PAGES.home); return; }
   // A section's own page: only while its link still says so; otherwise the visitor goes to that section on the main page.
@@ -1004,7 +1009,7 @@ async function postEnquiry(data, page, cart) {
   const cfg = backend(); if (!cfg) return "";
   const pg = page || location.pathname;
   if (cfg.file) { const r = await fetch(cfg.file, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "submit", data, page: pg }) }); if (!r.ok) throw new Error("save " + r.status); return "file"; }
-  if (cfg.cf) { const r = await fetch(cfg.cf + "/enquire/" + encodeURIComponent(cfg.site), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ data, page: pg, ...(cart ? { cart } : {}) }) }); if (!r.ok) throw new Error("save " + r.status); return "cf"; }
+  if (cfg.cf) { const r = await fetch(cfg.cf + "/enquire/" + encodeURIComponent(cfg.site), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ data, page: pg, ...(cart ? { cart } : {}) }) }); if (r.status === 409) { const j = await r.json().catch(() => null), e = new Error((j && j.error) || "Something in your order has just sold out."); e.soldOut = true; throw e; } if (!r.ok) throw new Error("save " + r.status); return "cf"; }
   const r = await fetch(cfg.url + "/rest/v1/site_enquiries", { method: "POST", headers: { apikey: cfg.key, ...(/^sb_/.test(cfg.key) ? {} : { Authorization: "Bearer " + cfg.key }), "Content-Type": "application/json", Prefer: "return=minimal" }, body: JSON.stringify({ site: cfg.site, data, page: pg }) });
   if (!r.ok) throw new Error("save " + r.status); return "db";
 }
@@ -1128,7 +1133,9 @@ if (PREVIEW) {
     if (txt === shownTxt) return;
     const j = JSON.parse(txt); if (SC && SC.take(j, { ...SCO, drawn: !!shownTxt, text: txt })) return;
     C = merge(DEFAULT, j); render();
-  }).catch(() => { clearTimeout(giveUp); if (!shownTxt) render(); });
+  }).catch(() => { clearTimeout(giveUp); if (!shownTxt) render(); })
+    // dishes with none left show as sold out, once the content is in (drawn again only when one has)
+    .then(() => stockLoad()).then((ok) => { if (ok && Object.keys(STOCK).some((k) => STOCK[k] <= 0)) render(); });
 }
 if (SC) SC.untrack();
 })();

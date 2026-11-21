@@ -132,6 +132,14 @@ const schema: Category[] = [
       { title: "Shipping", fields: [g2({ t: "number", path: "settings.shippingFee", label: "Shipping fee", min: 0 }, { t: "number", path: "settings.freeShippingOver", label: "Free shipping over (0 = never)", min: 0 })] },
       { title: "Tax", fields: [g3({ t: "number", path: "settings.taxPercent", label: "Tax %", min: 0, step: 0.1 }, { t: "text", path: "settings.taxLabel", label: "Tax name" }, { t: "toggle", path: "settings.taxIncluded", label: "Prices include tax" })] },
       { title: "Order numbers", fields: [{ t: "text", path: "settings.orderPrefix", label: "Order number prefix", hint: "Orders look like PREFIX-1105-4821." }] },
+      { title: "Inventory", fields: [
+        { t: "toggle", path: "inventory.on", label: "Count stock (products you give a quantity sell out by themselves)" },
+        { t: "when", path: "inventory.on", is: "true", fields: [
+          g2({ t: "number", path: "inventory.leftAt", label: "Say “Only N left” at or below", min: 0, step: 1, hint: "Empty means 5. 0 never shows how many are left." }, { t: "text", path: "inventory.alertTo", label: "Send low-stock emails to (optional)", ph: "you@example.com", hint: "Empty uses the address new orders go to." }),
+          { t: "toggle", path: "inventory.alert", label: "Email me when a product runs low or sells out" },
+        ] },
+        { t: "note", text: "Enter the quantities under Inventory (in the menu, under Selling). Only products you give a quantity are counted; the rest sell without a limit, and “Stock” on each product still works as before. Counting runs on the site's own Cloudflare database, so the site must be hosted there and published once after switching this on." },
+      ] },
     ],
   },
   {

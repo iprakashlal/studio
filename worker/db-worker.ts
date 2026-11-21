@@ -420,6 +420,10 @@ async function ensure(env: Env) {
     // what a signed-in customer keeps about themselves beyond their name and contacts (their saved addresses)
     env.DB.prepare("create table if not exists profiles (site text not null, ckey text not null, data text not null default '{}', primary key (site, ckey))"),
     env.DB.prepare("create table if not exists otps (k text primary key, hash text not null, expires integer not null, tries integer not null default 0, sent integer not null default 0)"),
+    // inventory: how many of each item are left, and every change to that
+    env.DB.prepare("create table if not exists stock (site text not null, item text not null, qty integer not null default 0, low integer not null default 0, updated_at text not null, primary key (site, item))"),
+    env.DB.prepare("create table if not exists stock_log (id integer primary key autoincrement, site text not null, item text not null, delta integer not null, qty integer not null, why text not null default '', ref text not null default '', at text not null)"),
+    env.DB.prepare("create index if not exists stock_log_site on stock_log (site, id)"),
     env.DB.prepare("create table if not exists payments (rz_order text primary key, site text not null, order_no text not null, amount integer not null, status text not null default 'created', created_at text not null)"),
   ]);
   ensured = true;
@@ -762,6 +766,70 @@ function orderItems(c: any, cart: any): { n: string; q: number; i: string }[] {
     for (const l of lines) { const p = P.get(String(l?.id || "")); if (p) out.push({ n: (oneLine(String(p.name)) + (l.opt ? " · " + oneLine(String(l.opt)) : "")).slice(0, 90), q: Math.max(1, Math.floor(+l.qty || 1)), i: pic(Array.isArray(p.images) ? p.images[0] : null) }); }
   }
   return out;
+}
+/* ---- Inventory (content.inventory.on): how many of each product or dish are left, kept on this database. An item is
+   counted only once the owner gives it a quantity; everything else sells without a limit. An option or size can have
+   its own count ("<item>|<option>"), else it draws on the item's. Orders take from it as they are placed (an unpaid
+   order that asks for more than is left is refused), a cancelled order gives it back, and every change is logged. */
+const invOn = (c: any) => !!c?.inventory?.on;
+const stockKey = (id: unknown, opt?: unknown) => { const a = String(id || "").trim().slice(0, 130), b = oneLine(String(opt || "")).toLowerCase().slice(0, 60); return b ? a + "|" + b : a; };
+/** Every item that can be counted on this site: [key, name], options and sizes after their item. */
+function stockItems(c: any): { item: string; name: string; group: string; opt: boolean }[] {
+  const out: { item: string; name: string; group: string; opt: boolean }[] = [];
+  if (isRest(c)) { for (const k of c?.food?.categories || []) for (const d of k?.items || []) { if (!d || !String(d.name || "").trim()) continue; const id = rslug(k.name) + "/" + rslug(d.name), nm = oneLine(String(d.name)).slice(0, 90); out.push({ item: id, name: nm, group: oneLine(String(k.name || "")).slice(0, 60), opt: false }); for (const v of Array.isArray(d.variants) ? d.variants : []) if (v && String(v.label || "").trim()) out.push({ item: stockKey(id, v.label), name: nm + " · " + oneLine(String(v.label)).slice(0, 40), group: "", opt: true }); } }
+  else { const cats = new Map<string, string>((Array.isArray(c?.categories) ? c.categories : []).map((x: any) => [String(x?.id || ""), oneLine(String(x?.name || ""))])); for (const p of Array.isArray(c?.products) ? c.products : []) { if (!p || !p.id) continue; const nm = oneLine(String(p.name || "")).slice(0, 90); out.push({ item: String(p.id), name: nm, group: cats.get(String(p.category || "")) || "", opt: false }); for (const o of [...(p.kindsOn && Array.isArray(p.kinds) ? p.kinds : []), ...(Array.isArray(p.options) ? p.options : [])]) { const l = oneLine(String(typeof o === "string" ? o : o?.label || o?.name || "")); if (l) out.push({ item: stockKey(p.id, l), name: nm + " · " + l.slice(0, 40), group: "", opt: true }); } } }
+  return out.slice(0, 1500);
+}
+/** What a cart needs from stock: for each counted row, how many, and what to call it. */
+async function stockNeed(env: Env, site: string, c: any, cart: any): Promise<{ need: Map<string, { q: number; name: string }>; rows: Map<string, { qty: number; low: number }> }> {
+  await ensure(env);
+  const lines = (Array.isArray(cart?.items) ? cart.items.slice(0, 40) : []).map((l: any) => ({ base: stockKey(l?.id), own: [String(l?.opt || l?.variant || ""), ...String(l?.opt || "").split(" · ")].filter((x, i, a) => x.trim() && a.indexOf(x) === i).map((x) => stockKey(l?.id, x)), q: Math.max(1, Math.min(999, Math.floor(+l?.qty || 1))) })).filter((l: any) => l.base);
+  const need = new Map<string, { q: number; name: string }>(), rows = new Map<string, { qty: number; low: number }>(); if (!lines.length) return { need, rows };
+  const keys = [...new Set(lines.flatMap((l: any) => [l.base, ...l.own]))] as string[];
+  for (const r of ((await env.DB.prepare(`select item, qty, low from stock where site = ? and item in (${keys.map(() => "?").join(",")})`).bind(site, ...keys).all()).results || []) as any[]) rows.set(String(r.item), { qty: +r.qty || 0, low: +r.low || 0 });
+  const names = new Map(stockItems(c).map((x) => [x.item, x.name]));
+  // a line draws on its own option's count when that option is counted, else on the item's
+  for (const l of lines) { const k = l.own.find((x: string) => rows.has(x)) || (rows.has(l.base) ? l.base : ""); if (!k) continue; const had = need.get(k); need.set(k, { q: (had?.q || 0) + l.q, name: names.get(k) || names.get(l.base) || "that item" }); }
+  return { need, rows };
+}
+const stockSorry = (name: string, left: number) => (left > 0 ? `Sorry, only ${left} left of ${name}. Change the quantity in your cart and try again.` : `Sorry, ${name} has just sold out. Remove it from your cart to go on.`);
+/** "" when everything in the cart is in stock, else what to tell the customer. */
+async function stockCheck(env: Env, site: string, c: any, cart: any): Promise<string> {
+  const { need, rows } = await stockNeed(env, site, c, cart);
+  for (const [k, n] of need) { const left = rows.get(k)!.qty; if (left < n.q) return stockSorry(n.name, Math.max(0, left)); }
+  return "";
+}
+/** Takes an order's items out of stock. `force` (an order already paid for) never refuses: it takes what there is. */
+async function stockTake(env: Env, site: string, c: any, cart: any, ref: string, force = false): Promise<{ taken: [string, number][]; short: string; low: { name: string; qty: number }[] }> {
+  const { need, rows } = await stockNeed(env, site, c, cart), now = new Date().toISOString(), taken: [string, number][] = [], low: { name: string; qty: number }[] = []; let short = "";
+  for (const [k, n] of need) {
+    const r: any = await env.DB.prepare("update stock set qty = qty - ?, updated_at = ? where site = ? and item = ? and qty >= ?").bind(n.q, now, site, k, n.q).run();
+    if (r?.meta?.changes) { taken.push([k, n.q]); continue; }
+    const left = Math.max(0, +(((await env.DB.prepare("select qty from stock where site = ? and item = ?").bind(site, k).first()) as any)?.qty) || 0);
+    short = short || stockSorry(n.name, left);
+    if (!force) { await stockBack(env, site, taken, ref, "Order not placed"); return { taken: [], short, low: [] }; }
+    if (left > 0) { await env.DB.prepare("update stock set qty = 0, updated_at = ? where site = ? and item = ?").bind(now, site, k).run(); taken.push([k, left]); }
+  }
+  if (!taken.length) return { taken, short, low };
+  const after = new Map<string, number>(); for (const r of ((await env.DB.prepare(`select item, qty from stock where site = ? and item in (${taken.map(() => "?").join(",")})`).bind(site, ...taken.map((t) => t[0])).all()).results || []) as any[]) after.set(String(r.item), +r.qty || 0);
+  await env.DB.batch(taken.map(([k, q]) => env.DB.prepare("insert into stock_log (site, item, delta, qty, why, ref, at) values (?, ?, ?, ?, 'Order', ?, ?)").bind(site, k, -q, after.get(k) ?? 0, ref.slice(0, 40), now)));
+  for (const [k, q] of taken) { const a = after.get(k) ?? 0, lw = rows.get(k)?.low || 0; if ((a <= lw && a + q > lw) || (a === 0 && q > 0)) low.push({ name: need.get(k)!.name, qty: a }); }
+  return { taken, short, low };
+}
+/** Gives quantities back to stock (a cancelled order). */
+async function stockBack(env: Env, site: string, taken: [string, number][], ref: string, why: string) {
+  const now = new Date().toISOString();
+  for (const [k, q] of taken) { if (!(q > 0)) continue; const r: any = await env.DB.prepare("update stock set qty = qty + ?, updated_at = ? where site = ? and item = ? returning qty").bind(q, now, site, k).first(); if (r) await env.DB.prepare("insert into stock_log (site, item, delta, qty, why, ref, at) values (?, ?, ?, ?, ?, ?, ?)").bind(site, k, q, +r.qty || 0, why.slice(0, 60), ref.slice(0, 40), now).run(); }
+}
+/** An email to the owner when an order takes an item down to its low mark (or to nothing). */
+async function stockLowMail(env: Env, site: string, c: any, low: { name: string; qty: number }[]) {
+  if (!low.length || c?.inventory?.alert === false || !env.RESEND_API_KEY || !env.MAIL_FROM) return;
+  const addrs = (v: unknown) => String(v || "").split(/[,;\s]+/).map((x) => x.trim()).filter((x) => EMAIL_RE.test(x)).slice(0, 5);
+  let to = addrs(c?.inventory?.alertTo); if (!to.length) to = addrs(c?.contact?.form?.notifyTo); if (!to.length) to = addrs(c?.contact?.email);
+  if (!to.length) to = addrs((((await env.DB.prepare("select email from members where scope = ? order by role = 'owner' desc limit 3").bind("site:" + site).all()).results || []) as any[]).map((r) => r.email).join(","));
+  if (!to.length) return;
+  const out = low.filter((x) => x.qty <= 0), few = low.filter((x) => x.qty > 0);
+  await sendMail(env, to, `${out.length ? "Sold out: " + out.map((x) => x.name).join(", ") : "Running low: " + few.map((x) => x.name).join(", ")}`.slice(0, 150), WRAP(`<h2 style="margin:0 0 12px;font-size:20px">Stock at ${hesc(siteName(c, site))}</h2>${out.length ? paras("Sold out:\n" + out.map((x) => "• " + x.name).join("\n")) : ""}${few.length ? paras("Running low:\n" + few.map((x) => `• ${x.name}: ${x.qty} left`).join("\n")) : ""}${paras("Add stock under Inventory in your site's admin page.", "margin:0 0 8px;color:#667;font-size:13px")}`));
 }
 const cleanAddr = (a: any) => { const t = (v: unknown, n = 120) => oneLine(String(v ?? "")).replace(/\s+/g, " ").slice(0, n); return { label: t(a?.label, 30), line1: t(a?.line1), line2: t(a?.line2), city: t(a?.city, 60), pin: t(a?.pin, 12), state: t(a?.state, 60) }; };
 /* ---- Customer accounts (content.account): a customer signs in with a code sent to their mobile number or email address,
@@ -1395,6 +1463,7 @@ export default {
         q._bal = +q.points > 0 ? (await pointsBal(env, site, q.phone, q.otp, { email: q.email, acct: q.acct })).bal : 0;
         const bill = rest ? restBill(c, q) : Array.isArray(c?.products) ? shopBill(c, q) : { error: "This site doesn't take orders." };
         if ("error" in bill) return err(409, bill.error);
+        if (invOn(c)) { const sorry = await stockCheck(env, site, c, { items: q.items }); if (sorry) return err(409, sorry); }
         if (Math.abs(bill.total - (+q.total || 0)) > 0.5) return err(409, rest ? "The menu or its prices changed while you were ordering. Refresh the page and check your cart." : "Prices or delivery charges changed while you were ordering. Refresh the page and check your cart.");
         const n: any = await env.DB.prepare("select count(*) n from payments where site = ? and created_at > ?").bind(site, new Date(Date.now() - 3600_000).toISOString()).first();
         if ((n?.n || 0) >= 200) return err(429, "Too many payments were started. Please try again in a while.");
@@ -1417,6 +1486,12 @@ export default {
         if (!hit) return err(404, "Not found.");
         let paid = "", track: any = null; try { const hd = JSON.parse(hit.data); paid = String(hd._paid || ""); track = trackShown(trackOf(hd)); } catch { /* none */ }
         return json({ status: hit.status, paid, ...(track ? { track } : {}) });
+      }
+      // ---- what is left of each counted item, for the site's pages (never more than "plenty": 99)
+      if (/^\/stock\/[a-z0-9][a-z0-9-]{0,59}$/.test(p) && req.method === "GET") {
+        const site = p.split("/")[2]; await ensure(env);
+        const s: Record<string, number> = {}; for (const r of ((await env.DB.prepare("select item, qty from stock where site = ? limit 3000").bind(site).all()).results || []) as any[]) s[String(r.item)] = Math.max(0, Math.min(99, +r.qty || 0));
+        return new Response(JSON.stringify({ s }), { headers: { ...cors, "Content-Type": "application/json", "Cache-Control": "no-store" } });
       }
       // ---- where a shop order's parcel is: POST /track/<site> { no, k | contact | key + pass }. The order's own key
       //      opens it (the device that ordered), or the mobile number or email the order was placed with.
@@ -1493,6 +1568,13 @@ export default {
             data._paid = "yes"; data._paid_by = `${PG[g].name}, ${pgMoney(cur, row.amount)}, ${got.id.slice(0, 60)}`; data.pay_gw = PG[g].name; delete data.pay_ref;
           }
         }
+        // Inventory: the order's items leave stock now. An unpaid order that asks for more than is left is refused; one
+        // already paid for is kept, and the shortfall noted for the owner.
+        let lowNow: { name: string; qty: number }[] = [], stockC: any = null;
+        if (data.order_no && q.cart && typeof q.cart === "object") {
+          stockC = await siteContent(env, site).catch(() => null);
+          if (invOn(stockC)) { const paid = data._paid === "yes", tk = await stockTake(env, site, stockC, q.cart, String(data.order_no), paid); if (tk.short && !paid) return err(409, tk.short); if (tk.taken.length) data._stock = JSON.stringify(tk.taken); if (tk.short) data._stock_short = "Not enough stock when this paid order came in. " + tk.short.replace(/ (Change|Remove).*$/, ""); lowNow = tk.low; }
+        }
         // A restaurant that uses Petpooja: the order is handed to it now, and its answer is kept with the order.
         if (data.order_no && q.cart && typeof q.cart === "object") q.cart._bal = data._phone && +q.cart.points > 0 ? Math.max(0, +((await env.DB.prepare("select points from customers where site = ? and ckey = ?").bind(site, waNum(data.phone, (await codeWays(env, site)).cc)).first()) as any)?.points || 0) : 0;
         if (data.order_no && q.cart && typeof q.cart === "object") {
@@ -1506,6 +1588,7 @@ export default {
         // The enquiry is saved either way; the email is a copy, so a mail failure never fails the form. What happened
         // to the email is noted on the enquiry (_mail: keys starting with "_" never come from the visitor).
         const rowId = made?.id;
+        if (lowNow.length) { const lm = stockLowMail(env, site, stockC, lowNow).catch(() => {}); if (ctx?.waitUntil) ctx.waitUntil(lm); else await lm; }
         const mail = Promise.all([notifyEnquiry(env, site, data, String(q.page || "").slice(0, 200)).catch((e: any) => "Not emailed: " + String(e?.message || e).slice(0, 300)), waAlert(env, site, data).catch(() => "")])
           .then(([said, wa]) => ((said || wa) && rowId ? env.DB.prepare("update enquiries set data = ? where id = ? and site = ?").bind(JSON.stringify({ ...data, ...(said ? { _mail: said } : {}), ...(wa ? { _wa: wa } : {}) }), rowId, site).run() : null)).catch(() => {});
         if (ctx?.waitUntil) ctx.waitUntil(mail); else await mail;
@@ -2038,6 +2121,30 @@ export default {
         await env.DB.prepare("update enquiries set data = ? where id = ? and site = ?").bind(JSON.stringify(d), b.id, site).run();
         return json({ ok: true });
       }
+      // ---- Inventory: what is counted and how many are left; the owner sets, adds or stops counting; the log of changes.
+      if (p === "/st/list") {
+        const site = scope.replace(/^site:/, ""); await ensure(env);
+        const rows = (await env.DB.prepare("select item, qty, low, updated_at from stock where site = ? order by item limit 3000").bind(site).all()).results || [];
+        const log = (await env.DB.prepare("select item, delta, qty, why, ref, at from stock_log where site = ? order by id desc limit 200").bind(site).all()).results || [];
+        const c = await siteContent(env, site).catch(() => null);
+        return json({ on: invOn(c), items: c ? stockItems(c) : [], rows, log });
+      }
+      if (p === "/st/set" && req.method === "POST") {
+        const site = scope.replace(/^site:/, ""), b = (await req.json()) as any, now = new Date().toISOString(), why = oneLine(String(b.why || "")).slice(0, 60); await ensure(env);
+        const list = (Array.isArray(b.items) ? b.items : []).slice(0, 600); let n = 0;
+        for (const it of list) {
+          const item = String(it?.item || "").trim().slice(0, 200); if (!item) continue;
+          if (it.off) { await env.DB.prepare("delete from stock where site = ? and item = ?").bind(site, item).run(); await env.DB.prepare("insert into stock_log (site, item, delta, qty, why, ref, at) values (?, ?, 0, 0, 'No longer counted', '', ?)").bind(site, item, now).run(); n++; continue; }
+          const had: any = await env.DB.prepare("select qty, low from stock where site = ? and item = ?").bind(site, item).first();
+          const int = (v: unknown) => Math.max(0, Math.min(1_000_000, Math.round(+(v as any) || 0)));
+          const qty = it.add != null && isFinite(+it.add) ? int((+had?.qty || 0) + Math.round(+it.add)) : it.qty != null && isFinite(+it.qty) ? int(it.qty) : +had?.qty || 0, low = it.low != null && isFinite(+it.low) ? int(it.low) : +had?.low || 0;
+          if (had && +had.qty === qty && +had.low === low) continue;
+          await env.DB.prepare("insert into stock (site, item, qty, low, updated_at) values (?, ?, ?, ?, ?) on conflict (site, item) do update set qty = excluded.qty, low = excluded.low, updated_at = excluded.updated_at").bind(site, item, qty, low, now).run();
+          if (!had || +had.qty !== qty) await env.DB.prepare("insert into stock_log (site, item, delta, qty, why, ref, at) values (?, ?, ?, ?, ?, ?, ?)").bind(site, item, qty - (+had?.qty || 0), qty, why || (had ? (it.add != null ? (+it.add >= 0 ? "Stock added" : "Stock taken off") : "Counted") : "Started counting"), String(email || "").slice(0, 40), now).run();
+          n++;
+        }
+        return json({ ok: true, changed: n });
+      }
       // A shop order's shipment: the courier and its tracking number (and, with `ship`, the order is marked as sent and the customer told).
       if ((p === "/e/track" || p === "/e/track/live") && req.method === "POST") {
         const b = (await req.json()) as any, site = scope.replace(/^site:/, "");
@@ -2057,7 +2164,14 @@ export default {
       }
       if ((p === "/e/status" || p === "/e/delete") && req.method === "POST") {
         const b = (await req.json()) as any; const site = scope.replace(/^site:/, "");
-        if (p === "/e/status") { if (!["new", "read", "replied", "archived", "accepted", "preparing", "ready", "out", "done", "cancelled"].includes(b.status)) return err(400, "Unknown status."); await env.DB.prepare("update enquiries set status = ? where id = ? and site = ?").bind(b.status, b.id, site).run(); }
+        if (p === "/e/status") { if (!["new", "read", "replied", "archived", "accepted", "preparing", "ready", "out", "done", "cancelled"].includes(b.status)) return err(400, "Unknown status.");
+          // A cancelled order gives its items back to stock; one brought back from cancelled takes them again.
+          const row: any = await env.DB.prepare("select data, status from enquiries where id = ? and site = ?").bind(b.id, site).first();
+          let nd: string | null = null;
+          if (row && (b.status === "cancelled") !== (row.status === "cancelled")) { try { const d = JSON.parse(row.data), tk = JSON.parse(String(d._stock || "[]")) as [string, number][];
+            if (Array.isArray(tk) && tk.length) { if (b.status === "cancelled" && !d._stock_back) { await stockBack(env, site, tk, String(d.order_no || ""), "Order cancelled"); d._stock_back = "yes"; nd = JSON.stringify(d); }
+              else if (b.status !== "cancelled" && d._stock_back) { const now = new Date().toISOString(); for (const [k, q] of tk) { const r: any = await env.DB.prepare("update stock set qty = max(0, qty - ?), updated_at = ? where site = ? and item = ? returning qty").bind(q, now, site, k).first(); if (r) await env.DB.prepare("insert into stock_log (site, item, delta, qty, why, ref, at) values (?, ?, ?, ?, 'Order brought back', ?, ?)").bind(site, k, -q, +r.qty || 0, String(d.order_no || "").slice(0, 40), now).run(); } delete d._stock_back; nd = JSON.stringify(d); } } } catch { /* an order without stock lines */ } }
+          if (nd) await env.DB.prepare("update enquiries set status = ?, data = ? where id = ? and site = ?").bind(b.status, nd, b.id, site).run(); else await env.DB.prepare("update enquiries set status = ? where id = ? and site = ?").bind(b.status, b.id, site).run(); }
         else await env.DB.prepare("delete from enquiries where id = ? and site = ?").bind(b.id, site).run();
         return json({ ok: true });
       }

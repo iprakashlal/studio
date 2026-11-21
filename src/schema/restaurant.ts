@@ -207,6 +207,14 @@ const schema: Category[] = [
         { t: "toggle", path: "ordering.schedule", label: "Let guests order ahead for a later time" },
         { t: "when", path: "ordering.schedule", is: "true", fields: [g2({ t: "number", path: "ordering.slotMins", label: "Time slots every (minutes)", min: 10, step: 5 }, { t: "number", path: "ordering.daysAhead", label: "How many days ahead (0 = today only)", min: 0, step: 1 })] },
         { t: "note", text: "Times follow your Opening hours. While you're closed, guests can only order ahead (or not at all, if ordering ahead is off)." }] },
+      { title: "Inventory", fields: [
+        { t: "toggle", path: "inventory.on", label: "Count stock (dishes you give a quantity sell out by themselves)" },
+        { t: "when", path: "inventory.on", is: "true", fields: [
+          { t: "text", path: "inventory.alertTo", label: "Send low-stock emails to (optional)", ph: "you@example.com", hint: "Empty uses the address new orders go to." },
+          { t: "toggle", path: "inventory.alert", label: "Email me when a dish runs low or sells out" },
+        ] },
+        { t: "note", text: "Enter the quantities under Inventory (in the menu, under Selling). Only dishes you give a quantity are counted (for example the day's specials); the rest sell without a limit, and “Sold out today” on each dish still works as before. Counting runs on the site's own Cloudflare database, so the site must be hosted there and published once after switching this on." },
+      ] },
     ],
   },
   {

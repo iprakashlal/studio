@@ -9,7 +9,7 @@ import { applyTint, isHex, type UiMode } from "./tint";
 export const DEFAULT_NAME = "Picaffectz Studio";
 export type Brand = { name: string; logo: string /* small data: URL, or "" */; v?: number; /** The interface is coloured from the logo: its main colour (#rrggbb), or "" for the standard colours. */ tint?: string; /** Light or dark interface (dark when unset). */ mode?: UiMode; /** A quiet movement on the Studio's logo: one of LOGO_ANIMS, or "" for still. */ anim?: string };
 /** The movements the Studio's logo can have (Settings → Customize → Studio name & logo). */
-export const LOGO_ANIMS: [string, string][] = [["", "None (still)"], ["float", "Float"], ["pulse", "Pulse"], ["spin", "Spin"], ["swing", "Swing"], ["bounce", "Bounce"], ["flip", "Flip"], ["jelly", "Jelly"], ["glow", "Glow"], ["shine", "Shine"]];
+export const LOGO_ANIMS: [string, string][] = [["", "None (still)"], ["float", "Float"], ["pulse", "Pulse"], ["spin", "Spin"], ["swing", "Swing"], ["bounce", "Bounce"], ["flip", "Flip"], ["jelly", "Jelly"], ["glow", "Glow"], ["shine", "Shine"], ["heartbeat", "Heartbeat"], ["wobble", "Wobble"], ["tada", "Ta-da"], ["rubber", "Rubber band"], ["tilt", "Tilt"], ["drop", "Drop in and land"], ["pop", "Pop in"], ["neon", "Neon flicker"], ["hue", "Colour cycle"], ["glitch", "Glitch"]];
 const animOk = (a: unknown) => (LOGO_ANIMS.some(([k]) => k && k === a) ? String(a) : "");
 
 const KEY = () => "studio-brand:" + basePath();

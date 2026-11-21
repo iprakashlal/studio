@@ -171,7 +171,7 @@
     return `<li class="oc${d.soldOut ? " sold" : ""}" data-id="${esc(x.id)}" data-diet="${esc(d.diet || "")}" data-fav="${fav}" data-q="${esc((d.name + " " + (d.desc || "") + " " + (d.tag || "") + " " + x.cat.name).toLowerCase())}">
       <button type="button" class="oc-pic" data-act="open" data-id="${esc(x.id)}" aria-label="${esc(d.name)}: details"${d.soldOut ? " disabled" : ""}>${im ? `<img src="${esc(im)}" alt="" loading="lazy">` : A.ph(d.name)}${d.tag ? `<em class="oc-tag">${esc(d.tag)}</em>` : ""}</button>
       <div class="oc-b"><div class="oc-t"><h3>${A.dietMark(d.diet)}<span>${esc(d.name)}</span></h3><button type="button" class="oc-fav" data-act="fav" data-id="${esc(x.id)}" aria-pressed="${fav}" aria-label="${fav ? "Remove " + esc(d.name) + " from favourites" : "Save " + esc(d.name) + " as a favourite"}">${SV.heart}</button></div>
-        ${REV && REV[x.id] ? `<p class="oc-rv">${rvStars(REV[x.id][0])} <small>${REV[x.id][0]} (${REV[x.id][1]})</small></p>` : ""}
+        ${rvCard(x.id)}
         ${d.desc ? `<p class="oc-d">${A.rich(d.desc)}</p>${long ? `<button type="button" class="oc-more" data-act="more" aria-expanded="false">Show more</button>` : ""}` : ""}
         <div class="oc-f"><div><b class="oc-p">${x.V.length ? "From " : ""}${fmt(x.base)}</b>${custom ? `<small>Customisation available</small>` : ""}</div>
           ${d.soldOut ? `<span class="oc-out">Sold out</span>` : n && !custom ? stepper(x.id, n) : `<button type="button" class="btn sec oc-add" data-act="add" data-id="${esc(x.id)}" aria-label="Add ${esc(d.name)}">+ Add${n ? ` <i>${n}</i>` : ""}</button>`}</div></div></li>`;
@@ -410,10 +410,10 @@
     l.qty += by; if (l.qty <= 0) cart = cart.filter((x) => x !== l); else if (l.qty > 50) l.qty = 50; save();
   }
   /* Reviews (content.reviews, hosted sites): the average on each dish, and in its sheet the reviews and a way to write one. */
-  let REV = null; const RVL = {}, rvOn = () => !A.PREVIEW && !!(C.reviews && C.reviews.on && A.backend() && A.backend().cf);
+  let REV = null; const rvInner = (r) => `${rvStars(r[0])}<b>${r[0]}</b><small>(${r[1]})</small>`, rvCard = (id) => (REV && REV[id] ? `<p class="oc-rv" data-rv="${esc(id)}">${rvInner(REV[id])}</p>` : `<p class="oc-rv" data-rv="${esc(id)}" hidden></p>`); const RVL = {}, rvOn = () => !A.PREVIEW && !!(C.reviews && C.reviews.on && A.backend() && A.backend().cf);
   const rvStars = (n) => { n = Math.round(+n || 0); return `<span class="stars" role="img" aria-label="${n} out of 5 stars">${"★".repeat(n)}<i class="off">${"★".repeat(5 - n)}</i></span>`; };
   const rvApi = () => { const be = A.backend(); return be.cf + "/rev/" + encodeURIComponent(be.site); };
-  const rvLoad = () => { if (!rvOn()) return; fetch(rvApi(), { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((j) => { if (j && j.s && Object.keys(j.s).length) { REV = j.s; if (!ui.sheet && !ui.drawer) { const y = scrollY; menu(); scrollTo(0, y); } } }).catch(() => {}); };
+  const rvLoad = () => { if (!rvOn()) return; fetch(rvApi(), { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((j) => { if (j && j.s && Object.keys(j.s).length) { REV = j.s; document.querySelectorAll(".oc-rv[data-rv]").forEach((e) => { const r = REV[e.dataset.rv]; if (r) { e.innerHTML = rvInner(r); e.hidden = false; } }); } }).catch(() => {}); };
   const rvFetch = (id) => { if (!rvOn()) return; fetch(rvApi() + "?item=" + encodeURIComponent(id), { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((j) => { if (j) { RVL[id] = j; if (ui.sheet && ui.sheet.id === id) over(true); } }).catch(() => {}); };
   const rvBlock = (x) => {
     if (!rvOn()) return ""; const j = RVL[x.id], f = ui.rvf || (ui.rvf = { open: false, rating: 0, name: ui.form.name || "", email: ui.form.email || "", title: "", body: "", msg: "", err: "", busy: false });

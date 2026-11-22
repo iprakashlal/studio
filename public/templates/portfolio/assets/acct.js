@@ -240,6 +240,7 @@
 
   /** A bill for one order: a page of its own that prints (or saves as a PDF) cleanly. */
   function bill(o) {
+    if (cfg.gstBill && cfg.gstBill(o)) return; // a GST invoice, when the site offers one
     const B = cfg.biz || {}, rows = (o.items || []).length ? `<table><thead><tr><th>Item</th><th class="r">Qty</th></tr></thead><tbody>${o.items.map((x) => `<tr><td>${esc(x.n)}</td><td class="r">${x.q}</td></tr>`).join("")}</tbody></table>` : "";
     const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Bill ${esc(o.no)}</title><style>
 body{font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#111;margin:0;padding:32px;max-width:760px;margin-inline:auto}h1{font-size:22px;margin:0}h2{font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:#666;margin:22px 0 6px}

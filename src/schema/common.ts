@@ -657,12 +657,37 @@ export function accountCard(kind: "restaurant" | "store"): Card {
 /** Theme & layout → Account customization: how the sign-in step, "My account" and the checkout look. They always take
  *  the theme's own accent colour, corners, fonts and dark mode; these choices shape the rest. */
 /** Invoice and bill look and wording (content.invoice): used by the GST invoice (shop) and the bill in “My account” (shop and restaurant). */
+const g2 = (...f: Field[]): Field => ({ t: "grid", cols: 2, fields: f });
+const g3 = (...f: Field[]): Field => ({ t: "grid", cols: 3, fields: f });
+export const GST_STATES = ["Andaman and Nicobar Islands", "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chandigarh", "Chhattisgarh", "Dadra and Nagar Haveli and Daman and Diu", "Delhi", "Goa", "Gujarat", "Haryana", "Himachal Pradesh", "Jammu and Kashmir", "Jharkhand", "Karnataka", "Kerala", "Ladakh", "Lakshadweep", "Madhya Pradesh", "Maharashtra", "Manipur", "Meghalaya", "Mizoram", "Nagaland", "Odisha", "Puducherry", "Punjab", "Rajasthan", "Sikkim", "Tamil Nadu", "Telangana", "Tripura", "Uttar Pradesh", "Uttarakhand", "West Bengal"];
+/** The GST invoice section: the GST details, then the invoice's style, layout and wording (shared by the shop and the restaurant). */
+export function gstCategory(kind: "restaurant" | "store"): Category {
+  const rest = kind === "restaurant";
+  return {
+    id: "gst", label: "GST invoices", group: "Selling", desc: `A tax invoice for every order, with your GSTIN, ${rest ? "the SAC/HSN code" : "HSN codes"} and the CGST/SGST or IGST split, that ${rest ? "guests" : "customers"} and you can print or save as PDF. Its style, layout and wording are set here too.`,
+    cards: [
+      { title: "GST invoice", fields: [
+        { t: "toggle", path: "gst.on", label: "Offer a GST invoice on every order" },
+        { t: "when", path: "gst.on", is: "true", fields: [
+          g2({ t: "text", path: "gst.legalName", label: "Legal name of the business", ph: "as on the GST certificate" }, { t: "text", path: "gst.gstin", label: "GSTIN", ph: "27ABCDE1234F1Z5" }),
+          { t: "textarea", path: "gst.address", label: "Registered address", rows: 2 },
+          g3({ t: "select", path: "gst.state", label: "State", options: [{ value: "", label: "Choose the state" }, ...GST_STATES.map((n) => ({ value: n, label: n }))] }, { t: "text", path: "gst.pan", label: "PAN (optional)" }, { t: "text", path: "gst.prefix", label: "Invoice number starts with", ph: "INV-" }),
+          g3({ t: "select", path: "gst.defaultRate", label: "Usual GST rate", options: ["0", "0.25", "3", "5", "12", "18", "28"].map((v) => ({ value: v, label: v + "%" })) }, { t: "text", path: "gst.defaultHsn", label: "Usual HSN code" }, ...(rest ? [] : [{ t: "toggle", path: "gst.askGstin", label: "Ask business buyers for their GSTIN at checkout" } as Field])),
+          g2({ t: "text", path: "gst.sign", label: "Signature line", ph: "Authorised signatory" }, { t: "text", path: "gst.notes", label: "Note at the bottom (optional)", ph: "Goods once sold are not returnable." }),
+          { t: "note", text: rest ? "Prices on your menu are read as including GST at the usual rate, so the invoice total always equals what the guest paid; if the Order now page adds a tax percentage on top (Online ordering → Tax, not included), that percentage is used instead (delivery is not taxed then). Restaurant service is usually SAC 9963 at 5%; ask your accountant which applies to you. Tips are not part of the invoice. The invoice opens from “My account” (Bill) for orders placed after this update." : "Each product can have its own HSN code and rate (Products → open a product). Prices are read as including GST, so the invoice total always equals what the customer paid; if the shop adds one tax percentage on top (Prices & shipping → Tax, not included), that percentage is used instead. Buyers in your state get CGST + SGST, others IGST. The invoice number is your prefix plus the order number." },
+          { t: "note", text: "This prepares the invoice; it doesn't file anything with the GST portal. Have your accountant check the rates, HSN codes and number series before you rely on it.", tone: "warn" },
+        ] },
+      ] },
+      ...invoiceLookCard(kind),
+    ],
+  };
+}
 export function invoiceLookCard(kind: "restaurant" | "store" = "store"): Card[] {
   const o = (pairs: [string, string][]) => pairs.map(([value, label]) => ({ value, label }));
   const t = (path: string, label: string, ph: string): Field => ({ t: "text", path: "invoice." + path, label, ph });
   const store = kind === "store";
   const look: Card = { title: "Invoice style & layout", fields: [
-    ...(store ? [{ t: "previewPages", text: "Show the invoice in the live preview (a sample order; it updates as you change the settings below):", pages: [{ file: "checkout.html?preview=invoice", label: "Invoice" }] } as Field] : [{ t: "note", text: "How the bill in “My account” looks when a customer prints it or saves it as PDF." } as Field]),
+    ...(store ? [{ t: "previewPages", text: "Show the invoice in the live preview (a sample order; it updates as you change the settings below):", pages: [{ file: "checkout.html?preview=invoice", label: "Invoice" }] } as Field] : [{ t: "previewPages", text: "Show the invoice in the live preview (a sample order; it updates as you change the settings below). The same look is used for the bill in “My account”:", pages: [{ file: "order.html?preview=invoice", label: "Invoice" }] } as Field]),
     { t: "select", path: "invoice.theme", label: "Ready-made style", options: o([["", "None: choose layout, colour and font yourself"], ["corporate", "Corporate: blue, colour header band"], ["ink", "Ink: classic black and white"], ["sunset", "Sunset: bold orange"], ["emerald", "Emerald: minimal, green"], ["royal", "Royal: purple, serif"], ["boutique", "Boutique: minimal, berry, serif"], ["receipt", "Receipt: boxed grid, monospace"]]) },
     { t: "grid", cols: 2, fields: [
       { t: "select", path: "invoice.layout", label: "Layout", options: o([["", "The style's own (Classic if no style)"], ["classic", "Classic: ruled header, plain table"], ["modern", "Modern: colour header band, soft table"], ["minimal", "Minimal: light, airy, hairlines"], ["bold", "Bold: big title, dark table head, colour total"], ["ledger", "Ledger: boxed grid, compact (traditional tax invoice)"]]) },
@@ -753,7 +778,6 @@ export function accountsCategory(kind: "restaurant" | "store"): Category {
   return { id: "users", label: "User accounts", group: "Selling", desc: `Customer accounts: signing in before checkout, and “My account” with orders, bills, points and a profile.`,
     cards: [
       accountCard(kind),
-      ...(kind === "restaurant" ? invoiceLookCard("restaurant") : []),
       { title: "What “My account” holds", fields: [{ t: "note", text: `“My account” opens as a panel at the side of the site with three parts. Current order: the order in progress with its steps (it follows the status you set under Purchased orders${kind === "restaurant" ? ", or Petpooja's" : ""}). Order history: every order placed while signed in, with pictures of what was ordered and a bill to download. Profile: the ${who}'s name, the other contact and ${kind === "store" ? "up to six saved addresses" : "their address"}, which then fill in the checkout for them. Points show at the top when points are switched on.` }] },
       { title: "Verifying contacts", fields: [
         { t: "toggle", path: kind === "restaurant" ? "ordering.verifyPhone" : "checkout.verifyPhone", label: `Verify the mobile number with a code before the order is placed` },

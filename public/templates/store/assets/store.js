@@ -226,7 +226,7 @@ let recoT = 0;
 function recoSave(now) {
   clearTimeout(recoT);
   const send = () => {
-    if (!recoOn()) return; const g = (i) => { const e = $("#co #" + i); return e ? String(e.value || "").trim() : ""; }, email = g("email"); if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return;
+    if (!recoOn()) return; const g = (i) => { const e = $("#co #" + i); return e ? String(e.value || "").trim() : ""; }, email = g("email") || (ME() && ME().kind === "email" ? String(ME().key || "").trim() : ""); if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return;
     const lines = cartLines(); if (!$("#co") || $(".done") || !lines.length) return;
     const body = JSON.stringify({ email, name: g("name"), phone: g("phone"), lines: lines.map((l) => ({ id: l.id, opt: l.opt || "", qty: l.qty })), items: lines.map((l) => ({ n: l.p.name + (l.opt ? " (" + l.opt + ")" : ""), q: l.qty })), total: lines.reduce((n, l) => n + (Number(l.p.price) || 0) * l.qty, 0), back: location.origin + location.pathname.replace(/[^/]*$/, "") + "checkout.html" });
     if (body === recoSave.last) return; recoSave.last = body;
@@ -1003,6 +1003,7 @@ function render() {
   $("#app").innerHTML = html;
   if (SC && SC.drawn) SC.drawn($("#app"), C);
   bind();
+  if (PAGE === "checkout") recoSave(); // a signed-in shopper's own email counts, even if they never type in the form
   reveal();
   slides();
   if (window.SiteFX) try { window.SiteFX.init({ root: $("#app"), brand: C.theme.introTitle || C.brand.name, badge: C.poweredBy, bgs: C.sectionBg, asset: imgUrl, fonts: FONTS, c: C, policy: policyUrl(), again: render }); } catch (e) {}

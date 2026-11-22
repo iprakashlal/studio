@@ -261,7 +261,7 @@ const schema: Category[] = [
     ],
   },
   {
-    id: "checkout", label: "Checkout", group: "Selling", sub: "Online ordering", desc: "What guests are asked in the cart and at checkout.",
+    id: "checkout", label: "Checkout", group: "Selling", sub: "Online ordering", desc: "What guests are asked in the cart and at checkout, and the GST invoice they can download.",
     cards: [
       { title: "Cart extras", fields: [g2({ t: "toggle", path: "ordering.tips", label: "Offer a tip for the team" }, { t: "text", path: "ordering.tipOptions", label: "Tip amounts", ph: "10, 20, 30" }),
         g3({ t: "toggle", path: "ordering.cutlery", label: "Ask whether to send cutlery" }, { t: "toggle", path: "ordering.dishNotes", label: "Special instructions per dish" }, { t: "toggle", path: "ordering.notes", label: "A note for the kitchen" }),
@@ -273,6 +273,8 @@ const schema: Category[] = [
         { t: "toggle", path: "ordering.verifyEmail", label: "Verify the email address with a code before the order is placed" },
         { t: "when", path: "ordering.verifyEmail", is: "true", fields: [{ t: "note", text: "The guest is emailed a 6-digit code and enters it at checkout; the order then shows “Email: verified by a code” under Purchased orders. This works on a site hosted on Cloudflare, and the codes are sent by that database's own email (Resend). While its sender is still in test mode, codes can't reach guests: orders are then let through and marked “not verified”, so nobody is locked out. Send from your own domain (hosting window → Email settings) to verify everyone. An email address is checked only when one is given: choose Email or Both above to ask every guest for it (with Standard, also switch on “Ask for an email address” under Cart extras)." }] },
         { t: "note", text: "The other one is still shown, marked optional. Where guests verify their number on WhatsApp, or orders go to Petpooja, keep the mobile number required: verifying always asks for it, and Petpooja expects one." }] },
+      // The GST invoice (details, style, layout, preview and wording) is part of checkout.
+      ...gstCategory("restaurant").cards,
     ],
   },
   accountsCategory("restaurant"),
@@ -299,7 +301,6 @@ const schema: Category[] = [
       { title: "Cash on delivery", fields: [{ t: "toggle", path: "ordering.pay.cod", label: "Offer pay on delivery, at the counter or at the table" }, { t: "text", path: "ordering.pay.codLabel", label: "Label at checkout for delivery orders", ph: "Pay on delivery (cash or UPI)" }] },
     ],
   },
-  gstCategory("restaurant"),
   {
     id: "orderdelivery", label: "Order delivery", group: "Selling", sub: "Online ordering", desc: "Where new orders reach you.",
     cards: [

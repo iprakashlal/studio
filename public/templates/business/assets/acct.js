@@ -195,14 +195,15 @@
     const d = data;
     if (!d) return `<div class="sa" role="status" aria-label="Loading your account"><i class="sa-sk t"></i><i class="sa-sk h"></i><i class="sa-sk"></i><i class="sa-sk"></i></div>`;
     if (d.error) return `<div class="sa"><p class="sa-bad" role="alert">${esc(d.error)}</p></div>`;
-    const live = d.orders.filter(active), past = d.orders.filter((o) => !active(o)), view = ui.view || (live.length ? "now" : "orders");
+    let live = d.orders.filter(active), past = d.orders.filter((o) => !active(o)), view = ui.view || (live.length ? "now" : ["orders", "profile"].includes(U().startView) ? U().startView : "orders"), T = (k, d) => String(U()[k] || "").trim() || d;
     const L = d.loyalty, worth = L && L.worth > 0 ? Math.round(d.points * L.worth * 100) / 100 : 0, m = cfg.money || ((n) => String(n));
-    const tabs = [["now", "Current order" + (live.length > 1 ? "s" : "")], ["orders", "Order history"], ["profile", "Profile"]], nm = String(d.name || "").trim();
-    return `<div class="sa"><div class="sa-hero"><div class="sa-me"><span class="sa-av" aria-hidden="true">${esc((nm || show(me.key).replace(/^\+/, "")).slice(0, 1).toUpperCase())}</span><div><b>${nm ? "Hi, " + esc(nm.split(" ")[0]) : "Welcome"}</b><span>${esc(show(me.key))}</span></div><button type="button" class="sa-link" data-sa="out">Sign out</button></div>
-      <div class="sa-pills">${L ? `<span class="sa-pill"><b>${d.points}</b>point${d.points === 1 ? "" : "s"}${worth ? ` · worth up to ${esc(m(worth))}` : ""}</span>` : ""}<span class="sa-pill"><b>${d.count}</b>order${d.count === 1 ? "" : "s"}</span></div></div>
+    const tabs = [["now", T("tabNow", "Current order" + (live.length > 1 ? "s" : ""))], ["orders", T("tabOrders", "Order history")], ["profile", T("tabProfile", "Profile")]].filter((x) => !(x[0] === "now" && U().hideNow === true)), nm = String(d.name || "").trim();
+    if (U().hideNow === true && view === "now") view = "orders";
+    return `<div class="sa"><div class="sa-hero"><div class="sa-me"><span class="sa-av" aria-hidden="true">${esc((nm || show(me.key).replace(/^\+/, "")).slice(0, 1).toUpperCase())}</span><div><b>${nm ? esc(T("hello", "Hi, {name}").replace(/\{name\}/g, nm.split(" ")[0])) : esc(T("welcome", "Welcome"))}</b><span>${esc(show(me.key))}</span></div><button type="button" class="sa-link" data-sa="out">Sign out</button></div>
+      <div class="sa-pills"${U().hidePills === true ? " hidden" : ""}>${L ? `<span class="sa-pill"><b>${d.points}</b>point${d.points === 1 ? "" : "s"}${worth ? ` · worth up to ${esc(m(worth))}` : ""}</span>` : ""}<span class="sa-pill"><b>${d.count}</b>order${d.count === 1 ? "" : "s"}</span></div></div>
       <div class="sa-tabs" role="tablist" aria-label="My account">${tabs.map(([k, l]) => `<button type="button" role="tab" data-sa="view" data-v="${k}" aria-selected="${view === k}">${l}${k === "now" && live.length ? `<em>${live.length}</em>` : ""}</button>`).join("")}</div>
-      ${view === "now" ? (live.length ? `<div class="sa-orders">${live.map((o) => orderHTML(o, true)).join("")}</div><p class="sa-soft">This updates by itself while it is open.</p>` : `<div class="sa-empty">${IC.bag}<span>No order in progress.</span></div>`)
-        : view === "orders" ? (past.length || live.length ? `<div class="sa-orders">${[...live, ...past].map((o) => orderHTML(o, false)).join("")}</div>` : `<div class="sa-empty">${IC.bag}<span>No orders yet. They show here once you place one while signed in.</span></div>`)
+      ${view === "now" ? (live.length ? `<div class="sa-orders">${live.map((o) => orderHTML(o, true)).join("")}</div><p class="sa-soft">This updates by itself while it is open.</p>` : `<div class="sa-empty">${IC.bag}<span>${esc(T("emptyNow", "No order in progress."))}</span></div>`)
+        : view === "orders" ? (past.length || live.length ? `<div class="sa-orders">${[...live, ...past].map((o) => orderHTML(o, false)).join("")}</div>` : `<div class="sa-empty">${IC.bag}<span>${esc(T("emptyOrders", "No orders yet. They show here once you place one while signed in."))}</span></div>`)
         : profileHTML(d)}</div>`;
   }
   function draw() {

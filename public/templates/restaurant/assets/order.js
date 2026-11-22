@@ -35,6 +35,7 @@
      their orders and points. A signed-in mobile number or email address counts as verified. */
   const ME = () => (window.SiteAcct && SiteAcct.on() ? SiteAcct.user() : null);
   /** How the checkout's sections are drawn (Theme & layout → Account customization): cards, numbered steps, or plain. */
+  const uiT = (k, d) => { const v = A.C().account && A.C().account.ui && String(A.C().account.ui[k] || "").trim(); return v || d; };
   const coLook = () => { const v = A.C().account && A.C().account.ui && A.C().account.ui.checkout; return ["cards", "steps", "plain"].includes(v) ? v : "cards"; };
   let acctWait = false; // true while the site finds out whether sign-in is on, so checkout never flashes its form first
   /** In the Studio's preview: ?preview=cart | signin | account shows the checkout with a sample cart, its sign-in step, or "My account". */
@@ -287,9 +288,9 @@
     if (acctWait) return `<div class="sk-wrap" role="status" aria-label="Loading"><i class="sk-b s"></i><i class="sk-b"></i><i class="sk-b"></i><i class="sk-b h"></i></div>`;
     if (mustSign()) return `<div id="od-acct"></div>`; // sign in first: the form follows
     return `<form class="od-form" id="od-form" data-look="${esc(coLook())}" novalidate>${ME() ? `<p class="od-me"><span>Signed in as <b>${esc(/@/.test(ME().key) ? ME().key : "+" + ME().key)}</b></span><button type="button" class="chip" data-act="acct">My account</button></p>` : ""}
-      <fieldset><legend>Your details</legend>${inp("name", "Name", 'autocomplete="name" required')}${phoneBox()}${must().askEmail ? emailBox() : ""}${must().either ? `<p class="od-live">Give your mobile number or your email address (or both), so we can reach you about the order.</p>` : ""}
+      <fieldset><legend>${esc(uiT("coDetails", "Your details"))}</legend>${inp("name", "Name", 'autocomplete="name" required')}${phoneBox()}${must().askEmail ? emailBox() : ""}${must().either ? `<p class="od-live">Give your mobile number or your email address (or both), so we can reach you about the order.</p>` : ""}
         ${ptsBox()}</fieldset>
-      ${m === "delivery" ? `<fieldset><legend>Delivery address</legend>${inp("line1", "Flat, house or building", 'autocomplete="address-line1" required')}${inp("area", "Street and area", 'autocomplete="address-line2" required')}<div class="of2">${inp("landmark", "Landmark (optional)")}${inp("pin", "PIN code", 'inputmode="numeric" autocomplete="postal-code" maxlength="10"' + (o.askPin !== false ? " required" : ""))}</div>
+      ${m === "delivery" ? `<fieldset><legend>${esc(uiT("coAddress", "Delivery address"))}</legend>${inp("line1", "Flat, house or building", 'autocomplete="address-line1" required')}${inp("area", "Street and area", 'autocomplete="address-line2" required')}<div class="of2">${inp("landmark", "Landmark (optional)")}${inp("pin", "PIN code", 'inputmode="numeric" autocomplete="postal-code" maxlength="10"' + (o.askPin !== false ? " required" : ""))}</div>
         <div class="od-tips" role="radiogroup" aria-label="Save this address as">${["Home", "Work", "Other"].map((l) => `<button type="button" class="chip" role="radio" data-act="label" data-id="${l}" aria-checked="${f.label === l}">${l}</button>`).join("")}</div>
         <p class="od-bad" id="od-area" role="alert"${!b.area.ok && (f.pin || f.area) ? "" : " hidden"}>${esc(o.areaNote || "Sorry, we don't deliver to that area yet. Choose Pick up, or call us.")}</p></fieldset>` : ""}
       ${m === "dinein" ? `<fieldset><legend>Your table</legend>${inp("table", "Table number", 'required maxlength="12"')}</fieldset>` : ""}
@@ -298,7 +299,7 @@
       ${o.notes !== false ? `<div class="of"><label for="of-notes">Note for the kitchen (optional)</label><textarea id="of-notes" data-f="notes" rows="2" maxlength="300">${esc(f.notes || "")}</textarea></div>` : ""}
       <div class="od-box" id="od-bill"><span class="od-l">Bill details</span>${billRows(b)}</div>
       ${agree() ? `<label class="of-consent"><input type="checkbox" id="of-consent"${ui.agreed ? " checked" : ""}> <span>${A.consentHTML ? A.consentHTML() : esc(agree())}</span></label>` : ""}
-      <p class="od-bad" id="od-err" role="alert"${ui.err ? "" : " hidden"}>${esc(ui.err)}</p></form>`;
+      ${uiT("coTrust", "") ? `<p class="od-live co-trust">${esc(uiT("coTrust", ""))}</p>` : ""}<p class="od-bad" id="od-err" role="alert"${ui.err ? "" : " hidden"}>${esc(ui.err)}</p></form>`;
   }
   const STEPS = { delivery: ["Order received", "Confirmed", "Being prepared", "Out for delivery", "Delivered"], pickup: ["Order received", "Confirmed", "Being prepared", "Ready for pickup", "Collected"], dinein: ["Order received", "Confirmed", "Being prepared", "Served", "Completed"] };
   const stepOf = (s) => ({ accepted: 1, preparing: 2, ready: 3, out: 3, done: 4 }[s] || 0);

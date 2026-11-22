@@ -696,6 +696,29 @@ export function accountLookCard(kind: "restaurant" | "store"): Card {
     { t: "grid", cols: 2, fields: [
       { t: "text", path: "account.ui.signTitle", label: "Sign-in heading", ph: "Sign in or create your account" },
       { t: "text", path: "account.ui.signText", label: "Line under it", ph: "New here? It is the same step…" }] },
+    { t: "note", text: "“My account”: the words and parts. Leave a box empty to keep the standard wording shown in grey." },
+    { t: "grid", cols: 3, fields: [
+      { t: "text", path: "account.ui.tabNow", label: "Tab: current order", ph: "Current order" },
+      { t: "text", path: "account.ui.tabOrders", label: "Tab: order history", ph: "Order history" },
+      { t: "text", path: "account.ui.tabProfile", label: "Tab: profile", ph: "Profile" }] },
+    { t: "grid", cols: 2, fields: [
+      { t: "text", path: "account.ui.hello", label: "Greeting", ph: "Hi, {name}", hint: "{name} is the customer's first name." },
+      { t: "text", path: "account.ui.welcome", label: "Greeting when we don't know the name", ph: "Welcome" },
+      { t: "text", path: "account.ui.emptyNow", label: "When no order is in progress", ph: "No order in progress." },
+      { t: "text", path: "account.ui.emptyOrders", label: "When there are no orders", ph: "No orders yet. They show here once you place one while signed in." }] },
+    { t: "grid", cols: 3, fields: [
+      S("startView", "Opens on (when nothing is in progress)", [["", "Order history"], ["profile", "Profile"]]),
+      { t: "toggle", path: "account.ui.hideNow", label: "Hide the “current order” tab" },
+      { t: "toggle", path: "account.ui.hidePills", label: "Hide the points and order count" }] },
+    { t: "note", text: "Checkout: the section titles and two extra lines. Leave a box empty to keep the standard wording." },
+    { t: "grid", cols: 2, fields: [
+      { t: "text", path: "account.ui.coDetails", label: "Section: your details", ph: "Your details" },
+      { t: "text", path: "account.ui.coAddress", label: "Section: delivery address", ph: "Delivery address" },
+      ...(kind === "store" ? [{ t: "text", path: "account.ui.coPay", label: "Section: payment", ph: "Payment" } as Field, { t: "text", path: "account.ui.coOrder", label: "Section: order summary", ph: "Order" } as Field] : [])] },
+    { t: "text", path: "account.ui.coTrust", label: "Reassurance line before the order button (optional)", ph: "Secure checkout · Easy returns · Questions? WhatsApp us" },
+    ...(kind === "store" ? [
+      { t: "text", path: "account.ui.coNote", label: "Note under the order button", ph: "Nothing is charged yet. You'll pay and send the order on the next screen." } as Field,
+      { t: "toggle", path: "account.ui.coNoteOff", label: "Hide the note under the order button" } as Field] : []),
   ] };
 }
 /** Selling → User accounts: customer accounts and what goes with them, in one place. */

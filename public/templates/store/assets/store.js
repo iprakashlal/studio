@@ -370,6 +370,15 @@ function bindTrack() {
 const gstOn = () => !!(C.gst && C.gst.on);
 const invBtn = (id) => (gstOn() ? `<button type="button" class="btn" data-inv="${esc(id)}">Download invoice</button>` : "");
 let invP;
+/** The invoice as the editor's preview shows it: a sample order, redrawn whenever the owner changes a setting. */
+function invPreview() {
+  const P = C.products.slice(0, 2), seller = (C.gst && C.gst.state) || "Maharashtra";
+  const items = P.length ? P.map((p, i) => ({ id: p.id, name: p.name, opt: "", qty: i ? 1 : 2, price: +p.price || 500 })) : [{ id: "x", name: "Sample product", opt: "", qty: 2, price: 500 }];
+  const sub = items.reduce((a, x) => a + x.price * x.qty, 0), ship = 60, o = { id: "1042", at: new Date().toISOString(), items, t: { sub, ship, total: sub + ship }, c: { name: "Asha Rao", email: "asha@example.com", phone: "+91 98765 43210", address: "12 MG Road", city: "Pune", pin: "411001", state: seller } };
+  setTimeout(() => (invP ||= new Promise((ok, no) => { if (window.SiteInvoice) return ok(); const s = document.createElement("script"); s.src = "assets/invoice.js"; s.onload = () => ok(); s.onerror = no; document.head.appendChild(s); }))
+    .then(() => { const f = $("#inv-pv"); if (f) { f.srcdoc = window.SiteInvoice.html(o, C, { bar: false }); f.onload = () => { try { f.style.height = f.contentDocument.documentElement.scrollHeight + 20 + "px"; } catch (e) {} }; } }).catch(() => {}), 0);
+  return `<div class="wrap" style="padding:18px 0 60px"><p class="soft" style="font-size:13px">Preview with a sample order. ${C.gst && C.gst.on ? "" : "Switch “Offer a GST invoice” on to offer it to customers."}</p><iframe id="inv-pv" title="Invoice preview" style="width:100%;height:1100px;border:1px solid var(--line);border-radius:12px;background:#fff"></iframe></div>`;
+}
 function openInvoice(o) {
   (invP ||= new Promise((ok, no) => { if (window.SiteInvoice) return ok(); const s = document.createElement("script"); s.src = "assets/invoice.js"; s.onload = () => ok(); s.onerror = no; document.head.appendChild(s); }))
     .then(() => window.SiteInvoice.open(o, C)).catch(() => {});
@@ -746,6 +755,7 @@ const PAGES = {
     if (!lines.length) return `<section class="page-h"><div class="wrap"><h1>${esc(C.checkout.title)}</h1></div></section><div class="wrap" style="padding-bottom:80px"><div class="empty"><p>Your cart is empty.</p><a class="btn pri" href="shop.html">Start shopping</a></div></div>`;
     const K = C.checkout, ms = methods(), t = totals(lines);
 
+    if (PREVIEW && PV === "invoice") return invPreview();
     if (askCan.waiting) return `<section class="page-h"><div class="wrap"><h1 class="fit">${ml(K.title)}</h1></div></section><div class="wrap" style="padding-bottom:80px"><div class="sk-wrap" role="status" aria-label="Loading"><i class="sk-b s"></i><i class="sk-b"></i><i class="sk-b"></i><i class="sk-b h"></i></div></div>`;
     if (mustSign()) return `<section class="page-h"><div class="wrap"><h1 class="fit">${ml(K.title)}</h1></div></section><div class="wrap" style="padding-bottom:80px"><div id="sa-gate"></div></div>`;
     { const k = window.SiteAcct && !ME() && SiteAcct.skipped(); if (k) { EV.tok = k.token; EV.email = k.email; } }

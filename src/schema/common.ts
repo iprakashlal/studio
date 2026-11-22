@@ -781,6 +781,12 @@ export function accountsCategory(kind: "restaurant" | "store"): Category {
     cards: [
       accountCard(kind),
       { title: "What “My account” holds", fields: [{ t: "note", text: `“My account” opens as a panel at the side of the site with three parts. Current order: the order in progress with its steps (it follows the status you set under Purchased orders${kind === "restaurant" ? ", or Petpooja's" : ""}). Order history: every order placed while signed in, with pictures of what was ordered and a bill to download. Profile: the ${who}'s name, the other contact and ${kind === "store" ? "up to six saved addresses" : "their address"}, which then fill in the checkout for them. Points show at the top when points are switched on.` }] },
+      { title: "What the profile asks for", fields: [
+        { t: "note", text: `The Profile part of “My account” always has the ${who}'s name and mobile number or email (the one they signed in with can't be changed). Switch on what else it should ask. Everything here is optional for the ${who}.` },
+        { t: "toggle", path: "account.addresses", label: `Let ${kind === "restaurant" ? "guests" : "shoppers"} keep several addresses (up to 6, each with a name such as Home or Office)`, def: kind === "store" },
+        { t: "toggle", path: "account.dob", label: "Ask for the date of birth" },
+        { t: "toggle", path: "account.gender", label: "Ask for the gender (female, male, other, or prefer not to say)" },
+      ] },
       { title: "Verifying contacts", fields: [
         { t: "toggle", path: kind === "restaurant" ? "ordering.verifyPhone" : "checkout.verifyPhone", label: `Verify the mobile number with a code before the order is placed` },
         { t: "toggle", path: kind === "restaurant" ? "ordering.verifyEmail" : "checkout.verifyEmail", label: `Verify the email address with a code before the order is placed` },

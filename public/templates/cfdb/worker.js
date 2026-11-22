@@ -26,7 +26,7 @@ create index if not exists approvals_project on approvals (scope, project, creat
 create table if not exists approval_notes (id integer primary key autoincrement, token text not null, who text not null, body text not null, page text not null default '', kind text not null default 'comment', created_at text not null);
 create index if not exists approval_notes_token on approval_notes (token, id);
 `;
-var CFDB_VERSION = 50;
+var CFDB_VERSION = 51;
 var CFDB_WORKER_NAME = "picaffectz-db";
 
 // src/lib/lookdigest.ts
@@ -1799,6 +1799,8 @@ async function ownerTo(env, site, c, pref) {
   if (!to.length) to = addrs(((await env.DB.prepare("select email from members where scope = ? order by role = 'owner' desc limit 3").bind("site:" + site).all()).results || []).map((r) => r.email).join(","));
   return to;
 }
+var cleanDob = (v) => /^(19|20)\d\d-\d\d-\d\d$/.test(String(v ?? "")) ? String(v) : "";
+var cleanGender = (v) => ["female", "male", "other"].includes(String(v ?? "")) ? String(v) : "";
 var cleanAddr = (a) => {
   const t = (v, n = 120) => oneLine(String(v ?? "")).replace(/\s+/g, " ").slice(0, n);
   return { label: t(a?.label, 30), line1: t(a?.line1), line2: t(a?.line2), city: t(a?.city, 60), pin: t(a?.pin, 12), state: t(a?.state, 60) };
@@ -2541,16 +2543,23 @@ var db_worker_default = {
           if (!byMail && String(b.email || "").trim() && !email2) return err(400, "Enter a valid email address.");
           if (byMail && phone && phone.replace(/\D/g, "").length < 8) return err(400, "Enter a mobile number with at least 8 digits.");
           const addrs = (Array.isArray(b.addresses) ? b.addresses : []).slice(0, 6).map(cleanAddr).filter((a) => a.line1 || a.city || a.pin), now = (/* @__PURE__ */ new Date()).toISOString();
+          let kept = {};
+          try {
+            kept = JSON.parse(String((await env.DB.prepare("select data from profiles where site = ? and ckey = ?").bind(site, key).first())?.data || "{}")) || {};
+          } catch {
+          }
+          const dob = "dob" in b ? /^(19|20)\d\d-\d\d-\d\d$/.test(String(b.dob)) && String(b.dob) <= now.slice(0, 10) ? String(b.dob) : "" : cleanDob(kept.dob), gender = "gender" in b ? cleanGender(b.gender) : cleanGender(kept.gender);
           await env.DB.batch([
             env.DB.prepare("insert into customers (site, ckey, name, phone, email, verified, orders, spent, points, first_at, last_at) values (?, ?, ?, ?, ?, 1, 0, 0, 0, ?, ?) on conflict (site, ckey) do update set name = excluded.name, phone = case when ? = 1 then excluded.phone else phone end, email = case when ? = 1 then email else excluded.email end, verified = 1").bind(site, key, name, byMail ? phone : "+" + key, byMail ? key : email2, now, now, byMail ? 1 : 0, byMail ? 1 : 0),
-            env.DB.prepare("insert into profiles (site, ckey, data) values (?, ?, ?) on conflict (site, ckey) do update set data = excluded.data").bind(site, key, JSON.stringify({ addresses: addrs }))
+            env.DB.prepare("insert into profiles (site, ckey, data) values (?, ?, ?) on conflict (site, ckey) do update set data = excluded.data").bind(site, key, JSON.stringify({ addresses: addrs, dob, gender }))
           ]);
-          return json({ ok: true, profile: { name, phone: byMail ? phone : "+" + key, email: byMail ? key : email2, addresses: addrs } });
+          return json({ ok: true, profile: { name, phone: byMail ? phone : "+" + key, email: byMail ? key : email2, addresses: addrs, dob, gender } });
         }
         const row = await env.DB.prepare("select name, phone, email, orders, spent, points, first_at from customers where site = ? and ckey = ?").bind(site, key).first();
-        let addresses = [];
+        let addresses = [], pf = {};
         try {
-          addresses = (JSON.parse(String((await env.DB.prepare("select data from profiles where site = ? and ckey = ?").bind(site, key).first())?.data || "{}")).addresses || []).slice(0, 6).map(cleanAddr);
+          pf = JSON.parse(String((await env.DB.prepare("select data from profiles where site = ? and ckey = ?").bind(site, key).first())?.data || "{}")) || {};
+          addresses = (pf.addresses || []).slice(0, 6).map(cleanAddr);
         } catch {
         }
         const nos = ((await env.DB.prepare("select order_no, max(at) t from points where site = ? and ckey = ? and order_no <> '' group by order_no order by t desc limit 25").bind(site, key).all()).results || []).map((r) => String(r.order_no));
@@ -2580,7 +2589,7 @@ var db_worker_default = {
           }
         }
         const L = loyOf(sc);
-        return json({ ok: true, name: row?.name || "", phone: byMail ? row?.phone || "" : "+" + key, email: byMail ? key : row?.email || "", addresses, count: +row?.orders || 0, points: Math.max(0, +row?.points || 0), loyalty: L.on ? { worth: L.worth, min: L.min, maxPct: L.maxPct } : null, orders });
+        return json({ ok: true, name: row?.name || "", phone: byMail ? row?.phone || "" : "+" + key, email: byMail ? key : row?.email || "", addresses, dob: cleanDob(pf.dob), gender: cleanGender(pf.gender), count: +row?.orders || 0, points: Math.max(0, +row?.points || 0), loyalty: L.on ? { worth: L.worth, min: L.min, maxPct: L.maxPct } : null, orders });
       }
       if (/^\/eotp\/(send|check)\/[a-z0-9][a-z0-9-]{0,59}$/.test(p) && req.method === "POST") {
         const site = p.split("/")[3], b = await req.json(), sc = await siteContent(env, site).catch(() => null);

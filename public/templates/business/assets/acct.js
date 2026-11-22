@@ -22,7 +22,7 @@
     if (/^e?otp\/send/.test(path)) return ok({ ok: true, via: body.via });
     if (/^e?otp\/check/.test(path)) return ok({ ok: true, token: "demo" });
     if (path === "acct/in") return ok({ ok: true, kind: body.phone ? "phone" : "email", key: body.phone ? "91" + digits(body.phone).slice(-10) : String(body.email).toLowerCase(), pass: Date.now() + day + ".demo" });
-    if (path === "acct/save") { demoProfile = { name: body.name, phone: body.phone || "", email: body.email || "", addresses: body.addresses || [] }; return ok({ ok: true, profile: demoProfile }); }
+    if (path === "acct/save") { demoProfile = { name: body.name, phone: body.phone || "", email: body.email || "", addresses: body.addresses || [], dob: body.dob || "", gender: body.gender || "" }; return ok({ ok: true, profile: demoProfile }); }
     const P = demoProfile || { name: "Asha Rao", phone: "+91 98765 43210", email: "asha@example.com", addresses: [{ label: "Home", line1: "12 MG Road", line2: "Camp", city: "Pune", pin: "411001", state: "Maharashtra" }] }, m = cfg.money || ((n) => String(n));
     return ok({ ok: true, ...P, count: 2, points: 120, loyalty: { worth: 1, min: 50, maxPct: 50 }, orders: [
       { no: "SAMPLE-1002", at: new Date(Date.now() - 20 * 60000).toISOString(), total: m(640), status: "preparing", mode: cfg.kind === "store" ? "Shop order" : "Delivery", paid: true, pay: "Paid online", address: "12 MG Road, Pune", name: P.name, points: "Earned 32 points", items: it.map((x, i) => ({ n: x.n, q: i ? 1 : 2, i: x.i })), text: "" },
@@ -178,11 +178,12 @@
   const blankAddr = () => ({ label: "", line1: "", line2: "", city: "", pin: "", state: "" });
   function profileHTML(d) {
     const byMail = me.kind === "email", A = ui.addrs || (ui.addrs = (d.addresses && d.addresses.length ? d.addresses : [blankAddr()]).map((a) => ({ ...blankAddr(), ...a }))), many = !!cfg.addresses;
-    const f = (id, lab, val, more) => `<div class="sa-f"><label for="${id}">${lab}</label><input id="${id}" value="${esc(val || "")}" ${more || ""}></div>`;
+    const ASK = cfg.ask || {}, f = (id, lab, val, more) => `<div class="sa-f"><label for="${id}">${lab}</label><input id="${id}" value="${esc(val || "")}" ${more || ""}></div>`;
     return `<form class="sa-form" data-sa-profile novalidate>
       ${f("sa-name", "Name", d.name, 'autocomplete="name" maxlength="100"')}
       <div class="sa-two">${f("sa-phone", "Mobile number", d.phone, byMail ? 'type="tel" inputmode="tel" autocomplete="tel"' : "readonly")}${f("sa-email", "Email address", d.email, byMail ? "readonly" : 'type="email" autocomplete="email"')}</div>
       <p class="sa-soft">You sign in with your ${byMail ? "email address" : "mobile number"}, so that one can't be changed here.</p>
+      ${ASK.dob || ASK.gender ? `<div class="sa-two">${ASK.dob ? f("sa-dob", "Date of birth", d.dob, `type="date" max="${new Date().toISOString().slice(0, 10)}" min="1900-01-01" autocomplete="bday"`) : ""}${ASK.gender ? `<div class="sa-f"><label for="sa-gender">Gender</label><select id="sa-gender"><option value="">Prefer not to say</option>${[["female", "Female"], ["male", "Male"], ["other", "Other"]].map(([k, l]) => `<option value="${k}"${d.gender === k ? " selected" : ""}>${l}</option>`).join("")}</select></div>` : ""}</div>` : ""}
       <p class="sa-sub">${many ? "Saved addresses" : "Your address"}</p>
       ${A.map((a, i) => `<div class="sa-addr" data-addr="${i}">${many ? `<div class="sa-row"><b>Address ${i + 1}</b>${A.length > 1 ? `<button type="button" class="sa-link" data-sa="deladdr" data-v="${i}">Remove</button>` : ""}</div>${f("sa-a-label-" + i, "Name for it (optional)", a.label, 'placeholder="Home, Office…" maxlength="30"')}` : ""}
         ${f("sa-a-line1-" + i, "Address", a.line1, 'autocomplete="address-line1"')}${f("sa-a-line2-" + i, "Area or landmark (optional)", a.line2, 'autocomplete="address-line2"')}
@@ -215,7 +216,7 @@
   /** What is typed in the profile form, read back into the working copy (so a redraw keeps it). */
   function readProfile() {
     const v = (id) => String((document.getElementById(id) || {}).value || "").trim(); if (!document.getElementById("sa-name") || !data || data.error) return;
-    data.name = v("sa-name"); if (me.kind === "email") data.phone = v("sa-phone"); else data.email = v("sa-email");
+    data.name = v("sa-name"); if (document.getElementById("sa-dob")) data.dob = v("sa-dob"); if (document.getElementById("sa-gender")) data.gender = v("sa-gender"); if (me.kind === "email") data.phone = v("sa-phone"); else data.email = v("sa-email");
     (ui.addrs || []).forEach((a, i) => { for (const k of ["label", "line1", "line2", "city", "pin", "state"]) if (document.getElementById("sa-a-" + k + "-" + i)) a[k] = v("sa-a-" + k + "-" + i); });
   }
   /** Ready-made invoice styles: a layout, a colour and a font in one choice (the owner's own choices still win). */
@@ -267,7 +268,7 @@ ${B.inv && B.inv.terms ? `<h2>Terms</h2><p class="note" style="margin-top:4px">$
     if (a === "deladdr") { readProfile(); ui.addrs.splice(+v, 1); return draw(); }
     if (a === "save") {
       readProfile(); ui.msg = ""; ui.saved = ""; ui.busy = true; draw();
-      try { const r = await post("acct/save", { key: me.key, pass: me.pass, name: data.name, phone: data.phone, email: data.email, addresses: ui.addrs }), j = await r.json().catch(() => null);
+      try { const r = await post("acct/save", { key: me.key, pass: me.pass, name: data.name, phone: data.phone, email: data.email, addresses: ui.addrs, ...((cfg.ask || {}).dob ? { dob: data.dob || "" } : {}), ...((cfg.ask || {}).gender ? { gender: data.gender || "" } : {}) }), j = await r.json().catch(() => null);
         if (r.status === 401) { ui.busy = false; out(); return; }
         if (!r.ok || !j || !j.profile) ui.msg = (j && j.error) || "Couldn't save that. Please try again.";
         else { Object.assign(data, j.profile); ui.addrs = null; ui.saved = "Saved."; keepProfile(); changed(); }
@@ -304,7 +305,7 @@ ${B.inv && B.inv.terms ? `<h2>Terms</h2><p class="note" style="margin-top:4px">$
 
   /* The profile is kept on the device too, so a checkout can fill itself in before the account has loaded. */
   let prof = null;
-  function keepProfile() { prof = data && !data.error ? { name: data.name || "", phone: data.phone || "", email: data.email || "", addresses: data.addresses || [] } : prof; try { if (prof && !cfg.demo) localStorage.setItem(key() + ":p", JSON.stringify(prof)); } catch (e) { /* private window */ } }
+  function keepProfile() { prof = data && !data.error ? { name: data.name || "", phone: data.phone || "", email: data.email || "", addresses: data.addresses || [], dob: data.dob || "", gender: data.gender || "" } : prof; try { if (prof && !cfg.demo) localStorage.setItem(key() + ":p", JSON.stringify(prof)); } catch (e) { /* private window */ } }
   async function load(quiet) {
     if (!me) return;
     try { const r = await post("acct/me", { key: me.key, pass: me.pass }), j = await r.json().catch(() => null);

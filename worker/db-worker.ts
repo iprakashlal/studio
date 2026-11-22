@@ -934,6 +934,8 @@ async function ownerTo(env: Env, site: string, c: any, pref: unknown): Promise<s
   if (!to.length) to = addrs((((await env.DB.prepare("select email from members where scope = ? order by role = 'owner' desc limit 3").bind("site:" + site).all()).results || []) as any[]).map((r) => r.email).join(","));
   return to;
 }
+const cleanDob = (v: unknown) => (/^(19|20)\d\d-\d\d-\d\d$/.test(String(v ?? "")) ? String(v) : "");
+const cleanGender = (v: unknown) => (["female", "male", "other"].includes(String(v ?? "")) ? String(v) : "");
 const cleanAddr = (a: any) => { const t = (v: unknown, n = 120) => oneLine(String(v ?? "")).replace(/\s+/g, " ").slice(0, n); return { label: t(a?.label, 30), line1: t(a?.line1), line2: t(a?.line2), city: t(a?.city, 60), pin: t(a?.pin, 12), state: t(a?.state, 60) }; };
 /* ---- Customer accounts (content.account): a customer signs in with a code sent to their mobile number or email address,
    and stays signed in on that device with a pass only this database can make. The pass names the customer by that number
@@ -1505,15 +1507,18 @@ export default {
           if (!byMail && String(b.email || "").trim() && !email) return err(400, "Enter a valid email address.");
           if (byMail && phone && phone.replace(/\D/g, "").length < 8) return err(400, "Enter a mobile number with at least 8 digits.");
           const addrs = (Array.isArray(b.addresses) ? b.addresses : []).slice(0, 6).map(cleanAddr).filter((a: any) => a.line1 || a.city || a.pin), now = new Date().toISOString();
+          // Date of birth and gender are kept only when the page sends them (a shop that doesn't ask never touches them).
+          let kept: any = {}; try { kept = JSON.parse(String(((await env.DB.prepare("select data from profiles where site = ? and ckey = ?").bind(site, key).first()) as any)?.data || "{}")) || {}; } catch { /* none kept */ }
+          const dob = "dob" in b ? (/^(19|20)\d\d-\d\d-\d\d$/.test(String(b.dob)) && String(b.dob) <= now.slice(0, 10) ? String(b.dob) : "") : cleanDob(kept.dob), gender = "gender" in b ? cleanGender(b.gender) : cleanGender(kept.gender);
           await env.DB.batch([
             env.DB.prepare("insert into customers (site, ckey, name, phone, email, verified, orders, spent, points, first_at, last_at) values (?, ?, ?, ?, ?, 1, 0, 0, 0, ?, ?) on conflict (site, ckey) do update set name = excluded.name, phone = case when ? = 1 then excluded.phone else phone end, email = case when ? = 1 then email else excluded.email end, verified = 1")
               .bind(site, key, name, byMail ? phone : "+" + key, byMail ? key : email, now, now, byMail ? 1 : 0, byMail ? 1 : 0),
-            env.DB.prepare("insert into profiles (site, ckey, data) values (?, ?, ?) on conflict (site, ckey) do update set data = excluded.data").bind(site, key, JSON.stringify({ addresses: addrs })),
+            env.DB.prepare("insert into profiles (site, ckey, data) values (?, ?, ?) on conflict (site, ckey) do update set data = excluded.data").bind(site, key, JSON.stringify({ addresses: addrs, dob, gender })),
           ]);
-          return json({ ok: true, profile: { name, phone: byMail ? phone : "+" + key, email: byMail ? key : email, addresses: addrs } });
+          return json({ ok: true, profile: { name, phone: byMail ? phone : "+" + key, email: byMail ? key : email, addresses: addrs, dob, gender } });
         }
         const row: any = await env.DB.prepare("select name, phone, email, orders, spent, points, first_at from customers where site = ? and ckey = ?").bind(site, key).first();
-        let addresses: any[] = []; try { addresses = (JSON.parse(String(((await env.DB.prepare("select data from profiles where site = ? and ckey = ?").bind(site, key).first()) as any)?.data || "{}")).addresses || []).slice(0, 6).map(cleanAddr); } catch { /* none kept */ }
+        let addresses: any[] = [], pf: any = {}; try { pf = JSON.parse(String(((await env.DB.prepare("select data from profiles where site = ? and ckey = ?").bind(site, key).first()) as any)?.data || "{}")) || {}; addresses = (pf.addresses || []).slice(0, 6).map(cleanAddr); } catch { /* none kept */ }
         const nos = (((await env.DB.prepare("select order_no, max(at) t from points where site = ? and ckey = ? and order_no <> '' group by order_no order by t desc limit 25").bind(site, key).all()).results || []) as any[]).map((r) => String(r.order_no));
         const orders: any[] = [];
         if (nos.length) {
@@ -1523,7 +1528,7 @@ export default {
             orders.push({ no: String(d.order_no), at: r.created_at, total: String(d.total || ""), status: String(r.status || "new"), mode: String(d.mode || ""), paid: d._paid === "yes", pay: String(d.payment || d.pay || ""), address: String(d.address || ""), name: String(d.name || ""), points: String(d._points || ""), ...(d._bill ? (() => { try { return { bill: JSON.parse(String(d._bill)) }; } catch { return {}; } })() : {}), ...(trackOf(d) ? { track: trackShown(trackOf(d)) } : {}), items, text: String(d.items || d.order || d.message || "").slice(0, 2000) }); }
         }
         const L = loyOf(sc);
-        return json({ ok: true, name: row?.name || "", phone: byMail ? row?.phone || "" : "+" + key, email: byMail ? key : row?.email || "", addresses, count: +row?.orders || 0, points: Math.max(0, +row?.points || 0), loyalty: L.on ? { worth: L.worth, min: L.min, maxPct: L.maxPct } : null, orders });
+        return json({ ok: true, name: row?.name || "", phone: byMail ? row?.phone || "" : "+" + key, email: byMail ? key : row?.email || "", addresses, dob: cleanDob(pf.dob), gender: cleanGender(pf.gender), count: +row?.orders || 0, points: Math.max(0, +row?.points || 0), loyalty: L.on ? { worth: L.worth, min: L.min, maxPct: L.maxPct } : null, orders });
       }
       // ---- A customer proves their email address at checkout: a 6-digit code by email, then a proof only this database can make.
       if (/^\/eotp\/(send|check)\/[a-z0-9][a-z0-9-]{0,59}$/.test(p) && req.method === "POST") {

@@ -18,7 +18,7 @@ import type { Studio, StudioIndex } from "../lib/studio";
 import { jsonB64 } from "../lib/repo";
 import { useBrand } from "../lib/brand";
 import { STUDIO_BUILD } from "../build-info";
-import { Field, ProgressBar, Spinner, partOf, useToast } from "../ui/kit";
+import { Field, ProgressBar, Skel, SkelLines, partOf, useToast } from "../ui/kit";
 import { NetlifyAccount } from "./HostDialog";
 import { BringAcross } from "./BringAcross";
 import { studioUpdate, useStudioUpdate } from "../lib/studioupdate";
@@ -88,11 +88,20 @@ export function useSupabasePicker(studioToken: string, nf: Netlify | null, persi
 
 /** `update`: a moved Studio's own updates. `move` (Migration): put this Studio, its app and its projects, on
  *  another service; from GitHub, or from a Studio already on Cloudflare or Netlify (to another database or host). */
+/** The Updates and Migration cards while their first facts load: the same shape, so nothing jumps. */
+function SkelCards() {
+  return (
+    <div role="status" aria-label="Loading" className="flex flex-col gap-4">
+      <section className="card flex flex-col gap-3 p-5"><Skel className="h-5 w-2/3" /><SkelLines n={3} /><Skel className="h-10 w-40 rounded-lg" /></section>
+      <section className="card flex flex-col gap-3 p-5"><Skel className="h-5 w-1/2" /><SkelLines n={2} /><div className="grid gap-3 sm:grid-cols-2"><Skel className="h-11" /><Skel className="h-11" /></div></section>
+    </div>
+  );
+}
 export function MigrationTab({ studio, index, session, onIndex, mode = "move" }: { studio: Studio; index: StudioIndex; session: Session; onIndex: (i: StudioIndex) => void; mode?: "update" | "move" }) {
   const hostedHere = isHosted(session);
   const [nf, setNf] = useState<Netlify | null | undefined>(undefined);
   useEffect(() => { netlifyToken.load(session.token).then((t) => setNf(t ? new Netlify(t.token) : null)); }, [session.token]);
-  if (nf === undefined) return <Spinner label="Checking Netlify…" />;
+  if (nf === undefined) return <SkelCards />;
   return hostedHere && mode === "update" ? <HostedHere session={session} nf={nf} setNf={setNf} index={index} /> : <MoveStudio studio={studio} index={index} session={session} nf={nf} setNf={setNf} onIndex={onIndex} hosted={hostedHere} />;
 }
 
@@ -251,8 +260,8 @@ function HostedHere({ session, nf, setNf, index }: { session: Session; nf: Netli
   const [cfg, setCfg] = useState<StudioHostCfg | null>(null), [latest, setLatest] = useState<string | null>(null), [mine, setMine] = useState<string | null>(null);
   // The update is the Studio's one job (it carries on when this screen is left); this card only shows it.
   const job = useStudioUpdate(), step = job.running ? job.step : "", err = job.err;
-  const [auto, setAuto] = useState(autoUpdatePref.on);
-  useEffect(() => { loadHostConfig().then((c) => { setCfg(c); if (c?.source) appFiles(c.source).then((m) => setLatest(m.build)).catch(() => setLatest(null)); }); appFiles(appBase()).then((m) => setMine(m.build)).catch(() => setMine(STUDIO_BUILD.id)); }, []);
+  const [auto, setAuto] = useState(autoUpdatePref.on), [cfgDone, setCfgDone] = useState(false);
+  useEffect(() => { loadHostConfig().catch(() => null).then((c) => { setCfg(c); setCfgDone(true); if (c?.source) appFiles(c.source).then((m) => setLatest(m.build)).catch(() => setLatest(null)); }); appFiles(appBase()).then((m) => setMine(m.build)).catch(() => setMine(STUDIO_BUILD.id)); }, []);
   // Without the token here, the Studio updates itself through its own database (Publish from any device).
   useEffect(() => { if (where === "cloudflare" && !cfAcc.ready && cfg?.kind === "cloudflare") pagesViaDb(cfg.api, "studio:" + cfg.studio).then(setViaDb).catch(() => setViaDb(null)); }, [where, cfAcc.ready, cfg?.kind]);
   const update = () => {
@@ -265,6 +274,7 @@ function HostedHere({ session, nf, setNf, index }: { session: Session; nf: Netli
       return true;
     });
   };
+  if (!cfgDone) return <SkelCards />;
   return (
     <div className="flex flex-col gap-4">
       <section className="card flex flex-col gap-2 p-5">

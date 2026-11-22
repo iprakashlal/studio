@@ -2,7 +2,7 @@ import { legalChecks } from "../lib/legal";
 import type { Category, Field, TemplateDef } from "./types";
 import { uid, vpaOk, paypalOk, httpsOk } from "../lib/util";
 import { BODY_FONTS, DISPLAY_FONTS, LINE_BREAKS_AXIS, STORE_AXES, THEMES, onColor, storeThemeValues } from "../themes/catalog";
-import { invoiceLookCard, adminCategory, loyaltyCard, accountsCategory, accountLookCard, legalCategory, codeCategory, withSectionBg, videoCategory, socialCategory, logoFields, consentCategory, emailsCategory, i18nCategory, prepareI18n, featuresCategory, festivalCategory, menuCategory, menuItem, prepareMenu, staticPagesCategory, heroSlidesCard, prepareSlides, prepareMaintenance, seoCategory, warrantyCategory, customFontsCard } from "./common";
+import { gstCategory, adminCategory, loyaltyCard, accountsCategory, accountLookCard, legalCategory, codeCategory, withSectionBg, videoCategory, socialCategory, logoFields, consentCategory, emailsCategory, i18nCategory, prepareI18n, featuresCategory, festivalCategory, menuCategory, menuItem, prepareMenu, staticPagesCategory, heroSlidesCard, prepareSlides, prepareMaintenance, seoCategory, warrantyCategory, customFontsCard } from "./common";
 import { NAV_MODE_FIELD, NAV_MODE_MOB_FIELD, themeCards } from "../themes/fields";
 
 const CURRENCIES = ["INR", "USD", "EUR", "GBP", "AED", "SGD", "AUD", "CAD"];
@@ -11,7 +11,6 @@ const FONTS_B = BODY_FONTS;
 const g2 = (...fields: Field[]): Field => ({ t: "grid", cols: 2, fields });
 const g3 = (...fields: Field[]): Field => ({ t: "grid", cols: 3, fields });
 
-const GST_STATES = ["Andaman and Nicobar Islands", "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chandigarh", "Chhattisgarh", "Dadra and Nagar Haveli and Daman and Diu", "Delhi", "Goa", "Gujarat", "Haryana", "Himachal Pradesh", "Jammu and Kashmir", "Jharkhand", "Karnataka", "Kerala", "Ladakh", "Lakshadweep", "Madhya Pradesh", "Maharashtra", "Manipur", "Meghalaya", "Mizoram", "Nagaland", "Odisha", "Puducherry", "Punjab", "Rajasthan", "Sikkim", "Tamil Nadu", "Telangana", "Tripura", "Uttar Pradesh", "Uttarakhand", "West Bengal"];
 const schema: Category[] = [
   {
     id: "look", label: "Theme & layout", group: "Design", desc: `Choose from ${THEMES.length} themes, then fine-tune the layout, elements and animation.`,
@@ -197,24 +196,7 @@ const schema: Category[] = [
       ] },
     ],
   },
-  {
-    id: "gst", label: "GST invoices", group: "Selling", desc: "A tax invoice for every order, with your GSTIN, HSN codes and the CGST/SGST or IGST split, that customers and you can print or save as PDF.",
-    cards: [
-      { title: "GST invoice", fields: [
-        { t: "toggle", path: "gst.on", label: "Offer a GST invoice on every order" },
-        { t: "when", path: "gst.on", is: "true", fields: [
-          g2({ t: "text", path: "gst.legalName", label: "Legal name of the business", ph: "as on the GST certificate" }, { t: "text", path: "gst.gstin", label: "GSTIN", ph: "27ABCDE1234F1Z5" }),
-          { t: "textarea", path: "gst.address", label: "Registered address", rows: 2 },
-          g3({ t: "select", path: "gst.state", label: "State", options: [{ value: "", label: "Choose the state" }, ...GST_STATES.map((n) => ({ value: n, label: n }))] }, { t: "text", path: "gst.pan", label: "PAN (optional)" }, { t: "text", path: "gst.prefix", label: "Invoice number starts with", ph: "INV-" }),
-          g3({ t: "select", path: "gst.defaultRate", label: "Usual GST rate", options: ["0", "0.25", "3", "5", "12", "18", "28"].map((v) => ({ value: v, label: v + "%" })) }, { t: "text", path: "gst.defaultHsn", label: "Usual HSN code" }, { t: "toggle", path: "gst.askGstin", label: "Ask business buyers for their GSTIN at checkout" }),
-          g2({ t: "text", path: "gst.sign", label: "Signature line", ph: "Authorised signatory" }, { t: "text", path: "gst.notes", label: "Note at the bottom (optional)", ph: "Goods once sold are not returnable." }),
-          { t: "note", text: "Each product can have its own HSN code and rate (Products → open a product). Prices are read as including GST, so the invoice total always equals what the customer paid; if the shop adds one tax percentage on top (Prices & shipping → Tax, not included), that percentage is used instead. Buyers in your state get CGST + SGST, others IGST. The invoice number is your prefix plus the order number." },
-          { t: "note", text: "This prepares the invoice; it doesn't file anything with the GST portal. Have your accountant check the rates, HSN codes and number series before you rely on it.", tone: "warn" },
-        ] },
-      ] },
-      ...invoiceLookCard("store"),
-    ],
-  },
+  gstCategory("store"),
   {
     id: "checkout", label: "Checkout", group: "Selling", desc: "What shoppers fill in and what they see after ordering.",
     cards: [

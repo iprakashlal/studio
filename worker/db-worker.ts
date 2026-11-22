@@ -744,12 +744,12 @@ export function pointsFor(c: any, want: unknown, bal: number, amount: number): {
   const points = Math.max(0, Math.min(ask, Math.floor((amount * L.maxPct) / 100 / L.worth)));
   return { points, off: Math.round(points * L.worth * 100) / 100 };
 }
-export function restBill(c: any, q: any): { total: number; points?: number; pointsOff?: number; net?: number } | { error: string } {
+export function restBill(c: any, q: any): { total: number; points?: number; pointsOff?: number; net?: number; parts?: { sub: number; disc: number; pack: number; del: number; tax: number; pct: number; tip: number; incl: boolean }; units?: number[] } | { error: string } {
   const o = c?.ordering || {}; if (!o.on) return { error: "Online ordering is switched off." };
   const mode = String(q?.mode || ""), modes = o.modes || {}; if (!["delivery", "pickup", "dinein"].includes(mode) || !modes[mode]) return { error: "That way of ordering isn't offered." };
   const dishes = new Map<string, any>();
   for (const k of c?.food?.categories || []) { if (!k || !String(k.name || "").trim()) continue; for (const d of k.items || []) if (d && String(d.name || "").trim() && !d.noOrder && !d.soldOut) dishes.set(rslug(k.name) + "/" + rslug(d.name), d); }
-  let sub = 0; const lines = Array.isArray(q?.items) ? q.items.slice(0, 60) : []; if (!lines.length) return { error: "The cart is empty." };
+  let sub = 0; const units: number[] = []; const lines = Array.isArray(q?.items) ? q.items.slice(0, 60) : []; if (!lines.length) return { error: "The cart is empty." };
   for (const l of lines) {
     const d = dishes.get(String(l?.id || "")); if (!d) return { error: "A dish in the cart is no longer on the menu. Refresh the page." };
     const V = rchoices(d), qty = Math.max(1, Math.min(50, Math.floor(+l.qty || 0)));
@@ -757,7 +757,7 @@ export function restBill(c: any, q: any): { total: number; points?: number; poin
     if (isNaN(unit)) return { error: "A dish in the cart changed. Refresh the page." };
     const opts = new Map<string, number>(); for (const g of d.addons || []) for (const s of (g && g.options) || []) { const t = String(s || ""), i = t.lastIndexOf("="), label = (i > 0 ? t.slice(0, i) : t).trim(), pr = i > 0 ? rnum(t.slice(i + 1)) : 0; if (label) opts.set(label, isNaN(pr) ? 0 : pr); }
     for (const a of Array.isArray(l.addons) ? l.addons.slice(0, 20) : []) { if (!opts.has(String(a))) return { error: "An extra in the cart changed. Refresh the page." }; unit += opts.get(String(a))!; }
-    sub += unit * qty;
+    sub += unit * qty; units.push(Math.round(unit * 100) / 100);
   }
   const cp = (o.coupons || []).find((x: any) => x && x.on !== false && +x.value > 0 && String(x.code || "").trim().toUpperCase() === String(q.coupon || "").trim().toUpperCase() && String(q.coupon || "").trim());
   let disc = 0; if (cp && sub >= (+cp.min || 0)) disc = Math.min(sub, cp.kind === "flat" ? +cp.value : Math.min((sub * +cp.value) / 100, +cp.max > 0 ? +cp.max : Infinity));
@@ -777,7 +777,8 @@ export function restBill(c: any, q: any): { total: number; points?: number; poin
   const tip = o.tips !== false && mode !== "pickup" ? Math.max(0, Math.min(5000, +q.tip || 0)) : 0;
   const raw = base + tax + del + tip, total = o.roundOff === false ? Math.round(raw * 100) / 100 : Math.round(raw);
   if (mode !== "dinein" && sub < Math.max(0, +o.minOrder || 0)) return { error: "The order is below the minimum." };
-  return { total, points: pt.points, pointsOff: pt.off, net: Math.round((sub - disc - pt.off) * 100) / 100 };
+  const r2 = (n: number) => Math.round(n * 100) / 100;
+  return { total, points: pt.points, pointsOff: pt.off, net: Math.round((sub - disc - pt.off) * 100) / 100, units, parts: { sub: r2(sub), disc: r2(disc + pt.off), pack: r2(pack), del: r2(del), tax: r2(tax), pct, tip: r2(tip), incl: !!o.taxIncluded } };
 }
 
 /* ---- Petpooja: an order placed on the site is handed to the restaurant's Petpooja, which then reports its status. ---- */
@@ -806,8 +807,8 @@ export function posItems(c: any, q: any): { items: any[]; sub: number } | { erro
  *  needs), then looked up here. 0 when the proof is missing or stale. */
 /** What an order held, in short: each thing's name, how many, and its picture (a path inside the site). Kept with the
  *  order so a signed-in customer's history can show it. */
-function orderItems(c: any, cart: any): { n: string; q: number; i: string }[] {
-  const out: { n: string; q: number; i: string }[] = [], lines = Array.isArray(cart?.items) ? cart.items.slice(0, 40) : [], pic = (v: any) => (typeof v?.path === "string" && !/^[a-z]+:|^\/\//i.test(v.path) ? v.path.slice(0, 200) : "");
+function orderItems(c: any, cart: any): { n: string; q: number; i: string; p?: number }[] {
+  const out: { n: string; q: number; i: string; p?: number }[] = [], lines = Array.isArray(cart?.items) ? cart.items.slice(0, 40) : [], pic = (v: any) => (typeof v?.path === "string" && !/^[a-z]+:|^\/\//i.test(v.path) ? v.path.slice(0, 200) : "");
   if (isRest(c)) {
     const dishes = new Map<string, any>(); for (const k of c?.food?.categories || []) for (const d of k?.items || []) if (d && String(d.name || "").trim()) dishes.set(rslug(k.name) + "/" + rslug(d.name), d);
     for (const l of lines) { const d = dishes.get(String(l?.id || "")); if (d) out.push({ n: (oneLine(String(d.name)) + (l.variant ? " · " + oneLine(String(l.variant)) : "")).slice(0, 90), q: Math.max(1, Math.floor(+l.qty || 1)), i: pic(d.image) }); }
@@ -1519,7 +1520,7 @@ export default {
           const rows = ((await env.DB.prepare(`select data, status, created_at from enquiries where site = ? and (${nos.map(() => "instr(data, ?) > 0").join(" or ")}) order by created_at desc limit 40`).bind(site, ...nos.map((n) => `"order_no":${JSON.stringify(n)}`)).all()).results || []) as any[];
           for (const r of rows) { let d: any = null; try { d = JSON.parse(r.data); } catch { continue; } if (!nos.includes(String(d.order_no))) continue;
             let items: any[] = []; try { items = JSON.parse(String(d._items || "[]")).slice(0, 40); } catch { /* an older order: its text is shown */ }
-            orders.push({ no: String(d.order_no), at: r.created_at, total: String(d.total || ""), status: String(r.status || "new"), mode: String(d.mode || ""), paid: d._paid === "yes", pay: String(d.payment || d.pay || ""), address: String(d.address || ""), name: String(d.name || ""), points: String(d._points || ""), ...(trackOf(d) ? { track: trackShown(trackOf(d)) } : {}), items, text: String(d.items || d.order || d.message || "").slice(0, 2000) }); }
+            orders.push({ no: String(d.order_no), at: r.created_at, total: String(d.total || ""), status: String(r.status || "new"), mode: String(d.mode || ""), paid: d._paid === "yes", pay: String(d.payment || d.pay || ""), address: String(d.address || ""), name: String(d.name || ""), points: String(d._points || ""), ...(d._bill ? (() => { try { return { bill: JSON.parse(String(d._bill)) }; } catch { return {}; } })() : {}), ...(trackOf(d) ? { track: trackShown(trackOf(d)) } : {}), items, text: String(d.items || d.order || d.message || "").slice(0, 2000) }); }
         }
         const L = loyOf(sc);
         return json({ ok: true, name: row?.name || "", phone: byMail ? row?.phone || "" : "+" + key, email: byMail ? key : row?.email || "", addresses, count: +row?.orders || 0, points: Math.max(0, +row?.points || 0), loyalty: L.on ? { worth: L.worth, min: L.min, maxPct: L.maxPct } : null, orders });
@@ -1796,7 +1797,7 @@ export default {
           if (posReady(pz)) { const pc = await siteContent(env, site); if (isRest(pc)) data._pos = await posSend(env, site, pz, pc, q.cart, data, u.origin); }
         }
         // The customer is kept, and the order's points settled, with the order.
-        if (data.order_no && q.cart) { try { const it = orderItems(await siteContent(env, site), q.cart); if (it.length) data._items = JSON.stringify(it).slice(0, 6000); } catch { /* the order's text is enough */ } }
+        if (data.order_no && q.cart) { try { const it = orderItems(await siteContent(env, site), q.cart); if (it.length) { const sc2 = await siteContent(env, site); if (isRest(sc2)) { const rb = restBill(sc2, q.cart); if (!("error" in rb) && rb.units && rb.units.length === it.length) { it.forEach((x: any, i: number) => { x.p = rb.units![i]; }); data._bill = JSON.stringify({ ...rb.parts, total: rb.total }); } } data._items = JSON.stringify(it).slice(0, 6000); } } catch { /* the order's text is enough */ } }
         if (data.order_no) { const said = await custOrder(env, site, await siteContent(env, site), data, q.cart, who).catch(() => ""); if (said) data._points = said; }
         const made: any = await env.DB.prepare("insert into enquiries (site, data, page, created_at) values (?, ?, ?, ?) returning id").bind(site, JSON.stringify(data), String(q.page || "").slice(0, 200), new Date().toISOString()).first();
         // The enquiry is saved either way; the email is a copy, so a mail failure never fails the form. What happened

@@ -199,8 +199,31 @@
     const later = slots().length > 0;
     return `<p class="ord-closed" role="status"><b>We're closed right now.</b> ${at ? `We open ${at}. ` : ""}${later ? "You can still order ahead for a later time." : "Ordering opens again then."}</p>`;
   }
+  /* GST invoice (assets/invoice.js): a restaurant order read as a tax invoice. */
+  const gstOn = () => !!(A.C().gst && A.C().gst.on);
+  let invP; const loadInv = () => (invP ||= new Promise((ok, no) => { if (window.SiteInvoice) return ok(); const x = document.createElement("script"); x.src = "assets/invoice.js"; x.onload = () => ok(); x.onerror = no; document.head.appendChild(x); }));
+  /** The invoice's view of the site: the order's own tax rule (added on top, or already in the prices) and no shop products. */
+  const invSite = () => { const c = A.C(), o = c.ordering || {}; return { ...c, products: [], settings: { taxPercent: +o.taxPercent || 0, taxIncluded: !!o.taxIncluded, currency: "INR" } }; };
+  /** An order (from "My account": items with their price, and the bill's parts) as the invoice reads it; null for an older order without them. */
+  const invOf = (n) => {
+    const b = n.bill, it = (n.items || []).filter((x) => x && x.p != null); if (!b || !it.length) return null;
+    const f = b.sub > 0 ? Math.max(0, (b.sub - b.disc) / b.sub) : 1, on = !b.incl && b.pct > 0, items = it.map((x, i) => ({ id: "d" + i, name: x.n, opt: "", qty: x.q, price: Math.round(x.p * f * 100) / 100 }));
+    if (b.pack > 0) items.push({ id: "pk", name: "Packing", opt: "", qty: 1, price: b.pack });
+    return { id: String(n.no), at: n.at, items, t: { sub: b.sub, ship: b.del || 0, shipName: "Delivery charge", shipNoTax: on, total: Math.round((b.total - (b.tip || 0)) * 100) / 100, taxAdd: on ? b.tax : 0 }, c: { name: n.name || "", address: n.address || "" } };
+  };
+  const openGst = (n) => { const o = invOf(n); if (!o) return false; loadInv().then(() => window.SiteInvoice.open(o, invSite())).catch(() => {}); return true; };
+  /** The invoice as the editor's preview shows it: a sample order, redrawn whenever the owner changes a setting. */
+  function invPreview() {
+    const c = A.C(), P = (c.food.categories || []).flatMap((k) => k.items || []).filter((d) => d && d.name && !isNaN(parseFloat(String(d.price || "")))).slice(0, 3), ot = c.ordering || {};
+    const rows = P.length ? P.map((d, i) => ({ n: d.name, q: i ? 1 : 2, p: parseFloat(String(d.price)) })) : [{ n: "Paneer tikka", q: 2, p: 280 }, { n: "Butter naan", q: 3, p: 60 }];
+    const sub = rows.reduce((a, x) => a + x.p * x.q, 0), pack = +ot.packing || 0, pct = +ot.taxPercent || 0, incl = !!ot.taxIncluded, tax = pct && !incl ? Math.round((sub + pack) * pct) / 100 : 0, del = 40;
+    const n = { no: "1042", at: new Date().toISOString(), name: "Asha Rao", address: "12 MG Road, Pune 411001", items: rows, bill: { sub, disc: 0, pack, del, tax, pct, tip: 0, incl, total: Math.round(sub + pack + tax + del) } };
+    setTimeout(() => loadInv().then(() => { const f = $("#inv-pv"); if (f) { f.srcdoc = window.SiteInvoice.html(invOf(n), invSite(), { bar: false }); f.onload = () => { try { f.style.height = f.contentDocument.documentElement.scrollHeight + 20 + "px"; } catch (e) {} }; } }).catch(() => {}), 0);
+    return `<div class="wrap" style="padding:18px 0 60px"><p class="soft" style="font-size:13px">Preview with a sample order. ${c.gst && c.gst.on ? "" : "Switch “Offer a GST invoice” on to offer it to guests."}</p><iframe id="inv-pv" title="Invoice preview" style="width:100%;height:1100px;border:1px solid var(--line);border-radius:12px;background:#fff"></iframe></div>`;
+  }
   function page(api) {
     A = api; C = A.C(); load();
+    if (A.PREVIEW && pvOf() === "invoice") return invPreview();
     const o = O(), ms = modes(), m = mode(), diets = [...new Set(D.map((x) => x.d.diet).filter((d) => A.DIET[d]))], past = st.get("orders", []);
     return `<section class="ord" id="order-page">${strip()}
       <div class="wrap">
@@ -691,7 +714,7 @@
     if (!canAsked && !A.PREVIEW && be && be.cf) { canAsked = true; acctWait = !!(C.account && C.account.on); const fin = () => { if (acctWait) { acctWait = false; if (ui.drawer === "checkout") { sync(); over(true); } } }; fetch(be.cf + "/site/" + encodeURIComponent(be.site) + "/can", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((j) => { if (!j) fin(); if (j) { can = { otp: !!j.otp, pts: !!j.pts, em: !!j.em, via: Array.isArray(j.via) && j.via.length ? j.via.filter((v) => v === "wa" || v === "sms") : ["wa"], rz: String(j.rz || ""), pg: Array.isArray(j.pg) ? j.pg : [] }; if (ui.drawer === "checkout") { sync(); over(true); }
       // customer accounts: sign-in before checkout, and "My account" in the toolbar
       if (!j.acct) fin(); else loadAcct().then(() => { const redo = () => { sync(); applyMe(true); if (!ME()) ui.pts = null; const host = root.parentNode, y = scrollY; host.innerHTML = page(A); bind(A); scrollTo(0, y); loadPts(); };
-        SiteAcct.init({ api: be.cf, site: be.site, kind: "restaurant", ui: (C.account && C.account.ui) || {}, acct: j.acct, money: (n) => fmt(n), img: (path) => A.imgUrl({ path }), biz: (() => { const L = C.legal || {}, K = C.contact || {}; return { name: L.name || (C.brand && C.brand.name) || "", address: L.address || K.address || "", phone: L.phone || K.phone || "", email: L.email || K.email || "", gstin: L.gstin || "", inv: C.invoice || null, logo: A.imgUrl(C.brand && C.brand.logo) }; })(), onChange: redo }); acctWait = false; redo(); }).catch(fin); } }).catch(fin); }
+        SiteAcct.init({ api: be.cf, site: be.site, kind: "restaurant", ui: (C.account && C.account.ui) || {}, acct: j.acct, money: (n) => fmt(n), img: (path) => A.imgUrl({ path }), biz: (() => { const L = C.legal || {}, K = C.contact || {}; return { name: L.name || (C.brand && C.brand.name) || "", address: L.address || K.address || "", phone: L.phone || K.phone || "", email: L.email || K.email || "", gstin: L.gstin || "", inv: C.invoice || null, logo: A.imgUrl(C.brand && C.brand.logo) }; })(), gstBill: (n) => gstOn() && openGst(n), onChange: redo }); acctWait = false; redo(); }).catch(fin); } }).catch(fin); }
   }
   window.RestOrder = { page, bind };
 })();

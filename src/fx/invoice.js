@@ -47,7 +47,7 @@
       var r = onTop ? +S.taxPercent : rate(p.gstRate, def), taxable = onTop ? gross : r2(gross / (1 + r / 100)), tax = onTop ? r2(gross * r / 100) : r2(gross - taxable);
       return { name: it.name + (it.opt ? " (" + it.opt + ")" : ""), hsn: String(p.hsn || G.defaultHsn || ""), qty: it.qty, unit: r2(taxable / (it.qty || 1)), taxable: taxable, rate: r, tax: tax };
     });
-    if (+t.ship > 0) { var top = lines.reduce(function (m, l) { return Math.max(m, l.rate); }, 0), tx = r2(t.ship / (1 + top / 100)); lines.push({ name: "Shipping and handling", hsn: "9968", qty: 1, unit: tx, taxable: tx, rate: top, tax: r2(t.ship - tx), ship: true }); }
+    if (+t.ship > 0) { var top = t.shipNoTax ? 0 : lines.reduce(function (m, l) { return Math.max(m, l.rate); }, 0), tx = r2(t.ship / (1 + top / 100)); lines.push({ name: t.shipName || "Shipping and handling", hsn: "9968", qty: 1, unit: tx, taxable: tx, rate: top, tax: r2(t.ship - tx), ship: true }); }
     // With tax added on top, the order's own tax figure is the one charged: put any paise of rounding on the last goods line.
     if (onTop) { var goods = lines.filter(function (l) { return !l.ship; }), sum = goods.reduce(function (s, l) { return s + l.tax; }, 0), d = r2(+t.taxAdd - sum); if (d && goods.length) goods[goods.length - 1].tax = r2(goods[goods.length - 1].tax + d); }
     var taxable = r2(lines.reduce(function (s, l) { return s + l.taxable; }, 0)), tax = r2(lines.reduce(function (s, l) { return s + l.tax; }, 0)), total = r2(+t.total || taxable + tax);

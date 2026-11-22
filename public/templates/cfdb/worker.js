@@ -26,7 +26,7 @@ create index if not exists approvals_project on approvals (scope, project, creat
 create table if not exists approval_notes (id integer primary key autoincrement, token text not null, who text not null, body text not null, page text not null default '', kind text not null default 'comment', created_at text not null);
 create index if not exists approval_notes_token on approval_notes (token, id);
 `;
-var CFDB_VERSION = 49;
+var CFDB_VERSION = 50;
 var CFDB_WORKER_NAME = "picaffectz-db";
 
 // src/lib/lookdigest.ts
@@ -1514,6 +1514,7 @@ function restBill(c, q) {
     for (const d of k.items || []) if (d && String(d.name || "").trim() && !d.noOrder && !d.soldOut) dishes.set(rslug(k.name) + "/" + rslug(d.name), d);
   }
   let sub = 0;
+  const units = [];
   const lines = Array.isArray(q?.items) ? q.items.slice(0, 60) : [];
   if (!lines.length) return { error: "The cart is empty." };
   for (const l of lines) {
@@ -1532,6 +1533,7 @@ function restBill(c, q) {
       unit += opts.get(String(a));
     }
     sub += unit * qty;
+    units.push(Math.round(unit * 100) / 100);
   }
   const cp = (o.coupons || []).find((x) => x && x.on !== false && +x.value > 0 && String(x.code || "").trim().toUpperCase() === String(q.coupon || "").trim().toUpperCase() && String(q.coupon || "").trim());
   let disc = 0;
@@ -1562,7 +1564,8 @@ function restBill(c, q) {
   const tip = o.tips !== false && mode !== "pickup" ? Math.max(0, Math.min(5e3, +q.tip || 0)) : 0;
   const raw = base + tax + del + tip, total = o.roundOff === false ? Math.round(raw * 100) / 100 : Math.round(raw);
   if (mode !== "dinein" && sub < Math.max(0, +o.minOrder || 0)) return { error: "The order is below the minimum." };
-  return { total, points: pt.points, pointsOff: pt.off, net: Math.round((sub - disc - pt.off) * 100) / 100 };
+  const r2 = (n) => Math.round(n * 100) / 100;
+  return { total, points: pt.points, pointsOff: pt.off, net: Math.round((sub - disc - pt.off) * 100) / 100, units, parts: { sub: r2(sub), disc: r2(disc + pt.off), pack: r2(pack), del: r2(del), tax: r2(tax), pct, tip: r2(tip), incl: !!o.taxIncluded } };
 }
 var POS_URL = "https://pponlineordercb.petpooja.com/save_order";
 var posReady = (z) => !!(z && z.on && z.secret && z.token && z.appKey && z.restId);
@@ -2567,7 +2570,13 @@ var db_worker_default = {
               items = JSON.parse(String(d._items || "[]")).slice(0, 40);
             } catch {
             }
-            orders.push({ no: String(d.order_no), at: r.created_at, total: String(d.total || ""), status: String(r.status || "new"), mode: String(d.mode || ""), paid: d._paid === "yes", pay: String(d.payment || d.pay || ""), address: String(d.address || ""), name: String(d.name || ""), points: String(d._points || ""), ...trackOf(d) ? { track: trackShown(trackOf(d)) } : {}, items, text: String(d.items || d.order || d.message || "").slice(0, 2e3) });
+            orders.push({ no: String(d.order_no), at: r.created_at, total: String(d.total || ""), status: String(r.status || "new"), mode: String(d.mode || ""), paid: d._paid === "yes", pay: String(d.payment || d.pay || ""), address: String(d.address || ""), name: String(d.name || ""), points: String(d._points || ""), ...d._bill ? (() => {
+              try {
+                return { bill: JSON.parse(String(d._bill)) };
+              } catch {
+                return {};
+              }
+            })() : {}, ...trackOf(d) ? { track: trackShown(trackOf(d)) } : {}, items, text: String(d.items || d.order || d.message || "").slice(0, 2e3) });
           }
         }
         const L = loyOf(sc);
@@ -2961,7 +2970,19 @@ ${body}`)}${paras("Approve or hide it under Reviews in your site's admin page.",
         if (data.order_no && q.cart) {
           try {
             const it = orderItems(await siteContent(env, site), q.cart);
-            if (it.length) data._items = JSON.stringify(it).slice(0, 6e3);
+            if (it.length) {
+              const sc2 = await siteContent(env, site);
+              if (isRest(sc2)) {
+                const rb = restBill(sc2, q.cart);
+                if (!("error" in rb) && rb.units && rb.units.length === it.length) {
+                  it.forEach((x, i) => {
+                    x.p = rb.units[i];
+                  });
+                  data._bill = JSON.stringify({ ...rb.parts, total: rb.total });
+                }
+              }
+              data._items = JSON.stringify(it).slice(0, 6e3);
+            }
           } catch {
           }
         }

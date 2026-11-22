@@ -3,7 +3,7 @@ import type { Category, Field, TemplateDef } from "./types";
 import { FX_AXES, HERO_FX_AXIS, LOADER_ON_AXIS, LINE_BREAKS_AXIS, type Axis } from "../themes/catalog";
 import { REST_AXES, REST_BODY_FONTS, REST_DISPLAY_FONTS, REST_TAGS, REST_THEMES, restaurantThemeValues } from "../themes/restaurant";
 import { INTRO_CARD, NAV_MODE_FIELD, NAV_MODE_MOB_FIELD } from "../themes/fields";
-import { ANIM_BG_FIELDS, adminCategory, loyaltyCard, accountsCategory, accountLookCard, legalCategory, codeCategory, withSectionBg, videoCategory, socialCategory, logoFields, consentCategory, emailsCategory, i18nCategory, prepareI18n, featuresCategory, festivalCategory, menuCategory, menuItem, prepareMenu, staticPagesCategory, heroSlidesCard, prepareSlides, prepareMaintenance, seoCategory, customFontsCard } from "./common";
+import { ANIM_BG_FIELDS, gstCategory, adminCategory, loyaltyCard, accountsCategory, accountLookCard, legalCategory, codeCategory, withSectionBg, videoCategory, socialCategory, logoFields, consentCategory, emailsCategory, i18nCategory, prepareI18n, featuresCategory, festivalCategory, menuCategory, menuItem, prepareMenu, staticPagesCategory, heroSlidesCard, prepareSlides, prepareMaintenance, seoCategory, customFontsCard } from "./common";
 
 const g2 = (...fields: Field[]): Field => ({ t: "grid", cols: 2, fields });
 const g3 = (...fields: Field[]): Field => ({ t: "grid", cols: 3, fields });
@@ -299,6 +299,7 @@ const schema: Category[] = [
       { title: "Cash on delivery", fields: [{ t: "toggle", path: "ordering.pay.cod", label: "Offer pay on delivery, at the counter or at the table" }, { t: "text", path: "ordering.pay.codLabel", label: "Label at checkout for delivery orders", ph: "Pay on delivery (cash or UPI)" }] },
     ],
   },
+  gstCategory("restaurant"),
   {
     id: "orderdelivery", label: "Order delivery", group: "Selling", desc: "Where new orders reach you.",
     cards: [
@@ -426,6 +427,7 @@ function prepareRestaurant(c: any) {
   c.food = { eyebrow: "", title: "Menu", lede: "", currency: "₹", dietMarks: true, filters: true, search: true, photos: true, homeCount: 3, all: "See the full menu", pdfUrl: "", pdfLabel: "Download the menu (PDF)", note: "", ...(c.food && typeof c.food === "object" ? c.food : {}) };
   c.food.categories = (Array.isArray(c.food.categories) ? c.food.categories : []).filter((k: any) => k && typeof k === "object");
   for (const k of c.food.categories) { k.items = (Array.isArray(k.items) ? k.items : []).filter((d: any) => d && typeof d === "object"); for (const d of k.items) { if (!Array.isArray(d.variants)) d.variants = []; if (d.kinds !== undefined && !Array.isArray(d.kinds)) d.kinds = []; d.addons = (Array.isArray(d.addons) ? d.addons : []).filter((g: any) => g && typeof g === "object"); for (const g of d.addons) g.options = (Array.isArray(g.options) ? g.options : []).map((o: any) => String(o ?? "")); d.spice = String(Math.max(0, Math.min(3, +d.spice || 0))); } }
+  { const G = c.gst && typeof c.gst === "object" ? c.gst : {}; c.gst = { on: false, legalName: "", gstin: "", address: "", state: "", pan: "", prefix: "INV-", defaultHsn: "9963", askGstin: false, sign: "", notes: "", ...G, defaultRate: String(G.defaultRate ?? "5") }; }
   c.hours = { title: "Opening hours", format: "12", utcOffset: "+05:30", showStatus: true, note: "", openLabel: "Open now", closedLabel: "Closed now", ...(c.hours && typeof c.hours === "object" ? c.hours : {}) };
   const have: any[] = Array.isArray(c.hours.days) ? c.hours.days.filter((d: any) => d && typeof d === "object") : [];
   c.hours.days = DAYS.map((day, i) => ({ day, closed: false, open: "", close: "", open2: "", close2: "", ...(have[i] || {}) }));

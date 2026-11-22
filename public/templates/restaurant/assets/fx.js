@@ -753,9 +753,15 @@
 
   // ---- A section's own background (content.sectionBg[key] = { on, kind, color, image, video, dim, text }): a colour, a
   // picture or GIF, or a silent looping video, laid behind the section's content whatever the theme.
+  // A link given for a section's background video: a YouTube or Vimeo address (shown as a silent background player) or a video file's address.
+  function vlink(u) { u = String(u || "").trim(); if (!u) return ""; if (/(?:youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|shorts\/|live\/)|youtu\.be\/)([\w-]{11})/i.test(u) || /vimeo\.com\/(?:video\/)?(\d{6,12})/i.test(u) || /^https:\/\//i.test(u) || !/^[a-z][a-z0-9+.-]*:/i.test(u)) return u; return ""; }
   var SBG_CSS = ".has-sbg{isolation:isolate}.has-sbg[data-sbg-c]{background:var(--sbg)!important}" +
     ".sbg{position:absolute;inset:0;z-index:-1;overflow:hidden;pointer-events:none;border-radius:inherit}" +
     ".sbg img,.sbg video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}.sbg i{position:absolute;inset:0}" +
+    // a YouTube or Vimeo player is cropped to fill the section like a picture
+    ".sbg[data-embed]{container-type:size}.sbg iframe{position:absolute;top:50%;left:50%;width:max(100%,calc(100cqh*1.7778));height:max(100%,calc(100cqw*.5625));transform:translate(-50%,-50%);border:0;pointer-events:none}" +
+    ".sbg[data-blur] iframe{filter:blur(var(--sbl))}" +
+    ".sbg-ctl{position:absolute;right:14px;bottom:14px;z-index:4;display:flex;gap:8px}.sbg-ctl button{width:40px;height:40px;border-radius:50%;border:1px solid rgba(255,255,255,.35);background:rgba(0,0,0,.55);color:#fff;font-size:14px;line-height:1;cursor:pointer;backdrop-filter:blur(6px)}.sbg-ctl button:hover{background:rgba(0,0,0,.75)}.sbg-ctl button:focus-visible{outline:2px solid #fff;outline-offset:2px}" +
     ".sbg[data-blur] img,.sbg[data-blur] video{filter:blur(var(--sbl));inset:calc(var(--sbl)*-2);width:calc(100% + var(--sbl)*4);height:calc(100% + var(--sbl)*4)}" +
     // a slideshow of pictures: they follow each other by themselves, with no controls
     ".sbg[data-slides] img{opacity:0;transition:opacity 1.4s ease}.sbg[data-slides] img.on{opacity:1}" +
@@ -1200,12 +1206,12 @@
       if (/^(left|center|right)$/.test(k.align || "")) { el.setAttribute("data-salign", k.align); try { sectionAlign(el); } catch (e) { /* the text is still aligned */ } }
       if (!k.on) return;
       var pics = k.kind === "slides" && Array.isArray(k.slides) ? k.slides.map(function (x) { return url(x); }).filter(Boolean) : [];
-      var kind = k.kind === "image" || k.kind === "video" ? k.kind : pics.length > 1 ? "slides" : "color", src = kind === "image" ? url(k.image) : kind === "video" ? url(k.video) : kind === "slides" ? pics[0] : pics[0] || "";
+      var kind = k.kind === "image" || k.kind === "video" ? k.kind : pics.length > 1 ? "slides" : "color", src = kind === "image" ? url(k.image) : kind === "video" ? url(k.video) || vlink(k.videoUrl) : kind === "slides" ? pics[0] : pics[0] || "";
       if (k.kind === "slides" && pics.length === 1) kind = "image";
       if (k.kind === "anim" && ANIMS[k.anim]) kind = "anim"; else if (k.kind === "pattern" && PATTERNS[k.pattern]) kind = "pattern";
       var col = /^(#[0-9a-f]{3,8}|rgba?\([0-9., %]+\))$/i.test(String(k.color || "").trim()) ? String(k.color).trim() : "";
       if (kind !== "color" && kind !== "anim" && kind !== "pattern" && !src) kind = "color";
-      var old = el.querySelector(":scope > .sbg"); if (old) { if (old.__ab) old.__ab.stop(); old.remove(); }
+      var old = el.querySelector(":scope > .sbg"); if (old) { if (old.__ab) old.__ab.stop(); old.remove(); } var oldc = el.querySelector(":scope > .sbg-ctl"); if (oldc) oldc.remove();
       el.classList.add("has-sbg");
       try { sectionText(el, k, opts); } catch (e) { /* the text keeps the theme's look */ }
       if (k.kind === "none" || (kind === "color" && !col)) return;
@@ -1231,10 +1237,30 @@
           var tick = setInterval(function () { if (!box.isConnected) { clearInterval(tick); return; } if (document.hidden) return; ims.forEach(function (x) { x.classList.remove("was"); }); ims[at].classList.remove("on"); ims[at].classList.add("was"); at = (at + 1) % ims.length; ims[at].classList.add("on"); }, secs * 1000); }
       } else
       if (kind === "image") { var im = document.createElement("img"); im.alt = ""; im.decoding = "async"; im.loading = "lazy"; im.src = src; box.appendChild(im); }
-      else { var v = document.createElement("video"); v.muted = true; v.loop = true; v.playsInline = true; v.setAttribute("muted", ""); v.setAttribute("playsinline", ""); v.preload = "metadata"; if (!RM) v.autoplay = true; var poster = url(k.image); if (poster) v.poster = poster; v.src = src; box.appendChild(v); if (!RM) { var pl = v.play(); if (pl && pl.catch) pl.catch(function () {}); } }
+      else {
+        var yt = /(?:youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|shorts\/|live\/)|youtu\.be\/)([\w-]{11})/i.exec(src), vm = /vimeo\.com\/(?:video\/)?(\d{6,12})/i.exec(src), lp = !k.videoOnce, go = RM ? 0 : 1, ctl = null;
+        if (yt || vm) {
+          var fr = document.createElement("iframe"); fr.title = "Background video"; fr.setAttribute("tabindex", "-1"); fr.setAttribute("allow", "autoplay; encrypted-media"); fr.setAttribute("referrerpolicy", "strict-origin-when-cross-origin"); fr.loading = "lazy";
+          fr.src = yt ? "https://www.youtube-nocookie.com/embed/" + yt[1] + "?autoplay=" + go + "&mute=1&controls=0&disablekb=1&fs=0&modestbranding=1&rel=0&playsinline=1&iv_load_policy=3&enablejsapi=1" + (lp ? "&loop=1&playlist=" + yt[1] : "") : "https://player.vimeo.com/video/" + vm[1] + "?background=1&autoplay=" + go + "&muted=1&dnt=1&loop=" + (lp ? 1 : 0);
+          box.setAttribute("data-embed", ""); box.appendChild(fr);
+          var say = function (f, a2) { try { fr.contentWindow.postMessage(yt ? JSON.stringify({ event: "command", func: f, args: a2 || "" }) : JSON.stringify(a2 === undefined ? { method: f } : { method: f, value: a2 }), "*"); } catch (e) { /* the player is not ready */ } };
+          ctl = { play: function () { say(yt ? "playVideo" : "play"); }, pause: function () { say(yt ? "pauseVideo" : "pause"); }, mute: function (m) { if (yt) say(m ? "mute" : "unMute"); else say("setVolume", m ? 0 : 1); } };
+        } else {
+          var v = document.createElement("video"); v.muted = true; v.loop = lp; v.playsInline = true; v.setAttribute("muted", ""); v.setAttribute("playsinline", ""); v.preload = "metadata"; if (!RM) v.autoplay = true; var poster = url(k.image); if (poster) v.poster = poster; v.src = src; box.appendChild(v); if (!RM) { var pl = v.play(); if (pl && pl.catch) pl.catch(function () {}); }
+          ctl = { play: function () { var q = v.play(); if (q && q.catch) q.catch(function () {}); }, pause: function () { v.pause(); }, mute: function (m) { v.muted = m; } };
+        }
+        if (k.videoControls && ctl) {
+          var bar = document.createElement("div"); bar.className = "sbg-ctl fx-skip"; var playing = !RM, muted = true;
+          var pb = document.createElement("button"), mb = document.createElement("button"); pb.type = mb.type = "button";
+          var paint = function () { pb.textContent = playing ? "❚❚" : "▶"; pb.setAttribute("aria-label", playing ? "Pause the background video" : "Play the background video"); mb.textContent = muted ? "🔇" : "🔊"; mb.setAttribute("aria-label", muted ? "Turn the sound on" : "Turn the sound off"); };
+          pb.onclick = function () { playing = !playing; if (playing) ctl.play(); else ctl.pause(); paint(); };
+          mb.onclick = function () { muted = !muted; ctl.mute(muted); if (!muted && !playing) { playing = true; ctl.play(); } paint(); };
+          bar.appendChild(pb); bar.appendChild(mb); paint(); box.__ctl = bar;
+        }
+      }
       var dim = Math.max(0, Math.min(95, Number(k.dim) || 0));
       if (dim) { var ov = document.createElement("i"); ov.style.background = ((k.shade ? k.shade === "light" : k.text === "dark") ? "rgba(255,255,255," : "rgba(0,0,0,") + dim / 100 + ")"; box.appendChild(ov); }
-      el.insertBefore(box, el.firstChild);
+      el.insertBefore(box, el.firstChild); if (box.__ctl) el.appendChild(box.__ctl);
       if (kind === "anim") box.__ab = animMount(box, k.anim, { speed: k.animSpeed, strength: k.animStrength, bg: col });
       else if (kind === "pattern") { var pt = document.createElement("i"); pt.setAttribute("data-pattern", k.pattern); pt.style.background = patternCss(k.pattern, animCols(box, col)); box.insertBefore(pt, box.firstChild); }
     });

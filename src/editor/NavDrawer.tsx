@@ -49,7 +49,7 @@ const P: Record<string, ReactNode> = {
   fork: <path d="M7 3.5v6a2 2 0 0 0 4 0v-6M9 11.5V20.5M16.5 3.5c-1.5 1-2.5 3-2.5 5.5s1 3.5 2.5 3.5V20.5" />,
 };
 const WORDS: [RegExp, string][] = [
-  [/^orders & guests$/i, "inbox"], [/^menu & dishes$/i, "fork"], [/^online ordering$/i, "bag"], [/^website pages$/i, "pages"], [/^hours & contact$/i, "clock"], [/^look & feel$/i, "palette"], [/^email & chat$/i, "mail"], [/^dish stock$|^inventory$/i, "list"], [/^table bookings/i, "calendar"], [/^guest quotes$|^guest reviews$/i, "star"],
+  [/^orders & (guests|customers)$/i, "inbox"], [/^products & stock$/i, "tag"], [/^selling & checkout$/i, "card"], [/^portfolio content$/i, "book"], [/^pages & navigation$/i, "list"], [/^contact & (policies|social)$/i, "pin"], [/^menu & dishes$/i, "fork"], [/^online ordering$/i, "bag"], [/^website pages$/i, "pages"], [/^hours & contact$/i, "clock"], [/^look & feel$/i, "palette"], [/^email & chat$/i, "mail"], [/^dish stock$|^inventory$/i, "list"], [/^table bookings/i, "calendar"], [/^guest quotes$|^guest reviews$/i, "star"],
   [/^design$|theme|brand|colou?r/i, "palette"], [/layout/i, "layout"], [/^pages$|custom page/i, "pages"], [/^selling$|product|shop|cart|checkout/i, "bag"], [/order(?!$)|ordering/i, "cart"], [/forms? ?&? ?records|enquir|inbox|purchased/i, "inbox"],
   [/^features$|highlight|ai\b|engine/i, "spark"], [/^settings$|admin/i, "gear"], [/^project$/i, "folder"], [/code/i, "code"], [/hero|gallery|photo|picture|logo/i, "image"], [/sections & order|^sections$/i, "rows"],
   [/sub-menus|navigation/i, "list"], [/menu|dish|food|restaurant/i, "fork"], [/signature|review|rating|featured/i, "star"], [/story|about|blog/i, "book"], [/offer|coupon|pricing|discount/i, "tag"], [/team|customer|people/i, "people"],

@@ -6,7 +6,7 @@ import type { Session } from "../lib/auth";
 import { netlifyToken } from "../lib/hosting";
 import { Netlify } from "../lib/netlify";
 import { backendOf } from "../lib/backend";
-import { cfAddMembers } from "../lib/cfdb";
+import { cfAddMembers, cfDeployInfo, cfSignedIn, cfxSite } from "../lib/cfdb";
 import type { StudioHostCfg } from "../lib/studiohost";
 import { useCfAccount, useCloudflarePicker } from "./CfPicker";
 import { loadPages, pagesViaDb, PAGES_LABEL, type PagesKind } from "../lib/pages";
@@ -212,6 +212,22 @@ function AddPartner({ nf, setNf, session, index, partner, myEmail, onDone, onCan
   );
 }
 
+/** Updating a client Studio's app with no Cloudflare token on this device: through the client's database (its kept
+ *  token), else through your own Studio's database, which keeps your Cloudflare tokens for every device (the app's
+ *  Worker is registered to your Studio there first, so you can publish it). null when neither keeps a token for it. */
+async function clientAppViaDb(p: PartnerRec, myDb: { api: string; studio: string } | null) {
+  if (!p.siteId) return null;
+  if (p.backend === "cloudflare" && p.api) { const v = await pagesViaDb(p.api, "studio:" + p.studio, p.pagesAccount).catch(() => null); if (v) return v; }
+  if (!myDb || !(await cfSignedIn(myDb.api).catch(() => false))) return null;
+  const info = await cfDeployInfo(myDb.api);
+  const acc = p.pagesAccount || info.account;
+  if (!acc) return null;
+  // Same database and its main account: the client's scope above is the way; registering here would move it.
+  if (myDb.api === p.api && acc === info.account) return null;
+  try { await cfxSite(myDb.api, myDb.studio, acc, p.siteId); } catch { return null; } // that account's token isn't kept there
+  return pagesViaDb(myDb.api, "studio:" + myDb.studio, acc).catch(() => null);
+}
+
 const STATE: Record<SiteSync, [string, string]> = {
   same: ["In step", "border-emerald-400/60 text-emerald-200"], mine: ["You changed it", "border-brand-400/60 text-brand-200"],
   theirs: ["Client changed it", "border-amber-400/60 text-amber-200"], both: ["Both changed", "border-rose-400/60 text-rose-200"], gone: ["Missing on one side", "border-ink-500 text-ink-300"],
@@ -249,8 +265,8 @@ function PartnerCard({ p, studio, index, nf, setNf, session, myEmail, studioToke
   const unshare = (s: SharedSite) => run(s.project, async () => { if (!(await confirm("Stop syncing this site?", "It stays in both Studios; changes just aren't kept in step any more.", "Stop syncing"))) return; await onChange((x) => ({ ...x, shared: x.shared.filter((y) => y.project !== s.project) }), "Stop syncing a site"); });
   const updateApp = () => run("app", async () => {
     if (!p.siteId) return;
-    const pages = (await loadPages(p.pages || "netlify", studioToken, p.pagesAccount)) || (p.pages === "cloudflare" && p.backend === "cloudflare" && p.api ? await pagesViaDb(p.api, "studio:" + p.studio) : null);
-    if (!pages) throw new Error(p.pages === "cloudflare" ? "Connect Cloudflare in Settings → Hostings → Hosting accounts, or turn on Publish from any device there and sign in to the client's Studio database on this device." : `Connect ${PAGES_LABEL[p.pages || "netlify"]} in Settings → Hostings → Hosting accounts first.`);
+    const pages = (await loadPages(p.pages || "netlify", studioToken, p.pagesAccount).catch(() => null)) || (p.pages === "cloudflare" ? await clientAppViaDb(p, myDb) : null);
+    if (!pages) throw new Error(p.pages === "cloudflare" ? "No Cloudflare token reaches their Studio's account from this device. On a device that has the token: Settings → Hostings → Hosting accounts → turn on Publish from any device (and add the client's Cloudflare account under Other accounts if it's a different one). Then this works from every device you're signed in on." : `Connect ${PAGES_LABEL[p.pages || "netlify"]} in Settings → Hostings → Hosting accounts first.`);
     await deployClientApp(pages, p, "", await source(), partner, setBusy); toast(`${p.name}'s Studio is updated`);
   });
   const notShared = index.projects.filter((m) => !p.shared.some((s) => s.project === m.id) && !m.partner);

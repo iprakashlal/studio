@@ -674,6 +674,32 @@
     requestAnimationFrame(function () { requestAnimationFrame(function () { box.classList.add("in"); }); });
     setTimeout(function () { location.href = u.href; }, 560);
   }
+  /* A menu link to a section of the same page glides there. The route is made quiet first: sections passed on the way are already settled (they used to fade in half-way as the scroll went by and looked like a cancelled transition), and the target is measured again on every step, so a layout shift on the way (an image, the locations slider) can no longer make the glide end in the wrong place and snap. The section itself fades in where you land. */
+  var glide = { id: 0 };
+  function onJump(e) {
+    if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || PREVIEW) return;
+    var a = e.target.closest && e.target.closest("a[href]");
+    if (!a || a.target && a.target !== "_self" || a.hasAttribute("download") || a.hasAttribute("data-fx-skip")) return;
+    var u; try { u = new URL(a.href, location.href); } catch (x) { return; }
+    if (u.origin !== location.origin || u.pathname !== location.pathname || u.search !== location.search || !u.hash || u.hash.length < 2) return;
+    var t; try { t = document.getElementById(decodeURIComponent(u.hash.slice(1))); } catch (x) { return; }
+    if (!t) return;
+    e.preventDefault();
+    var spot = function () { return Math.max(0, Math.min(doc.scrollHeight - innerHeight, scrollY + t.getBoundingClientRect().top)); };
+    if (!RM) $$(".rv:not(.in)").forEach(function (n) { if (!t.contains(n)) { n.style.transition = "none"; n.classList.add("in"); } });
+    if (location.hash !== u.hash) { try { history.pushState(null, "", u.hash); dispatchEvent(new HashChangeEvent("hashchange")); } catch (x) { /* the address stays as it was */ } }
+    var id = ++glide.id, from = scrollY, t0 = performance.now(), dist = Math.abs(spot() - from), dur = RM ? 0 : Math.max(450, Math.min(1100, 380 + dist * 0.18));
+    var root = doc, was = root.style.scrollBehavior; root.style.scrollBehavior = "auto"; sm.run = false; sm.set = -1;
+    var done = function () { root.style.scrollBehavior = was; sm.cur = sm.target = scrollY; sm.set = -1; };
+    var cancel = function () { glide.id++; };
+    addEventListener("wheel", cancel, { once: true, passive: true }); addEventListener("touchstart", cancel, { once: true, passive: true });
+    (function step(now) {
+      if (id !== glide.id) { done(); return; }
+      var k = dur ? Math.min(1, (now - t0) / dur) : 1, ease = k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
+      scrollTo(0, from + (spot() - from) * ease);
+      if (k < 1) requestAnimationFrame(step); else { scrollTo(0, spot()); done(); }
+    })(t0);
+  }
   addEventListener("pageshow", function (e) { if (e.persisted) $$(".fx-exit").forEach(function (n) { n.remove(); }); });
 
   /* ---------------------------------------------------------------- init */
@@ -687,6 +713,7 @@
     addEventListener("wheel", onWheel, { passive: false });
     addEventListener("scroll", onScroll, { passive: true });
     addEventListener("resize", sizeTrail);
+    document.addEventListener("click", onJump);
     document.addEventListener("click", onClick);
     document.addEventListener("pointerover", function (e) {
       if (cfg().text !== "scramble" || RM) return;

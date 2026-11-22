@@ -693,21 +693,21 @@ export function invoiceLookCard(kind: "restaurant" | "store" = "store"): Card[] 
       { t: "select", path: "invoice.layout", label: "Layout", options: o([["", "The style's own (Classic if no style)"], ["classic", "Classic: ruled header, plain table"], ["modern", "Modern: colour header band, soft table"], ["minimal", "Minimal: light, airy, hairlines"], ["bold", "Bold: big title, dark table head, colour total"], ["ledger", "Ledger: boxed grid, compact (traditional tax invoice)"]]) },
       { t: "select", path: "invoice.font", label: "Font", options: o([["", "The style's own (sans-serif if no style)"], ["sans", "Clean sans-serif"], ["serif", "Serif (formal)"], ["mono", "Monospace (receipt)"]]) },
       { t: "color", path: "invoice.accent", label: "Accent colour (header, headings, total)" },
-      ...(store ? [{ t: "select", path: "invoice.paper", label: "Paper size when printed", options: o([["", "A4"], ["letter", "Letter"], ["a5", "A5 (half page)"]]) } as Field] : []),
+      { t: "select", path: "invoice.paper", label: "Paper size when printed", options: o([["", "A4"], ["letter", "Letter"], ["a5", "A5 (half page)"]]) },
     ] },
-    { t: "toggle", path: "invoice.logo", label: "Show the shop's logo at the top" },
-    ...(store ? [{ t: "grid", cols: 3, fields: [
+    { t: "toggle", path: "invoice.logo", label: store ? "Show the shop's logo at the top" : "Show the restaurant's logo at the top" },
+    { t: "grid", cols: 3, fields: [
       { t: "toggle", path: "invoice.words", def: true, label: "Amount in words" },
       { t: "toggle", path: "invoice.summary", def: true, label: "Tax summary table" },
       { t: "toggle", path: "invoice.sign", def: true, label: "Signature line" },
       { t: "toggle", path: "invoice.colHsn", def: true, label: "HSN/SAC column" },
       { t: "toggle", path: "invoice.colRate", def: true, label: "Rate column" },
-      { t: "toggle", path: "invoice.contact", label: "Shop phone, email and website in the header" },
-    ] } as Field] : []),
+      { t: "toggle", path: "invoice.contact", label: store ? "Shop phone, email and website in the header" : "Restaurant phone, email and website in the header" },
+    ] } as Field,
   ] };
-  const words: Card = { title: store ? "Invoice contents & wording" : "Bill wording", fields: [
+  const words: Card = { title: "Invoice contents & wording", fields: [
     { t: "note", text: "Every piece of text on the printed page. Leave a box empty to keep the standard wording shown in grey." },
-    ...(store ? [
+    ...[
       g2c(t("title", "Document title", "Tax Invoice"), t("lblNo", "Label: invoice number", "Invoice no.")),
       g2c(t("lblDate", "Label: date", "Date"), t("lblOrder", "Label: order", "Order")),
       g2c(t("lblSupply", "Label: place of supply", "Place of supply"), t("lblBill", "Label: billed to", "Billed to")),
@@ -718,9 +718,9 @@ export function invoiceLookCard(kind: "restaurant" | "store" = "store"): Card[] 
       g2c(t("lblWords", "Label: amount in words", "Amount in words"), t("lblSummary", "Heading: tax summary", "Tax summary")),
       ({ t: "textarea", path: "invoice.bank", label: "Bank details (optional)", rows: 3, hint: "Account name, number, IFSC, UPI: shown in its own block under the totals." } as Field),
       t("lblBank", "Heading for the bank details", "Bank details"),
-    ] : []),
+    ],
     ({ t: "textarea", path: "invoice.terms", label: "Terms & conditions (optional)", rows: 3, hint: "Returns, warranty, jurisdiction…" } as Field),
-    ...(store ? [t("lblTerms", "Heading for the terms", "Terms & conditions")] : []),
+    t("lblTerms", "Heading for the terms", "Terms & conditions"),
     ({ t: "text", path: "invoice.thanks", label: "Thank-you line (optional)", ph: "Thank you for your business!" } as Field),
     ({ t: "text", path: "invoice.footer", label: "Closing line", ph: store ? "This is a computer-generated invoice." : "This bill is made from your order as it was placed." } as Field),
   ] };

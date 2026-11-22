@@ -217,6 +217,24 @@
     data.name = v("sa-name"); if (me.kind === "email") data.phone = v("sa-phone"); else data.email = v("sa-email");
     (ui.addrs || []).forEach((a, i) => { for (const k of ["label", "line1", "line2", "city", "pin", "state"]) if (document.getElementById("sa-a-" + k + "-" + i)) a[k] = v("sa-a-" + k + "-" + i); });
   }
+  /* Invoice look (content.invoice): layout, accent colour, font. Returned as CSS added after the page's own. */
+  var INV_LAYOUTS = ["classic", "modern", "minimal", "bold", "ledger"];
+  function invCss(I) {
+    I = I || {}; var lay = INV_LAYOUTS.indexOf(I.layout) >= 0 ? I.layout : "classic", ac = /^#[0-9a-f]{6}$/i.test(I.accent || "") ? I.accent : "#14171c";
+    var ff = I.font === "serif" ? "Georgia,'Times New Roman',serif" : I.font === "mono" ? "ui-monospace,'SF Mono',Menlo,Consolas,monospace" : "";
+    var tint = "color-mix(in srgb," + ac + " 12%,#fff)";
+    var css = ":root{--ac:" + ac + "}" + (ff ? "body,.sheet,button{font-family:" + ff + "!important}" : "");
+    if (lay === "modern") css += ".top{background:var(--ac)!important;color:#fff;border:0!important;border-radius:12px;padding:22px 26px!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}.top *{color:#fff!important}.top h1{font-size:26px}th{background:" + tint + "!important;color:var(--ac)!important;border:0!important}td{border-bottom:1px solid #eef0f3!important}.tot .g{color:var(--ac);border-top:2px solid var(--ac)!important}.words{background:" + tint + "!important}h2{color:var(--ac)!important}.sheet{border-radius:14px}";
+    else if (lay === "minimal") css += ".sheet{padding:52px 56px!important}h1{font-weight:300!important;letter-spacing:.28em!important;text-transform:uppercase;font-size:20px!important}.top{border-bottom:1px solid #cfd3d9!important}th{background:none!important;border-bottom:1px solid #14171c!important;color:#14171c!important;font-weight:600}td{border-bottom:1px solid #f0f1f3!important}.words{background:none!important;padding:10px 0!important;border-top:1px solid #e5e7eb;border-radius:0}.tot .g{border-top:1px solid #14171c!important}h2{color:var(--ac)!important;font-weight:600}";
+    else if (lay === "bold") css += "h1{font-size:36px!important;font-weight:900!important;text-transform:uppercase;color:var(--ac);line-height:1}.top{border-bottom:8px solid var(--ac)!important;padding-bottom:20px!important}th{background:#14171c!important;color:#fff!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}.tot .g{background:var(--ac);color:#fff;padding:10px 12px!important;border:0!important;border-radius:6px;-webkit-print-color-adjust:exact;print-color-adjust:exact}h2{color:var(--ac)!important}.words{border-left:5px solid var(--ac);border-radius:0!important}";
+    else if (lay === "ledger") css += "body{font-size:12.5px!important}.sheet{padding:26px 28px!important}.top{border:1px solid #14171c!important;padding:14px!important}table,th,td{border:1px solid #14171c!important}th,td{padding:5px 7px!important}th{background:" + tint + "!important;color:#14171c!important}.tot{border:1px solid #14171c;padding:6px 10px}.tot .g{border-top:1px solid #14171c!important}.words{border:1px solid #14171c;background:none!important;border-radius:0!important}";
+    else if (ac !== "#14171c") css += ".top{border-bottom-color:var(--ac)!important}.tot .g{border-top-color:var(--ac)!important}h2{color:var(--ac)!important}th{color:var(--ac)!important}";
+    if (I.words === false) css += ".words{display:none!important}";
+    if (I.summary === false) css += ".taxsum{display:none!important}";
+    if (I.sign === false) css += ".sign{display:none!important}";
+    return css;
+  }
+
   /** A bill for one order: a page of its own that prints (or saves as a PDF) cleanly. */
   function bill(o) {
     const B = cfg.biz || {}, rows = (o.items || []).length ? `<table><thead><tr><th>Item</th><th class="r">Qty</th></tr></thead><tbody>${o.items.map((x) => `<tr><td>${esc(x.n)}</td><td class="r">${x.q}</td></tr>`).join("")}</tbody></table>` : "";
@@ -226,7 +244,7 @@ body{font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;co
 table{width:100%;border-collapse:collapse;margin-top:6px}th,td{padding:8px 0;border-bottom:1px solid #ddd;text-align:left;font-size:14px}th{font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:#666}
 pre{white-space:pre-wrap;font:inherit;font-size:14px;margin:6px 0 0}.tot{display:flex;justify-content:space-between;font-size:18px;font-weight:700;border-top:2px solid #111;margin-top:18px;padding-top:12px}
 .note{color:#666;font-size:12.5px;margin-top:26px}button{font:inherit;font-weight:700;padding:10px 18px;border-radius:999px;border:1px solid #111;background:#111;color:#fff;cursor:pointer;margin-top:22px}@media print{button{display:none}body{padding:0}}
-</style></head><body><div class="top"><div><h1>${esc(B.name || "")}</h1>${B.address ? `<p>${esc(B.address)}</p>` : ""}${B.phone ? `<p>${esc(B.phone)}</p>` : ""}${B.email ? `<p>${esc(B.email)}</p>` : ""}${B.gstin ? `<p>GSTIN: ${esc(B.gstin)}</p>` : ""}</div><div class="r"><p><b>Bill</b></p><p>${esc(o.no)}</p><p>${esc(when(o.at))}</p><p>${esc(label(o))}${o.paid ? " · Paid" : ""}</p></div></div>
+${invCss(B.inv)}</style></head><body><div class="top"><div>${B.inv && B.inv.logo === true && B.logo ? `<img src="${esc((() => { try { return new URL(String(B.logo), location.href).href; } catch (e) { return ""; } })())}" alt="" style="height:44px;max-width:180px;object-fit:contain;display:block;margin:0 0 8px">` : ""}<h1>${esc(B.name || "")}</h1>${B.address ? `<p>${esc(B.address)}</p>` : ""}${B.phone ? `<p>${esc(B.phone)}</p>` : ""}${B.email ? `<p>${esc(B.email)}</p>` : ""}${B.gstin ? `<p>GSTIN: ${esc(B.gstin)}</p>` : ""}</div><div class="r"><p><b>Bill</b></p><p>${esc(o.no)}</p><p>${esc(when(o.at))}</p><p>${esc(label(o))}${o.paid ? " · Paid" : ""}</p></div></div>
 <h2>Billed to</h2><p>${esc(o.name || (data && data.name) || "")}<br>${esc(show(me.key))}${o.address ? "<br>" + esc(o.address) : ""}</p>
 <h2>Order${o.mode ? " · " + esc(o.mode) : ""}</h2>${rows}${o.text ? `<pre>${esc(o.text)}</pre>` : ""}
 <div class="tot"><span>Total${o.pay ? ` <span style="font-weight:400;font-size:13.5px;color:#666">· ${esc(o.pay)}</span>` : ""}</span><span>${esc(o.total)}</span></div>

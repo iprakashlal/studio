@@ -656,6 +656,27 @@ export function accountCard(kind: "restaurant" | "store"): Card {
 }
 /** Theme & layout → Account customization: how the sign-in step, "My account" and the checkout look. They always take
  *  the theme's own accent colour, corners, fonts and dark mode; these choices shape the rest. */
+/** Invoice and bill look (content.invoice): used by the GST invoice and by the bill in “My account”. */
+export function invoiceLookCard(): Card {
+  const o = (pairs: [string, string][]) => pairs.map(([value, label]) => ({ value, label }));
+  return { title: "Invoice & bill look", fields: [
+    { t: "note", text: "How the printed invoice (GST invoice) and the bill in “My account” look. Customers open them from an order and print or save them as PDF. Checking one: place a test order, open it and press “Download invoice” or “Bill”." },
+    { t: "grid", cols: 2, fields: [
+      { t: "select", path: "invoice.layout", label: "Layout", options: o([["classic", "Classic: ruled header, plain table"], ["modern", "Modern: colour header band, soft table"], ["minimal", "Minimal: light, airy, hairlines"], ["bold", "Bold: big title, dark table head, colour total"], ["ledger", "Ledger: boxed grid, compact (traditional tax invoice)"]]) },
+      { t: "select", path: "invoice.font", label: "Font", options: o([["", "Clean sans-serif"], ["serif", "Serif (formal)"], ["mono", "Monospace (receipt)"]]) },
+    ] },
+    { t: "grid", cols: 2, fields: [
+      { t: "color", path: "invoice.accent", label: "Accent colour (header, headings, total)" },
+      { t: "toggle", path: "invoice.logo", label: "Show the shop's logo at the top" },
+    ] },
+    { t: "grid", cols: 3, fields: [
+      { t: "toggle", path: "invoice.words", def: true, label: "Amount in words" },
+      { t: "toggle", path: "invoice.summary", def: true, label: "Tax summary table" },
+      { t: "toggle", path: "invoice.sign", def: true, label: "Signature line" },
+    ] },
+  ] };
+}
+
 export function accountLookCard(kind: "restaurant" | "store"): Card {
   const o = (pairs: [string, string][]) => pairs.map(([value, label]) => ({ value, label }));
   const S = (path: string, label: string, pairs: [string, string][]): Field => ({ t: "select", path: "account.ui." + path, label, options: o(pairs) });
@@ -683,6 +704,7 @@ export function accountsCategory(kind: "restaurant" | "store"): Category {
   return { id: "users", label: "User accounts", group: "Selling", desc: `Customer accounts: signing in before checkout, and “My account” with orders, bills, points and a profile.`,
     cards: [
       accountCard(kind),
+      invoiceLookCard(),
       { title: "What “My account” holds", fields: [{ t: "note", text: `“My account” opens as a panel at the side of the site with three parts. Current order: the order in progress with its steps (it follows the status you set under Purchased orders${kind === "restaurant" ? ", or Petpooja's" : ""}). Order history: every order placed while signed in, with pictures of what was ordered and a bill to download. Profile: the ${who}'s name, the other contact and ${kind === "store" ? "up to six saved addresses" : "their address"}, which then fill in the checkout for them. Points show at the top when points are switched on.` }] },
       { title: "Verifying contacts", fields: [
         { t: "toggle", path: kind === "restaurant" ? "ordering.verifyPhone" : "checkout.verifyPhone", label: `Verify the mobile number with a code before the order is placed` },

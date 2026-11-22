@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { HelpPanel } from "../editor/HelpPanel";
+import { TourHost, type TourStep } from "../ui/Tour";
 import { brand } from "../lib/brand";
 import { accentFromImage, applyTint, isHex } from "../lib/tint";
 import { CfAccount, CfGate } from "./CfGate";
@@ -100,6 +102,18 @@ import { markSiteAdmin } from "../lib/ai";
 // This bundle is a site's own admin page: engines kept for the Studio are offered here only where the Studio allowed them.
 markSiteAdmin();
 
+/** The quick tour shown after signing in (it can be turned off, and played again, in Settings → Help). */
+const TOUR: TourStep[] = [
+  { title: "Welcome to your site's admin", text: "A one-minute look around: where to find things, how to change them and how to put the changes on your site. You can skip it any time." },
+  { sel: 'nav[aria-label="Content categories"]', title: "The menu", text: "Every part of your site is a section here: pages, the menu, photos, settings. Pick one and its choices open in the middle. Sections you don't use can stay folded." },
+  { sel: "#menu-search", title: "Looking for something?", text: "Type a word, like “phone”, “logo” or “hours”, and the menu shows where that setting is." },
+  { sel: '[data-tour="edit"]', title: "Change things here", text: "Edit the words, photos and choices. Nothing goes live yet: you only change a draft of the site." },
+  { sel: '[data-tour="preview"]', title: "See it as you type", text: "The preview shows your site with your changes straight away. On a phone, switch between Edit and Preview at the top." },
+  { sel: '[data-tour="save"]', title: "Save a draft", text: "Keeps your work safely without changing the live site, so you can carry on later or on another device." },
+  { sel: '[data-tour="publish"]', title: "Save & publish", text: "Makes your changes live. Visitors see them in about a minute." },
+  { sel: '[data-tour="view"]', title: "View your site", text: "Opens the live site in a new tab, so you can check what visitors see." },
+  { title: "That's it", text: "You can play this tour again, or turn it off, in Settings → Help." },
+];
 export function SiteAdmin() {
   const toast = useToast();
   const [info, setInfo] = useState<SiteInfo | null>(null);
@@ -379,6 +393,7 @@ function Workspace({ info, onInfo, repo, account, onSignOut, hosted, ghToken }: 
     ] : []),
     ...(hosted && "api" in hosted ? [{ id: "people", label: "Who can sign in", group: "Settings", desc: "The emails that can open this admin page, with a code sent to them.", render: () => <PeoplePanel cf={hosted} /> }] : []),
     { id: "backup", label: "Backup & reset", group: "Settings", desc: "Copy, restore or reset the site's content.", render: () => <BackupPanel draft={draft} onReplace={(c) => { setDraft(clone(c)); bump(); }} loadDefaults={async () => clone(saved)} hosted={!!hosted} /> },
+    { id: "help", label: "Help", group: "Settings", desc: "A quick tour of the admin, and how to turn it on or off.", render: () => <HelpPanel /> },
     { id: "account", label: "Account", group: "Settings", desc: "Your login on this device.", render: () => account },
   ], [draft, saved, account, tpl.id, hosted, ghToken, repo]);
 
@@ -396,13 +411,13 @@ function Workspace({ info, onInfo, repo, account, onSignOut, hosted, ghToken }: 
             <button type="button" aria-pressed={pane === "edit"} className={`btn btn-sm border-0 ${pane === "edit" ? "bg-ink-700" : "bg-transparent"}`} onClick={() => setPane("edit")}>Edit</button>
             <button type="button" aria-pressed={pane === "preview"} className={`btn btn-sm border-0 ${pane === "preview" ? "bg-ink-700" : "bg-transparent"}`} onClick={() => setPane("preview")}>Preview</button>
           </div>
-          <a className="btn btn-sm" href="./" target="_blank" rel="noopener">View site ↗</a>
+          <a className="btn btn-sm" data-tour="view" href="./" target="_blank" rel="noopener">View site ↗</a>
           <button type="button" role="switch" aria-checked={!!draft.maintenance?.on} className={`btn btn-sm ${draft.maintenance?.on ? "border-amber-400/60 text-amber-200" : ""}`} title="Shows a maintenance page to visitors instead of the site. Takes effect when you publish. Its text is under Publish & admin." onClick={() => { draft.maintenance = { ...(draft.maintenance || {}), on: !draft.maintenance?.on }; bump(); }}>Maintenance: {draft.maintenance?.on ? "On" : "Off"}</button>
           {dirty || !draftSha
             ? <button type="button" className="btn btn-sm" disabled={!dirty} onClick={async () => { if (await confirm("Discard unsaved changes?", draftSha ? "The editor goes back to your last saved draft." : "Your edits since the last save will be lost.", "Discard", true)) { setDraft(clone(base)); setV(0); setSavedV(0); } }}>Discard</button>
             : <button type="button" className="btn btn-sm" disabled={saving} onClick={dropDraft}>Delete draft</button>}
-          <button type="button" className="btn btn-sm" disabled={!dirty || saving} onClick={saveDraft} title="Saves a draft in the site's repository. The live site doesn't change.">Save</button>
-          <button type="button" className="btn btn-pri btn-sm" disabled={(!dirty && !draftSha) || saving} onClick={save} title="Makes your changes live.">Save &amp; publish</button>
+          <button type="button" className="btn btn-sm" data-tour="save" disabled={!dirty || saving} onClick={saveDraft} title="Saves a draft in the site's repository. The live site doesn't change.">Save</button>
+          <button type="button" className="btn btn-pri btn-sm" data-tour="publish" disabled={(!dirty && !draftSha) || saving} onClick={save} title="Makes your changes live.">Save &amp; publish</button>
         </div>
       </header>
       {moved && (
@@ -424,13 +439,14 @@ function Workspace({ info, onInfo, repo, account, onSignOut, hosted, ghToken }: 
         </div>
       )}
       <div className="flex min-h-0 flex-1">
-        <div className={`min-h-0 min-w-0 flex-1 flex-col lg:flex ${pane === "edit" || wide ? "flex" : "hidden"}`}>
+        <div data-tour="edit" className={`min-h-0 min-w-0 flex-1 flex-col lg:flex ${pane === "edit" || wide ? "flex" : "hidden"}`}>
           <Editor site menu={cleanMenu(info.menu)} tpl={tpl} draft={draft} version={v} onChange={bump} upload={upload} img={img} cf={hosted && "api" in hosted ? hosted : null} extras={extras} onCategory={setCat} />
         </div>
-        <div className={`min-h-0 flex-col border-l border-ink-700 lg:w-[46%] ${wide ? "lg:hidden" : "lg:flex"} ${pane === "preview" && !wide ? "flex flex-1" : "hidden"}`}>
+        <div data-tour="preview" className={`min-h-0 flex-col border-l border-ink-700 lg:w-[46%] ${wide ? "lg:hidden" : "lg:flex"} ${pane === "preview" && !wide ? "flex flex-1" : "hidden"}`}>
           <Preview tpl={tpl} base="" content={draft} version={v} assets={assets} />
         </div>
       </div>
+      <TourHost steps={TOUR} />
     </div>
   );
 }

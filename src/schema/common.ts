@@ -702,6 +702,8 @@ export function invoiceLookCard(kind: "restaurant" | "store" = "store"): Card[] 
       { t: "toggle", path: "invoice.sign", def: true, label: "Signature line" },
       { t: "toggle", path: "invoice.colHsn", def: true, label: "HSN/SAC column" },
       { t: "toggle", path: "invoice.colRate", def: true, label: "Rate column" },
+      { t: "toggle", path: "invoice.colTaxable", def: true, label: "Taxable value (column and total)" },
+      { t: "toggle", path: "invoice.colTax", def: true, label: "CGST / SGST / IGST (columns and totals)" },
       { t: "toggle", path: "invoice.contact", label: store ? "Shop phone, email and website in the header" : "Restaurant phone, email and website in the header" },
     ] } as Field,
   ] };

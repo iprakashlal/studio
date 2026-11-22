@@ -6,7 +6,7 @@ import type { Session } from "../lib/auth";
 import { netlifyToken } from "../lib/hosting";
 import { Netlify } from "../lib/netlify";
 import { backendOf } from "../lib/backend";
-import { cfAddMembers, cfDeployInfo, cfSignedIn, cfxSite } from "../lib/cfdb";
+import { cfAddMembers, cfDeployInfo, cfSignedIn, cfxSite, cfxPut } from "../lib/cfdb";
 import type { StudioHostCfg } from "../lib/studiohost";
 import { useCfAccount, useCloudflarePicker } from "./CfPicker";
 import { loadPages, pagesViaDb, PAGES_LABEL, type PagesKind } from "../lib/pages";
@@ -243,6 +243,8 @@ function PartnerCard({ p, studio, index, nf, setNf, session, myEmail, studioToke
   const tearOk = useRef(false); // the card goes when the result is closed, so the result can be read first
   const [hide, setHide] = useState<string[] | null>(null), [moving, setMoving] = useState(false), [tear, setTear] = useState(false);
   const [myDb, setMyDb] = useState<{ api: string; studio: string } | null>(null);
+  // The Cloudflare token for their account, kept on a database so updates work from any device (opens when an update finds none).
+  const [tokOpen, setTokOpen] = useState(false), [tok, setTok] = useState("");
   useEffect(() => { loadHostConfig().then((c) => setMyDb(c?.kind === "cloudflare" ? { api: c.api, studio: c.studio } : null)).catch(() => {}); }, []);
   // Limits: how many themes they can choose from and how many sites of each type they can have ("" = no limit).
   const [lim, setLim] = useState<{ themes: string; portfolio: string; store: string; business: string; restaurant: string; list: Record<string, string[]> }>({ themes: "", portfolio: "", store: "", business: "", restaurant: "", list: {} }), [limSaved, setLimSaved] = useState("");
@@ -256,7 +258,7 @@ function PartnerCard({ p, studio, index, nf, setNf, session, myEmail, studioToke
     for (const s of p.shared) { const v = await siteSync(studio, p, s).catch(() => "gone" as const); setStates((m) => ({ ...m, [s.project]: v })); }
   };
   useEffect(() => { check(); source().then(appFiles).then((m) => setLatest(m.build)).catch(() => {}); }, [p.shared.length, p.sbUrl, p.api, p.studio]);
-  const run = async (k: string, fn: () => Promise<void>) => { setBusy(k); try { await fn(); } catch (e: any) { toast(e?.message || "Something went wrong.", "bad"); } setBusy(""); };
+  const run = async (k: string, fn: () => Promise<void>, tokenHelp = false) => { setBusy(k); try { await fn(); } catch (e: any) { if (tokenHelp && (e?.status === 501 || /no Cloudflare token|reaches their Studio/i.test(String(e?.message || "")))) setTokOpen(true); toast(e?.message || "Something went wrong.", "bad"); } setBusy(""); };
   // After a share, send or pull both sides hold the same content.
   const setShared = async (s: SharedSite, msg: string) => { await onChange((x) => ({ ...x, shared: [...x.shared.filter((y) => y.project !== s.project), s] }), msg); setStates((m) => ({ ...m, [s.project]: "same" })); };
   const share = () => run("share", async () => { const m = index.projects.find((x) => x.id === pick); if (!m) return; await setShared(await sendSite(studio, p, m, partner, setBusy), `Share ${m.name} with ${p.name}`); setPick(""); toast(`${m.name} is in ${p.name}'s Studio`); });
@@ -276,6 +278,19 @@ function PartnerCard({ p, studio, index, nf, setNf, session, myEmail, studioToke
       await deployClientApp(alt, p, "", await source(), partner, setBusy);
     }
     toast(`${p.name}'s Studio is updated`);
+  }, true);
+  /** Keeps the pasted token for their account on their database (or yours), then updates their Studio with it. */
+  const saveTokenAndUpdate = () => run("app", async () => {
+    const t = tok.trim(); if (!/^[\w-]{20,200}$/.test(t)) throw new Error("Paste the Cloudflare API token for their account (the “Edit Cloudflare Workers” template).");
+    let kept = false, why = "";
+    for (const d of [p.backend === "cloudflare" && p.api ? { api: p.api, studio: p.studio } : null, myDb].filter(Boolean) as { api: string; studio: string }[]) {
+      try { await cfxPut(d.api, d.studio, t); kept = true; break; } catch (e: any) { why = e?.message || why; }
+    }
+    if (!kept) throw new Error(why || "Neither database could keep the token. Turn on Publish from any device in Settings → Hostings first.");
+    setTok(""); setTokOpen(false);
+    const pages = await clientAppViaDb(p, myDb);
+    if (!pages) throw new Error("The token is saved, but it doesn't reach their Studio's account. Check it was created while signed in to that account.");
+    await deployClientApp(pages, p, "", await source(), partner, setBusy); toast(`${p.name}'s Studio is updated`);
   });
   const notShared = index.projects.filter((m) => !p.shared.some((s) => s.project === m.id) && !m.partner);
 
@@ -353,6 +368,13 @@ function PartnerCard({ p, studio, index, nf, setNf, session, myEmail, studioToke
         run={(step) => teardownPartner(p, { studioToken, db: myDb, step })}
         onDone={(r) => { tearOk.current = !r.failed.length; }} onClose={() => { setTear(false); if (tearOk.current) onRemove(); }} />}
       {moving && <AddPartner from={p} nf={nf} setNf={setNf} session={session} index={index} partner={partner} myEmail={myEmail} onCancel={() => setMoving(false)} onDone={async (rec) => { await onChange(() => rec, `Move client Studio ${rec.name}`); }} />}
+      {p.accounts === "mine" && p.siteId && (tokOpen
+        ? <div className="flex flex-col gap-2 rounded-xl border border-amber-400/40 bg-amber-400/5 p-3 text-[13px]" role="group" aria-label={`Cloudflare token for ${p.name}`}>
+            <b>Cloudflare token for {p.name}'s account</b>
+            <span className="text-ink-300">Updating their Studio needs a Cloudflare API token for the account it lives on, kept on a database so it works from any device. Create one in that account with the “Edit Cloudflare Workers” template and paste it here.</span>
+            <div className="flex flex-wrap gap-2"><input type="password" autoComplete="off" aria-label="Cloudflare API token" className="input min-w-0 flex-1 font-mono" placeholder="Cloudflare API token" value={tok} onChange={(e) => setTok(e.target.value)} /><button type="button" className="btn btn-pri btn-sm" disabled={!!busy || !tok.trim()} onClick={saveTokenAndUpdate}>{busy === "app" ? "Working…" : "Save token & update"}</button><button type="button" className="btn btn-ghost btn-sm" onClick={() => { setTokOpen(false); setTok(""); }}>Cancel</button></div>
+          </div>
+        : <button type="button" className="self-start text-[12.5px] text-brand-300 underline" onClick={() => setTokOpen(true)}>Update the Cloudflare token for their account…</button>)}
       <div className="flex flex-wrap items-center gap-2 border-t border-ink-700 pt-3 text-[13px] text-ink-400">
         {!moving && <button type="button" className="btn btn-sm" disabled={!!busy} title="Copies their Studio (projects, photos, settings) to another account, yours or the client's own, and updates this card." onClick={() => setMoving(true)}>Move their Studio…</button>}
         {p.accounts === "mine" && p.siteId ? <button type="button" className="btn btn-sm" disabled={!!busy} onClick={updateApp}>{busy === "app" ? "Updating…" : `Update their Studio${latest ? ` to ${latest}` : ""}`}</button> : <span>The client updates their Studio from its Settings → Migration.</span>}

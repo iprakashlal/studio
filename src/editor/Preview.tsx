@@ -20,7 +20,8 @@ function previewPages(tpl: TemplateDef, content: any): { file: string; label: st
   const acct = content?.account?.on ? (tpl.id === "store"
     ? [{ file: "checkout.html?preview=cart", label: "Checkout (sample cart)" }, { file: "checkout.html?preview=signin", label: "Checkout: sign-in step" }, { file: "index.html?preview=account", label: "My account (sample)" }]
     : tpl.id === "restaurant" ? [{ file: "order.html?preview=cart", label: "Checkout (sample cart)" }, { file: "order.html?preview=signin", label: "Checkout: sign-in step" }, { file: "order.html?preview=account", label: "My account (sample)" }] : []) : [];
-  return [...tpl.pages, ...acct, { file: "index.html?maintenance=1", label: "Maintenance page" }, ...extra.filter((p: any) => !seen.has(p.slug) && seen.add(p.slug)).map((p: any) => ({ file: `${tpl.pageFile || "page.html"}?p=${encodeURIComponent(p.slug)}`, label: `Page: ${p.title}` }))];
+  const inv = tpl.id === "store" ? [{ file: "checkout.html?preview=invoice", label: "Invoice (sample order)" }] : tpl.id === "restaurant" ? [{ file: "order.html?preview=invoice", label: "Invoice (sample order)" }] : [];
+  return [...tpl.pages, ...acct, ...inv, { file: "index.html?maintenance=1", label: "Maintenance page" }, ...extra.filter((p: any) => !seen.has(p.slug) && seen.add(p.slug)).map((p: any) => ({ file: `${tpl.pageFile || "page.html"}?p=${encodeURIComponent(p.slug)}`, label: `Page: ${p.title}` }))];
 }
 
 // The template pages run in an iframe named "cms-preview". They announce themselves with

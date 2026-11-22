@@ -1,5 +1,6 @@
 import { MENU_LAYOUTS, applyLayout } from "./menuLayout";
 import { pushPref } from "../lib/prefs";
+import { tourSections } from "../ui/Tour";
 import { useEffect, useMemo, useRef, useState, type ReactNode, Fragment } from "react";
 import type { TemplateDef } from "../schema/types";
 import { Ctx, FieldView, openListItem, type EditorCtx } from "./fields";
@@ -139,6 +140,8 @@ export function Editor({ tpl, draft, version, onChange, upload, img, extras = []
     const esc = (e: KeyboardEvent) => { if (e.key === "Escape") setSheet(false); }; addEventListener("keydown", esc); return () => removeEventListener("keydown", esc);
   }, [sheet]);
   const pick = (r: { id: string; path?: string }) => { setQ(""); setSheet(false); if (r.path) dispatchEvent(new CustomEvent(GOTO_EVENT, { detail: { path: r.path } })); else { setCat(r.id); onCategory?.(r.id); } };
+  // The site admin's quick tour walks through these sections, opening each one and saying what it is for.
+  if (site) tourSections.list = nav.map((n: any) => ({ id: n.id, label: n.label, group: n.group, desc: String(n.desc || ""), cards: (n.cards || []).map((c: any) => String(c?.card?.title || "")).filter(Boolean) }));
   const entry = entryOf(cat) || nav[0];
   const curId = entry?.id;
   const extra = entry?.extra ? extras.find((e) => e.id === entry.id) : undefined;
@@ -203,7 +206,7 @@ export function Editor({ tpl, draft, version, onChange, upload, img, extras = []
         </nav>
         <div ref={scroller} className="scroll-thin min-w-0 flex-1 overflow-y-auto">
           <div className="mx-auto flex max-w-5xl flex-col gap-4 px-4 py-5 sm:px-6">
-            <div key={landed} className={landed ? "hub-landed -mx-2 rounded-lg px-2 py-1" : undefined}>
+            <div key={landed} data-tour="section-head" className={landed ? "hub-landed -mx-2 rounded-lg px-2 py-1" : undefined}>
               <h2 className="text-lg font-extrabold">{entry?.label}</h2>
               <p className="mt-1 text-sm text-ink-400">{entry?.desc}</p>
             </div>

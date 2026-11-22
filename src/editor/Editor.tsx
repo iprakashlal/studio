@@ -38,7 +38,7 @@ export function Editor({ tpl, draft, version, onChange, upload, img, extras = []
   const noFestival = !site && studioHidden().has("festival");
   const shown = tpl.schema.filter((c) => (!c.showIf || c.showIf(draft)) && !cmsHide.includes(c.id) && !(site && c.siteIf && !cmsAllow.includes(c.siteIf)) && !(c.id === "festival" && noFestival)).map((c) => (site && c.site ? { ...c, label: c.site.label || c.label, group: c.site.group || c.group } : c));
   const nav0 = applyMenu(shown, extras.filter((e) => !cmsHide.includes(e.id)), menu);
-  const byOwnerDay = site && tpl.id === "restaurant" && !menu?.items?.length;
+  const byOwnerDay = tpl.id === "restaurant" && !menu?.items?.length;
   const nav = byOwnerDay ? restaurantLayout(nav0) : nav0;
   /** The menu entry showing a section (itself, or the one it was combined into). */
   const entryOf = (id: string) => nav.find((e) => e.from.includes(id));

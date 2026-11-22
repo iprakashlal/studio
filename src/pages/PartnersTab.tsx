@@ -265,9 +265,17 @@ function PartnerCard({ p, studio, index, nf, setNf, session, myEmail, studioToke
   const unshare = (s: SharedSite) => run(s.project, async () => { if (!(await confirm("Stop syncing this site?", "It stays in both Studios; changes just aren't kept in step any more.", "Stop syncing"))) return; await onChange((x) => ({ ...x, shared: x.shared.filter((y) => y.project !== s.project) }), "Stop syncing a site"); });
   const updateApp = () => run("app", async () => {
     if (!p.siteId) return;
-    const pages = (await loadPages(p.pages || "netlify", studioToken, p.pagesAccount).catch(() => null)) || (p.pages === "cloudflare" ? await clientAppViaDb(p, myDb) : null);
+    const first = await loadPages(p.pages || "netlify", studioToken, p.pagesAccount).catch(() => null);
+    const pages = first || (p.pages === "cloudflare" ? await clientAppViaDb(p, myDb) : null);
     if (!pages) throw new Error(p.pages === "cloudflare" ? "No Cloudflare token reaches their Studio's account from this device. On a device that has the token: Settings → Hostings → Hosting accounts → turn on Publish from any device (and add the client's Cloudflare account under Other accounts if it's a different one). Then this works from every device you're signed in on." : `Connect ${PAGES_LABEL[p.pages || "netlify"]} in Settings → Hostings → Hosting accounts first.`);
-    await deployClientApp(pages, p, "", await source(), partner, setBusy); toast(`${p.name}'s Studio is updated`);
+    try { await deployClientApp(pages, p, "", await source(), partner, setBusy); }
+    catch (e: any) {
+      // This device's route has no token kept for their account: try the other routes before giving up.
+      const alt = first && p.pages === "cloudflare" && (e?.status === 501 || /no Cloudflare token/i.test(String(e?.message || ""))) ? await clientAppViaDb(p, myDb) : null;
+      if (!alt) throw e;
+      await deployClientApp(alt, p, "", await source(), partner, setBusy);
+    }
+    toast(`${p.name}'s Studio is updated`);
   });
   const notShared = index.projects.filter((m) => !p.shared.some((s) => s.project === m.id) && !m.partner);
 

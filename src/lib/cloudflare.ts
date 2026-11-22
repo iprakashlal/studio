@@ -74,6 +74,8 @@ export class Cloudflare {
       if (r.status === 401 || r.status === 403 || j?.errors?.some((e: any) => e.code === 10000 || e.code === 9109)) throw new CfError("Cloudflare refused the token. Create one with the “Edit Cloudflare Workers” template and paste it again. (If you used Connect Cloudflare, press it again: that sign-in lasts a short while.)", r.status);
       if (j?.success) return j.result as T;
       const e = j?.errors?.[0], code = e?.code || 0;
+      // 501 from the Studio's database is its own answer in words ("no Cloudflare token for that account is kept here"), not a hiccup.
+      if (this.via && r.status === 501 && e?.message) throw new CfError(String(e.message), 501, code);
       const passing = r.status >= 500 || code === 10013 || /unknown error/i.test(e?.message || "");
       if (passing && attempt < 2) { await new Promise((res) => setTimeout(res, attempt ? 5000 : 1500)); continue; }
       const what = cfStep(method, path);

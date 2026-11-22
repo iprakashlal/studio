@@ -29,7 +29,7 @@ export function prepareEmails(c: any) {
 }
 /** Email templates: the wording of the emails this site sends from its Cloudflare database. `form`: the template
  *  has an enquiry form (so also the enquiry email and the thank-you to the visitor). */
-export function emailsCategory(form: boolean): Category {
+export function emailsCategory(form: boolean, orders = false): Category {
   const g2 = (...fields: Field[]): Field => ({ t: "grid", cols: 2, fields });
   return {
     id: "emails", label: "Email templates", group: "Forms & records",
@@ -54,6 +54,44 @@ export function emailsCategory(form: boolean): Category {
             { t: "note", text: "It goes to the email address the visitor typed, and their reply comes to your enquiry address. One address gets at most 3 of these an hour." },
           ] },
         ] as Field[] },
+      ] : []),
+      ...(orders ? [
+        { title: "Order emails: what customers get", fields: [
+          { t: "note", text: "Order emails use these words in curly brackets: {name} the customer, {order} the order number, {total}, {site} your shop's name, {items} the list of items, {when} the delivery or pickup time. For the shipped email also {courier} and {tracking}. Plain text; a blank line starts a new paragraph. Leave a box empty to keep the standard wording shown in grey." },
+        ] as Field[] },
+        { title: "Order confirmation to the customer", fields: [
+          { t: "toggle", path: "emails.order.on", label: "Email the customer when they place an order (they must have given an email address)" },
+          { t: "when", path: "emails.order.on", is: "true", fields: [
+            { t: "text", path: "emails.order.subject", label: "Subject", ph: "Thanks for your order {order}" },
+            { t: "text", path: "emails.order.heading", label: "Heading", ph: "We've got your order" },
+            { t: "textarea", path: "emails.order.message", label: "Message", rows: 6, hint: "Standard: Hi {name}, / Thanks for your order {order} from {site}. We've received it and will get it ready soon. / Order total: {total}" },
+            { t: "toggle", path: "emails.order.items", def: true, label: "List the items they ordered" },
+            { t: "text", path: "emails.order.itemsLabel", label: "Heading above the items", ph: "Your order" },
+            { t: "textarea", path: "emails.order.footer", label: "Closing line", rows: 2, hint: "Standard: Questions? Just reply to this email." },
+          ] },
+        ] as Field[] },
+        { title: "New-order email to you", fields: [
+          { t: "note", text: "Sent to you for each order (see Enquiry form / Send orders to for the address). The order's details are listed between the opening and closing lines." },
+          { t: "text", path: "emails.orderOwner.subject", label: "Subject", ph: "New order {order} ({total}) from {name}" },
+          { t: "textarea", path: "emails.orderOwner.intro", label: "Opening line", rows: 2, hint: "Standard: New order {order} on the {site} website." },
+          { t: "textarea", path: "emails.orderOwner.footer", label: "Closing line", rows: 2, hint: "Standard: It is also saved under Purchased orders in the site's admin page." },
+        ] as Field[] },
+        { title: "Shipped email", fields: [
+          { t: "note", text: "Sent when you mark an order as shipped with a tracking number. Switch it off per shop in the order's courier box." },
+          { t: "text", path: "emails.shipped.subject", label: "Subject", ph: "Your order {order} has shipped" },
+          { t: "text", path: "emails.shipped.heading", label: "Heading", ph: "Your order is on its way" },
+          { t: "textarea", path: "emails.shipped.message", label: "Message", rows: 4, hint: "Standard: Hi {name}, your order {order} from {site} has shipped with {courier}. / Tracking number: {tracking}" },
+          g2({ t: "text", path: "emails.shipped.button", label: "Button text", ph: "Track your parcel" }, { t: "text", path: "emails.shipped.footer", label: "Closing line", ph: "Thank you for shopping with us." }),
+        ] as Field[] },
+        ...([["ready", "Order ready", "is ready"], ["out", "Out for delivery", "is out for delivery"], ["done", "Order complete", "is complete"], ["cancelled", "Order cancelled", "was cancelled"]] as const).map(([k, label, was]) => ({ title: label + " email", fields: [
+          { t: "toggle", path: `emails.status.${k}.on`, label: `Email the customer when an order is marked “${k === "ready" ? "Ready" : k === "out" ? "Out for delivery" : k === "done" ? "Done" : "Cancelled"}”` },
+          { t: "when", path: `emails.status.${k}.on`, is: "true", fields: [
+            { t: "text", path: `emails.status.${k}.subject`, label: "Subject", ph: `Your order {order} ${was}` },
+            { t: "text", path: `emails.status.${k}.heading`, label: "Heading", ph: label },
+            { t: "textarea", path: `emails.status.${k}.message`, label: "Message", rows: 3, hint: `Standard: Hi {name}, your order {order} from {site} ${was}.` },
+            { t: "textarea", path: `emails.status.${k}.footer`, label: "Closing line", rows: 2 },
+          ] },
+        ] as Field[] })),
       ] : []),
       { title: "Sign-in code email", fields: [
         { t: "note", text: "Sent to you and your editors when signing in to this admin page. The 6-digit code always sits between the opening and closing lines." },

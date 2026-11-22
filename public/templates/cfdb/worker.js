@@ -26,7 +26,7 @@ create index if not exists approvals_project on approvals (scope, project, creat
 create table if not exists approval_notes (id integer primary key autoincrement, token text not null, who text not null, body text not null, page text not null default '', kind text not null default 'comment', created_at text not null);
 create index if not exists approval_notes_token on approval_notes (token, id);
 `;
-var CFDB_VERSION = 48;
+var CFDB_VERSION = 49;
 var CFDB_WORKER_NAME = "picaffectz-db";
 
 // src/lib/lookdigest.ts
@@ -689,7 +689,7 @@ function gsPage(title, text, finish = false) {
   const script = finish ? `<script>(function(){var q=new URLSearchParams(location.hash.slice(1)),h=document.getElementById("h"),p=document.getElementById("p");try{history.replaceState(null,"",location.pathname)}catch(e){}
 function say(a,b){h.textContent=a;p.textContent=b}
 if(q.get("error")||!q.get("id_token")){say("Not signed in",q.get("error")==="access_denied"?"You closed Google's sign-in. You can close this window.":"Google didn't finish the sign-in. Close this window and try again.");return}
-fetch("/auth/google/finish",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id_token:q.get("id_token"),state:q.get("state")})}).then(function(r){return r.json().then(function(j){return{ok:r.ok,j:j}})}).then(function(x){if(x.ok){say("Signed in","You can close this window and go back.");setTimeout(function(){try{window.close()}catch(e){}},400)}else say("Not signed in",(x.j&&x.j.error)||"Something went wrong. Close this window and try again.")}).catch(function(){say("Not signed in","Couldn't reach the sign-in. Close this window and try again.")})})();</script>` : "";
+fetch("/auth/google/finish",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id_token:q.get("id_token"),state:q.get("state")})}).then(function(r){return r.json().then(function(j){return{ok:r.ok,j:j}})}).then(function(x){if(x.ok){say("Signed in","You can close this window and go back.");setTimeout(function(){try{window.close()}catch(e){}},400)}else say("Not signed in",(x.j&&x.j.error)||"Something went wrong. Close this window and try again.")}).catch(function(){say("Not signed in","Couldn't reach the sign-in. Close this window and try again.")})})();<\/script>` : "";
   return new Response(`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><meta name="referrer" content="no-referrer"><title>Sign in</title><style>body{font:16px/1.6 system-ui,sans-serif;max-width:420px;margin:18vh auto;padding:0 20px;color:#1d2433;text-align:center}p{color:#5b6475}</style><h1 id="h">${esc(title)}</h1><p id="p">${esc(text)}</p>${script}`, { status: 200, headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Frame-Options": "DENY" } });
 }
 var roleOf = async (env, scope, email) => email ? (await env.DB.prepare("select role from members where scope = ? and email = ?").bind(scope, email).first())?.role || null : null;
@@ -761,9 +761,10 @@ async function notifyEnquiry(env, site, data, page) {
   const table = `<table style="border-collapse:collapse;margin:0 0 14px">${rows}</table>`;
   const jobs = [];
   if (wantOwner && owners.length) {
-    const subject = data.order_no ? oneLine(`New order ${data.order_no}${data.total ? " (" + data.total + ")" : ""} from ${vars.name || "your website"}`).slice(0, 150) : oneLine(fill(String(F.notifySubject || "New enquiry from {name}"), { ...vars, name: vars.name || "your website" })).slice(0, 150) || "New enquiry";
-    const intro = fill(String(E2.enquiry?.intro || "New enquiry from the {site} website."), vars);
-    const foot = fill(String(E2.enquiry?.footer || "It is also saved under Enquiries in the site's admin page."), vars) + (EMAIL_RE.test(data.email || "") ? " Reply to this email to answer the visitor." : "");
+    const OO = E2.orderOwner && typeof E2.orderOwner === "object" ? E2.orderOwner : {}, ov = { ...vars, name: vars.name || "your website", order: oneLine(String(data.order_no || "")), total: oneLine(String(data.total || "")) };
+    const subject = data.order_no ? oneLine(fill(String(OO.subject || "New order {order}{totalbit} from {name}"), { ...ov, totalbit: data.total ? " (" + data.total + ")" : "" })).slice(0, 150) || "New order" : oneLine(fill(String(F.notifySubject || "New enquiry from {name}"), { ...vars, name: vars.name || "your website" })).slice(0, 150) || "New enquiry";
+    const intro = data.order_no ? fill(String(OO.intro || "New order {order} on the {site} website."), ov) : fill(String(E2.enquiry?.intro || "New enquiry from the {site} website."), vars);
+    const foot = (data.order_no ? fill(String(OO.footer || "It is also saved under Purchased orders in the site's admin page."), ov) : fill(String(E2.enquiry?.footer || "It is also saved under Enquiries in the site's admin page."), vars)) + (EMAIL_RE.test(data.email || "") ? " Reply to this email to answer the visitor." : "");
     jobs.push(sendMail(env, owners, subject, WRAP(paras(intro) + table + paras(foot, "margin:0 0 8px;color:#667;font-size:13px")), EMAIL_RE.test(data.email || "") ? data.email : void 0).then(() => {
       said = "Emailed to " + owners.join(", ") + ".";
     }, (e) => {
@@ -1197,12 +1198,46 @@ async function shipLive(env, site, rowId, d, status, force = false) {
   await env.DB.prepare("update enquiries set data = ?, status = ? where id = ? and site = ?").bind(JSON.stringify(nd), next, rowId, site).run();
   return { live: keep, why: "", status: next };
 }
+var ORDER_DEF = {
+  placed: { subject: "Thanks for your order {order}", heading: "We've got your order", message: "Hi {name},\n\nThanks for your order {order} from {site}. We've received it and will get it ready soon.\n\nOrder total: {total}", footer: "Questions? Just reply to this email." },
+  shipped: { subject: "Your order {order} has shipped", heading: "Your order is on its way", message: "Hi {name}, your order {order} from {site} has shipped with {courier}.{trackline}", footer: "Thank you for shopping with us." },
+  ready: { subject: "Your order {order} is ready", heading: "Your order is ready", message: "Hi {name}, your order {order} from {site} is ready.", footer: "Thank you!" },
+  out: { subject: "Your order {order} is out for delivery", heading: "On its way to you", message: "Hi {name}, your order {order} from {site} is out for delivery.", footer: "Thank you!" },
+  done: { subject: "Your order {order} is complete", heading: "Order complete", message: "Hi {name}, your order {order} from {site} is complete. We hope you enjoy it!", footer: "Thank you for choosing us." },
+  cancelled: { subject: "Your order {order} was cancelled", heading: "Order cancelled", message: "Hi {name}, your order {order} from {site} has been cancelled. If you didn't ask for this, just reply to this email.", footer: "" }
+};
+var itemsText = (d) => {
+  try {
+    const a = JSON.parse(String(d?._items || "[]"));
+    return Array.isArray(a) ? a.slice(0, 40).map((x) => `\u2022 ${Math.max(1, +x.q || 1)} \xD7 ${oneLine(String(x.n || ""))}`).join("\n") : "";
+  } catch {
+    return "";
+  }
+};
+async function orderMail(env, site, kind, d, c0) {
+  const to = emailKey(d?.email);
+  if (!to || !env.RESEND_API_KEY || !env.MAIL_FROM) return "";
+  const c = c0 || await siteContent(env, site).catch(() => null), E2 = c?.emails && typeof c.emails === "object" ? c.emails : {};
+  const T = kind === "placed" ? E2.order : kind === "shipped" ? E2.shipped : E2.status?.[kind];
+  if (kind !== "shipped" && T?.on !== true) return "";
+  const def = ORDER_DEF[kind];
+  if (!def) return "";
+  const t = kind === "shipped" ? trackShown(trackOf(d)) : null;
+  if (kind === "shipped" && !t) return "";
+  const name = siteName(c, site);
+  const vars = { name: oneLine(String(d.name || "")) || "there", order: oneLine(String(d.order_no || "")), total: oneLine(String(d.total || "")), site: name, shop: name, when: oneLine([d.mode, d.when].filter(Boolean).join(", ")), items: itemsText(d), courier: t ? t.name : "", tracking: t?.awb || "", trackline: t?.awb ? "\nTracking number: " + t.awb : "" };
+  const subject = oneLine(fill(String(T?.subject || def.subject), vars)).slice(0, 150) || "Your order";
+  const body = fill(String(T?.message || def.message), vars), heading = oneLine(fill(String(T?.heading || def.heading), vars));
+  const foot = fill(String(T?.footer ?? def.footer) || (T && "footer" in T ? "" : def.footer), vars);
+  const showItems = kind !== "shipped" && T?.items !== false && vars.items;
+  const btn = t?.link ? `<p style="margin:0 0 12px"><a href="${hesc(t.link)}" style="display:inline-block;background:#111;color:#fff;text-decoration:none;padding:10px 16px;border-radius:8px">${hesc(oneLine(String(T?.button || "Track your parcel")))}</a></p>` : "";
+  const list = showItems ? `<p style="margin:0 0 6px;color:#667;font-size:13px">${hesc(String(T?.itemsLabel || "Your order"))}</p>${paras(vars.items, "margin:0 0 12px")}` : "";
+  const reply = emailKey(c?.contact?.email) || void 0;
+  await sendMail(env, to, subject, WRAP(`<h2 style="margin:0 0 12px;font-size:20px">${hesc(heading)}</h2>${paras(body)}${list}${btn}${foot ? paras(foot, "margin:0 0 8px;color:#667;font-size:13px") : ""}`), reply);
+  return kind === "shipped" ? "Shipping email sent to " + to : "Order email (" + kind + ") sent to " + to;
+}
 async function shippedMail(env, site, d) {
-  const to = emailKey(d.email), t = trackShown(trackOf(d));
-  if (!to || !t || !env.RESEND_API_KEY || !env.MAIL_FROM) return "";
-  const c = await siteContent(env, site).catch(() => null), name = siteName(c, site);
-  await sendMail(env, to, `Your order ${oneLine(String(d.order_no))} has shipped`.slice(0, 150), WRAP(`<h2 style="margin:0 0 12px;font-size:20px">Your order is on its way</h2>${paras(`Hi ${oneLine(String(d.name || "there"))}, your order ${oneLine(String(d.order_no))} from ${name} has shipped with ${t.name}.${t.awb ? "\nTracking number: " + t.awb : ""}`)}${t.link ? `<p style="margin:0 0 12px"><a href="${hesc(t.link)}" style="display:inline-block;background:#111;color:#fff;text-decoration:none;padding:10px 16px;border-radius:8px">Track your parcel</a></p>` : ""}${paras("Thank you for shopping with us.", "margin:0 0 8px;color:#667;font-size:13px")}`));
-  return "Shipping email sent to " + to;
+  return orderMail(env, site, "shipped", d);
 }
 function maskSetting(name, v) {
   const S2 = SETTINGS[name], o = {};
@@ -2944,7 +2979,7 @@ ${body}`)}${paras("Approve or hide it under Reviews in your site's admin page.",
           if (ctx?.waitUntil) ctx.waitUntil(lm);
           else await lm;
         }
-        const mail = Promise.all([notifyEnquiry(env, site, data, String(q.page || "").slice(0, 200)).catch((e) => "Not emailed: " + String(e?.message || e).slice(0, 300)), waAlert(env, site, data).catch(() => "")]).then(([said, wa]) => (said || wa) && rowId ? env.DB.prepare("update enquiries set data = ? where id = ? and site = ?").bind(JSON.stringify({ ...data, ...said ? { _mail: said } : {}, ...wa ? { _wa: wa } : {} }), rowId, site).run() : null).catch(() => {
+        const mail = Promise.all([notifyEnquiry(env, site, data, String(q.page || "").slice(0, 200)).catch((e) => "Not emailed: " + String(e?.message || e).slice(0, 300)), waAlert(env, site, data).catch(() => ""), data.order_no ? orderMail(env, site, "placed", data).catch(() => "") : Promise.resolve("")]).then(([said, wa, om]) => (said || wa || om) && rowId ? env.DB.prepare("update enquiries set data = ? where id = ? and site = ?").bind(JSON.stringify({ ...data, ...said ? { _mail: said } : {}, ...wa ? { _wa: wa } : {}, ...om ? { _omail: om } : {} }), rowId, site).run() : null).catch(() => {
         });
         if (ctx?.waitUntil) ctx.waitUntil(mail);
         else await mail;
@@ -3753,6 +3788,20 @@ ${body}`)}${paras("Approve or hide it under Reviews in your site's admin page.",
           }
           if (nd) await env.DB.prepare("update enquiries set status = ?, data = ? where id = ? and site = ?").bind(b.status, nd, b.id, site).run();
           else await env.DB.prepare("update enquiries set status = ? where id = ? and site = ?").bind(b.status, b.id, site).run();
+          if (row && row.status !== b.status && ["ready", "out", "done", "cancelled"].includes(b.status)) {
+            try {
+              const d = JSON.parse(nd || row.data), sent = String(d._smail || "").split(",");
+              if (d.order_no && !sent.includes(b.status)) {
+                const said = await orderMail(env, site, b.status, d);
+                if (said) {
+                  d._smail = [...sent.filter(Boolean), b.status].join(",");
+                  d._omail = said;
+                  await env.DB.prepare("update enquiries set data = ? where id = ? and site = ?").bind(JSON.stringify(d), b.id, site).run();
+                }
+              }
+            } catch {
+            }
+          }
         } else await env.DB.prepare("delete from enquiries where id = ? and site = ?").bind(b.id, site).run();
         return json({ ok: true });
       }

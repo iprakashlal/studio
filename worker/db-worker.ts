@@ -183,10 +183,11 @@ async function notifyEnquiry(env: Env, site: string, data: Record<string, string
   const table = `<table style="border-collapse:collapse;margin:0 0 14px">${rows}</table>`;
   const jobs: Promise<unknown>[] = [];
   if (wantOwner && owners.length) {
-    const subject = data.order_no ? oneLine(`New order ${data.order_no}${data.total ? " (" + data.total + ")" : ""} from ${vars.name || "your website"}`).slice(0, 150)
+    const OO = (E.orderOwner && typeof E.orderOwner === "object" ? E.orderOwner : {}) as any, ov = { ...vars, name: vars.name || "your website", order: oneLine(String(data.order_no || "")), total: oneLine(String(data.total || "")) };
+    const subject = data.order_no ? (oneLine(fill(String(OO.subject || "New order {order}{totalbit} from {name}"), { ...ov, totalbit: data.total ? " (" + data.total + ")" : "" })).slice(0, 150) || "New order")
       : oneLine(fill(String(F.notifySubject || "New enquiry from {name}"), { ...vars, name: vars.name || "your website" })).slice(0, 150) || "New enquiry";
-    const intro = fill(String(E.enquiry?.intro || "New enquiry from the {site} website."), vars);
-    const foot = fill(String(E.enquiry?.footer || "It is also saved under Enquiries in the site's admin page."), vars) + (EMAIL_RE.test(data.email || "") ? " Reply to this email to answer the visitor." : "");
+    const intro = data.order_no ? fill(String(OO.intro || "New order {order} on the {site} website."), ov) : fill(String(E.enquiry?.intro || "New enquiry from the {site} website."), vars);
+    const foot = (data.order_no ? fill(String(OO.footer || "It is also saved under Purchased orders in the site's admin page."), ov) : fill(String(E.enquiry?.footer || "It is also saved under Enquiries in the site's admin page."), vars)) + (EMAIL_RE.test(data.email || "") ? " Reply to this email to answer the visitor." : "");
     jobs.push(sendMail(env, owners, subject, WRAP(paras(intro) + table + paras(foot, "margin:0 0 8px;color:#667;font-size:13px")), EMAIL_RE.test(data.email || "") ? data.email : undefined)
       .then(() => { said = "Emailed to " + owners.join(", ") + "."; }, (e: any) => { said = "Not emailed: " + String(e?.message || e).slice(0, 300); }));
   }
@@ -517,13 +518,39 @@ async function shipLive(env: Env, site: string, rowId: number, d: any, status: s
   await env.DB.prepare("update enquiries set data = ?, status = ? where id = ? and site = ?").bind(JSON.stringify(nd), next, rowId, site).run();
   return { live: keep, why: "", status: next };
 }
-/** The email a customer gets when their order ships: the courier, the tracking number and where to follow it. */
-async function shippedMail(env: Env, site: string, d: any) {
-  const to = emailKey(d.email), t = trackShown(trackOf(d)); if (!to || !t || !env.RESEND_API_KEY || !env.MAIL_FROM) return "";
-  const c = await siteContent(env, site).catch(() => null), name = siteName(c, site);
-  await sendMail(env, to, `Your order ${oneLine(String(d.order_no))} has shipped`.slice(0, 150), WRAP(`<h2 style="margin:0 0 12px;font-size:20px">Your order is on its way</h2>${paras(`Hi ${oneLine(String(d.name || "there"))}, your order ${oneLine(String(d.order_no))} from ${name} has shipped with ${t.name}.${t.awb ? "\nTracking number: " + t.awb : ""}`)}${t.link ? `<p style="margin:0 0 12px"><a href="${hesc(t.link)}" style="display:inline-block;background:#111;color:#fff;text-decoration:none;padding:10px 16px;border-radius:8px">Track your parcel</a></p>` : ""}${paras("Thank you for shopping with us.", "margin:0 0 8px;color:#667;font-size:13px")}`));
-  return "Shipping email sent to " + to;
+/* ---- Order emails: the customer's confirmation, the "shipped" note and status notes, all worded by the site's email
+   templates (content.emails.order / shipped / status.*). Placeholders: {name} {order} {total} {site} {items} {when}
+   {courier} {tracking}. A status email is sent once per status per order, and only if the site switched it on. */
+const ORDER_DEF: Record<string, { subject: string; heading: string; message: string; footer: string }> = {
+  placed: { subject: "Thanks for your order {order}", heading: "We've got your order", message: "Hi {name},\n\nThanks for your order {order} from {site}. We've received it and will get it ready soon.\n\nOrder total: {total}", footer: "Questions? Just reply to this email." },
+  shipped: { subject: "Your order {order} has shipped", heading: "Your order is on its way", message: "Hi {name}, your order {order} from {site} has shipped with {courier}.{trackline}", footer: "Thank you for shopping with us." },
+  ready: { subject: "Your order {order} is ready", heading: "Your order is ready", message: "Hi {name}, your order {order} from {site} is ready.", footer: "Thank you!" },
+  out: { subject: "Your order {order} is out for delivery", heading: "On its way to you", message: "Hi {name}, your order {order} from {site} is out for delivery.", footer: "Thank you!" },
+  done: { subject: "Your order {order} is complete", heading: "Order complete", message: "Hi {name}, your order {order} from {site} is complete. We hope you enjoy it!", footer: "Thank you for choosing us." },
+  cancelled: { subject: "Your order {order} was cancelled", heading: "Order cancelled", message: "Hi {name}, your order {order} from {site} has been cancelled. If you didn't ask for this, just reply to this email.", footer: "" },
+};
+const itemsText = (d: any) => { try { const a = JSON.parse(String(d?._items || "[]")); return Array.isArray(a) ? a.slice(0, 40).map((x: any) => `• ${Math.max(1, +x.q || 1)} × ${oneLine(String(x.n || ""))}`).join("\n") : ""; } catch { return ""; } };
+/** Sends one order email to the customer. kind: placed, shipped, ready, out, done or cancelled. Returns a line for the order's note, or "". */
+async function orderMail(env: Env, site: string, kind: string, d: any, c0?: any): Promise<string> {
+  const to = emailKey(d?.email); if (!to || !env.RESEND_API_KEY || !env.MAIL_FROM) return "";
+  const c = c0 || (await siteContent(env, site).catch(() => null)), E = (c?.emails && typeof c.emails === "object" ? c.emails : {}) as any;
+  const T: any = kind === "placed" ? E.order : kind === "shipped" ? E.shipped : E.status?.[kind];
+  if (kind !== "shipped" && T?.on !== true) return "";
+  const def = ORDER_DEF[kind]; if (!def) return "";
+  const t = kind === "shipped" ? trackShown(trackOf(d)) : null; if (kind === "shipped" && !t) return "";
+  const name = siteName(c, site);
+  const vars: Record<string, string> = { name: oneLine(String(d.name || "")) || "there", order: oneLine(String(d.order_no || "")), total: oneLine(String(d.total || "")), site: name, shop: name, when: oneLine([d.mode, d.when].filter(Boolean).join(", ")), items: itemsText(d), courier: t ? t.name : "", tracking: t?.awb || "", trackline: t?.awb ? "\nTracking number: " + t.awb : "" };
+  const subject = oneLine(fill(String(T?.subject || def.subject), vars)).slice(0, 150) || "Your order";
+  const body = fill(String(T?.message || def.message), vars), heading = oneLine(fill(String(T?.heading || def.heading), vars));
+  const foot = fill(String(T?.footer ?? def.footer) || (T && "footer" in T ? "" : def.footer), vars);
+  const showItems = kind !== "shipped" && T?.items !== false && vars.items;
+  const btn = t?.link ? `<p style="margin:0 0 12px"><a href="${hesc(t.link)}" style="display:inline-block;background:#111;color:#fff;text-decoration:none;padding:10px 16px;border-radius:8px">${hesc(oneLine(String(T?.button || "Track your parcel")))}</a></p>` : "";
+  const list = showItems ? `<p style="margin:0 0 6px;color:#667;font-size:13px">${hesc(String(T?.itemsLabel || "Your order"))}</p>${paras(vars.items, "margin:0 0 12px")}` : "";
+  const reply = emailKey(c?.contact?.email) || undefined;
+  await sendMail(env, to, subject, WRAP(`<h2 style="margin:0 0 12px;font-size:20px">${hesc(heading)}</h2>${paras(body)}${list}${btn}${foot ? paras(foot, "margin:0 0 8px;color:#667;font-size:13px") : ""}`), reply);
+  return kind === "shipped" ? "Shipping email sent to " + to : "Order email (" + kind + ") sent to " + to;
 }
+async function shippedMail(env: Env, site: string, d: any) { return orderMail(env, site, "shipped", d); }
 
 /** What a browser may see of a setting: everything but the secrets (those only say whether one is saved). */
 function maskSetting(name: string, v: any) {
@@ -1777,8 +1804,8 @@ export default {
         const rowId = made?.id;
         if (data.order_no && EMAIL_RE.test(String(data.email || ""))) await env.DB.prepare("update carts set status = 'recovered', order_no = ?, updated_at = ? where site = ? and ckey = ? and status != 'recovered'").bind(String(data.order_no).slice(0, 30), new Date().toISOString(), site, recKey(String(data.email))).run().catch(() => {});
         if (lowNow.length) { const lm = stockLowMail(env, site, stockC, lowNow).catch(() => {}); if (ctx?.waitUntil) ctx.waitUntil(lm); else await lm; }
-        const mail = Promise.all([notifyEnquiry(env, site, data, String(q.page || "").slice(0, 200)).catch((e: any) => "Not emailed: " + String(e?.message || e).slice(0, 300)), waAlert(env, site, data).catch(() => "")])
-          .then(([said, wa]) => ((said || wa) && rowId ? env.DB.prepare("update enquiries set data = ? where id = ? and site = ?").bind(JSON.stringify({ ...data, ...(said ? { _mail: said } : {}), ...(wa ? { _wa: wa } : {}) }), rowId, site).run() : null)).catch(() => {});
+        const mail = Promise.all([notifyEnquiry(env, site, data, String(q.page || "").slice(0, 200)).catch((e: any) => "Not emailed: " + String(e?.message || e).slice(0, 300)), waAlert(env, site, data).catch(() => ""), data.order_no ? orderMail(env, site, "placed", data).catch(() => "") : Promise.resolve("")])
+          .then(([said, wa, om]) => ((said || wa || om) && rowId ? env.DB.prepare("update enquiries set data = ? where id = ? and site = ?").bind(JSON.stringify({ ...data, ...(said ? { _mail: said } : {}), ...(wa ? { _wa: wa } : {}), ...(om ? { _omail: om } : {}) }), rowId, site).run() : null)).catch(() => {});
         if (ctx?.waitUntil) ctx.waitUntil(mail); else await mail;
         return json({ ok: true });
       }
@@ -2397,7 +2424,9 @@ export default {
           if (row && (b.status === "cancelled") !== (row.status === "cancelled")) { try { const d = JSON.parse(row.data), tk = JSON.parse(String(d._stock || "[]")) as [string, number][];
             if (Array.isArray(tk) && tk.length) { if (b.status === "cancelled" && !d._stock_back) { await stockBack(env, site, tk, String(d.order_no || ""), "Order cancelled"); d._stock_back = "yes"; nd = JSON.stringify(d); }
               else if (b.status !== "cancelled" && d._stock_back) { const now = new Date().toISOString(); for (const [k, q] of tk) { const r: any = await env.DB.prepare("update stock set qty = max(0, qty - ?), updated_at = ? where site = ? and item = ? returning qty").bind(q, now, site, k).first(); if (r) await env.DB.prepare("insert into stock_log (site, item, delta, qty, why, ref, at) values (?, ?, ?, ?, 'Order brought back', ?, ?)").bind(site, k, -q, +r.qty || 0, String(d.order_no || "").slice(0, 40), now).run(); } delete d._stock_back; nd = JSON.stringify(d); } } } catch { /* an order without stock lines */ } }
-          if (nd) await env.DB.prepare("update enquiries set status = ?, data = ? where id = ? and site = ?").bind(b.status, nd, b.id, site).run(); else await env.DB.prepare("update enquiries set status = ? where id = ? and site = ?").bind(b.status, b.id, site).run(); }
+          if (nd) await env.DB.prepare("update enquiries set status = ?, data = ? where id = ? and site = ?").bind(b.status, nd, b.id, site).run(); else await env.DB.prepare("update enquiries set status = ? where id = ? and site = ?").bind(b.status, b.id, site).run();
+          // A status the site switched on emails the customer once (content.emails.status.<status>.on).
+          if (row && row.status !== b.status && ["ready", "out", "done", "cancelled"].includes(b.status)) { try { const d = JSON.parse(nd || row.data), sent = String(d._smail || "").split(","); if (d.order_no && !sent.includes(b.status)) { const said = await orderMail(env, site, b.status, d); if (said) { d._smail = [...sent.filter(Boolean), b.status].join(","); d._omail = said; await env.DB.prepare("update enquiries set data = ? where id = ? and site = ?").bind(JSON.stringify(d), b.id, site).run(); } } } catch { /* the status is saved; the email is a courtesy */ } } }
         else await env.DB.prepare("delete from enquiries where id = ? and site = ?").bind(b.id, site).run();
         return json({ ok: true });
       }

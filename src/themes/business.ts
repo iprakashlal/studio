@@ -11,7 +11,7 @@ export const BIZ_AXES: Record<string, Axis> = {
   buttons: { key: "buttons", label: "Buttons", options: [["rounded", "Rounded"], ["pill", "Pill"], ["sharp", "Square"], ["outline", "Outline"], ["underline", "Underlined text"]] },
   heading: { key: "heading", label: "Headings", options: [["normal", "Bold"], ["upper", "CAPITALS"], ["serif", "Light serif, italic highlights"], ["light", "Light"]] },
   shead: { key: "shead", label: "Section titles", options: [["label", "Small label"], ["line", "Label with a rule"], ["number", "Numbered"], ["center", "Centred"], ["bar", "Accent bar"]] },
-  pattern: { key: "pattern", label: "Background", options: [["none", "Plain"], ["grid", "Fine grid"], ["dots", "Dots"], ["lines", "Column lines"], ["mesh", "Soft colour glow in the hero"]] },
+  pattern: { key: "pattern", label: "Background", options: [["none", "Plain"], ["grid", "Fine grid"], ["dots", "Dots"], ["lines", "Column lines"], ["mesh", "Soft colour glow in the hero"], ["glass", "Frosted glass (iPhone style)"]] },
   bands: { key: "bands", label: "Section bands", options: [["soft", "Alternate soft bands"], ["deep", "Alternate dark bands"], ["lines", "Divider lines"], ["none", "None"], ["tint", "Accent tint"], ["gradient", "Fading gradient"], ["glow", "Corner glow"], ["dots", "Dotted paper"], ["grid", "Grid paper"], ["stripe", "Accent stripe on top"], ["sheet", "Rounded sheets"], ["slant", "Slanted edges"], ["panel", "Floating panels"], ["outline", "Outlined panels"]] },
   motionStyle: { key: "motionStyle", label: "Reveal animation", options: [["rise", "Rise in"], ["fade", "Fade in"], ["none", "None"]] },
   width: { key: "width", label: "Page width", options: [["normal", "Standard"], ["wide", "Wide"], ["narrow", "Narrow"], ["xwide", "Extra wide"], ["full", "Full, edge to edge"]] },
@@ -73,6 +73,8 @@ const ROWS: Row[] = [
   ["opal", "Opal", "Finance Tech Dark Modern", "#0D0F1A #151829 #070810 #ECEDF7 #9799B3 #262A44 #8B5CF6 #22D3EE #F472B6", "Outfit", "Inter", 14, "center float glass pill normal center mesh lines default rise normal", "Fintech and Web3: violet and cyan on deep blue."],
   ["heritage", "Heritage", "Warm Classy Light Corporate", "#F7F1E8 #FFFCF7 #3B2A1A #2E2015 #6F5E4E #E8DAC5 #7B4B2A #2F5D50 #C9973F", "Libre Baskerville", "Lora", 4, "split bar lined rounded serif line dots soft frame fade normal", "Family businesses and long-established brands."],
   ["apex", "Apex", "Corporate Classy Minimal Light", "#FFFFFF #F7F7F5 #111418 #111418 #5F656D #E4E4E0 #111418 #6B7280 #B08D57", "Instrument Serif", "Inter", 2, "editorial line lined underline serif line none lines frame fade wide", "Executive search and boards: black, white, brass."],
+  ["crystal", "Crystal", "Corporate Modern Light Tech Calm", "#E8EEFB #FFFFFF #1B2140 #1B2140 #5B6488 #D5DCF3 #5B6CFF #FF6FB5 #3FD6C6", "Plus Jakarta Sans", "Inter", 22, "center glass glass pill normal center glass none default rise normal", "Frosted glass panels floating over soft colour: a light, iPhone-style business site."],
+  ["aurora-glass", "Aurora Glass", "Tech Modern Dark Creative Bold", "#0B0F1E #1A2040 #05070F #F2F4FF #A5ADCB #2A3260 #7C8CFF #FF6FB5 #34E0C8", "Manrope", "Inter", 22, "split glass glass pill normal center glass none frame rise normal", "Dark frosted glass with northern-lights colour behind it, for tech and creative firms."],
 ];
 
 const lumHex = (h: string) => {

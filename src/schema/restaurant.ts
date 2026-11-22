@@ -192,7 +192,7 @@ const schema: Category[] = [
       { t: "when", path: "order.whatsapp", is: "true", fields: [{ t: "text", path: "order.whatsappText", label: "Message the chat starts with" }] }] }],
   },
   {
-    id: "ordering", label: "Online ordering", group: "Selling", desc: "An Order now page of your own: guests pick dishes, add extras, and order for delivery, pickup or their table. No commission and no ordering app.",
+    id: "ordering", label: "Online ordering", group: "Selling", sub: "Online ordering", desc: "An Order now page of your own: guests pick dishes, add extras, and order for delivery, pickup or their table. No commission and no ordering app.",
     cards: [
       { title: "Order now page", fields: [{ t: "toggle", path: "ordering.on", label: "Take orders on the site (adds the Order now page)" },
         { t: "note", text: "The page lists every dish on your Menu that has a price. Guests search, filter by diet, save favourites, choose sizes and extras, and check out with their name, mobile number and address. It opens at order.html, a good address for a table QR code (order.html?table=7 fills in table 7)." },
@@ -240,7 +240,7 @@ const schema: Category[] = [
     ],
   },
   {
-    id: "delivery", label: "Delivery & charges", group: "Selling", desc: "Where you deliver, what it costs, the minimum order, packing and tax used in the cart and at checkout.",
+    id: "delivery", label: "Delivery & charges", group: "Selling", sub: "Online ordering", desc: "Where you deliver, what it costs, the minimum order, packing and tax used in the cart and at checkout.",
     cards: [
       { title: "Delivery area and charges", fields: [g3({ t: "number", path: "ordering.minOrder", label: "Minimum order", min: 0, step: 10 }, { t: "number", path: "ordering.deliveryFee", label: "Delivery fee", min: 0, step: 5 }, { t: "number", path: "ordering.freeAbove", label: "Free delivery above (0 = never)", min: 0, step: 50 }),
         { t: "textarea", path: "ordering.areas", label: "Where you deliver: one PIN code or area per line (empty = anywhere)", rows: 4 },
@@ -251,7 +251,7 @@ const schema: Category[] = [
     ],
   },
   {
-    id: "coupons", label: "Offers & coupons", group: "Selling", desc: "Codes guests can use in the cart.",
+    id: "coupons", label: "Offers & coupons", group: "Selling", sub: "Online ordering", desc: "Codes guests can use in the cart.",
     cards: [
       { title: "Offers and coupons", fields: [{ t: "list", path: "ordering.coupons", max: 12, title: (it) => `${String(it.code || "CODE").toUpperCase()} · ${it.kind === "flat" ? "" : ""}${it.value || 0}${it.kind === "flat" ? " off" : "% off"}${it.on === false ? " (off)" : ""}`, add: () => ({ on: true, code: "", kind: "percent", value: 10, min: 0, max: 0, note: "" }),
         item: [g3({ t: "text", path: "code", label: "Code", ph: "WELCOME10" }, { t: "select", path: "kind", label: "Kind", options: [{ value: "percent", label: "Percent off" }, { value: "flat", label: "Amount off" }] }, { t: "number", path: "value", label: "Value", min: 0, step: 1 }),
@@ -261,7 +261,7 @@ const schema: Category[] = [
     ],
   },
   {
-    id: "checkout", label: "Checkout", group: "Selling", desc: "What guests are asked in the cart and at checkout.",
+    id: "checkout", label: "Checkout", group: "Selling", sub: "Online ordering", desc: "What guests are asked in the cart and at checkout.",
     cards: [
       { title: "Cart extras", fields: [g2({ t: "toggle", path: "ordering.tips", label: "Offer a tip for the team" }, { t: "text", path: "ordering.tipOptions", label: "Tip amounts", ph: "10, 20, 30" }),
         g3({ t: "toggle", path: "ordering.cutlery", label: "Ask whether to send cutlery" }, { t: "toggle", path: "ordering.dishNotes", label: "Special instructions per dish" }, { t: "toggle", path: "ordering.notes", label: "A note for the kitchen" }),
@@ -277,7 +277,7 @@ const schema: Category[] = [
   },
   accountsCategory("restaurant"),
   {
-    id: "payments", label: "Payments", group: "Selling", desc: "Turn on the ways guests can pay. A method only shows once its details are valid.",
+    id: "payments", label: "Payments", group: "Selling", sub: "Online ordering", desc: "Turn on the ways guests can pay. A method only shows once its details are valid.",
     cards: [
       { title: "UPI", fields: [{ t: "toggle", path: "ordering.pay.upi", label: "Accept UPI (prices in ₹ only)" }, g2({ t: "text", path: "ordering.pay.upiId", label: "UPI ID", ph: "name@bank", check: "vpa" }, { t: "text", path: "ordering.pay.payee", label: "Payee name (as your bank shows it)" }),
         { t: "note", text: "The guest pays first: checkout shows a QR code and a button for their UPI app with the exact total and the order number, and the order is placed only when they enter the payment's 12-digit reference number (UTR). Under Purchased orders the order is marked “Payment to check” with that reference; find it in your UPI app and press Payment received, and the guest's order page shows it. A UPI ID alone can't tell a website that money arrived. For confirmation with no checking, turn on Razorpay, which includes UPI." }] },
@@ -301,7 +301,7 @@ const schema: Category[] = [
   },
   gstCategory("restaurant"),
   {
-    id: "orderdelivery", label: "Order delivery", group: "Selling", desc: "Where new orders reach you.",
+    id: "orderdelivery", label: "Order delivery", group: "Selling", sub: "Online ordering", desc: "Where new orders reach you.",
     cards: [
       { title: "Where orders reach you", fields: [
         { t: "note", text: "With the booking inbox set up (Booking form → where requests are saved), every order lands in Enquiries on the admin page and is emailed to you like a booking. There you move it through Confirmed, Being prepared, Out for delivery and Delivered, and on a site hosted on your Cloudflare database the guest's order page follows along. Without an inbox, the guest sends the order to you on WhatsApp with one tap." },

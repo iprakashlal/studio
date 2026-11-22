@@ -664,7 +664,7 @@ export const GST_STATES = ["Andaman and Nicobar Islands", "Andhra Pradesh", "Aru
 export function gstCategory(kind: "restaurant" | "store"): Category {
   const rest = kind === "restaurant";
   return {
-    id: "gst", label: "GST invoices", group: "Selling", desc: `A tax invoice for every order, with your GSTIN, ${rest ? "the SAC/HSN code" : "HSN codes"} and the CGST/SGST or IGST split, that ${rest ? "guests" : "customers"} and you can print or save as PDF. Its style, layout and wording are set here too.`,
+    id: "gst", label: "GST invoices", group: "Selling", ...(rest ? { sub: "Online ordering" } : {}), desc: `A tax invoice for every order, with your GSTIN, ${rest ? "the SAC/HSN code" : "HSN codes"} and the CGST/SGST or IGST split, that ${rest ? "guests" : "customers"} and you can print or save as PDF. Its style, layout and wording are set here too.`,
     cards: [
       { title: "GST invoice", fields: [
         { t: "toggle", path: "gst.on", label: "Offer a GST invoice on every order" },

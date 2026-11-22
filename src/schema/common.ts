@@ -656,26 +656,52 @@ export function accountCard(kind: "restaurant" | "store"): Card {
 }
 /** Theme & layout → Account customization: how the sign-in step, "My account" and the checkout look. They always take
  *  the theme's own accent colour, corners, fonts and dark mode; these choices shape the rest. */
-/** Invoice and bill look (content.invoice): used by the GST invoice and by the bill in “My account”. */
-export function invoiceLookCard(): Card {
+/** Invoice and bill look and wording (content.invoice): used by the GST invoice (shop) and the bill in “My account” (shop and restaurant). */
+export function invoiceLookCard(kind: "restaurant" | "store" = "store"): Card[] {
   const o = (pairs: [string, string][]) => pairs.map(([value, label]) => ({ value, label }));
-  return { title: "Invoice & bill look", fields: [
-    { t: "note", text: "How the printed invoice (GST invoice) and the bill in “My account” look. Customers open them from an order and print or save them as PDF. Checking one: place a test order, open it and press “Download invoice” or “Bill”." },
+  const t = (path: string, label: string, ph: string): Field => ({ t: "text", path: "invoice." + path, label, ph });
+  const store = kind === "store";
+  const look: Card = { title: "Invoice style & layout", fields: [
+    ...(store ? [{ t: "previewPages", text: "Show the invoice in the live preview (a sample order; it updates as you change the settings below):", pages: [{ file: "checkout.html?preview=invoice", label: "Invoice" }] } as Field] : [{ t: "note", text: "How the bill in “My account” looks when a customer prints it or saves it as PDF." } as Field]),
+    { t: "select", path: "invoice.theme", label: "Ready-made style", options: o([["", "None: choose layout, colour and font yourself"], ["corporate", "Corporate: blue, colour header band"], ["ink", "Ink: classic black and white"], ["sunset", "Sunset: bold orange"], ["emerald", "Emerald: minimal, green"], ["royal", "Royal: purple, serif"], ["boutique", "Boutique: minimal, berry, serif"], ["receipt", "Receipt: boxed grid, monospace"]]) },
     { t: "grid", cols: 2, fields: [
-      { t: "select", path: "invoice.layout", label: "Layout", options: o([["classic", "Classic: ruled header, plain table"], ["modern", "Modern: colour header band, soft table"], ["minimal", "Minimal: light, airy, hairlines"], ["bold", "Bold: big title, dark table head, colour total"], ["ledger", "Ledger: boxed grid, compact (traditional tax invoice)"]]) },
-      { t: "select", path: "invoice.font", label: "Font", options: o([["", "Clean sans-serif"], ["serif", "Serif (formal)"], ["mono", "Monospace (receipt)"]]) },
-    ] },
-    { t: "grid", cols: 2, fields: [
+      { t: "select", path: "invoice.layout", label: "Layout", options: o([["", "The style's own (Classic if no style)"], ["classic", "Classic: ruled header, plain table"], ["modern", "Modern: colour header band, soft table"], ["minimal", "Minimal: light, airy, hairlines"], ["bold", "Bold: big title, dark table head, colour total"], ["ledger", "Ledger: boxed grid, compact (traditional tax invoice)"]]) },
+      { t: "select", path: "invoice.font", label: "Font", options: o([["", "The style's own (sans-serif if no style)"], ["sans", "Clean sans-serif"], ["serif", "Serif (formal)"], ["mono", "Monospace (receipt)"]]) },
       { t: "color", path: "invoice.accent", label: "Accent colour (header, headings, total)" },
-      { t: "toggle", path: "invoice.logo", label: "Show the shop's logo at the top" },
+      ...(store ? [{ t: "select", path: "invoice.paper", label: "Paper size when printed", options: o([["", "A4"], ["letter", "Letter"], ["a5", "A5 (half page)"]]) } as Field] : []),
     ] },
-    { t: "grid", cols: 3, fields: [
+    { t: "toggle", path: "invoice.logo", label: "Show the shop's logo at the top" },
+    ...(store ? [{ t: "grid", cols: 3, fields: [
       { t: "toggle", path: "invoice.words", def: true, label: "Amount in words" },
       { t: "toggle", path: "invoice.summary", def: true, label: "Tax summary table" },
       { t: "toggle", path: "invoice.sign", def: true, label: "Signature line" },
-    ] },
+      { t: "toggle", path: "invoice.colHsn", def: true, label: "HSN/SAC column" },
+      { t: "toggle", path: "invoice.colRate", def: true, label: "Rate column" },
+      { t: "toggle", path: "invoice.contact", label: "Shop phone, email and website in the header" },
+    ] } as Field] : []),
   ] };
+  const words: Card = { title: store ? "Invoice contents & wording" : "Bill wording", fields: [
+    { t: "note", text: "Every piece of text on the printed page. Leave a box empty to keep the standard wording shown in grey." },
+    ...(store ? [
+      g2c(t("title", "Document title", "Tax Invoice"), t("lblNo", "Label: invoice number", "Invoice no.")),
+      g2c(t("lblDate", "Label: date", "Date"), t("lblOrder", "Label: order", "Order")),
+      g2c(t("lblSupply", "Label: place of supply", "Place of supply"), t("lblBill", "Label: billed to", "Billed to")),
+      g2c(t("lblContact", "Label: contact", "Contact"), t("lblItem", "Column: item", "Item")),
+      g2c(t("lblHsn", "Column: HSN/SAC", "HSN/SAC"), t("lblQty", "Column: quantity", "Qty")),
+      g2c(t("lblRate", "Column: rate", "Rate"), t("lblTaxable", "Column: taxable value", "Taxable value")),
+      g2c(t("lblAmount", "Column: amount", "Amount"), t("lblTotal", "Label: total", "Total")),
+      g2c(t("lblWords", "Label: amount in words", "Amount in words"), t("lblSummary", "Heading: tax summary", "Tax summary")),
+      ({ t: "textarea", path: "invoice.bank", label: "Bank details (optional)", rows: 3, hint: "Account name, number, IFSC, UPI: shown in its own block under the totals." } as Field),
+      t("lblBank", "Heading for the bank details", "Bank details"),
+    ] : []),
+    ({ t: "textarea", path: "invoice.terms", label: "Terms & conditions (optional)", rows: 3, hint: "Returns, warranty, jurisdiction…" } as Field),
+    ...(store ? [t("lblTerms", "Heading for the terms", "Terms & conditions")] : []),
+    ({ t: "text", path: "invoice.thanks", label: "Thank-you line (optional)", ph: "Thank you for your business!" } as Field),
+    ({ t: "text", path: "invoice.footer", label: "Closing line", ph: store ? "This is a computer-generated invoice." : "This bill is made from your order as it was placed." } as Field),
+  ] };
+  return [look, words];
 }
+const g2c = (a: Field, b: Field): Field => ({ t: "grid", cols: 2, fields: [a, b] });
 
 export function accountLookCard(kind: "restaurant" | "store"): Card {
   const o = (pairs: [string, string][]) => pairs.map(([value, label]) => ({ value, label }));
@@ -727,7 +753,7 @@ export function accountsCategory(kind: "restaurant" | "store"): Category {
   return { id: "users", label: "User accounts", group: "Selling", desc: `Customer accounts: signing in before checkout, and “My account” with orders, bills, points and a profile.`,
     cards: [
       accountCard(kind),
-      invoiceLookCard(),
+      ...(kind === "restaurant" ? invoiceLookCard("restaurant") : []),
       { title: "What “My account” holds", fields: [{ t: "note", text: `“My account” opens as a panel at the side of the site with three parts. Current order: the order in progress with its steps (it follows the status you set under Purchased orders${kind === "restaurant" ? ", or Petpooja's" : ""}). Order history: every order placed while signed in, with pictures of what was ordered and a bill to download. Profile: the ${who}'s name, the other contact and ${kind === "store" ? "up to six saved addresses" : "their address"}, which then fill in the checkout for them. Points show at the top when points are switched on.` }] },
       { title: "Verifying contacts", fields: [
         { t: "toggle", path: kind === "restaurant" ? "ordering.verifyPhone" : "checkout.verifyPhone", label: `Verify the mobile number with a code before the order is placed` },

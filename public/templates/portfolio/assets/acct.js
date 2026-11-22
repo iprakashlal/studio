@@ -218,11 +218,13 @@
     data.name = v("sa-name"); if (me.kind === "email") data.phone = v("sa-phone"); else data.email = v("sa-email");
     (ui.addrs || []).forEach((a, i) => { for (const k of ["label", "line1", "line2", "city", "pin", "state"]) if (document.getElementById("sa-a-" + k + "-" + i)) a[k] = v("sa-a-" + k + "-" + i); });
   }
-  /* Invoice look (content.invoice): layout, accent colour, font. Returned as CSS added after the page's own. */
+  /** Ready-made invoice styles: a layout, a colour and a font in one choice (the owner's own choices still win). */
+  var INV_THEMES = { corporate: { layout: "modern", accent: "#1D4ED8" }, ink: { layout: "classic", accent: "#14171C" }, sunset: { layout: "bold", accent: "#E4572E" }, emerald: { layout: "minimal", accent: "#0F766E" }, royal: { layout: "modern", accent: "#6D28D9", font: "serif" }, receipt: { layout: "ledger", accent: "#14171C", font: "mono" }, boutique: { layout: "minimal", accent: "#9D174D", font: "serif" } };
   var INV_LAYOUTS = ["classic", "modern", "minimal", "bold", "ledger"];
   function invCss(I) {
-    I = I || {}; var lay = INV_LAYOUTS.indexOf(I.layout) >= 0 ? I.layout : "classic", ac = /^#[0-9a-f]{6}$/i.test(I.accent || "") ? I.accent : "#14171c";
-    var ff = I.font === "serif" ? "Georgia,'Times New Roman',serif" : I.font === "mono" ? "ui-monospace,'SF Mono',Menlo,Consolas,monospace" : "";
+    I = I || {}; var P = INV_THEMES[I.theme] || {}, fo = I.font || P.font || "";
+    var lay = INV_LAYOUTS.indexOf(I.layout) >= 0 ? I.layout : INV_LAYOUTS.indexOf(P.layout) >= 0 ? P.layout : "classic", ac = /^#[0-9a-f]{6}$/i.test(I.accent || "") ? I.accent : P.accent || "#14171c";
+    var ff = fo === "serif" ? "Georgia,'Times New Roman',serif" : fo === "mono" ? "ui-monospace,'SF Mono',Menlo,Consolas,monospace" : "";
     var tint = "color-mix(in srgb," + ac + " 12%,#fff)";
     var css = ":root{--ac:" + ac + "}" + (ff ? "body,.sheet,button{font-family:" + ff + "!important}" : "");
     if (lay === "modern") css += ".top{background:var(--ac)!important;color:#fff;border:0!important;border-radius:12px;padding:22px 26px!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}.top *{color:#fff!important}.top h1{font-size:26px}th{background:" + tint + "!important;color:var(--ac)!important;border:0!important}td{border-bottom:1px solid #eef0f3!important}.tot .g{color:var(--ac);border-top:2px solid var(--ac)!important}.words{background:" + tint + "!important}h2{color:var(--ac)!important}.sheet{border-radius:14px}";
@@ -249,7 +251,7 @@ ${invCss(B.inv)}</style></head><body><div class="top"><div>${B.inv && B.inv.logo
 <h2>Billed to</h2><p>${esc(o.name || (data && data.name) || "")}<br>${esc(show(me.key))}${o.address ? "<br>" + esc(o.address) : ""}</p>
 <h2>Order${o.mode ? " · " + esc(o.mode) : ""}</h2>${rows}${o.text ? `<pre>${esc(o.text)}</pre>` : ""}
 <div class="tot"><span>Total${o.pay ? ` <span style="font-weight:400;font-size:13.5px;color:#666">· ${esc(o.pay)}</span>` : ""}</span><span>${esc(o.total)}</span></div>
-<p class="note">This bill is made from your order as it was placed${B.gstin ? "" : ". It is not a tax invoice"}.</p><button onclick="print()">Print or save as PDF</button></body></html>`;
+${B.inv && B.inv.terms ? `<h2>Terms</h2><p class="note" style="margin-top:4px">${esc(B.inv.terms).replace(/\n/g, "<br>")}</p>` : ""}${B.inv && B.inv.thanks ? `<p style="text-align:center;font-weight:700;margin-top:22px">${esc(B.inv.thanks)}</p>` : ""}<p class="note">${B.inv && String(B.inv.footer || "").trim() ? esc(B.inv.footer) : `This bill is made from your order as it was placed${B.gstin ? "" : ". It is not a tax invoice"}.`}</p><button onclick="print()">Print or save as PDF</button></body></html>`;
     const blob = new Blob([html], { type: "text/html" }), url = URL.createObjectURL(blob), a = document.createElement("a");
     a.href = url; a.download = "Bill-" + String(o.no).replace(/[^\w-]+/g, "") + ".html"; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 30000);
   }

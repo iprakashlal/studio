@@ -57,10 +57,13 @@
   }
 
   /* Invoice look (content.invoice): layout, accent colour, font. Returned as CSS added after the page's own. */
+  /** Ready-made invoice styles: a layout, a colour and a font in one choice (the owner's own choices still win). */
+  var INV_THEMES = { corporate: { layout: "modern", accent: "#1D4ED8" }, ink: { layout: "classic", accent: "#14171C" }, sunset: { layout: "bold", accent: "#E4572E" }, emerald: { layout: "minimal", accent: "#0F766E" }, royal: { layout: "modern", accent: "#6D28D9", font: "serif" }, receipt: { layout: "ledger", accent: "#14171C", font: "mono" }, boutique: { layout: "minimal", accent: "#9D174D", font: "serif" } };
   var INV_LAYOUTS = ["classic", "modern", "minimal", "bold", "ledger"];
   function invCss(I) {
-    I = I || {}; var lay = INV_LAYOUTS.indexOf(I.layout) >= 0 ? I.layout : "classic", ac = /^#[0-9a-f]{6}$/i.test(I.accent || "") ? I.accent : "#14171c";
-    var ff = I.font === "serif" ? "Georgia,'Times New Roman',serif" : I.font === "mono" ? "ui-monospace,'SF Mono',Menlo,Consolas,monospace" : "";
+    I = I || {}; var P = INV_THEMES[I.theme] || {}, fo = I.font || P.font || "";
+    var lay = INV_LAYOUTS.indexOf(I.layout) >= 0 ? I.layout : INV_LAYOUTS.indexOf(P.layout) >= 0 ? P.layout : "classic", ac = /^#[0-9a-f]{6}$/i.test(I.accent || "") ? I.accent : P.accent || "#14171c";
+    var ff = fo === "serif" ? "Georgia,'Times New Roman',serif" : fo === "mono" ? "ui-monospace,'SF Mono',Menlo,Consolas,monospace" : "";
     var tint = "color-mix(in srgb," + ac + " 12%,#fff)";
     var css = ":root{--ac:" + ac + "}" + (ff ? "body,.sheet,button{font-family:" + ff + "!important}" : "");
     if (lay === "modern") css += ".top{background:var(--ac)!important;color:#fff;border:0!important;border-radius:12px;padding:22px 26px!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}.top *{color:#fff!important}.top h1{font-size:26px}th{background:" + tint + "!important;color:var(--ac)!important;border:0!important}td{border-bottom:1px solid #eef0f3!important}.tot .g{color:var(--ac);border-top:2px solid var(--ac)!important}.words{background:" + tint + "!important}h2{color:var(--ac)!important}.sheet{border-radius:14px}";
@@ -79,9 +82,12 @@
     var u = ""; try { u = new URL(String(p), (window.__invBase || location.href)).href; } catch (e) { return ""; }
     return '<img src="' + esc(u) + '" alt="" style="height:44px;max-width:180px;object-fit:contain;display:block;margin:0 0 8px">';
   }
-  function html(o, C) {
+  function html(o, C, opt) {
+    opt = opt || {};
     var G = (C && C.gst) || {}, B = (C && C.brand) || {}, c = o.c || {}, v = build(o, C), cur = v.cur, I = (C && C.invoice) || {};
     var name = G.legalName || B.name || "", th = 'style="text-align:right"';
+    var L = function (k, d) { var x = String(I[k] == null ? "" : I[k]).trim(); return esc(x || d); }, K = (C && C.contact) || {}, paper = I.paper === "letter" ? "Letter" : I.paper === "a5" ? "A5" : "A4";
+    var showHsn = I.colHsn !== false, showRate = I.colRate !== false;
     var taxCols = v.intra ? "<th " + th + ">CGST</th><th " + th + ">SGST</th>" : "<th " + th + ">IGST</th>";
     var taxCells = function (l) { return v.intra ? "<td " + th + ">" + num(l.tax / 2) + "<br><small>" + l.rate / 2 + "%</small></td><td " + th + ">" + num(l.tax - r2(l.tax / 2)) + "<br><small>" + l.rate / 2 + "%</small></td>" : "<td " + th + ">" + num(l.tax) + "<br><small>" + l.rate + "%</small></td>"; };
     var addr = [c.address, [c.city, c.pin].filter(Boolean).join(" "), c.state].filter(Boolean).map(esc).join("<br>");
@@ -91,23 +97,24 @@
       ".top{display:flex;justify-content:space-between;gap:24px;align-items:flex-start;border-bottom:2px solid #14171c;padding-bottom:16px}.top .r{text-align:right}.two{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin:18px 0}" +
       "table{width:100%;border-collapse:collapse;margin-top:6px}th,td{padding:8px 8px;border-bottom:1px solid #dfe3e8;vertical-align:top;text-align:left}th{font-size:11.5px;text-transform:uppercase;letter-spacing:.05em;color:#556;background:#f5f6f8}small{color:#667}" +
       ".tot{margin-left:auto;width:min(340px,100%);margin-top:14px}.tot div{display:flex;justify-content:space-between;padding:4px 0}.tot .g{font-weight:800;font-size:16px;border-top:2px solid #14171c;margin-top:6px;padding-top:8px}" +
-      ".words{margin-top:14px;padding:10px 12px;background:#f5f6f8;border-radius:6px}.foot{display:flex;justify-content:space-between;gap:24px;margin-top:30px;align-items:flex-end}.sign{text-align:right;min-width:200px}.sign i{display:block;height:44px}" +
+      ".xtra{margin-top:16px;line-height:1.5}.thx{text-align:center;font-weight:700;margin:22px 0 0}.words{margin-top:14px;padding:10px 12px;background:#f5f6f8;border-radius:6px}.foot{display:flex;justify-content:space-between;gap:24px;margin-top:30px;align-items:flex-end}.sign{text-align:right;min-width:200px}.sign i{display:block;height:44px}" +
       ".bar{max-width:820px;margin:16px auto 0;display:flex;gap:10px;justify-content:flex-end;padding:0 4px}.bar button{font:700 14px/1 system-ui,sans-serif;padding:11px 18px;border-radius:8px;border:1px solid #14171c;background:#14171c;color:#fff;cursor:pointer}.bar button.alt{background:#fff;color:#14171c}" +
-      "@media print{body{background:#fff}.sheet{box-shadow:none;margin:0;max-width:none;padding:0}.bar{display:none}@page{size:A4;margin:14mm}}@media (max-width:600px){.sheet{padding:20px 16px;margin:0}.two{grid-template-columns:1fr}.top{flex-direction:column}.top .r{text-align:left}}" +
-      invCss(I) + '</style></head><body><div class="bar"><button type="button" class="alt" onclick="window.close()">Close</button><button type="button" onclick="window.print()">Print or save as PDF</button></div><div class="sheet">' +
-      '<div class="top"><div>' + invLogo(I, B) + '<h1>' + (G.gstin ? "Tax Invoice" : "Invoice") + "</h1><div><b>" + esc(name) + "</b></div><div>" + esc(G.address || "").replace(/\n/g, "<br>") + "</div>" +
-      (G.gstin ? "<div>GSTIN: <b>" + esc(G.gstin) + "</b></div>" : "") + (v.seller ? "<div>State: " + esc(v.seller[1]) + " (" + v.seller[0] + ")</div>" : "") + (G.pan ? "<div>PAN: " + esc(G.pan) + "</div>" : "") + "</div>" +
-      '<div class="r"><div>Invoice no. <b>' + esc(v.no) + "</b></div><div>Date: <b>" + esc(v.date.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })) + "</b></div><div>Order: " + esc(v.order) + "</div>" +
-      "<div>Place of supply: " + esc(v.buyer ? v.buyer[1] + " (" + v.buyer[0] + ")" : c.state || (v.seller ? v.seller[1] + " (" + v.seller[0] + ")" : "")) + "</div></div></div>" +
-      '<div class="two"><div><h2>Billed to</h2><b>' + esc(c.name || "") + "</b><br>" + addr + (c.gstin ? "<br>GSTIN: <b>" + esc(c.gstin) + "</b>" : "") + "</div><div><h2>Contact</h2>" + [c.phone, c.email].filter(Boolean).map(esc).join("<br>") + "</div></div>" +
-      "<table><thead><tr><th>#</th><th>Item</th><th>HSN/SAC</th><th " + th + ">Qty</th><th " + th + ">Rate</th><th " + th + ">Taxable value</th>" + taxCols + "<th " + th + ">Amount</th></tr></thead><tbody>" +
-      v.lines.map(function (l, i) { return "<tr><td>" + (i + 1) + "</td><td>" + esc(l.name) + "</td><td>" + esc(l.hsn || "-") + "</td><td " + th + ">" + l.qty + "</td><td " + th + ">" + num(l.unit) + "</td><td " + th + ">" + num(l.taxable) + "</td>" + taxCells(l) + "<td " + th + ">" + num(l.taxable + l.tax) + "</td></tr>"; }).join("") + "</tbody></table>" +
+      "@media print{body{background:#fff}.sheet{box-shadow:none;margin:0;max-width:none;padding:0}.bar{display:none}@page{size:" + paper + ";margin:14mm}}@media (max-width:600px){.sheet{padding:20px 16px;margin:0}.two{grid-template-columns:1fr}.top{flex-direction:column}.top .r{text-align:left}}" +
+      invCss(I) + '</style></head><body>' + (opt.bar === false ? '' : '<div class="bar"><button type="button" class="alt" onclick="window.close()">Close</button><button type="button" onclick="window.print()">Print or save as PDF</button></div>') + '<div class="sheet">' +
+      '<div class="top"><div>' + invLogo(I, B) + '<h1>' + L("title", G.gstin ? "Tax Invoice" : "Invoice") + "</h1><div><b>" + esc(name) + "</b></div><div>" + esc(G.address || "").replace(/\n/g, "<br>") + "</div>" +
+      (G.gstin ? "<div>GSTIN: <b>" + esc(G.gstin) + "</b></div>" : "") + (v.seller ? "<div>State: " + esc(v.seller[1]) + " (" + v.seller[0] + ")</div>" : "") + (G.pan ? "<div>PAN: " + esc(G.pan) + "</div>" : "") + (I.contact === true ? [K.phone, K.email, K.website].filter(Boolean).map(function (x) { return "<div>" + esc(x) + "</div>"; }).join("") : "") + "</div>" +
+      '<div class="r"><div>' + L("lblNo", "Invoice no.") + " <b>" + esc(v.no) + "</b></div><div>" + L("lblDate", "Date") + ": <b>" + esc(v.date.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })) + "</b></div><div>" + L("lblOrder", "Order") + ": " + esc(v.order) + "</div>" +
+      "<div>" + L("lblSupply", "Place of supply") + ": " + esc(v.buyer ? v.buyer[1] + " (" + v.buyer[0] + ")" : c.state || (v.seller ? v.seller[1] + " (" + v.seller[0] + ")" : "")) + "</div></div></div>" +
+      '<div class="two"><div><h2>' + L("lblBill", "Billed to") + '</h2><b>' + esc(c.name || "") + "</b><br>" + addr + (c.gstin ? "<br>GSTIN: <b>" + esc(c.gstin) + "</b>" : "") + "</div><div><h2>" + L("lblContact", "Contact") + "</h2>" + [c.phone, c.email].filter(Boolean).map(esc).join("<br>") + "</div></div>" +
+      "<table><thead><tr><th>#</th><th>" + L("lblItem", "Item") + "</th>" + (showHsn ? "<th>" + L("lblHsn", "HSN/SAC") + "</th>" : "") + "<th " + th + ">" + L("lblQty", "Qty") + "</th>" + (showRate ? "<th " + th + ">" + L("lblRate", "Rate") + "</th>" : "") + "<th " + th + ">" + L("lblTaxable", "Taxable value") + "</th>" + taxCols + "<th " + th + ">" + L("lblAmount", "Amount") + "</th></tr></thead><tbody>" +
+      v.lines.map(function (l, i) { return "<tr><td>" + (i + 1) + "</td><td>" + esc(l.name) + "</td>" + (showHsn ? "<td>" + esc(l.hsn || "-") + "</td>" : "") + "<td " + th + ">" + l.qty + "</td>" + (showRate ? "<td " + th + ">" + num(l.unit) + "</td>" : "") + "<td " + th + ">" + num(l.taxable) + "</td>" + taxCells(l) + "<td " + th + ">" + num(l.taxable + l.tax) + "</td></tr>"; }).join("") + "</tbody></table>" +
       '<div class="tot"><div><span>Taxable value</span><span>' + num(v.taxable) + "</span></div>" + (v.intra ? "<div><span>CGST</span><span>" + num(v.cgst) + "</span></div><div><span>SGST</span><span>" + num(v.sgst) + "</span></div>" : "<div><span>IGST</span><span>" + num(v.igst) + "</span></div>") +
-      (v.roundOff ? "<div><span>Round off</span><span>" + num(v.roundOff) + "</span></div>" : "") + '<div class="g"><span>Total</span><span>' + esc(money(v.total, cur)) + "</span></div></div>" +
-      '<div class="words"><small>Amount in words</small><br><b>' + esc(v.words) + "</b></div>" +
-      "<div class=\"taxsum\"><h2 style=\"margin-top:20px\">Tax summary</h2><table><thead><tr><th>HSN/SAC</th><th " + th + ">Rate</th><th " + th + ">Taxable value</th><th " + th + ">Tax</th></tr></thead><tbody>" +
+      (v.roundOff ? "<div><span>Round off</span><span>" + num(v.roundOff) + "</span></div>" : "") + '<div class="g"><span>' + L("lblTotal", "Total") + '</span><span>' + esc(money(v.total, cur)) + "</span></div></div>" +
+      '<div class="words"><small>' + L("lblWords", "Amount in words") + '</small><br><b>' + esc(v.words) + "</b></div>" +
+      "<div class=\"taxsum\"><h2 style=\"margin-top:20px\">" + L("lblSummary", "Tax summary") + "</h2><table><thead><tr><th>HSN/SAC</th><th " + th + ">Rate</th><th " + th + ">Taxable value</th><th " + th + ">Tax</th></tr></thead><tbody>" +
       v.summary.map(function (s) { return "<tr><td>" + esc(s.hsn || "-") + "</td><td " + th + ">" + s.rate + "%</td><td " + th + ">" + num(s.taxable) + "</td><td " + th + ">" + num(s.tax) + "</td></tr>"; }).join("") + "</tbody></table></div>" +
-      '<div class="foot"><div><small>' + esc(G.notes || "").replace(/\n/g, "<br>") + (G.notes ? "<br>" : "") + 'This is a computer-generated invoice.</small></div><div class="sign"><small>For ' + esc(name) + "</small><i></i><b>" + esc(G.sign || "Authorised signatory") + "</b></div></div></div></body></html>";
+      (I.bank ? '<div class="xtra"><h2>' + L("lblBank", "Bank details") + "</h2>" + esc(I.bank).replace(/\n/g, "<br>") + "</div>" : "") + (I.terms ? '<div class="xtra"><h2>' + L("lblTerms", "Terms & conditions") + "</h2><small>" + esc(I.terms).replace(/\n/g, "<br>") + "</small></div>" : "") + (I.thanks ? '<p class="thx">' + esc(I.thanks) + "</p>" : "") +
+      '<div class="foot"><div><small>' + esc(G.notes || "").replace(/\n/g, "<br>") + (G.notes ? "<br>" : "") + L("footer", "This is a computer-generated invoice.") + '</small></div><div class="sign"><small>For ' + esc(name) + "</small><i></i><b>" + esc(G.sign || "Authorised signatory") + "</b></div></div></div></body></html>";
   }
   /** Opens the invoice in a new tab, ready to print or save as PDF. */
   function open(o, C) {

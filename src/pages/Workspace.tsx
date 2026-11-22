@@ -29,7 +29,7 @@ import { PartnersTab } from "./PartnersTab";
 import { BADGE_DEFAULT, cleanBadge, setCurrentBadge, type BadgeCfg } from "../lib/badge";
 import { MARK_URI } from "../ui/logo";
 import { FoldAll, FoldCards } from "../ui/fold";
-import { LOGO_ANIMS, BrandMark, DEFAULT_NAME, brand as currentBrand, setBrand, shrinkImage, useBrand } from "../lib/brand";
+import { LOGO_ANIMS, UI_LAYOUTS, BrandMark, DEFAULT_NAME, brand as currentBrand, setBrand, shrinkImage, useBrand } from "../lib/brand";
 import { PushUpdatesCard, PushUpdatesHost } from "./PushUpdates";
 import { Dashboard } from "./Dashboard";
 import { ProjectView } from "./ProjectView";
@@ -95,7 +95,7 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
     (async () => {
       let logo = "";
       if (sb.logo) { const blob = await repo.getRaw(sb.logo).catch(() => null); if (blob) logo = await new Promise<string>((ok) => { const r = new FileReader(); r.onload = () => ok(String(r.result || "")); r.onerror = () => ok(""); r.readAsDataURL(new Blob([blob], { type: "image/png" })); }); }
-      setBrand({ name: sb.name, logo, v: sb.v, tint: sb.tint || "", mode: sb.mode === "light" ? "light" : "dark", anim: sb.anim || "" });
+      setBrand({ name: sb.name, logo, v: sb.v, tint: sb.tint || "", mode: sb.mode === "light" ? "light" : "dark", anim: sb.anim || "", layout: sb.layout || "" });
     })();
   }, [index?.brand?.v]);
 
@@ -249,13 +249,14 @@ function BrandCard({ studio, onIndex }: { studio: Studio; onIndex: (i: StudioInd
   const [mode, setMode] = useState<"dark" | "light">(b.mode === "light" ? "light" : "dark");
   const pal = chosen ? tintPalette(chosen, mode) : null;
   const [anim, setAnim] = useState(b.anim || "");
-  const same = tint.toLowerCase() === (b.tint || "").toLowerCase() && mode === (b.mode || "dark") && anim === (b.anim || "");
+  const [layout, setLayout] = useState(b.layout || "classic");
+  const same = tint.toLowerCase() === (b.tint || "").toLowerCase() && mode === (b.mode || "dark") && anim === (b.anim || "") && (layout === "classic" ? "" : layout) === (b.layout || "");
   const save = async () => {
     setBusy(true);
     try {
-      const i = await studio.saveBrand(name.trim() || DEFAULT_NAME, logo, tint, mode, anim);
+      const i = await studio.saveBrand(name.trim() || DEFAULT_NAME, logo, tint, mode, anim, layout === "classic" ? "" : layout);
       onIndex(i);
-      setBrand({ name: name.trim() || DEFAULT_NAME, logo: shown, v: i.brand?.v, tint, mode, anim });
+      setBrand({ name: name.trim() || DEFAULT_NAME, logo: shown, v: i.brand?.v, tint, mode, anim, layout: layout === "classic" ? "" : layout });
       setLogo(null);
       toast(tint ? `Saved. The Studio now wears ${pick === "logo" ? "the logo's colours" : "the new colours"}${mode === "light" ? " in light mode" : ""} on every device you sign in on.` : "Saved. Every device you sign in on shows the new name and logo.");
     } catch (e) { toast(explain(e), "bad"); }
@@ -276,6 +277,13 @@ function BrandCard({ studio, onIndex }: { studio: Studio; onIndex: (i: StudioInd
           {([["dark", "Dark"], ["light", "Light"]] as const).map(([k, l]) => <button key={k} type="button" role="radio" aria-checked={mode === k} onClick={() => setMode(k)} className={`btn btn-sm border-0 ${mode === k ? "bg-ink-700" : "bg-transparent"}`}>{l}</button>)}
         </div>
         <span className="hint">Works with any of the colours below.</span>
+      </div>
+      <div className="flex flex-col gap-2" role="radiogroup" aria-label="Studio layout">
+        <span className="label">Studio layout</span>
+        <div className="grid gap-2 sm:grid-cols-2">
+          {UI_LAYOUTS.map(([k, l, d]) => <button key={k} type="button" role="radio" aria-checked={layout === k} onClick={() => { setLayout(k); if (k === "classic") delete document.documentElement.dataset.layout; else document.documentElement.dataset.layout = k; }} className={`rounded-xl border p-3 text-left ${layout === k ? "border-brand-400 bg-ink-700" : "border-ink-600 hover:bg-ink-800"}`}><b className="block text-sm">{l}</b><span className="hint">{d}</span></button>)}
+        </div>
+        <span className="hint">Changes how every Studio screen looks, on every device you sign in on. Shown live here; Save to keep it.</span>
       </div>
       <div className="flex flex-col gap-3 rounded-xl border border-ink-700 p-3" role="radiogroup" aria-label="Studio colours">
         <span className="label">Studio colours</span>

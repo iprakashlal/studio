@@ -674,6 +674,23 @@
     requestAnimationFrame(function () { requestAnimationFrame(function () { box.classList.add("in"); }); });
     setTimeout(function () { location.href = u.href; }, 560);
   }
+  /* Menu links to a section of the same page. The browser's own smooth scroll crossed every section on the way: each one faded in as it went past, and a layout shift on the way (an image, the locations slider) moved the target so the scroll ended in the wrong place and snapped, which looked like a cancelled transition. Now the page jumps straight to the section, everything on the way is already settled, and the section itself fades in where the visitor lands. */
+  function onJump(e) {
+    if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || PREVIEW) return;
+    var a = e.target.closest && e.target.closest("a[href]");
+    if (!a || a.target && a.target !== "_self" || a.hasAttribute("download") || a.hasAttribute("data-fx-skip")) return;
+    var u; try { u = new URL(a.href, location.href); } catch (x) { return; }
+    if (u.origin !== location.origin || u.pathname !== location.pathname || u.search !== location.search || !u.hash || u.hash.length < 2) return;
+    var t; try { t = document.getElementById(decodeURIComponent(u.hash.slice(1))); } catch (x) { return; }
+    if (!t) return;
+    e.preventDefault();
+    var go = function () { var r = t.getBoundingClientRect(); return scrollY + r.top; };
+    if (!RM) $$(".rv:not(.in)").forEach(function (n) { if (!t.contains(n)) { n.style.transition = "none"; n.classList.add("in"); } });
+    var root = document.documentElement, was = root.style.scrollBehavior; root.style.scrollBehavior = "auto";
+    if (location.hash !== u.hash) location.hash = u.hash; // keeps the address and fires hashchange for pages that listen
+    scrollTo(0, go()); sm.set = scrollY; sm.cur = scrollY; sm.target = scrollY;
+    requestAnimationFrame(function () { scrollTo(0, go()); sm.set = scrollY; sm.cur = scrollY; sm.target = scrollY; setTimeout(function () { root.style.scrollBehavior = was; }, 120); });
+  }
   addEventListener("pageshow", function (e) { if (e.persisted) $$(".fx-exit").forEach(function (n) { n.remove(); }); });
 
   /* ---------------------------------------------------------------- init */
@@ -687,6 +704,7 @@
     addEventListener("wheel", onWheel, { passive: false });
     addEventListener("scroll", onScroll, { passive: true });
     addEventListener("resize", sizeTrail);
+    document.addEventListener("click", onJump);
     document.addEventListener("click", onClick);
     document.addEventListener("pointerover", function (e) {
       if (cfg().text !== "scramble" || RM) return;

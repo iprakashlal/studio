@@ -209,9 +209,11 @@
     const b = n.bill, it = (n.items || []).filter((x) => x && x.p != null); if (!b || !it.length) return null;
     const f = b.sub > 0 ? Math.max(0, (b.sub - b.disc) / b.sub) : 1, on = !b.incl && b.pct > 0, items = it.map((x, i) => ({ id: "d" + i, name: x.n, opt: "", qty: x.q, price: Math.round(x.p * f * 100) / 100 }));
     if (b.pack > 0) items.push({ id: "pk", name: "Packing", opt: "", qty: 1, price: b.pack });
-    return { id: String(n.no), at: n.at, items, t: { sub: b.sub, ship: b.del || 0, shipName: "Delivery charge", shipNoTax: on, total: Math.round((b.total - (b.tip || 0)) * 100) / 100, taxAdd: on ? b.tax : 0 }, c: { name: n.name || "", address: n.address || "" } };
+    return { id: String(n.no), at: n.at, items, t: { sub: b.sub, ship: b.del || 0, shipName: "Delivery charge", shipNoTax: on, total: Math.round((b.total - (b.tip || 0)) * 100) / 100, taxAdd: on ? b.tax : 0 }, c: { name: n.name || "", address: n.address || "", gstin: n.gstin || ((st.get("orders", []).find((x) => String(x.id) === String(n.no)) || { c: {} }).c.gstin) || "" } };
   };
-  const openGst = (n) => { const o = invOf(n); if (!o) return false; loadInv().then(() => window.SiteInvoice.open(o, invSite())).catch(() => {}); return true; };
+  /** An order kept in this browser (just placed) as the account's order shape, so one invoice code serves both. */
+  const invOfLocal = (od) => ({ no: od.id, at: new Date(od.at).toISOString(), name: od.c.name, address: od.c.address, gstin: od.c.gstin || "", items: od.items.map((l) => ({ n: l.name, q: l.qty, p: l.unit })), bill: { sub: od.bill.sub, disc: (od.bill.disc || 0) + (od.bill.ptsOff || 0), pack: od.bill.pack, del: od.bill.del, tax: od.bill.tax, pct: od.bill.pct, tip: od.bill.tip, incl: !!(A.C().ordering || {}).taxIncluded, total: od.bill.total } });
+  const openGst = (n) => { const o = n && n.items && n.items[0] && n.items[0].price !== undefined ? n : invOf(n); if (!o) return false; loadInv().then(() => window.SiteInvoice.open(o, invSite())).catch(() => {}); return true; };
   /** The invoice as the editor's preview shows it: a sample order, redrawn whenever the owner changes a setting. */
   function invPreview() {
     const c = A.C(), P = (c.food.categories || []).flatMap((k) => k.items || []).filter((d) => d && d.name && !isNaN(parseFloat(String(d.price || "")))).slice(0, 3), ot = c.ordering || {};
@@ -311,7 +313,7 @@
     if (acctWait) return `<div class="sk-wrap" role="status" aria-label="Loading"><i class="sk-b s"></i><i class="sk-b"></i><i class="sk-b"></i><i class="sk-b h"></i></div>`;
     if (mustSign()) return `<div id="od-acct"></div>`; // sign in first: the form follows
     return `<form class="od-form" id="od-form" data-look="${esc(coLook())}" novalidate>${ME() ? `<p class="od-me"><span>Signed in as <b>${esc(/@/.test(ME().key) ? ME().key : "+" + ME().key)}</b></span><button type="button" class="chip" data-act="acct">My account</button></p>` : ""}
-      <fieldset><legend>${esc(uiT("coDetails", "Your details"))}</legend>${inp("name", "Name", 'autocomplete="name" required')}${phoneBox()}${must().askEmail ? emailBox() : ""}${must().either ? `<p class="od-live">Give your mobile number or your email address (or both), so we can reach you about the order.</p>` : ""}
+      <fieldset><legend>${esc(uiT("coDetails", "Your details"))}</legend>${inp("name", "Name", 'autocomplete="name" required')}${phoneBox()}${must().askEmail ? emailBox() : ""}${gstOn() && A.C().gst.askGstin ? inp("gstin", "GSTIN, for a business invoice (optional)", 'maxlength="15" autocapitalize="characters" autocomplete="off"') : ""}${must().either ? `<p class="od-live">Give your mobile number or your email address (or both), so we can reach you about the order.</p>` : ""}
         ${ptsBox()}</fieldset>
       ${m === "delivery" ? `<fieldset><legend>${esc(uiT("coAddress", "Delivery address"))}</legend>${inp("line1", "Flat, house or building", 'autocomplete="address-line1" required')}${inp("area", "Street and area", 'autocomplete="address-line2" required')}<div class="of2">${inp("landmark", "Landmark (optional)")}${inp("pin", "PIN code", 'inputmode="numeric" autocomplete="postal-code" maxlength="10"' + (o.askPin !== false ? " required" : ""))}</div>
         <div class="od-tips" role="radiogroup" aria-label="Save this address as">${["Home", "Work", "Other"].map((l) => `<button type="button" class="chip" role="radio" data-act="label" data-id="${l}" aria-checked="${f.label === l}">${l}</button>`).join("")}</div>
@@ -357,7 +359,7 @@
       ${o.pay === "rz" && !cancelled ? `<div class="od-box"><span class="od-l">Payment</span><p class="od-ok">${o.sent ? `Payment of ${fmt(o.bill.total)} received. Thank you.` : `You paid ${fmt(o.bill.total)} online (payment ${esc((o.rz || {}).razorpay_payment_id || "")}).`}</p></div>` : ""}
       ${o.pay === "upi" && !cancelled ? `<div class="od-box"><span class="od-l">Payment</span>${o.paid ? `<p class="od-ok">Payment of ${fmt(o.bill.total)} received. Thank you.</p>` : `<p><b>${fmt(o.bill.total)} by UPI</b>, reference <code>${esc(o.utr || "")}</code>.</p><p class="od-live">${o.live ? "The restaurant is checking it in their UPI app. This page shows it as soon as they confirm." : "The restaurant checks it in their UPI app and confirms with you."}</p>`}</div>` : ""}
       <div class="od-box"><span class="od-l">Your order</span><ul class="od-sum">${o.items.map((l) => `<li><span>${l.qty} × ${esc(l.name)}${lineText(l) ? ` <small>(${esc(lineText(l))})</small>` : ""}</span><b>${fmt(l.unit * l.qty)}</b></li>`).join("")}</ul>${billRows(o.bill, o)}</div>
-      <div class="od-acts">${o.sent ? sendWa : ""}${C.contact.phone ? `<a class="btn sec" href="${esc(A.tel(C.contact.phone))}">Call the restaurant</a>` : ""}<button type="button" class="btn sec" data-act="again" data-id="${esc(o.id)}">Order again</button></div></div>`;
+      <div class="od-acts">${o.sent ? sendWa : ""}${gstOn() && !cancelled && (o.sent || o.preview) ? `<button type="button" class="btn sec" data-act="gstinv" data-id="${esc(o.id)}">Download GST invoice</button>` : ""}${C.contact.phone ? `<a class="btn sec" href="${esc(A.tel(C.contact.phone))}">Call the restaurant</a>` : ""}<button type="button" class="btn sec" data-act="again" data-id="${esc(o.id)}">Order again</button></div></div>`;
   }
   /** Paying comes first: the QR code and the UPI app button carry the exact amount and the order number. The order is
       placed when the guest enters the reference number their UPI app shows after paying. */
@@ -483,6 +485,7 @@
     if (m === "dinein" && !String(f.table).trim()) return bad("table", "Please enter your table number.");
     if (can.otp && !A.PREVIEW && !verified()) return bad("phone", "Please verify your mobile number first.");
     if (can.em && !A.PREVIEW && elow() && !etok() && !(ME() && ME().kind === "email")) { if (!ui.eSent) return eotp(true).then(() => { if (etok()) return place(); ui.err = "We've emailed you a code. Enter it above to verify your email address."; over(true); const c = $("#of-ecode", root); c && c.focus(); }); return bad("ecode", "Enter the code we emailed you to verify your email address."); }
+    if (gstOn() && A.C().gst.askGstin && String(f.gstin || "").trim() && !/^\d{2}[A-Z0-9]{13}$/i.test(String(f.gstin).trim())) return bad("gstin", "That GSTIN doesn't look right. It has 15 letters and digits, or leave it empty.");
     if (!sl.some((s) => s.v === f.when)) return bad("when", "Please choose a time.");
     if (b.short) return bad("name", `The minimum order is ${txt(b.min)}.`);
     const ps = pays(), pay = ps.find((p) => p.id === f.pay); if (!pay) return bad("name", "Please choose how you'll pay.");
@@ -492,7 +495,7 @@
     const od = { consent: agree() ? "Agreed on " + new Date().toISOString() + ": " + agree() : "", id: newId(), k: key, at: Date.now(), mode: m, when: f.when, whenLabel: whenLabel(f.when, sl), items: cart.map((l) => ({ ...l })), bill: b, taxLabel: o.taxLabel || "Tax", pay: pay.id, payLabel: pay.label, upiId: String((o.pay || {}).upiId || "").trim(), payee: (o.pay || {}).payee || "", notes: String(f.notes || "").trim(), cutlery: !!f.cutlery, intro: o.intro || "", wa: o.whatsapp || C.contact.whatsapp || "",
       pin: String(f.pin || "").trim(), area: String(f.area || "").trim(),
       et: etok(), ac: ME() ? ME().pass : "",
-      c: { name: String(f.name).trim(), phone: String(f.phone).trim(), email: String(f.email || "").trim(), table: String(f.table || "").trim(), address: m === "delivery" ? [f.line1, f.area, f.landmark ? "Near " + f.landmark : "", f.pin].map((x) => String(x || "").trim()).filter(Boolean).join(", ") + ` (${f.label})` : "" }, status: "new", sent: false, live: false };
+      c: { name: String(f.name).trim(), phone: String(f.phone).trim(), email: String(f.email || "").trim(), table: String(f.table || "").trim(), gstin: gstOn() ? String(f.gstin || "").trim().toUpperCase().slice(0, 15) : "", address: m === "delivery" ? [f.line1, f.area, f.landmark ? "Near " + f.landmark : "", f.pin].map((x) => String(x || "").trim()).filter(Boolean).join(", ") + ` (${f.label})` : "" }, status: "new", sent: false, live: false };
     // Paying by UPI comes before the order is placed.
     if (pay.id === "upi") { ui.paying = od; ui.utr = ""; ui.drawer = "pay"; over(); return; }
     if ((pay.id === "rz" || GW[pay.id]) && !A.PREVIEW) return payOnline(od);
@@ -562,7 +565,7 @@
   /** The cart as the database reads it (to hand the order to the restaurant's billing system when one is connected). */
   function cartOf(od) { return { mode: od.mode, pin: od.pin || "", area: od.area || "", coupon: od.bill.code || "", tip: od.bill.tip || 0, points: od.bill.pts || 0, items: od.items.map((l) => ({ id: l.id, qty: l.qty, variant: l.variant, addons: (l.addons || []).map((a) => a.label) })) }; }
   /** What is saved for an order (it goes to the site's database under Purchased orders). */
-  function orderData(od) { const m = od.mode, b = od.bill, pay = { label: od.payLabel }; return { ...(od.consent ? { consent: od.consent } : {}), type: "Order", order_no: od.id, okey: od.k, name: od.c.name, phone: od.c.phone, email: od.c.email, mode: MODES[m], when: od.whenLabel, address: od.c.address, table: od.c.table, items: od.items.map((l) => `${l.qty} × ${l.name}${lineText(l) ? ` (${lineText(l)})` : ""}${l.note ? ` [${l.note}]` : ""} = ${txt(l.unit * l.qty)}`).join("\n"), total: txt(b.total), payment: od.utr ? "UPI, paid before ordering" : od.rz ? "Paid online (Razorpay)" : od.pg ? `Paid online (${GW[od.pg.gw].name})` : pay.label, utr: od.utr || "", ...(od.pg ? { pay_gw: od.pg.gw, pay_ref: od.pg.ref, otp_token: od.pg.otp || undefined } : {}), ...(od.rz ? { rz_order: od.rz.razorpay_order_id, rz_payment: od.rz.razorpay_payment_id, rz_sig: od.rz.razorpay_signature } : {}), ...(ui.otp ? { otp_token: ui.otp.token } : {}), ...(od.et ? { email_token: od.et } : {}), ...(od.ac ? { acct_token: od.ac } : {}), message: orderText(od) }; }
+  function orderData(od) { const m = od.mode, b = od.bill, pay = { label: od.payLabel }; return { ...(od.consent ? { consent: od.consent } : {}), type: "Order", order_no: od.id, okey: od.k, name: od.c.name, ...(od.c.gstin ? { gstin: od.c.gstin } : {}), phone: od.c.phone, email: od.c.email, mode: MODES[m], when: od.whenLabel, address: od.c.address, table: od.c.table, items: od.items.map((l) => `${l.qty} × ${l.name}${lineText(l) ? ` (${lineText(l)})` : ""}${l.note ? ` [${l.note}]` : ""} = ${txt(l.unit * l.qty)}`).join("\n"), total: txt(b.total), payment: od.utr ? "UPI, paid before ordering" : od.rz ? "Paid online (Razorpay)" : od.pg ? `Paid online (${GW[od.pg.gw].name})` : pay.label, utr: od.utr || "", ...(od.pg ? { pay_gw: od.pg.gw, pay_ref: od.pg.ref, otp_token: od.pg.otp || undefined } : {}), ...(od.rz ? { rz_order: od.rz.razorpay_order_id, rz_payment: od.rz.razorpay_payment_id, rz_sig: od.rz.razorpay_signature } : {}), ...(ui.otp ? { otp_token: ui.otp.token } : {}), ...(od.et ? { email_token: od.et } : {}), ...(od.ac ? { acct_token: od.ac } : {}), message: orderText(od) }; }
   /** The order is placed: the cart empties and the page shows it. */
   function shown(od) {
     cart = []; save(); ui.usePts = false; ui.pts = null; ui.coupon = ""; st.set("coupon", ""); ui.tip = 0; ui.form.notes = ""; ui.paying = null; ui.utr = ""; ui.err = "";
@@ -659,6 +662,7 @@
       if (!/^\d{12}$/.test(v) && !/^[A-Za-z0-9]{12,22}$/.test(v)) { ui.err = "Enter the 12-digit reference number from your UPI app. It is shown on the payment's receipt as UTR or UPI transaction ID."; over(true); const e2 = $("#of-utr", root); e2 && e2.focus(); return; }
       ui.err = ""; ui.paying.utr = v; finish(ui.paying);
     }
+    else if (a === "gstinv") { const o = st.get("orders", []).find((x) => x.id === id) || (ui.done && ui.done.id === id ? ui.done : null); if (o) openGst(invOfLocal(o)); }
     else if (a === "view") { const o = st.get("orders", []).find((x) => x.id === id); if (o) { ui.done = o; ui.drawer = "done"; over(); track(o); } }
     else if (a === "again") again(id);
   }

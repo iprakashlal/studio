@@ -65,6 +65,9 @@ export const CF_DB_TOKEN_PAGE = `https://dash.cloudflare.com/profile/api-tokens?
   accountId: "*", zoneId: "all", name: "Picaffectz Studio",
 })}`;
 
+/** The same page, named for a client's account (the permissions are already ticked: the owner only presses Continue, then Create Token). */
+export const cfTokenPageFor = (name: string) => CF_DB_TOKEN_PAGE.replace(/name=[^&]*$/, "name=" + encodeURIComponent(("Picaffectz Studio " + name).slice(0, 60)));
+
 // ---------------------------------------------------------------- sign-in (one session per database, per device)
 const KEY = (api: string) => `site-cfdb:${api.replace(/\/+$/, "")}`;
 const clean = (api: string) => api.replace(/\/+$/, "");

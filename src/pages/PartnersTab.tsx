@@ -6,7 +6,7 @@ import type { Session } from "../lib/auth";
 import { netlifyToken } from "../lib/hosting";
 import { Netlify } from "../lib/netlify";
 import { backendOf } from "../lib/backend";
-import { cfAddMembers, cfDeployInfo, cfSignedIn, cfxSite, cfxPut } from "../lib/cfdb";
+import { cfAddMembers, cfDeployInfo, cfSignedIn, cfxSite, cfxPut, cfTokenPageFor } from "../lib/cfdb";
 import type { StudioHostCfg } from "../lib/studiohost";
 import { useCfAccount, useCloudflarePicker } from "./CfPicker";
 import { loadPages, pagesViaDb, PAGES_LABEL, type PagesKind } from "../lib/pages";
@@ -371,7 +371,8 @@ function PartnerCard({ p, studio, index, nf, setNf, session, myEmail, studioToke
       {p.accounts === "mine" && p.siteId && (tokOpen
         ? <div className="flex flex-col gap-2 rounded-xl border border-amber-400/40 bg-amber-400/5 p-3 text-[13px]" role="group" aria-label={`Cloudflare token for ${p.name}`}>
             <b>Cloudflare token for {p.name}'s account</b>
-            <span className="text-ink-300">Updating their Studio needs a Cloudflare API token for the account it lives on, kept on a database so it works from any device. Create one in that account with the “Edit Cloudflare Workers” template and paste it here.</span>
+            <span className="text-ink-300">Updating their Studio needs a Cloudflare API token for the account it lives on, kept on a database so it works from any device. Press the button, sign in to <b>that</b> account, then Continue → Create Token, and paste the token it shows once.</span>
+            <a className="btn btn-sm self-start" href={cfTokenPageFor(p.name)} target="_blank" rel="noopener noreferrer">Create the token on Cloudflare (permissions pre-filled) ↗</a>
             <div className="flex flex-wrap gap-2"><input type="password" autoComplete="off" aria-label="Cloudflare API token" className="input min-w-0 flex-1 font-mono" placeholder="Cloudflare API token" value={tok} onChange={(e) => setTok(e.target.value)} /><button type="button" className="btn btn-pri btn-sm" disabled={!!busy || !tok.trim()} onClick={saveTokenAndUpdate}>{busy === "app" ? "Working…" : "Save token & update"}</button><button type="button" className="btn btn-ghost btn-sm" onClick={() => { setTokOpen(false); setTok(""); }}>Cancel</button></div>
           </div>
         : <button type="button" className="self-start text-[12.5px] text-brand-300 underline" onClick={() => setTokOpen(true)}>Update the Cloudflare token for their account…</button>)}

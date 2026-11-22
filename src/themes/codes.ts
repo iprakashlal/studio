@@ -125,6 +125,8 @@ export const THEME_CODES: Record<string, string> = {
   "consultant": "T-117",
   "coral-club": "T-118",
   "pearl": "T-119",
+  "frosted": "T-120",
+  "glass-night": "T-121",
 };
 
 /** The ID shown for a theme, e.g. "T-07". Themes without an ID yet fall back to their slug. */

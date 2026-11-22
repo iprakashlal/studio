@@ -1352,6 +1352,24 @@
     var r; try { r = a11yScan(); } catch (x) { r = { issues: [{ kind: "error", text: "The check could not finish on this page.", where: String(x && x.message || x).slice(0, 80) }], seen: 0 }; }
     window.parent.postMessage({ type: "cms:a11y", page: (location.pathname.split("/").pop() || "index.html") + location.search, issues: r.issues, seen: r.seen }, location.origin);
   });
+
+  // Frosted glass (iPhone-style): drifting colour light behind translucent, blurred surfaces. Active on html[data-pattern=glass].
+  var GLASS_SEL = ".card,.hp-card,.dish,.offer,.order-box,.mbar,.pcard,.box,.sum,.quote,.wcard,.ocard,.ctaband,.cat,.tile,.proj,.stat,.rv-c,.rv-top,.rv-form,.faq-item,.plan,.price,.pkg";
+  var GLASS_CSS = "html[data-pattern=glass]{--g1:var(--c1,var(--accent,#6a7cff));--g2:var(--c2,var(--accent2,#ff7ab8));--g3:var(--c3,var(--c2,var(--accent2,#6ee7d8)));background:var(--bg)}" +
+    "html[data-pattern=glass] body{background:transparent!important}" +
+    "html[data-pattern=glass]::before{content:'';position:fixed;inset:-12%;z-index:-1;pointer-events:none;background:radial-gradient(34% 34% at 18% 22%,color-mix(in srgb,var(--g1) 62%,transparent),transparent 70%),radial-gradient(30% 30% at 82% 16%,color-mix(in srgb,var(--g2) 55%,transparent),transparent 70%),radial-gradient(36% 36% at 70% 84%,color-mix(in srgb,var(--g3) 50%,transparent),transparent 70%),radial-gradient(28% 28% at 12% 88%,color-mix(in srgb,var(--g2) 40%,transparent),transparent 70%);filter:blur(30px) saturate(1.3);animation:fx-glassdrift 26s ease-in-out infinite alternate}" +
+    "@keyframes fx-glassdrift{to{transform:translate3d(3%,-3%,0) scale(1.08) rotate(4deg)}}" +
+    "html[data-pattern=glass] .band:not(.has-sbg){background:transparent!important}" +
+    "html[data-pattern=glass] .plane{display:none!important}" +
+    "html[data-pattern=glass] :is(" + GLASS_SEL + "){background:color-mix(in srgb,var(--surface) 46%,transparent)!important;-webkit-backdrop-filter:blur(26px) saturate(1.8);backdrop-filter:blur(26px) saturate(1.8);border:1px solid rgba(255,255,255,.55)!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.65),0 12px 40px -12px rgba(20,24,60,.28)!important}" +
+    "html[data-pattern=glass][data-glass=dark] :is(" + GLASS_SEL + "){background:color-mix(in srgb,var(--surface) 38%,transparent)!important;border-color:rgba(255,255,255,.16)!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.22),0 14px 44px -14px rgba(0,0,0,.6)!important}" +
+    "html[data-pattern=glass] :is(.nav,.hdr){background:color-mix(in srgb,var(--bg) 40%,transparent)!important;-webkit-backdrop-filter:blur(26px) saturate(1.8);backdrop-filter:blur(26px) saturate(1.8);box-shadow:inset 0 -1px 0 rgba(255,255,255,.35)}" +
+    "@media(prefers-reduced-motion:reduce){html[data-pattern=glass]::before{animation:none}}";
+  function glassMode() {
+    if (doc.getAttribute("data-pattern") !== "glass") { doc.removeAttribute("data-glass"); return; }
+    if (!document.getElementById("fx-glass")) { var g = document.createElement("style"); g.id = "fx-glass"; g.textContent = GLASS_CSS; document.head.appendChild(g); }
+    doc.setAttribute("data-glass", isDark() ? "dark" : "light");
+  }
   function init(opts) {
     opts = opts || {};
     var root = opts.root || document.body;
@@ -1359,6 +1377,7 @@
     try { sectionBgs(opts, root); } catch (e) { /* a background is never worth a broken page */ }
     try { pageBg(opts, root); } catch (e) { /* a background is never worth a broken page */ }
     try { logoMotion(opts, root); } catch (e) { /* nor is a moving logo */ }
+    try { glassMode(); } catch (e) {}
     ensureStyle(); wire();
     try { badge(opts.badge); } catch (e) {}
     var c = cfg(), sig = JSON.stringify(c), changed = sig !== st.sig;

@@ -1,4 +1,5 @@
 import { MENU_LAYOUTS, applyLayout } from "./menuLayout";
+import { pushPref } from "../lib/prefs";
 import { useEffect, useMemo, useRef, useState, type ReactNode, Fragment } from "react";
 import type { TemplateDef } from "../schema/types";
 import { Ctx, FieldView, openListItem, type EditorCtx } from "./fields";
@@ -83,7 +84,7 @@ export function Editor({ tpl, draft, version, onChange, upload, img, extras = []
   }, [focus]);
   // Menu headings fold their sections away (the open section stays visible); remembered in this browser.
   const [folded, setFolded] = useState<string[]>(() => { try { return JSON.parse(localStorage.getItem("studio-menu-fold") || "[]"); } catch { return []; } });
-  const foldGroup = (g: string) => setFolded((f) => { const n = f.includes(g) ? f.filter((x) => x !== g) : [...f, g]; try { localStorage.setItem("studio-menu-fold", JSON.stringify(n)); } catch { /* private mode */ } return n; });
+  const foldGroup = (g: string) => setFolded((f) => { const n = f.includes(g) ? f.filter((x) => x !== g) : [...f, g]; try { localStorage.setItem("studio-menu-fold", JSON.stringify(n)); } catch { /* private mode */ } pushPref({ nav: { fold: n } }); return n; });
   const groups: { group: string; items: typeof nav }[] = [];
   for (const it of nav) {
     let g = groups.find((x) => x.group === it.group);
@@ -170,7 +171,7 @@ export function Editor({ tpl, draft, version, onChange, upload, img, extras = []
               {!found.length && <li className="px-2.5 py-2 text-[13px] text-ink-400">Nothing matches “{q}”.</li>}
             </ul>
           )}
-          {!found && drawer && <div className="hidden md:block"><NavDrawer groups={groups} cur={curId} wide={wide} onWide={(v) => { setWide(v); keep("studio-nav-wide", v ? "1" : "0"); }} onPick={drawerPick} /></div>}
+          {!found && drawer && <div className="hidden md:block"><NavDrawer groups={groups} cur={curId} wide={wide} onWide={(v) => { setWide(v); keep("studio-nav-wide", v ? "1" : "0"); pushPref({ nav: { wide: v } }); }} onPick={drawerPick} /></div>}
           {!found && groups.map((g) => { const shut = folded.includes(g.group); return (
             <div key={g.group} className={`flex flex-col gap-1 ${drawer ? "md:hidden" : ""}`}>
               <button type="button" onClick={() => foldGroup(g.group)} aria-expanded={!shut} className="flex items-center px-2.5 pb-1 pt-3 text-left text-[11.5px] font-bold uppercase tracking-widest text-ink-500 hover:text-ink-300 md:text-[10.5px]">
@@ -198,7 +199,7 @@ export function Editor({ tpl, draft, version, onChange, upload, img, extras = []
               })}
             </div>
           ); })}
-          {!found && !(drawer && !wide) && <button type="button" className="mt-auto hidden rounded-lg px-2.5 py-2 text-left text-[12px] font-semibold text-ink-500 hover:bg-ink-800 hover:text-ink-200 md:block" onClick={() => { const v = drawer ? "list" : "drawer"; setNavView(v); keep("studio-nav", v); }}>{drawer ? "Show the full list instead" : "Show as a drawer with icons"}</button>}
+          {!found && !(drawer && !wide) && <button type="button" className="mt-auto hidden rounded-lg px-2.5 py-2 text-left text-[12px] font-semibold text-ink-500 hover:bg-ink-800 hover:text-ink-200 md:block" onClick={() => { const v = drawer ? "list" : "drawer"; setNavView(v); keep("studio-nav", v); pushPref({ nav: { view: v as "drawer" | "list" } }); }}>{drawer ? "Show the full list instead" : "Show as a drawer with icons"}</button>}
         </nav>
         <div ref={scroller} className="scroll-thin min-w-0 flex-1 overflow-y-auto">
           <div className="mx-auto flex max-w-5xl flex-col gap-4 px-4 py-5 sm:px-6">

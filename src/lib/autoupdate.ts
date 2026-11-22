@@ -3,6 +3,7 @@
 // members and settings live in the database and aren't touched. Uses this device's hosting token, or the
 // database's kept token (Settings → Accounts → Publish from any device) for a signed-in owner.
 import type { Session } from "./auth";
+import { pushPref } from "./prefs";
 import type { StudioIndex } from "./studio";
 import { loadHostConfig } from "./studiohost";
 import { appBase, appFiles, deployStudioApp } from "./migrate";
@@ -12,7 +13,7 @@ import { STUDIO_BUILD } from "../build-info";
 const OFF = "site-studio:auto-update";
 export const autoUpdatePref = {
   on: () => { try { return localStorage.getItem(OFF) !== "off"; } catch { return true; } },
-  set: (v: boolean) => { try { localStorage.setItem(OFF, v ? "on" : "off"); } catch { /* private mode */ } },
+  set: (v: boolean) => { try { localStorage.setItem(OFF, v ? "on" : "off"); } catch { /* private mode */ } pushPref({ autoUpdate: v }); },
 };
 
 /** "updated" (reload to use it), "current", or "skip" (not a moved Studio, turned off, no way to deploy, or tried). */

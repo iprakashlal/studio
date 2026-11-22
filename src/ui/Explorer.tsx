@@ -95,7 +95,7 @@ export function Explorer({ studio, index, route, hosted }: { studio: Studio; ind
   );
 }
 
-/** Settings → Customize → Picaffectz Explorer. Kept on this device. */
+/** Settings → Customize → Picaffectz Explorer. Saved with the Studio, so every device shows the same. */
 export function ExplorerCard() {
   const [p, setP] = useState<ExplorerPrefs>(explorerPrefs.get);
   useEffect(() => { const on = (e: Event) => setP((e as CustomEvent).detail || explorerPrefs.get()); addEventListener(EXPLORER_EVENT, on); return () => removeEventListener(EXPLORER_EVENT, on); }, []);
@@ -114,7 +114,7 @@ export function ExplorerCard() {
           <div className="flex self-start rounded-lg border border-ink-600" role="radiogroup" aria-label="Explorer corner">{(["right", "left"] as const).map((k) => <button key={k} type="button" role="radio" aria-checked={p.corner === k} onClick={() => set({ corner: k })} className={`btn btn-sm border-0 ${p.corner === k ? "bg-ink-700" : "bg-transparent"}`}>{k === "right" ? "Bottom right" : "Bottom left"}</button>)}</div>
         </div>
       </>}
-      <p className="hint">These choices are kept on this device. What it can answer: where a setting or screen is (for all four site types), what a setting does (in the Studio's own words), how many projects you have and which, and where a piece of text is written. It can't write for you or judge anything; for that the Studio's AI tools are separate.</p>
+      <p className="hint">These choices are saved with your Studio, so every device you sign in on has the same. What it can answer: where a setting or screen is (for all four site types), what a setting does (in the Studio's own words), how many projects you have and which, and where a piece of text is written. It can't write for you or judge anything; for that the Studio's AI tools are separate.</p>
     </section>
   );
 }

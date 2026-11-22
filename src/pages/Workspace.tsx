@@ -1,4 +1,5 @@
 import { Explorer, ExplorerCard } from "../ui/Explorer";
+import { prefSync, applyPrefs } from "../lib/prefs";
 import { StudioGoogleCard } from "./StudioGoogle";
 import { StudioPeopleCard } from "./StudioPeople";
 import { SitesHostingCard } from "./SitesHostingCard";
@@ -86,6 +87,14 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
     if (!index || repo.demo || !isHosted(session)) return;
     studioUpdate.start(async (step) => (await autoUpdateStudio(session, index, step)) === "updated", { quietErrors: true });
   }, [hostedId]);
+  // Choices kept in the Studio (lib/prefs.ts): saved there when changed, applied here when the Studio loads.
+  useEffect(() => {
+    if (repo.demo) return;
+    prefSync.attach((patch) => studio.updateIndex((i) => { const o = i.prefs || {}; i.prefs = { ...o, ...patch, ...(patch.explorer ? { explorer: { ...o.explorer, ...patch.explorer } } : {}), ...(patch.nav ? { nav: { ...o.nav, ...patch.nav } } : {}) }; }, "Save the Studio's preferences").then((i) => { setIndex(i); }));
+    return () => prefSync.attach(null);
+  }, [studio]);
+  const prefsKey = JSON.stringify(index?.prefs || null);
+  useEffect(() => { if (index?.prefs && !repo.demo) applyPrefs(index.prefs); }, [prefsKey]);
   // Name and logo come from studio.json, so every signed-in device shows the same.
   useEffect(() => {
     const sb = index?.brand;

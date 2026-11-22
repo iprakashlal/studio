@@ -4,13 +4,14 @@
 // then ranks what matches the words asked. Its answers are places to go and the Studio's own explanations.
 import { TEMPLATES } from "../schema";
 import type { ProjectMeta, StudioIndex } from "./studio";
+import { pushPref } from "./prefs";
 
 export type ExplorerPrefs = { on: boolean; min: boolean; corner: "right" | "left"; content: boolean; keys: boolean };
 const KEY = "studio-explorer", DEF: ExplorerPrefs = { on: true, min: true, corner: "right", content: true, keys: true };
 export const EXPLORER_EVENT = "studio:explorer";
 export const explorerPrefs = {
   get(): ExplorerPrefs { try { const j = JSON.parse(localStorage.getItem(KEY) || "null"); return { ...DEF, ...(j && typeof j === "object" ? { on: j.on !== false, min: j.min !== false, corner: j.corner === "left" ? "left" : "right", content: j.content !== false, keys: j.keys !== false } : {}) }; } catch { return { ...DEF }; } },
-  set(p: Partial<ExplorerPrefs>) { const n = { ...explorerPrefs.get(), ...p }; try { localStorage.setItem(KEY, JSON.stringify(n)); } catch { /* private window: this visit only */ } dispatchEvent(new CustomEvent(EXPLORER_EVENT, { detail: n })); return n; },
+  set(p: Partial<ExplorerPrefs>) { const n = { ...explorerPrefs.get(), ...p }; try { localStorage.setItem(KEY, JSON.stringify(n)); } catch { /* private window: this visit only */ } dispatchEvent(new CustomEvent(EXPLORER_EVENT, { detail: n })); pushPref({ explorer: n }); return n; },
 };
 
 export type Entry = {

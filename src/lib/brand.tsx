@@ -7,14 +7,17 @@ import { basePath } from "./util";
 import { applyTint, isHex, type UiMode } from "./tint";
 
 export const DEFAULT_NAME = "Picaffectz Studio";
-export type Brand = { name: string; logo: string /* small data: URL, or "" */; v?: number; /** The interface is coloured from the logo: its main colour (#rrggbb), or "" for the standard colours. */ tint?: string; /** Light or dark interface (dark when unset). */ mode?: UiMode; /** A quiet movement on the Studio's logo: one of LOGO_ANIMS, or "" for still. */ anim?: string };
+export type Brand = { name: string; logo: string /* small data: URL, or "" */; v?: number; /** The interface is coloured from the logo: its main colour (#rrggbb), or "" for the standard colours. */ tint?: string; /** Light or dark interface (dark when unset). */ mode?: UiMode; /** A quiet movement on the Studio's logo: one of LOGO_ANIMS, or "" for still. */ anim?: string; /** The shape of the Studio's screens: one of UI_LAYOUTS ("classic" when unset). */ layout?: string };
+/** The layouts the Studio can wear (Settings → Customize → Studio name & logo). */
+export const UI_LAYOUTS: [string, string, string][] = [["classic", "Classic", "The workbench as it has always been."], ["glass", "Glass", "Frosted, translucent panels floating over soft colour, like iOS."], ["soft", "Soft", "Big rounded cards, pill buttons, airy spacing and gentle shadows."], ["sharp", "Sharp", "Compact and crisp: hairline borders, small corners, more on screen."]];
+const layoutOk = (a: unknown) => (UI_LAYOUTS.some(([k]) => k !== "classic" && k === a) ? String(a) : "");
 /** The movements the Studio's logo can have (Settings → Customize → Studio name & logo). */
 export const LOGO_ANIMS: [string, string][] = [["", "None (still)"], ["float", "Float"], ["pulse", "Pulse"], ["spin", "Spin"], ["swing", "Swing"], ["bounce", "Bounce"], ["flip", "Flip"], ["jelly", "Jelly"], ["glow", "Glow"], ["shine", "Shine"], ["heartbeat", "Heartbeat"], ["wobble", "Wobble"], ["tada", "Ta-da"], ["rubber", "Rubber band"], ["tilt", "Tilt"], ["drop", "Drop in and land"], ["pop", "Pop in"], ["neon", "Neon flicker"], ["hue", "Colour cycle"], ["glitch", "Glitch"]];
 const animOk = (a: unknown) => (LOGO_ANIMS.some(([k]) => k && k === a) ? String(a) : "");
 
 const KEY = () => "studio-brand:" + basePath();
 function load(): Brand {
-  try { const b = JSON.parse(localStorage.getItem(KEY()) || "null"); if (b && typeof b.name === "string") return { anim: animOk(b.anim), name: b.name || DEFAULT_NAME, logo: typeof b.logo === "string" && b.logo.startsWith("data:image/") ? b.logo : "", v: b.v, tint: isHex(b.tint) ? b.tint : "", mode: b.mode === "light" ? "light" : "dark" }; } catch { /* ignore */ }
+  try { const b = JSON.parse(localStorage.getItem(KEY()) || "null"); if (b && typeof b.name === "string") return { anim: animOk(b.anim), layout: layoutOk(b.layout), name: b.name || DEFAULT_NAME, logo: typeof b.logo === "string" && b.logo.startsWith("data:image/") ? b.logo : "", v: b.v, tint: isHex(b.tint) ? b.tint : "", mode: b.mode === "light" ? "light" : "dark" }; } catch { /* ignore */ }
   return { name: DEFAULT_NAME, logo: "" };
 }
 let cur = load();
@@ -25,12 +28,13 @@ function applyDoc(b: Brand) {
   if (b.logo) { if (!l) { l = document.createElement("link"); l.rel = "icon"; document.head.appendChild(l); } l.href = b.logo; }
   else if (l) l.remove();
   applyTint(b.tint || null, b.mode);
+  if (layoutOk(b.layout)) document.documentElement.dataset.layout = layoutOk(b.layout); else delete document.documentElement.dataset.layout;
 }
 applyDoc(cur);
 
 export const brand = () => cur;
 export function setBrand(b: Partial<Brand>) {
-  cur = { name: (b.name ?? cur.name).trim() || DEFAULT_NAME, logo: b.logo ?? cur.logo, v: b.v ?? cur.v, tint: b.tint ?? cur.tint ?? "", mode: b.mode ?? cur.mode ?? "dark", anim: animOk(b.anim ?? cur.anim) };
+  cur = { name: (b.name ?? cur.name).trim() || DEFAULT_NAME, logo: b.logo ?? cur.logo, v: b.v ?? cur.v, tint: b.tint ?? cur.tint ?? "", mode: b.mode ?? cur.mode ?? "dark", anim: animOk(b.anim ?? cur.anim), layout: layoutOk(b.layout ?? cur.layout) };
   try { localStorage.setItem(KEY(), JSON.stringify(cur)); } catch { /* private mode: this session only */ }
   applyDoc(cur);
   subs.forEach((f) => f(cur));

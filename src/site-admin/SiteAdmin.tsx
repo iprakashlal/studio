@@ -103,12 +103,14 @@ import { markSiteAdmin } from "../lib/ai";
 markSiteAdmin();
 
 /** The quick tour shown after signing in (it can be turned off, and played again, in Settings → Help). */
-const TOUR: TourStep[] = [
-  { title: "Welcome to your site's admin", text: "A one-minute look around: where to find things, how to change them and how to put the changes on your site. You can skip it any time." },
-  { sel: 'nav[aria-label="Content categories"]', title: "The menu", text: "Every part of your site is a section here: pages, the menu, photos, settings. Pick one and its choices open in the middle. Sections you don't use can stay folded." },
+const TOUR_INTRO: TourStep[] = [
+  { title: "Welcome to your site's admin", text: "A look around: where things are, how to change them, then every section of the menu in a line or two, and how to put your changes on the site. Skip any time." },
+  { sel: 'nav[aria-label="Content categories"]', title: "The menu", text: "Every part of your site is a section in this list. Pick one and its settings open in the middle." },
   { sel: "#menu-search", title: "Looking for something?", text: "Type a word, like “phone”, “logo” or “hours”, and the menu shows where that setting is." },
   { sel: '[data-tour="edit"]', title: "Change things here", text: "Edit the words, photos and choices. Nothing goes live yet: you only change a draft of the site." },
   { sel: '[data-tour="preview"]', title: "See it as you type", text: "The preview shows your site with your changes straight away. On a phone, switch between Edit and Preview at the top." },
+];
+const TOUR_OUTRO: TourStep[] = [
   { sel: '[data-tour="save"]', title: "Save a draft", text: "Keeps your work safely without changing the live site, so you can carry on later or on another device." },
   { sel: '[data-tour="publish"]', title: "Save & publish", text: "Makes your changes live. Visitors see them in about a minute." },
   { sel: '[data-tour="view"]', title: "View your site", text: "Opens the live site in a new tab, so you can check what visitors see." },
@@ -446,7 +448,7 @@ function Workspace({ info, onInfo, repo, account, onSignOut, hosted, ghToken }: 
           <Preview tpl={tpl} base="" content={draft} version={v} assets={assets} />
         </div>
       </div>
-      <TourHost steps={TOUR} />
+      <TourHost intro={TOUR_INTRO} outro={TOUR_OUTRO} />
     </div>
   );
 }

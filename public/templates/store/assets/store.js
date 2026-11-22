@@ -223,14 +223,22 @@ function revDraw(p) {
    shop's database so a reminder can bring the shopper back. The link in the reminder (?rc=…) puts the cart back. */
 const recoOn = () => !PREVIEW && !!(C.recovery && C.recovery.on && HOST && HOST.api && HOST.site);
 let recoT = 0;
-function recoSave() {
-  clearTimeout(recoT); recoT = setTimeout(() => {
+function recoSave(now) {
+  clearTimeout(recoT);
+  const send = () => {
     if (!recoOn()) return; const g = (i) => { const e = $("#co #" + i); return e ? String(e.value || "").trim() : ""; }, email = g("email"); if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return;
-    const lines = cartLines(); if (!$("#co") || $(".done")) return;
-    fetch(HOST.api + "/cart/" + encodeURIComponent(HOST.site), { method: "POST", headers: { "Content-Type": "application/json" }, keepalive: true, body: JSON.stringify({ email, name: g("name"), phone: g("phone"), lines: lines.map((l) => ({ id: l.id, opt: l.opt || "", qty: l.qty })), items: lines.map((l) => ({ n: l.p.name + (l.opt ? " (" + l.opt + ")" : ""), q: l.qty })), total: lines.reduce((n, l) => n + (Number(l.p.price) || 0) * l.qty, 0), back: location.origin + location.pathname.replace(/[^/]*$/, "") + "checkout.html" }) }).catch(() => {});
-  }, 600);
+    const lines = cartLines(); if (!$("#co") || $(".done") || !lines.length) return;
+    const body = JSON.stringify({ email, name: g("name"), phone: g("phone"), lines: lines.map((l) => ({ id: l.id, opt: l.opt || "", qty: l.qty })), items: lines.map((l) => ({ n: l.p.name + (l.opt ? " (" + l.opt + ")" : ""), q: l.qty })), total: lines.reduce((n, l) => n + (Number(l.p.price) || 0) * l.qty, 0), back: location.origin + location.pathname.replace(/[^/]*$/, "") + "checkout.html" });
+    if (body === recoSave.last) return; recoSave.last = body;
+    fetch(HOST.api + "/cart/" + encodeURIComponent(HOST.site), { method: "POST", headers: { "Content-Type": "application/json" }, keepalive: true, body }).catch(() => { recoSave.last = ""; });
+  };
+  if (now) send(); else recoT = setTimeout(send, 900);
 }
-document.addEventListener("focusout", (e) => { const t = e.target; if (t && t.closest && t.closest("#co") && /^(email|name|phone)$/.test(t.id)) recoSave(); });
+/* Saved while typing and again the moment the shopper leaves: closing the tab or going back never blurs a field, so waiting for that lost the cart. */
+document.addEventListener("input", (e) => { const t = e.target; if (t && t.closest && t.closest("#co") && /^(email|name|phone)$/.test(t.id)) recoSave(); });
+document.addEventListener("focusout", (e) => { const t = e.target; if (t && t.closest && t.closest("#co") && /^(email|name|phone)$/.test(t.id)) recoSave(true); });
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") recoSave(true); });
+addEventListener("pagehide", () => recoSave(true));
 (function recoBack() {
   const m = /[?&]rc=([a-f0-9]{32})(?:&|$)/.exec(location.search); if (!m || !HOST || !HOST.api || !HOST.site) return;
   const go = () => { const u = new URL(location.href); u.searchParams.delete("rc"); location.replace(u.href); };

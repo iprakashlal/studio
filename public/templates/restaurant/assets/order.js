@@ -668,9 +668,14 @@
     { const rc = /[?&]rc=([a-f0-9]{32})(?:&|$)/.exec(location.search), rb = be && be.cf && be.site ? be : null;
       if (rc && rb) { const u = new URL(location.href); u.searchParams.delete("rc"); history.replaceState(null, "", u.href);
         fetch(rb.cf + "/cart/" + encodeURIComponent(rb.site) + "/" + rc[1]).then((r) => (r.ok ? r.json() : null)).then((j) => { const ok = new Set(D.filter((x) => !x.d.soldOut).map((x) => x.id)); const ls = j && Array.isArray(j.lines) ? j.lines.filter((l) => l && ok.has(l.id) && +l.qty > 0) : []; if (ls.length) { cart = ls; save(); ui.drawer = "cart"; over(true); } }).catch(() => {}); }
-      let rt = 0; root.addEventListener("focusout", (e) => { const t = e.target; if (!t || !t.dataset || !/^(email|name|phone)$/.test(t.dataset.f || "") || !(C.recovery && C.recovery.on) || A.PREVIEW || !rb) return; clearTimeout(rt); rt = setTimeout(() => {
-        sync(); const em = String(ui.form.email || "").trim(); if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em) || !cart.length || ui.drawer === "done") return;
-        fetch(rb.cf + "/cart/" + encodeURIComponent(rb.site), { method: "POST", headers: { "Content-Type": "application/json" }, keepalive: true, body: JSON.stringify({ email: em, name: ui.form.name, phone: ui.form.phone, lines: cart, items: cart.map((l) => ({ n: l.name, q: l.qty })), total: bill().total, back: location.origin + location.pathname }) }).catch(() => {}); }, 600); }); }
+      /* Saved while typing and again the moment the shopper leaves: closing the tab or going back never blurs a field, so waiting for that lost the cart. */
+      if (!bind.reco) { bind.reco = true; let rt = 0, last = "";
+        const go = (now) => { clearTimeout(rt); const run = () => { if (!(C.recovery && C.recovery.on) || A.PREVIEW || !rb) return; sync(); const em = String(ui.form.email || "").trim(); if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em) || !cart.length || ui.drawer === "done") return;
+          const body = JSON.stringify({ email: em, name: ui.form.name, phone: ui.form.phone, lines: cart, items: cart.map((l) => ({ n: l.name, q: l.qty })), total: bill().total, back: location.origin + location.pathname }); if (body === last) return; last = body;
+          fetch(rb.cf + "/cart/" + encodeURIComponent(rb.site), { method: "POST", headers: { "Content-Type": "application/json" }, keepalive: true, body }).catch(() => { last = ""; }); }; if (now) run(); else rt = setTimeout(run, 900); };
+        const mine = (e) => { const t = e.target; return t && t.dataset && /^(email|name|phone)$/.test(t.dataset.f || ""); };
+        document.addEventListener("input", (e) => { if (mine(e)) go(); }); document.addEventListener("focusout", (e) => { if (mine(e)) go(true); });
+        document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") go(true); }); addEventListener("pagehide", () => go(true)); } }
     if (!bind.back) { bind.back = true; cameBack(); }
     // The Studio's preview: a sample cart (not saved) with the checkout open, so its look can be chosen.
     if (pvOf() && !bind.pv) { bind.pv = true; const x = D.find((d) => !d.d.soldOut && !d.need) || D[0]; if (!cart.length && x) cart.push({ key: x.id + "|||", id: x.id, name: x.d.name, diet: x.d.diet || "", variant: "", addons: [], note: "", qty: 2, unit: x.base }); if (pvOf() !== "account" && cart.length) { ui.drawer = "checkout"; over(true); } }

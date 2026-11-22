@@ -41,7 +41,7 @@
   function build(o, C) {
     var G = (C && C.gst) || {}, S = (C && C.settings) || {}, prods = (C && C.products) || [], t = o.t || {};
     var def = rate(G.defaultRate, 18), onTop = !!(+S.taxPercent && !S.taxIncluded && +t.taxAdd);
-    var seller = stateOf(G.state), buyer = stateOf((o.c || {}).state), intra = !seller || !buyer || seller[0] === buyer[0];
+    var seller = stateOf(G.state), buyer = stateOf((o.c || {}).state || (/^\d{2}[A-Z0-9]{13}$/i.test(String((o.c || {}).gstin || "").trim()) ? String(o.c.gstin).trim().slice(0, 2) : "")), intra = !seller || !buyer || seller[0] === buyer[0];
     var lines = (o.items || []).map(function (it) {
       var p = prods.filter(function (x) { return x.id === it.id; })[0] || {}, gross = r2(it.price * it.qty);
       var r = onTop ? +S.taxPercent : rate(p.gstRate, def), taxable = onTop ? gross : r2(gross / (1 + r / 100)), tax = onTop ? r2(gross * r / 100) : r2(gross - taxable);

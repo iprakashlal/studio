@@ -1,3 +1,4 @@
+import { restaurantLayout, RESTAURANT_GROUPS } from "./restaurantMenu";
 import { useEffect, useMemo, useRef, useState, type ReactNode, Fragment } from "react";
 import type { TemplateDef } from "../schema/types";
 import { Ctx, FieldView, openListItem, type EditorCtx } from "./fields";
@@ -36,7 +37,9 @@ export function Editor({ tpl, draft, version, onChange, upload, img, extras = []
   // A client Studio whose partner switched the festival overlay off doesn't show it at all.
   const noFestival = !site && studioHidden().has("festival");
   const shown = tpl.schema.filter((c) => (!c.showIf || c.showIf(draft)) && !cmsHide.includes(c.id) && !(site && c.siteIf && !cmsAllow.includes(c.siteIf)) && !(c.id === "festival" && noFestival)).map((c) => (site && c.site ? { ...c, label: c.site.label || c.label, group: c.site.group || c.group } : c));
-  const nav = applyMenu(shown, extras.filter((e) => !cmsHide.includes(e.id)), menu);
+  const nav0 = applyMenu(shown, extras.filter((e) => !cmsHide.includes(e.id)), menu);
+  const byOwnerDay = site && tpl.id === "restaurant" && !menu?.items?.length;
+  const nav = byOwnerDay ? restaurantLayout(nav0) : nav0;
   /** The menu entry showing a section (itself, or the one it was combined into). */
   const entryOf = (id: string) => nav.find((e) => e.from.includes(id));
   const scroller = useRef<HTMLDivElement>(null);
@@ -89,7 +92,7 @@ export function Editor({ tpl, draft, version, onChange, upload, img, extras = []
   }
   // The usual order of the headings (a custom admin menu keeps its own order).
   if (!menu?.items?.length) {
-    const ORDER = ["Design", "Pages", "Catalogue", "Selling", "Shop", "Forms & records", "Features", "Settings", "Project"];
+    const ORDER = byOwnerDay ? RESTAURANT_GROUPS : ["Design", "Pages", "Catalogue", "Selling", "Shop", "Forms & records", "Features", "Settings", "Project"];
     const at = (g: string) => { const i = ORDER.indexOf(g); return i < 0 ? ORDER.length : i; };
     groups.sort((a, b) => at(a.group) - at(b.group));
   }

@@ -282,15 +282,25 @@ function PartnerCard({ p, studio, index, nf, setNf, session, myEmail, studioToke
   /** Keeps the pasted token for their account on their database (or yours), then updates their Studio with it. */
   const saveTokenAndUpdate = () => run("app", async () => {
     const t = tok.trim(); if (!/^[\w-]{20,200}$/.test(t)) throw new Error("Paste the Cloudflare API token for their account (the “Edit Cloudflare Workers” template).");
-    let kept = false, why = "";
-    for (const d of [p.backend === "cloudflare" && p.api ? { api: p.api, studio: p.studio } : null, myDb].filter(Boolean) as { api: string; studio: string }[]) {
-      try { await cfxPut(d.api, d.studio, t); kept = true; break; } catch (e: any) { why = e?.message || why; }
+    if (!p.siteId) return;
+    // Try each database that could keep it (theirs, then yours); update through the one that kept it, not just any.
+    const dbs = [p.backend === "cloudflare" && p.api ? { api: p.api, studio: p.studio, mine: false } : null, myDb && myDb.api !== p.api ? { ...myDb, mine: true } : null, myDb && myDb.api === p.api ? { ...myDb, mine: true } : null].filter(Boolean) as { api: string; studio: string; mine: boolean }[];
+    let last = "";
+    const seen = new Set<string>();
+    for (const d of dbs) {
+      if (seen.has(d.api + "|" + d.studio)) continue; seen.add(d.api + "|" + d.studio);
+      try {
+        let acc = p.pagesAccount || "";
+        try { const r = await cfxPut(d.api, d.studio, t); if (!acc) acc = r.accounts.length === 1 ? r.accounts[0].id : ""; if (!acc && r.accounts.length) acc = r.accounts[0].id; }
+        catch (e: any) { if (!/own Cloudflare account/i.test(String(e?.message || ""))) throw e; /* its main token: nothing to keep */ }
+        if (!d.mine || !acc) { /* theirs, or this database's main account */ } else await cfxSite(d.api, d.studio, acc, p.siteId);
+        const pages = await pagesViaDb(d.api, "studio:" + d.studio, acc || undefined);
+        if (!pages) throw new Error("That database can't publish with the token.");
+        await deployClientApp(pages, p, "", await source(), partner, setBusy);
+        setTok(""); setTokOpen(false); toast(`${p.name}'s Studio is updated`); return;
+      } catch (e: any) { last = e?.message || last; }
     }
-    if (!kept) throw new Error(why || "Neither database could keep the token. Turn on Publish from any device in Settings → Hostings first.");
-    setTok(""); setTokOpen(false);
-    const pages = await clientAppViaDb(p, myDb);
-    if (!pages) throw new Error("The token is saved, but it doesn't reach their Studio's account. Check it was created while signed in to that account.");
-    await deployClientApp(pages, p, "", await source(), partner, setBusy); toast(`${p.name}'s Studio is updated`);
+    throw new Error((last || "Couldn't update.") + " Check that the token was created while signed in to the account their Studio lives on, and that Publish from any device is on for the database (Settings → Hostings).");
   });
   const notShared = index.projects.filter((m) => !p.shared.some((s) => s.project === m.id) && !m.partner);
 

@@ -278,7 +278,7 @@ const schema: Category[] = [
   },
   staticPagesCategory("page"),
   warrantyCategory("page"),
-  emailsCategory(false),
+  emailsCategory(false, true),
   featuresCategory(),
   festivalCategory(),
   i18nCategory(),

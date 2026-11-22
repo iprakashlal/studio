@@ -401,7 +401,7 @@ const schema: Category[] = [
         ] }] },
     ],
   },
-  emailsCategory(true),
+  emailsCategory(true, true),
   featuresCategory(),
   festivalCategory(),
   i18nCategory(),

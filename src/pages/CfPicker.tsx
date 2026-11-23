@@ -60,6 +60,7 @@ export function useCfAccount(studioToken: string, nf: Netlify | null | undefined
       if (!list.length) throw new Error("This token can't see any Cloudflare account. Create it while signed in to that account.");
       const next = [...more.filter((m) => m.token !== t), { token: t, accounts: list.map((a) => ({ id: a.id, name: a.name })) }];
       await saveMore(next); setAddTok(""); setAddOpen(false);
+      if (site) site.set(list[0].id); // used in a project: that project takes the account just added
       // Settings → Sites and hosting accounts keeps it on the Studio's database too, so every device sees it.
       dispatchEvent(new CustomEvent("studio:cf-account-added", { detail: t }));
     } catch (e: any) { setAddErr(e?.message || "Couldn't reach Cloudflare."); }
@@ -306,7 +307,8 @@ export function useCfAccount(studioToken: string, nf: Netlify | null | undefined
               {!known && <option value={cur}>The site's account (no token for it on this device yet)</option>}
               {allAccounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
             </select></label>}
-          <p className={known ? "text-emerald-300" : "text-amber-200"}>{known ? `Connected to ${allAccounts.find((a) => a.id === cur)!.name}.` : "This site is on a Cloudflare account this device has no token for. Add it in Settings → Hostings → Sites and hosting accounts."} <span className="text-ink-400">This site's own account, saved with this project only.</span></p>
+          <p className={known ? "text-emerald-300" : "text-amber-200"}>{known ? `Connected to ${allAccounts.find((a) => a.id === cur)!.name}.` : "This site is on a Cloudflare account this device has no token for. Add its token below."} <span className="text-ink-400">This site's own account, saved with this project only.</span></p>
+          {others}
         </>;
       })() : <>
         {accounts && accounts.length > 1 && <label className="flex flex-col gap-1"><span className="label">Cloudflare account</span><select className="input" aria-label="Cloudflare account" value={account} onChange={(e) => pickAccount(e.target.value)}>{accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select></label>}

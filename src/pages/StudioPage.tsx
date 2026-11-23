@@ -16,8 +16,8 @@ import { TEMPLATES } from "../schema";
 import { basePath, textToB64 } from "../lib/util";
 
 const SP = () => (window as any).SitePages as { article: (p: any, o: any) => string; missing: (o: any) => string; after: (p: any) => void };
-/** Reading colours for the Studio's dark look (assets/pages.js reads these). */
-const VARS = { "--text": "#EEF1F6", "--soft": "#A9B3C4", "--line": "#2E3A4C", "--c1": "#8099FF", "--r": "14px", "--fd": "inherit", "--fb": "inherit" } as CSSProperties;
+/** Reading colours follow the Studio's own theme (light or dark), so text is never pale on pale (assets/pages.js reads these). */
+const VARS = { "--text": "rgb(var(--ink-100, 238 241 246))", "--soft": "rgb(var(--ink-300, 169 179 196))", "--line": "rgb(var(--ink-600, 46 58 76))", "--c1": "rgb(var(--brand-500, 99 120 255))", "--r": "14px", "--fd": "inherit", "--fb": "inherit" } as CSSProperties;
 
 /** Links to the Studio's pages; `where` picks those switched on for the sign-in screen or the Studio's footer. */
 export function StudioPageLinks({ host, repo, where, className = "" }: { host: StudioHostCfg | null | undefined; repo?: Repo | null; where: "gate" | "footer"; className?: string }) {

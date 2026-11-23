@@ -174,3 +174,9 @@
 #notice-dock>*{pointer-events:auto}
 #notice-dock:empty{display:none}
 @media print{#notice-dock{display:none}}
+
+/* A Studio page's own heading block is a plain header, not a glass bar: no panel behind it, and the page keeps its own padding. */
+:root[data-layout="glass"] .sp header, :root[data-layout="glass"] .sp-head { background: none !important; -webkit-backdrop-filter: none !important; backdrop-filter: none !important; box-shadow: none !important; border-color: var(--sp-line) !important; border-top: 0 !important; border-left: 0 !important; border-right: 0 !important; border-radius: 0 !important; color: inherit !important; }
+.sp { color: var(--text); }
+.sp-body, .sp-body p, .sp-body li, .sp-body td, .sp-body th, .sp-body h2, .sp-body h3, .sp-head h1 { color: var(--text); }
+.sp-sub, .sp-date, .sp-crumbs { color: var(--soft); }

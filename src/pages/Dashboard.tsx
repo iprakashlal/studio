@@ -34,7 +34,9 @@ function ProjectMark({ studio, p, acc }: { studio: Studio; p: ProjectMeta; acc: 
     if (studio.repo.demo) return; let on = true, url = "";
     (async () => {
       try {
-        const c = await studio.loadContent(p.id), B = c?.brand || {}, f = String((p.template === "portfolio" ? B.icon || B.logo : B.logo || B.icon) || "");
+        const c = await studio.loadContent(p.id), B = c?.brand || {}, raw = p.template === "portfolio" ? B.icon || B.logo : B.logo || B.icon;
+        // An uploaded picture is saved as { path: "assets/uploads/…", alt }; a plain address is also accepted.
+        const f = typeof raw === "string" ? raw : String(raw?.path || raw?.url || raw?.src || "");
         if (!f) { markCache.set(key, ""); return; }
         if (/^(https?:|data:image\/)/.test(f)) url = f; else { const b = await studio.assetBlob(p.id, f); if (b) {
             // A stored file can come back typed as a generic download: give it the picture type its name says, so the page can draw it.

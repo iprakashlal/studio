@@ -40,7 +40,7 @@ export function emailsCategory(form: boolean, orders = false): Category {
       ] },
       ...(form ? [
         { title: "Enquiry email to you", fields: [
-          { t: "note", text: "Sent to you for each enquiry when “Also email me each enquiry” is on (Enquiry form). The visitor's answers are listed between the opening and closing lines." },
+          { t: "note", text: "Sent to you for each enquiry when “Email me each enquiry” is on (Enquiry form). The visitor's answers are listed between the opening and closing lines." },
           { t: "text", path: "contact.form.notifySubject", label: "Subject", ph: "New enquiry from {name}" },
           { t: "textarea", path: "emails.enquiry.intro", label: "Opening line", rows: 2, hint: "Standard: New enquiry from the {site} website." },
           { t: "textarea", path: "emails.enquiry.footer", label: "Closing line", rows: 2, hint: "Standard: It is also saved under Enquiries in the site's admin page." },

@@ -36,7 +36,11 @@ function ProjectMark({ studio, p, acc }: { studio: Studio; p: ProjectMeta; acc: 
       try {
         const c = await studio.loadContent(p.id), B = c?.brand || {}, f = String((p.template === "portfolio" ? B.icon || B.logo : B.logo || B.icon) || "");
         if (!f) { markCache.set(key, ""); return; }
-        if (/^(https?:|data:image\/)/.test(f)) url = f; else { const b = await studio.assetBlob(p.id, f); if (b && /^image\//.test(b.type || "image/png")) url = URL.createObjectURL(b); }
+        if (/^(https?:|data:image\/)/.test(f)) url = f; else { const b = await studio.assetBlob(p.id, f); if (b) {
+            // A stored file can come back typed as a generic download: give it the picture type its name says, so the page can draw it.
+            const ext = (f.split("?")[0].match(/\.([a-z0-9]+)$/i)?.[1] || "png").toLowerCase(), mime = { svg: "image/svg+xml", jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", webp: "image/webp", gif: "image/gif", avif: "image/avif", ico: "image/x-icon" }[ext] || "image/png";
+            url = URL.createObjectURL(/^image\//.test(b.type) ? b : new Blob([b], { type: mime }));
+          } }
         markCache.set(key, url); if (on) setSrc(url);
       } catch { /* initials stay */ }
     })();
@@ -164,6 +168,16 @@ export function Dashboard({ studio, index, onIndex, token, hid = () => false, ma
             return (
               <article key={p.id} style={{ "--acc": acc } as React.CSSProperties} className="card group relative flex flex-col overflow-hidden rounded-3xl transition duration-200 hover:-translate-y-1 hover:border-ink-500 hover:shadow-[0_22px_44px_-22px_var(--acc)]">
                 <div className="h-1.5" style={{ background: `linear-gradient(90deg, ${acc}, ${acc}55)` }} />
+                {/* Live site, Duplicate and Delete slide down from the top edge into the empty middle of the header row when the card is hovered, and back up after. */}
+                <div className="pointer-events-none absolute inset-x-0 top-[26px] z-20 flex justify-center">
+                  <span className="pointer-events-auto flex items-center rounded-full [&_.btn]:!px-2 [&_.btn]:!py-1 [&_.btn]:!text-[12px] border border-ink-700 bg-ink-900/95 px-1 py-0.5 shadow-lg backdrop-blur transition duration-300 ease-out [@media(hover:hover)]:-translate-y-14 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-focus-within:translate-y-0 [@media(hover:hover)]:group-focus-within:opacity-100 [@media(hover:hover)]:group-hover:translate-y-0 [@media(hover:hover)]:group-hover:opacity-100">
+                  {p.host ? <a className="btn btn-ghost btn-sm" href={siteAddress(p.host)} target="_blank" rel="noopener">Live site ↗</a> : p.publish && <a className="btn btn-ghost btn-sm" href={`https://${p.publish.owner}.github.io/${p.publish.repo === `${p.publish.owner}.github.io` ? "" : p.publish.repo + "/"}`} target="_blank" rel="noopener">Live site ↗</a>}
+                  {!hid("duplicate") && !hid("new") && !hid("tpl-" + p.template) && room(p.template) && <button className="btn btn-ghost btn-sm" disabled={!!busy} onClick={() => run("dup" + p.id, () => studio.duplicate(p.id, `${p.name} (copy)`), "Project duplicated")}>{busy === "dup" + p.id ? "Copying…" : "Duplicate"}</button>}
+                  {!hid("delete") && <button className="btn btn-ghost btn-sm text-red-300 hover:text-red-200" disabled={!!busy} onClick={async () => {
+                    if (await confirm(`Delete “${p.name}”?`, "This removes the project, its images and export snapshots from the Studio. Sites you already exported or published are not affected.", "Delete", true)) run("del" + p.id, () => studio.remove(p.id), "Project deleted");
+                  }}>Delete</button>}
+                </span>
+                </div>
                 <div className="flex flex-1 flex-col gap-4 p-5">
                   <div className="flex flex-wrap items-center gap-1.5 text-xs">
                     {c && <span className="inline-flex items-center gap-1.5 truncate text-ink-400"><span className="h-2 w-2 rounded-full" style={{ background: c.color }} />{c.name}</span>}
@@ -195,16 +209,6 @@ export function Dashboard({ studio, index, onIndex, token, hid = () => false, ma
                     <p className="text-xs text-ink-400">Edited <b className="font-semibold text-ink-200">{timeAgo(p.updatedAt)}</b> · Export <b className="font-semibold text-ink-200">{last ? `v${last.version} · ${timeAgo(last.at)}` : "not yet"}</b></p>
                   </div>
                   <div className="relative z-10 border-t border-ink-700/70 pt-4">
-                    {/* Live site, Duplicate and Delete rise from behind the main buttons when the card is hovered, and sink back after. */}
-                    <div className="pointer-events-none absolute inset-x-0 bottom-full z-0 flex justify-center pb-2">
-                      <span className="pointer-events-auto flex items-center gap-0.5 rounded-full border border-ink-700 bg-ink-900/95 px-1.5 py-1 shadow-lg backdrop-blur transition duration-300 ease-out [@media(hover:hover)]:translate-y-8 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-focus-within:translate-y-0 [@media(hover:hover)]:group-focus-within:opacity-100 [@media(hover:hover)]:group-hover:translate-y-0 [@media(hover:hover)]:group-hover:opacity-100">
-                      {p.host ? <a className="btn btn-ghost btn-sm" href={siteAddress(p.host)} target="_blank" rel="noopener">Live site ↗</a> : p.publish && <a className="btn btn-ghost btn-sm" href={`https://${p.publish.owner}.github.io/${p.publish.repo === `${p.publish.owner}.github.io` ? "" : p.publish.repo + "/"}`} target="_blank" rel="noopener">Live site ↗</a>}
-                      {!hid("duplicate") && !hid("new") && !hid("tpl-" + p.template) && room(p.template) && <button className="btn btn-ghost btn-sm" disabled={!!busy} onClick={() => run("dup" + p.id, () => studio.duplicate(p.id, `${p.name} (copy)`), "Project duplicated")}>{busy === "dup" + p.id ? "Copying…" : "Duplicate"}</button>}
-                      {!hid("delete") && <button className="btn btn-ghost btn-sm text-red-300 hover:text-red-200" disabled={!!busy} onClick={async () => {
-                        if (await confirm(`Delete “${p.name}”?`, "This removes the project, its images and export snapshots from the Studio. Sites you already exported or published are not affected.", "Delete", true)) run("del" + p.id, () => studio.remove(p.id), "Project deleted");
-                      }}>Delete</button>}
-                    </span>
-                    </div>
 <div className="relative z-10 flex flex-wrap items-center gap-2 bg-inherit">
                     <a href={`#/p/${p.id}`} className="btn btn-pri btn-sm">Open</a>
                     <button type="button" className="btn btn-sm" onClick={() => setQuick({ id: p.id, kind: "setup" })}>Quick Setup</button>

@@ -94,7 +94,7 @@ const schema: Category[] = [
     ],
   },
   {
-    id: "food", label: "Menu", group: "Pages", sub: "Sections", desc: "Your food and drinks menu: sections, dishes, prices, diet marks, spice level, allergens and photos.",
+    id: "food", label: "Menu", group: "Pages", sub: "Sections", desc: "Your food and drinks menu: sections, dishes, prices, diet marks, spice level, allergens and photos, and counting stock.",
     cards: [
       head("food"),
       { title: "How the menu shows", fields: [
@@ -126,6 +126,14 @@ const schema: Category[] = [
                 { t: "list", path: "kinds", label: "Varieties with their own prices", max: 12, title: (it) => `${it.label || "Variety"}${it.price ? " · " + it.price : ""}`, add: () => ({ label: "", price: "", posId: "" }), item: [g2({ t: "text", path: "label", label: "Variety", ph: "Butter" }, { t: "text", path: "price", label: "Price", ph: "49" }), { t: "text", path: "posId", label: "Petpooja variation ID (only with Petpooja)" }] },
                 { t: "note", text: "For the same dish made in different ways, such as Oil, Butter and Cheese. The Menu lists each variety with its price, and on Order now the guest has to choose one before the price shows and the dish can be added. The dish's own Price box is not used then. If the dish also has sizes, the first size costs the variety's price and each bigger size adds its difference." }] },
               { t: "text", path: "posId", label: "Petpooja item ID", hint: "Only if your orders go to Petpooja (Restaurant backend → Petpooja): the item's ID in your Petpooja menu. An order with a dish that has no ID is kept here but not sent to Petpooja." }] }] }] },
+      { title: "Inventory", fields: [
+        { t: "toggle", path: "inventory.on", label: "Count stock (dishes you give a quantity sell out by themselves)" },
+        { t: "when", path: "inventory.on", is: "true", fields: [
+          { t: "text", path: "inventory.alertTo", label: "Send low-stock emails to (optional)", ph: "you@example.com", hint: "Empty uses the address new orders go to." },
+          { t: "toggle", path: "inventory.alert", def: true, label: "Email me when a dish runs low or sells out" },
+        ] },
+        { t: "note", text: "Enter the quantities under Dish stock (in the menu, under Menu & dishes). Only dishes you give a quantity are counted (for example the day's specials); the rest sell without a limit, and “Sold out today” on each dish still works as before. Counting runs on the site's own Cloudflare database, so the site must be hosted there and published once after switching this on." },
+      ] },
     ],
   },
   {
@@ -176,11 +184,22 @@ const schema: Category[] = [
       { t: "list", path: "press.logos", max: 12, title: (it) => it.name || "Name", add: () => ({ name: "New mention", logo: null }), item: [{ t: "text", path: "name", label: "Name" }, { t: "image", path: "logo", label: "Logo (optional)", hint: "Only use a logo you are allowed to show. Without one, the name shows in your headings font." }] }] }],
   },
   {
-    id: "testimonials", label: "Reviews", group: "Pages", sub: "Sections", desc: "What guests say.",
+    id: "testimonials", label: "Reviews", group: "Pages", sub: "Sections", desc: "What guests say: quotes on the site, Google reviews and the reviews customers leave on dishes.",
     cards: [head2("testimonials"),
       { title: "Reviews from Google", studio: true, fields: [{ t: "googleReviews" }] },
       { title: "Reviews", fields: [{ t: "list", path: "testimonials.items", max: 12, title: (it) => it.name || "Review", add: () => ({ quote: "", name: "", role: "", company: "", rating: "5" }),
-        item: [{ t: "textarea", path: "quote", label: "What they said", rows: 3 }, g2({ t: "text", path: "name", label: "Name" }, { t: "select", path: "rating", label: "Stars", options: [{ value: "", label: "None" }, { value: "5", label: "★★★★★" }, { value: "4", label: "★★★★" }, { value: "3", label: "★★★" }] })] }] }],
+        item: [{ t: "textarea", path: "quote", label: "What they said", rows: 3 }, g2({ t: "text", path: "name", label: "Name" }, { t: "select", path: "rating", label: "Stars", options: [{ value: "", label: "None" }, { value: "5", label: "★★★★★" }, { value: "4", label: "★★★★" }, { value: "3", label: "★★★" }] })] }] },
+      { title: "Dish reviews (online ordering)", fields: [
+        { t: "toggle", path: "reviews.on", label: "Let customers review dishes (stars and a few words, on each dish page)" },
+        { t: "when", path: "reviews.on", is: "true", fields: [
+          { t: "toggle", path: "reviews.auto", label: "Show reviews straight away (off: you approve each one first)" },
+          { t: "toggle", path: "reviews.trustBuyers", label: "…but only approve-first for people who haven't ordered it (a buyer's review shows straight away)" },
+          { t: "toggle", path: "reviews.buyersOnly", label: "Only people who ordered it can review it (matched by the email they ordered with)" },
+          g2({ t: "toggle", path: "reviews.alert", def: true, label: "Email me when a review needs approving" }, { t: "text", path: "reviews.alertTo", label: "Send those emails to (optional)", ph: "you@example.com", hint: "Empty uses the address new orders go to." }),
+        ] },
+        { t: "note", text: "Reviews, approving, hiding and replying are under Guest reviews (in the menu, under Orders & guests). Only the reviewer's first name and last initial are shown, never the email address. A reviewer's email decides “Verified buyer”: it must match the email on an order for that item. It runs on the site's own Cloudflare database, so the site must be hosted there and published once after this is switched on." },
+      ] }
+    ],
   },
   {
     id: "order", label: "Order online", group: "Pages", sub: "Sections", desc: "Links to where guests can order for pickup or delivery, plus call and WhatsApp.",
@@ -207,45 +226,16 @@ const schema: Category[] = [
         { t: "toggle", path: "ordering.schedule", label: "Let guests order ahead for a later time" },
         { t: "when", path: "ordering.schedule", is: "true", fields: [g2({ t: "number", path: "ordering.slotMins", label: "Time slots every (minutes)", min: 10, step: 5 }, { t: "number", path: "ordering.daysAhead", label: "How many days ahead (0 = today only)", min: 0, step: 1 })] },
         { t: "note", text: "Times follow your Opening hours. While you're closed, guests can only order ahead (or not at all, if ordering ahead is off)." }] },
-            { title: "Reviews", fields: [
-        { t: "toggle", path: "reviews.on", label: "Let customers review dishes (stars and a few words, on each dish page)" },
-        { t: "when", path: "reviews.on", is: "true", fields: [
-          { t: "toggle", path: "reviews.auto", label: "Show reviews straight away (off: you approve each one first)" },
-          { t: "toggle", path: "reviews.trustBuyers", label: "…but only approve-first for people who haven't ordered it (a buyer's review shows straight away)" },
-          { t: "toggle", path: "reviews.buyersOnly", label: "Only people who ordered it can review it (matched by the email they ordered with)" },
-          g2({ t: "toggle", path: "reviews.alert", def: true, label: "Email me when a review needs approving" }, { t: "text", path: "reviews.alertTo", label: "Send those emails to (optional)", ph: "you@example.com", hint: "Empty uses the address new orders go to." }),
-        ] },
-        { t: "note", text: "Reviews, approving, hiding and replying are under Reviews (in the menu, under Selling). Only the reviewer's first name and last initial are shown, never the email address. A reviewer's email decides “Verified buyer”: it must match the email on an order for that item. It runs on the site's own Cloudflare database, so the site must be hosted there and published once after this is switched on." },
-      ] },
-      { title: "Abandoned carts", fields: [
-        { t: "toggle", path: "recovery.on", label: "Remind shoppers who leave their cart (they must have typed their email at checkout)" },
-        { t: "when", path: "recovery.on", is: "true", fields: [
-          g2({ t: "number", path: "recovery.after", label: "First reminder after (hours)", min: 1, step: 1, hint: "Empty means 1." }, { t: "number", path: "recovery.again", label: "Second reminder after (hours)", min: 0, step: 1, hint: "Empty means 24. 0 sends only one." }),
-          { t: "text", path: "recovery.subject", label: "Email subject", ph: "You left something in your cart at {shop}" },
-          { t: "textarea", path: "recovery.body", label: "Email text", hint: "Use {name}, {items}, {total}, {shop} and {offer}. The button back to the cart is added for you. Empty uses the standard wording." },
-          g2({ t: "text", path: "recovery.offer", label: "Offer line (optional)", ph: "Use code COMEBACK10 for 10% off" }, { t: "text", path: "recovery.button", label: "Button label", ph: "Back to my cart" }),
-          { t: "text", path: "recovery.url", label: "Address of this page (optional)", ph: "https://yourshop.com/checkout.html", hint: "Where the button goes. Empty uses the page the shopper was on." },
-          { t: "toggle", path: "recovery.auto", def: true, label: "Send reminders by themselves (off: only when you press “Remind now”)" },
-        ] },
-        { t: "note", text: "Carts and the Remind now button are under Abandoned carts (in the menu, under Selling). Every email has a link to stop reminders, an order from the same email closes the cart, and a site sends at most 50 reminders a day. Reminders are sent while the site is being visited, so a very quiet site may send them a little late. It runs on the site's own Cloudflare database, so the site must be hosted there and published once after this is switched on." },
-      ] },
-{ title: "Inventory", fields: [
-        { t: "toggle", path: "inventory.on", label: "Count stock (dishes you give a quantity sell out by themselves)" },
-        { t: "when", path: "inventory.on", is: "true", fields: [
-          { t: "text", path: "inventory.alertTo", label: "Send low-stock emails to (optional)", ph: "you@example.com", hint: "Empty uses the address new orders go to." },
-          { t: "toggle", path: "inventory.alert", def: true, label: "Email me when a dish runs low or sells out" },
-        ] },
-        { t: "note", text: "Enter the quantities under Inventory (in the menu, under Selling). Only dishes you give a quantity are counted (for example the day's specials); the rest sell without a limit, and “Sold out today” on each dish still works as before. Counting runs on the site's own Cloudflare database, so the site must be hosted there and published once after switching this on." },
-      ] },
     ],
   },
   {
     id: "delivery", label: "Delivery & charges", group: "Selling", sub: "Online ordering", desc: "Where you deliver, what it costs, the minimum order, packing and tax used in the cart and at checkout.",
     cards: [
-      { title: "Delivery area and charges", fields: [g3({ t: "number", path: "ordering.minOrder", label: "Minimum order", min: 0, step: 10 }, { t: "number", path: "ordering.deliveryFee", label: "Delivery fee", min: 0, step: 5 }, { t: "number", path: "ordering.freeAbove", label: "Free delivery above (0 = never)", min: 0, step: 50 }),
+      { title: "Delivery area and fees", fields: [g3({ t: "number", path: "ordering.minOrder", label: "Minimum order", min: 0, step: 10 }, { t: "number", path: "ordering.deliveryFee", label: "Delivery fee", min: 0, step: 5 }, { t: "number", path: "ordering.freeAbove", label: "Free delivery above (0 = never)", min: 0, step: 50 }),
         { t: "textarea", path: "ordering.areas", label: "Where you deliver: one PIN code or area per line (empty = anywhere)", rows: 4 },
         { t: "note", text: "Add “= fee” for an area with its own delivery fee, for example “411001 = 30” or “Koregaon Park = 0”. An address outside the list can't be ordered to; the guest is offered pickup." },
-        g2({ t: "text", path: "ordering.areaNote", label: "Message for an address you don't deliver to", ph: "Sorry, we don't deliver there yet. Choose Pick up, or call us." }, { t: "toggle", path: "ordering.askPin", label: "Ask for the PIN code" }),
+        g2({ t: "text", path: "ordering.areaNote", label: "Message for an address you don't deliver to", ph: "Sorry, we don't deliver there yet. Choose Pick up, or call us." }, { t: "toggle", path: "ordering.askPin", label: "Ask for the PIN code" })] },
+      { title: "Packing, tax and rounding", fields: [
         g3({ t: "number", path: "ordering.packing", label: "Packing charge per order", min: 0, step: 5 }, { t: "number", path: "ordering.taxPercent", label: "Tax (%)", min: 0, step: 0.5 }, { t: "text", path: "ordering.taxLabel", label: "Tax name", ph: "GST" }),
         g2({ t: "toggle", path: "ordering.taxIncluded", label: "Menu prices already include tax" }, { t: "toggle", path: "ordering.roundOff", label: "Round the total to a whole number" })] },
     ],
@@ -261,7 +251,7 @@ const schema: Category[] = [
     ],
   },
   {
-    id: "checkout", label: "Checkout", group: "Selling", sub: "Online ordering", desc: "What guests are asked in the cart and at checkout, and the GST invoice they can download.",
+    id: "checkout", label: "Checkout", group: "Selling", sub: "Online ordering", desc: "What guests are asked in the cart and at checkout, reminders for abandoned carts, and the GST invoice they can download.",
     cards: [
       { title: "Cart extras", fields: [g2({ t: "toggle", path: "ordering.tips", label: "Offer a tip for the team" }, { t: "text", path: "ordering.tipOptions", label: "Tip amounts", ph: "10, 20, 30" }),
         g3({ t: "toggle", path: "ordering.cutlery", label: "Ask whether to send cutlery" }, { t: "toggle", path: "ordering.dishNotes", label: "Special instructions per dish" }, { t: "toggle", path: "ordering.notes", label: "A note for the kitchen" }),
@@ -274,6 +264,18 @@ const schema: Category[] = [
         { t: "when", path: "ordering.verifyEmail", is: "true", fields: [{ t: "note", text: "The guest is emailed a 6-digit code and enters it at checkout; the order then shows “Email: verified by a code” under Purchased orders. This works on a site hosted on Cloudflare, and the codes are sent by that database's own email (Resend). While its sender is still in test mode, codes can't reach guests: orders are then let through and marked “not verified”, so nobody is locked out. Send from your own domain (hosting window → Email settings) to verify everyone. An email address is checked only when one is given: choose Email or Both above to ask every guest for it (with Standard, also switch on “Ask for an email address” under Cart extras)." }] },
         { t: "note", text: "The other one is still shown, marked optional. Where guests verify their number on WhatsApp, or orders go to Petpooja, keep the mobile number required: verifying always asks for it, and Petpooja expects one." }] },
       // The GST invoice (details, style, layout, preview and wording) is part of checkout.
+      { title: "Abandoned carts", fields: [
+        { t: "toggle", path: "recovery.on", label: "Remind shoppers who leave their cart (they must have typed their email at checkout)" },
+        { t: "when", path: "recovery.on", is: "true", fields: [
+          g2({ t: "number", path: "recovery.after", label: "First reminder after (hours)", min: 1, step: 1, hint: "Empty means 1." }, { t: "number", path: "recovery.again", label: "Second reminder after (hours)", min: 0, step: 1, hint: "Empty means 24. 0 sends only one." }),
+          { t: "text", path: "recovery.subject", label: "Email subject", ph: "You left something in your cart at {shop}" },
+          { t: "textarea", path: "recovery.body", label: "Email text", hint: "Use {name}, {items}, {total}, {shop} and {offer}. The button back to the cart is added for you. Empty uses the standard wording." },
+          g2({ t: "text", path: "recovery.offer", label: "Offer line (optional)", ph: "Use code COMEBACK10 for 10% off" }, { t: "text", path: "recovery.button", label: "Button label", ph: "Back to my cart" }),
+          { t: "text", path: "recovery.url", label: "Address of this page (optional)", ph: "https://yourshop.com/checkout.html", hint: "Where the button goes. Empty uses the page the shopper was on." },
+          { t: "toggle", path: "recovery.auto", def: true, label: "Send reminders by themselves (off: only when you press “Remind now”)" },
+        ] },
+        { t: "note", text: "Carts and the Remind now button are under Abandoned carts (in the menu, under Orders & guests). Every email has a link to stop reminders, an order from the same email closes the cart, and a site sends at most 50 reminders a day. Reminders are sent while the site is being visited, so a very quiet site may send them a little late. It runs on the site's own Cloudflare database, so the site must be hosted there and published once after this is switched on." },
+      ] },
       ...gstCategory("restaurant").cards,
     ],
   },
@@ -340,7 +342,7 @@ const schema: Category[] = [
     ],
   },
   {
-    id: "contact", label: "Address & contact", group: "Pages", desc: "Where you are, how to reach you and the map. The booking form is under Forms & records.",
+    id: "contact", label: "Address & contact", group: "Pages", desc: "Where you are, how to reach you and the map. The booking form is under Hours & contact → Booking form.",
     cards: [
       head("contact"),
       { title: "Details", fields: [{ t: "textarea", path: "contact.address", label: "Address", rows: 2 },

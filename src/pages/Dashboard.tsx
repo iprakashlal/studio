@@ -144,42 +144,45 @@ export function Dashboard({ studio, index, onIndex, token, hid = () => false, ma
   };
 
   const card = (p: ProjectMeta) => {
-            const c = catById(p.category), t = TEMPLATES[p.template], st = STATUS[p.status], last = p.exports[0];
+            const c = catById(p.category), t = TEMPLATES[p.template], st = STATUS[p.status], last = p.exports[0], acc = /^#[0-9a-f]{6}$/i.test(c?.color || "") ? c!.color : "#5B7CFF";
             return (
-              <article key={p.id} className="card group relative flex flex-col overflow-hidden rounded-2xl transition hover:-translate-y-0.5 hover:border-ink-500 hover:shadow-lg">
-                <div className="h-1.5" style={{ background: c?.color || "#2E3A4C" }} />
-                <div className="flex flex-1 flex-col gap-3 p-4">
+              <article key={p.id} style={{ "--acc": acc } as React.CSSProperties} className="card group relative flex flex-col overflow-hidden rounded-3xl transition duration-200 hover:-translate-y-1 hover:border-ink-500 hover:shadow-[0_22px_44px_-22px_var(--acc)]">
+                <div className="h-1.5" style={{ background: `linear-gradient(90deg, ${acc}, ${acc}55)` }} />
+                <div className="flex flex-1 flex-col gap-4 p-5">
                   <div className="flex flex-wrap items-center gap-1.5 text-xs">
                     {c && <span className="inline-flex items-center gap-1.5 truncate text-ink-400"><span className="h-2 w-2 rounded-full" style={{ background: c.color }} />{c.name}</span>}
-                    <span className={`chip ml-auto ${st.cls}`}>{st.label}</span>
+                    <span className={`chip ml-auto gap-1.5 ${st.cls}`}><span className="h-1.5 w-1.5 rounded-full bg-current" />{st.label}</span>
                     {(index.partners || []).filter((x) => x.shared.some((y) => y.project === p.id)).map((x) => <span key={x.id} className="chip border-brand-400/50 text-brand-200" title={`Shared with ${x.name}'s Studio; sync it from Settings → Studio Partners.`}>Shared with {x.name}</span>)}
                     {p.partner && <span className="chip border-brand-400/50 text-brand-200" title="Shared with you by your Studio Partner; changes are kept in step with them.">Shared by {p.partner.name}</span>}
                     {live[p.id] === "checking" && <span className="chip border-ink-600 text-ink-400">Checking live site…</span>}
                     {live[p.id] === "pulled" && <span className="chip border-emerald-400/60 text-emerald-200" title="Edits made in the site's own CMS were copied into this project.">Updated from live site</span>}
                     {live[p.id] === "conflict" && <span className="chip border-amber-400/60 text-amber-200" title="The site's own CMS and the Studio both changed the content. Open the project to choose which to keep.">Live site edited · review</span>}
                   </div>
-                  <div>
-                    <a href={`#/p/${p.id}`} className="after:absolute after:inset-0">
-                      <h2 className="font-display text-lg font-extrabold leading-tight">{p.name}</h2>
-                    </a>
-                    <p className="mt-1 flex flex-wrap items-center gap-x-1.5 text-[13px] text-ink-400">
-                      <span>{t?.name || p.template} · {t?.kind}</span>
-                      <span aria-hidden>·</span>
-                      {p.client.trim() ? <button type="button" className="relative z-10 font-semibold text-ink-200 underline-offset-2 hover:underline" title={`Show only ${p.client.trim()}'s sites`} onClick={() => setClient(p.client.trim())}><span className="font-normal text-ink-400">Client </span>{p.client.trim()}</button> : <span>No client set</span>}
-                    </p>
-                    {p.summary && <p className="mt-1 line-clamp-2 text-[13px] text-ink-400">{p.summary}</p>}
+                  <div className="flex items-start gap-3">
+                    <span aria-hidden className="grid h-11 w-11 flex-none place-items-center rounded-2xl font-display text-[15px] font-extrabold" style={{ background: `${acc}26`, color: acc }}>{(p.name.trim().match(/\b[\p{L}\p{N}]/gu) || ["•"]).slice(0, 2).join("").toUpperCase()}</span>
+                    <div className="min-w-0 flex-1">
+                      <a href={`#/p/${p.id}`} className="after:absolute after:inset-0">
+                        <h2 className="truncate font-display text-xl font-extrabold leading-tight tracking-tight">{p.name}</h2>
+                      </a>
+                      <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-[13px] text-ink-400">
+                        <span>{t?.name || p.template} · {t?.kind}</span>
+                        <span aria-hidden>·</span>
+                        {p.client.trim() ? <button type="button" className="relative z-10 font-semibold text-ink-200 underline-offset-2 hover:underline" title={`Show only ${p.client.trim()}'s sites`} onClick={() => setClient(p.client.trim())}><span className="font-normal text-ink-400">Client </span>{p.client.trim()}</button> : <span>No client set</span>}
+                      </p>
+                    </div>
                   </div>
+                  {p.summary && <p className="-mt-1 line-clamp-2 text-[13px] text-ink-400">{p.summary}</p>}
                   <CardNumbers p={p} onOverview={() => setQuick({ id: p.id, kind: "overview" })} onPublish={() => setQuick({ id: p.id, kind: "setup", tab: "publish" })} />
                   {fb[p.id] && <Feedback s={fb[p.id]} id={p.id} />}
                   <div className="mt-auto flex flex-col gap-2.5">
                     <PayNote id={"p:" + p.id} pay={p.pay} onSave={async (pay) => onIndex(await studio.savePay(p.id, pay))} />
                     <p className="text-xs text-ink-400">Edited <b className="font-semibold text-ink-200">{timeAgo(p.updatedAt)}</b> · Export <b className="font-semibold text-ink-200">{last ? `v${last.version} · ${timeAgo(last.at)}` : "not yet"}</b></p>
                   </div>
-                  <div className="relative z-10 flex flex-wrap items-center gap-1.5 border-t border-ink-700 pt-3">
+                  <div className="relative z-10 flex flex-wrap items-center gap-2 border-t border-ink-700/70 pt-4">
                     <a href={`#/p/${p.id}`} className="btn btn-pri btn-sm">Open</a>
                     <button type="button" className="btn btn-sm" onClick={() => setQuick({ id: p.id, kind: "setup" })}>Quick Setup</button>
                     <button type="button" className="btn btn-sm" onClick={() => setQuick({ id: p.id, kind: "overview" })}>Quick Overview</button>
-                    <span className="ml-auto flex items-center gap-0.5">
+                    <span className="ml-auto flex items-center gap-0.5 opacity-75 transition group-hover:opacity-100 focus-within:opacity-100">
                       {p.host ? <a className="btn btn-ghost btn-sm" href={siteAddress(p.host)} target="_blank" rel="noopener">Live site ↗</a> : p.publish && <a className="btn btn-ghost btn-sm" href={`https://${p.publish.owner}.github.io/${p.publish.repo === `${p.publish.owner}.github.io` ? "" : p.publish.repo + "/"}`} target="_blank" rel="noopener">Live site ↗</a>}
                       {!hid("duplicate") && !hid("new") && !hid("tpl-" + p.template) && room(p.template) && <button className="btn btn-ghost btn-sm" disabled={!!busy} onClick={() => run("dup" + p.id, () => studio.duplicate(p.id, `${p.name} (copy)`), "Project duplicated")}>{busy === "dup" + p.id ? "Copying…" : "Duplicate"}</button>}
                       {!hid("delete") && <button className="btn btn-ghost btn-sm text-red-300 hover:text-red-200" disabled={!!busy} onClick={async () => {

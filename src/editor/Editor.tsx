@@ -41,7 +41,10 @@ export function Editor({ tpl, draft, version, onChange, upload, img, extras = []
   const shown = tpl.schema.filter((c) => (!c.showIf || c.showIf(draft)) && !cmsHide.includes(c.id) && !(site && c.siteIf && !cmsAllow.includes(c.siteIf)) && !(c.id === "festival" && noFestival)).map((c) => (site && c.site ? { ...c, label: c.site.label || c.label, group: c.site.group || c.group } : c));
   const nav0 = applyMenu(shown, extras.filter((e) => !cmsHide.includes(e.id)), menu);
   const byOwnerDay = !menu?.items?.length ? MENU_LAYOUTS[tpl.id] : undefined;
-  const nav = byOwnerDay ? applyLayout(byOwnerDay, nav0) : nav0;
+  const nav1 = byOwnerDay ? applyLayout(byOwnerDay, nav0) : nav0;
+  // The admin (in the Studio and on the site) keeps the setup that makes it work (sign-in people, email, codes, payments) together in one place, each once.
+  const ADV = ["people", "connections", "payments"];
+  const nav: typeof nav1 = !menu?.items?.length ? nav1.map((e) => (ADV.includes(e.id) ? { ...e, group: "Advanced setup", sub: undefined } : e)) : nav1;
   /** The menu entry showing a section (itself, or the one it was combined into). */
   const entryOf = (id: string) => nav.find((e) => e.from.includes(id));
   const scroller = useRef<HTMLDivElement>(null);
@@ -94,9 +97,11 @@ export function Editor({ tpl, draft, version, onChange, upload, img, extras = []
   }
   // The usual order of the headings (a custom admin menu keeps its own order).
   if (!menu?.items?.length) {
-    const ORDER = byOwnerDay ? byOwnerDay.groups : ["Design", "Pages", "Catalogue", "Selling", "Shop", "Forms & records", "Features", "Settings", "Project"];
+    const base = byOwnerDay ? byOwnerDay.groups : ["Design", "Pages", "Catalogue", "Selling", "Shop", "Forms & records", "Features", "Settings", "Project"];
+    const ORDER = base.flatMap((g) => (g === "Settings" ? ["Advanced setup", g] : [g]));
     const at = (g: string) => { const i = ORDER.indexOf(g); return i < 0 ? ORDER.length : i; };
     groups.sort((a, b) => at(a.group) - at(b.group));
+    const adv = groups.find((g) => g.group === "Advanced setup"); if (adv) adv.items.sort((a: any, b: any) => ADV.indexOf(a.id) - ADV.indexOf(b.id));
   }
   const ctx = useMemo<EditorCtx>(() => ({ tpl, root: draft, bump: onChange, upload, img, site, cf }), [tpl, draft, onChange, upload, img, version, site, cf?.api, cf?.site]);
   // Search the menu: section names, what each is for, card titles and the labels of the settings inside.

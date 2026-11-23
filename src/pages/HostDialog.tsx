@@ -581,7 +581,7 @@ export function CfDomainCard({ host, acc, onHost, plain }: { host: HostCfg; acc:
   const permErr = (e: any) => e instanceof CfError && (e.status === 403 || e.status === 401 || e.code === 9109 || e.code === 10000 || e.code === 1068);
   const run = async (k: string, fn: () => Promise<void>) => {
     setBusy(k); setErr("");
-    try { await fn(); } catch (e: any) { if (permErr(e)) { setNeedPerm(true); setErr("Your Cloudflare token isn't allowed to add domains yet."); } else setErr(e?.message || "Something went wrong"); }
+    try { await fn(); } catch (e: any) { if (permErr(e)) { setNeedPerm(true); setErr(`Your Cloudflare token isn't allowed to add domains yet. Cloudflare said: ${String(e?.message || "").replace(/^Cloudflare \(/, "(")}${e?.status ? ` [${e.status}]` : ""}. If you just pasted a new token and still see this, the domain may be on a different Cloudflare account than the one this site is hosted on: both must be the same account.`); } else setErr(e?.message || "Something went wrong"); }
     setBusy("");
   };
   /** Points the domain and www at the site (replacing old records for those two names) and records it. */

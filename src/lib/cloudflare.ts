@@ -71,7 +71,7 @@ export class Cloudflare {
     for (let attempt = 0; ; attempt++) {
       const r = this.via ? await this.via(q) : await relayCall(this.relay!, q);
       let j: any = null; try { j = JSON.parse(r.body); } catch { /* not JSON */ }
-      if (r.status === 401 || r.status === 403 || j?.errors?.some((e: any) => e.code === 10000 || e.code === 9109)) throw new CfError("Cloudflare refused the token. Create one with the “Edit Cloudflare Workers” template and paste it again. (If you used Connect Cloudflare, press it again: that sign-in lasts a short while.)", r.status);
+      if (r.status === 401 || r.status === 403 || j?.errors?.some((e: any) => e.code === 10000 || e.code === 9109)) throw new CfError("Cloudflare refused the token. Create one with the “Edit Cloudflare Workers” template and paste it again. (If you used Connect Cloudflare, press it again: that sign-in lasts a short while.)" + ` [while ${cfStep(method, path)}: ${j?.errors?.[0]?.message || "HTTP " + r.status}${j?.errors?.[0]?.code ? ", code " + j.errors[0].code : ""}]`, r.status, j?.errors?.[0]?.code || 0);
       if (j?.success) return j.result as T;
       // 204 / empty 2xx (e.g. connecting or removing a domain): Cloudflare says done with no body.
       if (r.status >= 200 && r.status < 300 && (j === null || j === undefined) && !(r.body || "").trim()) return undefined as T;

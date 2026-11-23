@@ -25,7 +25,7 @@ create index if not exists approvals_project on approvals (scope, project, creat
 create table if not exists approval_notes (id integer primary key autoincrement, token text not null, who text not null, body text not null, page text not null default '', kind text not null default 'comment', created_at text not null);
 create index if not exists approval_notes_token on approval_notes (token, id);
 `;
-var CFDB_VERSION = 56;
+var CFDB_VERSION = 57;
 var CFDB_WORKER_NAME = "picaffectz-db";
 
 // src/lib/lookdigest.ts
@@ -1116,6 +1116,7 @@ var SETTINGS = {
 for (const id of Object.keys(TRACKERS)) SETTINGS["tk_" + id] = TRACKER_FIELDS;
 SETTINGS.ship = { secret: [], text: [], flags: ["manual", "quiet"] };
 SETTINGS.mail = { secret: ["key"], text: ["from"], flags: ["on"] };
+SETTINGS.prefs = { secret: [], text: ["json"], flags: [] };
 async function aesKey(env) {
   return crypto.subtle.importKey("raw", await crypto.subtle.digest("SHA-256", enc.encode("settings:" + env.SECRET)), "AES-GCM", false, ["encrypt", "decrypt"]);
 }

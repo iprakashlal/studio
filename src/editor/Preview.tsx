@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { pushPref } from "../lib/prefs";
 import type { TemplateDef } from "../schema/types";
 import { STUDIO_BUILD } from "../build-info";
 import { contentIndex, locateField, matchImage, matchText } from "./locate";
@@ -47,7 +48,7 @@ export function Preview({ tpl, base, content, version, assets, editable = true }
   const live = useRef({ editOn, idx: contentIndex(content), tpl, content, assets });
   live.current = { editOn, idx: live.current.content === content && live.current.idx ? live.current.idx : contentIndex(content), tpl, content, assets };
   useEffect(() => { live.current.idx = contentIndex(content); }, [version]);
-  useEffect(() => { if (editable) try { localStorage.setItem(EDIT_KEY, editOn ? "on" : "off"); } catch { /* private mode */ } if (!editOn) frame.current?.contentDocument?.getElementById("cms-edit-ui")?.remove(); }, [editOn]);
+  useEffect(() => { if (editable) try { const was = localStorage.getItem(EDIT_KEY) !== "off"; localStorage.setItem(EDIT_KEY, editOn ? "on" : "off"); if (was !== editOn) pushPref({ clickToEdit: editOn }); } catch { /* private mode */ } if (!editOn) frame.current?.contentDocument?.getElementById("cms-edit-ui")?.remove(); }, [editOn]);
   const wire = () => { if (!editable) return; try { const d = frame.current?.contentDocument; if (d) clickToEdit(d, live); } catch { /* another origin */ } };
 
   const send = () => {

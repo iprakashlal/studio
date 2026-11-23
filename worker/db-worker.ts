@@ -471,6 +471,8 @@ for (const id of Object.keys(TRACKERS)) SETTINGS["tk_" + id] = TRACKER_FIELDS;
 SETTINGS.ship = { secret: [], text: [], flags: ["manual", "quiet"] };
 // Email through the site's own Resend account (key and sender), when the Studio's owner has switched the site to "Custom".
 SETTINGS.mail = { secret: ["key"], text: ["from"], flags: ["on"] };
+// The site admin's own choices (tour, click-to-edit, menu layout...), kept here so they follow its people to any device.
+SETTINGS.prefs = { secret: [], text: ["json"], flags: [] };
 async function aesKey(env: Env) { return crypto.subtle.importKey("raw", await crypto.subtle.digest("SHA-256", enc.encode("settings:" + env.SECRET)), "AES-GCM", false, ["encrypt", "decrypt"]); }
 /** A project's own Resend key and sender can be dropped into its database from outside (the Studio does it through
  *  Cloudflare's D1 API when the owner isn't signed in to the site yet, since the sign-in code itself needs working email).

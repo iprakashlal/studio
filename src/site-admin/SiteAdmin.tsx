@@ -4,7 +4,8 @@ import { TourHost, type TourStep } from "../ui/Tour";
 import { brand } from "../lib/brand";
 import { accentFromImage, applyTint, isHex } from "../lib/tint";
 import { CfAccount, CfGate } from "./CfGate";
-import { CfRepo, cfSession } from "../lib/cfdb";
+import { CfRepo, cfCall, cfSession } from "../lib/cfdb";
+import { applyPrefs, cleanPrefs, mergePrefs, prefSync, type SyncedPrefs } from "../lib/prefs";
 import { cleanMenu } from "../lib/menus";
 import { EnquiriesPanel, enquiriesCfg } from "./EnquiriesPanel";
 import { CustomerPanel } from "./CustomerPanel";
@@ -177,6 +178,13 @@ function HostedWorkspace({ info, onInfo, sb, onSignOut }: { info: SiteInfo; onIn
 
 function CfWorkspace({ info, onInfo, cf, onSignOut }: { info: SiteInfo; onInfo: (i: SiteInfo) => void; cf: CfSiteCfg; onSignOut: () => void }) {
   const repo = useMemo(() => new CfRepo(cf.api, "site:" + cf.site), [cf.api, cf.site]);
+  // This site's own choices (tour, click-to-edit, menu layout...) are kept in its database (owners), so they follow its people to any device.
+  useEffect(() => {
+    let on = true, known: SyncedPrefs = {}; const q = `/set?scope=${encodeURIComponent("site:" + cf.site)}`;
+    cfCall<any>(cf.api, q).then((s) => { try { known = cleanPrefs(JSON.parse(s?.prefs?.json || "{}")); } catch { /* none yet */ } if (on) applyPrefs(known); }).catch(() => { /* only an owner can read it */ });
+    prefSync.attach(async (patch) => { known = cleanPrefs(mergePrefs(known, patch)); await cfCall(cf.api, q, { method: "POST", body: JSON.stringify({ name: "prefs", value: { json: JSON.stringify(known) } }) }); });
+    return () => { on = false; prefSync.attach(null); };
+  }, [cf.api, cf.site]);
   return <Workspace info={info} onInfo={onInfo} repo={repo} hosted={cf} onSignOut={() => { cfSession.clear(cf.api); onSignOut(); }}
     account={<CfAccount cf={cf} onSignOut={onSignOut} />} />;
 }

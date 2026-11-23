@@ -948,7 +948,7 @@ function bindMenu() {
   const body = $(".mbody"); if (!body) return;
   // The category row sticks right under the menu bar, whatever its height in this theme.
   if (window.SiteFX && window.SiteFX.stick && $(".mcats")) window.SiteFX.stick($(".mcats"), "--mtop");
-  const tabs = C.theme.menuStyle === "tabs", q = $("#menu-q"), links = $$(".mcats a"), secs = $$(".mcat", body);
+  const tabs = () => document.documentElement.dataset.menuStyle === "tabs", q = $("#menu-q"), links = $$(".mcats a"), secs = $$(".mcat", body);
   let diet = "";
   const apply = () => {
     const w = q ? q.value.trim().toLowerCase() : ""; let any = false;
@@ -963,9 +963,9 @@ function bindMenu() {
   };
   if (q) q.addEventListener("input", apply);
   $$(".mdiet .chip").forEach((c) => c.addEventListener("click", () => { diet = c.dataset.diet; $$(".mdiet .chip").forEach((x) => x.setAttribute("aria-pressed", String(x === c))); apply(); }));
-  const setOn = (id) => { links.forEach((a) => a.classList.toggle("on", a.dataset.cat === id)); if (tabs) secs.forEach((s) => s.classList.toggle("on", s.id === id)); const on = links.find((a) => a.dataset.cat === id); if (on && on.parentNode.scrollWidth > on.parentNode.clientWidth) on.parentNode.scrollTo({ left: on.offsetLeft - 16, behavior: "smooth" }); };
-  links.forEach((a) => a.addEventListener("click", (e) => { if (tabs) { e.preventDefault(); setOn(a.dataset.cat); return; } setOn(a.dataset.cat); }));
-  if (!tabs && links.length && "IntersectionObserver" in window) {
+  const setOn = (id) => { links.forEach((a) => a.classList.toggle("on", a.dataset.cat === id)); if (tabs()) secs.forEach((s) => s.classList.toggle("on", s.id === id)); const on = links.find((a) => a.dataset.cat === id); if (on && on.parentNode.scrollWidth > on.parentNode.clientWidth) on.parentNode.scrollTo({ left: on.offsetLeft - 16, behavior: "smooth" }); };
+  links.forEach((a) => a.addEventListener("click", (e) => { if (tabs()) { e.preventDefault(); setOn(a.dataset.cat); return; } setOn(a.dataset.cat); }));
+  if (!tabs() && links.length && "IntersectionObserver" in window) {
     const io = new IntersectionObserver((es) => { const v = es.filter((e) => e.isIntersecting).sort((x, y) => x.boundingClientRect.top - y.boundingClientRect.top)[0]; if (v) links.forEach((a) => a.classList.toggle("on", a.dataset.cat === v.target.id)); }, { rootMargin: "-30% 0px -60% 0px" });
     secs.forEach((s) => io.observe(s));
   }

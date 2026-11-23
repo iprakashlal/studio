@@ -2,12 +2,13 @@
 // the Save buttons, then one pop-up for every section of the menu (each is opened for you and explained in a line or two).
 // It is shown when someone signs in. Skip or Done turns it off for good (on this device); Settings → Help turns it back on
 // or plays it again. Steps whose target isn't on screen (a phone shows one pane at a time) are left out.
+import { pushPref } from "../lib/prefs";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 const KEY = "site-admin-tour", EVENT = "site-admin:tour", GOTO = "studio:goto";
 export const tourPref = {
   on(): boolean { try { return localStorage.getItem(KEY) !== "off"; } catch { return true; } },
-  set(v: boolean) { try { localStorage.setItem(KEY, v ? "on" : "off"); } catch { /* private mode */ } dispatchEvent(new CustomEvent(EVENT, { detail: { on: v } })); },
+  set(v: boolean) { try { localStorage.setItem(KEY, v ? "on" : "off"); } catch { /* private mode */ } dispatchEvent(new CustomEvent(EVENT, { detail: { on: v } })); pushPref({ tour: v }); },
   /** Play the tour now, whatever the setting says. */
   replay() { dispatchEvent(new CustomEvent(EVENT, { detail: { play: true } })); },
 };

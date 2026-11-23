@@ -3,11 +3,14 @@
 // It stays in this Studio: it is never part of a site, and isn't sent along when a site is shared with a client.
 import { useEffect, useState } from "react";
 import type { PayInfo } from "../lib/studio";
+import { pushPref } from "../lib/prefs";
 
 const KEY = "site-studio:pay-hidden";
 const hiddenSet = (): Set<string> => { try { return new Set(JSON.parse(localStorage.getItem(KEY) || "[]")); } catch { return new Set(); } };
 const listeners = new Set<() => void>();
-function setHidden(id: string, hide: boolean) { const s = hiddenSet(); hide ? s.add(id) : s.delete(id); try { localStorage.setItem(KEY, JSON.stringify([...s].slice(-500))); } catch { /* private mode */ } listeners.forEach((f) => f()); }
+/** Another device's choice arrived (lib/prefs.ts). */
+addEventListener("studio:pay-hidden", () => listeners.forEach((f) => f()));
+function setHidden(id: string, hide: boolean) { const s = hiddenSet(); hide ? s.add(id) : s.delete(id); try { localStorage.setItem(KEY, JSON.stringify([...s].slice(-500))); } catch { /* private mode */ } listeners.forEach((f) => f()); pushPref({ payHidden: [...s].slice(-300) }); }
 
 export const PAY_STATES: { id: NonNullable<PayInfo["state"]> | ""; label: string; cls: string; dot: string }[] = [
   { id: "", label: "Not set", cls: "border-ink-600 text-ink-400", dot: "bg-ink-500" },

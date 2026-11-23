@@ -167,7 +167,9 @@ const b64Bytes = (b: string) => Uint8Array.from(atob(String(b).replace(/\s/g, ""
 let linkCache: Promise<{ api: string; studio: string } | null> | null = null;
 const dbIds = new Map<string, string>();
 async function studioLink(siteApi: string): Promise<{ api: string; studio: string } | null> {
-  linkCache ||= import("./studiohost").then((m) => m.loadHostConfig()).then((c) => (c?.kind === "cloudflare" ? { api: c.api, studio: c.studio } : null)).catch(() => null);
+  // Remembered once found; a "no Studio link" answer is only remembered for a few seconds (the config may just not have loaded).
+  linkCache ||= import("./studiohost").then((m) => m.loadHostConfig()).then((c) => (c?.kind === "cloudflare" ? { api: c.api, studio: c.studio } : null)).catch(() => null)
+    .then((l) => { if (!l) setTimeout(() => { linkCache = null; }, 3000); return l; });
   const l = await linkCache;
   return l && clean(l.api) !== clean(siteApi) && cfSession.load(l.api) ? l : null;
 }
@@ -446,6 +448,12 @@ export async function siteMembers(cf: { api: string; site: string }, account?: s
     add: async (email: string) => { br ? await br({ sub: "add", email }) : await cfCall(cf.api, "/m/add?" + scope, { method: "POST", body: JSON.stringify({ email, role: "owner" }) }); },
     remove: async (email: string) => { br ? await br({ sub: "remove", email }) : await cfCall(cf.api, "/m/remove?" + scope, { method: "POST", body: JSON.stringify({ email }) }); },
   };
+}
+/** Saves a project's own Resend key and sender straight into its database through the Studio (no sign-in to the site's
+ *  database needed, which matters when the sign-in code itself can't be sent yet). Null when this site isn't reachable that way. */
+export async function siteMailBridge(cf: { api: string; site: string }, account?: string): Promise<{ set: (key: string, from: string) => Promise<void> } | null> {
+  const l = !cfSession.load(cf.api) && account ? await studioLink(cf.api) : null; if (!l) return null;
+  return { set: async (key, from) => { const r = await cfCall<any>(l.api, `/cfx/db?scope=${encodeURIComponent("studio:" + l.studio)}`, { method: "POST", body: JSON.stringify({ account, site: cf.site, db: dbIds.get(account!), op: "mail", key, from }) }); if (r?.db) dbIds.set(account!, r.db); } };
 }
 /** A site's enquiries: from its own database when signed in to it here, else through the Studio's database. */
 export async function siteEnquiries(cf: { api: string; site: string }, account?: string) {

@@ -207,11 +207,11 @@ export function ProjectView({ studio, index, project, session, onIndex }: { stud
     }] : []),
     ...(project.template !== "portfolio" ? [{
       id: "connections", label: project.template === "restaurant" ? "Restaurant backend" : project.template === "store" ? "Couriers, WhatsApp & SMS" : "WhatsApp & SMS", group: project.template === "restaurant" ? "Selling" : "Forms & records", desc: project.template === "restaurant" ? "What runs the Order now page behind the scenes, on your own Cloudflare database: Petpooja, and WhatsApp for alerts and codes. Payment gateway keys are under Payments." : "Optional: WhatsApp alerts when an enquiry or order arrives, and sign-in codes on WhatsApp. The keys stay on your own Cloudflare database.",
-      render: () => <SiteConnections cf={project.host?.cf} template={project.template} cms={draft?.cms} />,
+      render: () => <SiteConnections cf={project.host?.cf} account={project.host?.kind === "cloudflare" ? project.host.account : undefined} template={project.template} cms={draft?.cms} />,
     }] : []),
     ...(project.template === "portfolio" ? [{
       id: "connections", label: "Email (Resend)", group: "Forms & records", desc: "Which Resend sends this site's sign-in codes and enquiry emails: the Studio's, or this site's own.",
-      render: () => <SiteConnections cf={project.host?.cf} template={project.template} cms={draft?.cms} only="mail" />,
+      render: () => <SiteConnections cf={project.host?.cf} account={project.host?.kind === "cloudflare" ? project.host.account : undefined} template={project.template} cms={draft?.cms} only="mail" />,
     }] : []),
     ...(project.template === "store" || project.template === "business" ? [{
       id: "warranty-records", label: "Warranty records", group: "Forms & records", desc: "Products' numbers, warranty and service status, for the site's warranty & status check. Saved straight to the live site.",

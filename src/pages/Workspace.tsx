@@ -1,3 +1,4 @@
+import { GUIDES, guide } from "../lib/guides";
 import { Explorer, ExplorerCard } from "../ui/Explorer";
 import { prefSync, applyPrefs } from "../lib/prefs";
 import { StudioGoogleCard } from "./StudioGoogle";
@@ -154,7 +155,7 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
     const showCustomize = ["brand", "badge", "pages", "menus"].some((k) => !hid(k)), showHostings = !hid("hosting");
     const want = route.split("/")[1] || "general";
     const tab = (want === "customize" && !showCustomize) || (want === "hostings" && !showHostings) ? "general" : want;
-    const tabList = [["general", "General"], ...(showCustomize ? [["customize", "Customize"]] : []), ...(showHostings ? [["hostings", "Hostings"]] : []), ["update", "Updates"], ...(client ? [] : [["migration", "Migration"]])] as [string, string][];
+    const tabList = [["general", "General"], ...(showCustomize ? [["customize", "Customize"]] : []), ...(showHostings ? [["hostings", "Hostings"]] : []), ["update", "Updates"], ...(client ? [] : [["migration", "Migration"]]), ["help", "Help"]] as [string, string][];
     const tabs = <>
       {/* Phones: one dropdown, so the tabs never wrap onto a second row. */}
       <label className="flex flex-col gap-1.5 sm:hidden"><span className="label">Settings section</span>
@@ -164,6 +165,7 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
       {tabList.map(([k, l]) => <a key={k} href={`#/settings${k === "general" ? "" : "/" + k}`} role="tab" aria-selected={tab === k} className={`-mb-px border-b-2 px-3 py-2 text-sm font-semibold ${tab === k ? "border-brand-400 text-ink-100" : "border-transparent text-ink-400 hover:text-ink-100"}`}>{l}</a>)}
     </div></>;
     if (client === undefined && tab !== "general") return <>{header}<main className="mx-auto flex max-w-3xl flex-col gap-4 px-4 py-8 sm:px-6"><h1 className="font-display text-3xl font-extrabold">Settings</h1>{tabs}<SkelRows n={3} label="Loading settings" /></main></>;
+    if (tab === "help") return <>{header}<main className="mx-auto flex max-w-3xl flex-col gap-4 px-4 py-8 sm:px-6"><h1 className="font-display text-3xl font-extrabold">Settings</h1>{tabs}<StudioHelp /></main></>;
     // Updates: this Studio build onto live sites, and (a hosted Studio) the Studio's own update.
     if (tab === "update" && !(isHosted(session) && !client)) return <>{header}<main className="mx-auto flex max-w-3xl flex-col gap-4 px-4 py-8 sm:px-6"><h1 className="font-display text-3xl font-extrabold">Settings</h1>{tabs}<PushUpdatesCard index={index} demo={repo.demo} /></main></>;
     if ((tab === "migration" && !client) || tab === "update") return <>{header}<main className="mx-auto flex max-w-3xl flex-col gap-4 px-4 py-8 sm:px-6"><h1 className="font-display text-3xl font-extrabold">Settings</h1>{tabs}{tab === "update" && <PushUpdatesCard index={index} demo={repo.demo} />}<FoldAll /><FoldCards scope={tab}><MigrationTab key={tab} studio={studio} index={index} session={session} onIndex={setIndex} mode={tab === "update" ? "update" : "move"} /></FoldCards></main></>;
@@ -210,6 +212,24 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
 
   const only = /^type\/([a-z]+)$/.exec(route)?.[1];
   return <>{header}<Dashboard key={only || "all"} studio={studio} index={index} onIndex={setIndex} token={session.token} hid={hid} max={limits.max} only={only && TEMPLATES[only] ? only : undefined} /><footer className="py-6"><StudioPageLinks host={null} repo={repo} where="footer" /></footer></>;
+}
+
+/** Settings → Help: guided tours of the Studio, end to end. */
+function StudioHelp() {
+  return (
+    <section className="card flex flex-col gap-3 p-5" aria-label="Guided tours">
+      <h3 className="text-[15px] font-extrabold">Guided tours</h3>
+      <p className="text-sm text-ink-300">Pop-ups that point at the real buttons and move between screens for you. Press Next, or use the arrow keys; Escape stops.</p>
+      <div className="flex flex-col gap-2">
+        {GUIDES.map((g) => (
+          <div key={g.id} className="flex flex-wrap items-center gap-3 rounded-xl border border-ink-700 p-3">
+            <div className="min-w-0 flex-1"><b className="block text-ink-100">{g.title}</b><span className="text-[13px] text-ink-400">{g.blurb} · {g.steps.length} steps</span></div>
+            <button type="button" className="btn btn-pri btn-sm" onClick={() => guide.play(g.id)}>Start tour</button>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
 }
 
 /** Settings → General → which numbers the dashboard shows at the top. */

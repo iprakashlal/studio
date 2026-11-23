@@ -1,3 +1,4 @@
+import { GuideTourHost } from "../ui/GuideTour";
 import { useEffect, useMemo, useState } from "react";
 import { session as sess, device, watchIdle, type Session } from "../lib/auth";
 import { GitHubRepo, MemoryRepo, type Repo } from "../lib/repo";
@@ -97,7 +98,7 @@ export function App() {
     );
   }
 
-  return (
+  return (<>
     <Workspace
       repo={repo}
       session={demo ? { cfg: repo.cfg, token: "", username: "demo" } : session!}
@@ -105,5 +106,6 @@ export function App() {
       onSignOut={signOut}
       onForget={() => { device.clear(NS); signOut(); }}
     />
-  );
+    <GuideTourHost />
+  </>);
 }

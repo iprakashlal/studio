@@ -267,8 +267,8 @@ export function ProjectView({ studio, index, project, session, onIndex }: { stud
             <button type="button" aria-pressed={pane === "preview"} className={`btn btn-sm border-0 ${pane === "preview" ? "bg-ink-700" : "bg-transparent"}`} onClick={() => setPane("preview")}>Preview</button>
           </div>
           {project.template === "business" && !studio.repo.demo && <button type="button" className="btn btn-sm" onClick={() => setModal("inbox")} title="Save the enquiry form's enquiries as JSON files in a private GitHub repository (no email)">{project.inbox ? "Enquiry inbox ✓" : "Enquiry inbox"}</button>}
-          {tools.filter((t) => pinned.includes(t.id)).map((t) => <button key={t.id} type="button" className="btn btn-sm" onClick={() => setModal(t.id)} title={t.hint}>{t.label}</button>)}
-          <button type="button" className="btn btn-pri btn-sm" disabled={!dirty || saving} onClick={() => save()}>Save</button>
+          <div data-tour="tools" className="flex flex-wrap gap-1.5">{tools.filter((t) => pinned.includes(t.id)).map((t) => <button key={t.id} type="button" className="btn btn-sm" onClick={() => setModal(t.id)} title={t.hint}>{t.label}</button>)}</div>
+          <button type="button" className="btn btn-pri btn-sm" data-tour="save" disabled={!dirty || saving} onClick={() => save()}>Save</button>
         </div>
       </header>
       {conflict && (
@@ -281,10 +281,10 @@ export function ProjectView({ studio, index, project, session, onIndex }: { stud
         </div>
       )}
       <div className="flex min-h-0 flex-1">
-        <div className={`min-h-0 min-w-0 flex-1 flex-col lg:flex ${pane === "edit" ? "flex" : "hidden"}`}>
+        <div data-tour="edit" className={`min-h-0 min-w-0 flex-1 flex-col lg:flex ${pane === "edit" ? "flex" : "hidden"}`}>
           <Editor tpl={tpl} draft={draft} version={v} onChange={bump} upload={upload} img={img} cf={project.host?.cf} extras={extras} menu={index.menus?.[tpl.id]?.studio ? index.menus[tpl.id] : undefined} />
         </div>
-        <div className={`min-h-0 flex-col border-l border-ink-700 lg:flex lg:w-[46%] ${pane === "preview" ? "flex flex-1" : "hidden"}`}>
+        <div data-tour="preview" className={`min-h-0 flex-col border-l border-ink-700 lg:flex lg:w-[46%] ${pane === "preview" ? "flex flex-1" : "hidden"}`}>
           <Preview tpl={tpl} base={`templates/${tpl.id}/`} content={previewContent} version={v} assets={assets.map} />
         </div>
       </div>

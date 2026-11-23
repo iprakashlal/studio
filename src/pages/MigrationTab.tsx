@@ -278,7 +278,7 @@ function HostedHere({ session, nf, setNf, index }: { session: Session; nf: Netli
   return (
     <div className="flex flex-col gap-4">
       <section className="card flex flex-col gap-2 p-5">
-        <h2 className="text-lg font-extrabold">This Studio runs on {PAGES_LABEL[where]} + {cfg?.kind === "cloudflare" ? "Cloudflare" : "Supabase"}</h2>
+        <h2 className="text-lg font-extrabold">{(() => { const db = cfg?.kind === "cloudflare" ? "Cloudflare" : "Supabase", app = PAGES_LABEL[where]; return app === db ? `This Studio runs on ${db} (the app and its database)` : `This Studio runs on ${app} (the app) + ${db} (its database)`; })()}</h2>
         <p className="text-sm text-ink-300">Studio <b className="text-ink-100">{cfg?.studio}</b> · files in <code className="font-mono text-xs">{cfg ? (cfg.kind === "cloudflare" ? cfg.api : cfg.url) : ""}</code> · signed in as <b className="text-ink-100">{session.username}</b>.</p>
       </section>
       <section className="card flex flex-col gap-3 p-5" aria-label="Update">

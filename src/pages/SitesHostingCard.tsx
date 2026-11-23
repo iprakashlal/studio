@@ -17,6 +17,8 @@ import { useConfirm, useToast, Skel, SkelRows } from "../ui/kit";
 import { projectPlan, teardownProject } from "../lib/teardown";
 import { TeardownDialog } from "./TeardownDialog";
 import { useCfAccount } from "./CfPicker";
+import { CfDomainCard } from "./HostDialog";
+import type { HostCfg } from "../lib/supa";
 import { Netlify } from "../lib/netlify";
 import { netlifyToken } from "../lib/hosting";
 
@@ -195,6 +197,9 @@ export function SitesHostingCard({ session, studio, index, onIndex }: { session:
           {cfAcc.ui}
           <button type="button" className="btn btn-pri btn-sm self-start" disabled={!!busy || !cfAcc.ready} onClick={updateDb}>{busy.startsWith("update") ? (busy.split(":").slice(1).join(":") || "Updating") + "…" : "Update the database"}</button></div>
         : <>
+          {index.hosted?.pages === "cloudflare" && index.hosted.siteId && <div aria-label="The Studio's own address"><CfDomainCard plain="The Studio's own address" acc={cfAcc}
+            host={{ kind: "cloudflare", siteId: index.hosted.siteId, siteName: index.hosted.siteName, url: index.hosted.url, account: index.hosted.account, domain: index.hosted.domain, subdomain: index.hosted.subdomain, domainSetup: index.hosted.domainSetup } as HostCfg}
+            onHost={async (h) => { onIndex(await studio.updateIndex((i) => { if (i.hosted) { i.hosted = { ...i.hosted, domain: h.domain, subdomain: h.subdomain, domainSetup: h.domainSetup }; } }, h.domain ? `Studio address: ${h.domain}` : "Studio address removed")); }} /></div>}
           <div className="flex flex-col gap-2 rounded-lg border border-ink-700 p-3 text-[13px]" aria-label="Cloudflare accounts on the database">
             <div className="flex flex-wrap items-baseline gap-x-2"><b className="text-sm">Cloudflare accounts</b><span className="text-ink-400">Every account your sites are hosted on. This is the only place they are listed; a site shows just its own.</span></div>
             {!info.main && <span className="text-amber-200">The main account's token isn't kept on the database: turn on Publish from any device above so every device can publish, and so accounts can be added from any device.</span>}

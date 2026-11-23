@@ -17,6 +17,7 @@ import { useConfirm, useToast, Skel, SkelRows } from "../ui/kit";
 import { projectPlan, teardownProject } from "../lib/teardown";
 import { TeardownDialog } from "./TeardownDialog";
 import { useCfAccount } from "./CfPicker";
+import { SiteMailSetting } from "./Connections";
 import { CfDomainCard } from "./HostDialog";
 import type { HostCfg } from "../lib/supa";
 import { Netlify } from "../lib/netlify";
@@ -300,6 +301,7 @@ export function SitesHostingCard({ session, studio, index, onIndex }: { session:
                             <dt className="text-ink-400">Admin page</dt>
                             <dd>{h?.cf ? "Works on every device: its editors sign in with an email code" : h ? "Its editors sign in with an email code (Supabase)" : "Each device signs in once with a GitHub token for the site's repository"}</dd>
                             {h?.cf && <><dt className="text-ink-400">Login emails</dt><dd><LoginEmails key={String(keptAcc)} cf={h.cf} account={h.kind === "cloudflare" ? h.account : undefined} name={p.name} /></dd></>}
+                            {h?.cf && <><dt className="text-ink-400">Sign-in email sender</dt><dd><SiteMailSetting cf={h.cf} /></dd></>}
                             {!h?.cf && <><dt className="text-ink-400">Login emails</dt><dd className="text-ink-400">{h ? "Kept in Supabase: manage them in the site's admin page" : "None: this site has no email sign-in. Publish it to Cloudflare from its project to add login emails."}</dd></>}
                             {cf && <><dt className="text-ink-400">Data</dt><dd>{otherDb
                               ? (keptAcc

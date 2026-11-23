@@ -302,7 +302,7 @@ export class Studio {
 function normalise(i: any): StudioIndex {
   return {
     version: 1,
-    ...(i?.brand && typeof i.brand.name === "string" ? { brand: { name: i.brand.name, ...(typeof i.brand.logo === "string" ? { logo: i.brand.logo } : {}), ...(typeof i.brand.v === "number" ? { v: i.brand.v } : {}), ...(typeof i.brand.tint === "string" && /^#[0-9a-f]{6}$/i.test(i.brand.tint) ? { tint: i.brand.tint } : {}), ...(i.brand.mode === "light" ? { mode: "light" as const } : {}) } } : {}),
+    ...(i?.brand && typeof i.brand.name === "string" ? { brand: { name: i.brand.name, ...(typeof i.brand.logo === "string" ? { logo: i.brand.logo } : {}), ...(typeof i.brand.v === "number" ? { v: i.brand.v } : {}), ...(typeof i.brand.tint === "string" && /^#[0-9a-f]{6}$/i.test(i.brand.tint) ? { tint: i.brand.tint } : {}), ...(i.brand.mode === "light" ? { mode: "light" as const } : {}), ...(typeof i.brand.anim === "string" && /^[a-z0-9-]{1,20}$/.test(i.brand.anim) ? { anim: i.brand.anim } : {}), ...(typeof i.brand.layout === "string" && /^[a-z0-9-]{1,20}$/.test(i.brand.layout) ? { layout: i.brand.layout } : {}) } } : {}),
     ...(i?.badge && typeof i.badge === "object" ? { badge: cleanBadge(i.badge) } : {}),
     ...(i?.menus && Object.keys(cleanMenus(i.menus)).length ? { menus: cleanMenus(i.menus) } : {}),
     ...(i?.hosted && typeof i.hosted.url === "string" ? { hosted: i.hosted } : {}),

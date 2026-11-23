@@ -194,18 +194,23 @@ export function Dashboard({ studio, index, onIndex, token, hid = () => false, ma
                     <PayNote id={"p:" + p.id} pay={p.pay} onSave={async (pay) => onIndex(await studio.savePay(p.id, pay))} />
                     <p className="text-xs text-ink-400">Edited <b className="font-semibold text-ink-200">{timeAgo(p.updatedAt)}</b> · Export <b className="font-semibold text-ink-200">{last ? `v${last.version} · ${timeAgo(last.at)}` : "not yet"}</b></p>
                   </div>
-                  <div className="relative z-10 flex flex-wrap items-center gap-2 border-t border-ink-700/70 pt-4">
-                    <a href={`#/p/${p.id}`} className="btn btn-pri btn-sm">Open</a>
-                    <button type="button" className="btn btn-sm" onClick={() => setQuick({ id: p.id, kind: "setup" })}>Quick Setup</button>
-                    <button type="button" className="btn btn-sm" onClick={() => setQuick({ id: p.id, kind: "overview" })}>Quick Overview</button>
-                    <span className="ml-auto flex items-center gap-0.5 opacity-75 transition group-hover:opacity-100 focus-within:opacity-100">
+                  <div className="relative z-10 border-t border-ink-700/70 pt-4">
+                    {/* Live site, Duplicate and Delete rise from behind the main buttons when the card is hovered, and sink back after. */}
+                    <div className="pointer-events-none absolute inset-x-0 bottom-full z-0 flex justify-center pb-2">
+                      <span className="pointer-events-auto flex items-center gap-0.5 rounded-full border border-ink-700 bg-ink-900/95 px-1.5 py-1 shadow-lg backdrop-blur transition duration-300 ease-out [@media(hover:hover)]:translate-y-8 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-focus-within:translate-y-0 [@media(hover:hover)]:group-focus-within:opacity-100 [@media(hover:hover)]:group-hover:translate-y-0 [@media(hover:hover)]:group-hover:opacity-100">
                       {p.host ? <a className="btn btn-ghost btn-sm" href={siteAddress(p.host)} target="_blank" rel="noopener">Live site ↗</a> : p.publish && <a className="btn btn-ghost btn-sm" href={`https://${p.publish.owner}.github.io/${p.publish.repo === `${p.publish.owner}.github.io` ? "" : p.publish.repo + "/"}`} target="_blank" rel="noopener">Live site ↗</a>}
                       {!hid("duplicate") && !hid("new") && !hid("tpl-" + p.template) && room(p.template) && <button className="btn btn-ghost btn-sm" disabled={!!busy} onClick={() => run("dup" + p.id, () => studio.duplicate(p.id, `${p.name} (copy)`), "Project duplicated")}>{busy === "dup" + p.id ? "Copying…" : "Duplicate"}</button>}
                       {!hid("delete") && <button className="btn btn-ghost btn-sm text-red-300 hover:text-red-200" disabled={!!busy} onClick={async () => {
                         if (await confirm(`Delete “${p.name}”?`, "This removes the project, its images and export snapshots from the Studio. Sites you already exported or published are not affected.", "Delete", true)) run("del" + p.id, () => studio.remove(p.id), "Project deleted");
                       }}>Delete</button>}
                     </span>
-                  </div>
+                    </div>
+<div className="relative z-10 flex flex-wrap items-center gap-2 bg-inherit">
+                    <a href={`#/p/${p.id}`} className="btn btn-pri btn-sm">Open</a>
+                    <button type="button" className="btn btn-sm" onClick={() => setQuick({ id: p.id, kind: "setup" })}>Quick Setup</button>
+                    <button type="button" className="btn btn-sm" onClick={() => setQuick({ id: p.id, kind: "overview" })}>Quick Overview</button>
+                    </div>
+                    </div>
                 </div>
               </article>
             );

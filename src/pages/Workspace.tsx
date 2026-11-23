@@ -21,7 +21,7 @@ import { NetlifyAccount } from "./HostDialog";
 import { GitHubPublishAccount } from "./GitHubAccount";
 import { HostFold, SetupAccounts } from "./SetupAccounts";
 import { ghPublish } from "../lib/ghpublish";
-import { partOf, Field, Logo, Skel, SkelDashboard, SkelRows, useToast } from "../ui/kit";
+import { partOf, Field, Logo, Skel, SkelDashboard, SkelRows, useToast, Dock } from "../ui/kit";
 import { accentFromImage, SCHEMES, tintPalette } from "../lib/tint";
 import { setCurrentMenus } from "../lib/menus";
 import { MenusCard } from "./MenusCard";
@@ -114,10 +114,10 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
 
   // Shown on every Studio screen while the Studio updates itself (it carries on whichever screen or browser tab is open).
   const updStep = upd.step && upd.step !== "Checking" ? upd.step : "";
-  const updNote = upd.ready ? <div role="status" aria-label="Studio update" className="fixed bottom-4 left-4 z-50 flex max-w-sm flex-col gap-2 rounded-lg border border-brand-500/40 bg-ink-900 px-4 py-3 text-[13px] text-ink-100 shadow-xl"><span><b>The Studio is updated.</b> You have unsaved changes open, so it hasn't reloaded. Save them, then reload to use the new version.</span><button type="button" className="btn btn-pri btn-sm self-start" onClick={reloadToProjects}>Reload to Projects</button></div>
-    : upd.running && updStep ? <div role="status" aria-label="Studio update" className="fixed bottom-4 left-4 z-50 flex w-[min(24rem,calc(100vw-2rem))] flex-col gap-2 rounded-lg border border-brand-500/40 bg-ink-900 px-4 py-3 text-[13px] text-ink-100 shadow-xl"><span><b>Updating the Studio</b>: {updStep}…</span><span className="h-1.5 overflow-hidden rounded-full bg-ink-700"><i className="block h-full rounded-full bg-brand-500 transition-[width] duration-300" style={{ width: `${/^Reading the Studio/.test(updStep) ? 8 : /^Creating the Studio/.test(updStep) ? 15 : /^Uploading the Studio/.test(updStep) ? partOf(updStep, 20, 98) : /^Updated/.test(updStep) ? 100 : 5}%` }} /></span><span className="text-ink-400">It carries on if you move to another screen or browser tab, then opens your projects. Your projects aren't touched.</span></div> : null;
+  const updNote = upd.ready ? <div role="status" aria-label="Studio update" className="flex w-full flex-col gap-2 rounded-lg border border-brand-500/40 bg-ink-900 px-4 py-3 text-[13px] text-ink-100 shadow-xl"><span><b>The Studio is updated.</b> You have unsaved changes open, so it hasn't reloaded. Save them, then reload to use the new version.</span><button type="button" className="btn btn-pri btn-sm self-start" onClick={reloadToProjects}>Reload to Projects</button></div>
+    : upd.running && updStep ? <div role="status" aria-label="Studio update" className="flex w-full flex-col gap-2 rounded-lg border border-brand-500/40 bg-ink-900 px-4 py-3 text-[13px] text-ink-100 shadow-xl"><span><b>Updating the Studio</b>: {updStep}…</span><span className="h-1.5 overflow-hidden rounded-full bg-ink-700"><i className="block h-full rounded-full bg-brand-500 transition-[width] duration-300" style={{ width: `${/^Reading the Studio/.test(updStep) ? 8 : /^Creating the Studio/.test(updStep) ? 15 : /^Uploading the Studio/.test(updStep) ? partOf(updStep, 20, 98) : /^Updated/.test(updStep) ? 100 : 5}%` }} /></span><span className="text-ink-400">It carries on if you move to another screen or browser tab, then opens your projects. Your projects aren't touched.</span></div> : null;
   // The live-sites update is mounted once here, so it carries on (minimised) on every Studio screen.
-  const updBanner = <>{updNote}<PushUpdatesHost studio={studio} index={index} token={session.token} />{!repo.demo && <Explorer studio={studio} index={index} route={route} hosted={isHosted(session)} />}</>;
+  const updBanner = <><Dock>{updNote}</Dock><PushUpdatesHost studio={studio} index={index} token={session.token} />{!repo.demo && <Explorer studio={studio} index={index} route={route} hosted={isHosted(session)} />}</>;
   const header = (<>{updBanner}
     <header className="sticky top-0 z-40 border-b border-ink-700 bg-ink-950/90 pt-[env(safe-area-inset-top)] backdrop-blur">
       <div className="mx-auto flex max-w-[1400px] flex-wrap items-center gap-3 px-4 py-3 sm:px-6">

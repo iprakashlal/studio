@@ -7,7 +7,7 @@ import { checkTarget, liveTargets, pushTarget, type LiveTarget, type TargetState
 import type { Studio, StudioIndex } from "../lib/studio";
 import { fmtDate, timeAgo } from "../lib/util";
 import { STUDIO_BUILD } from "../build-info";
-import { Modal, ProgressBar, partOf, useToast } from "../ui/kit";
+import { Dock, Modal, ProgressBar, partOf, useToast } from "../ui/kit";
 
 /** How far one site's update is (0–100), from the step it reports. */
 export function pushPct(detail: string | undefined, prev = 4): number {
@@ -103,13 +103,13 @@ export function PushUpdatesHost({ studio, index, token }: { studio: Studio; inde
 
   // Minimised: a small strip in the corner of every Studio screen.
   if (j.min) return (
-    <div role="status" aria-label="Updating live sites" className="fixed bottom-4 right-4 z-[150] w-[min(340px,calc(100vw-32px))] rounded-xl border border-brand-500/40 bg-ink-900 p-3 shadow-2xl">
+    <Dock><div role="status" aria-label="Updating live sites" className="w-full rounded-xl border border-brand-500/40 bg-ink-900 p-3 shadow-2xl">
       <div className="mb-2 flex items-center gap-2"><b className="min-w-0 flex-1 truncate text-[13px] text-ink-100">{finished ? "Live sites updated" : "Updating live sites…"}</b>
         <button type="button" className="btn btn-sm" onClick={() => put(() => ({ min: false }))}>Open</button>
         {finished && <button type="button" className="icon-btn" aria-label="Dismiss" onClick={close}>✕</button>}</div>
       {overallBar}
       {!finished && <p className="mt-1.5 text-[11.5px] text-ink-400">Carry on working in the Studio. Keep this tab open until it finishes.</p>}
-    </div>
+    </div></Dock>
   );
 
   const footer = finished

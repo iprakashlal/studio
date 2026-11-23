@@ -147,3 +147,9 @@
 :root[data-layout="sharp"] .chip { border-radius: .3rem; }
 :root[data-layout="sharp"] .label { letter-spacing: .1em; }
 @media (prefers-reduced-motion: reduce) { :root[data-layout="glass"]::before { animation: none; } }
+
+/* One stack for every notification, bottom right (ui/kit.tsx Dock). Clear of the Explorer button. */
+#notice-dock{position:fixed;right:16px;bottom:max(76px,calc(env(safe-area-inset-bottom) + 76px));z-index:300;display:flex;flex-direction:column;gap:8px;width:min(24rem,calc(100vw - 32px));pointer-events:none}
+#notice-dock>*{pointer-events:auto}
+#notice-dock:empty{display:none}
+@media print{#notice-dock{display:none}}

@@ -25,27 +25,39 @@ const Sec = ({ title, children, note }: { title: string; note?: string; children
 
 export function QuickSetup({ project, onClose }: { project: ProjectMeta; onClose: () => void }) {
   const h = project.host, cf = h?.cf || null, signed = useSiteDbSigned(cf);
+  const [tab, setTab] = useState<"who" | "how" | "publish">("who");
+  const host = h ? (h.kind === "cloudflare" ? "Cloudflare" : h.kind === "netlify" ? "Netlify" : "its host") : "";
+  const tabs: [typeof tab, string][] = [["who", "Who can sign in"], ["how", "How they sign in"], ["publish", "Publish"]];
+  const note = (t: string) => <p className="text-[13px] text-ink-400">{t}</p>;
   return (
     <Modal wide title={`Quick setup · ${project.name}`} onClose={onClose}>
-      <Sec title="Admin login: who can sign in" note="These emails can open this site's admin page (they get a 6-digit code).">
+      <div role="tablist" aria-label="Quick setup" className="-mt-1 flex gap-1 rounded-full border border-ink-700 p-1">
+        {tabs.map(([k, l]) => <button key={k} type="button" role="tab" aria-selected={tab === k} onClick={() => setTab(k)} className={`flex-1 rounded-full px-3 py-1.5 text-[13px] font-semibold transition ${tab === k ? "bg-brand-500 text-white" : "text-ink-300 hover:text-ink-100"}`}>{l}</button>)}
+      </div>
+      {tab === "who" && <section aria-label="Admin login: who can sign in" className="flex flex-col gap-3">
+        {note("These emails can open this site's admin page; each gets a 6-digit code.")}
         {cf ? <LoginEmails cf={cf} account={h!.kind === "cloudflare" ? h!.account : undefined} name={project.name} startOpen />
-          : <p className="text-[13px] text-amber-200">{h ? "This site keeps its logins in Supabase: manage them in the site's admin page." : "This site has no email sign-in yet. Publish it to Cloudflare to add login emails."}</p>}
-      </Sec>
-      {cf && <Sec title="Admin login: how they sign in" note="Email code always works. The options below apply to every site on this database.">
-        {!signed ? <SiteDbSignIn cf={cf} small what="change the sign-in options" /> : <>
-          <GoogleSignInCard api={cf.api} what="this site's admin page and any other site on this database" />
-          <PinCard api={cf.api} what="this site's admin page and any other site on this database" />
-          <MailForm where={{ api: cf.api, scope: "site:" + cf.site }} studio />
+          : <p className="text-[13px] text-amber-200">{h ? "This site keeps its logins in Supabase: manage them in the site's admin page." : "No email sign-in yet. Publish this site to Cloudflare to add login emails."}</p>}
+      </section>}
+      {tab === "how" && <section aria-label="Admin login: how they sign in" className="flex flex-col gap-3">
+        {!cf ? <p className="text-[13px] text-amber-200">Sign-in options need the site on Cloudflare.</p> : <>
+          {note("Email code always works. Google and PIN apply to every site on this database.")}
+          {!signed ? <SiteDbSignIn cf={cf} small what="change the sign-in options" /> : <>
+            <MailForm where={{ api: cf.api, scope: "site:" + cf.site }} studio />
+            <GoogleSignInCard api={cf.api} what="this site's admin page and any other site on this database" />
+            <PinCard api={cf.api} what="this site's admin page and any other site on this database" />
+          </>}
         </>}
-      </Sec>}
-      <Sec title="Publish" note={h ? `This site is hosted on ${h.kind === "cloudflare" ? "Cloudflare" : h.kind === "netlify" ? "Netlify" : h.kind}. Publishing opens the project with the publish window ready.` : project.publish ? "This site is on GitHub Pages. Publishing opens the project with the publish window ready." : "This site isn't published yet."}>
+      </section>}
+      {tab === "publish" && <section aria-label="Publish" className="flex flex-col gap-3">
+        {note(h ? `Hosted on ${host}. Publishing opens the project with the publish window ready.` : project.publish ? "On GitHub Pages. Publishing opens the project with the publish window ready." : "Not published yet. Pick where to host it.")}
         <div className="flex flex-wrap gap-2">
-          {h && <button type="button" className="btn btn-pri btn-sm" onClick={() => openPublish(project, "host")}>Publish to {h.kind === "cloudflare" ? "Cloudflare" : h.kind === "netlify" ? "Netlify" : "its host"}</button>}
+          {h && <button type="button" className="btn btn-pri btn-sm" onClick={() => openPublish(project, "host")}>Publish to {host}</button>}
           {!h && <button type="button" className="btn btn-pri btn-sm" onClick={() => openPublish(project, "publish")}>Publish to GitHub</button>}
           {!h && !project.publish && <button type="button" className="btn btn-sm" onClick={() => openPublish(project, "host")}>Host to external services</button>}
           {h && project.publish && <button type="button" className="btn btn-sm" onClick={() => openPublish(project, "publish")}>Also update GitHub</button>}
         </div>
-      </Sec>
+      </section>}
     </Modal>
   );
 }

@@ -35,7 +35,7 @@ export function SitesHostingCard({ session, studio, index, onIndex }: { session:
   const isOpen = (id: string) => openSites === "all" || openSites.split(",").includes(id);
   const keepOpen = (v: string) => { setOpenSites(v); try { localStorage.setItem("studio-sites-open", v); } catch { /* private window */ } };
   const toggleSite = (id: string, all: string[]) => { const cur = openSites === "all" ? all : openSites.split(",").filter(Boolean); keepOpen((cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]).join(",")); };
-  const [info, setInfo] = useState<{ /** The database runs this build's version. */ cur: boolean; cfx: boolean; imp: boolean; pages: boolean; del: boolean; mail: boolean; main: string | null; accounts: Acc[]; signed: boolean; gh: boolean; workers: string[] | null } | null>(null);
+  const [info, setInfo] = useState<{ /** The database runs this build's version. */ cur: boolean; cfx: boolean; imp: boolean; pages: boolean; del: boolean; mail: boolean; /** The database has a Resend key and sender (sign-in codes can be sent). */ resend: boolean; main: string | null; accounts: Acc[]; signed: boolean; gh: boolean; workers: string[] | null } | null>(null);
   const [mainName, setMainName] = useState("");
   /** Databases that sites keep on their own Cloudflare accounts (not the Studio's database): each is updated by itself. */
   const [siteDbs, setSiteDbs] = useState<{ api: string; account: string; cur: boolean; sites: string[] }[]>([]);
@@ -63,7 +63,7 @@ export function SitesHostingCard({ session, studio, index, onIndex }: { session:
     setDb({ api, studio: sid });
     const d = await cfDeployInfo(api), signed = !!(await cfSignedIn(api));
     const l = signed && d.cfx ? await cfxList(api, sid).catch(() => null) : null;
-    setInfo({ cur: (d.v || 0) >= CFDB_VERSION, cfx: !!d.cfx, imp: !!d.bridge, pages: !!d.studioPages, del: !!d.del, mail: !!d.enqMail, main: l?.main ?? (d.deploy ? d.account || null : null), accounts: l?.accounts || [], signed, gh: !!d.gh, workers: l?.workers || null });
+    setInfo({ cur: (d.v || 0) >= CFDB_VERSION, cfx: !!d.cfx, imp: !!d.bridge, pages: !!d.studioPages, del: !!d.del, mail: !!d.enqMail, resend: !!d.mail, main: l?.main ?? (d.deploy ? d.account || null : null), accounts: l?.accounts || [], signed, gh: !!d.gh, workers: l?.workers || null });
     if (v?.account && v.account === (l?.main ?? d.account)) {
       // The main account's name, from this device's token (only shown here).
       try { const acc = await new Cloudflare(await getHelper(session.token, null), v.token).accounts(); setMainName(acc.find((a) => a.id === v.account)?.name || ""); } catch { /* name stays generic */ }
@@ -220,15 +220,17 @@ export function SitesHostingCard({ session, studio, index, onIndex }: { session:
           {index.hosted?.pages === "cloudflare" && index.hosted.siteId && <div aria-label="The Studio's own address"><CfDomainCard plain="The Studio's own address" acc={cfAcc}
             host={{ kind: "cloudflare", siteId: index.hosted.siteId, siteName: index.hosted.siteName, url: index.hosted.url, account: index.hosted.account, domain: index.hosted.domain, subdomain: index.hosted.subdomain, domainSetup: index.hosted.domainSetup } as HostCfg}
             onHost={async (h) => { onIndex(await studio.updateIndex((i) => { if (i.hosted) { i.hosted = { ...i.hosted, domain: h.domain, subdomain: h.subdomain, domainSetup: h.domainSetup }; } }, h.domain ? `Studio address: ${h.domain}` : "Studio address removed")); }} /></div>}
-          <div className="flex flex-col gap-2 rounded-lg border border-ink-700 p-3 text-[13px]" aria-label="Sign-in emails (Resend)">
-            <div className="flex flex-wrap items-baseline gap-x-2"><b className="text-sm">Sign-in emails (Resend)</b><span className="text-ink-400">How this Studio emails its 6-digit sign-in codes. Each site's own email settings are separate.</span></div>
+          <details className="group rounded-lg border border-ink-700 p-3 text-[13px]" aria-label="Sign-in emails (Resend)" open={!info.resend}>
+            <summary className="flex cursor-pointer select-none flex-wrap items-baseline gap-x-2"><b className="text-sm">Sign-in emails (Resend)</b>{info.resend ? <span className="chip border-emerald-400/50 text-emerald-200">Connected{mailFrom.trim() ? " · " + mailFrom.trim() : ""}</span> : <span className="chip border-amber-400/50 text-amber-200">Not set up</span>}<span className="text-ink-400">How this Studio emails its 6-digit sign-in codes. Each site's own email settings are separate.</span></summary>
+            <div className="mt-2 flex flex-col gap-2">
             <label className="flex flex-col gap-1"><span className="text-ink-300">Resend API key</span>
               <input className="input font-mono text-xs" type="password" autoComplete="off" aria-label="Resend API key for the Studio's codes" placeholder="Leave empty to keep the current key (re_…)" value={mailKey} onChange={(e) => setMailKey(e.target.value)} /></label>
             <label className="flex flex-col gap-1"><span className="text-ink-300">Codes come from</span>
               <input className="input text-xs" aria-label="Sender for the Studio's codes" placeholder="Picaffectz Studio <codes@your-domain.com>" value={mailFrom} onChange={(e) => setMailFrom(e.target.value)} /></label>
             <p className="text-ink-400">The sender's domain must be verified in <a className="underline" href="https://resend.com/domains" target="_blank" rel="noopener noreferrer">Resend → Domains</a>. Until then, <span className="font-mono">onboarding@resend.dev</span> works but only delivers to your own Resend email. <a className="underline" href={RESEND_KEYS_PAGE} target="_blank" rel="noopener noreferrer">Create a key ↗</a></p>
             <button type="button" className="btn btn-pri btn-sm self-start" disabled={!!busy || !mailFrom.trim()} onClick={saveMail}>{busy.startsWith("mail") ? (busy.split(":").slice(1).join(":") || "Saving") + "…" : "Save sign-in email settings"}</button>
-          </div>
+            </div>
+          </details>
           <div className="flex flex-col gap-2 rounded-lg border border-ink-700 p-3 text-[13px]" aria-label="Cloudflare accounts on the database">
             <div className="flex flex-wrap items-baseline gap-x-2"><b className="text-sm">Cloudflare accounts</b><span className="text-ink-400">Every account your sites are hosted on. This is the only place they are listed; a site shows just its own.</span></div>
             {!info.main && <span className="text-amber-200">The main account's token isn't kept on the database: turn on Publish from any device above so every device can publish, and so accounts can be added from any device.</span>}

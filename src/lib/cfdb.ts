@@ -286,6 +286,8 @@ export async function cfAddMembers(relay: Relay, token: string, s: CfDbSetup, sc
 }
 
 /** Resend's test mode (no verified domain) only emails the Resend account's own address; returns it from the error. */
+/** Resend refused because the sender's domain isn't verified for the key: the domain it tried. */
+export const resendDomainBlocked = (msg: string): string | null => /not authorized to send emails from ([a-z0-9.-]+\.[a-z]{2,})/i.exec(String(msg || ""))?.[1]?.toLowerCase() || null;
 export const resendTestOnly = (msg: string): string | null => /own email address \(([^)\s]+@[^)\s]+)\)/i.exec(String(msg || ""))?.[1]?.toLowerCase() || null;
 
 // ---------------------------------------------------------------- publishing from any device

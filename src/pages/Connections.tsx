@@ -3,7 +3,7 @@
 // Each form shows what is saved (a key only as "saved"), and a key box left empty keeps the saved key.
 import { GoogleSignInCard } from "../ui/GoogleSignIn";
 import { useEffect, useRef, useState } from "react";
-import { cfCall, cfRole, cfSendCode, cfSession, cfSignedIn, cfVerifyCode, resendTestOnly, signedInApi } from "../lib/cfdb";
+import { cfCall, cfRole, cfSendCode, cfSession, cfSignedIn, cfVerifyCode, resendDomainBlocked, resendTestOnly, signedInApi } from "../lib/cfdb";
 import { Field, Toggle, useToast } from "../ui/kit";
 import { COURIERS, TRACKERS } from "../lib/tracking";
 
@@ -38,8 +38,8 @@ function Secret({ id, label, saved, value, onChange, hint }: { id: string; label
   return <Field label={label} htmlFor={id} hint={hint || (saved ? "A key is saved. Leave this empty to keep it, or type a new one to replace it." : "Typed here, it goes straight to your own database and is stored encrypted. It is never shown again.")}>
     <input id={id} className="input" type="password" autoComplete="off" placeholder={saved ? "•••••••• saved" : ""} value={value} onChange={(e) => onChange(e.target.value)} /></Field>;
 }
-function Shell({ title, on, children, lead }: { title: string; on?: boolean; children: React.ReactNode; lead: React.ReactNode }) {
-  return <section className="card flex flex-col gap-3 p-5" aria-label={title}><h3 className="flex items-center gap-2 text-[15px] font-extrabold">{title}{on != null && <span className={`chip ${on ? "border-emerald-400/50 text-emerald-200" : "border-ink-600 text-ink-400"}`}>{on ? "On" : "Off"}</span>}</h3><p className="text-sm text-ink-300">{lead}</p>{children}</section>;
+function Shell({ title, on, children, lead, bare }: { bare?: boolean; title: string; on?: boolean; children: React.ReactNode; lead: React.ReactNode }) {
+  return <section className="card flex flex-col gap-3 p-5" aria-label={title}>{(!bare || on != null) && <h3 className="flex items-center gap-2 text-[15px] font-extrabold">{!bare && title}{on != null && <span className={`chip ${on ? "border-emerald-400/50 text-emerald-200" : "border-ink-600 text-ink-400"}`}>{on ? "On" : "Off"}</span>}</h3>}<p className="text-sm text-ink-300">{lead}</p>{children}</section>;
 }
 /** One box with its button on the same line (same height), and the hint under both. */
 function WithButton({ label, htmlFor, hint, children, button }: { label: string; htmlFor: string; hint?: string; children: React.ReactNode; button: React.ReactNode }) {
@@ -330,14 +330,14 @@ export function SmsForm({ where, kind, allow }: { where: Where | null | undefine
 
 /** A project's email (Resend): the Studio's own Resend (set in Settings → Hostings), or this project's own key and sender
  *  ("Custom"). The Studio's owner chooses which; the site's owner can fill in the key and sender once it is Custom. */
-export function MailForm({ where, studio }: { where: Where | null | undefined; /** True in the Studio's editor (the Studio's owner), false in the site's own admin page. */ studio: boolean }) {
+export function MailForm({ where, studio, bare }: { bare?: boolean; where: Where | null | undefined; /** True in the Studio's editor (the Studio's owner), false in the site's own admin page. */ studio: boolean }) {
   const toast = useToast(), { saved, err, save } = useSaved(where || null);
   const [f, setF] = useState({ on: false, from: "", key: "" }), [busy, setBusy] = useState("");
   useEffect(() => { const m = saved?.mail; setF({ on: !!m?.on, from: txt(m?.from), key: "" }); }, [saved]);
   const lead = <>Sign-in codes and the emails this project sends (enquiries, orders, stock, reviews) go out through Resend. By default that is the Studio's Resend (Settings → Hostings). Choose Custom to send this project's emails from its own Resend account and sender.</>;
-  if (where === undefined) return <Shell title="Email (Resend)" lead={lead}><Missing why="Checking your database…" /></Shell>;
-  if (!where) return <Shell title="Email (Resend)" lead={lead}><Missing why="Email settings are kept on the project's Cloudflare database. Publish the site to Cloudflare and sign in there to set them." /></Shell>;
-  if (err) return <Shell title="Email (Resend)" lead={lead}><Missing why={err} /></Shell>;
+  if (where === undefined) return <Shell bare={bare} title="Email (Resend)" lead={lead}><Missing why="Checking your database…" /></Shell>;
+  if (!where) return <Shell bare={bare} title="Email (Resend)" lead={lead}><Missing why="Email settings are kept on the project's Cloudflare database. Publish the site to Cloudflare and sign in there to set them." /></Shell>;
+  if (err) return <Shell bare={bare} title="Email (Resend)" lead={lead}><Missing why={err} /></Shell>;
   const m = saved?.mail, keyKept = !!m?.key, custom = studio ? f.on : !!m?.on;
   const fromOk = /<[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+>$|^[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+$/.test(f.from.trim()), keyOk = !!f.key.trim() || keyKept;
   const ok = !custom ? true : fromOk && keyOk && (!f.key.trim() || /^re_\S{8,}$/.test(f.key.trim()));
@@ -348,7 +348,7 @@ export function MailForm({ where, studio }: { where: Where | null | undefined; /
     setBusy("");
   };
   return (
-    <Shell title="Email (Resend)" on={!!(m?.on && m.key && m.from)} lead={lead}>
+    <Shell bare={bare} title="Email (Resend)" on={!!(m?.on && m.key && m.from)} lead={lead}>
       <fieldset className="flex flex-col gap-2 rounded-lg border border-ink-600 px-3 pb-3 pt-2" aria-label="Which Resend this project uses"><legend className="label px-1">Send with</legend>
         <label className={`flex items-start gap-2.5 text-sm ${studio ? "" : "opacity-70"}`}><input type="radio" name={"mail-way-" + (studio ? "s" : "x")} className="mt-[3px] h-4 w-4 flex-none" disabled={!studio} checked={!custom} onChange={() => setF({ ...f, on: false })} /><span>The Studio's Resend<span className="block text-ink-400">The key and sender set in the Studio's Settings → Hostings.</span></span></label>
         <label className={`flex items-start gap-2.5 text-sm ${studio ? "" : "opacity-70"}`}><input type="radio" name={"mail-way-" + (studio ? "s" : "x")} className="mt-[3px] h-4 w-4 flex-none" disabled={!studio} checked={custom} onChange={() => setF({ ...f, on: true })} /><span>Custom<span className="block text-ink-400">This project's own Resend key and sender.</span></span></label>
@@ -387,7 +387,7 @@ export function SiteDbSignIn({ cf, small, what = "see and change what is kept th
   const send = async (e?: React.FormEvent, to = email.trim()) => {
     e?.preventDefault(); setErr(""); setOwn(null); setBusy(true);
     try { await cfSendCode(cf.api, to, cf.site); setEmail(to); setSent(true); }
-    catch (x: any) { const o = resendTestOnly(x?.message || ""); if (o && o !== to.toLowerCase()) { setOwn(o); setErr(`This site's sign-in email is still in test mode, so codes can only go to ${o}.`); } else setErr(x?.message || "Couldn't send the code. Check your connection."); }
+    catch (x: any) { const o = resendTestOnly(x?.message || ""); const dom = resendDomainBlocked(x?.message || ""); if (o && o !== to.toLowerCase()) { setOwn(o); setErr(`This site's sign-in email is still in test mode, so codes can only go to ${o}.`); } else if (dom) setErr(`Resend won't send from ${dom}: the Resend key isn't verified for that domain. In Settings → Hostings → Sign-in emails (Resend), save a key and a sender on a domain verified in Resend, then use "Update the database" on this site.`); else setErr(x?.message || "Couldn't send the code. Check your connection."); }
     setBusy(false);
   };
   const verify = async (e: React.FormEvent) => {
@@ -486,7 +486,7 @@ export function CourierTrackingForm({ where }: { where: Where | null | undefined
 export function SiteConnections({ cf, template, cms, site, only }: { cf?: { api: string; site: string } | null; template: string; /** "mail": just the Email (Resend) card (portfolio sites have no WhatsApp or SMS). */ only?: "mail"; /** The site's content.cms (what the Studio allows it). */ cms?: any; /** True in the site's own admin page. */ site?: boolean }) {
   const aw = msgAllow(cms, "wa"), as = msgAllow(cms, "sms");
   const signed = useSiteDbSigned(cf), where = cf && signed ? { api: cf.api, scope: "site:" + cf.site } : null;
-  if (only === "mail") return <div className="flex max-w-3xl flex-col gap-4">{cf && !signed && <SiteDbSignIn cf={cf} what="show this project's email settings" />}<MailForm where={where} studio={!site} /></div>;
+  if (only === "mail") return <div className="flex max-w-3xl flex-col gap-4">{cf && !signed && <SiteDbSignIn cf={cf} what="show this project's email settings" />}<MailForm bare where={where} studio={!site} /></div>;
   return <div className="flex max-w-3xl flex-col gap-4">
     {cf && !signed && <SiteDbSignIn cf={cf} what={template === "restaurant" ? "show the boxes for Petpooja's and WhatsApp's keys" : "show the boxes for WhatsApp's keys"} />}
     {template === "restaurant" && <section className="card flex flex-col gap-2 p-5"><h3 className="text-[15px] font-extrabold">Restaurant backend</h3><p className="text-sm text-ink-300">Orders, payments and messages run on the site's own Cloudflare database: it saves each order under Purchased orders, works out what an order costs from your menu, confirms online payments with your payment gateway, passes orders to Petpooja, and sends WhatsApp messages. Keys you enter here stay on that database, encrypted. The payment gateways (Razorpay, Cashfree, PhonePe, Stripe, PayPal) and their keys are under Payments.</p></section>}

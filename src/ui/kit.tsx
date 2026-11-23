@@ -1,3 +1,4 @@
+import { createPortal } from "react-dom";
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { MARK_URI } from "./logo";
 
@@ -6,22 +7,30 @@ type ToastCtx = (msg: string, tone?: "ok" | "bad") => void;
 const ToastContext = createContext<ToastCtx>(() => {});
 export const useToast = () => useContext(ToastContext);
 
+/** One stack in the bottom-right corner for every notification: update progress, "updated" notes and toasts. */
+function dockEl(): HTMLElement {
+  let e = document.getElementById("notice-dock");
+  if (!e) { e = document.createElement("div"); e.id = "notice-dock"; e.setAttribute("aria-label", "Notifications"); document.body.appendChild(e); }
+  return e;
+}
+export function Dock({ children }: { children: ReactNode }) { return createPortal(children, dockEl()); }
+
 export function ToastHost({ children }: { children: ReactNode }) {
-  const [t, setT] = useState<{ msg: string; tone: "ok" | "bad"; id: number } | null>(null);
-  const timer = useRef<number>();
+  const [list, setList] = useState<{ msg: string; tone: "ok" | "bad"; id: number }[]>([]);
+  const n = useRef(0);
   const show = useCallback<ToastCtx>((msg, tone = "ok") => {
-    setT({ msg, tone, id: Date.now() });
-    clearTimeout(timer.current);
-    timer.current = window.setTimeout(() => setT(null), 3200);
+    const id = ++n.current;
+    setList((l) => [...l.slice(-3), { msg, tone, id }]);
+    window.setTimeout(() => setList((l) => l.filter((x) => x.id !== id)), 3600);
   }, []);
   return (
     <ToastContext.Provider value={show}>
       {children}
-      <div aria-live="polite" className="pointer-events-none fixed inset-x-0 bottom-0 z-[300] flex justify-center px-4 pb-[max(20px,env(safe-area-inset-bottom))]">
-        {t && (
-          <div key={t.id} className={`pointer-events-auto max-w-lg rounded-xl px-4 py-2.5 text-sm font-semibold shadow-2xl ${t.tone === "bad" ? "bg-red-500 text-white" : "bg-ink-100 text-ink-950"}`}>{t.msg}</div>
-        )}
-      </div>
+      <Dock>
+        <div aria-live="polite" className="flex flex-col gap-2 empty:-mt-2">
+          {list.map((t) => <div key={t.id} className={`rounded-xl px-4 py-2.5 text-sm font-semibold shadow-2xl ${t.tone === "bad" ? "bg-red-500 text-white" : "bg-ink-100 text-ink-950"}`}>{t.msg}</div>)}
+        </div>
+      </Dock>
     </ToastContext.Provider>
   );
 }

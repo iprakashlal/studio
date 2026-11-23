@@ -132,6 +132,7 @@ export function Dashboard({ studio, index, onIndex, token, hid = () => false, ma
             const c = catById(p.category), t = TEMPLATES[p.template], st = STATUS[p.status], last = p.exports[0];
             return (
               <article key={p.id} className="card group relative flex flex-col overflow-hidden rounded-2xl transition hover:-translate-y-0.5 hover:border-ink-500 hover:shadow-lg">
+                <div className="h-1.5" style={{ background: c?.color || "#2E3A4C" }} />
                 <div className="flex flex-1 flex-col gap-3 p-4">
                   <div className="flex flex-wrap items-center gap-1.5 text-xs">
                     {c && <span className="inline-flex items-center gap-1.5 truncate text-ink-400"><span className="h-2 w-2 rounded-full" style={{ background: c.color }} />{c.name}</span>}

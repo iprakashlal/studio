@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { THEMES, THEME_TAGS, hasFx, Motifs, type Theme } from "./catalog";
 import { themeCode } from "./codes";
 import { RestSwatch, restLine } from "./RestSwatch";
+import { Logo } from "../ui/kit";
 
 /** A small drawing of the theme: background, a card in its card style, a button in its button style, and the hero layout. */
 export function ThemeSwatch({ t }: { t: Theme }) {
@@ -90,7 +91,7 @@ export function ThemeGallery({ current, onPick, compact, dense, themes = THEMES,
             <span className={`flex flex-1 items-start justify-between gap-1.5 bg-ink-950 ${dense ? "px-2 py-1.5" : "px-2.5 py-2"}`}>
               <span className="min-w-0">
                 <span className="block font-mono text-[11px] leading-tight text-ink-400">{themeCode(t)}</span>
-                <b className={`line-clamp-2 block leading-snug ${dense ? "text-[12px]" : "text-[13px]"}`}>{t.signature && <span className="mr-1 text-brand-400" title="Signature layout">★</span>}{t.name}</b>
+                <b className={`line-clamp-2 block leading-snug ${dense ? "text-[12px]" : "text-[13px]"}`}>{t.signature && <span className="mr-1 text-brand-400" title="Signature layout">★</span>}{t.tags.includes("Picaffectz") && <span className="mr-1 inline-block translate-y-[3px]" title="Picaffectz theme"><Logo size={6} /></span>}{t.name}</b>
                 {!dense && <span className="line-clamp-2 block text-[11px] leading-snug text-ink-400">{t.signature ? "Signature layout · own sections" : <>{t.kit !== "classic" ? "Own layout · " : ""}{t.id.startsWith("rest-") ? restLine(t) : Motifs.packs[t.motif]?.name || t.display}{hasFx(t) ? " · " + fxSummary(t) : ""}</>}</span>}
               </span>
               {on(t) ? <span className="text-xs font-bold text-brand-400">✓</span> : !dense && hasFx(t) && <span className="shrink-0 rounded-full border border-brand-500/50 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-brand-400" title="Interactive theme: cursor, intro and scroll effects">fx</span>}

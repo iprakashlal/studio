@@ -50,7 +50,11 @@ export function ProjectView({ studio, index, project, session, onIndex }: { stud
   useEffect(() => { const on = () => setPane("edit"); addEventListener(GOTO_EVENT, on); return () => removeEventListener(GOTO_EVENT, on); }, []);
   useEffect(() => { const on = () => setModal("pamphlet"); addEventListener(PAMPHLET_EVENT, on); return () => removeEventListener(PAMPHLET_EVENT, on); }, []);
   useEffect(() => { const on = () => setModal("reviews"); addEventListener(GOOGLE_EVENT, on); return () => removeEventListener(GOOGLE_EVENT, on); }, []);
-  const [modal, setModal] = useState<Modal>("");
+  const [modal, setModal] = useState<Modal>(() => {
+    // Quick Setup on a project tile opens the project with its publish window ready.
+    try { const v = sessionStorage.getItem("studio-open-modal") || ""; if (v.startsWith(project.id + ":")) { sessionStorage.removeItem("studio-open-modal"); const m = v.slice(project.id.length + 1); if (m === "host" || m === "publish") return m; } } catch { /* opens as usual */ }
+    return "";
+  });
   const defaults = useRef<any>(null);
   const [openAt, setOpenAt] = useState(0);
   const [conflict, setConflict] = useState<{ siteAt: string | null } | null>(null);

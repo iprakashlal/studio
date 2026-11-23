@@ -5,6 +5,7 @@ import { ThemeGallery } from "../themes/ThemeGallery";
 import { anyThemeById as themeById } from "../themes/codes";
 import { dashStats } from "../lib/dashstats";
 import { TEMPLATES, TEMPLATE_LIST } from "../schema";
+import { QuickOverview, QuickSetup } from "./QuickTiles";
 import { CATEGORY_COLORS, type CategoryRec, type ProjectMeta, type Studio, type StudioIndex } from "../lib/studio";
 import { explain } from "../lib/repo";
 import { siteAddress, siteRepoFor } from "../lib/hosting";
@@ -120,6 +121,7 @@ export function Dashboard({ studio, index, onIndex, token, hid = () => false, ma
 
   const stats = dashStats(index.dash?.stats).map((d) => ({ n: d.count(index.projects), l: d.label }));
 
+  const [quick, setQuick] = useState<{ id: string; kind: "setup" | "overview" } | null>(null);
   const run = async (key: string, fn: () => Promise<StudioIndex>, ok: string) => {
     setBusy(key);
     try { onIndex(await fn()); toast(ok); } catch (e) { toast(explain(e), "bad"); }
@@ -159,6 +161,8 @@ export function Dashboard({ studio, index, onIndex, token, hid = () => false, ma
                   </div>
                   <div className="relative z-10 flex flex-wrap gap-2">
                     <a href={`#/p/${p.id}`} className="btn btn-pri btn-sm">Open</a>
+                    <button type="button" className="btn btn-sm" onClick={() => setQuick({ id: p.id, kind: "setup" })}>Quick Setup</button>
+                    <button type="button" className="btn btn-sm" onClick={() => setQuick({ id: p.id, kind: "overview" })}>Quick Overview</button>
                     {!hid("duplicate") && !hid("new") && !hid("tpl-" + p.template) && room(p.template) && <button className="btn btn-sm" disabled={!!busy} onClick={() => run("dup" + p.id, () => studio.duplicate(p.id, `${p.name} (copy)`), "Project duplicated")}>{busy === "dup" + p.id ? "Copying…" : "Duplicate"}</button>}
                     {p.host ? <a className="btn btn-sm" href={siteAddress(p.host)} target="_blank" rel="noopener">Live site ↗</a> : p.publish && <a className="btn btn-sm" href={`https://${p.publish.owner}.github.io/${p.publish.repo === `${p.publish.owner}.github.io` ? "" : p.publish.repo + "/"}`} target="_blank" rel="noopener">Live site ↗</a>}
                     {!hid("delete") && <button className="btn btn-sm btn-danger ml-auto" disabled={!!busy} onClick={async () => {
@@ -243,6 +247,7 @@ export function Dashboard({ studio, index, onIndex, token, hid = () => false, ma
 
       {creating && <NewProject templates={offered} studio={studio} index={index} onClose={() => setCreating(false)} onCreated={(i, id) => { onIndex(i); setCreating(false); location.hash = `#/p/${id}`; }} />}
       {managing && <Categories studio={studio} index={index} onClose={() => setManaging(false)} onIndex={onIndex} />}
+      {quick && (() => { const qp = index.projects.find((x) => x.id === quick.id); return qp ? (quick.kind === "setup" ? <QuickSetup project={qp} onClose={() => setQuick(null)} /> : <QuickOverview project={qp} onClose={() => setQuick(null)} />) : null; })()}
     </main>
   );
 }

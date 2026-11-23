@@ -50,7 +50,7 @@ function ProjectMark({ studio, p, acc }: { studio: Studio; p: ProjectMeta; acc: 
   }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
   const initials = (p.name.trim().match(/\b[\p{L}\p{N}]/gu) || ["•"]).slice(0, 2).join("").toUpperCase();
   return src
-    ? <span aria-hidden className="grid h-11 w-11 flex-none place-items-center overflow-hidden rounded-2xl border border-ink-700 bg-white/90 p-1.5"><img src={src} alt="" className="h-full w-full object-contain" onError={() => setSrc("")} /></span>
+    ? <span aria-hidden className="block h-11 w-11 flex-none overflow-hidden rounded-2xl border border-ink-700 bg-ink-800"><img src={src} alt="" className="h-full w-full object-cover" onError={() => setSrc("")} /></span>
     : <span aria-hidden className="grid h-11 w-11 flex-none place-items-center rounded-2xl font-display text-[15px] font-extrabold" style={{ background: `${acc}26`, color: acc }}>{initials}</span>;
 }
 /** A project that isn't published anywhere yet says what to do next. */

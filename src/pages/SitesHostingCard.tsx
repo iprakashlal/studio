@@ -20,6 +20,7 @@ import { useCfAccount } from "./CfPicker";
 import { CfDomainCard } from "./HostDialog";
 import type { HostCfg } from "../lib/supa";
 import { Netlify } from "../lib/netlify";
+import { RESEND_KEYS_PAGE } from "../lib/resend";
 import { netlifyToken } from "../lib/hosting";
 
 type Acc = { id: string; name: string };
@@ -43,6 +44,8 @@ export function SitesHostingCard({ session, studio, index, onIndex }: { session:
     setSiteDbs(await Promise.all([...by].map(async ([api, e]) => ({ api, account: e.account, sites: e.sites, cur: api === justUpdated || ((await cfDeployInfo(api)).v || 0) >= CFDB_VERSION }))));
   };
   const [busy, setBusy] = useState(""), [err, setErr] = useState("");
+  const [mailKey, setMailKey] = useState(""), [mailFrom, setMailFrom] = useState("");
+  useEffect(() => { cfAccountVault.load(session.token).then((v) => { if (v?.mailFrom) setMailFrom((x) => x || v.mailFrom!); }).catch(() => {}); }, [session.token]);
   const [tear, setTear] = useState<ProjectMeta | null>(null);
   const [addTok, setAddTok] = useState(""), [replaceFor, setReplaceFor] = useState<string | null>(null);
   const [pick, setPick] = useState<Record<string, string>>({});
@@ -175,6 +178,22 @@ export function SitesHostingCard({ session, studio, index, onIndex }: { session:
     await cfAccountVault.save({ ...(v || {}), token, account: account.id, setup }, session.token);
     toast("Your Studio's database is up to date."); await load();
   });
+  /** Changes the Resend key and/or sender the Studio's database sends sign-in codes with. A blank key keeps the one it has. */
+  const saveMail = () => run("mail", async () => {
+    if (!db) return;
+    const from = mailFrom.trim(), key = mailKey.trim();
+    if (!/<[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+>$|^[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+$/.test(from)) throw new Error("The sender should look like Name <codes@your-domain.com>, or just codes@your-domain.com.");
+    if (key && !/^re_\S{8,}$/.test(key)) throw new Error("A Resend API key starts with re_. Copy it again from resend.com/api-keys.");
+    const say = (x: string) => setBusy("mail:" + x);
+    const { relay, cf, account, token } = await cfAcc.client(say);
+    const sub = await cf.subdomainOf(account.id);
+    if (!sub || `picaffectz-db.${sub}.workers.dev` !== dbHost) throw new Error(`This token is for ${account.name}, but your Studio's database (${dbHost}) is on another Cloudflare account. Connect that account's token here.`);
+    const v = await cfAccountVault.load(session.token);
+    const deploy = (await cfDeployInfo(db.api)).deploy;
+    const setup = await setupCfDb(relay, token, { account, resendKey: key, mailFrom: from, name: "Picaffectz Studio", existing: v?.setup && v.setup.api === db.api ? v.setup : null, requireMail: true, ...(deploy ? { deployToken: token } : {}) }, say);
+    await cfAccountVault.save({ ...(v || {}), token, account: account.id, setup, mailFrom: from, ...(key ? { resendKey: key } : {}) }, session.token);
+    setMailKey(""); toast("Sign-in emails will now be sent from " + from + "."); await load();
+  });
   if (db === undefined) return null;
   return (
     <section className="card flex flex-col gap-3 p-5" aria-label="Sites and hosting accounts">
@@ -200,6 +219,15 @@ export function SitesHostingCard({ session, studio, index, onIndex }: { session:
           {index.hosted?.pages === "cloudflare" && index.hosted.siteId && <div aria-label="The Studio's own address"><CfDomainCard plain="The Studio's own address" acc={cfAcc}
             host={{ kind: "cloudflare", siteId: index.hosted.siteId, siteName: index.hosted.siteName, url: index.hosted.url, account: index.hosted.account, domain: index.hosted.domain, subdomain: index.hosted.subdomain, domainSetup: index.hosted.domainSetup } as HostCfg}
             onHost={async (h) => { onIndex(await studio.updateIndex((i) => { if (i.hosted) { i.hosted = { ...i.hosted, domain: h.domain, subdomain: h.subdomain, domainSetup: h.domainSetup }; } }, h.domain ? `Studio address: ${h.domain}` : "Studio address removed")); }} /></div>}
+          <div className="flex flex-col gap-2 rounded-lg border border-ink-700 p-3 text-[13px]" aria-label="Sign-in emails (Resend)">
+            <div className="flex flex-wrap items-baseline gap-x-2"><b className="text-sm">Sign-in emails (Resend)</b><span className="text-ink-400">How this Studio emails its 6-digit sign-in codes. Each site's own email settings are separate.</span></div>
+            <label className="flex flex-col gap-1"><span className="text-ink-300">Resend API key</span>
+              <input className="input font-mono text-xs" type="password" autoComplete="off" aria-label="Resend API key for the Studio's codes" placeholder="Leave empty to keep the current key (re_…)" value={mailKey} onChange={(e) => setMailKey(e.target.value)} /></label>
+            <label className="flex flex-col gap-1"><span className="text-ink-300">Codes come from</span>
+              <input className="input text-xs" aria-label="Sender for the Studio's codes" placeholder="Picaffectz Studio <codes@your-domain.com>" value={mailFrom} onChange={(e) => setMailFrom(e.target.value)} /></label>
+            <p className="text-ink-400">The sender's domain must be verified in <a className="underline" href="https://resend.com/domains" target="_blank" rel="noopener noreferrer">Resend → Domains</a>. Until then, <span className="font-mono">onboarding@resend.dev</span> works but only delivers to your own Resend email. <a className="underline" href={RESEND_KEYS_PAGE} target="_blank" rel="noopener noreferrer">Create a key ↗</a></p>
+            <button type="button" className="btn btn-pri btn-sm self-start" disabled={!!busy || !mailFrom.trim()} onClick={saveMail}>{busy.startsWith("mail") ? (busy.split(":").slice(1).join(":") || "Saving") + "…" : "Save sign-in email settings"}</button>
+          </div>
           <div className="flex flex-col gap-2 rounded-lg border border-ink-700 p-3 text-[13px]" aria-label="Cloudflare accounts on the database">
             <div className="flex flex-wrap items-baseline gap-x-2"><b className="text-sm">Cloudflare accounts</b><span className="text-ink-400">Every account your sites are hosted on. This is the only place they are listed; a site shows just its own.</span></div>
             {!info.main && <span className="text-amber-200">The main account's token isn't kept on the database: turn on Publish from any device above so every device can publish, and so accounts can be added from any device.</span>}

@@ -15,7 +15,7 @@ const RESTAURANT: Row[] = [
   ["ordering", "Online ordering"], ["delivery", "Online ordering"], ["checkout", "Online ordering"], ["payments", "Online ordering"], ["coupons", "Online ordering"], ["users", "Online ordering"], ["orderdelivery", "Online ordering"],
   // Website pages: the home page and its sections
   ["pages", "Website pages"], ["menu", "Website pages"],
-  ["hero", "Website pages", "Sections"], ["highlights", "Website pages", "Sections"], ["about", "Website pages", "Sections"], ["events", "Website pages", "Sections"], ["gallery", "Website pages", "Sections"], ["chef", "Website pages", "Sections"], ["testimonials", "Website pages", "Sections", "Guest quotes"], ["press", "Website pages", "Sections"], ["video", "Website pages", "Sections"], ["order", "Website pages", "Sections"], ["faq", "Website pages", "Sections"], ["cta", "Website pages", "Sections"],
+  ["hero", "Website pages", "Sections"], ["highlights", "Website pages", "Sections"], ["about", "Website pages", "Sections"], ["gallery", "Website pages", "Sections"], ["chef", "Website pages", "Sections"], ["events", "Website pages", "Sections"], ["press", "Website pages", "Sections"], ["testimonials", "Website pages", "Sections", "Guest quotes & dish reviews"], ["video", "Website pages", "Sections"], ["order", "Website pages", "Sections", "Order links"], ["faq", "Website pages", "Sections"], ["cta", "Website pages", "Sections"],
   ["static-pages", "Website pages"],
   // Hours & contact: what guests look for first
   ["hours", "Hours & contact"], ["contact", "Hours & contact"], ["forms", "Hours & contact"], ["social", "Hours & contact"], ["footer", "Hours & contact"],

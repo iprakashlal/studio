@@ -25,7 +25,7 @@ create index if not exists approvals_project on approvals (scope, project, creat
 create table if not exists approval_notes (id integer primary key autoincrement, token text not null, who text not null, body text not null, page text not null default '', kind text not null default 'comment', created_at text not null);
 create index if not exists approval_notes_token on approval_notes (token, id);
 `;
-var CFDB_VERSION = 52;
+var CFDB_VERSION = 53;
 var CFDB_WORKER_NAME = "picaffectz-db";
 
 // src/lib/lookdigest.ts
@@ -739,6 +739,7 @@ async function siteContent(env, site) {
 }
 var siteName = (c, site) => oneLine(String(c?.brand?.name || c?.brand?.logoText || site));
 async function notifyEnquiry(env, site, data, page) {
+  env = await siteMail(env, site);
   const c = await siteContent(env, site);
   if (!c) return "";
   const F = c?.contact?.form || {}, E2 = c?.emails && typeof c.emails === "object" ? c.emails : {};
@@ -1114,6 +1115,7 @@ var SETTINGS = {
 };
 for (const id of Object.keys(TRACKERS)) SETTINGS["tk_" + id] = TRACKER_FIELDS;
 SETTINGS.ship = { secret: [], text: [], flags: ["manual", "quiet"] };
+SETTINGS.mail = { secret: ["key"], text: ["from"], flags: ["on"] };
 async function aesKey(env) {
   return crypto.subtle.importKey("raw", await crypto.subtle.digest("SHA-256", enc.encode("settings:" + env.SECRET)), "AES-GCM", false, ["encrypt", "decrypt"]);
 }
@@ -1214,6 +1216,7 @@ var itemsText = (d) => {
   }
 };
 async function orderMail(env, site, kind, d, c0) {
+  env = await siteMail(env, site);
   const to = emailKey(d?.email);
   if (!to || !env.RESEND_API_KEY || !env.MAIL_FROM) return "";
   const c = c0 || await siteContent(env, site).catch(() => null), E2 = c?.emails && typeof c.emails === "object" ? c.emails : {};
@@ -1237,6 +1240,11 @@ async function orderMail(env, site, kind, d, c0) {
 }
 async function shippedMail(env, site, d) {
   return orderMail(env, site, "shipped", d);
+}
+async function siteMail(env, site) {
+  if (!/^[a-z0-9][a-z0-9-]{0,59}$/.test(site)) return env;
+  const m = await getSetting(env, "site:" + site, "mail").catch(() => null);
+  return m?.on && m.key && m.from ? { ...env, RESEND_API_KEY: String(m.key), MAIL_FROM: String(m.from) } : env;
 }
 function maskSetting(name, v) {
   const S2 = SETTINGS[name], o = {};
@@ -1707,6 +1715,7 @@ async function stockBack(env, site, taken, ref, why) {
   }
 }
 async function stockLowMail(env, site, c, low) {
+  env = await siteMail(env, site);
   if (!low.length || c?.inventory?.alert === false || !env.RESEND_API_KEY || !env.MAIL_FROM) return;
   const addrs = (v) => String(v || "").split(/[,;\s]+/).map((x) => x.trim()).filter((x) => EMAIL_RE.test(x)).slice(0, 5);
   let to = addrs(c?.inventory?.alertTo);
@@ -1733,6 +1742,7 @@ var recTok = () => {
   return [...a].map((x) => x.toString(16).padStart(2, "0")).join("");
 };
 async function recSend(env, site, c, row, origin) {
+  env = await siteMail(env, site);
   const R = c?.recovery || {}, shop = siteName(c, site), items = (() => {
     try {
       return JSON.parse(row.items);
@@ -2239,7 +2249,9 @@ var db_worker_default = {
         const code = String(1e5 + crypto.getRandomValues(new Uint32Array(1))[0] % 9e5);
         await env.DB.prepare("insert into codes (email, hash, expires, tries, sent) values (?, ?, ?, 0, ?) on conflict (email) do update set hash = excluded.hash, expires = excluded.expires, tries = 0, sent = excluded.sent").bind(email2, b64u(await hmac(env.SECRET, "c:" + email2 + ":" + code)), Date.now() + 10 * 6e4, Date.now()).run();
         let subject = "Your sign-in code", intro = `Enter this code to sign in${env.NAME ? " to " + env.NAME : ""}:`, footer = "It works for 10 minutes. If you didn't ask for it, ignore this email.", heading = "Your sign-in code";
+        let mailEnv = env;
         if (typeof forSite === "string" && /^[a-z0-9][a-z0-9-]{0,59}$/.test(forSite) && await env.DB.prepare("select 1 from members where email = ? and scope = ? limit 1").bind(email2, "site:" + forSite).first()) {
+          mailEnv = await siteMail(env, forSite);
           const c = await siteContent(env, forSite).catch(() => null), T = c?.emails?.signin;
           if (T && typeof T === "object") {
             const vars = { site: siteName(c, forSite), email: email2 };
@@ -2286,7 +2298,7 @@ var db_worker_default = {
           }
         }
         try {
-          await sendMail(env, email2, subject, WRAP(`<h2 style="margin:0 0 12px;font-size:20px">${hesc(heading)}</h2>${paras(intro)}<p style="font-size:28px;font-weight:700;letter-spacing:6px;margin:0 0 14px">${code}</p>${paras(footer, "margin:0 0 8px;color:#667;font-size:13px")}`));
+          await sendMail(mailEnv, email2, subject, WRAP(`<h2 style="margin:0 0 12px;font-size:20px">${hesc(heading)}</h2>${paras(intro)}<p style="font-size:28px;font-weight:700;letter-spacing:6px;margin:0 0 14px">${code}</p>${paras(footer, "margin:0 0 8px;color:#667;font-size:13px")}`));
         } catch (e) {
           if (!onWa && !onSms) throw e;
         }
@@ -2604,7 +2616,7 @@ var db_worker_default = {
           const code = String(1e5 + crypto.getRandomValues(new Uint32Array(1))[0] % 9e5), name = oneLine(String(sc?.brand?.name || "")).slice(0, 60) || "your order";
           await env.DB.prepare("insert into otps (k, hash, expires, tries, sent) values (?, ?, ?, 0, ?) on conflict (k) do update set hash = excluded.hash, expires = excluded.expires, tries = 0, sent = excluded.sent").bind(k, b64u(await hmac(env.SECRET, k + ":" + code)), now + 10 * 6e4, now).run();
           try {
-            await sendMail(env, em, `${code} is your code for ${name}`, `<p>Your code to confirm this email address for ${hesc(name)}:</p><p style="font-size:28px;font-weight:700;letter-spacing:4px">${code}</p><p>It works for 10 minutes. If you didn't ask for it, ignore this email.</p>`);
+            await sendMail(await siteMail(env, site), em, `${code} is your code for ${name}`, `<p>Your code to confirm this email address for ${hesc(name)}:</p><p style="font-size:28px;font-weight:700;letter-spacing:4px">${code}</p><p>It works for 10 minutes. If you didn't ask for it, ignore this email.</p>`);
           } catch {
             const exp2 = now + 45 * 6e4;
             return json({ ok: false, skip: exp2 + "." + b64u(await hmac(env.SECRET, "eskip:" + site + ":" + em + ":" + exp2)) });
@@ -2785,10 +2797,10 @@ var db_worker_default = {
         if (c.reviews.buyersOnly && !verified) return err(403, "Only people who have ordered this can review it. Use the email address you ordered with.");
         const live = c.reviews.auto === true || c.reviews.trustBuyers && verified;
         await env.DB.prepare("insert into reviews (site, item, label, name, email, rating, title, body, verified, status, created_at) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").bind(site, it.item, it.name.slice(0, 120), name, email2, rating, title, body, verified, live ? "live" : "pending", (/* @__PURE__ */ new Date()).toISOString()).run();
-        if (!live && c.reviews.alert !== false && env.RESEND_API_KEY && env.MAIL_FROM) {
+        if (!live && c.reviews.alert !== false && (await siteMail(env, site)).RESEND_API_KEY && (await siteMail(env, site)).MAIL_FROM) {
           const to = await ownerTo(env, site, c, c.reviews.alertTo);
           if (to.length) {
-            const mm = sendMail(env, to, `New review to approve: ${it.name}`.slice(0, 150), WRAP(`<h2 style="margin:0 0 12px;font-size:20px">New review for ${hesc(it.name)}</h2>${paras(`${"\u2605".repeat(rating)}${"\u2606".repeat(5 - rating)}  ${name}${verified ? " (verified buyer)" : ""}
+            const mm = sendMail(await siteMail(env, site), to, `New review to approve: ${it.name}`.slice(0, 150), WRAP(`<h2 style="margin:0 0 12px;font-size:20px">New review for ${hesc(it.name)}</h2>${paras(`${"\u2605".repeat(rating)}${"\u2606".repeat(5 - rating)}  ${name}${verified ? " (verified buyer)" : ""}
 ${title ? title + "\n" : ""}
 ${body}`)}${paras("Approve or hide it under Reviews in your site's admin page.", "margin:0 0 8px;color:#667;font-size:13px")}`)).catch(() => {
             });
@@ -3171,10 +3183,17 @@ ${body}`)}${paras("Approve or hide it under Reviews in your site's admin page.",
           await putSetting(env, scope, name, null);
           return json({ ok: true });
         }
+        if (name === "mail" && !scope.startsWith("site:")) return err(400, "Site email is set per site.");
         const old = await getSetting(env, scope, name) || {}, v = {};
         for (const k of S2.text) v[k] = String(b.value[k] ?? old[k] ?? "").slice(0, 3e3).trim();
         for (const k of S2.flags) v[k] = b.value[k] == null ? !!old[k] : !!b.value[k];
         for (const k of S2.secret) v[k] = String(b.value[k] || "").trim().slice(0, 600) || old[k] || "";
+        if (name === "mail") {
+          const so = await env.DB.prepare("select 1 x from members where email = ? and scope like 'studio:%' and role = 'owner' limit 1").bind(email).first();
+          if (!so) v.on = !!old.on;
+          if (v.from && !EMAIL_RE.test(v.from.replace(/^.*<([^<>]+)>\s*$/, "$1"))) return err(400, "The sender should look like Name <codes@your-domain.com>.");
+          if (v.key && !/^re_\S{8,}$/.test(v.key)) return err(400, "A Resend API key starts with re_.");
+        }
         if (name === "ai" && v.base && !publicUrl(v.base)) return err(400, "The API address must be a public https:// address.");
         if (name.startsWith("tk_") && v.url && !publicUrl(v.url.replace(/\{(awb|courier)\}/g, "x"))) return err(400, "The tracking address must be a public https:// address.");
         await putSetting(env, scope, name, v);

@@ -162,6 +162,7 @@ const siteName = (c: any, site: string) => oneLine(String(c?.brand?.name || c?.b
  *  so the form can't be used to send mail to strangers or to flood an inbox. */
 /** Returns what happened to the owner's copy, in words for the Enquiries list ("" when it is switched off). */
 async function notifyEnquiry(env: Env, site: string, data: Record<string, string>, page: string): Promise<string> {
+  env = await siteMail(env, site);
   const c = await siteContent(env, site); if (!c) return "";
   const F = c?.contact?.form || {}, E = (c?.emails && typeof c.emails === "object" ? c.emails : {}) as any;
   // The owner's copy is on unless the owner switched it off (content saved before the switch existed counts as on).
@@ -468,6 +469,8 @@ const SETTINGS: Record<string, { secret: string[]; text: string[]; flags: string
 // Courier tracking (shops): one connection per service the shop has an account with (tk_<service>), and what to do with what they say.
 for (const id of Object.keys(TRACKERS)) SETTINGS["tk_" + id] = TRACKER_FIELDS;
 SETTINGS.ship = { secret: [], text: [], flags: ["manual", "quiet"] };
+// Email through the site's own Resend account (key and sender), when the Studio's owner has switched the site to "Custom".
+SETTINGS.mail = { secret: ["key"], text: ["from"], flags: ["on"] };
 async function aesKey(env: Env) { return crypto.subtle.importKey("raw", await crypto.subtle.digest("SHA-256", enc.encode("settings:" + env.SECRET)), "AES-GCM", false, ["encrypt", "decrypt"]); }
 async function getSetting(env: Env, scope: string, name: string): Promise<any | null> {
   await ensure(env);
@@ -532,6 +535,7 @@ const ORDER_DEF: Record<string, { subject: string; heading: string; message: str
 const itemsText = (d: any) => { try { const a = JSON.parse(String(d?._items || "[]")); return Array.isArray(a) ? a.slice(0, 40).map((x: any) => `• ${Math.max(1, +x.q || 1)} × ${oneLine(String(x.n || ""))}`).join("\n") : ""; } catch { return ""; } };
 /** Sends one order email to the customer. kind: placed, shipped, ready, out, done or cancelled. Returns a line for the order's note, or "". */
 async function orderMail(env: Env, site: string, kind: string, d: any, c0?: any): Promise<string> {
+  env = await siteMail(env, site);
   const to = emailKey(d?.email); if (!to || !env.RESEND_API_KEY || !env.MAIL_FROM) return "";
   const c = c0 || (await siteContent(env, site).catch(() => null)), E = (c?.emails && typeof c.emails === "object" ? c.emails : {}) as any;
   const T: any = kind === "placed" ? E.order : kind === "shipped" ? E.shipped : E.status?.[kind];
@@ -552,6 +556,13 @@ async function orderMail(env: Env, site: string, kind: string, d: any, c0?: any)
 }
 async function shippedMail(env: Env, site: string, d: any) { return orderMail(env, site, "shipped", d); }
 
+/** The environment a site\'s emails are sent with: its own Resend key and sender when the Studio\'s owner switched the site to
+ *  Custom and both are filled in, otherwise the database\'s own (the Studio\'s Resend). */
+async function siteMail(env: Env, site: string): Promise<Env> {
+  if (!/^[a-z0-9][a-z0-9-]{0,59}$/.test(site)) return env;
+  const m = await getSetting(env, "site:" + site, "mail").catch(() => null);
+  return m?.on && m.key && m.from ? { ...env, RESEND_API_KEY: String(m.key), MAIL_FROM: String(m.from) } : env;
+}
 /** What a browser may see of a setting: everything but the secrets (those only say whether one is saved). */
 function maskSetting(name: string, v: any) {
   const S = SETTINGS[name], o: any = {}; if (!v) return null;
@@ -874,6 +885,7 @@ async function stockBack(env: Env, site: string, taken: [string, number][], ref:
 }
 /** An email to the owner when an order takes an item down to its low mark (or to nothing). */
 async function stockLowMail(env: Env, site: string, c: any, low: { name: string; qty: number }[]) {
+  env = await siteMail(env, site);
   if (!low.length || c?.inventory?.alert === false || !env.RESEND_API_KEY || !env.MAIL_FROM) return;
   const addrs = (v: unknown) => String(v || "").split(/[,;\s]+/).map((x) => x.trim()).filter((x) => EMAIL_RE.test(x)).slice(0, 5);
   let to = addrs(c?.inventory?.alertTo); if (!to.length) to = addrs(c?.contact?.form?.notifyTo); if (!to.length) to = addrs(c?.contact?.email);
@@ -891,6 +903,7 @@ const recKey = (email: string) => email.trim().toLowerCase();
 const recMoney = (c: any, n: number) => { const cur = siteCur(c); try { return new Intl.NumberFormat("en-IN", { style: "currency", currency: cur, maximumFractionDigits: n % 1 ? 2 : 0 }).format(n); } catch { return cur + " " + n; } };
 const recTok = () => { const a = new Uint8Array(16); crypto.getRandomValues(a); return [...a].map((x) => x.toString(16).padStart(2, "0")).join(""); };
 async function recSend(env: Env, site: string, c: any, row: any, origin: string): Promise<void> {
+  env = await siteMail(env, site);
   const R = c?.recovery || {}, shop = siteName(c, site), items: { n: string; q: number }[] = (() => { try { return JSON.parse(row.items); } catch { return []; } })();
   const base = String(R.url || "").trim().replace(/[?#].*$/, ""), back = /^https:\/\//.test(base) ? base : String(row.back || "");
   if (!/^https:\/\//.test(back)) throw new Error("No shop address to link to.");
@@ -1258,7 +1271,9 @@ export default {
         // A site's admin page names its site: that site's own wording is used when this email is one of its editors.
         // The Studio's sign-in names the Studio: its own wording (Settings → Customize) for its members.
         let subject = "Your sign-in code", intro = `Enter this code to sign in${env.NAME ? " to " + env.NAME : ""}:`, footer = "It works for 10 minutes. If you didn't ask for it, ignore this email.", heading = "Your sign-in code";
+        let mailEnv = env;
         if (typeof forSite === "string" && /^[a-z0-9][a-z0-9-]{0,59}$/.test(forSite) && (await env.DB.prepare("select 1 from members where email = ? and scope = ? limit 1").bind(email, "site:" + forSite).first())) {
+          mailEnv = await siteMail(env, forSite);
           const c = await siteContent(env, forSite).catch(() => null), T = c?.emails?.signin;
           if (T && typeof T === "object") {
             const vars = { site: siteName(c, forSite), email };
@@ -1288,7 +1303,7 @@ export default {
           const z = await getSetting(env, waScope, "sms").catch(() => null), sn = pol.sms && smsReady(z) && smsOwnCode(z) && z.login ? waNum(waPhoneOf(z.phones, email), z.cc) : "";
           if (sn) try { await smsSend(z, sn, code, env.NAME || "your account"); onSms = true; } catch { /* the email still goes */ }
         }
-        try { await sendMail(env, email, subject, WRAP(`<h2 style="margin:0 0 12px;font-size:20px">${hesc(heading)}</h2>${paras(intro)}<p style="font-size:28px;font-weight:700;letter-spacing:6px;margin:0 0 14px">${code}</p>${paras(footer, "margin:0 0 8px;color:#667;font-size:13px")}`)); }
+        try { await sendMail(mailEnv, email, subject, WRAP(`<h2 style="margin:0 0 12px;font-size:20px">${hesc(heading)}</h2>${paras(intro)}<p style="font-size:28px;font-weight:700;letter-spacing:6px;margin:0 0 14px">${code}</p>${paras(footer, "margin:0 0 8px;color:#667;font-size:13px")}`)); }
         catch (e) { if (!onWa && !onSms) throw e; }
         return json({ ok: true, ...(onWa ? { whatsapp: true } : {}), ...(onSms ? { sms: true } : {}) });
       }
@@ -1543,7 +1558,7 @@ export default {
           if ((n?.n || 0) >= 150) return err(429, "Too many codes were asked for. Please try again later.");
           const code = String(100000 + (crypto.getRandomValues(new Uint32Array(1))[0] % 900000)), name = oneLine(String(sc?.brand?.name || "")).slice(0, 60) || "your order";
           await env.DB.prepare("insert into otps (k, hash, expires, tries, sent) values (?, ?, ?, 0, ?) on conflict (k) do update set hash = excluded.hash, expires = excluded.expires, tries = 0, sent = excluded.sent").bind(k, b64u(await hmac(env.SECRET, k + ":" + code)), now + 10 * 60_000, now).run();
-          try { await sendMail(env, em, `${code} is your code for ${name}`, `<p>Your code to confirm this email address for ${hesc(name)}:</p><p style="font-size:28px;font-weight:700;letter-spacing:4px">${code}</p><p>It works for 10 minutes. If you didn't ask for it, ignore this email.</p>`); }
+          try { await sendMail(await siteMail(env, site), em, `${code} is your code for ${name}`, `<p>Your code to confirm this email address for ${hesc(name)}:</p><p style="font-size:28px;font-weight:700;letter-spacing:4px">${code}</p><p>It works for 10 minutes. If you didn't ask for it, ignore this email.</p>`); }
           catch {
             // The database could not send mail to this address at all (for example its sender is still in test mode). Customers are
             // not locked out for that: the order may go ahead unverified, with a pass only this database can make, and is marked so.
@@ -1675,7 +1690,7 @@ export default {
         if (c.reviews.buyersOnly && !verified) return err(403, "Only people who have ordered this can review it. Use the email address you ordered with.");
         const live = c.reviews.auto === true || (c.reviews.trustBuyers && verified);
         await env.DB.prepare("insert into reviews (site, item, label, name, email, rating, title, body, verified, status, created_at) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").bind(site, it.item, it.name.slice(0, 120), name, email, rating, title, body, verified, live ? "live" : "pending", new Date().toISOString()).run();
-        if (!live && c.reviews.alert !== false && env.RESEND_API_KEY && env.MAIL_FROM) { const to = await ownerTo(env, site, c, c.reviews.alertTo); if (to.length) { const mm = sendMail(env, to, `New review to approve: ${it.name}`.slice(0, 150), WRAP(`<h2 style="margin:0 0 12px;font-size:20px">New review for ${hesc(it.name)}</h2>${paras(`${"★".repeat(rating)}${"☆".repeat(5 - rating)}  ${name}${verified ? " (verified buyer)" : ""}\n${title ? title + "\n" : ""}\n${body}`)}${paras("Approve or hide it under Reviews in your site's admin page.", "margin:0 0 8px;color:#667;font-size:13px")}`)).catch(() => {}); if (ctx?.waitUntil) ctx.waitUntil(mm); else await mm; } }
+        if (!live && c.reviews.alert !== false && (await siteMail(env, site)).RESEND_API_KEY && (await siteMail(env, site)).MAIL_FROM) { const to = await ownerTo(env, site, c, c.reviews.alertTo); if (to.length) { const mm = sendMail(await siteMail(env, site), to, `New review to approve: ${it.name}`.slice(0, 150), WRAP(`<h2 style="margin:0 0 12px;font-size:20px">New review for ${hesc(it.name)}</h2>${paras(`${"★".repeat(rating)}${"☆".repeat(5 - rating)}  ${name}${verified ? " (verified buyer)" : ""}\n${title ? title + "\n" : ""}\n${body}`)}${paras("Approve or hide it under Reviews in your site's admin page.", "margin:0 0 8px;color:#667;font-size:13px")}`)).catch(() => {}); if (ctx?.waitUntil) ctx.waitUntil(mm); else await mm; } }
         return json({ ok: true, status: live ? "live" : "pending" });
       }
       // ---- abandoned carts: the page saves the cart once an email is typed, and restores it from the link in the reminder
@@ -1932,11 +1947,19 @@ export default {
           catch (e: any) { return json({ error: String(e?.message || e).slice(0, 300) }); }
         }
         if (b.value == null) { await putSetting(env, scope, name, null); return json({ ok: true }); }
+        if (name === "mail" && !scope.startsWith("site:")) return err(400, "Site email is set per site.");
         const old = (await getSetting(env, scope, name)) || {}, v: any = {};
         for (const k of S.text) v[k] = String(b.value[k] ?? old[k] ?? "").slice(0, 3000).trim();
         for (const k of S.flags) v[k] = b.value[k] == null ? !!old[k] : !!b.value[k];
         // A secret left empty keeps the one already saved.
         for (const k of S.secret) v[k] = String(b.value[k] || "").trim().slice(0, 600) || old[k] || "";
+        // Which Resend a site uses (the Studio's or its own) is the Studio owner's choice, not the site owner's.
+        if (name === "mail") {
+          const so = await env.DB.prepare("select 1 x from members where email = ? and scope like 'studio:%' and role = 'owner' limit 1").bind(email).first();
+          if (!so) v.on = !!old.on;
+          if (v.from && !EMAIL_RE.test(v.from.replace(/^.*<([^<>]+)>\s*$/, "$1"))) return err(400, "The sender should look like Name <codes@your-domain.com>.");
+          if (v.key && !/^re_\S{8,}$/.test(v.key)) return err(400, "A Resend API key starts with re_.");
+        }
         if (name === "ai" && v.base && !publicUrl(v.base)) return err(400, "The API address must be a public https:// address.");
         if (name.startsWith("tk_") && v.url && !publicUrl(v.url.replace(/\{(awb|courier)\}/g, "x"))) return err(400, "The tracking address must be a public https:// address.");
         await putSetting(env, scope, name, v);

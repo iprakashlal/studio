@@ -7,7 +7,7 @@ import { cfCall, cfRole, cfSendCode, cfSession, cfSignedIn, cfVerifyCode, resend
 import { Field, Toggle, useToast } from "../ui/kit";
 import { COURIERS, TRACKERS } from "../lib/tracking";
 
-type Kind = "ai" | "wa" | "rz" | "cf" | "pe" | "st" | "pp" | "pos" | "sms" | "ship" | `tk_${string}`;
+type Kind = "ai" | "wa" | "rz" | "cf" | "pe" | "st" | "pp" | "pos" | "sms" | "ship" | "mail" | `tk_${string}`;
 /** What the Studio lets this site use a way of messaging for (content.cms.msg). */
 export type MsgAllow = { login: boolean; checkout: boolean };
 export const msgAllow = (cms: any, way: "wa" | "sms"): MsgAllow => { const m = cms?.msg || {}, ok = (v: unknown) => v == null || v === "" || v === way || v === "both"; return { login: ok(m.login), checkout: ok(m.checkout) }; };
@@ -328,6 +328,42 @@ export function SmsForm({ where, kind, allow }: { where: Where | null | undefine
   );
 }
 
+/** A project's email (Resend): the Studio's own Resend (set in Settings → Hostings), or this project's own key and sender
+ *  ("Custom"). The Studio's owner chooses which; the site's owner can fill in the key and sender once it is Custom. */
+export function MailForm({ where, studio }: { where: Where | null | undefined; /** True in the Studio's editor (the Studio's owner), false in the site's own admin page. */ studio: boolean }) {
+  const toast = useToast(), { saved, err, save } = useSaved(where || null);
+  const [f, setF] = useState({ on: false, from: "", key: "" }), [busy, setBusy] = useState("");
+  useEffect(() => { const m = saved?.mail; setF({ on: !!m?.on, from: txt(m?.from), key: "" }); }, [saved]);
+  const lead = <>Sign-in codes and the emails this project sends (enquiries, orders, stock, reviews) go out through Resend. By default that is the Studio's Resend (Settings → Hostings). Choose Custom to send this project's emails from its own Resend account and sender.</>;
+  if (where === undefined) return <Shell title="Email (Resend)" lead={lead}><Missing why="Checking your database…" /></Shell>;
+  if (!where) return <Shell title="Email (Resend)" lead={lead}><Missing why="Email settings are kept on the project's Cloudflare database. Publish the site to Cloudflare and sign in there to set them." /></Shell>;
+  if (err) return <Shell title="Email (Resend)" lead={lead}><Missing why={err} /></Shell>;
+  const m = saved?.mail, keyKept = !!m?.key, custom = studio ? f.on : !!m?.on;
+  const fromOk = /<[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+>$|^[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+$/.test(f.from.trim()), keyOk = !!f.key.trim() || keyKept;
+  const ok = !custom ? true : fromOk && keyOk && (!f.key.trim() || /^re_\S{8,}$/.test(f.key.trim()));
+  const doSave = async () => {
+    setBusy("Saving");
+    try { await save("mail", { on: studio ? f.on : !!m?.on, from: f.from.trim(), key: f.key.trim() }); toast(custom ? "This project's emails now go out through its own Resend." : "Saved. This project uses the Studio's Resend."); }
+    catch (e: any) { toast(e?.message || "Couldn't save that.", "bad"); }
+    setBusy("");
+  };
+  return (
+    <Shell title="Email (Resend)" on={!!(m?.on && m.key && m.from)} lead={lead}>
+      <fieldset className="flex flex-col gap-2 rounded-lg border border-ink-600 px-3 pb-3 pt-2" aria-label="Which Resend this project uses"><legend className="label px-1">Send with</legend>
+        <label className={`flex items-start gap-2.5 text-sm ${studio ? "" : "opacity-70"}`}><input type="radio" name={"mail-way-" + (studio ? "s" : "x")} className="mt-[3px] h-4 w-4 flex-none" disabled={!studio} checked={!custom} onChange={() => setF({ ...f, on: false })} /><span>The Studio's Resend<span className="block text-ink-400">The key and sender set in the Studio's Settings → Hostings.</span></span></label>
+        <label className={`flex items-start gap-2.5 text-sm ${studio ? "" : "opacity-70"}`}><input type="radio" name={"mail-way-" + (studio ? "s" : "x")} className="mt-[3px] h-4 w-4 flex-none" disabled={!studio} checked={custom} onChange={() => setF({ ...f, on: true })} /><span>Custom<span className="block text-ink-400">This project's own Resend key and sender.</span></span></label>
+        {!studio && <p className="hint">Which Resend is used is chosen by the Studio's owner.</p>}
+      </fieldset>
+      {custom && <div className="grid gap-3 sm:grid-cols-2">
+        <Secret id={"mail-key-" + (studio ? "s" : "x")} label="Resend API key" saved={keyKept} value={f.key} onChange={(v) => setF({ ...f, key: v })} hint={keyKept ? "A key is saved. Leave this empty to keep it, or type a new one to replace it." : "resend.com/api-keys → Create API key (Sending access is enough). It starts with re_."} />
+        <Field label="Emails come from" htmlFor={"mail-from-" + (studio ? "s" : "x")} hint="An address on a domain verified in Resend → Domains, for example Acme <hello@acme.com>."><input id={"mail-from-" + (studio ? "s" : "x")} className="input" placeholder="Name <hello@your-domain.com>" value={f.from} onChange={(e) => setF({ ...f, from: e.target.value })} /></Field>
+        {!ok && <p className="hint sm:col-span-2 text-amber-200">Fill in a key (starting with re_) and a sender like Name &lt;hello@your-domain.com&gt;. Until both are saved, the Studio's Resend is used.</p>}
+      </div>}
+      <div className={FOOT}><button type="button" className="btn btn-pri" disabled={!ok || !!busy} onClick={doSave}>{busy ? "Saving…" : "Save"}</button></div>
+    </Shell>
+  );
+}
+
 /** Kept for the places that ask for Razorpay by name. */
 export function RazorpayForm({ where }: { where: Where | null | undefined; plain?: boolean }) { return <GatewayForm where={where} gw="rz" />; }
 
@@ -440,13 +476,14 @@ export function CourierTrackingForm({ where }: { where: Where | null | undefined
 }
 
 /** A site's "Payments & WhatsApp" section (site admin and the Studio's editor). */
-export function SiteConnections({ cf, template, cms, site }: { cf?: { api: string; site: string } | null; template: string; /** The site's content.cms (what the Studio allows it). */ cms?: any; /** True in the site's own admin page. */ site?: boolean }) {
+export function SiteConnections({ cf, template, cms, site, only }: { cf?: { api: string; site: string } | null; template: string; /** "mail": just the Email (Resend) card (portfolio sites have no WhatsApp or SMS). */ only?: "mail"; /** The site's content.cms (what the Studio allows it). */ cms?: any; /** True in the site's own admin page. */ site?: boolean }) {
   const aw = msgAllow(cms, "wa"), as = msgAllow(cms, "sms");
   const signed = useSiteDbSigned(cf), where = cf && signed ? { api: cf.api, scope: "site:" + cf.site } : null;
+  if (only === "mail") return <div className="flex max-w-3xl flex-col gap-4">{cf && !signed && <SiteDbSignIn cf={cf} what="show this project's email settings" />}<MailForm where={where} studio={!site} /></div>;
   return <div className="flex max-w-3xl flex-col gap-4">
     {cf && !signed && <SiteDbSignIn cf={cf} what={template === "restaurant" ? "show the boxes for Petpooja's and WhatsApp's keys" : "show the boxes for WhatsApp's keys"} />}
     {template === "restaurant" && <section className="card flex flex-col gap-2 p-5"><h3 className="text-[15px] font-extrabold">Restaurant backend</h3><p className="text-sm text-ink-300">Orders, payments and messages run on the site's own Cloudflare database: it saves each order under Purchased orders, works out what an order costs from your menu, confirms online payments with your payment gateway, passes orders to Petpooja, and sends WhatsApp messages. Keys you enter here stay on that database, encrypted. The payment gateways (Razorpay, Cashfree, PhonePe, Stripe, PayPal) and their keys are under Payments.</p></section>}
-    {template === "restaurant" && <PetpoojaForm where={where} />}{template === "store" && <CourierTrackingForm where={where} />}<WhatsAppForm where={where} kind="site" allow={aw} />
+    <MailForm where={where} studio={!site} />{template === "restaurant" && <PetpoojaForm where={where} />}{template === "store" && <CourierTrackingForm where={where} />}<WhatsAppForm where={where} kind="site" allow={aw} />
     {/* In the site's own admin page SMS shows only when the Studio lets the site use it for something. */}
     {!(site && !as.login && !as.checkout) && <SmsForm where={where} kind="site" allow={as} />}
     {cf && signed && <GoogleSignInCard api={cf.api} what="this site's admin page (and anything else that signs in to the same database)" />}</div>;

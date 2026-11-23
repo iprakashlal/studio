@@ -904,7 +904,7 @@ function render() {
   document.documentElement.classList.toggle("has-mbar", !!bar);
   const html = `<a class="skip" href="#main">Skip to content</a>${noticeHTML()}${navHTML()}<main id="main">${multi() && !special && PAGE !== "home" ? pageHead() : ""}${body}</main>${footerHTML()}${bar}`;
   /* A redraw that gives what is already on screen is skipped, and one that lands while the entrance is still running carries on from where it was: both used to make the page blink. */
-  if (!PREVIEW && html === lastHtml && $("#app").firstChild) return;
+  if (!PREVIEW && html === lastHtml && $("#app").firstChild) { bindMaps(); return; } // the page is the same, but a map held back for consent may be free to load now
   lastHtml = html; const pend = drawn ? new Set($$(".rv").map((e, i) => (e.classList.contains("in") ? -1 : i))) : null; drawn = true;
   $("#app").innerHTML = html;
   if (pend) $$(".rv").forEach((e, i) => { if (!pend.has(i)) e.classList.add("in"); });

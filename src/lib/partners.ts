@@ -13,6 +13,8 @@ import { TEMPLATES } from "../schema";
 export type SharedSite = { project: string; base: string; at: string };
 export type PartnerRec = {
   id: string; name: string; url: string; studio: string; siteId?: string;
+  /** The client Studio's own domain (Cloudflare Worker domain), when the app runs on your Cloudflare. */
+  domain?: string; subdomain?: boolean; domainSetup?: import("./supa").HostCfg["domainSetup"];
   /** Where the client Studio's app runs (Netlify when not set; on Cloudflare siteId is the Worker in pagesAccount). */
   pages?: "netlify" | "cloudflare"; pagesAccount?: string;
   /** Where the client Studio keeps its files: Supabase (sbUrl, sbKey) or the Studio database on Cloudflare (api). */

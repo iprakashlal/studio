@@ -89,6 +89,15 @@ export async function loadPages(kind: PagesKind, studioToken: string, account?: 
   return cloudflarePages(new Cloudflare(relay, tok), acc);
 }
 
+/** A Cloudflare connection from a token on this device (through the helper), for `account` or the main one; null without. */
+export async function cfLocalClient(studioToken: string, account?: string): Promise<{ cf: Cloudflare; account: string } | null> {
+  const t = await netlifyToken.load(studioToken), nf = t ? new Netlify(t.token) : null;
+  const v = await cfAccountVault.load(studioToken).catch(() => null);
+  const acc = account || v?.account, tok = cfTokenFor(v, acc);
+  if (!tok || !acc) return null;
+  const relay = await getHelper(studioToken, nf).catch(() => null);
+  return relay ? { cf: new Cloudflare(relay, tok), account: acc } : null;
+}
 /** Whether a Cloudflare token on this device was set up for `account` (the main one's chosen account, or another's). */
 async function ownsAccount(studioToken: string, account: string) {
   const v = await cfAccountVault.load(studioToken).catch(() => null);

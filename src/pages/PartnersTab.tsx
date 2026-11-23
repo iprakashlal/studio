@@ -6,10 +6,13 @@ import type { Session } from "../lib/auth";
 import { netlifyToken } from "../lib/hosting";
 import { Netlify } from "../lib/netlify";
 import { backendOf } from "../lib/backend";
-import { cfAddMembers, cfDeployInfo, cfSignedIn, cfxSite, cfxPut, cfTokenPageFor } from "../lib/cfdb";
+import { cfAddMembers, cfDeployInfo, cfSignedIn, cfxSite, cfxPut, cfTokenPageFor, dbCloudflare } from "../lib/cfdb";
+import { Cloudflare } from "../lib/cloudflare";
+import { CfDomainCard } from "./HostDialog";
+import type { HostCfg } from "../lib/supa";
 import type { StudioHostCfg } from "../lib/studiohost";
 import { useCfAccount, useCloudflarePicker } from "./CfPicker";
-import { loadPages, pagesViaDb, PAGES_LABEL, type PagesKind } from "../lib/pages";
+import { cfLocalClient, loadPages, pagesViaDb, PAGES_LABEL, type PagesKind } from "../lib/pages";
 const hostFields = (t: StudioHostCfg) => (t.kind === "cloudflare" ? { backend: "cloudflare" as const, api: t.api } : { backend: "supabase" as const, sbUrl: t.url, sbKey: t.key });
 import { useBrand } from "../lib/brand";
 import { appBase, appFiles } from "../lib/migrate";
@@ -228,6 +231,20 @@ async function clientAppViaDb(p: PartnerRec, myDb: { api: string; studio: string
   return pagesViaDb(myDb.api, "studio:" + myDb.studio, acc).catch(() => null);
 }
 
+/** A Cloudflare connection for the account a client Studio's app lives on, through a database that keeps its token (same routes as above). */
+async function clientCfViaDb(p: PartnerRec, myDb: { api: string; studio: string } | null): Promise<{ cf: Cloudflare; account: string } | null> {
+  if (!p.siteId) return null;
+  if (p.backend === "cloudflare" && p.api && (await cfSignedIn(p.api).catch(() => false))) {
+    const info = await cfDeployInfo(p.api), acc = p.pagesAccount || info.account;
+    if (acc && ((info.deploy && info.account === acc) || info.more)) return { cf: dbCloudflare(p.api, "studio:" + p.studio), account: acc };
+  }
+  if (!myDb || !(await cfSignedIn(myDb.api).catch(() => false))) return null;
+  const info = await cfDeployInfo(myDb.api), acc = p.pagesAccount || info.account;
+  if (!acc) return null;
+  if (!(info.deploy && info.account === acc)) { try { await cfxSite(myDb.api, myDb.studio, acc, p.siteId); } catch { return null; } }
+  return { cf: dbCloudflare(myDb.api, "studio:" + myDb.studio), account: acc };
+}
+
 const STATE: Record<SiteSync, [string, string]> = {
   same: ["In step", "border-emerald-400/60 text-emerald-200"], mine: ["You changed it", "border-brand-400/60 text-brand-200"],
   theirs: ["Client changed it", "border-amber-400/60 text-amber-200"], both: ["Both changed", "border-rose-400/60 text-rose-200"], gone: ["Missing on one side", "border-ink-500 text-ink-300"],
@@ -302,6 +319,8 @@ function PartnerCard({ p, studio, index, nf, setNf, session, myEmail, studioToke
     }
     throw new Error((last || "Couldn't update.") + " Check that the token was created while signed in to the account their Studio lives on, and that Publish from any device is on for the database (Settings → Hostings).");
   });
+  const [domCf, setDomCf] = useState<{ cf: Cloudflare; account: string } | null | undefined>(undefined);
+  useEffect(() => { if (p.accounts === "mine" && p.pages === "cloudflare" && p.siteId) (cfLocalClient(studioToken, p.pagesAccount).catch(() => null).then((l) => l || clientCfViaDb(p, myDb))).then(setDomCf).catch(() => setDomCf(null)); }, [p.siteId, p.api, p.pagesAccount, myDb?.api, tokOpen]);
   const notShared = index.projects.filter((m) => !p.shared.some((s) => s.project === m.id) && !m.partner);
 
   return (
@@ -378,6 +397,12 @@ function PartnerCard({ p, studio, index, nf, setNf, session, myEmail, studioToke
         run={(step) => teardownPartner(p, { studioToken, db: myDb, step })}
         onDone={(r) => { tearOk.current = !r.failed.length; }} onClose={() => { setTear(false); if (tearOk.current) onRemove(); }} />}
       {moving && <AddPartner from={p} nf={nf} setNf={setNf} session={session} index={index} partner={partner} myEmail={myEmail} onCancel={() => setMoving(false)} onDone={async (rec) => { await onChange(() => rec, `Move client Studio ${rec.name}`); }} />}
+      {p.accounts === "mine" && p.pages === "cloudflare" && p.siteId && (domCf === undefined ? null : domCf
+        ? <CfDomainCard plain={`${p.name}'s Studio address`}
+            acc={{ ready: true, account: { id: domCf.account }, client: async () => ({ cf: domCf.cf }), replaceToken: async () => { throw new Error("Use “Update the Cloudflare token for their account…” below."); } }}
+            host={{ kind: "cloudflare", siteId: p.siteId, siteName: p.name, url: p.url, account: domCf.account, domain: p.domain, subdomain: p.subdomain, domainSetup: p.domainSetup } as HostCfg}
+            onHost={(h) => onChange((x) => ({ ...x, domain: h.domain, subdomain: h.subdomain, domainSetup: h.domainSetup }), h.domain ? `${p.name}'s Studio address: ${h.domain}` : `${p.name}'s Studio address removed`)} />
+        : <p className="text-[12.5px] text-ink-400">To give their Studio its own domain, no Cloudflare token reaches its account from this device yet: turn on Publish from any device (Settings → Hostings) or use “Update the Cloudflare token for their account…” below.</p>)}
       {p.accounts === "mine" && p.siteId && (tokOpen
         ? <div className="flex flex-col gap-2 rounded-xl border border-amber-400/40 bg-amber-400/5 p-3 text-[13px]" role="group" aria-label={`Cloudflare token for ${p.name}`}>
             <b>Cloudflare token for {p.name}'s account</b>

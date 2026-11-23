@@ -131,43 +131,44 @@ export function Dashboard({ studio, index, onIndex, token, hid = () => false, ma
   const card = (p: ProjectMeta) => {
             const c = catById(p.category), t = TEMPLATES[p.template], st = STATUS[p.status], last = p.exports[0];
             return (
-              <article key={p.id} className="card group relative flex flex-col overflow-hidden transition hover:border-ink-500">
-                <div className="h-1.5" style={{ background: c?.color || "#2E3A4C" }} />
-                <div className="flex flex-1 flex-col gap-3 p-5">
-                  <div className="flex flex-wrap items-center gap-2 text-xs">
-                    <span className="chip">{t?.name || p.template} · {t?.kind}</span>
-                    <span className={`chip ${st.cls}`}>{st.label}</span>
+              <article key={p.id} className="card group relative flex flex-col overflow-hidden rounded-2xl transition hover:-translate-y-0.5 hover:border-ink-500 hover:shadow-lg">
+                <div className="flex flex-1 flex-col gap-3 p-4">
+                  <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                    {c && <span className="inline-flex items-center gap-1.5 truncate text-ink-400"><span className="h-2 w-2 rounded-full" style={{ background: c.color }} />{c.name}</span>}
+                    <span className={`chip ml-auto ${st.cls}`}>{st.label}</span>
                     {(index.partners || []).filter((x) => x.shared.some((y) => y.project === p.id)).map((x) => <span key={x.id} className="chip border-brand-400/50 text-brand-200" title={`Shared with ${x.name}'s Studio; sync it from Settings → Studio Partners.`}>Shared with {x.name}</span>)}
                     {p.partner && <span className="chip border-brand-400/50 text-brand-200" title="Shared with you by your Studio Partner; changes are kept in step with them.">Shared by {p.partner.name}</span>}
                     {live[p.id] === "checking" && <span className="chip border-ink-600 text-ink-400">Checking live site…</span>}
                     {live[p.id] === "pulled" && <span className="chip border-emerald-400/60 text-emerald-200" title="Edits made in the site's own CMS were copied into this project.">Updated from live site</span>}
                     {live[p.id] === "conflict" && <span className="chip border-amber-400/60 text-amber-200" title="The site's own CMS and the Studio both changed the content. Open the project to choose which to keep.">Live site edited · review</span>}
-                    {c && <span className="ml-auto truncate text-ink-400">{c.name}</span>}
                   </div>
-                  <a href={`#/p/${p.id}`} className="after:absolute after:inset-0">
-                    <h2 className="font-display text-xl font-extrabold leading-tight">{p.name}</h2>
-                  </a>
-                  <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-ink-400">
-                    {p.client.trim() ? <button type="button" className="relative z-10 inline-flex items-center gap-1.5 rounded-full border border-ink-600 px-2.5 py-0.5 text-[12.5px] font-semibold text-ink-100 hover:border-ink-400" title={`Show only ${p.client.trim()}'s sites`} onClick={() => setClient(p.client.trim())}><span className="text-ink-400">Client</span>{p.client.trim()}</button> : <span>No client set</span>}
-                    {p.summary && <span>{p.summary}</span>}
-                  </p>
+                  <div>
+                    <a href={`#/p/${p.id}`} className="after:absolute after:inset-0">
+                      <h2 className="font-display text-lg font-extrabold leading-tight">{p.name}</h2>
+                    </a>
+                    <p className="mt-1 flex flex-wrap items-center gap-x-1.5 text-[13px] text-ink-400">
+                      <span>{t?.name || p.template} · {t?.kind}</span>
+                      <span aria-hidden>·</span>
+                      {p.client.trim() ? <button type="button" className="relative z-10 font-semibold text-ink-200 underline-offset-2 hover:underline" title={`Show only ${p.client.trim()}'s sites`} onClick={() => setClient(p.client.trim())}><span className="font-normal text-ink-400">Client </span>{p.client.trim()}</button> : <span>No client set</span>}
+                    </p>
+                    {p.summary && <p className="mt-1 line-clamp-2 text-[13px] text-ink-400">{p.summary}</p>}
+                  </div>
                   {fb[p.id] && <Feedback s={fb[p.id]} id={p.id} />}
-                  <div className="mt-auto flex flex-col gap-3">
+                  <div className="mt-auto flex flex-col gap-2.5">
                     <PayNote id={"p:" + p.id} pay={p.pay} onSave={async (pay) => onIndex(await studio.savePay(p.id, pay))} />
-                    <dl className="flex flex-wrap gap-x-4 gap-y-1 border-t border-ink-700 pt-3 text-xs text-ink-400">
-                      <div className="flex gap-1.5"><dt>Edited</dt><dd className="font-semibold text-ink-200">{timeAgo(p.updatedAt)}</dd></div>
-                      <div className="flex gap-1.5"><dt>Last export</dt><dd className="font-semibold text-ink-200">{last ? `v${last.version} · ${timeAgo(last.at)}` : "Not yet"}</dd></div>
-                    </dl>
+                    <p className="text-xs text-ink-400">Edited <b className="font-semibold text-ink-200">{timeAgo(p.updatedAt)}</b> · Export <b className="font-semibold text-ink-200">{last ? `v${last.version} · ${timeAgo(last.at)}` : "not yet"}</b></p>
                   </div>
-                  <div className="relative z-10 flex flex-wrap gap-2">
+                  <div className="relative z-10 flex flex-wrap items-center gap-1.5 border-t border-ink-700 pt-3">
                     <a href={`#/p/${p.id}`} className="btn btn-pri btn-sm">Open</a>
                     <button type="button" className="btn btn-sm" onClick={() => setQuick({ id: p.id, kind: "setup" })}>Quick Setup</button>
                     <button type="button" className="btn btn-sm" onClick={() => setQuick({ id: p.id, kind: "overview" })}>Quick Overview</button>
-                    {!hid("duplicate") && !hid("new") && !hid("tpl-" + p.template) && room(p.template) && <button className="btn btn-sm" disabled={!!busy} onClick={() => run("dup" + p.id, () => studio.duplicate(p.id, `${p.name} (copy)`), "Project duplicated")}>{busy === "dup" + p.id ? "Copying…" : "Duplicate"}</button>}
-                    {p.host ? <a className="btn btn-sm" href={siteAddress(p.host)} target="_blank" rel="noopener">Live site ↗</a> : p.publish && <a className="btn btn-sm" href={`https://${p.publish.owner}.github.io/${p.publish.repo === `${p.publish.owner}.github.io` ? "" : p.publish.repo + "/"}`} target="_blank" rel="noopener">Live site ↗</a>}
-                    {!hid("delete") && <button className="btn btn-sm btn-danger ml-auto" disabled={!!busy} onClick={async () => {
-                      if (await confirm(`Delete “${p.name}”?`, "This removes the project, its images and export snapshots from the Studio. Sites you already exported or published are not affected.", "Delete", true)) run("del" + p.id, () => studio.remove(p.id), "Project deleted");
-                    }}>Delete</button>}
+                    <span className="ml-auto flex items-center gap-0.5">
+                      {p.host ? <a className="btn btn-ghost btn-sm" href={siteAddress(p.host)} target="_blank" rel="noopener">Live site ↗</a> : p.publish && <a className="btn btn-ghost btn-sm" href={`https://${p.publish.owner}.github.io/${p.publish.repo === `${p.publish.owner}.github.io` ? "" : p.publish.repo + "/"}`} target="_blank" rel="noopener">Live site ↗</a>}
+                      {!hid("duplicate") && !hid("new") && !hid("tpl-" + p.template) && room(p.template) && <button className="btn btn-ghost btn-sm" disabled={!!busy} onClick={() => run("dup" + p.id, () => studio.duplicate(p.id, `${p.name} (copy)`), "Project duplicated")}>{busy === "dup" + p.id ? "Copying…" : "Duplicate"}</button>}
+                      {!hid("delete") && <button className="btn btn-ghost btn-sm text-red-300 hover:text-red-200" disabled={!!busy} onClick={async () => {
+                        if (await confirm(`Delete “${p.name}”?`, "This removes the project, its images and export snapshots from the Studio. Sites you already exported or published are not affected.", "Delete", true)) run("del" + p.id, () => studio.remove(p.id), "Project deleted");
+                      }}>Delete</button>}
+                    </span>
                   </div>
                 </div>
               </article>

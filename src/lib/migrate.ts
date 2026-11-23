@@ -41,10 +41,6 @@ export async function transferFiles(from: Repo, to: Repo, step: (done: number, t
 
 /** Puts the Studio app on Netlify or Cloudflare (a new site, or the existing one) with its studio.config.json. */
 export async function deployStudioApp(pages: Pages, o: { siteId?: string; siteName: string; source: string; config: StudioHostCfg }, step: (s: string) => void) {
-  step("Reading the Studio's files");
-  const r0 = await fetch(o.source + "app-files.json?x=" + Date.now(), { cache: "no-store" });
-  if (!r0.ok) throw new Error("This Studio build has no file list (app-files.json). Wait for the next GitHub build and try again.");
-  const listBytes = new Uint8Array(await r0.arrayBuffer()), m = JSON.parse(new TextDecoder().decode(listBytes)) as AppFiles;
   const cfg = new TextEncoder().encode(JSON.stringify({ ...o.config, source: o.source }, null, 2));
   let site = o.siteId ? await pages.get(o.siteId) : null;
   if (!site) {
@@ -58,11 +54,28 @@ export async function deployStudioApp(pages: Pages, o: { siteId?: string; siteNa
     }
     if (!site) throw new Error("Couldn't find a free name for the Studio's site. Try another address.");
   }
-  const dep = await pages.deployApp(site.siteId, m, [{ path: "studio.config.json", data: cfg }, { path: "app-files.json", data: listBytes }], async (p) => {
-    const r = await fetch(o.source + p, { cache: "no-store" });
-    if (!r.ok) throw new Error(`Couldn't read ${p} from the Studio.`);
-    return new Uint8Array(await r.arrayBuffer());
-  }, `Site Studio ${m.build}`, (d, t) => step(t ? `Uploading the Studio (${d} of ${t} files)` : "Uploading the Studio"));
+  // The source can publish a new build while this reads it (the file list from one build, a page from the next): that would
+  // leave the Studio with a page that points at files it doesn't have. Every file is checked against the list it was
+  // read with, and the whole read starts again when one differs.
+  const sha1 = async (u: Uint8Array) => [...new Uint8Array(await crypto.subtle.digest("SHA-1", u))].map((x) => x.toString(16).padStart(2, "0")).join("");
+  let dep: Awaited<ReturnType<Pages["deployApp"]>> | null = null, m!: AppFiles;
+  for (let attempt = 0; attempt < 4 && !dep; attempt++) {
+    if (attempt) { step("The Studio's source just changed: reading it again"); await new Promise((r) => setTimeout(r, 20_000)); }
+    step("Reading the Studio's files");
+    const r0 = await fetch(o.source + "app-files.json?x=" + Date.now(), { cache: "no-store" });
+    if (!r0.ok) throw new Error("This Studio build has no file list (app-files.json). Wait for the next GitHub build and try again.");
+    const listBytes = new Uint8Array(await r0.arrayBuffer()); m = JSON.parse(new TextDecoder().decode(listBytes)) as AppFiles;
+    try {
+      dep = await pages.deployApp(site.siteId, m, [{ path: "studio.config.json", data: cfg }, { path: "app-files.json", data: listBytes }], async (p) => {
+        const r = await fetch(o.source + p, { cache: "no-store" });
+        if (!r.ok) throw new Error(`Couldn't read ${p} from the Studio.`);
+        const bytes = new Uint8Array(await r.arrayBuffer()), want = (m.files as Record<string, string>)[p];
+        if (want && (await sha1(bytes)) !== want) throw Object.assign(new Error("The Studio's source changed while it was being read."), { stale: true });
+        return bytes;
+      }, `Site Studio ${m.build}`, (d, t) => step(t ? `Uploading the Studio (${d} of ${t} files)` : "Uploading the Studio"));
+    } catch (e: any) { if (!e?.stale || attempt === 3) throw e; }
+  }
+  if (!dep) throw new Error("The Studio's source kept changing. Try again in a few minutes.");
   return { siteId: site.siteId, url: (dep.url || site.url).replace(/^http:/, "https:").replace(/\/?$/, "/"), build: m.build, kind: pages.kind, account: pages.account };
 }
 

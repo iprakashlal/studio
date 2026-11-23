@@ -149,6 +149,9 @@
 :root[data-layout="glass"][data-ui="light"] .card, :root[data-layout="glass"][data-ui="light"] aside, :root[data-layout="glass"][data-ui="light"] header { background-color: rgb(255 255 255 / .72); }
 :root[data-layout="glass"]:not([data-ui="light"]) .card, :root[data-layout="glass"]:not([data-ui="light"]) aside, :root[data-layout="glass"]:not([data-ui="light"]) header { background-color: rgb(var(--ink-900, 15 20 29) / .6); }
 :root[data-layout="glass"]:not([data-ui="light"]) .card { text-shadow: 0 1px 1px rgb(0 0 0 / .25); }
+:root[data-layout="glass"] .btn.btn-pri, :root[data-layout="glass"] .btn.btn-pri:hover { color: #fff; font-weight: 600; text-shadow: none; }
+:root[data-layout="glass"] .btn.btn-danger { color: rgb(220 38 38); }
+:root[data-layout="glass"]:not([data-ui="light"]) .btn.btn-danger { color: rgb(252 165 165); }
 :root[data-layout="soft"] .card { border-radius: 1.75rem; border-color: transparent; box-shadow: 0 10px 30px -12px rgb(0 0 0 / .45); }
 :root[data-layout="soft"][data-ui="light"] .card { box-shadow: 0 10px 34px -14px rgb(30 40 90 / .22); }
 :root[data-layout="soft"] .btn { border-radius: 999px; }

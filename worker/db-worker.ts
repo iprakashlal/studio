@@ -2256,7 +2256,7 @@ export default {
             .bind(token, scope, project, oneLine(String(b.name || "Project")).slice(0, 120), String(b.template || "").slice(0, 40), content, String(b.note || "").trim().slice(0, 2000), email, new Date().toISOString()).run();
           return json({ token });
         }
-        if (p === "/rw/list") {
+        if (p === "/rv/list") {
           const rows = ((await env.DB.prepare("select token, name, note, status, decided_by, decided_at, created_by, created_at from approvals where scope = ? and project = ? order by created_at desc limit 20").bind(scope, project).all()).results || []) as any[];
           for (const r of rows) r.notes = (await env.DB.prepare("select id, who, body, page, kind, created_at from approval_notes where token = ? order by id limit 300").bind(r.token).all()).results || [];
           return json(rows);

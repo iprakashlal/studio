@@ -25,6 +25,28 @@ const STATUS: Record<ProjectMeta["status"], { label: string; cls: string }> = {
 };
 
 /** What the client said on the project's review link, in two lines: the decision, then their latest words. Opens the replies. */
+/** The project's logo (or icon) in the card's housing, when one was uploaded; otherwise its initials. */
+const markCache = new Map<string, string>();
+function ProjectMark({ studio, p, acc }: { studio: Studio; p: ProjectMeta; acc: string }) {
+  const key = p.id + "|" + (p.contentAt || p.updatedAt), [src, setSrc] = useState<string>(markCache.get(key) ?? "");
+  useEffect(() => {
+    if (markCache.has(key)) { setSrc(markCache.get(key)!); return; }
+    if (studio.repo.demo) return; let on = true, url = "";
+    (async () => {
+      try {
+        const c = await studio.loadContent(p.id), B = c?.brand || {}, f = String((p.template === "portfolio" ? B.icon || B.logo : B.logo || B.icon) || "");
+        if (!f) { markCache.set(key, ""); return; }
+        if (/^(https?:|data:image\/)/.test(f)) url = f; else { const b = await studio.assetBlob(p.id, f); if (b && /^image\//.test(b.type || "image/png")) url = URL.createObjectURL(b); }
+        markCache.set(key, url); if (on) setSrc(url);
+      } catch { /* initials stay */ }
+    })();
+    return () => { on = false; };
+  }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
+  const initials = (p.name.trim().match(/\b[\p{L}\p{N}]/gu) || ["•"]).slice(0, 2).join("").toUpperCase();
+  return src
+    ? <span aria-hidden className="grid h-11 w-11 flex-none place-items-center overflow-hidden rounded-2xl border border-ink-700 bg-white/90 p-1.5"><img src={src} alt="" className="h-full w-full object-contain" onError={() => setSrc("")} /></span>
+    : <span aria-hidden className="grid h-11 w-11 flex-none place-items-center rounded-2xl font-display text-[15px] font-extrabold" style={{ background: `${acc}26`, color: acc }}>{initials}</span>;
+}
 /** A project that isn't published anywhere yet says what to do next. */
 function NextStep({ p, onPublish }: { p: ProjectMeta; onPublish: () => void }) {
   if (p.host || p.publish) return null;
@@ -153,7 +175,7 @@ export function Dashboard({ studio, index, onIndex, token, hid = () => false, ma
                     {live[p.id] === "conflict" && <span className="chip border-amber-400/60 text-amber-200" title="The site's own CMS and the Studio both changed the content. Open the project to choose which to keep.">Live site edited · review</span>}
                   </div>
                   <div className="flex items-start gap-3">
-                    <span aria-hidden className="grid h-11 w-11 flex-none place-items-center rounded-2xl font-display text-[15px] font-extrabold" style={{ background: `${acc}26`, color: acc }}>{(p.name.trim().match(/\b[\p{L}\p{N}]/gu) || ["•"]).slice(0, 2).join("").toUpperCase()}</span>
+                    <ProjectMark studio={studio} p={p} acc={acc} />
                     <div className="min-w-0 flex-1">
                       <a href={`#/p/${p.id}`} className="after:absolute after:inset-0">
                         <h2 className="truncate font-display text-xl font-extrabold leading-tight tracking-tight">{p.name}</h2>

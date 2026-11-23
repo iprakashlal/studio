@@ -8,6 +8,7 @@ import { Netlify } from "../lib/netlify";
 import { backendOf } from "../lib/backend";
 import { cfAddMembers, cfDeployInfo, cfSignedIn, cfxSite, cfxPut, cfTokenPageFor, dbCloudflare } from "../lib/cfdb";
 import { Cloudflare } from "../lib/cloudflare";
+import { getHelper } from "../lib/relay";
 import { CfDomainCard } from "./HostDialog";
 import type { HostCfg } from "../lib/supa";
 import type { StudioHostCfg } from "../lib/studiohost";
@@ -232,14 +233,14 @@ async function clientAppViaDb(p: PartnerRec, myDb: { api: string; studio: string
 }
 
 /** A Cloudflare connection for the account a client Studio's app lives on, through a database that keeps its token (same routes as above). */
-async function clientCfViaDb(p: PartnerRec, myDb: { api: string; studio: string } | null): Promise<{ cf: Cloudflare; account: string } | null> {
+async function clientCfViaDb(p: PartnerRec, myDb: { api: string; studio: string } | null, only?: string): Promise<{ cf: Cloudflare; account: string } | null> {
   if (!p.siteId) return null;
   if (p.backend === "cloudflare" && p.api && (await cfSignedIn(p.api).catch(() => false))) {
-    const info = await cfDeployInfo(p.api), acc = p.pagesAccount || info.account;
+    const info = await cfDeployInfo(p.api), acc = only || p.pagesAccount || info.account;
     if (acc && ((info.deploy && info.account === acc) || info.more)) return { cf: dbCloudflare(p.api, "studio:" + p.studio), account: acc };
   }
   if (!myDb || !(await cfSignedIn(myDb.api).catch(() => false))) return null;
-  const info = await cfDeployInfo(myDb.api), acc = p.pagesAccount || info.account;
+  const info = await cfDeployInfo(myDb.api), acc = only || p.pagesAccount || info.account;
   if (!acc) return null;
   if (!(info.deploy && info.account === acc)) { try { await cfxSite(myDb.api, myDb.studio, acc, p.siteId); } catch { return null; } }
   return { cf: dbCloudflare(myDb.api, "studio:" + myDb.studio), account: acc };
@@ -319,8 +320,27 @@ function PartnerCard({ p, studio, index, nf, setNf, session, myEmail, studioToke
     }
     throw new Error((last || "Couldn't update.") + " Check that the token was created while signed in to the account their Studio lives on, and that Publish from any device is on for the database (Settings → Hostings).");
   });
+  /** Set once a new token is kept on a database: the domain box then works through it (the device's own token lacked the rights). */
+  const domForce = useRef("");
+  /** The domain box asked for a token that can add domains: kept on their database (or yours) for every device; else used just now. */
+  const newDomToken = async (t0: string) => {
+    const t = t0.trim(); if (!/^[\w-]{20,200}$/.test(t)) throw new Error("Paste the Cloudflare API token for their account.");
+    const dbs = [p.backend === "cloudflare" && p.api ? { api: p.api, studio: p.studio, mine: false } : null, myDb ? { ...myDb, mine: true } : null].filter(Boolean) as { api: string; studio: string; mine: boolean }[];
+    for (const d of dbs) {
+      try {
+        let acc = p.pagesAccount || domCf?.account || "";
+        const r = await cfxPut(d.api, d.studio, t); if (r.accounts.length && !r.accounts.some((a) => a.id === acc)) acc = r.accounts[0].id;
+        if (d.mine && acc) await cfxSite(d.api, d.studio, acc, p.siteId!).catch(() => null);
+        const via = await clientCfViaDb(p, myDb, acc); if (!via) continue;
+        domForce.current = acc; setDomCf(via); return;
+      } catch { /* try the next database, then this device */ }
+    }
+    const relay = await getHelper(studioToken, nf).catch(() => null);
+    if (relay && domCf) { setDomCf({ cf: new Cloudflare(relay, t), account: domCf.account }); toast("Using that token for the domain now (it isn't kept: it couldn't be saved on a database)."); return; }
+    throw new Error("That token couldn't be kept on a database, and this device has no helper to use it directly. If their Studio is on your main Cloudflare account, replace the main token under Settings → Hostings.");
+  };
   const [domCf, setDomCf] = useState<{ cf: Cloudflare; account: string } | null | undefined>(undefined);
-  useEffect(() => { if (p.accounts === "mine" && p.pages === "cloudflare" && p.siteId) (cfLocalClient(studioToken, p.pagesAccount).catch(() => null).then((l) => l || clientCfViaDb(p, myDb))).then(setDomCf).catch(() => setDomCf(null)); }, [p.siteId, p.api, p.pagesAccount, myDb?.api, tokOpen]);
+  useEffect(() => { if (p.accounts === "mine" && p.pages === "cloudflare" && p.siteId) (domForce.current ? clientCfViaDb(p, myDb, domForce.current) : cfLocalClient(studioToken, p.pagesAccount).catch(() => null).then((l) => l || clientCfViaDb(p, myDb))).then(setDomCf).catch(() => setDomCf(null)); }, [p.siteId, p.api, p.pagesAccount, myDb?.api]);
   const notShared = index.projects.filter((m) => !p.shared.some((s) => s.project === m.id) && !m.partner);
 
   return (
@@ -399,7 +419,7 @@ function PartnerCard({ p, studio, index, nf, setNf, session, myEmail, studioToke
       {moving && <AddPartner from={p} nf={nf} setNf={setNf} session={session} index={index} partner={partner} myEmail={myEmail} onCancel={() => setMoving(false)} onDone={async (rec) => { await onChange(() => rec, `Move client Studio ${rec.name}`); }} />}
       {p.accounts === "mine" && p.pages === "cloudflare" && p.siteId && (domCf === undefined ? null : domCf
         ? <CfDomainCard plain={`${p.name}'s Studio address`}
-            acc={{ ready: true, account: { id: domCf.account }, client: async () => ({ cf: domCf.cf }), replaceToken: async () => { throw new Error("Use “Update the Cloudflare token for their account…” below."); } }}
+            acc={{ ready: true, account: { id: domCf.account }, client: async () => ({ cf: domCf.cf }), replaceToken: newDomToken }}
             host={{ kind: "cloudflare", siteId: p.siteId, siteName: p.name, url: p.url, account: domCf.account, domain: p.domain, subdomain: p.subdomain, domainSetup: p.domainSetup } as HostCfg}
             onHost={(h) => onChange((x) => ({ ...x, domain: h.domain, subdomain: h.subdomain, domainSetup: h.domainSetup }), h.domain ? `${p.name}'s Studio address: ${h.domain}` : `${p.name}'s Studio address removed`)} />
         : <p className="text-[12.5px] text-ink-400">To give their Studio its own domain, no Cloudflare token reaches its account from this device yet: turn on Publish from any device (Settings → Hostings) or use “Update the Cloudflare token for their account…” below.</p>)}

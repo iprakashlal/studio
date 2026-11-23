@@ -31,7 +31,7 @@ export function RecoveryPanel({ cf, kind, on }: { cf?: { api: string; site: stri
       <div>
         <h3 className="text-[15px] font-extrabold text-ink-100">Abandoned carts</h3>
         <p className="text-sm text-ink-300">Someone typed their email at checkout and left. A reminder with a link back to their cart goes out by itself; you can also send one now.</p>
-        {!d.on && <p role="status" className="mt-2 rounded-lg border border-amber-400/40 bg-amber-400/5 px-3 py-2 text-[13px] text-amber-100" data-rc-off>{on ? <>Reminders are switched on in the editor but not on the live site yet. <b>Publish the site</b> to start keeping carts.</> : <>Reminders are switched off. Turn on <b>{kind === "store" ? "Prices & shipping" : "Online ordering"} → Abandoned carts → Remind shoppers</b>, then publish.</>}</p>}
+        {!d.on && <p role="status" className="mt-2 rounded-lg border border-amber-400/40 bg-amber-400/5 px-3 py-2 text-[13px] text-amber-100" data-rc-off>{on ? <>Reminders are switched on in the editor but not on the live site yet. <b>Publish the site</b> to start keeping carts.</> : <>Reminders are switched off. Turn on <b>Checkout → Abandoned carts → Remind shoppers</b>, then publish.</>}</p>}
         {!d.mail && <p role="status" className="mt-2 rounded-lg border border-amber-400/40 bg-amber-400/5 px-3 py-2 text-[13px] text-amber-100">Email isn't set up on this database (Resend), so reminders can't be sent.</p>}
         {err && <p role="alert" className="mt-2 text-[13px] text-red-300">{err}</p>}
         <dl className="mt-3 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4" aria-label="Summary">

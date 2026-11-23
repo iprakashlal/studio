@@ -472,8 +472,18 @@ SETTINGS.ship = { secret: [], text: [], flags: ["manual", "quiet"] };
 // Email through the site's own Resend account (key and sender), when the Studio's owner has switched the site to "Custom".
 SETTINGS.mail = { secret: ["key"], text: ["from"], flags: ["on"] };
 async function aesKey(env: Env) { return crypto.subtle.importKey("raw", await crypto.subtle.digest("SHA-256", enc.encode("settings:" + env.SECRET)), "AES-GCM", false, ["encrypt", "decrypt"]); }
+/** A project's own Resend key and sender can be dropped into its database from outside (the Studio does it through
+ *  Cloudflare's D1 API when the owner isn't signed in to the site yet, since the sign-in code itself needs working email).
+ *  The row is plain text; the first read here encrypts it as the site's "mail" setting and deletes the row. */
+async function adoptMail(env: Env, scope: string) {
+  const r: any = await env.DB.prepare("select value from settings where scope = ? and name = 'mail!pending'").bind(scope).first(); if (!r) return;
+  let v: any = null; try { v = JSON.parse(String(r.value)); } catch { /* ignored */ }
+  await env.DB.prepare("delete from settings where scope = ? and name = 'mail!pending'").bind(scope).run();
+  if (v && /^re_\S{8,}$/.test(String(v.key || "")) && /^[^<>\s@]+@[^<>\s@]+\.[^<>\s@]+$|<[^<>\s@]+@[^<>\s@]+\.[^<>\s@]+>$/.test(String(v.from || "").trim())) await putSetting(env, scope, "mail", { on: true, key: String(v.key), from: String(v.from).trim() });
+}
 async function getSetting(env: Env, scope: string, name: string): Promise<any | null> {
   await ensure(env);
+  if (name === "mail" && scope.startsWith("site:")) await adoptMail(env, scope).catch(() => {});
   const r: any = await env.DB.prepare("select value from settings where scope = ? and name = ?").bind(scope, name).first(); if (!r) return null;
   try { const b = unb64u(r.value); return JSON.parse(new TextDecoder().decode(await crypto.subtle.decrypt({ name: "AES-GCM", iv: b.slice(0, 12) }, await aesKey(env), b.slice(12)))); } catch { return null; }
 }
@@ -2116,6 +2126,14 @@ export default {
               if (sub === "add") { await q("insert into members (scope, email, role) values (?, ?, 'owner') on conflict (scope, email) do nothing", [S2, e]); return json({ db: dbId, ok: true }); }
               if (sub === "remove") { await q("delete from members where scope = ? and email = ?", [S2, e]); return json({ db: dbId, ok: true }); }
               return err(400, "Unknown operation.");
+            }
+            if (op === "mail") {
+              // The site's own Resend key and sender, left as a pending row that the site's database encrypts and adopts on its next email.
+              if (!/^re_\S{8,}$/.test(String(b.key || ""))) return err(400, "That doesn't look like a Resend API key (it starts with re_).");
+              const from = String(b.from || "").trim(); if (!/^[^<>\s@]+@[^<>\s@]+\.[^<>\s@]+$|<[^<>\s@]+@[^<>\s@]+\.[^<>\s@]+>$/.test(from)) return err(400, "Enter a sender like Name <hello@your-domain.com>.");
+              await q("create table if not exists settings (scope text not null, name text not null, value text not null, updated_at text not null, primary key (scope, name))");
+              await q("insert into settings (scope, name, value, updated_at) values (?, 'mail!pending', ?, ?) on conflict (scope, name) do update set value = excluded.value, updated_at = excluded.updated_at", [S2, JSON.stringify({ key: String(b.key), from }), new Date().toISOString()]);
+              return json({ db: dbId, ok: true });
             }
             if (op === "delete") {
               const list = (Array.isArray(b.paths) ? b.paths : []).filter(pathOk).slice(0, 200);

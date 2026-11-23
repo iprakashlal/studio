@@ -5,7 +5,7 @@ import type { ProjectMeta } from "../lib/studio";
 import { Modal } from "../ui/kit";
 import { cfCall, siteEnquiries } from "../lib/cfdb";
 import { LoginEmails } from "./SitesHostingCard";
-import { MailForm, SiteDbSignIn, useSiteDbSigned } from "./Connections";
+import { MailForm, SiteDbSignIn, useMailBridge, useSiteDbSigned } from "./Connections";
 import { GoogleSignInCard } from "../ui/GoogleSignIn";
 import { PinCard } from "../ui/PinSignIn";
 
@@ -24,7 +24,7 @@ const Sec = ({ title, children, note }: { title: string; note?: string; children
 );
 
 export function QuickSetup({ project, onClose }: { project: ProjectMeta; onClose: () => void }) {
-  const h = project.host, cf = h?.cf || null, signed = useSiteDbSigned(cf);
+  const h = project.host, cf = h?.cf || null, signed = useSiteDbSigned(cf), bridge = useMailBridge(cf, h?.kind === "cloudflare" ? h.account : undefined, signed);
   const [tab, setTab] = useState<"who" | "how" | "publish">("who");
   const host = h ? (h.kind === "cloudflare" ? "Cloudflare" : h.kind === "netlify" ? "Netlify" : "its host") : "";
   const tabs: [typeof tab, string][] = [["who", "Who can sign in"], ["how", "How they sign in"], ["publish", "Publish"]];
@@ -42,7 +42,7 @@ export function QuickSetup({ project, onClose }: { project: ProjectMeta; onClose
       {tab === "how" && <section aria-label="Admin login: how they sign in" className="flex flex-col gap-3">
         {!cf ? <p className="text-[13px] text-amber-200">Sign-in options need the site on Cloudflare.</p> : <>
           {note("Email code always works. Google and PIN apply to every site on this database.")}
-          {!signed ? <SiteDbSignIn cf={cf} small what="change the sign-in options" /> : <>
+          {!signed ? <>{bridge && <MailForm where={null} studio bridge={bridge} />}<SiteDbSignIn cf={cf} small what="change the sign-in options" /></> : <>
             <MailForm where={{ api: cf.api, scope: "site:" + cf.site }} studio />
             <GoogleSignInCard api={cf.api} what="this site's admin page and any other site on this database" />
             <PinCard api={cf.api} what="this site's admin page and any other site on this database" />

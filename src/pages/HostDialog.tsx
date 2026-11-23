@@ -564,7 +564,12 @@ function DomainCard({ host, nf, onHost }: { host: HostCfg; nf: Netlify; onHost: 
 
 /** Your own domain on a Cloudflare-hosted site: the domain's DNS is on the same Cloudflare account, so the Studio
  *  attaches it to the site's Worker (Cloudflare adds the DNS records and HTTPS by itself). */
-function CfDomainCard({ host, acc, onHost }: { host: HostCfg; acc: CfAccountHook; onHost: (h: HostCfg) => Promise<void> }) {
+/** The domain box's frame: a collapsible section in a site's Publish window, or (plain) a titled box in Settings. */
+function DomBox({ plain, children }: { plain?: string; children: ReactNode }) {
+  return plain ? <div className="flex flex-col gap-3 rounded-lg border border-ink-700 p-3" aria-label="Domain"><b className="text-sm">{plain}</b>{children}</div>
+    : <Sect id="domain" label="Domain" title="3 · Your domain (optional)">{children}</Sect>;
+}
+export function CfDomainCard({ host, acc, onHost, plain }: { host: HostCfg; acc: CfAccountHook; onHost: (h: HostCfg) => Promise<void>; /** A title: shown as a plain box instead of a collapsible section. */ plain?: string }) {
   const toast = useToast();
   const [d, setD] = useState(host.domain || host.domainSetup?.name || ""), [busy, setBusy] = useState(""), [err, setErr] = useState("");
   const [needPerm, setNeedPerm] = useState(false), [newTok, setNewTok] = useState("");
@@ -581,7 +586,7 @@ function CfDomainCard({ host, acc, onHost }: { host: HostCfg; acc: CfAccountHook
   const attach = async (cf: Cloudflare, dom: string, zoneId: string, sub = false) => {
     for (const hn of sub ? [dom] : [dom, "www." + dom]) await cf.addWorkerDomain(account, host.siteId, hn, zoneId);
     await onHost({ ...host, domain: dom, subdomain: sub || undefined, domainSetup: undefined });
-    toast(`${dom} is connected. Cloudflare is turning on HTTPS; it takes a few minutes. Publish once more so links use https://${sub ? "" : "www."}${dom}/.`);
+    toast(plain ? `${dom} is connected. Cloudflare is turning on HTTPS; it takes a few minutes. The Studio opens there too: sign in once more on that address (each address keeps its own sign-in).` : `${dom} is connected. Cloudflare is turning on HTTPS; it takes a few minutes. Publish once more so links use https://${sub ? "" : "www."}${dom}/.`);
   };
   const setup = () => run("connect", async () => {
     const dom = cleanDomain(d), { cf } = await acc.client();
@@ -622,7 +627,7 @@ function CfDomainCard({ host, acc, onHost }: { host: HostCfg; acc: CfAccountHook
   const useNewToken = () => run("token", async () => { await acc.replaceToken(newTok); setNewTok(""); setNeedPerm(false); toast("New token saved on this device. Press the button again."); });
   const copy = (t: string) => { navigator.clipboard?.writeText(t).then(() => toast("Copied " + t)).catch(() => {}); };
   return (
-    <Sect id="domain" label="Domain" title="3 · Your domain (optional)">
+    <DomBox plain={plain}>
 
       {host.domain ? <div className="flex flex-wrap items-center gap-2 text-[13px]">
         <span className="h-2 w-2 rounded-full bg-emerald-400" /><span>Live on <b>{host.domain}</b>{!host.subdomain && <> and <b>www.{host.domain}</b></>}</span>
@@ -653,6 +658,6 @@ function CfDomainCard({ host, acc, onHost }: { host: HostCfg; acc: CfAccountHook
         <p><a className="btn btn-pri btn-sm" href={CF_DB_TOKEN_PAGE} target="_blank" rel="noopener noreferrer">Create a token that can add domains ↗</a> Everything is ticked; press <b>Continue to summary → Create Token</b>, then paste it here. It replaces the old one on this device.</p>
         <div className="flex gap-2"><input aria-label="New Cloudflare token" className="input min-w-0 flex-1 font-mono text-xs" type="password" autoComplete="off" value={newTok} onChange={(e) => setNewTok(e.target.value)} placeholder="New Cloudflare API token" /><button type="button" className="btn btn-sm" disabled={!!busy || newTok.trim().length < 20} onClick={useNewToken}>{busy === "token" ? "Checking…" : "Use it"}</button></div>
       </div>}
-    </Sect>
+    </DomBox>
   );
 }

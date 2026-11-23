@@ -37,14 +37,12 @@ const schema: Category[] = [
     ],
   },
   {
-    id: "nav", label: "Menu & pages", group: "Design", desc: "Menu labels and which pages appear.",
+    id: "nav", label: "Menu & pages", group: "Design", desc: "Menu labels, how the menu behaves when scrolling, and which pages appear.",
     cards: [
       { title: "Menu titles", fields: [g2({ t: "text", path: "nav.home", label: "Home" }, { t: "text", path: "nav.shop", label: "Shop" }, { t: "text", path: "nav.portfolio", label: "Story / portfolio page" }, { t: "text", path: "nav.cart", label: "Cart" }, { t: "text", path: "nav.account", label: "Account (when sign-in is on)" }),
         { t: "toggle", path: "nav.showPortfolio", label: "Show the story / portfolio page in the menu" },
         { t: "toggle", path: "nav.crumbs", label: "Show the page trail (Shop / Category / Product, Home / Page name) at the top of pages" }] },
       { title: "Menu when scrolling", fields: [NAV_MODE_FIELD, NAV_MODE_MOB_FIELD, { t: "note", text: "Theme default keeps the menu at the top of the screen while shoppers scroll. The same setting is under Theme & layout." }] },
-      { title: "Footer titles & links", fields: [g2({ t: "text", path: "labels.allProducts", label: "“All products” link" }, { t: "text", path: "labels.viewAll", label: "“View all” link on the home page" },
-        { t: "text", path: "labels.help", label: "Footer column: help & policies" }, { t: "text", path: "labels.contact", label: "Footer column: contact" })] },
     ],
   },
   menuCategory({ where: "the shop's pages (Home, Shop, your story, custom pages and Account)", targets: [{ value: "home", label: "Home" }, { value: "shop", label: "Shop (all products)" }, { value: "cat", label: "A product category" }, { value: "portfolio", label: "Story / portfolio page" }, { value: "policies", label: "Policies" }, { value: "warranty", label: "Warranty & status check" }, { value: "account", label: "Account" }, { value: "cart", label: "Cart" }],
@@ -69,7 +67,7 @@ const schema: Category[] = [
     ],
   },
   {
-    id: "products", label: "Products", group: "Catalogue", desc: "Everything you sell. Each product gets its own page.",
+    id: "products", label: "Products", group: "Catalogue", desc: "Everything you sell, each with its own page, plus product reviews and stock counting.",
     cards: [
       { title: "Fill in from a PDF or pamphlet", studio: true, fields: [{ t: "pamphlet" }] },
       { title: "Product photos in bulk", fields: [{ t: "bulkPhotos", kind: "product" }] },
@@ -93,8 +91,27 @@ const schema: Category[] = [
           g2({ t: "toggle", path: "featured", label: "Feature on the home page" }, { t: "text", path: "slug", label: "Page address (optional)", ph: "made from the name" }),
           { t: "toggle", path: "sample", label: "This is a sample product (warns before export)" },
         ] }] },
+      { title: "Product reviews", fields: [
+        { t: "toggle", path: "reviews.on", label: "Let customers review products (stars and a few words, on each product page)" },
+        { t: "when", path: "reviews.on", is: "true", fields: [
+          { t: "toggle", path: "reviews.auto", label: "Show reviews straight away (off: you approve each one first)" },
+          { t: "toggle", path: "reviews.trustBuyers", label: "…but only approve-first for people who haven't ordered it (a buyer's review shows straight away)" },
+          { t: "toggle", path: "reviews.buyersOnly", label: "Only people who ordered it can review it (matched by the email they ordered with)" },
+          g2({ t: "toggle", path: "reviews.alert", def: true, label: "Email me when a review needs approving" }, { t: "text", path: "reviews.alertTo", label: "Send those emails to (optional)", ph: "you@example.com", hint: "Empty uses the address new orders go to." }),
+        ] },
+        { t: "note", text: "Reviews, approving, hiding and replying are under Product reviews (in the menu, under Orders & customers). Only the reviewer's first name and last initial are shown, never the email address. A reviewer's email decides “Verified buyer”: it must match the email on an order for that item. It runs on the site's own Cloudflare database, so the site must be hosted there and published once after this is switched on." },
+      ] },
+      { title: "Stock", fields: [
+        { t: "toggle", path: "inventory.on", label: "Count stock (products you give a quantity sell out by themselves)" },
+        { t: "when", path: "inventory.on", is: "true", fields: [
+          g2({ t: "number", path: "inventory.leftAt", label: "Say “Only N left” at or below", min: 0, step: 1, hint: "Empty means 5. 0 never shows how many are left." }, { t: "text", path: "inventory.alertTo", label: "Send low-stock emails to (optional)", ph: "you@example.com", hint: "Empty uses the address new orders go to." }),
+          { t: "toggle", path: "inventory.alert", def: true, label: "Email me when a product runs low or sells out" },
+        ] },
+        { t: "note", text: "Enter the quantities under Stock (in the menu, under Products & stock). Only products you give a quantity are counted; the rest sell without a limit, and “Stock” on each product still works as before. Counting runs on the site's own Cloudflare database, so the site must be hosted there and published once after switching this on." },
+      ] },
     ],
   },
+
   {
     id: "categories", label: "Categories", group: "Catalogue", desc: "Group products. Shoppers can filter the shop by category.",
     cards: [
@@ -125,50 +142,20 @@ const schema: Category[] = [
     ],
   },
   {
-    id: "pricing", label: "Prices & shipping", group: "Selling", desc: "Currency, shipping, tax and order limits used in the cart and checkout.",
+    id: "pricing", label: "Prices & tax", group: "Selling", desc: "Currency, tax, minimum order and order numbers used in the cart and checkout.",
     cards: [
       { title: "Prices", fields: [g3({ t: "select", path: "settings.currency", label: "Currency", options: CURRENCIES }, { t: "number", path: "settings.minOrder", label: "Minimum order", min: 0 }, { t: "number", path: "settings.maxQty", label: "Max quantity per item", min: 1 })] },
-      { title: "Shipping", fields: [g2({ t: "number", path: "settings.shippingFee", label: "Shipping fee", min: 0 }, { t: "number", path: "settings.freeShippingOver", label: "Free shipping over (0 = never)", min: 0 })] },
       { title: "Tax", fields: [g3({ t: "number", path: "settings.taxPercent", label: "Tax %", min: 0, step: 0.1 }, { t: "text", path: "settings.taxLabel", label: "Tax name" }, { t: "toggle", path: "settings.taxIncluded", label: "Prices include tax" })] },
       { title: "Order numbers", fields: [{ t: "text", path: "settings.orderPrefix", label: "Order number prefix", hint: "Orders look like PREFIX-1105-4821." }] },
-      { title: "Reviews", fields: [
-        { t: "toggle", path: "reviews.on", label: "Let customers review products (stars and a few words, on each product page)" },
-        { t: "when", path: "reviews.on", is: "true", fields: [
-          { t: "toggle", path: "reviews.auto", label: "Show reviews straight away (off: you approve each one first)" },
-          { t: "toggle", path: "reviews.trustBuyers", label: "…but only approve-first for people who haven't ordered it (a buyer's review shows straight away)" },
-          { t: "toggle", path: "reviews.buyersOnly", label: "Only people who ordered it can review it (matched by the email they ordered with)" },
-          g2({ t: "toggle", path: "reviews.alert", def: true, label: "Email me when a review needs approving" }, { t: "text", path: "reviews.alertTo", label: "Send those emails to (optional)", ph: "you@example.com", hint: "Empty uses the address new orders go to." }),
-        ] },
-        { t: "note", text: "Reviews, approving, hiding and replying are under Reviews (in the menu, under Selling). Only the reviewer's first name and last initial are shown, never the email address. A reviewer's email decides “Verified buyer”: it must match the email on an order for that item. It runs on the site's own Cloudflare database, so the site must be hosted there and published once after this is switched on." },
-      ] },
-      { title: "Abandoned carts", fields: [
-        { t: "toggle", path: "recovery.on", label: "Remind shoppers who leave their cart (they must have typed their email at checkout)" },
-        { t: "when", path: "recovery.on", is: "true", fields: [
-          g2({ t: "number", path: "recovery.after", label: "First reminder after (hours)", min: 1, step: 1, hint: "Empty means 1." }, { t: "number", path: "recovery.again", label: "Second reminder after (hours)", min: 0, step: 1, hint: "Empty means 24. 0 sends only one." }),
-          { t: "text", path: "recovery.subject", label: "Email subject", ph: "You left something in your cart at {shop}" },
-          { t: "textarea", path: "recovery.body", label: "Email text", hint: "Use {name}, {items}, {total}, {shop} and {offer}. The button back to the cart is added for you. Empty uses the standard wording." },
-          g2({ t: "text", path: "recovery.offer", label: "Offer line (optional)", ph: "Use code COMEBACK10 for 10% off" }, { t: "text", path: "recovery.button", label: "Button label", ph: "Back to my cart" }),
-          { t: "text", path: "recovery.url", label: "Address of this page (optional)", ph: "https://yourshop.com/checkout.html", hint: "Where the button goes. Empty uses the page the shopper was on." },
-          { t: "toggle", path: "recovery.auto", def: true, label: "Send reminders by themselves (off: only when you press “Remind now”)" },
-        ] },
-        { t: "note", text: "Carts and the Remind now button are under Abandoned carts (in the menu, under Selling). Every email has a link to stop reminders, an order from the same email closes the cart, and a site sends at most 50 reminders a day. Reminders are sent while the site is being visited, so a very quiet site may send them a little late. It runs on the site's own Cloudflare database, so the site must be hosted there and published once after this is switched on." },
-      ] },
-      { title: "Inventory", fields: [
-        { t: "toggle", path: "inventory.on", label: "Count stock (products you give a quantity sell out by themselves)" },
-        { t: "when", path: "inventory.on", is: "true", fields: [
-          g2({ t: "number", path: "inventory.leftAt", label: "Say “Only N left” at or below", min: 0, step: 1, hint: "Empty means 5. 0 never shows how many are left." }, { t: "text", path: "inventory.alertTo", label: "Send low-stock emails to (optional)", ph: "you@example.com", hint: "Empty uses the address new orders go to." }),
-          { t: "toggle", path: "inventory.alert", def: true, label: "Email me when a product runs low or sells out" },
-        ] },
-        { t: "note", text: "Enter the quantities under Inventory (in the menu, under Selling). Only products you give a quantity are counted; the rest sell without a limit, and “Stock” on each product still works as before. Counting runs on the site's own Cloudflare database, so the site must be hosted there and published once after switching this on." },
-      ] },
     ],
   },
   {
-    id: "delivery", label: "Delivery areas", group: "Selling", desc: "Which PIN codes you deliver to, what each area costs and how long it takes. Shoppers check their PIN on the product page and in the cart.",
+    id: "delivery", label: "Delivery areas", group: "Selling", desc: "The standard shipping fee, which PIN codes you deliver to, what each area costs and how long it takes. Shoppers check their PIN on the product page and in the cart.",
     cards: [
+      { title: "Standard shipping", fields: [g2({ t: "number", path: "settings.shippingFee", label: "Shipping fee", min: 0 }, { t: "number", path: "settings.freeShippingOver", label: "Free shipping over (0 = never)", min: 0 })] },
       { title: "Delivery by PIN code", fields: [
         { t: "toggle", path: "shipping.on", label: "Deliver by PIN code" },
-        { t: "note", text: "While this is off, every order ships at the flat fee under Prices & shipping. Switch it on to set areas with their own charge, delivery time and cash-on-delivery rule, and to stop orders from places you don't reach." },
+        { t: "note", text: "While this is off, every order ships at the standard shipping fee above. Switch it on to set areas with their own charge, delivery time and cash-on-delivery rule, and to stop orders from places you don't reach." },
         { t: "when", path: "shipping.on", is: "true", fields: [
           { t: "list", path: "shipping.zones", max: 30, add: () => ({ id: "z-" + Math.random().toString(36).slice(2, 8), on: true, name: "New area", pins: "", fee: "", freeOver: "", days: "", cod: true }),
             title: (it) => `${it?.name || "Area"}${it?.fee !== "" && it?.fee != null ? ` · ${Number(it.fee) ? "fee " + it.fee : "free"}` : ""}${it?.days ? ` · ${it.days}` : ""}${it?.on === false ? " · off" : ""}`,
@@ -198,7 +185,7 @@ const schema: Category[] = [
   },
   gstCategory("store"),
   {
-    id: "checkout", label: "Checkout", group: "Selling", desc: "What shoppers fill in and what they see after ordering.",
+    id: "checkout", label: "Checkout", group: "Selling", desc: "What shoppers fill in, what they see after ordering, and reminders for abandoned carts.",
     cards: [
       { title: "Form", fields: [g2({ t: "text", path: "checkout.title", label: "Page title", ml: true }, { t: "text", path: "checkout.button", label: "Order button label" }), { t: "textarea", path: "checkout.intro", label: "Intro" },
         g3({ t: "toggle", path: "checkout.askPhone", label: "Ask for phone" }, { t: "toggle", path: "checkout.askAddress", label: "Ask for address" }, { t: "toggle", path: "checkout.askNotes", label: "Ask for notes" }),
@@ -209,8 +196,21 @@ const schema: Category[] = [
         { t: "when", path: "checkout.verifyEmail", is: "true", fields: [{ t: "note", text: "The shopper is emailed a 6-digit code and enters it at checkout; the order then shows “Email: verified by a code” under Purchased orders. This works on a shop hosted on Cloudflare, and the codes are sent by that database's own email (Resend). While its sender is still in test mode, codes can't reach shoppers: orders are then let through and marked “not verified”, so nobody is locked out. Send from your own domain (hosting window → Email settings) to verify everyone. An email address is checked only when one is given: choose Email or Both above to ask every shopper for it." }] },
         { t: "note", text: "Any choice but Standard shows both boxes, with the one that isn't required marked optional. A shop with customer accounts always needs the email. Points are spent with a WhatsApp code, so they need a phone number." }] },
       { title: "After ordering", fields: [{ t: "text", path: "checkout.successTitle", label: "Title", ml: true }, { t: "textarea", path: "checkout.successText", label: "Text" }] },
+      { title: "Abandoned carts", fields: [
+        { t: "toggle", path: "recovery.on", label: "Remind shoppers who leave their cart (they must have typed their email at checkout)" },
+        { t: "when", path: "recovery.on", is: "true", fields: [
+          g2({ t: "number", path: "recovery.after", label: "First reminder after (hours)", min: 1, step: 1, hint: "Empty means 1." }, { t: "number", path: "recovery.again", label: "Second reminder after (hours)", min: 0, step: 1, hint: "Empty means 24. 0 sends only one." }),
+          { t: "text", path: "recovery.subject", label: "Email subject", ph: "You left something in your cart at {shop}" },
+          { t: "textarea", path: "recovery.body", label: "Email text", hint: "Use {name}, {items}, {total}, {shop} and {offer}. The button back to the cart is added for you. Empty uses the standard wording." },
+          g2({ t: "text", path: "recovery.offer", label: "Offer line (optional)", ph: "Use code COMEBACK10 for 10% off" }, { t: "text", path: "recovery.button", label: "Button label", ph: "Back to my cart" }),
+          { t: "text", path: "recovery.url", label: "Address of this page (optional)", ph: "https://yourshop.com/checkout.html", hint: "Where the button goes. Empty uses the page the shopper was on." },
+          { t: "toggle", path: "recovery.auto", def: true, label: "Send reminders by themselves (off: only when you press “Remind now”)" },
+        ] },
+        { t: "note", text: "Carts and the Remind now button are under Abandoned carts (in the menu, under Orders & customers). Every email has a link to stop reminders, an order from the same email closes the cart, and a site sends at most 50 reminders a day. Reminders are sent while the site is being visited, so a very quiet site may send them a little late. It runs on the site's own Cloudflare database, so the site must be hosted there and published once after this is switched on." },
+      ] },
     ],
   },
+
   accountsCategory("store"),
   {
     id: "payments", label: "Payments", group: "Selling", desc: "Turn on the ways customers can pay. A gateway shows at checkout once its keys are saved. The keys are kept on the shop's own Cloudflare database (Host to External Services), encrypted.",
@@ -257,6 +257,8 @@ const schema: Category[] = [
       { title: "Policies", fields: [{ t: "list", path: "policies", add: () => ({ id: uid("pol"), title: "New policy", text: "" }), title: (it) => it.title || "Policy", item: [{ t: "text", path: "title", label: "Title" }, { t: "textarea", path: "text", label: "Text", rows: 6 }] },
         { t: "note", text: "Payment providers usually ask for shipping, refund and privacy policies on your site." }] },
       { title: "Footer", fields: [{ t: "textarea", path: "footer.text", label: "Footer text" }] },
+      { title: "Footer link names", fields: [g2({ t: "text", path: "labels.allProducts", label: "“All products” link" }, { t: "text", path: "labels.viewAll", label: "“View all” link on the home page" },
+        { t: "text", path: "labels.help", label: "Footer column: help & policies" }, { t: "text", path: "labels.contact", label: "Footer column: contact" })] },
     ],
   },
   staticPagesCategory("page"),

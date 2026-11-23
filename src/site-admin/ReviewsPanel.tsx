@@ -31,7 +31,7 @@ export function ReviewsPanel({ cf, kind, on }: { cf?: { api: string; site: strin
       <div>
         <h3 className="text-[15px] font-extrabold text-ink-100">Reviews</h3>
         <p className="text-sm text-ink-300">What customers wrote about your {kind === "restaurant" ? "dishes" : "products"}. Only approved reviews show on the site.</p>
-        {!d.on && <p role="status" className="mt-2 rounded-lg border border-amber-400/40 bg-amber-400/5 px-3 py-2 text-[13px] text-amber-100" data-rv-off>{on ? <>Reviews are switched on in the editor but not on the live site yet. <b>Publish the site</b> to start taking them.</> : <>Reviews are switched off. Turn on <b>{kind === "store" ? "Prices & shipping" : "Online ordering"} → Reviews → Let customers review</b>, then publish.</>}</p>}
+        {!d.on && <p role="status" className="mt-2 rounded-lg border border-amber-400/40 bg-amber-400/5 px-3 py-2 text-[13px] text-amber-100" data-rv-off>{on ? <>Reviews are switched on in the editor but not on the live site yet. <b>Publish the site</b> to start taking them.</> : <>Reviews are switched off. Turn on <b>{kind === "store" ? "Products → Product reviews" : "Reviews → Dish reviews"} → Let customers review</b>, then publish.</>}</p>}
         {err && <p role="alert" className="mt-2 text-[13px] text-red-300">{err}</p>}
         <dl className="mt-3 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4" aria-label="Summary">
           {[["Waiting for you", n.pending], ["Showing", n.live], ["Hidden", n.hidden], ["Average", n.live ? avg.toFixed(1) + " ★" : "–"]].map(([k, v]) => <div key={String(k)} className="card p-3"><dt className="text-xs text-ink-400">{k}</dt><dd className="text-lg font-extrabold text-ink-100">{v}</dd></div>)}

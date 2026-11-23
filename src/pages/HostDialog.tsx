@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { useCfAccount, useCloudflarePicker, type CfAccountHook } from "./CfPicker";
+import { useCfAccount, useCloudflarePicker } from "./CfPicker";
 import { cloudflarePages, netlifyPages, pagesViaDbs, PAGES_LABEL, type Pages, type PagesKind } from "../lib/pages";
 import { CfError, registrarHelp, type Cloudflare } from "../lib/cloudflare";
 import { cfShortTokens, CFDB_WORKER, CF_DB_TOKEN_PAGE, CfRepo, registerWorkers, cfAccountVault, cfAddMembers, resendTestOnly, cfRole, cfSendCode, cfSignedIn, cfVerifyCode, cfSetupFor } from "../lib/cfdb";
@@ -569,7 +569,9 @@ function DomBox({ plain, children }: { plain?: string; children: ReactNode }) {
   return plain ? <div className="flex flex-col gap-3 rounded-lg border border-ink-700 p-3" aria-label="Domain"><b className="text-sm">{plain}</b>{children}</div>
     : <Sect id="domain" label="Domain" title="3 · Your domain (optional)">{children}</Sect>;
 }
-export function CfDomainCard({ host, acc, onHost, plain }: { host: HostCfg; acc: CfAccountHook; onHost: (h: HostCfg) => Promise<void>; /** A title: shown as a plain box instead of a collapsible section. */ plain?: string }) {
+/** What the domain box needs of a Cloudflare connection (the account hook has it; a client Studio's goes through a database). */
+export type DomAcc = { ready: boolean; account?: { id: string } | null; client: () => Promise<{ cf: Cloudflare }>; replaceToken: (t: string) => Promise<unknown> };
+export function CfDomainCard({ host, acc, onHost, plain }: { host: HostCfg; acc: DomAcc; onHost: (h: HostCfg) => Promise<void>; /** A title: shown as a plain box instead of a collapsible section. */ plain?: string }) {
   const toast = useToast();
   const [d, setD] = useState(host.domain || host.domainSetup?.name || ""), [busy, setBusy] = useState(""), [err, setErr] = useState("");
   const [needPerm, setNeedPerm] = useState(false), [newTok, setNewTok] = useState("");

@@ -381,6 +381,9 @@ function Workspace({ info, onInfo, repo, account, onSignOut, hosted, ghToken }: 
     ...(tpl.id !== "portfolio" ? [
       { id: "connections", label: tpl.id === "restaurant" ? "Restaurant backend" : tpl.id === "store" ? "Couriers, WhatsApp & SMS" : "WhatsApp & SMS", group: tpl.id === "restaurant" ? "Selling" : "Forms & records", desc: tpl.id === "restaurant" ? "What runs the Order now page behind the scenes, on your own Cloudflare database: Petpooja, and WhatsApp for alerts and codes. Payment gateway keys are under Payments." : "Optional: WhatsApp alerts when an enquiry or order arrives, and codes on WhatsApp or by SMS.", render: () => <SiteConnections cf={hosted && "api" in hosted ? hosted : null} template={tpl.id} cms={saved?.cms} site /> },
     ] : []),
+    ...(tpl.id === "portfolio" ? [
+      { id: "connections", label: "Email (Resend)", group: "Forms & records", desc: "Which Resend sends this site's sign-in codes and enquiry emails: the Studio's, or this site's own.", render: () => <SiteConnections cf={hosted && "api" in hosted ? hosted : null} template={tpl.id} cms={saved?.cms} site only="mail" /> },
+    ] : []),
     ...((tpl.id === "restaurant" || tpl.id === "store") ? [
       { id: "purchased", label: "Purchased orders", group: "Selling", desc: "Every order placed on your website: what was bought, by whom, how it is paid, and where it has got to.", render: () => <EnquiriesPanel only="orders" cfg={hosted && "api" in hosted ? null : enquiriesCfg(saved, hosted)} cf={hosted && "api" in hosted ? hosted : undefined} hosted={!!hosted} email={saved?.contact?.email} form={saved?.contact?.form} ghToken={ghToken} /> },
     ] : []),

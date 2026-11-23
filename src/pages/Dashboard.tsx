@@ -211,7 +211,7 @@ export function Dashboard({ studio, index, onIndex, token, hid = () => false, ma
                     <p className="text-xs text-ink-400">Edited <b className="font-semibold text-ink-200">{timeAgo(p.updatedAt)}</b> · Export <b className="font-semibold text-ink-200">{last ? `v${last.version} · ${timeAgo(last.at)}` : "not yet"}</b></p>
                   </div>
                   <div className="relative z-10 border-t border-ink-700/70 pt-4">
-<div className="relative z-10 flex flex-wrap items-center gap-2 bg-inherit">
+<div data-tour="card-actions" className="relative z-10 flex flex-wrap items-center gap-2 bg-inherit">
                     <a href={`#/p/${p.id}`} className="btn btn-pri btn-sm">Open</a>
                     <button type="button" className="btn btn-sm" onClick={() => setQuick({ id: p.id, kind: "setup" })}>Quick Setup</button>
                     <button type="button" className="btn btn-sm" onClick={() => setQuick({ id: p.id, kind: "overview" })}>Quick Overview</button>
@@ -231,7 +231,7 @@ export function Dashboard({ studio, index, onIndex, token, hid = () => false, ma
           <p className="mt-1 text-sm text-ink-400">Create, preview, export and re-edit websites. Every site ships with its own CMS.</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          {canNew && <button className="btn btn-pri" onClick={() => setCreating(true)}>+ New project</button>}
+          {canNew && <button className="btn btn-pri" data-tour="new-project" onClick={() => setCreating(true)}>+ New project</button>}
         </div>
       </div>
       {full.length > 0 && !hid("new") && <p className="rounded-lg border border-amber-400/40 bg-amber-400/5 px-3 py-2 text-[13px] text-amber-100" role="status">This Studio has reached its limit for {full.map((t) => `${t.name.toLowerCase()} sites (${max[t.id]})`).join(" and ")}. Ask your Studio Partner for more.</p>}

@@ -110,33 +110,3 @@ export function QuickOverview({ project, onClose }: { project: ProjectMeta; onCl
   );
 }
 
-const counts = new Map<string, { at: number; v: [number | string, string, boolean][] | "na" }>();
-/** The few numbers a project's card shows: orders and carts for shops, enquiries for the rest; "na" when its database can't be read from here. */
-export function useCounts(project: ProjectMeta): [number | string, string, boolean][] | "na" | null {
-  const h = project.host, cf = h?.cf || null, shop = project.template === "store" || project.template === "restaurant";
-  const hit = counts.get(project.id), [v, setV] = useState<[number | string, string, boolean][] | "na" | null>(hit && Date.now() - hit.at < 60_000 ? hit.v : cf ? null : "na");
-  useEffect(() => {
-    if (!cf) { setV("na"); return; }
-    const c = counts.get(project.id); if (c && Date.now() - c.at < 60_000) { setV(c.v); return; }
-    let live = true;
-    (async () => {
-      let out: [number | string, string, boolean][] | "na" = "na";
-      try {
-        const rows = (await (await siteEnquiries(cf, h!.kind === "cloudflare" ? h!.account : undefined)).list()) as Row[];
-        const orders = rows.filter((r) => isOrder(r.data)), enq = rows.filter((r) => !isOrder(r.data));
-        if (shop) {
-          const open = orders.filter((r) => !CLOSED.includes(r.status)), fresh = open.filter((r) => r.status === "new" || r.status === "read").length;
-          let ab: number | string = "–"; try { ab = ((await cfCall<{ rows: Cart[] }>(cf.api, `/rc/list?scope=${encodeURIComponent("site:" + cf.site)}`)).rows || []).filter((x) => x.status === "open").length; } catch { /* needs sign-in */ }
-          out = [[fresh, "New orders", fresh > 0], [open.length - fresh, "Processing", false], [ab, "Abandoned carts", false]];
-        } else {
-          const n = enq.filter((r) => r.status === "new").length;
-          out = [[n, "New enquiries", n > 0], [enq.filter((r) => r.status !== "archived").length, "Submitted in total", false]];
-        }
-      } catch { /* not reachable from here */ }
-      counts.set(project.id, { at: Date.now(), v: out });
-      if (live) setV(out);
-    })();
-    return () => { live = false; };
-  }, [project.id, cf?.api, cf?.site]);
-  return v;
-}

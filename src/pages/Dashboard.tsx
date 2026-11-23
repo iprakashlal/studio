@@ -5,7 +5,7 @@ import { ThemeGallery } from "../themes/ThemeGallery";
 import { anyThemeById as themeById } from "../themes/codes";
 import { dashStats } from "../lib/dashstats";
 import { TEMPLATES, TEMPLATE_LIST } from "../schema";
-import { QuickOverview, QuickSetup, useCounts } from "./QuickTiles";
+import { QuickOverview, QuickSetup } from "./QuickTiles";
 import { CATEGORY_COLORS, type CategoryRec, type ProjectMeta, type Studio, type StudioIndex } from "../lib/studio";
 import { explain } from "../lib/repo";
 import { siteAddress, siteRepoFor } from "../lib/hosting";
@@ -25,19 +25,13 @@ const STATUS: Record<ProjectMeta["status"], { label: string; cls: string }> = {
 };
 
 /** What the client said on the project's review link, in two lines: the decision, then their latest words. Opens the replies. */
-/** What the card says at a glance: the numbers waiting on a live site, or the next step for one that isn't live yet. */
-function CardNumbers({ p, onOverview, onPublish }: { p: ProjectMeta; onOverview: () => void; onPublish: () => void }) {
-  const v = useCounts(p);
-  if (!p.host && !p.publish) return (
+/** A project that isn't published anywhere yet says what to do next. */
+function NextStep({ p, onPublish }: { p: ProjectMeta; onPublish: () => void }) {
+  if (p.host || p.publish) return null;
+  return (
     <div className="relative z-10 flex items-center justify-between gap-2 rounded-xl border border-amber-400/30 bg-amber-400/5 px-3 py-2" aria-label="Next step">
       <span className="text-[13px] text-amber-100">Next: publish this site</span>
       <button type="button" className="btn btn-pri btn-sm" onClick={onPublish}>Publish</button>
-    </div>);
-  if (v === "na") return null;
-  if (v === null) return <div className="grid grid-cols-3 gap-2" aria-hidden>{[0, 1, 2].map((i) => <div key={i} className="h-[58px] animate-pulse rounded-xl bg-ink-800/60" />)}</div>;
-  return (
-    <div className={`relative z-10 grid gap-2 ${v.length === 3 ? "grid-cols-3" : "grid-cols-2"}`} aria-label="Card numbers">
-      {v.map(([n, l, hot]) => <button key={l} type="button" onClick={onOverview} title="Open Quick Overview" className={`rounded-xl border px-3 py-2 text-left transition hover:border-ink-400 ${hot ? "border-brand-500/70 bg-brand-500/10" : "border-ink-700"}`}><span className="block font-display text-xl font-extrabold leading-none tabular-nums">{n}</span><span className="mt-1 block text-[12px] text-ink-400">{l}</span></button>)}
     </div>);
 }
 function Feedback({ s, id }: { s: RvSummary; id: string }) {
@@ -172,7 +166,7 @@ export function Dashboard({ studio, index, onIndex, token, hid = () => false, ma
                     </div>
                   </div>
                   {p.summary && <p className="-mt-1 line-clamp-2 text-[13px] text-ink-400">{p.summary}</p>}
-                  <CardNumbers p={p} onOverview={() => setQuick({ id: p.id, kind: "overview" })} onPublish={() => setQuick({ id: p.id, kind: "setup", tab: "publish" })} />
+                  <NextStep p={p} onPublish={() => setQuick({ id: p.id, kind: "setup", tab: "publish" })} />
                   {fb[p.id] && <Feedback s={fb[p.id]} id={p.id} />}
                   <div className="mt-auto flex flex-col gap-2.5">
                     <PayNote id={"p:" + p.id} pay={p.pay} onSave={async (pay) => onIndex(await studio.savePay(p.id, pay))} />

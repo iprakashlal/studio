@@ -1956,8 +1956,10 @@ export default {
         for (const k of S.secret) v[k] = String(b.value[k] || "").trim().slice(0, 600) || old[k] || "";
         // Which Resend a site uses (the Studio's or its own) is the Studio owner's choice, not the site owner's.
         if (name === "mail") {
+          // The Studio's owner decides. A site on its own database (one with no Studio in it) has no one above its owner.
           const so = await env.DB.prepare("select 1 x from members where email = ? and scope like 'studio:%' and role = 'owner' limit 1").bind(email).first();
-          if (!so) v.on = !!old.on;
+          const hasStudio = await env.DB.prepare("select 1 x from members where scope like 'studio:%' limit 1").first();
+          if (!so && hasStudio && v.on !== !!old.on) return err(403, `Only the Studio's owner can switch this site's Resend. You are signed in as ${email}, who isn't an owner of this database's Studio. Sign in to the Studio with its owner's email.`);
           if (v.from && !EMAIL_RE.test(v.from.replace(/^.*<([^<>]+)>\s*$/, "$1"))) return err(400, "The sender should look like Name <codes@your-domain.com>.");
           if (v.key && !/^re_\S{8,}$/.test(v.key)) return err(400, "A Resend API key starts with re_.");
         }

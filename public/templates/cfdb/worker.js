@@ -25,7 +25,7 @@ create index if not exists approvals_project on approvals (scope, project, creat
 create table if not exists approval_notes (id integer primary key autoincrement, token text not null, who text not null, body text not null, page text not null default '', kind text not null default 'comment', created_at text not null);
 create index if not exists approval_notes_token on approval_notes (token, id);
 `;
-var CFDB_VERSION = 54;
+var CFDB_VERSION = 55;
 var CFDB_WORKER_NAME = "picaffectz-db";
 
 // src/lib/lookdigest.ts
@@ -3191,7 +3191,8 @@ ${body}`)}${paras("Approve or hide it under Reviews in your site's admin page.",
         for (const k of S2.secret) v[k] = String(b.value[k] || "").trim().slice(0, 600) || old[k] || "";
         if (name === "mail") {
           const so = await env.DB.prepare("select 1 x from members where email = ? and scope like 'studio:%' and role = 'owner' limit 1").bind(email).first();
-          if (!so) v.on = !!old.on;
+          const hasStudio = await env.DB.prepare("select 1 x from members where scope like 'studio:%' limit 1").first();
+          if (!so && hasStudio && v.on !== !!old.on) return err(403, `Only the Studio's owner can switch this site's Resend. You are signed in as ${email}, who isn't an owner of this database's Studio. Sign in to the Studio with its owner's email.`);
           if (v.from && !EMAIL_RE.test(v.from.replace(/^.*<([^<>]+)>\s*$/, "$1"))) return err(400, "The sender should look like Name <codes@your-domain.com>.");
           if (v.key && !/^re_\S{8,}$/.test(v.key)) return err(400, "A Resend API key starts with re_.");
         }

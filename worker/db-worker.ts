@@ -1275,6 +1275,7 @@ export default {
         if (typeof forSite === "string" && /^[a-z0-9][a-z0-9-]{0,59}$/.test(forSite) && (await env.DB.prepare("select 1 from members where email = ? and scope = ? limit 1").bind(email, "site:" + forSite).first())) {
           mailEnv = await siteMail(env, forSite);
           const c = await siteContent(env, forSite).catch(() => null), T = c?.emails?.signin;
+          if (c) intro = `Enter this code to sign in to ${siteName(c, forSite)}:`; // the site's own name, not the Studio's
           if (T && typeof T === "object") {
             const vars = { site: siteName(c, forSite), email };
             if (T.subject) { subject = oneLine(fill(String(T.subject), vars)).slice(0, 150) || subject; heading = subject; }

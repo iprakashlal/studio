@@ -364,6 +364,13 @@ export function MailForm({ where, studio }: { where: Where | null | undefined; /
   );
 }
 
+/** In the Studio's Settings → Hostings, under a site: who its admin sign-in codes and other emails come from (the Studio's
+ *  Resend, or this project's own key and sender). Only the Studio's owner reaches this. */
+export function SiteMailSetting({ cf }: { cf: { api: string; site: string } }) {
+  const signed = useSiteDbSigned(cf), where = signed ? { api: cf.api, scope: "site:" + cf.site } : null;
+  return <details className="min-w-0"><summary className="cursor-pointer select-none text-ink-300">Studio's Resend or this project's own (Custom)</summary>
+    <div className="mt-2">{!signed ? <SiteDbSignIn cf={cf} small what="show this project's email sender" /> : <MailForm where={where} studio />}</div></details>;
+}
 /** Kept for the places that ask for Razorpay by name. */
 export function RazorpayForm({ where }: { where: Where | null | undefined; plain?: boolean }) { return <GatewayForm where={where} gw="rz" />; }
 

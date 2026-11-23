@@ -66,6 +66,16 @@ export function useCfAccount(studioToken: string, nf: Netlify | null | undefined
     setAddBusy("");
   };
   const removeOther = (i: number) => saveMore(more.filter((_, k) => k !== i));
+  /** A token pasted here replaces the one the Studio's database keeps (when "Publish from any device" is on), so the
+   *  token lives in one place and no device is asked for it again. Nothing happens when that is off. */
+  const refreshKept = async (t: string, pick: string) => {
+    try {
+      if (!persist || cfShortTokens.has(t) || cfMemTokens.has(t)) return;
+      const v = await cfAccountVault.load(studioToken), setup = v?.setup;
+      if (!setup || setup.account !== pick || !(await cfDeployInfo(setup.api)).deploy) return;
+      await new Cloudflare(await helper.get(), t).putSecret(setup.account, CFDB_WORKER, "CF_TOKEN", t);
+    } catch { /* the device keeps it either way */ }
+  };
   const connect = async () => {
     setErr(""); setBusy("Connecting");
     try {
@@ -74,6 +84,7 @@ export function useCfAccount(studioToken: string, nf: Netlify | null | undefined
       const pick = list.some((x) => x.id === account) ? account : list[0].id;
       setAccounts(list); setAccount(pick);
       if (persist) { const v = await cfAccountVault.load(studioToken); await cfAccountVault.save({ ...(v || {}), token: tok.trim(), account: pick, ...(v?.token !== tok.trim() ? { oauth: undefined } : {}) }, studioToken); }
+      await refreshKept(tok.trim(), pick);
     } catch (e: any) { setErr(e?.message || "Couldn't reach Cloudflare."); }
     setBusy("");
   };
@@ -313,6 +324,7 @@ export function useCfAccount(studioToken: string, nf: Netlify | null | undefined
     const pick = list.some((x) => x.id === account) ? account : list[0].id;
     setTok(t.trim()); setAccounts(list); setAccount(pick);
     if (persist) { const v = await cfAccountVault.load(studioToken); await cfAccountVault.save({ ...(v || {}), token: t.trim(), account: pick, ...(v?.token !== t.trim() ? { oauth: undefined } : {}) }, studioToken); }
+    await refreshKept(t.trim(), pick);
     return new Cloudflare(await helper.get(), t.trim());
   };
   return { ui, othersUi: others, ready: !!acc && (helper.ready || viaDb), /** Working through the Studio's database: no token or helper on this device. */ viaDb, account: acc, token: tok.trim(), client, clientFor, allAccounts, busy, helper, replaceToken, /** What Connect Cloudflare last said. */ note: ocNote, /** Connected by a Cloudflare sign-in used in this tab only (nothing on the device). */ tabOnly: cfMemTokens.has(tok.trim()) };

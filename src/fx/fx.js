@@ -685,7 +685,8 @@
     var t; try { t = document.getElementById(decodeURIComponent(u.hash.slice(1))); } catch (x) { return; }
     if (!t) return;
     e.preventDefault();
-    var spot = function () { return Math.max(0, Math.min(doc.scrollHeight - innerHeight, scrollY + t.getBoundingClientRect().top)); };
+    var gap = function () { var a = parseFloat(getComputedStyle(t).scrollMarginTop) || 0, b = parseFloat(getComputedStyle(doc).scrollPaddingTop) || 0; return a + b; };
+    var spot = function () { return Math.max(0, Math.min(doc.scrollHeight - innerHeight, scrollY + t.getBoundingClientRect().top - gap())); };
     if (!RM) $$(".rv:not(.in)").forEach(function (n) { if (!t.contains(n)) { n.style.transition = "none"; n.classList.add("in"); } });
     if (location.hash !== u.hash) { try { history.pushState(null, "", u.hash); dispatchEvent(new HashChangeEvent("hashchange")); } catch (x) { /* the address stays as it was */ } }
     var id = ++glide.id, from = scrollY, t0 = performance.now(), dist = Math.abs(spot() - from), dur = RM ? 0 : Math.max(450, Math.min(1100, 380 + dist * 0.18));

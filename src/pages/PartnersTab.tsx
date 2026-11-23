@@ -219,9 +219,9 @@ function AddPartner({ nf, setNf, session, index, partner, myEmail, onDone, onCan
 /** Updating a client Studio's app with no Cloudflare token on this device: through the client's database (its kept
  *  token), else through your own Studio's database, which keeps your Cloudflare tokens for every device (the app's
  *  Worker is registered to your Studio there first, so you can publish it). null when neither keeps a token for it. */
-async function clientAppViaDb(p: PartnerRec, myDb: { api: string; studio: string } | null) {
+async function clientAppViaDb(p: PartnerRec, myDb: { api: string; studio: string } | null, skipClient = false) {
   if (!p.siteId) return null;
-  if (p.backend === "cloudflare" && p.api) { const v = await pagesViaDb(p.api, "studio:" + p.studio, p.pagesAccount).catch(() => null); if (v) return v; }
+  if (!skipClient && p.backend === "cloudflare" && p.api) { const v = await pagesViaDb(p.api, "studio:" + p.studio, p.pagesAccount).catch(() => null); if (v) return v; }
   if (!myDb || !(await cfSignedIn(myDb.api).catch(() => false))) return null;
   const info = await cfDeployInfo(myDb.api);
   const acc = p.pagesAccount || info.account;
@@ -286,12 +286,14 @@ function PartnerCard({ p, studio, index, nf, setNf, session, myEmail, studioToke
   const updateApp = () => run("app", async () => {
     if (!p.siteId) return;
     const first = await loadPages(p.pages || "netlify", studioToken, p.pagesAccount).catch(() => null);
-    const pages = first || (p.pages === "cloudflare" ? await clientAppViaDb(p, myDb) : null);
+    const pages = first || (p.pages === "cloudflare" ? await clientAppViaDb(p, myDb).catch((e: any) => (e?.status === 403 ? clientAppViaDb(p, myDb, true) : Promise.reject(e))) : null);
     if (!pages) throw new Error(p.pages === "cloudflare" ? "No Cloudflare token reaches their Studio's account from this device. On a device that has the token: Settings → Hostings → Hosting accounts → turn on Publish from any device (and add the client's Cloudflare account under Other accounts if it's a different one). Then this works from every device you're signed in on." : `Connect ${PAGES_LABEL[p.pages || "netlify"]} in Settings → Hostings → Hosting accounts first.`);
     try { await deployClientApp(pages, p, "", await source(), partner, setBusy); }
     catch (e: any) {
       // This device's route has no token kept for their account: try the other routes before giving up.
-      const alt = first && p.pages === "cloudflare" && (e?.status === 501 || /no Cloudflare token/i.test(String(e?.message || ""))) ? await clientAppViaDb(p, myDb) : null;
+      // Their database doesn't have the app registered to them (403): register it through your own Studio's database instead.
+      const notReg = e?.status === 403 || /isn't registered/i.test(String(e?.message || ""));
+      const alt = p.pages === "cloudflare" && ((first && (e?.status === 501 || /no Cloudflare token/i.test(String(e?.message || "")))) || notReg) ? await clientAppViaDb(p, myDb, notReg) : null;
       if (!alt) throw e;
       await deployClientApp(alt, p, "", await source(), partner, setBusy);
     }

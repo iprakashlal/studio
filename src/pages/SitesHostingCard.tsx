@@ -377,10 +377,10 @@ export function SitesHostingCard({ session, studio, index, onIndex }: { session:
 
 /** One site's sign-in emails: the people who open its admin page with an emailed code. A dropdown of the list, and
  *  a button that shows or hides the form to add (or remove) one. */
-function LoginEmails({ cf, account, name }: { cf: { api: string; site: string }; account?: string; name: string }) {
+export function LoginEmails({ cf, account, name, startOpen }: { cf: { api: string; site: string }; account?: string; name: string; /** Show the add and remove boxes straight away. */ startOpen?: boolean }) {
   const toast = useToast(), confirm = useConfirm();
   const [list, setList] = useState<{ email: string; role: string }[] | null>(null), [err, setErr] = useState("");
-  const [sel, setSel] = useState(""), [open, setOpen] = useState(false), [add, setAdd] = useState(""), [busy, setBusy] = useState(false);
+  const [sel, setSel] = useState(""), [open, setOpen] = useState(!!startOpen), [add, setAdd] = useState(""), [busy, setBusy] = useState(false);
   const load = async () => {
     setErr("");
     try { const l = await (await siteMembers(cf, account)).list(); setList(l); setSel((x) => (l.some((m) => m.email === x) ? x : l[0]?.email || "")); }

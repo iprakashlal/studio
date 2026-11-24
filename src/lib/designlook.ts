@@ -22,6 +22,8 @@ export type DesignSettings = {
   sets?: ColourSet[];
   /** Visitors may change each colour (default on). */
   pick?: boolean;
+  /** Background colours offered, light to dark (the text colour follows). */
+  backgrounds?: string[];
   /** Accent colours offered on the Colours panel (the theme's own is always there). */
   accents?: string[];
   /** Per type: the themes visitors are offered (none listed = all of them). */
@@ -75,6 +77,7 @@ export function cleanColours(x: any): Colours {
 export function cleanSets(x: any): ColourSet[] {
   return (Array.isArray(x) ? x : []).slice(0, 12).map((s) => ({ name: clip(s?.name, 30), colours: cleanColours(s?.colours) })).filter((s) => s.name && Object.keys(s.colours).length);
 }
+export const DEFAULT_BACKGROUNDS = ["#ffffff", "#f5f1e8", "#e6ebf2", "#3a4558", "#1c2230", "#0b0f17"];
 export const cleanAccents = (x: any): string[] => (Array.isArray(x) ? x.filter((c) => typeof c === "string" && HEX.test(c)).map((c) => c.toLowerCase()).slice(0, 16) : []);
 export function cleanThemes(x: any): NonNullable<DesignSettings["themes"]> {
   const o: NonNullable<DesignSettings["themes"]> = {}; if (!x || typeof x !== "object") return o;

@@ -25,7 +25,7 @@ create index if not exists approvals_project on approvals (scope, project, creat
 create table if not exists approval_notes (id integer primary key autoincrement, token text not null, who text not null, body text not null, page text not null default '', kind text not null default 'comment', created_at text not null);
 create index if not exists approval_notes_token on approval_notes (token, id);
 `;
-var CFDB_VERSION = 60;
+var CFDB_VERSION = 61;
 var CFDB_WORKER_NAME = "picaffectz-db";
 
 // src/lib/lookdigest.ts
@@ -2291,7 +2291,7 @@ function dqDesignPub(d) {
   const out = { on: d?.on !== false };
   if (!d || typeof d !== "object") return out;
   const HEX = /^#[0-9a-f]{6}$/i, KEY = /^[A-Za-z]{1,20}$/;
-  if (Array.isArray(d.sets)) out.sets = d.sets.slice(0, 12).filter((x) => x && typeof x.name === "string" && x.colours && typeof x.colours === "object").map((x) => ({ name: clip(x.name, 30), colours: Object.fromEntries(Object.entries(x.colours).filter(([k, v]) => KEY.test(k) && typeof v === "string" && HEX.test(v)).slice(0, 9)) }));
+  if (Array.isArray(d.sets)) out.sets = d.sets.slice(0, 12).filter((x) => x && typeof x.name === "string" && x.colours && typeof x.colours === "object").map((x) => ({ name: clip(x.name, 30), colours: Object.fromEntries(Object.entries(x.colours).filter(([k, v]) => /^[a-z][a-z0-9]{0,11}$/.test(k) && typeof v === "string" && HEX.test(v)).slice(0, 9)) }));
   if (typeof d.pick === "boolean") out.pick = d.pick;
   if (d.look && typeof d.look === "object") {
     const look = {};

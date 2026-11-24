@@ -23,8 +23,8 @@ export type Step = {
   accept?: string; maxKB?: number;
   options?: (a: Answers) => Opt[];
   ph?: (a: Answers) => string;
-  /** Can be left out. */
-  optional?: boolean;
+  /** Can be left out (always, or only for some answers). */
+  optional?: boolean | ((a: Answers) => boolean);
   /** One line shown under the question. */
   help?: (a: Answers) => string;
 };
@@ -44,6 +44,11 @@ export function tweakTheme(t: Theme, a: Answers): Theme {
   if (a.corners && /^\d{1,2}$/.test(a.corners)) o.radius = +a.corners;
   return o;
 }
+
+/** Whether a question may be skipped. */
+export const isOptional = (s: Step, a: Answers) => (typeof s.optional === "function" ? s.optional(a) : !!s.optional);
+/** A short name for each question (for the answers shown above the current question). */
+export const STEP_LABEL: Record<string, string> = { kind: "Type", doc: "Starting point", name: "Name", about: "About", city: "City", logo: "Logo", style: "Feel", colour: "Colour", pages: "Pages", story: "Story", items: "Offerings", usp: "Highlights", goal: "Goal", menu: "Menu", hours: "Hours", address: "Address", social: "Social", phone: "Phone", email: "Email" };
 
 export const KIND_OPTIONS: Opt[] = [
   { v: "portfolio", label: "A website about me", hint: "Show my work, skills and story. Good for designers, developers, photographers, creators." },
@@ -69,6 +74,12 @@ export const COLOUR_DOT: Record<string, string> = { blue: "#3b82f6", green: "#22
 export const STEPS: Step[] = [
   { id: "kind", type: "choice", ask: () => "Hi! Let's design your website together. What kind of website do you want?", options: () => KIND_OPTIONS },
   {
+    id: "doc", type: "file", optional: true, accept: "application/pdf", maxKB: 4000,
+    ask: (a) => by(a, { portfolio: "Do you already have your details somewhere? Add a PDF (resume, profile) or paste a link, and we'll fill in what we can.", store: "Do you already have your products somewhere? Add a PDF (catalogue, price list) or paste your website or Instagram link, and we'll fill in what we can.", business: "Do you already have your details somewhere? Add a PDF (brochure, profile, price list) or paste your website link, and we'll fill in what we can.", restaurant: "Do you already have your menu or details somewhere? Add a PDF or paste your website or Instagram link, and we'll fill in what we can." }),
+    ph: () => "Paste a link, e.g. https://yourname.com",
+    help: () => "We only use what is written there, and we won't ask again for what we find. You can skip this.",
+  },
+  {
     id: "name", type: "text",
     ask: (a) => by(a, { portfolio: "What's your name?", store: "What is your shop called?", business: "What is your business called?", restaurant: "What is your restaurant or café called?" }),
     ph: (a) => by(a, { portfolio: "e.g. Asha Verma", store: "e.g. Kala Ghar", business: "e.g. Verma & Co", restaurant: "e.g. The Tiffin Box" }),
@@ -80,12 +91,6 @@ export const STEPS: Step[] = [
     help: () => "One short line is enough. You can change it later.",
   },
   { id: "city", type: "text", optional: true, ask: () => "Which city are you in?", ph: () => "e.g. Mumbai", help: () => "Skip it if you work online or don't want to show it." },
-  {
-    id: "doc", type: "file", optional: true, accept: "application/pdf", maxKB: 4000,
-    ask: (a) => by(a, { portfolio: "Do you have a document with your details, like a resume, profile or brochure? Add the PDF and we'll read it to fill your website.", store: "Do you have a document with your products, like a catalogue or price list? Add the PDF and we'll read it to fill your website.", business: "Do you have a document about your business, like a brochure, profile or price list? Add the PDF and we'll read it to fill your website.", restaurant: "Do you have a document with your details, like a brochure or about-us note? Add the PDF and we'll read it to fill your website." }),
-    help: () => "We only use what is written in it. No PDF? Skip, and you can paste a link next.",
-  },
-  { id: "doclink", type: "text", optional: true, when: (a) => !a.doc, ask: () => "Are your details on a web page instead? Paste its link and we'll pass it to our team.", ph: () => "e.g. https://yourname.com/about", help: () => "We can't read a web page from here, so it goes to our team with your request. Skip if you don't have one." },
   { id: "logo", type: "file", optional: true, accept: "image/png,image/jpeg,image/webp", maxKB: 4000, when: (a) => k(a) !== "portfolio", ask: () => "Do you have a logo? Add it here, or skip and we'll use your name.", help: () => "A PNG or JPG picture. You can send a better one later." },
   { id: "style", type: "choice", ask: () => "How should your website feel?", options: () => STYLE_OPTIONS },
   { id: "colour", type: "choice", ask: () => "Which colour do you like best?", options: () => COLOUR_OPTIONS },
@@ -110,7 +115,7 @@ export const STEPS: Step[] = [
     }),
     ph: (a) => by(a, { portfolio: "Portraits\nWeddings\nProduct shoots", store: "Soy candle - 450\nGift box - 899\nIncense set - 299", business: "Repairs\nAnnual service\nInstallation", restaurant: "Masala dosa - 120\nFilter coffee - 60\nThali - 250" }),
     help: () => "Press Enter for a new line. We'll write a short line about each one.",
-    optional: true,
+    optional: (a) => k(a) !== "store",
   },
   { id: "usp", type: "long", optional: true, ask: () => "What makes you different from others? Write one thing on each line.", ph: () => "Same-day delivery\nFamily recipes\nFree first consultation", help: () => "Only things that are true. They appear as highlights on your site." },
   {
@@ -140,7 +145,7 @@ export const stepOf = (id: string) => STEPS.find((s) => s.id === id)!;
 export function sayAnswer(s: Step, a: Answers): string {
   const v = a[s.id]; if (!v) return "Skip";
   const src = (a.docfrom || "").split(",").includes(s.id) ? " (from your document)" : "";
-  if (s.type === "file") return s.id === "logo" ? "Logo added" : s.id === "doc" ? `Document added: ${v}` : `Menu added: ${v}`;
+  if (s.type === "file") return s.id === "logo" ? "Logo added" : s.id === "doc" ? (a.doclink ? `Link: ${v}` : `PDF: ${v}`) : `Menu added: ${v}`;
   if (s.id === "pages") return v === "multi" ? "Separate pages" : "One page";
   if (s.id === "kind") return KIND_OPTIONS.find((o) => o.v === v)?.label || v;
   if (s.type === "choice") return [...STYLE_OPTIONS, ...COLOUR_OPTIONS].find((o) => o.v === v)?.label || v;
@@ -152,8 +157,16 @@ export function sayAnswer(s: Step, a: Answers): string {
 // ---- reading the person's own document
 
 /** What a document's text can fill in: only things actually written in it (nothing is made up). Only fields not answered yet. */
-export function fromDoc(text: string, a: Answers): Answers {
+export function fromDoc(text: string, a: Answers, meta?: { name?: string; about?: string }): Answers {
   const t = text.replace(/\r/g, ""), ls = t.split("\n").map((x) => x.trim()).filter(Boolean), out: Answers = {}, kind = k(a);
+  const clean = (x: string) => x.replace(/\s+/g, " ").trim();
+  const isFact = (l: string) => /@|https?:\/\/|^\+?[\d\s()-]{8,}$/.test(l) || /^(call|email|instagram)\b/i.test(l);
+  const head = (meta?.name ? clean(meta.name) : (ls.find((l) => !isFact(l) && l.length >= 2) || "").split(/\s+[-–|·:]\s+/)[0]).slice(0, 60);
+  if (!a.name && head.length >= 2 && head.length <= 45 && !/^\d/.test(head)) out.name = head;
+  const aboutGuess = meta?.about ? clean(meta.about) : ls.slice(1, 8).find((l) => l.length >= 20 && l.length <= 110 && !isFact(l) && !/\d{3,}/.test(l) && !/(mon|tue|wed|thu|fri|sat|sun)[a-z]*\s*(?:-|–|to)/i.test(l) && !/[-–—:.…]\s*\d[\d,.]*$/.test(l) && l !== head);
+  if (!a.about && aboutGuess) out.about = aboutGuess.length > 110 ? aboutGuess.slice(0, 110).replace(/\s+\S*$/, "") : aboutGuess.replace(/[.]+$/, "");
+  const addr = ls.find((l) => l.length >= 15 && l.length <= 140 && /\b\d{6}\b|\b(road|rd\.?|street|st\.|nagar|layout|marg|lane|floor|plaza|complex|sector|colony)\b/i.test(l) && !/@/.test(l));
+  if (addr && !a.address && k(a) !== "portfolio") out.address = clean(addr.replace(/^(address|visit us|find us)\s*[:\-–]?\s*/i, ""));
   const email = /[\w.+-]+@[\w-]+(?:\.[\w-]+)+/.exec(t)?.[0];
   const phone = /(?:\+\d{1,3}[\s-]?)?(?:\(?\d{3,5}\)?[\s-]?)?\d{3,5}[\s-]?\d{4,5}/.exec(t.replace(/[^\S\n]+/g, " "))?.[0]?.trim();
   if (email && !a.email) out.email = email;
@@ -161,14 +174,19 @@ export function fromDoc(text: string, a: Answers): Answers {
   const insta = /(?:instagram\.com\/|@)([\w.]{3,30})\b/i.exec(t.replace(email || "\u0000", ""))?.[0];
   if (insta && !a.social) out.social = insta.startsWith("@") ? insta : "https://" + insta.replace(/^https?:\/\//, "");
   const hours = ls.find((l) => l.length < 90 && /(mon|tue|wed|thu|fri|sat|sun)[a-z]*\s*(?:-|–|to)\s*(mon|tue|wed|thu|fri|sat|sun)/i.test(l) && /\d/.test(l));
-  if (hours && !a.hours && (kind === "business" || kind === "restaurant")) out.hours = hours;
+  if (hours && !a.hours && (kind === "business" || kind === "restaurant")) out.hours = hours.replace(/\s+(call|mail|email|ig|instagram)\b.*$/i, "").trim();
   const priced = ls.map((l) => /^(.{2,50}?)\s*[-–—:.…]+\s*(?:₹|rs\.?|inr|\$)?\s*(\d[\d,.]*)\s*(?:\/-)?$/i.exec(l)).filter(Boolean).slice(0, 8) as RegExpExecArray[];
   const bullets = ls.filter((l) => /^[•●▪◦\-–*]\s+\S/.test(l)).map((l) => l.replace(/^[•●▪◦\-–*]\s+/, "")).filter((l) => l.length >= 3 && l.length <= 60).slice(0, 6);
+  const used = new Set<string>([...priced.map((m) => m[0]), ...(hours ? [hours] : []), ...(addr ? [addr] : []), head, aboutGuess || ""]);
+  const NAV = /^(home|about( us)?|contact( us)?|menu|blog|login|log in|sign in|services?|products?|gallery|faq|careers?|shop|cart|search|more|read more|book now|call|mail|email|privacy|terms)$/i;
+  const short = (l: string) => l.length >= 3 && l.length <= 40 && l.split(/\s+/).length <= 5 && !/[.!?:@]|https?:|\d{3,}/.test(l) && !NAV.test(l) && l !== head && !used.has(l);
+  let run: string[] = [], best: string[] = [];
+  for (const l of ls) { if (short(l)) { run.push(l); if (run.length > best.length) best = run.slice(); } else run = []; }
   if (!a.items) {
     if ((kind === "store" || kind === "restaurant") && priced.length >= 2) out.items = priced.map((m) => `${m[1].trim()} - ${m[2].replace(/,/g, "")}`).join("\n");
     else if (bullets.length >= 3) out.items = bullets.join("\n");
+    else if (best.length >= 3 && best.length <= 8) out.items = best.join("\n");
   }
-  const used = new Set<string>([...priced.map((m) => m[0]), ...(hours ? [hours] : [])]);
   const prose = ls.filter((l) => l.length >= 45 && /[a-z]/.test(l) && !used.has(l) && !/@|https?:\/\//.test(l) && !/^[•●▪◦\-–*]\s/.test(l)).join(" ");
   if (!a.story && prose.length >= 120) out.story = prose.length > 700 ? prose.slice(0, 700).replace(/\s+\S*$/, "") + "…" : prose;
   return out;
@@ -344,13 +362,24 @@ export async function buildDesign(a: Answers, copy?: Copy | null, files?: Design
     seo();
   }
   tidy(kind, c, { name, about, city, g, items, phone, email });
+  // A section the person gave nothing for isn't shown (not even with the template's sample words).
+  const hideIf = (cond: boolean, ...ids: string[]) => { if (cond) for (const x of c.sections || []) if (ids.includes(x.id)) { if ("visible" in x) x.visible = false; else x.show = false; } };
+  if (!items.length) { if (kind === "business") c.services.items = []; if (kind === "restaurant") c.specials.items = []; if (kind === "portfolio") c.skills.items = []; }
+  if (kind === "business") put("about.title", name ? `About ${name}` : "About us");
+  // The template's sample wording is not theirs: neutral headings instead.
+  if (kind === "portfolio") { put("about.title", "About me"); put("about.lede", ""); put("about.quote", ""); if (!items.length) put("ticker", []); }
+  if (kind === "restaurant") put("about.title", "Our story");
+  if (kind === "store") { put("footer.text", about ? `${name}. ${about}.` : name); put("home.featuredText", ""); put("home.banner.title", usp[0] || ""); for (const x of c.products || []) x.badge = ""; }
+  if (kind === "portfolio") { hideIf(!items.length, "skills"); hideIf(!(email || phone || social || address), "contact"); hideIf(!(story || cp.about_text || about), "about"); }
+  if (kind === "business") { hideIf(!items.length, "services"); hideIf(!(story || cp.about_text), "about"); hideIf(!(phone || email || address || city || hours), "contact"); }
+  if (kind === "restaurant") { hideIf(!items.length, "specials"); hideIf(!(story || cp.about_text), "about"); hideIf(!(phone || email || address || city || hours), "contact"); }
 
   // What only some types and answers add (after the starter's made-up parts are cleared).
   if (kind === "business" || kind === "restaurant") {
     if (address || city) put("contact.address", address || city);
     if (a.pages) put("site.multiPage", a.pages === "multi");
     if (social) c.footer.links = [{ label: /instagram/.test(social) ? "Instagram" : "Find us online", url: social }, ...(c.footer.links || [])];
-    if (cp.faq?.length) { put("faq.items", cp.faq); show(c, "faq"); }
+    if (cp.faq?.length && items.length >= 2) { put("faq.items", cp.faq); show(c, "faq"); }
   }
   if (kind === "business" && hours) put("contact.hours", hours);
   if (kind === "restaurant" && hours) { put("hours.note", hours); put("hours.days", []); put("hours.showStatus", false); }

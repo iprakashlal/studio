@@ -26,3 +26,9 @@ export type PublicBrand = { name: string; logo: string; v: number; tint: string;
 export async function publicBrand(h: DesignHost): Promise<PublicBrand | null> {
   try { return await cfCall<PublicBrand>(h.api, "/sb/" + encodeURIComponent(h.studio), { auth: false }); } catch { return null; }
 }
+
+/** A public web page, read by the Studio's database: its name, description and plain text. */
+export type PageRead = { title?: string; site?: string; description?: string; text?: string; error?: string };
+export async function readPage(h: DesignHost, url: string): Promise<PageRead> {
+  try { return await cfCall<PageRead>(h.api, "/dq/read/" + encodeURIComponent(h.studio), { method: "POST", auth: false, body: JSON.stringify({ url }) }); } catch (e: any) { return { error: e?.message || "Couldn't read that page." }; }
+}

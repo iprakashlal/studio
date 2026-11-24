@@ -1345,6 +1345,39 @@ async function dqSubmit(env: Env, id: string, req: Request, ctx?: { waitUntil(p:
   return json({ ok: true });
 }
 
+/** "Design yourself": reads a public web page the visitor points to and returns its plain text and a few facts (name, description,
+ *  phone, email, Instagram), so the site can start from what they already have. Public pages only, small, rate-limited. */
+async function dqRead(env: Env, id: string, req: Request): Promise<Response> {
+  const ip = req.headers.get("cf-connecting-ip") || "x";
+  if (!(await dqRate(env, "dqrd:" + id, 60, 3600)) || !(await dqRate(env, "dqrdip:" + ip, 10, 3600))) return json({ error: "busy" });
+  if (!(await studioIndex(env, id))) return err(404, "Not found.");
+  let q: any; try { q = JSON.parse((await req.text()).slice(0, 2000) || "{}"); } catch { return json({ error: "Couldn't read the request." }); }
+  const u = publicUrl(String(q.url || "").trim()); if (!u) return json({ error: "That isn't a public web address (it must start with https://)." });
+  let html = "";
+  try {
+    const r = await fetch(u.href, { headers: { "User-Agent": "Mozilla/5.0 (site-studio reference reader)", Accept: "text/html" }, redirect: "follow", signal: AbortSignal.timeout(8000) });
+    if (!r.ok) return json({ error: `That page answered ${r.status}.` });
+    if (!/html|text\/plain/i.test(r.headers.get("content-type") || "")) return json({ error: "That address isn't a web page." });
+    html = new TextDecoder().decode((await r.arrayBuffer()).slice(0, 600_000));
+  } catch { return json({ error: "Couldn't open that address." }); }
+  const dec = (t: string) => t.replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&(?:#39|rsquo|lsquo);/g, "'").replace(/&#(\d{2,5});/g, (_, n) => String.fromCharCode(+n));
+  const meta = (re: RegExp) => dec((re.exec(html)?.[1] || "").trim());
+  const title = clip(meta(/<title[^>]*>([\s\S]*?)<\/title>/i), 160);
+  const site = clip(meta(/<meta[^>]+property=["']og:site_name["'][^>]+content=["']([^"']*)["']/i) || meta(/<meta[^>]+content=["']([^"']*)["'][^>]+property=["']og:site_name["']/i), 100);
+  const description = clip(meta(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']*)["']/i) || meta(/<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']*)["']/i) || meta(/<meta[^>]+content=["']([^"']*)["'][^>]+name=["']description["']/i), 300);
+  const extra: string[] = [];
+  for (const m of html.matchAll(/href=["']tel:([^"']+)["']/gi)) extra.push("Call " + dec(m[1]).trim());
+  for (const m of html.matchAll(/href=["']mailto:([^"'?]+)/gi)) extra.push("Email " + dec(m[1]).trim());
+  const ig = /instagram\.com\/([\w.]{2,30})/i.exec(html); if (ig && !/^(p|reel|explore|accounts)$/i.test(ig[1])) extra.push("Instagram https://instagram.com/" + ig[1]);
+  const body = html.replace(/<(script|style|noscript|svg|head|template)[\s\S]*?<\/\1>/gi, " ").replace(/<!--[\s\S]*?-->/g, " ")
+    .replace(/<\/(p|div|li|h[1-6]|tr|section|article|footer|header|td|ul|ol)>|<br\s*\/?>/gi, "\n").replace(/<[^>]+>/g, " ");
+  const lines: string[] = [];
+  for (const raw of dec(body).split("\n")) { const l = raw.replace(/\s+/g, " ").trim(); if (l.length >= 2 && l !== lines[lines.length - 1]) lines.push(l); if (lines.length >= 400) break; }
+  const text = [...new Set([...extra, ...lines])].join("\n").slice(0, 12000);
+  if (!text && !title) return json({ error: "That page has no readable text (it may need JavaScript to show its content)." });
+  return json({ title, site, description, text });
+}
+
 async function dqWrite(env: Env, id: string, req: Request): Promise<Response> {
   const ip = req.headers.get("cf-connecting-ip") || "x";
   if (!(await dqRate(env, "dqai:" + id, 80, 3600)) || !(await dqRate(env, "dqaiip:" + ip, 12, 3600))) return json({ engine: "system", error: "busy" });
@@ -1881,6 +1914,7 @@ export default {
         const id = studioId(p.split("/")[2] || ""); const b = id ? await dqBrand(env, id) : null; if (!b) return err(404, "Not found.");
         return new Response(JSON.stringify(b), { headers: { ...cors, "Content-Type": "application/json", "Cache-Control": "public, max-age=60" } });
       }
+      if (p.startsWith("/dq/read/") && req.method === "POST") { const id = studioId(p.split("/")[3] || ""); if (!id) return err(404, "Not found."); return dqRead(env, id, req); }
       if (p.startsWith("/dq/write/") && req.method === "POST") { const id = studioId(p.split("/")[3] || ""); if (!id) return err(404, "Not found."); return dqWrite(env, id, req); }
       if (/^\/dq\/[a-z0-9-]+$/.test(p) && !["/dq/list", "/dq/get", "/dq/status", "/dq/delete"].includes(p) && req.method === "POST") { const id = studioId(p.split("/")[2]); if (!id) return err(404, "Not found."); return dqSubmit(env, id, req, ctx); }
 

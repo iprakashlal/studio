@@ -234,14 +234,19 @@ export function Dashboard({ studio, index, onIndex, token, hid = () => false, ma
           <p className="mt-1 text-sm text-ink-400">Create, preview, export and re-edit websites. Every site ships with its own CMS.</p>
         </div>
         <div className="flex flex-wrap gap-2">
+          {!only && !hid("design") && (
+            <a href="#/design-queries" aria-current={designsTab === "queries" ? "page" : undefined} className={`btn rounded-full ${designsTab === "queries" ? "border-brand-400 bg-brand-500/15" : ""}`}>
+              Design yourself queries{newQ ? <span className="ml-1 rounded-full bg-emerald-500/20 px-2 py-0.5 text-xs text-emerald-200">{newQ} new</span> : null}
+            </a>
+          )}
           {canNew && <button className="btn btn-pri" data-tour="new-project" onClick={() => setCreating(true)}>+ New project</button>}
         </div>
       </div>
       {full.length > 0 && !hid("new") && <p className="rounded-lg border border-amber-400/40 bg-amber-400/5 px-3 py-2 text-[13px] text-amber-100" role="status">This Studio has reached its limit for {full.map((t) => `${t.name.toLowerCase()} sites (${max[t.id]})`).join(" and ")}. Ask your Studio Partner for more.</p>}
 
       {!only && !hid("design") && (
-        <div className="flex flex-wrap gap-1 border-b border-ink-700" role="tablist" aria-label="Projects, design previews and requests">
-          {([["", "#/", "Projects", String(index.projects.length)], ["previews", "#/designs", "Design previews", String((index.designs || []).length)], ["queries", "#/design-queries", "Design yourself Query", newQ ? `${newQ} new` : ""]] as [string, string, string, string][]).map(([k, h, l, n]) => (
+        <div className="flex flex-wrap gap-1 border-b border-ink-700" role="tablist" aria-label="Projects and design previews">
+          {([["", "#/", "Projects", String(index.projects.length)], ["previews", "#/designs", "Design previews", String((index.designs || []).length)]] as [string, string, string, string][]).map(([k, h, l, n]) => (
             <a key={k} href={h} role="tab" aria-selected={designsTab === k} className={`-mb-px border-b-2 px-3 py-2 text-sm font-semibold ${designsTab === k ? "border-brand-400 text-ink-100" : "border-transparent text-ink-400 hover:text-ink-100"}`}>{l} {n && <span className={k === "queries" ? "ml-1 rounded-full bg-emerald-500/20 px-2 py-0.5 text-xs text-emerald-200" : "opacity-60"}>{n}</span>}</a>
           ))}
         </div>

@@ -28,7 +28,7 @@ import { setCurrentMenus } from "../lib/menus";
 import { MenusCard } from "./MenusCard";
 import { MigrationTab } from "./MigrationTab";
 import { PartnersTab } from "./PartnersTab";
-import { BADGE_DEFAULT, cleanBadge, setCurrentBadge, type BadgeCfg } from "../lib/badge";
+import { BADGE_DEFAULT, cleanBadge, resolveBadge, setCurrentBadge, studioLook, type BadgeCfg } from "../lib/badge";
 import { MARK_URI } from "../ui/logo";
 import { FoldAll, FoldCards } from "../ui/fold";
 import { LOGO_ANIMS, UI_LAYOUTS, BrandMark, DEFAULT_NAME, brand as currentBrand, setBrand, shrinkImage, useBrand } from "../lib/brand";
@@ -356,7 +356,7 @@ function BadgeCard({ studio, saved, onIndex }: { studio: Studio; saved?: BadgeCf
   const dirty = JSON.stringify(cleanBadge(b)) !== JSON.stringify(start);
   const set = (o: Partial<BadgeCfg>) => setB((x) => ({ ...x, ...o }));
   const save = async () => {
-    if (!/^https?:\/\//i.test(b.url)) return toast("The link must start with https://", "bad");
+    if (b.url && !/^https?:\/\//i.test(b.url)) return toast("The link must start with https://", "bad");
     setBusy(true);
     try { onIndex(await studio.saveBadge(b)); toast("Saved. Publish a site or use Settings → Updates → Push Studio updates to live sites to show it there."); }
     catch (e) { toast(explain(e), "bad"); }
@@ -366,10 +366,10 @@ function BadgeCard({ studio, saved, onIndex }: { studio: Studio; saved?: BadgeCf
     <section className="card flex flex-col gap-4 p-5" aria-label="Powered by badge">
       <h3 className="text-[15px] font-extrabold">“Powered by” badge</h3>
       <p className="text-sm text-ink-300">The small link in the bottom-right corner of every site. Set its look once here; show or hide it per site in each project under <b className="text-ink-100">Admin page → “Powered by” badge</b>.</p>
-      <div className="grid place-items-end rounded-xl border border-ink-700 bg-[repeating-linear-gradient(45deg,#1a2030_0_10px,#151a26_10px_20px)] p-4" aria-label="Badge preview"><BadgePreview b={b} /></div>
+      <div className="grid place-items-end rounded-xl border border-ink-700 bg-[repeating-linear-gradient(45deg,#1a2030_0_10px,#151a26_10px_20px)] p-4" aria-label="Badge preview"><BadgePreview b={resolveBadge(b)} /></div>
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Text" htmlFor="bd-text"><input id="bd-text" className="input" maxLength={60} value={b.text} onChange={(e) => set({ text: e.target.value })} placeholder={BADGE_DEFAULT.text} /></Field>
-        <Field label="Link" htmlFor="bd-url" hint="Opens in a new tab."><input id="bd-url" className="input" value={b.url} onChange={(e) => set({ url: e.target.value.trim() })} placeholder="https://…" /></Field>
+        <Field label="Link" htmlFor="bd-url" hint="Leave empty to open this Studio's own Themes page. Opens in a new tab."><input id="bd-url" className="input" value={b.url} onChange={(e) => set({ url: e.target.value.trim() })} placeholder={studioLook().url} /></Field>
       </div>
       <div className="flex flex-wrap items-end gap-4">
         <div className="flex flex-col gap-1.5"><span className="label">Size</span>
@@ -377,8 +377,9 @@ function BadgeCard({ studio, saved, onIndex }: { studio: Studio; saved?: BadgeCf
             {([["s", "Small"], ["m", "Medium"], ["l", "Large"]] as const).map(([k, l]) => <button key={k} type="button" role="radio" aria-checked={b.size === k} onClick={() => set({ size: k })} className={`btn btn-sm border-0 ${b.size === k ? "bg-ink-700" : "bg-transparent"}`}>{l}</button>)}
           </div>
         </div>
-        <label className="flex flex-col gap-1.5"><span className="label">Background</span><span className="flex items-center gap-2"><input type="color" aria-label="Badge background colour" className="h-9 w-12 cursor-pointer rounded border border-ink-600 bg-transparent" value={b.bg} onChange={(e) => set({ bg: e.target.value.toUpperCase() })} /><code className="font-mono text-xs text-ink-400">{b.bg}</code></span></label>
-        <label className="flex flex-col gap-1.5"><span className="label">Text colour</span><span className="flex items-center gap-2"><input type="color" aria-label="Badge text colour" className="h-9 w-12 cursor-pointer rounded border border-ink-600 bg-transparent" value={b.fg} onChange={(e) => set({ fg: e.target.value.toUpperCase() })} /><code className="font-mono text-xs text-ink-400">{b.fg}</code></span></label>
+        <label className="flex items-center gap-2 self-center text-sm"><input type="checkbox" checked={!b.bg} onChange={(e) => set(e.target.checked ? { bg: "", fg: "" } : { bg: resolveBadge(b).bg, fg: resolveBadge(b).fg })} />Use the Studio's colour</label>
+        <label className="flex flex-col gap-1.5"><span className="label">Background</span><span className="flex items-center gap-2"><input type="color" aria-label="Badge background colour" disabled={!b.bg} className="h-9 w-12 cursor-pointer rounded border border-ink-600 bg-transparent disabled:opacity-40" value={resolveBadge(b).bg} onChange={(e) => set({ bg: e.target.value.toUpperCase(), fg: b.fg || resolveBadge({ ...b, bg: e.target.value }).fg })} /><code className="font-mono text-xs text-ink-400">{resolveBadge(b).bg}</code></span></label>
+        <label className="flex flex-col gap-1.5"><span className="label">Text colour</span><span className="flex items-center gap-2"><input type="color" aria-label="Badge text colour" disabled={!b.bg} className="h-9 w-12 cursor-pointer rounded border border-ink-600 bg-transparent disabled:opacity-40" value={resolveBadge(b).fg} onChange={(e) => set({ fg: e.target.value.toUpperCase() })} /><code className="font-mono text-xs text-ink-400">{resolveBadge(b).fg}</code></span></label>
       </div>
       <div className="flex flex-col gap-1.5"><span className="label">Icon</span>
         <div className="flex flex-wrap items-center gap-2">

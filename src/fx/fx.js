@@ -1607,7 +1607,67 @@
   var scMemo = { html: "", base: "", to: null, from: null };
   function scDom(h) { var t = document.createElement("template"); t.innerHTML = h; var d = document.createElement("div"); d.appendChild(t.content); return d; }
   /** Called by the template the moment it has written a page's markup. */
-  function scDrawn(root, content) {
+  /* ---- Own text colours. The editor keeps a colour beside the text it belongs to: content.<…>.title = "Hello" with
+     titleInk = "#cc2200" (and, for a list of lines, linesInks = { "<line>": "#hex" }). After a page is drawn, every
+     element whose whole text is that text gets the colour, in every layout, section and template. Redraws start from
+     fresh markup, so a colour that was taken away is gone with it. */
+  var TC_HEX = /^#[0-9a-f]{6}$/i;
+  function tcNorm(t) { return String(t).replace(/[*_\u201c\u201d"\u2018\u2019']/g, "").replace(/[\u2013\u2014\u2012\u2212-]/g, "-").replace(/\s+/g, "").toLowerCase(); }
+  function tcEntries(content) {
+    var out = [], seen = 0;
+    (function walk(o, d) {
+      if (!o || typeof o !== "object" || d > 9 || seen > 20000) return; seen++;
+      if (Array.isArray(o)) { for (var i = 0; i < o.length; i++) walk(o[i], d + 1); return; }
+      for (var k in o) {
+        if (!Object.prototype.hasOwnProperty.call(o, k)) continue; var v = o[k];
+        if (k === "code" || k === "i18n" || k === "cms") continue;
+        if (typeof v === "string") { var c = o[k + "Ink"]; if (typeof c === "string" && TC_HEX.test(c) && v.trim()) out.push({ t: tcNorm(v), c: c }); }
+        else if (v && typeof v === "object" && /Inks$/.test(k)) { for (var t in v) if (typeof v[t] === "string" && TC_HEX.test(v[t]) && t.trim()) out.push({ t: tcNorm(t), c: v[t] }); }
+        else if (v && typeof v === "object") walk(v, d + 1);
+      }
+    })(content, 0);
+    return out;
+  }
+  function tcPaint(el, c) {
+    var all = [el].concat([].slice.call(el.querySelectorAll("*")));
+    for (var i = 0; i < all.length; i++) {
+      var e = all[i]; if (/^(svg|path|img|script|style|video|canvas|input|select|textarea|button)$/i.test(e.nodeName) && e !== el) continue;
+      if (e.closest && e.closest("svg") && e.nodeName.toLowerCase() !== "svg") continue;
+      var st = e.style; st.setProperty("color", c, "important"); st.setProperty("-webkit-text-fill-color", c, "important");
+      var cs = getComputedStyle(e);
+      if ((cs.webkitBackgroundClip || cs.backgroundClip) === "text") { st.setProperty("background-image", "none", "important"); }
+      if (parseFloat(cs.webkitTextStrokeWidth) > 0) st.setProperty("-webkit-text-stroke-color", c, "important");
+      e.setAttribute("data-ink", "1");
+    }
+  }
+  function tcApply(root, content) {
+    if (!root || !root.querySelectorAll) return; var list = tcEntries(content); if (!list.length) return;
+    var els = root.querySelectorAll("*"), cand = [];
+    for (var i = 0; i < els.length; i++) {
+      var e = els[i]; if (/^(SCRIPT|STYLE|SVG|IMG|INPUT|SELECT|TEXTAREA|OPTION|NOSCRIPT|VIDEO|CANVAS|IFRAME)$/i.test(e.nodeName) || (e.closest && e.closest("svg"))) continue;
+      var x = e.textContent; if (!x || x.length > 900) continue;
+      var own = ""; for (var c = e.firstChild; c; c = c.nextSibling) if (c.nodeType === 3) own += c.nodeValue; // the element's own words, beside a count or an arrow
+      var nn = tcNorm(x), oo = own.trim() ? tcNorm(own) : ""; cand.push({ e: e, n: nn.replace(/\(\d+\)/g, ""), o: oo.replace(/\(\d+\)/g, "") }); // a count in brackets beside the words is not part of them
+    }
+    for (var j = 0; j < list.length; j++) {
+      var w = list[j], hit = [];
+      for (var q = 0; q < cand.length; q++) {
+        var n = cand[q].n, ok = n === w.t || cand[q].o === w.t || (n.length > w.t.length && n.length - w.t.length <= 3 && (n.indexOf(w.t) === 0 || n.lastIndexOf(w.t) === n.length - w.t.length) && !/[\p{L}\p{N}]/u.test(n.split(w.t).join("")));
+        if (ok) hit.push(cand[q].e);
+      }
+      // the innermost element that carries the whole text; a wrapper around it is left alone
+      for (var h = 0; h < hit.length; h++) { var inner = false; for (var g = 0; g < hit.length; g++) if (g !== h && hit[h].contains(hit[g])) { inner = true; break; } if (!inner) tcPaint(hit[h], w.c); }
+    }
+  }
+  var tcTok = 0;
+  function tcRun(root, content) {
+    var my = ++tcTok;
+    try { tcApply(root, content); } catch (e) { /* colours are a nicety: never break the page */ }
+    // text effects (letters, words, lines) rebuild their text a moment after the page is drawn; a newer draw cancels these
+    if (tcEntries(content).length) [700, 2200].forEach(function (ms) { setTimeout(function () { if (my === tcTok) { try { tcApply(root, content); } catch (e) { /* none */ } } }, ms); });
+  }
+  function scDrawn(root, content) { scDrawn0(root, content); tcRun(root, content); }
+  function scDrawn0(root, content) {
     if (!root) return; var key = scKey();
     if (scPV) sc.snap = { key: key, html: root.innerHTML };
     var k = content && content.code, p = k && k.on && k.pages && k.pages[key];

@@ -53,6 +53,41 @@ function checkMsg(kind: string | undefined, v: string): string | undefined {
   if (kind === "phone" && !phoneOk(v)) return "Use digits with the country code, e.g. +91 98765 43210.";
 }
 
+/** Text boxes whose words don't show on the page as text (addresses, codes, keys): no colour button there. */
+const NO_INK = /(url|href|link|email|phone|mobile|whats|slug|domain|vpa|upi|gstin|pan|code|css|html|js|id|key|token|secret|password|handle|username|map|embed|src|file|path|color|colour|lang|currency|pin|zip|date|time)$/i;
+export const canInk = (path: string) => !NO_INK.test(path.split(".").pop() || "");
+const INK_HEX = /^#[0-9a-f]{6}$/i;
+/** A colour for one piece of text. It is kept beside the text (title → titleInk) so it follows the item when a list is moved or copied. */
+function TextInk({ obj, k, label }: { obj: any; k: string; label: string }) {
+  const { bump } = useCtx();
+  const ck = k + "Ink", cur = String(getP(obj, ck) ?? ""), on = INK_HEX.test(cur);
+  return (
+    <span className="mt-1 flex shrink-0 items-center gap-1" data-ink-ctl>
+      <label className="icon-btn relative cursor-pointer" title={on ? "Text colour (click to change)" : "Choose a colour for this text"}>
+        <span aria-hidden className="text-[13px] font-bold leading-none" style={{ borderBottom: `3px solid ${on ? cur : "currentColor"}`, paddingBottom: 1 }}>A</span>
+        <input type="color" aria-label={`Text colour: ${label}`} className="absolute inset-0 h-full w-full cursor-pointer opacity-0" value={on ? cur : "#ffffff"} onChange={(e) => { setP(obj, ck, e.target.value); bump(); }} />
+      </label>
+      {on && <button type="button" className="icon-btn" title="Back to the theme's colour" aria-label={`Use the theme's colour for ${label}`} onClick={() => { setP(obj, ck, ""); bump(); }}>↺</button>}
+    </span>
+  );
+}
+/** The same for one line of a list of lines; kept as lines Inks = { "<line>": "#hex" } so reordering never mixes them up. */
+function LineInk({ obj, k, line, label }: { obj: any; k: string; line: string; label: string }) {
+  const { bump } = useCtx();
+  const ck = k + "Inks", map: Record<string, string> = getP(obj, ck) && typeof getP(obj, ck) === "object" ? getP(obj, ck) : {};
+  const cur = String(map[line] ?? ""), on = INK_HEX.test(cur);
+  const put = (v: string) => { const m = { ...map }; if (v) m[line] = v; else delete m[line]; setP(obj, ck, m); bump(); };
+  return (
+    <span className="mt-1 flex shrink-0 items-center gap-1" data-ink-ctl>
+      <label className="icon-btn relative cursor-pointer" title={on ? "Text colour (click to change)" : "Choose a colour for this line"}>
+        <span aria-hidden className="text-[13px] font-bold leading-none" style={{ borderBottom: `3px solid ${on ? cur : "currentColor"}`, paddingBottom: 1 }}>A</span>
+        <input type="color" aria-label={`Text colour: ${label}`} disabled={!line.trim()} className="absolute inset-0 h-full w-full cursor-pointer opacity-0" value={on ? cur : "#ffffff"} onChange={(e) => put(e.target.value)} />
+      </label>
+      {on && <button type="button" className="icon-btn" title="Back to the theme's colour" aria-label={`Use the theme's colour for ${label}`} onClick={() => put("")}>↺</button>}
+    </span>
+  );
+}
+
 export function FieldView({ f, obj, base }: { f: F; obj: any; base: string }) {
   const ctx = useCtx(); const { bump, root, tpl } = ctx;
   const id = `f-${base}-${"path" in f ? f.path : ""}`.replace(/[^\w-]/g, "_");
@@ -83,13 +118,19 @@ export function FieldView({ f, obj, base }: { f: F; obj: any; base: string }) {
       if (f.ml) {
         return (
           <Field label={f.label} htmlFor={id} hint={f.hint || "Enter starts a new line."}>
-            <GrowText id={id} value={val ?? ""} ph={f.ph} onChange={set} />
+            <div className="flex items-start gap-1.5">
+              <div className="min-w-0 flex-1"><GrowText id={id} value={val ?? ""} ph={f.ph} onChange={set} /></div>
+              {canInk(f.path) && <TextInk obj={obj} k={f.path} label={f.label} />}
+            </div>
           </Field>
         );
       }
       return (
         <Field label={f.label} htmlFor={id} hint={f.show ? f.show(String(val ?? "")) : f.hint} warn={checkMsg(f.check, String(val ?? ""))}>
-          <input id={id} className="input" value={val ?? ""} placeholder={f.ph} spellCheck={!f.check} onChange={(e) => set(e.target.value)} />
+          <div className="flex items-start gap-1.5">
+            <input id={id} className="input min-w-0 flex-1" value={val ?? ""} placeholder={f.ph} spellCheck={!f.check} onChange={(e) => set(e.target.value)} />
+            {!f.check && canInk(f.path) && <TextInk obj={obj} k={f.path} label={f.label} />}
+          </div>
         </Field>
       );
     case "date":
@@ -107,9 +148,12 @@ export function FieldView({ f, obj, base }: { f: F; obj: any; base: string }) {
             if (r.title && (!String(t ?? "").trim() || /^(new page|untitled page)$/i.test(String(t)))) { setP(obj, "title", r.title); bump(); }
           }} />}
           {f.rich && <RichBar id={id} value={String(val ?? "")} set={set} />}
-          <textarea id={id} className={`input min-h-[84px] resize-y leading-relaxed${f.rich || f.code ? " font-mono text-[13px]" : ""}${f.code ? " whitespace-pre" : ""}`} rows={f.rows || 3} value={val ?? ""} placeholder={f.ph} spellCheck={f.code ? false : undefined} autoCapitalize={f.code ? "off" : undefined} autoCorrect={f.code ? "off" : undefined} wrap={f.code ? "off" : undefined}
+          <div className="flex items-start gap-1.5">
+          <textarea id={id} className={`input min-w-0 flex-1 min-h-[84px] resize-y leading-relaxed${f.rich || f.code ? " font-mono text-[13px]" : ""}${f.code ? " whitespace-pre" : ""}`} rows={f.rows || 3} value={val ?? ""} placeholder={f.ph} spellCheck={f.code ? false : undefined} autoCapitalize={f.code ? "off" : undefined} autoCorrect={f.code ? "off" : undefined} wrap={f.code ? "off" : undefined}
             onKeyDown={f.code ? (e) => { if (e.key !== "Tab" || e.shiftKey || e.altKey || e.ctrlKey || e.metaKey) return; e.preventDefault(); const el = e.currentTarget, a = el.selectionStart, b = el.selectionEnd; set(el.value.slice(0, a) + "  " + el.value.slice(b)); requestAnimationFrame(() => { el.selectionStart = el.selectionEnd = a + 2; }); } : undefined}
             onChange={(e) => set(e.target.value)} />
+            {!f.rich && !f.code && !f.pdf && canInk(f.path) && <TextInk obj={obj} k={f.path} label={f.label} />}
+          </div>
         </Field>
       );
     case "number":
@@ -211,7 +255,7 @@ export function FieldView({ f, obj, base }: { f: F; obj: any; base: string }) {
     case "images":
       return <ImagesField id={id} label={f.label} hint={f.hint} value={Array.isArray(val) ? val : []} onChange={set} />;
     case "strings":
-      return <StringsField f={f} arr={Array.isArray(val) ? val : []} set={set} id={id} />;
+      return <StringsField f={f} arr={Array.isArray(val) ? val : []} set={set} id={id} obj={obj} />;
     case "list":
       return <ListField f={f} obj={obj} base={base} />;
     case "themes":
@@ -466,8 +510,16 @@ function ImagesField({ id, label, hint, value, onChange }: { id: string; label: 
   );
 }
 
-function StringsField({ f, arr, set, id }: { f: Extract<F, { t: "strings" }>; arr: any[]; set: (v: any) => void; id: string }) {
-  const upd = (i: number, v: any) => { const a = [...arr]; a[i] = v; set(a); };
+function StringsField({ f, arr, set, id, obj }: { f: Extract<F, { t: "strings" }>; arr: any[]; set: (v: any) => void; id: string; obj?: any }) {
+  const upd = (i: number, v: any) => {
+    const a = [...arr], old = a[i]; a[i] = v;
+    // a line's colour follows its words while they are being edited
+    if (obj && typeof old === "string" && typeof v === "string" && old !== v) {
+      const m = getP(obj, f.path + "Inks");
+      if (m && typeof m === "object" && m[old]) { const n = { ...m }; if (v.trim()) n[v] = n[old]; delete n[old]; setP(obj, f.path + "Inks", n); }
+    }
+    set(a);
+  };
   const move = (i: number) => { const a = [...arr]; [a[i - 1], a[i]] = [a[i], a[i - 1]]; set(a); };
   return (
     <div className="flex flex-col gap-1.5">
@@ -478,6 +530,7 @@ function StringsField({ f, arr, set, id }: { f: Extract<F, { t: "strings" }>; ar
             {f.multiline
               ? <textarea id={`${id}-${i}`} aria-label={`${f.label} ${i + 1}`} rows={2} className="input min-h-[56px] resize-y" value={s} onChange={(e) => upd(i, e.target.value)} />
               : <input id={`${id}-${i}`} aria-label={`${f.label} ${i + 1}`} className="input" type={f.number ? "number" : "text"} value={s} onChange={(e) => upd(i, f.number ? Number(e.target.value) || 0 : e.target.value)} />}
+            {obj && !f.number && canInk(f.path) && <LineInk obj={obj} k={f.path} line={String(s ?? "")} label={`${f.label} ${i + 1}`} />}
             <button type="button" className="icon-btn mt-1.5" aria-label="Move up" disabled={i === 0} onClick={() => move(i)}>↑</button>
             <button type="button" className="icon-btn mt-1.5 hover:text-red-300" aria-label="Remove" onClick={() => set(arr.filter((_, j) => j !== i))}>✕</button>
           </div>

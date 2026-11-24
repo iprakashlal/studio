@@ -1317,7 +1317,10 @@ async function dqSubmit(env: Env, id: string, req: Request, ctx?: { waitUntil(p:
   if (!person) return err(400, "Please tell us your name.");
   if (!phone && !EMAIL_RE.test(email)) return err(400, "Please give a phone number or an email address so we can reach you.");
   if (email && !EMAIL_RE.test(email)) return err(400, "That email address doesn't look right.");
-  const answers = dqStrings(q.answers, 40, 1500), copy = dqCopy(q.copy);
+  const answers = dqStrings(q.answers, 44, 1500), copy = dqCopy(q.copy);
+  // The text read from the person's own document (kept longer than an ordinary answer) and the link they gave.
+  if (typeof q.answers?.doctext === "string" && q.answers.doctext.trim()) answers.doctext = q.answers.doctext.slice(0, 12000);
+  if (answers.doclink && !/^https?:\/\//i.test(answers.doclink)) delete answers.doclink;
   let logo = ""; if (typeof q.logo === "string" && /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(q.logo) && q.logo.length <= 160_000) logo = q.logo;
   let pdf = "", pdfName = "";
   if (q.pdf && typeof q.pdf.b64 === "string") { if (!/^JVBER/.test(q.pdf.b64) || q.pdf.b64.length > 1_700_000 || !/^[A-Za-z0-9+/=]+$/.test(q.pdf.b64)) return err(400, "The menu must be a PDF under 1.2 MB."); pdf = q.pdf.b64; pdfName = clip(q.pdf.name, 100) || "menu.pdf"; }
@@ -1331,7 +1334,7 @@ async function dqSubmit(env: Env, id: string, req: Request, ctx?: { waitUntil(p:
       if (!owners.length) said = "Not emailed: no owner address.";
       else if (!env.RESEND_API_KEY || !env.MAIL_FROM) said = "Not emailed: email (Resend) isn't set up on this database.";
       else {
-        const rows: [string, string][] = [["Name", person], ["Phone", phone], ["Email", email], ["Type", DQ_LABEL[kind]], ["Website name", name], ["What they do", answers.about || ""], ["City", answers.city || ""], ["Pages", answers.pages || ""], ["Feel", answers.style || ""], ["Colour", answers.colour || ""], ["Items", (answers.items || "").replace(/\n/g, ", ")], ["Visitors can", answers.goal || ""], ["Hours", answers.hours || ""], ["Address", answers.address || ""], ["Note", note]];
+        const rows: [string, string][] = [["Name", person], ["Phone", phone], ["Email", email], ["Type", DQ_LABEL[kind]], ["Website name", name], ["What they do", answers.about || ""], ["City", answers.city || ""], ["Pages", answers.pages || ""], ["Feel", answers.style || ""], ["Colour", answers.colour || ""], ["Items", (answers.items || "").replace(/\n/g, ", ")], ["Visitors can", answers.goal || ""], ["Hours", answers.hours || ""], ["Address", answers.address || ""], ["Their document", answers.doc || ""], ["Document link", answers.doclink || ""], ["Chosen look", [answers.theme, answers.accent, answers.mode].filter(Boolean).join(" · ")], ["Note", note]];
         const table = `<table style="border-collapse:collapse;margin:0 0 14px">${rows.filter(([, v]) => v).map(([k, v]) => `<tr><td style="padding:4px 12px 4px 0;color:#666;vertical-align:top">${hesc(k)}</td><td style="padding:4px 0">${hesc(v).replace(/\n/g, "<br>")}</td></tr>`).join("")}</table>`;
         await sendMail(env, owners, `New website request: ${name} (${DQ_LABEL[kind]})`.slice(0, 150), WRAP(`<p style="margin:0 0 12px"><b>${hesc(person)}</b> designed a website on your Design yourself page and wants to take it forward.</p>${table}<p style="margin:0;color:#666">Open Projects → Design yourself Query in your Studio to see the preview.${pdf ? " A menu PDF is attached to the request there." : ""}</p>`), EMAIL_RE.test(email) ? email : undefined);
       }
@@ -1355,7 +1358,7 @@ async function dqWrite(env: Env, id: string, req: Request): Promise<Response> {
   let q: any; try { q = JSON.parse((await req.text()).slice(0, 20000) || "{}"); } catch { return err(400, "Couldn't read the request."); }
   const kind = DQ_KINDS.includes(q.kind) ? q.kind : "business", brand = clip(q.brand, 80); if (!brand) return err(400, "Missing name.");
   const items: string[] = (Array.isArray(q.items) ? q.items : []).slice(0, 8).map((x: any) => clip(x, 100)).filter(Boolean);
-  const facts = [["About", clip(q.about, 200)], ["City", clip(q.city, 60)], ["Their story", clip(q.story, 900)], ["What makes them special", clip(q.usp, 400)]].filter(([, v]) => v).map(([k, v]) => `${k}: ${v}`).join("\n");
+  const facts = [["About", clip(q.about, 200)], ["City", clip(q.city, 60)], ["Their story", clip(q.story, 900)], ["What makes them special", clip(q.usp, 400)], ["From their own document (use only facts found here)", clip(q.doc, 3000)]].filter(([, v]) => v).map(([k, v]) => `${k}: ${v}`).join("\n");
   const noun = kind === "store" ? "products" : kind === "restaurant" ? "dishes" : kind === "portfolio" ? "skills" : "services";
   const sys = `You write short, friendly website text in plain words for a small ${DQ_LABEL[kind].toLowerCase()}. Use ONLY what the owner told you. Never invent facts: no years, numbers, prices, awards, client names, addresses or claims. Keep every line short and simple. Return JSON only: {"tagline": at most 8 words, "hero_text": at most 30 words, "about_text": two short paragraphs, at most 70 words in all, "cta_text": at most 14 words, "items": [{"name": the ${noun.slice(0, -1)} exactly as given, "text": one sentence of at most 18 words describing it without inventing facts}] in the same order, "faq": [{"q": question, "a": answer}] three general questions a customer might ask, answered without inventing facts}.`;
   const user = `Name: ${brand}\n${facts}\n${noun}: ${items.join("; ") || "(none given)"}`;

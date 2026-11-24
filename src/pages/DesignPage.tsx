@@ -3,9 +3,11 @@ import { BrandMark, useBrand } from "../lib/brand";
 import { TEMPLATES } from "../schema";
 import { Preview } from "../editor/Preview";
 import { Logo, Spinner, useToast } from "../ui/kit";
-import { COLOUR_DOT, STEPS, buildDesign, nextStep, requestText, sayAnswer, writeCopy, type Answers, type Design, type DesignFiles, type Step } from "../lib/designer";
+import { COLOUR_DOT, STEPS, buildDesign, fromDoc, nextStep, requestText, sayAnswer, themesFor, writeCopy, type Answers, type Design, type DesignFiles, type Step } from "../lib/designer";
 import { newDesignId, readLocalDesigns, writeLocalDesigns, type Copy, type DesignRec } from "../lib/designs";
 import { designHost, submitQuery, type DesignHost } from "../lib/designapi";
+import { pdfLines } from "../lib/pdftext";
+import { watchDevtools } from "../lib/devtools";
 import type { Studio, StudioIndex } from "../lib/studio";
 
 // #/design: a chat that asks plain questions and builds a preview website from the answers.
@@ -54,6 +56,8 @@ export function DesignPage({ studio, index, onIndex }: { studio?: Studio; index?
   const [many, setMany] = useState<string[]>([]);
   const [savedId, setSavedId] = useState(first.id);
   const [sent, setSent] = useState(first.sent);
+  const [warn, setWarn] = useState(false);
+  const resetRef = useRef<() => void>(() => {});
   const endRef = useRef<HTMLDivElement>(null);
   const field = useRef<HTMLInputElement & HTMLTextAreaElement>(null);
   const pick = useRef<HTMLInputElement>(null);
@@ -89,7 +93,7 @@ export function DesignPage({ studio, index, onIndex }: { studio?: Studio; index?
     if (!doneKey || !design || lastSaved.current === doneKey) return;
     lastSaved.current = doneKey;
     const id = savedId || newDesignId();
-    const rec: DesignRec = { id, name: a.name || "Untitled", kind: design.kind, themeId: design.themeId, themeName: design.themeName, answers: a, createdAt: new Date().toISOString(), summary: design.summary, ...(copy ? { copy } : {}), ...(files.logo && files.logo.length < 60000 ? { logo: files.logo } : {}) };
+    const rec: DesignRec = { id, name: a.name || "Untitled", kind: design.kind, themeId: design.themeId, themeName: design.themeName, answers: Object.fromEntries(Object.entries(a).filter(([key]) => key !== "doctext")), createdAt: new Date().toISOString(), summary: design.summary, ...(copy ? { copy } : {}), ...(files.logo && files.logo.length < 60000 ? { logo: files.logo } : {}) };
     (async () => {
       try {
         if (studio) {
@@ -116,6 +120,13 @@ export function DesignPage({ studio, index, onIndex }: { studio?: Studio; index?
     try {
       if (f.size > (s.maxKB || 1000) * 1024) throw new Error(`That file is over ${Math.round((s.maxKB || 1000) / 1000)} MB. Please choose a smaller one.`);
       if (s.id === "logo") { const u = await fitImage(f); setFiles((o) => ({ ...o, logo: u })); answer(s, "added"); }
+      else if (s.id === "doc") {
+        const text = (await pdfLines(f)).join("\n").slice(0, 12000);
+        if (text.length < 30) throw new Error("We couldn't find any text in that PDF (it may be a scan). Try another one, or skip.");
+        const fill = fromDoc(text, a), got = Object.keys(fill);
+        setA((o) => ({ ...o, doc: f.name.slice(0, 100), doctext: text, ...fromDoc(text, o), ...(got.length ? { docfrom: got.join(",") } : {}) }));
+        toast(got.length ? "Read your document. We filled in what it says, and you can change any answer." : "Read your document. It will help us write your text.");
+      }
       else { const buf = await f.arrayBuffer(); if (new TextDecoder().decode(new Uint8Array(buf).slice(0, 4)) !== "%PDF") throw new Error("That doesn't look like a PDF."); setFiles((o) => ({ ...o, menu: { name: f.name.slice(0, 100), b64: toB64(buf) } })); answer(s, f.name.slice(0, 100)); }
     } catch (e: any) { toast(e?.message || "Couldn't read that file.", "bad"); }
     if (pick.current) pick.current.value = "";
@@ -123,11 +134,16 @@ export function DesignPage({ studio, index, onIndex }: { studio?: Studio; index?
   /** Go back to a question: it and every later answer are cleared. */
   const rewind = (id: string) => {
     const at = STEPS.findIndex((s) => s.id === id);
-    const keep = Object.fromEntries(Object.entries(a).filter(([key]) => STEPS.findIndex((s) => s.id === key) < at));
+    const docAt = STEPS.findIndex((s) => s.id === "doc"), look = ["theme", "accent", "mode", "corners"];
+    const keep = Object.fromEntries(Object.entries(a).filter(([key]) => !look.includes(key) && !((key === "doctext" || key === "docfrom") && at <= docAt) && STEPS.findIndex((s) => s.id === key) < at));
     const old = a[id]; setA(keep); setCopy(null); if (STEPS[at].type === "text" || STEPS[at].type === "long") setTimeout(() => setText(old || ""), 60);
     lastSaved.current = ""; setShowPreview(false);
   };
-  const restart = () => { setA({}); setCopy(null); setFiles({}); setDesign(null); setSavedId(""); setSent(false); lastSaved.current = ""; try { sessionStorage.removeItem(DRAFT); } catch { /* none */ } };
+  resetRef.current = () => { restart(); try { writeLocalDesigns([]); } catch { /* none */ } setShowPreview(false); setConnect(false); };
+  // Developer tools opened on this page (not for a signed-in owner): everything made here is cleared and a warning is shown.
+  useEffect(() => { if (studio) return; return watchDevtools(() => { resetRef.current(); setWarn(true); }); }, [studio]);
+  const tweak = (p: Answers) => setA((o) => { const n = { ...o, ...p }; for (const key of Object.keys(p)) if (p[key] === "") delete n[key]; return n; });
+  function restart() { setA({}); setCopy(null); setFiles({}); setDesign(null); setSavedId(""); setSent(false); lastSaved.current = ""; try { sessionStorage.removeItem(DRAFT); } catch { /* none */ } }
 
   const field$ = cur && (cur.type === "text" || cur.type === "long" || cur.id === "kind");
   const bar = (
@@ -138,7 +154,7 @@ export function DesignPage({ studio, index, onIndex }: { studio?: Studio; index?
           : <input ref={field} aria-label={cur ? cur.ask(a) : "Your answer"} className="min-w-0 flex-1 bg-transparent py-2.5 text-[15px] text-ink-100 outline-none placeholder:text-ink-500" disabled={!field$} placeholder={writing ? "Writing your text…" : !cur ? "All done. Your preview is ready." : cur.id === "kind" ? "Tell me what you want, e.g. an online shop for my candles" : field$ ? cur.ph?.(a) : cur.type === "many" ? "Tap what applies above, then press Done" : cur.type === "file" ? "Choose a file, or skip" : "Pick one of the choices above"} value={field$ ? text : ""} onChange={(e) => setText(e.target.value)} />}
         {cur?.type === "file" && <>
           <input ref={pick} type="file" accept={cur.accept} className="sr-only" aria-label={cur.ask(a)} onChange={(e) => choose(cur, e.target.files?.[0])} />
-          <button type="button" className="btn btn-pri btn-sm rounded-full" onClick={() => pick.current?.click()}>{cur.id === "logo" ? "Choose logo" : "Choose PDF"}</button>
+          <button type="button" className="btn btn-pri btn-sm rounded-full" onClick={() => pick.current?.click()}>{cur.id === "logo" ? "Choose logo" : cur.id === "doc" ? "Choose document (PDF)" : "Choose PDF"}</button>
         </>}
         {cur?.optional && (field$ || cur.type === "file") && <button type="button" className="btn btn-ghost btn-sm" onClick={() => answer(cur, "")}>Skip</button>}
         {cur?.type === "many" && <button type="submit" className="btn btn-pri btn-sm rounded-full" disabled={!many.length}>Done</button>}
@@ -230,14 +246,24 @@ export function DesignPage({ studio, index, onIndex }: { studio?: Studio; index?
         {ready && <p className="mx-auto mt-2 max-w-2xl text-center text-xs text-ink-500">Preview only. Nothing is published or charged.</p>}
       </div>}
 
-      {showPreview && design && <PreviewPopup design={design} ver={ver} a={a} onClose={() => setShowPreview(false)} onConnect={() => setConnect(true)} done={ready} />}
+      {showPreview && design && <PreviewPopup design={design} ver={ver} a={a} onClose={() => setShowPreview(false)} onConnect={() => setConnect(true)} done={ready} onTweak={ready ? tweak : undefined} />}
+      {warn && (
+        <div role="alertdialog" aria-modal="true" aria-label="Developer tools detected" className="fixed inset-0 z-[100] grid place-items-center bg-black/85 p-4">
+          <div className="card flex w-full max-w-md flex-col gap-3 p-6">
+            <h2 className="font-display text-2xl font-extrabold text-amber-200">Developer tools detected</h2>
+            <p className="text-sm text-ink-200">This page doesn't allow developer tools while you design. To protect the design and its data, everything has been reset. Please close developer tools and start again.</p>
+            <button type="button" className="btn btn-pri self-start" autoFocus onClick={() => setWarn(false)}>OK, start again</button>
+          </div>
+        </div>
+      )}
       {connect && <ConnectPopup a={a} design={design} copy={copy} files={files} host={host} sent={sent} onSent={() => setSent(true)} onClose={() => setConnect(false)} />}
     </div>
   );
 }
 
 /** The preview, over the whole screen. */
-export function PreviewPopup({ design, ver, a, onClose, onConnect, done }: { design: Design; ver: number; a: Answers; onClose: () => void; onConnect?: () => void; done: boolean }) {
+export function PreviewPopup({ design, ver, a, onClose, onConnect, done, onTweak }: { design: Design; ver: number; a: Answers; onClose: () => void; onConnect?: () => void; done: boolean; onTweak?: (p: Answers) => void }) {
+  const [play, setPlay] = useState(false);
   useEffect(() => {
     const k = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     addEventListener("keydown", k); const o = document.body.style.overflow; document.body.style.overflow = "hidden";
@@ -249,12 +275,63 @@ export function PreviewPopup({ design, ver, a, onClose, onConnect, done }: { des
         <b className="truncate text-sm">{a.name || "Your website"}</b>
         <span className="chip border-amber-400/50 text-amber-200">{done ? "Preview · not published" : "Preview so far"}</span>
         <span className="ml-auto flex items-center gap-2">
+          {onTweak && <button type="button" className={`btn btn-sm ${play ? "border-brand-400" : ""}`} aria-pressed={play} onClick={() => setPlay((v) => !v)}>Play with your design</button>}
           {onConnect && <button type="button" className="btn btn-pri btn-sm" onClick={onConnect}>Connect with Picaffectz</button>}
           <button type="button" className="btn btn-sm" onClick={onClose} autoFocus>{done ? "Close" : "Keep answering"}</button>
         </span>
       </div>
-      <div className="flex min-h-0 flex-1 flex-col"><Preview key={design.kind} tpl={TEMPLATES[design.kind]} base={`templates/${design.kind}/`} content={design.content} version={ver} assets={{}} editable={false} /></div>
+      <div className="relative flex min-h-0 flex-1">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col"><Preview key={design.kind} tpl={TEMPLATES[design.kind]} base={`templates/${design.kind}/`} content={design.content} version={ver} assets={{}} editable={false} /></div>
+        {play && onTweak && <Tweaks a={a} design={design} onTweak={onTweak} onClose={() => setPlay(false)} />}
+      </div>
     </div>
+  );
+}
+
+const ACCENTS = ["blue", "green", "red", "orange", "purple", "pink", "gold", "mono"] as const;
+const CORNERS: [string, string][] = [["0", "Sharp"], ["8", "Soft"], ["16", "Round"], ["28", "Pill"]];
+/** "Play with your design": the colours and look of the chosen type, changed live. */
+function Tweaks({ a, design, onTweak, onClose }: { a: Answers; design: Design; onTweak: (p: Answers) => void; onClose: () => void }) {
+  const [q, setQ] = useState("");
+  const all = useMemo(() => themesFor(design.kind), [design.kind]);
+  const list = all.filter((t) => !q.trim() || (t.name + " " + t.tags.join(" ")).toLowerCase().includes(q.trim().toLowerCase()));
+  const seg = (label: string, key: string, opts: [string, string][], own = true) => (
+    <div className="flex flex-col gap-1.5"><span className="label">{label}</span>
+      <div className="flex flex-wrap rounded-lg border border-ink-600" role="radiogroup" aria-label={label}>
+        {[...(own ? [["", "Theme's own"] as [string, string]] : []), ...opts].map(([v, l]) => <button key={v || "own"} type="button" role="radio" aria-checked={(a[key] || "") === v} onClick={() => onTweak({ [key]: v })} className={`btn btn-sm border-0 ${(a[key] || "") === v ? "bg-ink-700" : "bg-transparent"}`}>{l}</button>)}
+      </div>
+    </div>
+  );
+  const changed = ["theme", "accent", "mode", "corners"].some((x) => a[x]);
+  return (
+    <aside aria-label="Play with your design" className="z-10 flex flex-col gap-4 overflow-y-auto border-ink-700 bg-ink-900 p-4 max-md:absolute max-md:inset-x-0 max-md:bottom-0 max-md:max-h-[58%] max-md:border-t md:w-[330px] md:flex-none md:border-l">
+      <div className="flex items-center gap-2"><b className="text-[15px]">Play with your design</b><button type="button" className="btn btn-ghost btn-sm ml-auto" onClick={onClose} aria-label="Close this panel">✕</button></div>
+      <p className="text-[13px] text-ink-400">Try other looks and colours for your {TEMPLATES[design.kind].name.toLowerCase()}. The preview changes as you tap.</p>
+      <div className="flex flex-col gap-1.5"><span className="label">Accent colour</span>
+        <div className="flex flex-wrap items-center gap-2">
+          {ACCENTS.map((c) => <button key={c} type="button" title={c} aria-label={c} aria-pressed={a.accent?.toLowerCase() === COLOUR_DOT[c].toLowerCase()} onClick={() => onTweak({ accent: COLOUR_DOT[c] })} className={`h-8 w-8 rounded-full border-2 ${a.accent?.toLowerCase() === COLOUR_DOT[c].toLowerCase() ? "border-white" : "border-white/20"}`} style={{ background: COLOUR_DOT[c] }} />)}
+          <input type="color" aria-label="Pick your own colour" className="h-8 w-10 cursor-pointer rounded border border-ink-600 bg-transparent" value={/^#[0-9a-f]{6}$/i.test(a.accent || "") ? a.accent : "#3b82f6"} onChange={(e) => onTweak({ accent: e.target.value })} />
+          {a.accent && <button type="button" className="btn btn-ghost btn-sm" onClick={() => onTweak({ accent: "" })}>Theme's own</button>}
+        </div>
+      </div>
+      {seg("Light or dark", "mode", [["light", "Light"], ["dark", "Dark"]])}
+      {seg("Corners", "corners", CORNERS)}
+      {(design.kind === "business" || design.kind === "restaurant") && seg("Pages", "pages", [["single", "One page"], ["multi", "Separate pages"]], false)}
+      <div className="flex flex-col gap-1.5"><span className="label">Look ({all.length})</span>
+        <input className="input" type="search" placeholder="Search, e.g. dark, warm, bold" aria-label="Search looks" value={q} onChange={(e) => setQ(e.target.value)} />
+        <div className="grid max-h-72 grid-cols-1 gap-1.5 overflow-y-auto pr-1">
+          {list.map((t) => (
+            <button key={t.id} type="button" aria-pressed={design.themeId === t.id} onClick={() => onTweak({ theme: t.id })} className={`flex items-center gap-2 rounded-lg border px-2.5 py-2 text-left text-[13px] ${design.themeId === t.id ? "border-brand-400 bg-brand-500/15" : "border-ink-700 hover:border-ink-500"}`}>
+              <span className="flex flex-none overflow-hidden rounded-full border border-white/20" aria-hidden>{[t.colors.bg, t.colors.c1, t.colors.c2].map((c, i) => <span key={i} className="h-5 w-4" style={{ background: c }} />)}</span>
+              <span className="min-w-0 flex-1 truncate font-semibold text-ink-100">{t.name}</span><span className="text-[11px] text-ink-500">{t.dark ? "Dark" : "Light"}</span>
+            </button>
+          ))}
+          {!list.length && <p className="text-[13px] text-ink-400">No look matches that.</p>}
+        </div>
+      </div>
+      {changed && <button type="button" className="btn btn-sm self-start" onClick={() => onTweak({ theme: "", accent: "", mode: "", corners: "" })}>Back to my first design</button>}
+      <p className="text-[12px] text-ink-500">Your changes are kept with your request when you connect with us.</p>
+    </aside>
   );
 }
 

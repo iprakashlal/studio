@@ -11,21 +11,15 @@ export const KINDS: Kind[] = ["business", "restaurant", "portfolio", "store"];
 /** The colours of the Brand & theme → Colours editor, in its order. */
 export const COLOUR_SLOTS: [string, string][] = [["bg", "Background"], ["surface", "Cards"], ["text", "Text"], ["soft", "Secondary text"], ["line", "Borders"], ["deep", "Dark panels & footer"], ["c1", "Primary (buttons, links)"], ["c2", "Secondary"], ["c3", "Highlight"]];
 export type Colours = Record<string, string>;
-/** A palette the owner offers: a name and any of the colours above. */
-export type ColourSet = { name: string; colours: Colours };
 
 /** One layout choice in the owner's settings: the default it fills in, the options offered, or hidden. */
 export type LookRule = { /** default option ("" = the theme's own) */ d?: string; /** options offered (empty = all) */ a?: string[]; /** not shown to visitors */ h?: boolean };
 export type DesignSettings = {
   on?: boolean;
-  /** Palettes offered on the Colours panel. */
-  sets?: ColourSet[];
   /** Visitors may change each colour (default on). */
   pick?: boolean;
-  /** Background colours offered, light to dark (the text colour follows). */
-  backgrounds?: string[];
-  /** Accent colours offered on the Colours panel (the theme's own is always there). */
-  accents?: string[];
+  /** Which AI reads a visitor's document or link and writes their text: "" = the engine chosen in Settings → General. */
+  ai?: "cloudflare" | "system" | "custom";
   /** Per type: the themes visitors are offered (none listed = all of them). */
   themes?: Partial<Record<Kind, string[]>>;
   /** Per type, per layout / style / interaction / intro choice. */
@@ -68,17 +62,12 @@ export const LOOK_AXES: Record<Kind, [Axis, string, Group][]> = {
 
 const HEX = /^#[0-9a-f]{6}$/i;
 const SLOT = new Set(COLOUR_SLOTS.map(([k]) => k));
-const clip = (s: any, n: number) => (typeof s === "string" ? s.trim().slice(0, n) : "");
 export function cleanColours(x: any): Colours {
   const o: Colours = {}; if (!x || typeof x !== "object") return o;
   for (const k of Object.keys(x)) if (SLOT.has(k) && typeof x[k] === "string" && HEX.test(x[k])) o[k] = x[k].toLowerCase();
   return o;
 }
-export function cleanSets(x: any): ColourSet[] {
-  return (Array.isArray(x) ? x : []).slice(0, 12).map((s) => ({ name: clip(s?.name, 30), colours: cleanColours(s?.colours) })).filter((s) => s.name && Object.keys(s.colours).length);
-}
-export const DEFAULT_BACKGROUNDS = ["#ffffff", "#f5f1e8", "#e6ebf2", "#3a4558", "#1c2230", "#0b0f17"];
-export const cleanAccents = (x: any): string[] => (Array.isArray(x) ? x.filter((c) => typeof c === "string" && HEX.test(c)).map((c) => c.toLowerCase()).slice(0, 16) : []);
+export const cleanAi = (v: unknown): DesignSettings["ai"] => (v === "cloudflare" || v === "system" || v === "custom" ? v : undefined);
 export function cleanThemes(x: any): NonNullable<DesignSettings["themes"]> {
   const o: NonNullable<DesignSettings["themes"]> = {}; if (!x || typeof x !== "object") return o;
   for (const k of KINDS) if (Array.isArray(x[k])) { const l = x[k].filter((v: any) => typeof v === "string" && /^[A-Za-z0-9_-]{1,40}$/.test(v)).slice(0, 400); if (l.length) o[k] = l; }
@@ -131,8 +120,3 @@ export function lookValues(kind: Kind, answer: string | undefined, s: DesignSett
 /** Everything the visitor and the owner's defaults decide, as one answer to keep with a request (so it looks the same later). */
 export const resolvedLook = (kind: Kind, answer: string | undefined, s: DesignSettings): string => JSON.stringify(lookValues(kind, answer, s));
 
-/** The palettes offered: the owner's, or (when none) one made from the Studio's own colour. */
-export function setsOf(s: DesignSettings, studioTint?: string): ColourSet[] {
-  if (s.sets?.length) return s.sets;
-  return studioTint && HEX.test(studioTint) ? [{ name: "Studio colour", colours: { c1: studioTint, c2: studioTint } }] : [];
-}

@@ -32,3 +32,9 @@ export type PageRead = { title?: string; site?: string; description?: string; te
 export async function readPage(h: DesignHost, url: string): Promise<PageRead> {
   try { return await cfCall<PageRead>(h.api, "/dq/read/" + encodeURIComponent(h.studio), { method: "POST", auth: false, body: JSON.stringify({ url }) }); } catch (e: any) { return { error: e?.message || "Couldn't read that page." }; }
 }
+
+/** What the Studio's AI picks out of a document or page's text (name, what they do, items, contact details), or nothing when the Picaffectz system is the engine: then the rules in this device read it. */
+export type Understood = { engine?: string; fields?: Record<string, any> };
+export async function understandText(h: DesignHost, kind: string, text: string): Promise<Understood> {
+  try { return await cfCall<Understood>(h.api, "/dq/understand/" + encodeURIComponent(h.studio), { method: "POST", auth: false, body: JSON.stringify({ kind, text: text.slice(0, 9000) }) }); } catch { return {}; }
+}

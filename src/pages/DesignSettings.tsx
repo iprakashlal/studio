@@ -1,9 +1,11 @@
 import { useMemo, useState } from "react";
 import { pushPref, savePrefNow } from "../lib/prefs";
 import { cleanDesignSettings, readDesignSettings, writeDesignSettings, type DesignSettings } from "../lib/designs";
-import { DEFAULT_BACKGROUNDS, GROUPS, KINDS, LOOK_AXES, type Kind, type LookRule } from "../lib/designlook";
+import { GROUPS, KINDS, LOOK_AXES, type Kind, type LookRule } from "../lib/designlook";
 import { allThemesOf } from "../lib/designer";
-import { COLOUR_DOT } from "../lib/designer";
+import { AI_ENGINES } from "../lib/ai";
+import { useAiEngine } from "./AiEngine";
+import { AiApiForm, useStudioWhere } from "./Connections";
 import { Toggle, useToast } from "../ui/kit";
 
 /** Settings → General: the "Design yourself" page (a link on the Themes page): on or off. */
@@ -24,7 +26,6 @@ function DesignOnCard() {
 }
 
 const KIND_NAME: Record<Kind, string> = { business: "Business", restaurant: "Restaurant", portfolio: "Portfolio", store: "Shop" };
-const DEFAULT_ACCENTS = ["blue", "green", "red", "orange", "purple", "pink", "gold", "mono"].map((c) => COLOUR_DOT[c]);
 const same = (x: unknown, y: unknown) => JSON.stringify(x) === JSON.stringify(y);
 
 function Block({ title, note, children, open = true }: { title: string; note?: string; children: React.ReactNode; open?: boolean }) {
@@ -38,9 +39,9 @@ function Block({ title, note, children, open = true }: { title: string; note?: s
   );
 }
 
-/** Settings → Design yourself: what a visitor can change on the Design yourself page (colours, themes, layout, style, interactions, intro screen) and what each type starts with. Saved with the Save button. */
+/** Settings → Design yourself: the AI that reads and writes for visitors, the themes offered, and the layout, style, interaction and intro-screen choices (what each starts with, what shows, what can be picked). Saved with the Save button. */
 export function DesignLookTab() {
-  const toast = useToast();
+  const toast = useToast(), general = useAiEngine(), where = useStudioWhere();
   const [saved, setSaved] = useState<DesignSettings>(readDesignSettings);
   const [d, setD] = useState<DesignSettings>(saved);
   const [kind, setKind] = useState<Kind>("business");
@@ -49,7 +50,6 @@ export function DesignLookTab() {
   const dirty = useMemo(() => !same(cleanDesignSettings({ ...d, on: saved.on }), cleanDesignSettings(saved)), [d, saved]);
   const upd = (p: Partial<DesignSettings>) => { setD((o) => ({ ...o, ...p })); setErr(""); };
 
-  const backgrounds = d.backgrounds?.length ? d.backgrounds : DEFAULT_BACKGROUNDS, accents = d.accents?.length ? d.accents : DEFAULT_ACCENTS;
   const rules = d.look?.[kind] || {};
   const setRule = (key: string, patch: Partial<LookRule>) => {
     const r: LookRule = { ...rules[key], ...patch };
@@ -58,8 +58,11 @@ export function DesignLookTab() {
     const look = { ...(d.look || {}) }; if (Object.keys(next).length) look[kind] = next; else delete look[kind];
     upd({ look });
   };
-  const themes = allThemesOf(kind), offered = d.themes?.[kind]?.length ? d.themes[kind]! : themes.map((t) => t.id);
+  const themes = allThemesOf(kind), picked = d.themes?.[kind]?.length ? d.themes[kind]!.filter((id) => themes.some((t) => t.id === id)) : [];
+  const all = !picked.length, offered = all ? themes.map((t) => t.id) : picked;
   const setOffered = (ids: string[]) => { const th = { ...(d.themes || {}) }; if (ids.length && ids.length < themes.length) th[kind] = ids; else delete th[kind]; upd({ themes: th }); };
+  const [find, setFind] = useState("");
+  const shownThemes = themes.filter((t) => !find.trim() || (t.name + " " + t.id + " " + t.tags.join(" ")).toLowerCase().includes(find.trim().toLowerCase()));
 
   const save = async () => {
     const clean = cleanDesignSettings({ ...d, on: readDesignSettings().on });
@@ -71,59 +74,55 @@ export function DesignLookTab() {
     } catch (e: any) { setErr((e?.message || "Couldn't save.") + " Your changes are still here: try Save again."); }
     setBusy(false);
   };
+  const ai = d.ai || "";
+  const generalName = AI_ENGINES.find((e) => e.id === general)?.name || "";
 
   return (
     <div className="flex flex-col gap-4">
-      <p className="text-sm text-ink-300">Everything a visitor can change on the Design yourself page after their preview is ready, and what each type starts with. Choices are the ones in your site admin's Theme &amp; layout. Press <b className="text-ink-100">Save changes</b> to store them in your Studio's database; signed-out visitors get them with the next page load.</p>
+      <p className="text-sm text-ink-300">What the Design yourself page offers a visitor, and what each type starts with. Press <b className="text-ink-100">Save changes</b> to store it in your Studio's database; signed-out visitors get it with the next page load.</p>
 
-      <Block title="Accent colours" note="The round colours visitors tap to recolour the buttons and links. “Theme's own” is always the first choice and the default.">
-        <div className="flex flex-wrap items-center gap-2.5">
-          {accents.map((c, i) => (
-            <span key={i} className="relative">
-              <input type="color" aria-label={`Accent colour ${i + 1}`} className="h-10 w-10 cursor-pointer rounded-full border border-ink-600 bg-transparent p-0.5" value={c} onChange={(e) => upd({ accents: accents.map((x, j) => (j === i ? e.target.value : x)) })} />
-              <button type="button" aria-label={`Remove accent colour ${i + 1}`} className="absolute -right-1.5 -top-1.5 grid h-5 w-5 place-items-center rounded-full border border-ink-600 bg-ink-800 text-[10px] text-ink-300 hover:text-ink-100" onClick={() => upd({ accents: accents.filter((_, j) => j !== i) })}>✕</button>
-            </span>
+      <Block title="AI engine" note="Which AI reads a visitor's PDF or website link and writes their text. The choices are the same as Settings → General → AI engine. With the Picaffectz system nothing is sent to an AI service: the visitor's own device reads and writes by rules.">
+        <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label="AI engine for Design yourself">
+          {[{ id: "", name: "Same as Settings → General", line: `Currently ${generalName}. Changing it there changes it here.` }, ...AI_ENGINES].map((e) => (
+            <button key={e.id || "same"} type="button" role="radio" aria-checked={ai === e.id} onClick={() => upd({ ai: (e.id || undefined) as DesignSettings["ai"] })} className={`flex flex-col gap-1 rounded-xl border p-4 text-left ${ai === e.id ? "border-brand-500 bg-brand-500/10" : "border-ink-700 hover:border-ink-500"}`}>
+              <b className="flex items-center gap-2 text-[13px] text-ink-100">{e.name}{ai === e.id && <span className="chip border-brand-400/60 text-brand-200">Chosen</span>}</b>
+              <span className="text-[12.5px] leading-snug text-ink-300">{e.line}</span>
+            </button>
           ))}
-          <button type="button" className="btn btn-sm" disabled={accents.length >= 16} onClick={() => upd({ accents: [...accents, "#3b82f6"] })}>+ Add</button>
-          {!!d.accents?.length && <button type="button" className="btn btn-ghost btn-sm" onClick={() => upd({ accents: [] })}>Use the standard set</button>}
         </div>
+        {(ai === "custom" || (!ai && general === "custom")) && <AiApiForm where={where} />}
       </Block>
 
-      <Block title="Background colours" note="A few backgrounds, light to dark, that visitors can tap. The text, cards and borders adjust automatically so the page stays easy to read. “Theme's own” is always the first choice and the default.">
-        <div className="flex flex-wrap items-center gap-2.5">
-          {backgrounds.map((c, i) => (
-            <span key={i} className="relative">
-              <input type="color" aria-label={`Background colour ${i + 1}`} className="h-10 w-10 cursor-pointer rounded-full border border-ink-600 bg-transparent p-0.5" value={c} onChange={(e) => upd({ backgrounds: backgrounds.map((x, j) => (j === i ? e.target.value : x)) })} />
-              <button type="button" aria-label={`Remove background colour ${i + 1}`} className="absolute -right-1.5 -top-1.5 grid h-5 w-5 place-items-center rounded-full border border-ink-600 bg-ink-800 text-[10px] text-ink-300 hover:text-ink-100" onClick={() => upd({ backgrounds: backgrounds.filter((_, j) => j !== i) })}>✕</button>
-            </span>
-          ))}
-          <button type="button" className="btn btn-sm" disabled={backgrounds.length >= 16} onClick={() => upd({ backgrounds: [...backgrounds, "#ffffff"] })}>+ Add</button>
-          {!!d.backgrounds?.length && <button type="button" className="btn btn-ghost btn-sm" onClick={() => upd({ backgrounds: [] })}>Use the standard set</button>}
-        </div>
-        <Toggle id="design-pick" label="Let visitors change each colour" checked={d.pick !== false} onChange={(v) => upd({ pick: v })} />
-      </Block>
+      <div className="flex flex-wrap gap-1 rounded-xl border border-ink-700 bg-ink-800/40 p-1" role="tablist" aria-label="Type of website">
+        {KINDS.map((k) => <button key={k} type="button" role="tab" aria-selected={kind === k} onClick={() => setKind(k)} className={`h-10 flex-1 rounded-lg px-3 text-[13px] font-semibold ${kind === k ? "bg-ink-700 text-ink-100 shadow" : "text-ink-400 hover:text-ink-100"}`}>{KIND_NAME[k]}</button>)}
+      </div>
 
-      <Block title="Themes, layout, style and interactions" note="Choose a type, then the themes it offers and, for each choice, the option it starts with. “Starts with” is filled in on every visitor's preview of that type (the theme's own if left alone). Each choice is labelled with the answer it shapes. Hide a choice, or narrow the options visitors can pick.">
-        <div className="flex flex-wrap gap-1 rounded-xl border border-ink-700 p-1" role="tablist" aria-label="Type of website">
-          {KINDS.map((k) => <button key={k} type="button" role="tab" aria-selected={kind === k} onClick={() => setKind(k)} className={`h-9 flex-1 rounded-lg px-3 text-[13px] font-semibold ${kind === k ? "bg-ink-700 text-ink-100" : "text-ink-400 hover:text-ink-100"}`}>{KIND_NAME[k]}</button>)}
-        </div>
-
-        <details className="group rounded-xl border border-ink-700">
-          <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-3 text-[13px] font-bold [&::-webkit-details-marker]:hidden">Themes offered<span className="font-normal text-ink-500">{offered.length} of {themes.length}</span><span aria-hidden className="ml-auto text-ink-500 transition-transform group-open:rotate-180">▾</span></summary>
-          <div className="flex flex-col gap-3 border-t border-ink-700 p-4">
-            <div className="flex gap-2"><button type="button" className="btn btn-sm" onClick={() => setOffered(themes.map((t) => t.id))}>All</button><button type="button" className="btn btn-sm" onClick={() => setOffered([themes[0].id])}>Only one</button></div>
-            <div className="grid max-h-80 gap-1.5 overflow-y-auto pr-1 sm:grid-cols-2">
-              {themes.map((t) => (
-                <label key={t.id} className="flex cursor-pointer items-center gap-2.5 rounded-lg border border-ink-700 px-3 py-2 text-[13px] hover:border-ink-500">
-                  <input type="checkbox" checked={offered.includes(t.id)} onChange={(e) => setOffered(e.target.checked ? [...offered, t.id] : offered.filter((x) => x !== t.id))} />
-                  <span className="flex flex-none overflow-hidden rounded-full border border-white/20" aria-hidden>{[t.colors.bg, t.colors.c1, t.colors.c2].map((c, i) => <span key={i} className="h-4 w-3.5" style={{ background: c }} />)}</span>
-                  <span className="min-w-0 flex-1 truncate">{t.name}</span>
-                </label>
-              ))}
-            </div>
+      <Block title={`Themes · ${KIND_NAME[kind]}`} note="Your Studio's themes. Show all of them to visitors, or only the ones you tick.">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="grid grid-cols-2 gap-1 rounded-xl border border-ink-600 p-1" role="radiogroup" aria-label="Themes shown">
+            <button type="button" role="radio" aria-checked={all} onClick={() => setOffered(themes.map((t) => t.id))} className={`h-8 rounded-lg px-4 text-[13px] font-semibold ${all ? "bg-ink-700 text-ink-100" : "text-ink-400 hover:text-ink-100"}`}>All themes ({themes.length})</button>
+            <button type="button" role="radio" aria-checked={!all} onClick={() => setOffered(all ? themes.slice(0, 12).map((t) => t.id) : offered)} className={`h-8 rounded-lg px-4 text-[13px] font-semibold ${!all ? "bg-ink-700 text-ink-100" : "text-ink-400 hover:text-ink-100"}`}>Only some</button>
           </div>
-        </details>
+          {!all && <span className="text-[13px] text-ink-400">{offered.length} chosen</span>}
+        </div>
+        {!all && <>
+          <div className="flex flex-wrap items-center gap-2"><input className="input h-10 max-w-xs" type="search" placeholder="Search themes" aria-label="Search themes" value={find} onChange={(e) => setFind(e.target.value)} />
+            <button type="button" className="btn btn-sm" onClick={() => setOffered([...new Set([...offered, ...shownThemes.map((t) => t.id)])])}>Tick these</button>
+            <button type="button" className="btn btn-sm" onClick={() => setOffered(offered.filter((id) => !shownThemes.some((t) => t.id === id)).length ? offered.filter((id) => !shownThemes.some((t) => t.id === id)) : [themes[0].id])}>Untick these</button></div>
+          <div className="grid max-h-96 gap-1.5 overflow-y-auto pr-1 sm:grid-cols-2">
+            {shownThemes.map((t) => (
+              <label key={t.id} className="flex cursor-pointer items-center gap-2.5 rounded-lg border border-ink-700 px-3 py-2 text-[13px] hover:border-ink-500">
+                <input type="checkbox" checked={offered.includes(t.id)} onChange={(e) => setOffered(e.target.checked ? [...offered, t.id] : offered.filter((x) => x !== t.id))} />
+                <span className="flex flex-none overflow-hidden rounded-full border border-white/20" aria-hidden>{[t.colors.bg, t.colors.c1, t.colors.c2].map((c, i) => <span key={i} className="h-4 w-3.5" style={{ background: c }} />)}</span>
+                <span className="min-w-0 flex-1 truncate">{t.name}</span>
+              </label>
+            ))}
+            {!shownThemes.length && <p className="text-[13px] text-ink-400">No theme matches that.</p>}
+          </div>
+        </>}
+      </Block>
 
+      <Block title={`Layout, style and interactions · ${KIND_NAME[kind]}`} note="For each choice: the option every visitor's preview starts with (the theme's own if left alone), whether visitors see it, and which options they can pick. Each choice shows the answer it shapes." open={false}>
         {GROUPS.map((g) => {
           const rows = LOOK_AXES[kind].filter((x) => x[2] === g); if (!rows.length) return null;
           return (
@@ -153,6 +152,10 @@ export function DesignLookTab() {
             </details>
           );
         })}
+      </Block>
+
+      <Block title="Colours" open={false}>
+        <Toggle id="design-pick" label="Let visitors change each colour" checked={d.pick !== false} onChange={(v) => upd({ pick: v })} />
       </Block>
 
       <div className="card sticky bottom-3 z-10 flex flex-wrap items-center gap-3 border-ink-600 bg-ink-900/95 p-3 shadow-xl backdrop-blur" role="region" aria-label="Save">

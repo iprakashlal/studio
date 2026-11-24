@@ -1,3 +1,4 @@
+import { DesignsTab } from "./DesignsTab";
 import { useEffect, useMemo, useState } from "react";
 import { THEMES } from "../themes/catalog";
 import { limitThemes } from "../themes/limit";
@@ -88,7 +89,7 @@ function Feedback({ s, id }: { s: RvSummary; id: string }) {
 /** Last live-site check per project, so going back and forth doesn't re-check every time. */
 const checked = new Map<string, number>();
 
-export function Dashboard({ studio, index, onIndex, token, hid = () => false, max = {}, only }: { studio: Studio; index: StudioIndex; onIndex: (i: StudioIndex) => void; token: string; /** Features a partner hid in this client Studio. */ hid?: (key: string) => boolean; /** The most sites of each template this client Studio may have. */ max?: Record<string, number>; /** One template's own page (#/type/<id>): every card of that type. */ only?: string }) {
+export function Dashboard({ studio, index, onIndex, token, hid = () => false, max = {}, only, designsTab = false }: { designsTab?: boolean; studio: Studio; index: StudioIndex; onIndex: (i: StudioIndex) => void; token: string; /** Features a partner hid in this client Studio. */ hid?: (key: string) => boolean; /** The most sites of each template this client Studio may have. */ max?: Record<string, number>; /** One template's own page (#/type/<id>): every card of that type. */ only?: string }) {
   // A template is on offer when it isn't hidden and the Studio hasn't reached its limit for that type.
   const countOf = (t: string) => index.projects.filter((p) => p.template === t).length;
   const room = (t: string) => max[t] === undefined || countOf(t) < max[t];
@@ -236,6 +237,13 @@ export function Dashboard({ studio, index, onIndex, token, hid = () => false, ma
       </div>
       {full.length > 0 && !hid("new") && <p className="rounded-lg border border-amber-400/40 bg-amber-400/5 px-3 py-2 text-[13px] text-amber-100" role="status">This Studio has reached its limit for {full.map((t) => `${t.name.toLowerCase()} sites (${max[t.id]})`).join(" and ")}. Ask your Studio Partner for more.</p>}
 
+      {!only && !hid("design") && (
+        <div className="flex gap-1 border-b border-ink-700" role="tablist" aria-label="Projects and design previews">
+          <a href="#/" role="tab" aria-selected={!designsTab} className={`-mb-px border-b-2 px-3 py-2 text-sm font-semibold ${!designsTab ? "border-brand-400 text-ink-100" : "border-transparent text-ink-400 hover:text-ink-100"}`}>Projects <span className="opacity-60">{index.projects.length}</span></a>
+          <a href="#/designs" role="tab" aria-selected={designsTab} className={`-mb-px border-b-2 px-3 py-2 text-sm font-semibold ${designsTab ? "border-brand-400 text-ink-100" : "border-transparent text-ink-400 hover:text-ink-100"}`}>Design previews <span className="opacity-60">{(index.designs || []).length}</span></a>
+        </div>
+      )}
+      {designsTab && !only ? <DesignsTab studio={studio} index={index} onIndex={onIndex} /> : <>
       {only && <a href="#/" className="btn btn-ghost btn-sm self-start text-ink-400">← All projects</a>}
       {!only && stats.length > 0 && <div className="grid grid-cols-2 overflow-hidden rounded-2xl border border-ink-700 bg-ink-900 sm:grid-cols-3 lg:grid-cols-4" aria-label="Studio numbers">
         {stats.map((s) => (
@@ -292,6 +300,8 @@ export function Dashboard({ studio, index, onIndex, token, hid = () => false, ma
           </div>
         )
       )}
+
+      </>}
 
       {creating && <NewProject templates={offered} studio={studio} index={index} onClose={() => setCreating(false)} onCreated={(i, id) => { onIndex(i); setCreating(false); location.hash = `#/p/${id}`; }} />}
       {managing && <Categories studio={studio} index={index} onClose={() => setManaging(false)} onIndex={onIndex} />}

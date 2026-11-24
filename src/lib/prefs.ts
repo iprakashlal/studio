@@ -3,6 +3,8 @@
 // Each choice is still written to this browser first (instant, works offline) and then saved to the Studio a moment
 // later; when the Studio loads, what it holds is applied here.
 
+import { cleanDesignSettings, writeDesignSettings } from "./designs";
+
 export type SyncedPrefs = {
   explorer?: { on?: boolean; min?: boolean; corner?: "right" | "left"; content?: boolean; keys?: boolean };
   autoUpdate?: boolean;
@@ -13,6 +15,8 @@ export type SyncedPrefs = {
   payHidden?: string[];
   /** Click-to-edit in the preview is on. */
   clickToEdit?: boolean;
+  /** The "Design yourself" page: on or off, and where requests are sent. */
+  design?: import("./designs").DesignSettings;
 };
 
 /** Only the choices this file knows about, in their right shapes (what is kept when the Studio's data is read). */
@@ -24,6 +28,7 @@ export function cleanPrefs(p: any): SyncedPrefs {
   if (typeof p.tour === "boolean") o.tour = p.tour;
   if (Array.isArray(p.payHidden)) o.payHidden = p.payHidden.filter((x: any) => typeof x === "string").slice(-300);
   if (typeof p.clickToEdit === "boolean") o.clickToEdit = p.clickToEdit;
+  if (p.design && typeof p.design === "object") { const d = cleanDesignSettings(p.design); if (Object.keys(d).length) o.design = d; }
   return o;
 }
 
@@ -66,6 +71,7 @@ export function applyPrefs(p: SyncedPrefs | undefined) {
   if (typeof p.tour === "boolean") { put(KEYS.tour, p.tour ? "on" : "off"); dispatchEvent(new CustomEvent("site-admin:tour", { detail: { on: p.tour } })); }
   if (Array.isArray(p.payHidden)) { put(KEYS.pay, JSON.stringify(p.payHidden.filter((x) => typeof x === "string").slice(-500))); dispatchEvent(new Event("studio:pay-hidden")); }
   if (typeof p.clickToEdit === "boolean") put(KEYS.edit, p.clickToEdit ? "on" : "off");
+  if (p.design) writeDesignSettings(cleanDesignSettings(p.design));
   if (p.nav) {
     if (p.nav.view === "drawer" || p.nav.view === "list") put(KEYS.view, p.nav.view);
     if (typeof p.nav.wide === "boolean") put(KEYS.wide, p.nav.wide ? "1" : "0");

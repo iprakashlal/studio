@@ -5,6 +5,8 @@ import { BIZ_THEMES } from "../themes/business";
 import { REST_THEMES } from "../themes/restaurant";
 import { TEMPLATES } from "../schema";
 import { loadStarter } from "./exporter";
+import { systemWrite } from "./syswrite";
+import type { Copy } from "./designs";
 
 export type Kind = "portfolio" | "store" | "business" | "restaurant";
 export type Answers = Record<string, string>;
@@ -14,7 +16,11 @@ export type Step = {
   /** What the assistant says (plain words). */
   ask: (a: Answers) => string;
   /** choice: tap one; many: tap several; text: one line; long: one item per line. */
-  type: "choice" | "many" | "text" | "long";
+  type: "choice" | "many" | "text" | "long" | "file";
+  /** Asked only when this is true. */
+  when?: (a: Answers) => boolean;
+  /** file: what may be chosen and how big. */
+  accept?: string; maxKB?: number;
   options?: (a: Answers) => Opt[];
   ph?: (a: Answers) => string;
   /** Can be left out. */
@@ -61,8 +67,20 @@ export const STEPS: Step[] = [
     help: () => "One short line is enough. You can change it later.",
   },
   { id: "city", type: "text", optional: true, ask: () => "Which city are you in?", ph: () => "e.g. Mumbai", help: () => "Skip it if you work online or don't want to show it." },
+  { id: "logo", type: "file", optional: true, accept: "image/png,image/jpeg,image/webp", maxKB: 4000, when: (a) => k(a) !== "portfolio", ask: () => "Do you have a logo? Add it here, or skip and we'll use your name.", help: () => "A PNG or JPG picture. You can send a better one later." },
   { id: "style", type: "choice", ask: () => "How should your website feel?", options: () => STYLE_OPTIONS },
   { id: "colour", type: "choice", ask: () => "Which colour do you like best?", options: () => COLOUR_OPTIONS },
+  {
+    id: "pages", type: "choice", when: (a) => k(a) === "business" || k(a) === "restaurant",
+    ask: () => "Should your website be one long page, or have separate pages (Home, About, Contact…)?",
+    options: () => [{ v: "single", label: "One page", hint: "Everything on one page you scroll down." }, { v: "multi", label: "Separate pages", hint: "Each topic gets its own page." }],
+  },
+  {
+    id: "story", type: "long", optional: true,
+    ask: (a) => by(a, { portfolio: "Tell us about yourself in a few lines: where you started and what you enjoy most.", store: "How did your shop start? Tell us your story in a few lines.", business: "Tell us about your business in a few lines: how it started and who you help.", restaurant: "Tell us your story in a few lines: how the place started and what makes the food yours." }),
+    ph: () => "Write it the way you'd tell a friend.",
+    help: () => "We'll tidy it into proper website text. Skip it and we'll write something simple from your answers.",
+  },
   {
     id: "items", type: "long",
     ask: (a) => by(a, {
@@ -72,9 +90,10 @@ export const STEPS: Step[] = [
       restaurant: "Name your best dishes, one on each line. You can add a price after a dash.",
     }),
     ph: (a) => by(a, { portfolio: "Portraits\nWeddings\nProduct shoots", store: "Soy candle - 450\nGift box - 899\nIncense set - 299", business: "Repairs\nAnnual service\nInstallation", restaurant: "Masala dosa - 120\nFilter coffee - 60\nThali - 250" }),
-    help: () => "Press Enter for a new line. You can leave this out and add them later.",
+    help: () => "Press Enter for a new line. We'll write a short line about each one.",
     optional: true,
   },
+  { id: "usp", type: "long", optional: true, ask: () => "What makes you different from others? Write one thing on each line.", ph: () => "Same-day delivery\nFamily recipes\nFree first consultation", help: () => "Only things that are true. They appear as highlights on your site." },
   {
     id: "goal", type: "many",
     ask: (a) => by(a, { portfolio: "What should visitors do on your website?", store: "How will customers pay you?", business: "How should customers reach you?", restaurant: "What should guests be able to do?" }),
@@ -86,17 +105,23 @@ export const STEPS: Step[] = [
       restaurant: [{ v: "table", label: "Book a table" }, { v: "order", label: "Order food online" }, { v: "menu", label: "See the menu" }, { v: "event", label: "Plan a party" }],
     }),
   },
+  { id: "menu", type: "file", optional: true, accept: "application/pdf", maxKB: 1200, when: (a) => k(a) === "restaurant", ask: () => "Do you have your menu as a PDF? Add it here, or skip.", help: () => "A PDF up to 1.2 MB. Visitors can download it from your site." },
+  { id: "hours", type: "text", optional: true, when: (a) => k(a) === "business" || k(a) === "restaurant", ask: () => "When are you open?", ph: () => "e.g. Monday to Saturday, 10 am to 7 pm", help: () => "Skip it if you don't want to show hours." },
+  { id: "address", type: "text", optional: true, when: (a) => k(a) !== "portfolio", ask: () => "What is your full address?", ph: () => "e.g. 12 MG Road, Bengaluru 560001", help: () => "Shown on your contact page. Skip it if you work from home or online." },
+  { id: "social", type: "text", optional: true, ask: () => "Do you have an Instagram or another page to link? Paste the link or your @name.", ph: () => "e.g. @yourname or https://instagram.com/yourname" },
   { id: "phone", type: "text", optional: true, ask: () => "What phone or WhatsApp number should customers see?", ph: () => "e.g. +91 98765 43210", help: () => "It is shown on the website. Skip if you'd rather not." },
   { id: "email", type: "text", optional: true, ask: () => "And your email address?", ph: () => "e.g. hello@yourname.com", help: () => "Skip if you'd rather not." },
 ];
 
 /** The steps still to ask, in order. */
-export const nextStep = (a: Answers): Step | null => STEPS.find((s) => !(s.id in a)) || null;
+export const nextStep = (a: Answers): Step | null => STEPS.find((s) => (s.when ? s.when(a) : true) && !(s.id in a)) || null;
 export const stepOf = (id: string) => STEPS.find((s) => s.id === id)!;
 
 /** How an answer reads back to the person (their own chat bubble). */
 export function sayAnswer(s: Step, a: Answers): string {
   const v = a[s.id]; if (!v) return "Skip";
+  if (s.type === "file") return s.id === "logo" ? "Logo added" : `Menu added: ${v}`;
+  if (s.id === "pages") return v === "multi" ? "Separate pages" : "One page";
   if (s.id === "kind") return KIND_OPTIONS.find((o) => o.v === v)?.label || v;
   if (s.type === "choice") return [...STYLE_OPTIONS, ...COLOUR_OPTIONS].find((o) => o.v === v)?.label || v;
   if (s.type === "many") return v.split(",").map((x) => (s.options?.(a) || []).find((o) => o.v === x)?.label || x).join(", ");
@@ -162,6 +187,7 @@ function rebrand(o: any, from: string, to: string, skip = new Set(["theme", "cod
 const goals = (a: Answers) => (a.goal || "").split(",").filter(Boolean);
 
 /** The starter holds made-up facts (years of experience, clients, reviews, prices). A preview built from a few answers shouldn't show someone else's story as theirs, so those parts are hidden or emptied. */
+/** The starter holds made-up facts (years of experience, clients, reviews, prices). A preview built from a few answers shouldn't show someone else's story as theirs, so those parts are hidden or emptied. */
 function tidy(kind: Kind, c: any, o: { name: string; about: string; city: string; g: string[]; items: string[]; phone: string; email: string }) {
   const hide = (...ids: string[]) => { for (const x of c.sections || []) if (ids.includes(x.id)) { if ("visible" in x) x.visible = false; else x.show = false; } };
   const show = (...ids: string[]) => { for (const x of c.sections || []) if (ids.includes(x.id)) { if ("visible" in x) x.visible = true; else x.show = true; } };
@@ -192,55 +218,65 @@ function tidy(kind: Kind, c: any, o: { name: string; about: string; city: string
     const dishes = items.map((l) => { const m = /^(.*?)\s*[-–—:]\s*(?:₹|rs\.?|inr)?\s*([\d,.]+)\s*$/i.exec(l); return { name: m ? m[1].trim() : l, price: m ? m[2].replace(/,/g, "") : "" }; });
     if (dishes.length) c.food.categories = [{ name: "Our menu", note: "", image: null, items: dishes.map((d) => ({ name: d.name, desc: "", price: d.price, diet: "", spice: "", tag: "", allergens: "", image: null, variants: [], soldOut: false })) }];
     else hide("food");
-    put("hours.note", "");
+    put("hours.note", ""); put("hours.days", []); put("hours.showStatus", false); put("hero.showStatus", false);
     if (!city) put("contact.address", ""); put("contact.parking", "");
   }
 }
 
 export type Design = { kind: Kind; content: any; themeId: string; themeName: string; summary: string };
+/** Pictures and files chosen in the chat (kept on this device until the request is sent). */
+export type DesignFiles = { logo?: string; menu?: { name: string; b64: string } };
 
-/** The website so far, from the answers so far (whatever isn't answered keeps its sample wording). */
-export async function buildDesign(a: Answers): Promise<Design | null> {
+const urlOf = (v: string) => { const t = v.trim(); if (!t) return ""; if (/^@?[\w.]{2,30}$/.test(t)) return "https://instagram.com/" + t.replace(/^@/, ""); return /^https?:\/\//i.test(t) ? t : /^[\w-]+(\.[\w-]+)+/.test(t) ? "https://" + t : ""; };
+
+/** The website so far, from the answers so far (whatever isn't answered keeps its sample wording). `copy` is the written text for each topic. */
+export async function buildDesign(a: Answers, copy?: Copy | null, files?: DesignFiles | null): Promise<Design | null> {
   if (!a.kind || !TEMPLATES[a.kind]) return null;
   const kind = a.kind as Kind, tpl = TEMPLATES[kind], c: any = clone(await starter(kind)); tpl.prepare?.(c); c.festival = { ...(c.festival || {}), on: false }; // the festival overlay would hide the first screen of a preview
-  const name = (a.name || "").trim(), about = cap((a.about || "").trim()), city = (a.city || "").trim(), g = goals(a), items = lines(a.items);
-  const phone = (a.phone || "").trim(), email = (a.email || "").trim();
-  const theme = pickTheme(a);
+  const name = (a.name || "").trim(), about = cap((a.about || "").trim()), city = (a.city || "").trim(), g = goals(a), items = lines(a.items), usp = lines(a.usp), story = (a.story || "").trim();
+  const phone = (a.phone || "").trim(), email = (a.email || "").trim(), address = (a.address || "").trim(), hours = (a.hours || "").trim(), social = urlOf(a.social || "");
+  const theme = pickTheme(a), cp: Copy = copy || {}, noteOf = (n: string) => cp.items?.find((x) => x.name.toLowerCase() === n.toLowerCase())?.text || "";
   if (name) rebrand(c, "Picaffectz", name);
   const put = (path: string, v: any) => { const ks = path.split("."); let o = c; for (const x of ks.slice(0, -1)) { if (!o[x] || typeof o[x] !== "object") o[x] = {}; o = o[x]; } o[ks[ks.length - 1]] = v; };
   const seo = () => { if (name) put("seo.title", about ? `${name} · ${about}` : name); if (about) put("seo.description", `${about}${city ? " in " + city : ""}.`); };
+  const aboutText = cp.about_text || story;
 
   if (kind === "portfolio") {
     if (name) { const p = name.split(/\s+/); put("hero.firstName", p[0]); put("hero.lastName", p.slice(1).join(" ")); put("brand.logoText", name); put("contact.footerLeft", `© ${new Date().getFullYear()} ${name}`); }
     if (about) { put("hero.eyebrow", about + (city ? " · " + city : "")); put("hero.role", `I'm a ${about.toLowerCase()}${city ? " based in " + city : ""}. *Let's make something good together.*`); put("seo.description", `Portfolio of ${name || "me"}: ${about.toLowerCase()}.`); }
-    if (items.length >= 3) c.skills.items = items.slice(0, 6).map((t, i) => ({ ...c.skills.items[i % c.skills.items.length], tag: `${String(i + 1).padStart(2, "0")} / Skill`, title: t, body: "", detail: "" }));
+    if (cp.hero_text) put("hero.role", cp.hero_text);
+    if (items.length >= 3) c.skills.items = items.slice(0, 6).map((t, i) => ({ ...c.skills.items[i % c.skills.items.length], tag: `${String(i + 1).padStart(2, "0")} / Skill`, title: t, body: noteOf(t), detail: "" }));
     const first: Record<string, [string, string]> = { work: ["See my work ↓", "work"], hire: ["Hire me", "contact"], story: ["Read my story ↓", "about"], contact: ["Message me", "contact"] };
     if (g[0] && first[g[0]]) { put("hero.ctaPrimary", first[g[0]][0]); put("hero.ctaPrimaryTarget", first[g[0]][1]); }
     if (email) { put("contact.email", email); c.contact.links = (c.contact.links || []).filter((l: any) => !/linkedin/i.test(l.label)); }
     else c.contact.links = (c.contact.links || []).filter((l: any) => !/linkedin\.com\/?$/.test(l.url));
+    if (social) c.contact.links = [...(c.contact.links || []), { label: /instagram/.test(social) ? "Instagram" : "My page", url: social }];
+    if (cp.cta_text) put("contact.body", cp.cta_text);
     put("hero.ctaSecondary", ""); put("hero.ctaSecondaryUrl", "");
     seo();
   } else if (kind === "store") {
     if (name) put("brand.name", name);
-    if (about) { put("brand.tagline", about); put("home.hero.text", about + "."); put("shop.intro", `Everything from ${name || "our shop"}, in one place.`); put("portfolio.intro", about + "."); }
+    if (about) { put("brand.tagline", cp.tagline || about); put("home.hero.text", cp.hero_text || about + "."); put("shop.intro", `Everything from ${name || "our shop"}, in one place.`); put("portfolio.intro", aboutText || about + "."); }
     if (name) { put("home.hero.title", `Welcome to\n${name}`); put("portfolio.title", `About ${name}`); }
     put("brand.showAnnouncement", false);
     if (items.length) {
       const base = c.products, cat = { ...c.categories[0], id: "all", name: "Our range", description: about };
       c.categories = [cat];
-      c.products = items.map((l, i) => { const { name: n, price } = priced(l), s = clone(base[i % base.length]); return { ...s, id: "p" + (i + 1), slug: n.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "item-" + (i + 1), name: n, category: "all", price: price ? +price : 0, compareAt: 0, short: "", description: "", features: [], options: [], optionName: "" }; });
+      c.products = items.map((l, i) => { const { name: n, price } = priced(l), s = clone(base[i % base.length]), t = noteOf(n); return { ...s, id: "p" + (i + 1), slug: n.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "item-" + (i + 1), name: n, category: "all", price: price ? +price : 0, compareAt: 0, short: t, description: t, features: [], options: [], optionName: "" }; });
     }
+    if (usp.length) { put("home.banner.show", true); put("home.banner.title", usp[0]); put("home.banner.text", usp.slice(1).join(". ") || about); put("home.banner.cta", ""); }
     if (g.length) { const P = c.payments; P.cod.enabled = g.includes("cod"); P.upi.enabled = g.includes("upi"); P.razorpay.enabled = g.includes("card"); put("orders.sendVia", g.includes("whatsapp") || !phone ? "whatsapp" : "email"); }
     if (phone) { put("contact.phone", phone); put("contact.whatsapp", digits(phone)); put("orders.whatsapp", digits(phone)); }
     if (email) { put("contact.email", email); put("orders.email", email); }
-    if (city) put("contact.address", city);
+    if (address || city) put("contact.address", address || city);
+    if (social) put("contact.instagram", social);
     seo();
   } else if (kind === "business") {
     if (name) put("brand.name", name);
-    if (about) { put("brand.tagline", about); put("hero.title", about + "."); put("hero.lede", `${name || "We"}${city ? ", " + city : ""}. Get in touch and we'll take it from there.`); put("about.body", `${about}.`); put("cta.body", `Tell us what you need and we'll get back to you.`); }
+    if (about) { put("brand.tagline", cp.tagline || about); put("hero.title", about + "."); put("hero.lede", cp.hero_text || `${name || "We"}${city ? ", " + city : ""}. Get in touch and we'll take it from there.`); put("about.body", aboutText || `${about}.`); put("cta.body", cp.cta_text || `Tell us what you need and we'll get back to you.`); }
     if (city) { put("hero.eyebrow", city); put("contact.address", city); } else put("hero.eyebrow", "");
-    c.hero.badges = [];
-    if (items.length) c.services.items = items.slice(0, 6).map((t, i) => ({ ...c.services.items[i % c.services.items.length], title: t, body: `${t}${name ? " by " + name : ""}.`, points: [] }));
+    c.hero.badges = usp.slice(0, 4);
+    if (items.length) c.services.items = items.slice(0, 6).map((t, i) => ({ ...c.services.items[i % c.services.items.length], title: t, body: noteOf(t) || `${t}${name ? " by " + name : ""}.`, points: [] }));
     const cta: Record<string, [string, string]> = { quote: ["Ask for a quote", "contact"], call: ["Call us", "contact"], book: ["Book a visit", "contact"], whatsapp: ["WhatsApp us", "contact"] };
     if (g[0] && cta[g[0]]) { put("nav.cta", cta[g[0]][0]); put("hero.ctaPrimary", cta[g[0]][0]); put("cta.button", cta[g[0]][0]); }
     if (phone) { put("contact.phone", phone); put("contact.whatsapp", digits(phone)); }
@@ -249,10 +285,10 @@ export async function buildDesign(a: Answers): Promise<Design | null> {
     seo();
   } else {
     if (name) put("brand.name", name);
-    if (about) { put("brand.tagline", about); put("hero.eyebrow", about + (city ? " · " + city : "")); put("hero.lede", `${about}. Come hungry.`); put("about.body", `${name || "We"} serve ${about.toLowerCase()}${city ? " in " + city : ""}.`); }
+    if (about) { put("brand.tagline", cp.tagline || about); put("hero.eyebrow", about + (city ? " · " + city : "")); put("hero.lede", cp.hero_text || `${about}. Come hungry.`); put("about.body", aboutText || `${name || "We"} serve ${about.toLowerCase()}${city ? " in " + city : ""}.`); put("cta.body", cp.cta_text || "Book a table, or call us for takeaway."); }
     if (name) put("hero.title", name);
-    put("hero.stamp", ""); c.hero.badges = [];
-    if (items.length) c.specials.items = items.slice(0, 8).map((l, i) => { const { name: n, price } = priced(l); return { ...c.specials.items[i % c.specials.items.length], name: n, desc: "", price, tag: "", image: null }; });
+    put("hero.stamp", ""); c.hero.badges = usp.slice(0, 4);
+    if (items.length) c.specials.items = items.slice(0, 8).map((l, i) => { const { name: n, price } = priced(l); return { ...c.specials.items[i % c.specials.items.length], name: n, desc: noteOf(n), price, tag: "", image: null }; });
     const cta: Record<string, [string, string]> = { table: ["Book a table", "reserve"], order: ["Order online", "order"], menu: ["See the menu", "food"], event: ["Plan a party", "events"] };
     if (g[0] && cta[g[0]]) { put("nav.cta", cta[g[0]][0]); put("nav.ctaTarget", cta[g[0]][1]); put("hero.ctaPrimary", cta[g[0]][0]); put("hero.ctaPrimaryTarget", cta[g[0]][1]); }
     if (city) put("contact.address", city);
@@ -262,8 +298,50 @@ export async function buildDesign(a: Answers): Promise<Design | null> {
     seo();
   }
   tidy(kind, c, { name, about, city, g, items, phone, email });
+
+  // What only some types and answers add (after the starter's made-up parts are cleared).
+  if (kind === "business" || kind === "restaurant") {
+    if (address || city) put("contact.address", address || city);
+    if (a.pages) put("site.multiPage", a.pages === "multi");
+    if (social) c.footer.links = [{ label: /instagram/.test(social) ? "Instagram" : "Find us online", url: social }, ...(c.footer.links || [])];
+    if (cp.faq?.length) { put("faq.items", cp.faq); show(c, "faq"); }
+  }
+  if (kind === "business" && hours) put("contact.hours", hours);
+  if (kind === "restaurant" && hours) { put("hours.note", hours); put("hours.days", []); put("hours.showStatus", false); }
+  if (files?.logo && kind !== "portfolio") put("brand.logo", { url: files.logo });
+  if (kind === "restaurant" && files?.menu) { put("food.pdfUrl", "data:application/pdf;base64," + files.menu.b64); put("food.pdfLabel", "Download the menu (PDF)"); }
   if (theme) c.theme = { ...(c.theme || {}), ...tpl.themeValues(theme) };
   return { kind, content: c, themeId: theme?.id || "", themeName: theme?.name || "", summary: tpl.summary(c) };
+}
+const show = (c: any, ...ids: string[]) => { for (const x of c.sections || []) if (ids.includes(x.id)) { if ("visible" in x) x.visible = true; else x.show = true; } };
+
+/** The topics the person gave, as plain names (prices removed). */
+export const topicsOf = (a: Answers) => lines(a.items).map((l) => priced(l).name);
+
+/** Written text from the Picaffectz system, on this device: no AI service. It uses only what the person said. */
+export function systemCopy(a: Answers): Copy {
+  const kind = k(a), name = (a.name || "").trim() || "We", notes = [a.about, a.city ? "in " + a.city : "", a.story].filter(Boolean).join(". ");
+  let b: any = {};
+  try { b = systemWrite({ brand: name, notes, kind, text: [a.about, a.story, a.usp].filter(Boolean).join("\n") }).brief; } catch { /* a plain fallback below */ }
+  const tail: Record<Kind, string> = { portfolio: "done with care and attention to detail.", store: "chosen and made with care.", business: "done properly and explained clearly.", restaurant: "made fresh and served warm." };
+  const out: Copy = {
+    ...(b.brand_tagline ? { tagline: b.brand_tagline } : {}), ...(b.hero_text ? { hero_text: b.hero_text } : {}), ...(b.cta_text ? { cta_text: b.cta_text } : {}),
+    about_text: [(a.story || "").trim(), b.about_text].filter(Boolean).join("\n\n").slice(0, 900) || undefined,
+    items: topicsOf(a).map((n) => ({ name: n, text: `${n}, ${tail[kind]}` })),
+    ...(Array.isArray(b.faq) && b.faq.length ? { faq: b.faq.slice(0, 4).map((x: any) => ({ q: String(x.q), a: String(x.a) })) } : {}),
+  };
+  if (kind === "portfolio") delete out.faq;
+  return out;
+}
+/** The text for each topic: written by the Studio's own AI engine through its database when that is set up, otherwise by the Picaffectz system here. */
+export async function writeCopy(a: Answers, host: { api: string; studio: string } | null): Promise<{ copy: Copy; engine: string }> {
+  if (host) {
+    try {
+      const r = await fetch(host.api.replace(/\/+$/, "") + "/dq/write/" + encodeURIComponent(host.studio), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind: a.kind, brand: a.name, about: a.about, city: a.city, story: a.story, usp: a.usp, items: topicsOf(a) }) });
+      if (r.ok) { const j = await r.json(); if (j?.copy && Object.keys(j.copy).length) return { copy: j.copy, engine: j.engine }; }
+    } catch { /* the Picaffectz system writes instead */ }
+  }
+  return { copy: systemCopy(a), engine: "system" };
 }
 
 /** What Picaffectz needs to know, as a short message (for WhatsApp or email). */

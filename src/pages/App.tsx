@@ -9,7 +9,9 @@ import { ThemesPage } from "./ThemesPage";
 import { DesignPage } from "./DesignPage";
 import { StudioPageLinks, StudioPageView } from "./StudioPage";
 import { ReviewPage } from "./ReviewPage";
-import { useBrand } from "../lib/brand";
+import { setBrand, useBrand } from "../lib/brand";
+import { publicBrand } from "../lib/designapi";
+import { writeDesignSettings } from "../lib/designs";
 import { deviceSecret, loadHostConfig, type StudioHostCfg } from "../lib/studiohost";
 import { backendOf, isHosted } from "../lib/backend";
 import { StudioGate, sharedSource } from "../ui/StudioGate";
@@ -44,6 +46,17 @@ export function App() {
   const [host, setHost] = useState<StudioHostCfg | null | undefined>(undefined);
   // GitHub Pages can share the moved Studio's database (studio.share.json); ?data=github opens the older GitHub data.
   useEffect(() => { loadHostConfig().then((c) => setHost(c && sharedSource(c) && githubData() ? null : c)); }, []);
+  // Signed out on a Studio kept in Cloudflare: its own name, logo and colours (and whether Design yourself is on) come from its database, so the sign-in and public pages look like the Studio even on a browser that has never been signed in.
+  useEffect(() => {
+    if (!host || host.kind !== "cloudflare" || session) return;
+    let live = true;
+    publicBrand({ api: host.api, studio: host.studio }).then((b) => {
+      if (!live || !b) return;
+      setBrand({ name: b.name, logo: b.logo, v: b.v, tint: b.tint, mode: b.mode, anim: b.anim, layout: b.layout });
+      writeDesignSettings({ on: b.design.on });
+    });
+    return () => { live = false; };
+  }, [host?.kind, !!session]);
   // A Studio that signs in by email reaches its GitHub sites through its database, when that keeps a GitHub token.
   useEffect(() => {
     if (host?.kind !== "cloudflare") return;

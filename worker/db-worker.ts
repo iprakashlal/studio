@@ -449,6 +449,9 @@ async function ensure(env: Env) {
     env.DB.prepare("create index if not exists reviews_item on reviews (site, item, status)"),
     env.DB.prepare("create table if not exists pins (email text primary key, salt text not null, hash text not null, tries integer not null default 0, locked integer not null default 0, set_at text not null)"),
     env.DB.prepare("create table if not exists pin_dev (email text not null, dev text not null, at integer not null, primary key (email, dev))"),
+    env.DB.prepare("create table if not exists design_queries (id integer primary key autoincrement, studio text not null, name text not null default '', kind text not null default '', person text not null default '', phone text not null default '', email text not null default '', note text not null default '', answers text not null default '{}', copy text not null default '{}', logo text not null default '', pdf_name text not null default '', pdf text not null default '', status text not null default 'new', mail text not null default '', created_at text not null)"),
+    env.DB.prepare("create index if not exists design_queries_studio on design_queries (studio, id)"),
+    env.DB.prepare("create table if not exists dq_rate (k text primary key, n integer not null, exp integer not null)"),
     env.DB.prepare("create table if not exists payments (rz_order text primary key, site text not null, order_no text not null, amount integer not null, status text not null default 'created', created_at text not null)"),
   ]);
   ensured = true;
@@ -1255,12 +1258,122 @@ async function writeSite(env: Env, q: any) {
   return { brief, flagged, words: words(src).length };
 }
 
+
+/* ============================================================
+   Design yourself: a visitor answers a few questions on the Studio's own page, gets a preview, and sends the request.
+   The request is kept in this database (design_queries) and emailed to the Studio's owners. The Studio's own look
+   (GET /sb/<studio>) and its chosen AI engine are read from the Studio's own files here: nothing leaves this database
+   except the email and, when the owner chose Cloudflare AI or their own AI API, the text-writing call.
+   ============================================================ */
+const DQ_KINDS = ["portfolio", "store", "business", "restaurant"];
+const DQ_LABEL: Record<string, string> = { portfolio: "Personal website", store: "Online shop", business: "Business website", restaurant: "Restaurant or café" };
+const studioId = (x: string) => (/^[a-z0-9][a-z0-9-]{0,59}$/.test(x) ? x : "");
+async function studioIndex(env: Env, id: string): Promise<any | null> {
+  const f = await readFile(env, "studio:" + id, "studio.json"); if (!f) return null;
+  try { return JSON.parse(new TextDecoder().decode(f.bytes)); } catch { return null; }
+}
+/** At most `max` calls per `secs` for a key; false when over. */
+async function dqRate(env: Env, key: string, max: number, secs: number): Promise<boolean> {
+  await ensure(env); const now = Date.now();
+  const r: any = await env.DB.prepare("select n, exp from dq_rate where k = ?").bind(key).first();
+  if (!r || r.exp < now) { await env.DB.prepare("insert or replace into dq_rate (k, n, exp) values (?, 1, ?)").bind(key, now + secs * 1000).run(); return true; }
+  if (r.n >= max) return false;
+  await env.DB.prepare("update dq_rate set n = n + 1 where k = ?").bind(key).run(); return true;
+}
+const clip = (x: unknown, n: number) => String(x ?? "").replace(/\u0000/g, "").trim().slice(0, n);
+function dqStrings(o: any, keys: number, len: number): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(o && typeof o === "object" ? o : {}).slice(0, keys)) if (/^[a-z]{1,20}$/.test(k) && typeof v === "string") out[k] = v.slice(0, len);
+  return out;
+}
+function dqCopy(c: any) {
+  const out: any = {}; if (!c || typeof c !== "object") return out;
+  for (const k of ["tagline", "hero_text", "about_text", "cta_text"]) if (typeof c[k] === "string" && c[k].trim()) out[k] = c[k].trim().slice(0, 900);
+  if (Array.isArray(c.items)) out.items = c.items.slice(0, 12).filter((i: any) => i && typeof i.name === "string").map((i: any) => ({ name: clip(i.name, 120), text: clip(i.text, 260) }));
+  if (Array.isArray(c.faq)) out.faq = c.faq.slice(0, 6).filter((i: any) => i && typeof i.q === "string" && typeof i.a === "string").map((i: any) => ({ q: clip(i.q, 160), a: clip(i.a, 420) }));
+  return out;
+}
+const b64Of = (bytes: Uint8Array) => { let s = ""; for (let i = 0; i < bytes.length; i += 8192) s += String.fromCharCode(...bytes.subarray(i, i + 8192)); return btoa(s); };
+
+/** The Studio's name, logo and colours, for its sign-in and public pages (no secrets, nothing about the owner). */
+async function dqBrand(env: Env, id: string) {
+  const idx = await studioIndex(env, id); const b = idx?.brand;
+  if (!b || typeof b.name !== "string") return null;
+  let logo = "";
+  if (typeof b.logo === "string" && pathOk(b.logo)) { const f = await readFile(env, "studio:" + id, b.logo); if (f && f.bytes.length <= 150_000) logo = `data:${f.type || "image/png"};base64,${b64Of(f.bytes)}`; }
+  return { name: clip(b.name, 80), logo, v: +b.v || 0, tint: /^#[0-9a-f]{6}$/i.test(b.tint || "") ? b.tint : "", mode: b.mode === "light" ? "light" : "dark", anim: clip(b.anim, 20), layout: clip(b.layout, 20), design: { on: idx?.prefs?.design?.on !== false } };
+}
+
+async function dqSubmit(env: Env, id: string, req: Request, ctx?: { waitUntil(p: Promise<unknown>): void }): Promise<Response> {
+  await ensure(env);
+  const raw = await req.text(); if (raw.length > 2_000_000) return err(413, "That is too big. Use a smaller logo or PDF.");
+  let q: any; try { q = JSON.parse(raw || "{}"); } catch { return err(400, "Couldn't read the request."); }
+  if (q.website) return json({ ok: true });
+  if (!(await env.DB.prepare("select 1 from members where scope = ? limit 1").bind("studio:" + id).first())) return err(404, "Not found.");
+  const ip = req.headers.get("cf-connecting-ip") || "x";
+  if (!(await dqRate(env, "dq:" + id, 30, 3600)) || !(await dqRate(env, "dqip:" + ip, 6, 3600))) return err(429, "Too many requests just now. Please try again in a little while.");
+  const kind = DQ_KINDS.includes(q.kind) ? q.kind : "", person = clip(q.person, 80), phone = clip(q.phone, 30), email = clip(q.email, 120), note = clip(q.note, 1000), name = clip(q.name, 120);
+  if (!kind || !name) return err(400, "Something is missing from the design. Please start again.");
+  if (!person) return err(400, "Please tell us your name.");
+  if (!phone && !EMAIL_RE.test(email)) return err(400, "Please give a phone number or an email address so we can reach you.");
+  if (email && !EMAIL_RE.test(email)) return err(400, "That email address doesn't look right.");
+  const answers = dqStrings(q.answers, 40, 1500), copy = dqCopy(q.copy);
+  let logo = ""; if (typeof q.logo === "string" && /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(q.logo) && q.logo.length <= 160_000) logo = q.logo;
+  let pdf = "", pdfName = "";
+  if (q.pdf && typeof q.pdf.b64 === "string") { if (!/^JVBER/.test(q.pdf.b64) || q.pdf.b64.length > 1_700_000 || !/^[A-Za-z0-9+/=]+$/.test(q.pdf.b64)) return err(400, "The menu must be a PDF under 1.2 MB."); pdf = q.pdf.b64; pdfName = clip(q.pdf.name, 100) || "menu.pdf"; }
+  const made: any = await env.DB.prepare("insert into design_queries (studio, name, kind, person, phone, email, note, answers, copy, logo, pdf_name, pdf, created_at) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) returning id")
+    .bind(id, name, kind, person, phone, email, note, JSON.stringify(answers), JSON.stringify(copy), logo, pdfName, pdf, new Date().toISOString()).first();
+  // The request is kept either way; the email is a copy, so a mail problem never fails it.
+  const mail = (async () => {
+    let said = "";
+    try {
+      const owners = ((await env.DB.prepare("select email from members where scope = ? and role in ('owner', 'partner') order by role = 'owner' desc limit 3").bind("studio:" + id).all()).results || []).map((r: any) => r.email as string);
+      if (!owners.length) said = "Not emailed: no owner address.";
+      else if (!env.RESEND_API_KEY || !env.MAIL_FROM) said = "Not emailed: email (Resend) isn't set up on this database.";
+      else {
+        const rows: [string, string][] = [["Name", person], ["Phone", phone], ["Email", email], ["Type", DQ_LABEL[kind]], ["Website name", name], ["What they do", answers.about || ""], ["City", answers.city || ""], ["Pages", answers.pages || ""], ["Feel", answers.style || ""], ["Colour", answers.colour || ""], ["Items", (answers.items || "").replace(/\n/g, ", ")], ["Visitors can", answers.goal || ""], ["Hours", answers.hours || ""], ["Address", answers.address || ""], ["Note", note]];
+        const table = `<table style="border-collapse:collapse;margin:0 0 14px">${rows.filter(([, v]) => v).map(([k, v]) => `<tr><td style="padding:4px 12px 4px 0;color:#666;vertical-align:top">${hesc(k)}</td><td style="padding:4px 0">${hesc(v).replace(/\n/g, "<br>")}</td></tr>`).join("")}</table>`;
+        await sendMail(env, owners, `New website request: ${name} (${DQ_LABEL[kind]})`.slice(0, 150), WRAP(`<p style="margin:0 0 12px"><b>${hesc(person)}</b> designed a website on your Design yourself page and wants to take it forward.</p>${table}<p style="margin:0;color:#666">Open Projects → Design yourself Query in your Studio to see the preview.${pdf ? " A menu PDF is attached to the request there." : ""}</p>`), EMAIL_RE.test(email) ? email : undefined);
+      }
+    } catch (e: any) { said = "Not emailed: " + String(e?.message || e).slice(0, 200); }
+    if (said && made?.id) await env.DB.prepare("update design_queries set mail = ? where id = ?").bind(said, made.id).run().catch(() => {});
+  })();
+  if (ctx?.waitUntil) ctx.waitUntil(mail); else await mail;
+  return json({ ok: true });
+}
+
+async function dqWrite(env: Env, id: string, req: Request): Promise<Response> {
+  const ip = req.headers.get("cf-connecting-ip") || "x";
+  if (!(await dqRate(env, "dqai:" + id, 80, 3600)) || !(await dqRate(env, "dqaiip:" + ip, 12, 3600))) return json({ engine: "system", error: "busy" });
+  const idx = await studioIndex(env, id); if (!idx) return err(404, "Not found.");
+  const choice = idx?.ai?.engine === "custom" ? "custom" : idx?.ai?.engine === "system" ? "system" : "cloudflare";
+  let ai: any = null;
+  if (choice === "custom") { const c = await anySetting(env, "ai"); if (c?.on && c.key && c.model && publicUrl(String(c.base || "").trim())) ai = customAI(c); }
+  else if (choice === "cloudflare" && env.AI) ai = env.AI;
+  // The Picaffectz system (or an engine that isn't ready) writes on the visitor's own device.
+  if (!ai) return json({ engine: "system" });
+  let q: any; try { q = JSON.parse((await req.text()).slice(0, 20000) || "{}"); } catch { return err(400, "Couldn't read the request."); }
+  const kind = DQ_KINDS.includes(q.kind) ? q.kind : "business", brand = clip(q.brand, 80); if (!brand) return err(400, "Missing name.");
+  const items: string[] = (Array.isArray(q.items) ? q.items : []).slice(0, 8).map((x: any) => clip(x, 100)).filter(Boolean);
+  const facts = [["About", clip(q.about, 200)], ["City", clip(q.city, 60)], ["Their story", clip(q.story, 900)], ["What makes them special", clip(q.usp, 400)]].filter(([, v]) => v).map(([k, v]) => `${k}: ${v}`).join("\n");
+  const noun = kind === "store" ? "products" : kind === "restaurant" ? "dishes" : kind === "portfolio" ? "skills" : "services";
+  const sys = `You write short, friendly website text in plain words for a small ${DQ_LABEL[kind].toLowerCase()}. Use ONLY what the owner told you. Never invent facts: no years, numbers, prices, awards, client names, addresses or claims. Keep every line short and simple. Return JSON only: {"tagline": at most 8 words, "hero_text": at most 30 words, "about_text": two short paragraphs, at most 70 words in all, "cta_text": at most 14 words, "items": [{"name": the ${noun.slice(0, -1)} exactly as given, "text": one sentence of at most 18 words describing it without inventing facts}] in the same order, "faq": [{"q": question, "a": answer}] three general questions a customer might ask, answered without inventing facts}.`;
+  const user = `Name: ${brand}\n${facts}\n${noun}: ${items.join("; ") || "(none given)"}`;
+  try {
+    const r: any = await ai.run("@cf/meta/llama-3.3-70b-instruct-fp8-fast", { messages: [{ role: "system", content: sys }, { role: "user", content: user }], max_tokens: 1200, temperature: 0.7, response_format: { type: "json_object" } });
+    const t = typeof r?.response === "string" ? r.response : JSON.stringify(r?.response ?? r);
+    let j: any; try { j = JSON.parse(t); } catch { const m = /\{[\s\S]*\}/.exec(t); j = m ? JSON.parse(m[0]) : null; }
+    const copy = dqCopy(j); if (!Object.keys(copy).length) return json({ engine: "system", error: "unreadable" });
+    return json({ engine: choice, copy });
+  } catch (e: any) { return json({ engine: "system", error: String(e?.message || e).slice(0, 160) }); }
+}
+
 export default {
   async fetch(req: Request, env: Env, ctx?: { waitUntil(p: Promise<unknown>): void }): Promise<Response> {
     if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
     const u = new URL(req.url), p = u.pathname.replace(/\/+$/, "") || "/";
     try {
-      if (p === "/") return json({ ok: true, service: "site-studio-db", v: V, mail: !!(env.RESEND_API_KEY && env.MAIL_FROM), ...(env.CF_TOKEN && env.CF_ACCOUNT ? { deploy: true, account: env.CF_ACCOUNT } : {}), ...(env.GH_TOKEN ? { gh: true } : {}), ...(env.AI ? { ai: true, pamphlet: 2 } : {}), reviews: true, look: 1, outline: 1, pictures: 1, connect: 2, translate: 4, approvals: 1, accounts: 2, cfx: 4, cfa: 1, google: 1, studioPages: 1, del: 1, enqMail: 3, ...(otherAccounts(env).length ? { more: otherAccounts(env).length } : {}) });
+      if (p === "/") return json({ ok: true, service: "site-studio-db", v: V, mail: !!(env.RESEND_API_KEY && env.MAIL_FROM), ...(env.CF_TOKEN && env.CF_ACCOUNT ? { deploy: true, account: env.CF_ACCOUNT } : {}), ...(env.GH_TOKEN ? { gh: true } : {}), ...(env.AI ? { ai: true, pamphlet: 2 } : {}), reviews: true, dq: 1, look: 1, outline: 1, pictures: 1, connect: 2, translate: 4, approvals: 1, accounts: 2, cfx: 4, cfa: 1, google: 1, studioPages: 1, del: 1, enqMail: 3, ...(otherAccounts(env).length ? { more: otherAccounts(env).length } : {}) });
 
       // The owner's own AI API in the place of Workers AI, when a request asks for it.
       if (p.startsWith("/ai/") && u.searchParams.get("engine") === "custom") {
@@ -1760,6 +1873,14 @@ export default {
         const L = got.live;
         return json({ no, at: hit.created_at, status: got.status, total: String(hd.total || ""), paid: hd._paid === "yes", track: trackShown(trackOf(hd)), live: L ? { st: L.st, label: TRACK_STATES[L.st] || L.say, say: L.say, eta: L.eta, link: L.link, ev: L.ev, at: L.t } : null });
       }
+      // ---- Design yourself (public): the Studio's own look, the request, and the text writer. See dqSubmit / dqWrite.
+      if (p.startsWith("/sb/") && req.method === "GET") {
+        const id = studioId(p.split("/")[2] || ""); const b = id ? await dqBrand(env, id) : null; if (!b) return err(404, "Not found.");
+        return new Response(JSON.stringify(b), { headers: { ...cors, "Content-Type": "application/json", "Cache-Control": "public, max-age=60" } });
+      }
+      if (p.startsWith("/dq/write/") && req.method === "POST") { const id = studioId(p.split("/")[3] || ""); if (!id) return err(404, "Not found."); return dqWrite(env, id, req); }
+      if (/^\/dq\/[a-z0-9-]+$/.test(p) && !["/dq/list", "/dq/get", "/dq/status", "/dq/delete"].includes(p) && req.method === "POST") { const id = studioId(p.split("/")[2]); if (!id) return err(404, "Not found."); return dqSubmit(env, id, req, ctx); }
+
       if (p.startsWith("/enquire/") && req.method === "POST") {
         const site = p.split("/")[2]; if (!/^[a-z0-9][a-z0-9-]{0,59}$/.test(site)) return err(404, "Not found.");
         const raw = await req.text(); if (raw.length > 20000) return err(413, "Too long.");
@@ -2373,6 +2494,20 @@ export default {
         const next = Math.max(0, (+row.points || 0) + d), real = next - (+row.points || 0);
         await env.DB.batch([env.DB.prepare("update customers set points = ? where site = ? and ckey = ?").bind(next, site, key), env.DB.prepare("insert into points (site, ckey, delta, why, order_no, at) values (?, ?, ?, ?, '', ?)").bind(site, key, real, oneLine(String(b.why || "Changed by the owner")).slice(0, 120), new Date().toISOString())]);
         return json({ ok: true, points: next });
+      }
+      // ---- Design yourself requests, for the Studio's members
+      if (p === "/dq/list" || p === "/dq/get" || p === "/dq/status" || p === "/dq/delete") {
+        if (!scope.startsWith("studio:")) return err(400, "Unknown scope.");
+        await ensure(env); const sid = scope.slice(7);
+        if (p === "/dq/list") {
+          const rows = (await env.DB.prepare("select id, name, kind, person, phone, email, note, answers, copy, status, mail, pdf_name, (logo != '') as has_logo, created_at from design_queries where studio = ? order by id desc limit 300").bind(sid).all()).results || [];
+          return json(rows.map((r: any) => ({ ...r, answers: JSON.parse(r.answers || "{}"), copy: JSON.parse(r.copy || "{}"), has_logo: !!r.has_logo })));
+        }
+        const b: any = req.method === "POST" ? await req.json().catch(() => ({})) : {}, qid = Math.floor(+(b.id ?? u.searchParams.get("id")) || 0);
+        if (!qid) return err(400, "Which request?");
+        if (p === "/dq/get") { const r: any = await env.DB.prepare("select logo, pdf_name, pdf from design_queries where studio = ? and id = ?").bind(sid, qid).first(); return r ? json(r) : err(404, "Not found."); }
+        if (p === "/dq/status") { if (!["new", "read", "done"].includes(b.status)) return err(400, "Unknown status."); await env.DB.prepare("update design_queries set status = ? where studio = ? and id = ?").bind(b.status, sid, qid).run(); return json({ ok: true }); }
+        await env.DB.prepare("delete from design_queries where studio = ? and id = ?").bind(sid, qid).run(); return json({ ok: true });
       }
       if (p === "/e/list") {
         const site = scope.replace(/^site:/, "");

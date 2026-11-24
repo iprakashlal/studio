@@ -217,7 +217,7 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
   }
 
   const only = /^type\/([a-z]+)$/.exec(route)?.[1];
-  return <>{header}<Dashboard key={(only || "all") + (route === "designs" ? "-d" : "")} designsTab={route === "designs" && !hid("design")} studio={studio} index={index} onIndex={setIndex} token={session.token} hid={hid} max={limits.max} only={only && TEMPLATES[only] ? only : undefined} /><footer className="py-6"><StudioPageLinks host={null} repo={repo} where="footer" /></footer></>;
+  return <>{header}<Dashboard key={(only || "all") + (route === "designs" ? "-d" : route === "design-queries" ? "-q" : "")} designsTab={hid("design") ? "" : route === "designs" ? "previews" : route === "design-queries" ? "queries" : ""} studio={studio} index={index} onIndex={setIndex} token={session.token} hid={hid} max={limits.max} only={only && TEMPLATES[only] ? only : undefined} /><footer className="py-6"><StudioPageLinks host={null} repo={repo} where="footer" /></footer></>;
 }
 
 /** Settings → Help: guided tours of the Studio, end to end. */

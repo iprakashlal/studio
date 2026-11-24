@@ -1238,7 +1238,7 @@ const SEC={
   skills(c){const S=c.skills,t=c.theme;const tr=["translateZ(calc(var(--s)/2))","rotateY(90deg) translateZ(calc(var(--s)/2))","rotateY(180deg) translateZ(calc(var(--s)/2))","rotateY(-90deg) translateZ(calc(var(--s)/2))","rotateX(90deg) translateZ(calc(var(--s)/2))","rotateX(-90deg) translateZ(calc(var(--s)/2))"];
     const faces=S.items.slice(0,6).map((it,i)=>{const bg=colHex(t,it.color);return `<div class="face" style="background:${bg};color:${onColor(bg)};transform:${tr[i]}">${shp(it.shape,"currentColor",80)}<span class="m">${esc(it.tag)}</span><h3>${esc(it.title)}</h3><p>${esc(it.body)}</p></div>`}).join("");
     const list=S.items.slice(0,6).map((it,i)=>`<button class="skill${i?"":" on"}" data-face="${i}" type="button">${shp(it.shape,colVar(it.color==="surface"||it.color==="deep"?"text":it.color),22)}<div><h4>${esc(it.title)}</h4><p>${esc(it.detail)}</p></div></button>`).join("");
-    return `<section id="skills" class="sec tight"><div class="wrap">${head(S,S.lede)}<div class="cube-grid"><div class="scene" id="scene"><div class="cube" id="cube">${faces}</div></div><div class="skill-list">${list}</div></div></div></section>`},
+    return `<section id="skills" class="sec tight"><div class="wrap">${head(S,/cube/i.test(S.lede||"")&&(t.skills==="grid"||t.skills==="rows")?"A few things I do well, and how I like to work.":S.lede)}<div class="cube-grid"><div class="scene" id="scene"><div class="cube" id="cube">${faces}</div></div><div class="skill-list">${list}</div></div></div></section>`},
   work(c){const W=c.work,t=c.theme,n=W.items.length;
     const slots=[["right:20px;top:10px",160],["right:120px;top:120px",110],["right:10px;top:170px",90]];
     const cards=W.items.map((it,i)=>{const bg=colHex(t,it.color),fg=onColor(bg);

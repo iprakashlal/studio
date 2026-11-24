@@ -1295,13 +1295,36 @@ function dqCopy(c: any) {
 }
 const b64Of = (bytes: Uint8Array) => { let s = ""; for (let i = 0; i < bytes.length; i += 8192) s += String.fromCharCode(...bytes.subarray(i, i + 8192)); return btoa(s); };
 
+/** The owner's Design yourself choices that a visitor's page needs: on or off, colour palettes and layout choices (checked again by the page). */
+function dqDesignPub(d: any) {
+  const out: any = { on: d?.on !== false }; if (!d || typeof d !== "object") return out;
+  const HEX = /^#[0-9a-f]{6}$/i, KEY = /^[A-Za-z]{1,20}$/;
+  if (Array.isArray(d.sets)) out.sets = d.sets.slice(0, 12).filter((x: any) => x && typeof x.name === "string" && x.colours && typeof x.colours === "object").map((x: any) => ({ name: clip(x.name, 30), colours: Object.fromEntries(Object.entries(x.colours).filter(([k, v]) => /^[a-z][a-z0-9]{0,11}$/.test(k) && typeof v === "string" && HEX.test(v as string)).slice(0, 9)) }));
+  if (typeof d.pick === "boolean") out.pick = d.pick;
+  if (d.look && typeof d.look === "object") {
+    const look: any = {};
+    for (const kind of ["business", "restaurant", "portfolio", "store"]) {
+      const src = d.look[kind]; if (!src || typeof src !== "object") continue;
+      const rules: any = {};
+      for (const key of Object.keys(src).slice(0, 30)) {
+        const r = src[key]; if (!KEY.test(key) || !r || typeof r !== "object") continue;
+        const o: any = {}; if (typeof r.d === "string") o.d = clip(r.d, 30); if (Array.isArray(r.a)) o.a = r.a.filter((v: any) => typeof v === "string").slice(0, 60).map((v: string) => clip(v, 30)); if (r.h === true) o.h = true;
+        rules[key] = o;
+      }
+      look[kind] = rules;
+    }
+    out.look = look;
+  }
+  return JSON.stringify(out).length > 12000 ? { on: out.on } : out;
+}
+
 /** The Studio's name, logo and colours, for its sign-in and public pages (no secrets, nothing about the owner). */
 async function dqBrand(env: Env, id: string) {
   const idx = await studioIndex(env, id); const b = idx?.brand;
   if (!b || typeof b.name !== "string") return null;
   let logo = "";
   if (typeof b.logo === "string" && pathOk(b.logo)) { const f = await readFile(env, "studio:" + id, b.logo); if (f && f.bytes.length <= 150_000) logo = `data:${f.type || "image/png"};base64,${b64Of(f.bytes)}`; }
-  return { name: clip(b.name, 80), logo, v: +b.v || 0, tint: /^#[0-9a-f]{6}$/i.test(b.tint || "") ? b.tint : "", mode: b.mode === "light" ? "light" : "dark", anim: clip(b.anim, 20), layout: clip(b.layout, 20), design: { on: idx?.prefs?.design?.on !== false } };
+  return { name: clip(b.name, 80), logo, v: +b.v || 0, tint: /^#[0-9a-f]{6}$/i.test(b.tint || "") ? b.tint : "", mode: b.mode === "light" ? "light" : "dark", anim: clip(b.anim, 20), layout: clip(b.layout, 20), design: dqDesignPub(idx?.prefs?.design) };
 }
 
 async function dqSubmit(env: Env, id: string, req: Request, ctx?: { waitUntil(p: Promise<unknown>): void }): Promise<Response> {

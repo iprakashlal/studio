@@ -53,7 +53,7 @@ export function App() {
     publicBrand({ api: host.api, studio: host.studio }).then((b) => {
       if (!live || !b) return;
       setBrand({ name: b.name, logo: b.logo, v: b.v, tint: b.tint, mode: b.mode, anim: b.anim, layout: b.layout });
-      writeDesignSettings({ on: b.design.on });
+      writeDesignSettings(b.design);
     });
     return () => { live = false; };
   }, [host?.kind, !!session]);

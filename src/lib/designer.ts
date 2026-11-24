@@ -6,7 +6,8 @@ import { REST_THEMES } from "../themes/restaurant";
 import { TEMPLATES } from "../schema";
 import { loadStarter } from "./exporter";
 import { systemWrite } from "./syswrite";
-import type { Copy } from "./designs";
+import { readDesignSettings, type Copy } from "./designs";
+import { lookValues, readColsAnswer } from "./designlook";
 
 export type Kind = "portfolio" | "store" | "business" | "restaurant";
 export type Answers = Record<string, string>;
@@ -42,6 +43,9 @@ export function tweakTheme(t: Theme, a: Answers): Theme {
   if (a.mode === "light" || a.mode === "dark") { Object.assign(o.colors, a.mode === "light" ? LIGHT : DARKK); o.dark = a.mode === "dark"; }
   if (/^#[0-9a-f]{6}$/i.test(a.accent || "")) { o.colors.c1 = a.accent; o.colors.c2 = a.accent; }
   if (a.corners && /^\d{1,2}$/.test(a.corners)) o.radius = +a.corners;
+  const own = readColsAnswer(a.cols); // the person's own colours (the palette editor) come last
+  for (const key of Object.keys(own)) (o.colors as any)[key] = own[key];
+  if (own.bg && !a.mode) o.dark = (parseInt(own.bg.slice(1, 3), 16) * 299 + parseInt(own.bg.slice(3, 5), 16) * 587 + parseInt(own.bg.slice(5, 7), 16) * 114) / 1000 < 128;
   return o;
 }
 
@@ -385,7 +389,7 @@ export async function buildDesign(a: Answers, copy?: Copy | null, files?: Design
   if (kind === "restaurant" && hours) { put("hours.note", hours); put("hours.days", []); put("hours.showStatus", false); }
   if (files?.logo && kind !== "portfolio") put("brand.logo", { url: files.logo });
   if (kind === "restaurant" && files?.menu) { put("food.pdfUrl", "data:application/pdf;base64," + files.menu.b64); put("food.pdfLabel", "Download the menu (PDF)"); }
-  if (theme) c.theme = { ...(c.theme || {}), ...tpl.themeValues(tweakTheme(theme, a)) };
+  if (theme) c.theme = { ...(c.theme || {}), ...tpl.themeValues(tweakTheme(theme, a)), ...lookValues(kind, a.look, readDesignSettings()) };
   return { kind, content: c, themeId: theme?.id || "", themeName: theme?.name || "", summary: tpl.summary(c) };
 }
 const show = (c: any, ...ids: string[]) => { for (const x of c.sections || []) if (ids.includes(x.id)) { if ("visible" in x) x.visible = true; else x.show = true; } };

@@ -38,7 +38,7 @@ const DEVICES = [
 /** The content shown in a preview: the same, with the "Powered by" badge turned off. */
 const quiet = (c: any) => (c && typeof c === "object" ? { ...c, poweredBy: { ...(c.poweredBy || {}), show: false } } : c);
 
-export function Preview({ tpl, base, content, version, assets, editable = true }: { tpl: TemplateDef; base: string; content: any; version: number; assets: Record<string, string>; editable?: boolean }) {
+export function Preview({ tpl, base, content, version, assets, editable = true, hidePages = false }: { tpl: TemplateDef; base: string; content: any; version: number; assets: Record<string, string>; editable?: boolean; /** No page list (a single-site preview). */ hidePages?: boolean }) {
   const frame = useRef<HTMLIFrameElement>(null);
   const box = useRef<HTMLDivElement>(null);
   const [device, setDevice] = useState<(typeof DEVICES)[number]["id"]>("desktop");
@@ -98,7 +98,7 @@ export function Preview({ tpl, base, content, version, assets, editable = true }
     <div className="flex min-h-0 flex-1 flex-col bg-ink-950">
       <div className="flex flex-wrap items-center gap-2 border-b border-ink-700 px-3 py-2">
         <span className="text-xs font-bold uppercase tracking-wider text-ink-400">Live preview</span>
-        {pages.length > 1 && (
+        {!hidePages && pages.length > 1 && (
           <select aria-label="Preview page" className="input w-auto max-w-[260px] py-1.5 text-[13px]" value={page} onChange={(e) => go(e.target.value)}>
             {!pages.some((p) => p.file === page) && <option value={page}>{page}</option>}
             {pages.map((p) => <option key={p.file} value={p.file}>{p.label}</option>)}

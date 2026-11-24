@@ -25,7 +25,7 @@ create index if not exists approvals_project on approvals (scope, project, creat
 create table if not exists approval_notes (id integer primary key autoincrement, token text not null, who text not null, body text not null, page text not null default '', kind text not null default 'comment', created_at text not null);
 create index if not exists approval_notes_token on approval_notes (token, id);
 `;
-var CFDB_VERSION = 59;
+var CFDB_VERSION = 60;
 var CFDB_WORKER_NAME = "picaffectz-db";
 
 // src/lib/lookdigest.ts
@@ -2287,6 +2287,33 @@ var b64Of = (bytes) => {
   for (let i = 0; i < bytes.length; i += 8192) s += String.fromCharCode(...bytes.subarray(i, i + 8192));
   return btoa(s);
 };
+function dqDesignPub(d) {
+  const out = { on: d?.on !== false };
+  if (!d || typeof d !== "object") return out;
+  const HEX = /^#[0-9a-f]{6}$/i, KEY = /^[A-Za-z]{1,20}$/;
+  if (Array.isArray(d.sets)) out.sets = d.sets.slice(0, 12).filter((x) => x && typeof x.name === "string" && x.colours && typeof x.colours === "object").map((x) => ({ name: clip(x.name, 30), colours: Object.fromEntries(Object.entries(x.colours).filter(([k, v]) => KEY.test(k) && typeof v === "string" && HEX.test(v)).slice(0, 9)) }));
+  if (typeof d.pick === "boolean") out.pick = d.pick;
+  if (d.look && typeof d.look === "object") {
+    const look = {};
+    for (const kind of ["business", "restaurant", "portfolio", "store"]) {
+      const src = d.look[kind];
+      if (!src || typeof src !== "object") continue;
+      const rules = {};
+      for (const key of Object.keys(src).slice(0, 30)) {
+        const r = src[key];
+        if (!KEY.test(key) || !r || typeof r !== "object") continue;
+        const o = {};
+        if (typeof r.d === "string") o.d = clip(r.d, 30);
+        if (Array.isArray(r.a)) o.a = r.a.filter((v) => typeof v === "string").slice(0, 60).map((v) => clip(v, 30));
+        if (r.h === true) o.h = true;
+        rules[key] = o;
+      }
+      look[kind] = rules;
+    }
+    out.look = look;
+  }
+  return JSON.stringify(out).length > 12e3 ? { on: out.on } : out;
+}
 async function dqBrand(env, id) {
   const idx = await studioIndex(env, id);
   const b = idx?.brand;
@@ -2296,7 +2323,7 @@ async function dqBrand(env, id) {
     const f = await readFile(env, "studio:" + id, b.logo);
     if (f && f.bytes.length <= 15e4) logo = `data:${f.type || "image/png"};base64,${b64Of(f.bytes)}`;
   }
-  return { name: clip(b.name, 80), logo, v: +b.v || 0, tint: /^#[0-9a-f]{6}$/i.test(b.tint || "") ? b.tint : "", mode: b.mode === "light" ? "light" : "dark", anim: clip(b.anim, 20), layout: clip(b.layout, 20), design: { on: idx?.prefs?.design?.on !== false } };
+  return { name: clip(b.name, 80), logo, v: +b.v || 0, tint: /^#[0-9a-f]{6}$/i.test(b.tint || "") ? b.tint : "", mode: b.mode === "light" ? "light" : "dark", anim: clip(b.anim, 20), layout: clip(b.layout, 20), design: dqDesignPub(idx?.prefs?.design) };
 }
 async function dqSubmit(env, id, req, ctx) {
   await ensure(env);

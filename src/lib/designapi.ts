@@ -22,7 +22,7 @@ export const setQueryStatus = (h: DesignHost, id: number, status: string) => cfC
 export const deleteQuery = (h: DesignHost, id: number) => cfCall(h.api, `/dq/delete?${sc(h)}`, { method: "POST", body: JSON.stringify({ id }) });
 
 /** The Studio's name, logo and colours, as kept in its database (for people who aren't signed in). */
-export type PublicBrand = { name: string; logo: string; v: number; tint: string; mode: "light" | "dark"; anim: string; layout: string; design: { on: boolean } };
+export type PublicBrand = { name: string; logo: string; v: number; tint: string; mode: "light" | "dark"; anim: string; layout: string; design: import("./designs").DesignSettings & { on: boolean } };
 export async function publicBrand(h: DesignHost): Promise<PublicBrand | null> {
   try { return await cfCall<PublicBrand>(h.api, "/sb/" + encodeURIComponent(h.studio), { auth: false }); } catch { return null; }
 }

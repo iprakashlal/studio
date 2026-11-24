@@ -2,6 +2,7 @@ import { BrandMark, useBrand } from "../lib/brand";
 import { STUDIO_BUILD } from "../build-info";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { THEMES, THEME_TAGS, portfolioThemeValues, storeThemeValues, type Theme } from "../themes/catalog";
+import { samplePicture } from "../lib/designer";
 import { BIZ_TAGS, BIZ_THEMES, businessThemeValues } from "../themes/business";
 import { REST_TAGS, REST_THEMES, restaurantThemeValues } from "../themes/restaurant";
 import { limitThemes } from "../themes/limit";
@@ -40,7 +41,13 @@ function link(p: { v: Kind; t?: string; list?: string[] }) {
   return location.origin + location.pathname + "#/themes" + (s ? "?" + s : "");
 }
 const values = (k: Kind, t: Theme) => (k === "store" ? storeThemeValues(t) : k === "business" ? businessThemeValues(t) : k === "restaurant" ? restaurantThemeValues(t) : portfolioThemeValues(t));
-const withTheme = (sample: any, k: Kind, t: Theme) => sample && { ...sample, theme: { ...(sample.theme || {}), ...values(k, t) } };
+// Business and restaurant sample pages have no photo, which leaves the picture side of many heroes empty: a sample picture in the theme's colours stands in (as in Design yourself).
+const withTheme = (sample: any, k: Kind, t: Theme) => {
+  if (!sample) return sample;
+  const out = { ...sample, theme: { ...(sample.theme || {}), ...values(k, t) } };
+  if ((k === "business" || k === "restaurant") && !sample.hero?.image?.url && !sample.hero?.video) out.hero = { ...(sample.hero || {}), image: { url: samplePicture(t.colors.c1, t.colors.c3 || t.colors.c2, t.colors.surface) } };
+  return out;
+};
 const readList = (): string[] => { try { return JSON.parse(localStorage.getItem(LS) || "[]").filter((id: string) => ALL.some((t) => t.id === id)); } catch { return []; } };
 
 export function ThemesPage({ signedIn }: { signedIn: boolean }) {

@@ -35,6 +35,9 @@ const DEVICES = [
 ] as const;
 
 /** `editable: false` (the Themes page): no click-to-edit, since there are no fields to open there. */
+/** The content shown in a preview: the same, with the "Powered by" badge turned off. */
+const quiet = (c: any) => (c && typeof c === "object" ? { ...c, poweredBy: { ...(c.poweredBy || {}), show: false } } : c);
+
 export function Preview({ tpl, base, content, version, assets, editable = true }: { tpl: TemplateDef; base: string; content: any; version: number; assets: Record<string, string>; editable?: boolean }) {
   const frame = useRef<HTMLIFrameElement>(null);
   const box = useRef<HTMLDivElement>(null);
@@ -43,7 +46,7 @@ export function Preview({ tpl, base, content, version, assets, editable = true }
   const [src, setSrc] = useState(pageUrl(base, tpl.pages[0].file));
   const [size, setSize] = useState({ w: 600, h: 600 });
   const latest = useRef({ content, assets });
-  latest.current = { content, assets };
+  latest.current = { content: quiet(content), assets }; // the "Powered by" badge only belongs on a published site, not in a preview
   const [editOn, setEditOn] = useState(() => editable && editPref());
   const live = useRef({ editOn, idx: contentIndex(content), tpl, content, assets });
   live.current = { editOn, idx: live.current.content === content && live.current.idx ? live.current.idx : contentIndex(content), tpl, content, assets };

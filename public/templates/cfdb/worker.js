@@ -25,7 +25,7 @@ create index if not exists approvals_project on approvals (scope, project, creat
 create table if not exists approval_notes (id integer primary key autoincrement, token text not null, who text not null, body text not null, page text not null default '', kind text not null default 'comment', created_at text not null);
 create index if not exists approval_notes_token on approval_notes (token, id);
 `;
-var CFDB_VERSION = 63;
+var CFDB_VERSION = 64;
 var CFDB_WORKER_NAME = "picaffectz-db";
 
 // src/lib/lookdigest.ts
@@ -2291,10 +2291,7 @@ function dqDesignPub(d) {
   const out = { on: d?.on !== false };
   if (!d || typeof d !== "object") return out;
   const HEX = /^#[0-9a-f]{6}$/i, KEY = /^[A-Za-z]{1,20}$/;
-  if (Array.isArray(d.sets)) out.sets = d.sets.slice(0, 12).filter((x) => x && typeof x.name === "string" && x.colours && typeof x.colours === "object").map((x) => ({ name: clip(x.name, 30), colours: Object.fromEntries(Object.entries(x.colours).filter(([k, v]) => /^[a-z][a-z0-9]{0,11}$/.test(k) && typeof v === "string" && HEX.test(v)).slice(0, 9)) }));
   if (typeof d.pick === "boolean") out.pick = d.pick;
-  if (Array.isArray(d.backgrounds)) out.backgrounds = d.backgrounds.filter((c) => typeof c === "string" && HEX.test(c)).slice(0, 16);
-  if (Array.isArray(d.accents)) out.accents = d.accents.filter((c) => typeof c === "string" && HEX.test(c)).slice(0, 16);
   if (d.themes && typeof d.themes === "object") {
     const th = {};
     for (const kind of ["business", "restaurant", "portfolio", "store"]) if (Array.isArray(d.themes[kind])) th[kind] = d.themes[kind].filter((v) => typeof v === "string" && /^[A-Za-z0-9_-]{1,40}$/.test(v)).slice(0, 400);
@@ -2426,17 +2423,61 @@ async function dqRead(env, id, req) {
   if (!text && !title) return json({ error: "That page has no readable text (it may need JavaScript to show its content)." });
   return json({ title, site, description, text });
 }
-async function dqWrite(env, id, req) {
-  const ip = req.headers.get("cf-connecting-ip") || "x";
-  if (!await dqRate(env, "dqai:" + id, 80, 3600) || !await dqRate(env, "dqaiip:" + ip, 12, 3600)) return json({ engine: "system", error: "busy" });
-  const idx = await studioIndex(env, id);
-  if (!idx) return err(404, "Not found.");
-  const choice = idx?.ai?.engine === "custom" ? "custom" : idx?.ai?.engine === "system" ? "system" : "cloudflare";
+async function dqEngine(env, idx) {
+  const mine = idx?.prefs?.design?.ai, g = idx?.ai?.engine;
+  const choice = mine === "custom" || mine === "system" || mine === "cloudflare" ? mine : g === "custom" ? "custom" : g === "system" ? "system" : "cloudflare";
   let ai = null;
   if (choice === "custom") {
     const c = await anySetting(env, "ai");
     if (c?.on && c.key && c.model && publicUrl(String(c.base || "").trim())) ai = customAI(c);
   } else if (choice === "cloudflare" && env.AI) ai = env.AI;
+  return { choice, ai };
+}
+async function dqUnderstand(env, id, req) {
+  const ip = req.headers.get("cf-connecting-ip") || "x";
+  if (!await dqRate(env, "dqun:" + id, 80, 3600) || !await dqRate(env, "dqunip:" + ip, 12, 3600)) return json({ engine: "system", error: "busy" });
+  const idx = await studioIndex(env, id);
+  if (!idx) return err(404, "Not found.");
+  const { choice, ai } = await dqEngine(env, idx);
+  if (!ai) return json({ engine: "system" });
+  let q;
+  try {
+    q = JSON.parse((await req.text()).slice(0, 2e4) || "{}");
+  } catch {
+    return err(400, "Couldn't read the request.");
+  }
+  const kind = DQ_KINDS.includes(q.kind) ? q.kind : "business", text = clip(q.text, 9e3);
+  if (text.length < 30) return json({ engine: "system" });
+  const sys = `You read the text of a ${DQ_LABEL[kind].toLowerCase()}'s document or web page and pick out facts for a website. Use ONLY facts written in the text. Never invent anything. Leave out what isn't there. Reply with JSON only: {"name": short name (max 45 chars), "about": what they do in one short line (max 100 chars), "city": city or area, "story": 1-2 plain sentences about them (max 300 chars), "usp": what makes them special (max 160 chars), "items": up to 8 short names of the ${kind === "store" ? "products" : kind === "restaurant" ? "dishes" : kind === "portfolio" ? "skills" : "services"} they offer, "phone": phone number, "email": email address, "hours": opening hours in one line, "address": street address, "social": Instagram address}. Use plain words.`;
+  try {
+    const r = await ai.run("@cf/meta/llama-3.3-70b-instruct-fp8-fast", { messages: [{ role: "system", content: sys }, { role: "user", content: text }], max_tokens: 700, temperature: 0.1, response_format: { type: "json_object" } });
+    const t = typeof r?.response === "string" ? r.response : JSON.stringify(r?.response ?? r);
+    let j;
+    try {
+      j = JSON.parse(t);
+    } catch {
+      const m = /\{[\s\S]*\}/.exec(t);
+      j = m ? JSON.parse(m[0]) : null;
+    }
+    if (!j || typeof j !== "object") return json({ engine: "system", error: "unreadable" });
+    const f = {};
+    for (const [k, n] of [["name", 60], ["about", 110], ["city", 60], ["story", 400], ["usp", 200], ["phone", 30], ["email", 80], ["hours", 90], ["address", 140], ["social", 120]]) {
+      const v = clip(j[k], n);
+      if (v) f[k] = v;
+    }
+    const items = (Array.isArray(j.items) ? j.items : []).map((x) => clip(x, 60)).filter(Boolean).slice(0, 8);
+    if (items.length) f.items = items;
+    return json({ engine: choice, fields: f });
+  } catch (e) {
+    return json({ engine: "system", error: String(e?.message || e).slice(0, 160) });
+  }
+}
+async function dqWrite(env, id, req) {
+  const ip = req.headers.get("cf-connecting-ip") || "x";
+  if (!await dqRate(env, "dqai:" + id, 80, 3600) || !await dqRate(env, "dqaiip:" + ip, 12, 3600)) return json({ engine: "system", error: "busy" });
+  const idx = await studioIndex(env, id);
+  if (!idx) return err(404, "Not found.");
+  const { choice, ai } = await dqEngine(env, idx);
   if (!ai) return json({ engine: "system" });
   let q;
   try {
@@ -3152,6 +3193,11 @@ ${body}`)}${paras("Approve or hide it under Reviews in your site's admin page.",
         const b = id ? await dqBrand(env, id) : null;
         if (!b) return err(404, "Not found.");
         return new Response(JSON.stringify(b), { headers: { ...cors, "Content-Type": "application/json", "Cache-Control": "public, max-age=60" } });
+      }
+      if (p.startsWith("/dq/understand/") && req.method === "POST") {
+        const id = studioId(p.split("/")[3] || "");
+        if (!id) return err(404, "Not found.");
+        return dqUnderstand(env, id, req);
       }
       if (p.startsWith("/dq/read/") && req.method === "POST") {
         const id = studioId(p.split("/")[3] || "");

@@ -8,6 +8,7 @@ import { loadStarter } from "./exporter";
 import { systemWrite } from "./syswrite";
 import { readDesignSettings, type Copy } from "./designs";
 import { lookValues, readColsAnswer } from "./designlook";
+import { limitThemes } from "../themes/limit";
 
 export type Kind = "portfolio" | "store" | "business" | "restaurant";
 export type Answers = Record<string, string>;
@@ -39,22 +40,12 @@ export const themesFor = (kind: Kind): Theme[] => offered(kind);
 export const themeOf = (kind: Kind, id: string): Theme | undefined => poolOf(kind).find((t) => t.id === id);
 const LIGHT = { bg: "#FFFFFF", surface: "#F5F6F8", deep: "#ECEEF2", text: "#14161A", soft: "#5B6270", line: "#E1E4EA" };
 const DARKK = { bg: "#0E1118", surface: "#161B26", deep: "#090B10", text: "#F2F4F8", soft: "#9AA3B5", line: "#262D3C" };
-const rgb = (h: string) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
-const lum = (h: string) => { const [r, g, b] = rgb(h); return (r * 299 + g * 587 + b * 114) / 255000; };
-const mixHex = (a: string, b: string, t: number) => "#" + rgb(a).map((x, i) => Math.round(x + (rgb(b)[i] - x) * t).toString(16).padStart(2, "0")).join("");
-/** The colours that go with a background: light backgrounds get dark text, dark ones light text; cards, borders and panels follow. */
-export function onBackground(bg: string): Record<string, string> {
-  const dark = lum(bg) < 0.5, text = dark ? "#f4f6fa" : "#111827", edge = dark ? "#ffffff" : "#000000";
-  return { bg, surface: dark ? mixHex(bg, "#ffffff", 0.06) : mixHex(bg, "#ffffff", 0.65), text, soft: mixHex(text, bg, 0.38), line: mixHex(bg, edge, dark ? 0.16 : 0.1), deep: mixHex(bg, "#000000", dark ? 0.35 : 0.88) };
-}
 /** A theme with the person's own colour, light/dark and corner choices on top. */
 export function tweakTheme(t: Theme, a: Answers): Theme {
   const o: Theme = { ...t, colors: { ...t.colors } };
   if (a.mode === "light" || a.mode === "dark") { Object.assign(o.colors, a.mode === "light" ? LIGHT : DARKK); o.dark = a.mode === "dark"; }
   if (/^#[0-9a-f]{6}$/i.test(a.accent || "")) { o.colors.c1 = a.accent; o.colors.c2 = a.accent; }
   if (a.corners && /^\d{1,2}$/.test(a.corners)) o.radius = +a.corners;
-  if (/^#[0-9a-f]{6}$/i.test(a.bgc || "")) Object.assign(o.colors, onBackground(a.bgc)); // a chosen background: the text and cards follow
-  if (/^#[0-9a-f]{6}$/i.test(a.bgc || "")) o.dark = lum(a.bgc) < 0.5;
   const own = readColsAnswer(a.cols); // the person's own colours (the palette editor) come last
   for (const key of Object.keys(own)) (o.colors as any)[key] = own[key];
   if (own.bg && !a.mode) o.dark = (parseInt(own.bg.slice(1, 3), 16) * 299 + parseInt(own.bg.slice(3, 5), 16) * 587 + parseInt(own.bg.slice(5, 7), 16) * 114) / 1000 < 128;
@@ -229,8 +220,10 @@ const STYLE_TAGS: Record<string, { want: string[]; dark?: boolean; light?: boole
 };
 const hash = (s: string) => { let h = 0; for (const c of s) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h; };
 function poolOf(kind: Kind): Theme[] { return kind === "business" ? BIZ_THEMES : kind === "restaurant" ? REST_THEMES : THEMES; }
+/** The Studio's own themes of a type (the ones its Themes page shows). */
+export const myThemesOf = (kind: Kind): Theme[] => limitThemes(poolOf(kind), undefined, kind);
 /** The themes the Studio's owner offers (all of them unless the owner picked some). */
-function offered(kind: Kind): Theme[] { const al = readDesignSettings().themes?.[kind], all = poolOf(kind), l = al?.length ? all.filter((t) => al.includes(t.id)) : all; return l.length ? l : all; }
+function offered(kind: Kind): Theme[] { const al = readDesignSettings().themes?.[kind], all = myThemesOf(kind), l = al?.length ? all.filter((t) => al.includes(t.id)) : all; return l.length ? l : all; }
 
 /** A plain sample picture (soft shapes in the theme's colours) for previews that have no photo yet. */
 const samplePicture = (c1: string, c2: string, bg: string) => "data:image/svg+xml," + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 640"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${c1}"/><stop offset="1" stop-color="${c2}"/></linearGradient></defs><rect width="800" height="640" fill="${bg}"/><rect width="800" height="640" fill="url(#g)" opacity=".85"/><circle cx="560" cy="190" r="120" fill="#fff" opacity=".22"/><circle cx="250" cy="430" r="190" fill="#000" opacity=".12"/><path d="M0 520C160 440 300 560 460 500S700 420 800 470V640H0Z" fill="#fff" opacity=".2"/></svg>`);
@@ -459,4 +452,4 @@ export function requestText(a: Answers, d: Design | null, link = ""): string {
 }
 
 /** Every theme of a type, whether or not the Studio's owner offers it (for the owner's settings). */
-export const allThemesOf = (kind: Kind): Theme[] => poolOf(kind);
+export const allThemesOf = (kind: Kind): Theme[] => myThemesOf(kind);

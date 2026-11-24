@@ -5,8 +5,8 @@ import { Preview } from "../editor/Preview";
 import { Logo, Spinner, useToast } from "../ui/kit";
 import { COLOUR_DOT, STEPS, STEP_LABEL, buildDesign, fromDoc, isOptional, nextStep, requestText, sayAnswer, themeOf, themesFor, tweakTheme, writeCopy, type Answers, type Design, type DesignFiles, type Step } from "../lib/designer";
 import { newDesignId, readDesignSettings, readLocalDesigns, writeLocalDesigns, type Copy, type DesignRec } from "../lib/designs";
-import { COLOUR_SLOTS, DEFAULT_BACKGROUNDS, GROUPS, readColsAnswer, readLookAnswer, resolvedLook, visibleAxes, type Kind as LookKind } from "../lib/designlook";
-import { designHost, readPage, submitQuery, type DesignHost } from "../lib/designapi";
+import { COLOUR_SLOTS, GROUPS, readColsAnswer, readLookAnswer, resolvedLook, visibleAxes, type Kind as LookKind } from "../lib/designlook";
+import { designHost, readPage, submitQuery, understandText, type DesignHost } from "../lib/designapi";
 import { pdfLines } from "../lib/pdftext";
 import { watchDevtools } from "../lib/devtools";
 import type { Studio, StudioIndex } from "../lib/studio";
@@ -125,6 +125,17 @@ export function DesignPage({ studio, index, onIndex }: { studio?: Studio; index?
     const fill = fromDoc(text, a, meta), got = Object.keys(fill);
     setA((o) => ({ ...o, doc: label, ...(link ? { doclink: link } : {}), ...(text ? { doctext: text } : {}), ...fromDoc(text, o, meta), ...(got.length ? { docfrom: got.join(",") } : {}) }));
     toast(got.length ? `Found ${got.map((x) => (STEP_LABEL[x] || x).toLowerCase()).join(", ")}. You can change any answer.` : "Read it. It will help us write your text.");
+    // The Studio's AI (when it is the chosen engine) reads it more closely: what it finds replaces the rule-based guesses, never what the person typed.
+    if (host && text.length >= 30) void understandText(host, a.kind || "", text).then((u) => {
+      const f = u.fields; if (!f || u.engine === "system") return;
+      setA((o) => {
+        const typed = new Set((o.docfrom || "").split(",").filter(Boolean)), n: Answers = {}, put = (k: string, v: any) => { if (typeof v === "string" && v.trim() && (!o[k] || typed.has(k))) n[k] = v.trim(); };
+        for (const k of ["name", "about", "city", "story", "usp", "phone", "email", "hours", "address", "social"]) { if (k === "address" || k === "hours" || k === "social") { if (!o[k]) put(k, f[k]); } else put(k, f[k]); }
+        if (Array.isArray(f.items) && f.items.length && (!o.items || typed.has("items"))) n.items = f.items.filter((x: any) => typeof x === "string" && x.trim()).join("\n");
+        const keys = Object.keys(n); if (!keys.length) return o;
+        return { ...o, ...n, docfrom: [...new Set([...typed, ...keys])].join(",") };
+      });
+    });
   };
   /** A link pasted for the starting point: the Studio's database reads the page; if it can't, the link goes to the team. */
   const readLink = async (raw: string) => {
@@ -350,8 +361,6 @@ export function PreviewPopup({ design, ver, a, onClose, onConnect, done, onTweak
   );
 }
 
-const DEFAULT_ACCENTS = ["blue", "green", "red", "orange", "purple", "pink", "gold", "mono"].map((c) => COLOUR_DOT[c]);
-
 /** A foldable group of controls in the customise panel. */
 function Group({ title, note, open, children }: { title: string; note?: string; open?: boolean; children: React.ReactNode }) {
   return (
@@ -372,14 +381,12 @@ function Tweaks({ a, design, onTweak, onClose }: { a: Answers; design: Design; o
   const all = useMemo(() => themesFor(design.kind), [design.kind, a.theme]);
   const list = all.filter((t) => !q.trim() || (t.name + " " + t.tags.join(" ")).toLowerCase().includes(q.trim().toLowerCase()));
   const settings = useMemo(readDesignSettings, [a.kind]);
-  const backgrounds = settings.backgrounds?.length ? settings.backgrounds : DEFAULT_BACKGROUNDS;
   const axes = visibleAxes(kind, settings);
   const picks = readLookAnswer(a.look), own = readColsAnswer(a.cols);
   const baseTheme = themeOf(kind, design.themeId) || all[0];
   const shown = tweakTheme(baseTheme, a).colors as Record<string, string>;
   const setCols = (c: Record<string, string>) => onTweak({ cols: Object.keys(c).length ? JSON.stringify(c) : "" });
-  const accents = settings.accents?.length ? settings.accents : DEFAULT_ACCENTS;
-  const changed = ["theme", "accent", "bgc", "cols", "look"].some((x) => a[x]);
+  const changed = ["theme", "cols", "look"].some((x) => a[x]);
   const grouped = GROUPS.map((g) => ({ g, rows: axes.filter((x) => x.group === g) })).filter((x) => x.rows.length);
   const pick = (axis: (typeof axes)[number]) => {
     const cur = picks[axis.axis.key] ?? axis.def ?? "";
@@ -397,20 +404,6 @@ function Tweaks({ a, design, onTweak, onClose }: { a: Answers; design: Design; o
       <div className="flex items-start gap-2"><div className="min-w-0"><b className="text-[16px]">Play with your design</b><p className="mt-0.5 text-[12px] leading-snug text-ink-400">Try other looks for your {TEMPLATES[design.kind].name.toLowerCase()}. The preview changes as you tap.</p></div><button type="button" className="btn btn-ghost btn-sm ml-auto shrink-0" onClick={onClose} aria-label="Close this panel">✕</button></div>
 
       <Group title="Colours" open>
-        <div className="flex flex-col gap-2"><span className={fieldLabel}>Accent colour</span>
-          <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Accent colour">
-            <button type="button" aria-pressed={!a.accent} onClick={() => onTweak({ accent: "" })} className={`h-8 rounded-full border px-3 text-[12px] font-semibold ${!a.accent ? "border-brand-400 bg-brand-500/15 text-ink-100" : "border-ink-600 text-ink-300 hover:border-ink-400"}`}>Theme's own</button>
-            {accents.map((c) => { const on = a.accent?.toLowerCase() === c.toLowerCase(); return <button key={c} type="button" title={c} aria-label={c} aria-pressed={on} onClick={() => onTweak({ accent: c })} className={`h-8 w-8 rounded-full border-2 transition ${on ? "scale-110 border-white" : "border-white/20 hover:border-white/60"}`} style={{ background: c }} />; })}
-            {settings.pick !== false && <input type="color" aria-label="Pick your own accent colour" className="h-8 w-9 cursor-pointer rounded-lg border border-ink-600 bg-transparent p-0.5" value={/^#[0-9a-f]{6}$/i.test(a.accent || "") ? a.accent : "#3b82f6"} onChange={(e) => onTweak({ accent: e.target.value })} />}
-          </div>
-        </div>
-        <div className="flex flex-col gap-2"><span className={fieldLabel}>Background colour</span>
-          <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Background colour">
-            <button type="button" aria-pressed={!a.bgc} onClick={() => onTweak({ bgc: "" })} className={`h-8 rounded-full border px-3 text-[12px] font-semibold ${!a.bgc ? "border-brand-400 bg-brand-500/15 text-ink-100" : "border-ink-600 text-ink-300 hover:border-ink-400"}`}>Theme's own</button>
-            {backgrounds.map((c) => { const on = a.bgc?.toLowerCase() === c.toLowerCase(); return <button key={c} type="button" title={c} aria-label={"Background " + c} aria-pressed={on} onClick={() => onTweak({ bgc: c })} className={`h-8 w-8 rounded-full border-2 transition ${on ? "scale-110 border-brand-400" : "border-white/30 hover:border-white/70"}`} style={{ background: c }} />; })}
-          </div>
-          <p className="text-[11px] text-ink-500">The text colour adjusts to stay easy to read.</p>
-        </div>
         {settings.pick !== false && <div className="flex flex-col gap-2"><span className={fieldLabel}>Each colour</span>
           <div className="grid grid-cols-3 gap-x-2.5 gap-y-3">
             {COLOUR_SLOTS.map(([k, label]) => (
@@ -419,7 +412,7 @@ function Tweaks({ a, design, onTweak, onClose }: { a: Answers; design: Design; o
               </label>
             ))}
           </div></div>}
-        {(Object.keys(own).length > 0 || a.accent || a.bgc) && <button type="button" className="btn btn-sm self-start" onClick={() => onTweak({ accent: "", bgc: "", cols: "" })}>Back to the theme's colours</button>}
+        {Object.keys(own).length > 0 && <button type="button" className="btn btn-sm self-start" onClick={() => onTweak({ cols: "" })}>Back to the theme's colours</button>}
       </Group>
 
       {grouped.map(({ g, rows }, i) => (
@@ -435,8 +428,8 @@ function Tweaks({ a, design, onTweak, onClose }: { a: Answers; design: Design; o
         </Group>
       ))}
 
-      <Group title={`Look (${all.length})`}>
-        <input className="input h-10" type="search" placeholder="Search, e.g. dark, warm, bold" aria-label="Search looks" value={q} onChange={(e) => setQ(e.target.value)} />
+      <Group title={`Themes (${all.length})`} note="Tap a theme to restyle your whole website.">
+        <input className="input h-10" type="search" placeholder="Search themes, e.g. dark, warm, bold" aria-label="Search themes" value={q} onChange={(e) => setQ(e.target.value)} />
         <div className="grid max-h-72 grid-cols-1 gap-1.5 overflow-y-auto pr-1">
           {list.map((t) => (
             <button key={t.id} type="button" aria-pressed={design.themeId === t.id} onClick={() => onTweak({ theme: t.id })} className={`flex items-center gap-2.5 rounded-xl border px-3 py-2 text-left text-[13px] ${design.themeId === t.id ? "border-brand-400 bg-brand-500/15" : "border-ink-700 hover:border-ink-500"}`}>
@@ -444,12 +437,12 @@ function Tweaks({ a, design, onTweak, onClose }: { a: Answers; design: Design; o
               <span className="min-w-0 flex-1 truncate font-semibold text-ink-100">{t.name}</span><span className="text-[11px] text-ink-500">{t.dark ? "Dark" : "Light"}</span>
             </button>
           ))}
-          {!list.length && <p className="text-[13px] text-ink-400">No look matches that.</p>}
+          {!list.length && <p className="text-[13px] text-ink-400">No theme matches that.</p>}
         </div>
       </Group>
 
       <div className="flex flex-wrap items-center gap-2 pb-1">
-        {changed && <button type="button" className="btn btn-sm" onClick={() => onTweak({ theme: "", accent: "", bgc: "", cols: "", look: "" })}>Back to my first design</button>}
+        {changed && <button type="button" className="btn btn-sm" onClick={() => onTweak({ theme: "", cols: "", look: "" })}>Back to my first design</button>}
         <p className="text-[12px] text-ink-500">Your changes are kept with your request when you connect with us.</p>
       </div>
     </aside>

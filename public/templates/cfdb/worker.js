@@ -25,7 +25,7 @@ create index if not exists approvals_project on approvals (scope, project, creat
 create table if not exists approval_notes (id integer primary key autoincrement, token text not null, who text not null, body text not null, page text not null default '', kind text not null default 'comment', created_at text not null);
 create index if not exists approval_notes_token on approval_notes (token, id);
 `;
-var CFDB_VERSION = 57;
+var CFDB_VERSION = 58;
 var CFDB_WORKER_NAME = "picaffectz-db";
 
 // src/lib/lookdigest.ts
@@ -688,7 +688,7 @@ function gsPage(title, text, finish = false) {
   const script = finish ? `<script>(function(){var q=new URLSearchParams(location.hash.slice(1)),h=document.getElementById("h"),p=document.getElementById("p");try{history.replaceState(null,"",location.pathname)}catch(e){}
 function say(a,b){h.textContent=a;p.textContent=b}
 if(q.get("error")||!q.get("id_token")){say("Not signed in",q.get("error")==="access_denied"?"You closed Google's sign-in. You can close this window.":"Google didn't finish the sign-in. Close this window and try again.");return}
-fetch("/auth/google/finish",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id_token:q.get("id_token"),state:q.get("state")})}).then(function(r){return r.json().then(function(j){return{ok:r.ok,j:j}})}).then(function(x){if(x.ok){say("Signed in","You can close this window and go back.");setTimeout(function(){try{window.close()}catch(e){}},400)}else say("Not signed in",(x.j&&x.j.error)||"Something went wrong. Close this window and try again.")}).catch(function(){say("Not signed in","Couldn't reach the sign-in. Close this window and try again.")})})();<\/script>` : "";
+fetch("/auth/google/finish",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id_token:q.get("id_token"),state:q.get("state")})}).then(function(r){return r.json().then(function(j){return{ok:r.ok,j:j}})}).then(function(x){if(x.ok){say("Signed in","You can close this window and go back.");setTimeout(function(){try{window.close()}catch(e){}},400)}else say("Not signed in",(x.j&&x.j.error)||"Something went wrong. Close this window and try again.")}).catch(function(){say("Not signed in","Couldn't reach the sign-in. Close this window and try again.")})})();</script>` : "";
   return new Response(`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><meta name="referrer" content="no-referrer"><title>Sign in</title><style>body{font:16px/1.6 system-ui,sans-serif;max-width:420px;margin:18vh auto;padding:0 20px;color:#1d2433;text-align:center}p{color:#5b6475}</style><h1 id="h">${esc(title)}</h1><p id="p">${esc(text)}</p>${script}`, { status: 200, headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Frame-Options": "DENY" } });
 }
 var roleOf = async (env, scope, email) => email ? (await env.DB.prepare("select role from members where scope = ? and email = ?").bind(scope, email).first())?.role || null : null;
@@ -1096,6 +1096,9 @@ async function ensure(env) {
     env.DB.prepare("create index if not exists reviews_item on reviews (site, item, status)"),
     env.DB.prepare("create table if not exists pins (email text primary key, salt text not null, hash text not null, tries integer not null default 0, locked integer not null default 0, set_at text not null)"),
     env.DB.prepare("create table if not exists pin_dev (email text not null, dev text not null, at integer not null, primary key (email, dev))"),
+    env.DB.prepare("create table if not exists design_queries (id integer primary key autoincrement, studio text not null, name text not null default '', kind text not null default '', person text not null default '', phone text not null default '', email text not null default '', note text not null default '', answers text not null default '{}', copy text not null default '{}', logo text not null default '', pdf_name text not null default '', pdf text not null default '', status text not null default 'new', mail text not null default '', created_at text not null)"),
+    env.DB.prepare("create index if not exists design_queries_studio on design_queries (studio, id)"),
+    env.DB.prepare("create table if not exists dq_rate (k text primary key, n integer not null, exp integer not null)"),
     env.DB.prepare("create table if not exists payments (rz_order text primary key, site text not null, order_no text not null, amount integer not null, status text not null default 'created', created_at text not null)")
   ]);
   ensured = true;
@@ -2241,12 +2244,162 @@ ${src.slice(0, 7e3)}`;
   }
   return { brief, flagged, words: words(src).length };
 }
+var DQ_KINDS = ["portfolio", "store", "business", "restaurant"];
+var DQ_LABEL = { portfolio: "Personal website", store: "Online shop", business: "Business website", restaurant: "Restaurant or caf\xE9" };
+var studioId = (x) => /^[a-z0-9][a-z0-9-]{0,59}$/.test(x) ? x : "";
+async function studioIndex(env, id) {
+  const f = await readFile(env, "studio:" + id, "studio.json");
+  if (!f) return null;
+  try {
+    return JSON.parse(new TextDecoder().decode(f.bytes));
+  } catch {
+    return null;
+  }
+}
+async function dqRate(env, key, max, secs) {
+  await ensure(env);
+  const now = Date.now();
+  const r = await env.DB.prepare("select n, exp from dq_rate where k = ?").bind(key).first();
+  if (!r || r.exp < now) {
+    await env.DB.prepare("insert or replace into dq_rate (k, n, exp) values (?, 1, ?)").bind(key, now + secs * 1e3).run();
+    return true;
+  }
+  if (r.n >= max) return false;
+  await env.DB.prepare("update dq_rate set n = n + 1 where k = ?").bind(key).run();
+  return true;
+}
+var clip = (x, n) => String(x ?? "").replace(/\u0000/g, "").trim().slice(0, n);
+function dqStrings(o, keys, len) {
+  const out = {};
+  for (const [k, v] of Object.entries(o && typeof o === "object" ? o : {}).slice(0, keys)) if (/^[a-z]{1,20}$/.test(k) && typeof v === "string") out[k] = v.slice(0, len);
+  return out;
+}
+function dqCopy(c) {
+  const out = {};
+  if (!c || typeof c !== "object") return out;
+  for (const k of ["tagline", "hero_text", "about_text", "cta_text"]) if (typeof c[k] === "string" && c[k].trim()) out[k] = c[k].trim().slice(0, 900);
+  if (Array.isArray(c.items)) out.items = c.items.slice(0, 12).filter((i) => i && typeof i.name === "string").map((i) => ({ name: clip(i.name, 120), text: clip(i.text, 260) }));
+  if (Array.isArray(c.faq)) out.faq = c.faq.slice(0, 6).filter((i) => i && typeof i.q === "string" && typeof i.a === "string").map((i) => ({ q: clip(i.q, 160), a: clip(i.a, 420) }));
+  return out;
+}
+var b64Of = (bytes) => {
+  let s = "";
+  for (let i = 0; i < bytes.length; i += 8192) s += String.fromCharCode(...bytes.subarray(i, i + 8192));
+  return btoa(s);
+};
+async function dqBrand(env, id) {
+  const idx = await studioIndex(env, id);
+  const b = idx?.brand;
+  if (!b || typeof b.name !== "string") return null;
+  let logo = "";
+  if (typeof b.logo === "string" && pathOk(b.logo)) {
+    const f = await readFile(env, "studio:" + id, b.logo);
+    if (f && f.bytes.length <= 15e4) logo = `data:${f.type || "image/png"};base64,${b64Of(f.bytes)}`;
+  }
+  return { name: clip(b.name, 80), logo, v: +b.v || 0, tint: /^#[0-9a-f]{6}$/i.test(b.tint || "") ? b.tint : "", mode: b.mode === "light" ? "light" : "dark", anim: clip(b.anim, 20), layout: clip(b.layout, 20), design: { on: idx?.prefs?.design?.on !== false } };
+}
+async function dqSubmit(env, id, req, ctx) {
+  await ensure(env);
+  const raw = await req.text();
+  if (raw.length > 2e6) return err(413, "That is too big. Use a smaller logo or PDF.");
+  let q;
+  try {
+    q = JSON.parse(raw || "{}");
+  } catch {
+    return err(400, "Couldn't read the request.");
+  }
+  if (q.website) return json({ ok: true });
+  if (!await env.DB.prepare("select 1 from members where scope = ? limit 1").bind("studio:" + id).first()) return err(404, "Not found.");
+  const ip = req.headers.get("cf-connecting-ip") || "x";
+  if (!await dqRate(env, "dq:" + id, 30, 3600) || !await dqRate(env, "dqip:" + ip, 6, 3600)) return err(429, "Too many requests just now. Please try again in a little while.");
+  const kind = DQ_KINDS.includes(q.kind) ? q.kind : "", person = clip(q.person, 80), phone = clip(q.phone, 30), email = clip(q.email, 120), note = clip(q.note, 1e3), name = clip(q.name, 120);
+  if (!kind || !name) return err(400, "Something is missing from the design. Please start again.");
+  if (!person) return err(400, "Please tell us your name.");
+  if (!phone && !EMAIL_RE.test(email)) return err(400, "Please give a phone number or an email address so we can reach you.");
+  if (email && !EMAIL_RE.test(email)) return err(400, "That email address doesn't look right.");
+  const answers = dqStrings(q.answers, 44, 1500), copy = dqCopy(q.copy);
+  if (typeof q.answers?.doctext === "string" && q.answers.doctext.trim()) answers.doctext = q.answers.doctext.slice(0, 12e3);
+  if (answers.doclink && !/^https?:\/\//i.test(answers.doclink)) delete answers.doclink;
+  let logo = "";
+  if (typeof q.logo === "string" && /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(q.logo) && q.logo.length <= 16e4) logo = q.logo;
+  let pdf = "", pdfName = "";
+  if (q.pdf && typeof q.pdf.b64 === "string") {
+    if (!/^JVBER/.test(q.pdf.b64) || q.pdf.b64.length > 17e5 || !/^[A-Za-z0-9+/=]+$/.test(q.pdf.b64)) return err(400, "The menu must be a PDF under 1.2 MB.");
+    pdf = q.pdf.b64;
+    pdfName = clip(q.pdf.name, 100) || "menu.pdf";
+  }
+  const made = await env.DB.prepare("insert into design_queries (studio, name, kind, person, phone, email, note, answers, copy, logo, pdf_name, pdf, created_at) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) returning id").bind(id, name, kind, person, phone, email, note, JSON.stringify(answers), JSON.stringify(copy), logo, pdfName, pdf, (/* @__PURE__ */ new Date()).toISOString()).first();
+  const mail = (async () => {
+    let said = "";
+    try {
+      const owners = ((await env.DB.prepare("select email from members where scope = ? and role in ('owner', 'partner') order by role = 'owner' desc limit 3").bind("studio:" + id).all()).results || []).map((r) => r.email);
+      if (!owners.length) said = "Not emailed: no owner address.";
+      else if (!env.RESEND_API_KEY || !env.MAIL_FROM) said = "Not emailed: email (Resend) isn't set up on this database.";
+      else {
+        const rows = [["Name", person], ["Phone", phone], ["Email", email], ["Type", DQ_LABEL[kind]], ["Website name", name], ["What they do", answers.about || ""], ["City", answers.city || ""], ["Pages", answers.pages || ""], ["Feel", answers.style || ""], ["Colour", answers.colour || ""], ["Items", (answers.items || "").replace(/\n/g, ", ")], ["Visitors can", answers.goal || ""], ["Hours", answers.hours || ""], ["Address", answers.address || ""], ["Their document", answers.doc || ""], ["Document link", answers.doclink || ""], ["Chosen look", [answers.theme, answers.accent, answers.mode].filter(Boolean).join(" \xB7 ")], ["Note", note]];
+        const table = `<table style="border-collapse:collapse;margin:0 0 14px">${rows.filter(([, v]) => v).map(([k, v]) => `<tr><td style="padding:4px 12px 4px 0;color:#666;vertical-align:top">${hesc(k)}</td><td style="padding:4px 0">${hesc(v).replace(/\n/g, "<br>")}</td></tr>`).join("")}</table>`;
+        await sendMail(env, owners, `New website request: ${name} (${DQ_LABEL[kind]})`.slice(0, 150), WRAP(`<p style="margin:0 0 12px"><b>${hesc(person)}</b> designed a website on your Design yourself page and wants to take it forward.</p>${table}<p style="margin:0;color:#666">Open Projects \u2192 Design yourself Query in your Studio to see the preview.${pdf ? " A menu PDF is attached to the request there." : ""}</p>`), EMAIL_RE.test(email) ? email : void 0);
+      }
+    } catch (e) {
+      said = "Not emailed: " + String(e?.message || e).slice(0, 200);
+    }
+    if (said && made?.id) await env.DB.prepare("update design_queries set mail = ? where id = ?").bind(said, made.id).run().catch(() => {
+    });
+  })();
+  if (ctx?.waitUntil) ctx.waitUntil(mail);
+  else await mail;
+  return json({ ok: true });
+}
+async function dqWrite(env, id, req) {
+  const ip = req.headers.get("cf-connecting-ip") || "x";
+  if (!await dqRate(env, "dqai:" + id, 80, 3600) || !await dqRate(env, "dqaiip:" + ip, 12, 3600)) return json({ engine: "system", error: "busy" });
+  const idx = await studioIndex(env, id);
+  if (!idx) return err(404, "Not found.");
+  const choice = idx?.ai?.engine === "custom" ? "custom" : idx?.ai?.engine === "system" ? "system" : "cloudflare";
+  let ai = null;
+  if (choice === "custom") {
+    const c = await anySetting(env, "ai");
+    if (c?.on && c.key && c.model && publicUrl(String(c.base || "").trim())) ai = customAI(c);
+  } else if (choice === "cloudflare" && env.AI) ai = env.AI;
+  if (!ai) return json({ engine: "system" });
+  let q;
+  try {
+    q = JSON.parse((await req.text()).slice(0, 2e4) || "{}");
+  } catch {
+    return err(400, "Couldn't read the request.");
+  }
+  const kind = DQ_KINDS.includes(q.kind) ? q.kind : "business", brand = clip(q.brand, 80);
+  if (!brand) return err(400, "Missing name.");
+  const items = (Array.isArray(q.items) ? q.items : []).slice(0, 8).map((x) => clip(x, 100)).filter(Boolean);
+  const facts = [["About", clip(q.about, 200)], ["City", clip(q.city, 60)], ["Their story", clip(q.story, 900)], ["What makes them special", clip(q.usp, 400)], ["From their own document (use only facts found here)", clip(q.doc, 3e3)]].filter(([, v]) => v).map(([k, v]) => `${k}: ${v}`).join("\n");
+  const noun = kind === "store" ? "products" : kind === "restaurant" ? "dishes" : kind === "portfolio" ? "skills" : "services";
+  const sys = `You write short, friendly website text in plain words for a small ${DQ_LABEL[kind].toLowerCase()}. Use ONLY what the owner told you. Never invent facts: no years, numbers, prices, awards, client names, addresses or claims. Keep every line short and simple. Return JSON only: {"tagline": at most 8 words, "hero_text": at most 30 words, "about_text": two short paragraphs, at most 70 words in all, "cta_text": at most 14 words, "items": [{"name": the ${noun.slice(0, -1)} exactly as given, "text": one sentence of at most 18 words describing it without inventing facts}] in the same order, "faq": [{"q": question, "a": answer}] three general questions a customer might ask, answered without inventing facts}.`;
+  const user = `Name: ${brand}
+${facts}
+${noun}: ${items.join("; ") || "(none given)"}`;
+  try {
+    const r = await ai.run("@cf/meta/llama-3.3-70b-instruct-fp8-fast", { messages: [{ role: "system", content: sys }, { role: "user", content: user }], max_tokens: 1200, temperature: 0.7, response_format: { type: "json_object" } });
+    const t = typeof r?.response === "string" ? r.response : JSON.stringify(r?.response ?? r);
+    let j;
+    try {
+      j = JSON.parse(t);
+    } catch {
+      const m = /\{[\s\S]*\}/.exec(t);
+      j = m ? JSON.parse(m[0]) : null;
+    }
+    const copy = dqCopy(j);
+    if (!Object.keys(copy).length) return json({ engine: "system", error: "unreadable" });
+    return json({ engine: choice, copy });
+  } catch (e) {
+    return json({ engine: "system", error: String(e?.message || e).slice(0, 160) });
+  }
+}
 var db_worker_default = {
   async fetch(req, env, ctx) {
     if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
     const u = new URL(req.url), p = u.pathname.replace(/\/+$/, "") || "/";
     try {
-      if (p === "/") return json({ ok: true, service: "site-studio-db", v: V, mail: !!(env.RESEND_API_KEY && env.MAIL_FROM), ...env.CF_TOKEN && env.CF_ACCOUNT ? { deploy: true, account: env.CF_ACCOUNT } : {}, ...env.GH_TOKEN ? { gh: true } : {}, ...env.AI ? { ai: true, pamphlet: 2 } : {}, reviews: true, look: 1, outline: 1, pictures: 1, connect: 2, translate: 4, approvals: 1, accounts: 2, cfx: 4, cfa: 1, google: 1, studioPages: 1, del: 1, enqMail: 3, ...otherAccounts(env).length ? { more: otherAccounts(env).length } : {} });
+      if (p === "/") return json({ ok: true, service: "site-studio-db", v: V, mail: !!(env.RESEND_API_KEY && env.MAIL_FROM), ...env.CF_TOKEN && env.CF_ACCOUNT ? { deploy: true, account: env.CF_ACCOUNT } : {}, ...env.GH_TOKEN ? { gh: true } : {}, ...env.AI ? { ai: true, pamphlet: 2 } : {}, reviews: true, dq: 1, look: 1, outline: 1, pictures: 1, connect: 2, translate: 4, approvals: 1, accounts: 2, cfx: 4, cfa: 1, google: 1, studioPages: 1, del: 1, enqMail: 3, ...otherAccounts(env).length ? { more: otherAccounts(env).length } : {} });
       if (p.startsWith("/ai/") && u.searchParams.get("engine") === "custom") {
         const c = await anySetting(env, "ai");
         if (!c?.on || !c.key || !c.model || !publicUrl(String(c.base || "").trim())) return json({ error: "Your own AI API isn't set up yet. Fill it in under Settings \u2192 AI engine." });
@@ -2917,6 +3070,22 @@ ${body}`)}${paras("Approve or hide it under Reviews in your site's admin page.",
         const got = await shipLive(env, site, hit.id, hd, hit.status).catch(() => ({ live: null, why: "", status: hit.status }));
         const L = got.live;
         return json({ no, at: hit.created_at, status: got.status, total: String(hd.total || ""), paid: hd._paid === "yes", track: trackShown(trackOf(hd)), live: L ? { st: L.st, label: TRACK_STATES[L.st] || L.say, say: L.say, eta: L.eta, link: L.link, ev: L.ev, at: L.t } : null });
+      }
+      if (p.startsWith("/sb/") && req.method === "GET") {
+        const id = studioId(p.split("/")[2] || "");
+        const b = id ? await dqBrand(env, id) : null;
+        if (!b) return err(404, "Not found.");
+        return new Response(JSON.stringify(b), { headers: { ...cors, "Content-Type": "application/json", "Cache-Control": "public, max-age=60" } });
+      }
+      if (p.startsWith("/dq/write/") && req.method === "POST") {
+        const id = studioId(p.split("/")[3] || "");
+        if (!id) return err(404, "Not found.");
+        return dqWrite(env, id, req);
+      }
+      if (/^\/dq\/[a-z0-9-]+$/.test(p) && !["/dq/list", "/dq/get", "/dq/status", "/dq/delete"].includes(p) && req.method === "POST") {
+        const id = studioId(p.split("/")[2]);
+        if (!id) return err(404, "Not found.");
+        return dqSubmit(env, id, req, ctx);
       }
       if (p.startsWith("/enquire/") && req.method === "POST") {
         const site = p.split("/")[2];
@@ -3697,6 +3866,28 @@ ${body}`)}${paras("Approve or hide it under Reviews in your site's admin page.",
         const next = Math.max(0, (+row.points || 0) + d), real = next - (+row.points || 0);
         await env.DB.batch([env.DB.prepare("update customers set points = ? where site = ? and ckey = ?").bind(next, site, key), env.DB.prepare("insert into points (site, ckey, delta, why, order_no, at) values (?, ?, ?, ?, '', ?)").bind(site, key, real, oneLine(String(b.why || "Changed by the owner")).slice(0, 120), (/* @__PURE__ */ new Date()).toISOString())]);
         return json({ ok: true, points: next });
+      }
+      if (p === "/dq/list" || p === "/dq/get" || p === "/dq/status" || p === "/dq/delete") {
+        if (!scope.startsWith("studio:")) return err(400, "Unknown scope.");
+        await ensure(env);
+        const sid = scope.slice(7);
+        if (p === "/dq/list") {
+          const rows = (await env.DB.prepare("select id, name, kind, person, phone, email, note, answers, copy, status, mail, pdf_name, (logo != '') as has_logo, created_at from design_queries where studio = ? order by id desc limit 300").bind(sid).all()).results || [];
+          return json(rows.map((r) => ({ ...r, answers: JSON.parse(r.answers || "{}"), copy: JSON.parse(r.copy || "{}"), has_logo: !!r.has_logo })));
+        }
+        const b = req.method === "POST" ? await req.json().catch(() => ({})) : {}, qid = Math.floor(+(b.id ?? u.searchParams.get("id")) || 0);
+        if (!qid) return err(400, "Which request?");
+        if (p === "/dq/get") {
+          const r = await env.DB.prepare("select logo, pdf_name, pdf from design_queries where studio = ? and id = ?").bind(sid, qid).first();
+          return r ? json(r) : err(404, "Not found.");
+        }
+        if (p === "/dq/status") {
+          if (!["new", "read", "done"].includes(b.status)) return err(400, "Unknown status.");
+          await env.DB.prepare("update design_queries set status = ? where studio = ? and id = ?").bind(b.status, sid, qid).run();
+          return json({ ok: true });
+        }
+        await env.DB.prepare("delete from design_queries where studio = ? and id = ?").bind(sid, qid).run();
+        return json({ ok: true });
       }
       if (p === "/e/list") {
         const site = scope.replace(/^site:/, "");

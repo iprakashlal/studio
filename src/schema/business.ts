@@ -11,6 +11,9 @@ const sel = (a: Axis): Field => ({ t: "select", path: "theme." + a.key, label: a
 
 const SECTIONS: [string, string][] = [["hero", "Hero"], ["clients", "Clients"], ["services", "Services"], ["products", "Products"], ["stats", "Numbers"], ["work", "Case studies"], ["about", "About"], ["process", "Process"], ["team", "Team"], ["testimonials", "Testimonials"], ["pricing", "Pricing"], ["faq", "FAQ"], ["cta", "Call to action"], ["contact", "Contact"]];
 const TARGETS = SECTIONS.filter(([id]) => id !== "hero").map(([value, label]) => ({ value, label }));
+/** Where a button can go: a section, or a link the person types. */
+const GOES = [...TARGETS, { value: "url", label: "A custom link…" }];
+const linkWhen = (path: string, label: string): Field => ({ t: "when", path, is: "url", fields: [{ t: "text", path: path + "Url", label, ph: "https://…", hint: "A full web address (a link to another site, a WhatsApp link, a PDF…)." }] });
 const ICONS: [string, string][] = [["compass", "Compass (strategy)"], ["layers", "Layers (design)"], ["code", "Code"], ["chart", "Chart (growth)"], ["shield", "Shield (security)"], ["people", "People"], ["cloud", "Cloud"], ["globe", "Globe"], ["cog", "Cog (operations)"], ["spark", "Spark (ideas)"], ["briefcase", "Briefcase"], ["scale", "Scales (legal)"], ["building", "Building"], ["heart", "Heart (care)"], ["leaf", "Leaf (sustainability)"], ["rocket", "Rocket (launch)"]];
 const head = (k: string, title = "Section heading"): Card => ({ title, fields: [g2({ t: "text", path: k + ".eyebrow", label: "Small label above" }, { t: "text", path: k + ".title", label: "Heading", ml: true }), { t: "textarea", path: k + ".lede", label: "Intro line", rows: 2 }] });
 type Card = Category["cards"][number];
@@ -57,7 +60,7 @@ const schema: Category[] = [
       { title: "Sections", fields: [{ t: "note", text: "Reorder with the arrows. Hidden sections stay in your content. On one page, sections with “In the menu” get a menu link." },
         { t: "list", path: "sections", fixed: true, add: () => ({}), title: (it) => `${it.label || it.id}${it.show === false ? " (hidden)" : ""}`,
           item: [g2({ t: "text", path: "label", label: "Menu name" }, { t: "toggle", path: "show", label: "Show this section" }), { t: "toggle", path: "inNav", label: "In the menu (one-page mode)" }] }] },
-      { title: "Menu button", fields: [g2({ t: "text", path: "nav.cta", label: "Button label (empty hides it)" }, { t: "select", path: "nav.ctaTarget", label: "Goes to", options: TARGETS })] },
+      { title: "Menu button", fields: [g2({ t: "text", path: "nav.cta", label: "Button label (empty hides it)" }, { t: "select", path: "nav.ctaTarget", label: "Goes to", options: GOES }), linkWhen("nav.ctaTarget", "Custom link for the menu button")] },
     ],
   },
   menuCategory({ note: "On a one-page site (“Use several pages” off), a link to a section with “Open in a new tab” switched on gives that section a page of its own, opened in the same tab like any page of a site with several pages, and the section no longer shows on the main page. Buttons that point to that section open its page too.", where: "the sections marked “In the menu” (or the site's pages when it has several)", targets: [{ value: "home", label: "Home (top of the site)" }, ...TARGETS.map((t) => ({ value: t.value, label: `Section: ${t.label}` })), { value: "warranty", label: "Warranty & status check" }] }),
@@ -65,7 +68,7 @@ const schema: Category[] = [
     id: "hero", label: "Hero", group: "Pages", sub: "Sections", desc: "The first screen: headline, intro, buttons, trust badges and image.",
     cards: [
       { title: "Text", fields: [{ t: "text", path: "hero.eyebrow", label: "Small label above" }, { t: "text", path: "hero.title", label: "Headline", ml: true, hint: "Enter starts a new line. Wrap words in *asterisks* to highlight them." }, { t: "textarea", path: "hero.lede", label: "Intro", rows: 3 }] },
-      { title: "Buttons", fields: [g2({ t: "text", path: "hero.ctaPrimary", label: "Main button" }, { t: "select", path: "hero.ctaPrimaryTarget", label: "Goes to", options: TARGETS }, { t: "text", path: "hero.ctaSecondary", label: "Second button" }, { t: "select", path: "hero.ctaSecondaryTarget", label: "Goes to", options: TARGETS })] },
+      { title: "Buttons", fields: [g2({ t: "text", path: "hero.ctaPrimary", label: "Main button" }, { t: "select", path: "hero.ctaPrimaryTarget", label: "Goes to", options: GOES }, { t: "text", path: "hero.ctaSecondary", label: "Second button" }, { t: "select", path: "hero.ctaSecondaryTarget", label: "Goes to", options: GOES }), linkWhen("hero.ctaPrimaryTarget", "Custom link for the main button"), linkWhen("hero.ctaSecondaryTarget", "Custom link for the second button")] },
       { title: "Trust badges", fields: [{ t: "strings", path: "hero.badges", label: "Short proof points under the buttons", addLabel: "Add badge" }] },
       { title: "Image", fields: [{ t: "image", path: "hero.image", label: "Hero image (optional)", hint: "A team photo, your office or your product. Without one, the hero shows cards built from your numbers and services (edit them below)." },
         { t: "videoFile", path: "hero.video", label: "Or a hero video", hint: "MP4 or WebM, up to 20 MB. It plays silently on a loop in the image's place; the image above is shown first, while it loads. A short clip works best." }] },
@@ -166,7 +169,7 @@ const schema: Category[] = [
   },
   {
     id: "cta", label: "Call to action", group: "Pages", sub: "Sections", desc: "The dark band that asks visitors to get in touch.",
-    cards: [{ title: "Call to action", fields: [{ t: "text", path: "cta.title", label: "Heading", ml: true }, { t: "textarea", path: "cta.body", label: "Text", rows: 2 }, g2({ t: "text", path: "cta.button", label: "Button" }, { t: "select", path: "cta.target", label: "Goes to", options: TARGETS })] }],
+    cards: [{ title: "Call to action", fields: [{ t: "text", path: "cta.title", label: "Heading", ml: true }, { t: "textarea", path: "cta.body", label: "Text", rows: 2 }, g2({ t: "text", path: "cta.button", label: "Button" }, { t: "select", path: "cta.target", label: "Goes to", options: GOES }), linkWhen("cta.target", "Custom link for the button")] }],
   },
   videoCategory("Pages", "Sections"),
   socialCategory("Pages"),

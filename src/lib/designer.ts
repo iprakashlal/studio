@@ -8,7 +8,7 @@ import { TEMPLATES } from "../schema";
 import { loadStarter } from "./exporter";
 import { systemWrite } from "./syswrite";
 import { readDesignSettings, type Copy } from "./designs";
-import { lookValues, readColsAnswer } from "./designlook";
+import { lookValues, pagesChoice, readColsAnswer } from "./designlook";
 import { limitThemes } from "../themes/limit";
 
 export type Kind = "portfolio" | "store" | "business" | "restaurant";
@@ -103,9 +103,9 @@ export const STEPS: Step[] = [
   { id: "style", type: "choice", ask: () => "How should your website feel?", options: () => STYLE_OPTIONS },
   { id: "colour", type: "choice", ask: () => "Which colour do you like best?", options: () => COLOUR_OPTIONS },
   {
-    id: "pages", type: "choice", when: (a) => k(a) === "business" || k(a) === "restaurant",
+    id: "pages", type: "choice", when: (a) => (k(a) === "business" || k(a) === "restaurant") && !readDesignSettings().look?.[k(a)]?.pages?.h,
     ask: () => "Should your website be one long page, or have separate pages (Home, About, Contact…)?",
-    options: () => [{ v: "single", label: "One page", hint: "Everything on one page you scroll down." }, { v: "multi", label: "Separate pages", hint: "Each topic gets its own page." }],
+    options: (a) => { const al = readDesignSettings().look?.[k(a)]?.pages?.a; return [{ v: "single", label: "One page", hint: "Everything on one page you scroll down." }, { v: "multi", label: "Separate pages", hint: "Each topic gets its own page." }].filter((o) => !al?.length || al.includes(o.v)); },
   },
   {
     id: "story", type: "long", optional: true,
@@ -395,7 +395,7 @@ export async function buildDesign(a: Answers, copy?: Copy | null, files?: Design
   // What only some types and answers add (after the starter's made-up parts are cleared).
   if (kind === "business" || kind === "restaurant") {
     if (address || city) put("contact.address", address || city);
-    if (a.pages) put("site.multiPage", a.pages === "multi");
+    put("site.multiPage", pagesChoice(kind, a.pages, readDesignSettings()) === "multi");
     if (social) c.footer.links = [{ label: /instagram/.test(social) ? "Instagram" : "Find us online", url: social }, ...(c.footer.links || [])];
     if (cp.faq?.length && items.length >= 2) { put("faq.items", cp.faq); show(c, "faq"); }
   }

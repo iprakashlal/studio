@@ -6,7 +6,7 @@ import { Logo, Spinner, useToast } from "../ui/kit";
 import { packSections, sectionNames, unpackSections } from "../lib/docsections";
 import { COLOUR_DOT, STEPS, STEP_LABEL, buildDesign, fromDoc, isOptional, nextStep, requestText, sayAnswer, themeOf, themesFor, tweakTheme, writeCopy, type Answers, type Design, type DesignFiles, type Step } from "../lib/designer";
 import { newDesignId, readDesignSettings, readLocalDesigns, writeLocalDesigns, type Copy, type DesignRec } from "../lib/designs";
-import { COLOUR_SLOTS, GROUPS, readColsAnswer, readLookAnswer, resolvedLook, visibleAxes, type Kind as LookKind } from "../lib/designlook";
+import { COLOUR_SLOTS, GROUPS, pagesChoice, readColsAnswer, readLookAnswer, resolvedLook, visibleAxes, type Kind as LookKind } from "../lib/designlook";
 import { designHost, readPage, submitQuery, understandText, type DesignHost } from "../lib/designapi";
 import { pdfLines } from "../lib/pdftext";
 import { watchDevtools } from "../lib/devtools";
@@ -390,6 +390,7 @@ function Tweaks({ a, design, onTweak, onClose }: { a: Answers; design: Design; o
   const shown = tweakTheme(baseTheme, a).colors as Record<string, string>;
   const setCols = (c: Record<string, string>) => onTweak({ cols: Object.keys(c).length ? JSON.stringify(c) : "" });
   const changed = ["theme", "cols", "look"].some((x) => a[x]);
+  const pagesAxis = axes.find((x) => x.axis.key === "pages");
   const grouped = GROUPS.map((g) => ({ g, rows: axes.filter((x) => x.group === g) })).filter((x) => x.rows.length);
   const pick = (axis: (typeof axes)[number]) => {
     const cur = picks[axis.axis.key] ?? axis.def ?? "";
@@ -420,14 +421,14 @@ function Tweaks({ a, design, onTweak, onClose }: { a: Answers; design: Design; o
 
       {grouped.map(({ g, rows }, i) => (
         <Group key={g} title={g === "Layout" ? "Layout" : g} open={g === "Layout"} note={g === "Intro screen" ? "Shown while the site opens, when an intro is switched on." : undefined}>
-          {g === "Layout" && (design.kind === "business" || design.kind === "restaurant") && (
+          {g === "Layout" && pagesAxis && (
             <div className="flex flex-col gap-1.5"><span className={fieldLabel}>Pages</span>
               <div className="grid grid-cols-2 gap-1 rounded-xl border border-ink-600 p-1" role="radiogroup" aria-label="Pages">
-                {([["single", "One page"], ["multi", "Separate pages"]] as const).map(([v, l]) => <button key={v} type="button" role="radio" aria-checked={(a.pages || "single") === v} onClick={() => onTweak({ pages: v })} className={`h-8 rounded-lg text-[13px] font-semibold ${(a.pages || "single") === v ? "bg-ink-700 text-ink-100" : "text-ink-400 hover:text-ink-100"}`}>{l}</button>)}
+                {([["single", "One page"], ["multi", "Separate pages"]] as const).filter(([v]) => pagesAxis.axis.options.some(([o]) => o === v)).map(([v, l]) => <button key={v} type="button" role="radio" aria-checked={pagesChoice(kind, a.pages, settings) === v} onClick={() => onTweak({ pages: v })} className={`h-8 rounded-lg text-[13px] font-semibold ${(a.pages || "single") === v ? "bg-ink-700 text-ink-100" : "text-ink-400 hover:text-ink-100"}`}>{l}</button>)}
               </div>
             </div>
           )}
-          {rows.map(pick)}
+          {rows.filter((x) => x.axis.key !== "pages").map(pick)}
         </Group>
       ))}
 

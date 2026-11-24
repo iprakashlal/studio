@@ -32,6 +32,8 @@ export type Group = "Layout" | "Style" | "Interactions" | "Intro screen";
 export const GROUPS: Group[] = ["Layout", "Style", "Interactions", "Intro screen"];
 const AX = (a: Axis, forAnswer: string, group: Group = "Layout"): [Axis, string, Group] => [a, forAnswer, group];
 const ST = (a: Axis, f: string) => AX(a, f, "Style");
+/** One long page or separate pages (business and restaurant sites). Not a theme value: it sets the site's page mode. */
+export const PAGES_AXIS: Axis = { key: "pages", label: "Site pages", options: [["single", "One page (everything scrolls)"], ["multi", "Separate pages (Home, About, Contact…)"]] };
 const NAV_MODE: Axis = { key: "navMode", label: "Menu when scrolling", options: [["fixed", "Always visible (fixed at the top)"], ["hide", "Hide on scroll down, show on scroll up"], ["scroll", "Scrolls away with the page"]] };
 const INTRO_FONT: Axis = { key: "introFont", label: "Intro font", options: [["display", "Same as the headline (headings font)"], ["body", "Body text font"]] };
 const INTRO_CASE: Axis = { key: "introCase", label: "Intro letters", options: [["upper", "CAPITALS"], ["asis", "As typed"]] };
@@ -44,11 +46,11 @@ const FX = (): [Axis, string, Group][] => [
 /** The choices of each type, the answer each one shapes, and the group it belongs to (the cards of Theme & layout). */
 export const LOOK_AXES: Record<Kind, [Axis, string, Group][]> = {
   business: [
-    AX(BIZ_AXES.layout, "Your name and what you do"), AX(BIZ_AXES.heroArt, "Your logo and picture"), AX(BIZ_AXES.nav, "Pages and menu"), AX(NAV_MODE, "Pages and menu"), AX(BIZ_AXES.width, "Page width"), AX(BIZ_AXES.bands, "What you offer and highlights"),
+    AX(PAGES_AXIS, "One page or separate pages"), AX(BIZ_AXES.layout, "Your name and what you do"), AX(BIZ_AXES.heroArt, "Your logo and picture"), AX(BIZ_AXES.nav, "Pages and menu"), AX(NAV_MODE, "Pages and menu"), AX(BIZ_AXES.width, "Page width"), AX(BIZ_AXES.bands, "What you offer and highlights"),
     ST(BIZ_AXES.heading, "Your name and headings"), ST(BIZ_AXES.shead, "Section titles"), ST(BIZ_AXES.cards, "What you offer"), ST(BIZ_AXES.buttons, "What you want visitors to do"), ST(BIZ_AXES.pattern, "Feel"), ST(BIZ_AXES.motionStyle, "Feel"), ...FX(),
   ],
   restaurant: [
-    AX(REST_AXES.layout, "Your name and what you serve"), AX(REST_AXES.heroArt, "Your logo and picture"), AX(REST_AXES.nav, "Pages and menu bar"), AX(NAV_MODE, "Pages and menu bar"), AX(REST_AXES.menuStyle, "Your food menu"), AX(REST_AXES.gallery, "Photos"), AX(REST_AXES.width, "Page width"), AX(REST_AXES.bands, "Sections"),
+    AX(PAGES_AXIS, "One page or separate pages"), AX(REST_AXES.layout, "Your name and what you serve"), AX(REST_AXES.heroArt, "Your logo and picture"), AX(REST_AXES.nav, "Pages and menu bar"), AX(NAV_MODE, "Pages and menu bar"), AX(REST_AXES.menuStyle, "Your food menu"), AX(REST_AXES.gallery, "Photos"), AX(REST_AXES.width, "Page width"), AX(REST_AXES.bands, "Sections"),
     ST(REST_AXES.heading, "Your name and headings"), ST(REST_AXES.shead, "Section titles"), ST(REST_AXES.cards, "Highlights"), ST(REST_AXES.buttons, "What you want visitors to do"), ST(REST_AXES.ornament, "Feel"), ST(REST_AXES.divider, "Feel"), ST(REST_AXES.pattern, "Feel"), ST(REST_AXES.motionStyle, "Feel"), ST(MOTIF_AXIS, "Feel"), ...FX(),
   ],
   portfolio: [
@@ -114,6 +116,7 @@ export function visibleAxes(kind: Kind, s: DesignSettings): { axis: Axis; forAns
 export function lookValues(kind: Kind, answer: string | undefined, s: DesignSettings): Record<string, string> {
   const own = readLookAnswer(answer), out: Record<string, string> = {}, rules = s.look?.[kind] || {};
   for (const [a] of LOOK_AXES[kind] || []) {
+    if (a.key === "pages") continue;
     const v = own[a.key] ?? rules[a.key]?.d ?? "";
     if (v && v !== "-" && a.options.some(([o]) => o === v)) out[a.key] = v;
   }
@@ -123,3 +126,9 @@ export function lookValues(kind: Kind, answer: string | undefined, s: DesignSett
 /** Everything the visitor and the owner's defaults decide, as one answer to keep with a request (so it looks the same later). */
 export const resolvedLook = (kind: Kind, answer: string | undefined, s: DesignSettings): string => JSON.stringify(lookValues(kind, answer, s));
 
+
+/** One page or separate pages: what the visitor chose, else the owner's starting choice, else one page. */
+export const pagesChoice = (kind: Kind, own: string | undefined, s: DesignSettings): "single" | "multi" => {
+  const r = s.look?.[kind]?.pages, ok = (v?: string) => (v === "single" || v === "multi") && (!r?.a?.length || r.a.includes(v));
+  return ok(own) ? (own as "single" | "multi") : ok(r?.d) ? (r!.d as "single" | "multi") : r?.a?.length === 1 && ok(r.a[0]) ? (r.a[0] as "single" | "multi") : "single";
+};

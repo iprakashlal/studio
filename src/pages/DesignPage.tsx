@@ -3,9 +3,9 @@ import { BrandMark, useBrand } from "../lib/brand";
 import { TEMPLATES } from "../schema";
 import { Preview } from "../editor/Preview";
 import { Logo, Spinner, useToast } from "../ui/kit";
-import { COLOUR_DOT, STEPS, buildDesign, fromDoc, nextStep, requestText, sayAnswer, themesFor, writeCopy, type Answers, type Design, type DesignFiles, type Step } from "../lib/designer";
+import { COLOUR_DOT, STEPS, STEP_LABEL, buildDesign, fromDoc, isOptional, nextStep, requestText, sayAnswer, themesFor, writeCopy, type Answers, type Design, type DesignFiles, type Step } from "../lib/designer";
 import { newDesignId, readLocalDesigns, writeLocalDesigns, type Copy, type DesignRec } from "../lib/designs";
-import { designHost, submitQuery, type DesignHost } from "../lib/designapi";
+import { designHost, readPage, submitQuery, type DesignHost } from "../lib/designapi";
 import { pdfLines } from "../lib/pdftext";
 import { watchDevtools } from "../lib/devtools";
 import type { Studio, StudioIndex } from "../lib/studio";
@@ -57,6 +57,7 @@ export function DesignPage({ studio, index, onIndex }: { studio?: Studio; index?
   const [savedId, setSavedId] = useState(first.id);
   const [sent, setSent] = useState(first.sent);
   const [warn, setWarn] = useState(false);
+  const [reading, setReading] = useState(false);
   const resetRef = useRef<() => void>(() => {});
   const endRef = useRef<HTMLDivElement>(null);
   const field = useRef<HTMLInputElement & HTMLTextAreaElement>(null);
@@ -64,11 +65,12 @@ export function DesignPage({ studio, index, onIndex }: { studio?: Studio; index?
   const cur = nextStep(a);
   const answered = STEPS.filter((s) => s.id in a && (s.when ? s.when(a) : true));
   const started = answered.length > 0;
+  const total = STEPS.filter((x) => (x.when ? x.when(a) : true)).length;
 
   useEffect(() => { document.title = "Design yourself · " + brand.name; }, [brand.name]);
   useEffect(() => { designHost().then(setHost); }, []);
   useEffect(() => { try { sessionStorage.setItem(DRAFT, JSON.stringify({ a, copy, id: savedId, sent })); } catch { /* private mode */ } }, [a, copy, savedId, sent]);
-  useEffect(() => { setText(""); setMany([]); setTimeout(() => field.current?.focus(), 50); endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" }); }, [cur?.id, answered.length, writing]);
+  useEffect(() => { setText(""); setMany([]); setTimeout(() => field.current?.focus(), 50); window.scrollTo({ top: 0, behavior: "smooth" }); }, [cur?.id, answered.length, writing]);
 
   // The site is rebuilt as each answer arrives.
   useEffect(() => {
@@ -111,8 +113,25 @@ export function DesignPage({ studio, index, onIndex }: { studio?: Studio; index?
     if (!cur) return;
     if (cur.type === "many") { if (many.length) answer(cur, many.join(",")); return; }
     if (!text.trim()) return;
+    if (cur.id === "doc") { readLink(text); return; }
     if (cur.id === "kind") { const g = guessKind(text); if (g) answer(cur, g); else toast("I'm not sure which one that is. Please tap one of the four choices.", "bad"); return; }
     answer(cur, text);
+  };
+  /** What a document or page says fills in the answers it can (the questions it covers are then not asked). */
+  const applyDoc = (label: string, text: string, link: string, meta?: { name?: string; about?: string }) => {
+    const fill = fromDoc(text, a, meta), got = Object.keys(fill);
+    setA((o) => ({ ...o, doc: label, ...(link ? { doclink: link } : {}), ...(text ? { doctext: text } : {}), ...fromDoc(text, o, meta), ...(got.length ? { docfrom: got.join(",") } : {}) }));
+    toast(got.length ? `Found ${got.map((x) => (STEP_LABEL[x] || x).toLowerCase()).join(", ")}. You can change any answer.` : "Read it. It will help us write your text.");
+  };
+  /** A link pasted for the starting point: the Studio's database reads the page; if it can't, the link goes to the team. */
+  const readLink = async (raw: string) => {
+    let url = raw.trim(); if (!/^https?:\/\//i.test(url)) url = "https://" + url.replace(/^\/+/, "");
+    let host$ = ""; try { host$ = new URL(url).hostname.replace(/^www\./, ""); } catch { toast("That doesn't look like a web address.", "bad"); return; }
+    setReading(true);
+    const r = host ? await readPage(host, url) : { error: "no database" };
+    if (r.text || r.title) applyDoc(host$, [r.site || r.title || "", r.description || "", r.text || ""].filter(Boolean).join("\n"), url, { name: (r.site || (r.title || "").split(/\s+[-–|·:]\s+/)[0] || "").trim(), about: r.description });
+    else { setA((o) => ({ ...o, doc: host$, doclink: url })); toast((r.error ? r.error + " " : "") + "We'll pass the link to our team instead.", "bad"); }
+    setReading(false);
   };
   /** A picture or PDF chosen for a file question. */
   const choose = async (s: Step, f: File | undefined) => {
@@ -121,14 +140,14 @@ export function DesignPage({ studio, index, onIndex }: { studio?: Studio; index?
       if (f.size > (s.maxKB || 1000) * 1024) throw new Error(`That file is over ${Math.round((s.maxKB || 1000) / 1000)} MB. Please choose a smaller one.`);
       if (s.id === "logo") { const u = await fitImage(f); setFiles((o) => ({ ...o, logo: u })); answer(s, "added"); }
       else if (s.id === "doc") {
+        setReading(true);
         const text = (await pdfLines(f)).join("\n").slice(0, 12000);
         if (text.length < 30) throw new Error("We couldn't find any text in that PDF (it may be a scan). Try another one, or skip.");
-        const fill = fromDoc(text, a), got = Object.keys(fill);
-        setA((o) => ({ ...o, doc: f.name.slice(0, 100), doctext: text, ...fromDoc(text, o), ...(got.length ? { docfrom: got.join(",") } : {}) }));
-        toast(got.length ? "Read your document. We filled in what it says, and you can change any answer." : "Read your document. It will help us write your text.");
+        applyDoc(f.name.slice(0, 100), text, "");
       }
       else { const buf = await f.arrayBuffer(); if (new TextDecoder().decode(new Uint8Array(buf).slice(0, 4)) !== "%PDF") throw new Error("That doesn't look like a PDF."); setFiles((o) => ({ ...o, menu: { name: f.name.slice(0, 100), b64: toB64(buf) } })); answer(s, f.name.slice(0, 100)); }
     } catch (e: any) { toast(e?.message || "Couldn't read that file.", "bad"); }
+    setReading(false);
     if (pick.current) pick.current.value = "";
   };
   /** Go back to a question: it and every later answer are cleared. */
@@ -145,18 +164,18 @@ export function DesignPage({ studio, index, onIndex }: { studio?: Studio; index?
   const tweak = (p: Answers) => setA((o) => { const n = { ...o, ...p }; for (const key of Object.keys(p)) if (p[key] === "") delete n[key]; return n; });
   function restart() { setA({}); setCopy(null); setFiles({}); setDesign(null); setSavedId(""); setSent(false); lastSaved.current = ""; try { sessionStorage.removeItem(DRAFT); } catch { /* none */ } }
 
-  const field$ = cur && (cur.type === "text" || cur.type === "long" || cur.id === "kind");
+  const field$ = cur && (cur.type === "text" || cur.type === "long" || cur.id === "kind" || cur.id === "doc");
   const bar = (
     <form className="mx-auto flex w-full max-w-2xl flex-col gap-2" onSubmit={(e) => { e.preventDefault(); submit(); }} aria-label="Your answer">
-      <div className={`flex items-end gap-2 rounded-3xl border bg-ink-900 p-2 pl-4 shadow-xl transition focus-within:border-brand-400 ${field$ || cur?.type === "file" ? "border-ink-600" : "border-ink-700 opacity-80"}`}>
+      <div className={`flex flex-wrap items-end gap-2 rounded-3xl border bg-ink-900 p-2 pl-4 shadow-xl transition focus-within:border-brand-400 ${field$ || cur?.type === "file" ? "border-ink-600" : "border-ink-700 opacity-80"}`}>
         {cur?.type === "long"
-          ? <textarea ref={field} aria-label={cur.ask(a)} rows={3} className="min-h-[3.5rem] flex-1 resize-none bg-transparent py-2 text-[15px] text-ink-100 outline-none placeholder:text-ink-500" placeholder={cur.ph?.(a)} value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); submit(); } }} />
-          : <input ref={field} aria-label={cur ? cur.ask(a) : "Your answer"} className="min-w-0 flex-1 bg-transparent py-2.5 text-[15px] text-ink-100 outline-none placeholder:text-ink-500" disabled={!field$} placeholder={writing ? "Writing your text…" : !cur ? "All done. Your preview is ready." : cur.id === "kind" ? "Tell me what you want, e.g. an online shop for my candles" : field$ ? cur.ph?.(a) : cur.type === "many" ? "Tap what applies above, then press Done" : cur.type === "file" ? "Choose a file, or skip" : "Pick one of the choices above"} value={field$ ? text : ""} onChange={(e) => setText(e.target.value)} />}
+          ? <textarea ref={field} aria-label={cur.ask(a)} rows={3} className="min-h-[3.5rem] min-w-0 flex-1 basis-[12rem] resize-none bg-transparent py-2 text-[15px] text-ink-100 outline-none placeholder:text-ink-500" placeholder={cur.ph?.(a)} value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); submit(); } }} />
+          : <input ref={field} aria-label={cur ? cur.ask(a) : "Your answer"} className="min-w-0 flex-1 basis-[12rem] bg-transparent py-2.5 text-[15px] text-ink-100 outline-none placeholder:text-ink-500" disabled={!field$ || reading} placeholder={reading ? "Reading…" : writing ? "Writing your text…" : !cur ? "All done. Your preview is ready." : cur.id === "kind" ? "Tell me what you want, e.g. an online shop for my candles" : field$ ? cur.ph?.(a) : cur.type === "many" ? "Tap what applies above, then press Done" : cur.type === "file" ? "Choose a file, or skip" : "Pick one of the choices above"} value={field$ ? text : ""} onChange={(e) => setText(e.target.value)} />}
         {cur?.type === "file" && <>
           <input ref={pick} type="file" accept={cur.accept} className="sr-only" aria-label={cur.ask(a)} onChange={(e) => choose(cur, e.target.files?.[0])} />
           <button type="button" className="btn btn-pri btn-sm rounded-full" onClick={() => pick.current?.click()}>{cur.id === "logo" ? "Choose logo" : cur.id === "doc" ? "Choose document (PDF)" : "Choose PDF"}</button>
         </>}
-        {cur?.optional && (field$ || cur.type === "file") && <button type="button" className="btn btn-ghost btn-sm" onClick={() => answer(cur, "")}>Skip</button>}
+        {cur && isOptional(cur, a) && (field$ || cur.type === "file") && <button type="button" className="btn btn-ghost btn-sm" onClick={() => answer(cur, "")}>Skip</button>}
         {cur?.type === "many" && <button type="submit" className="btn btn-pri btn-sm rounded-full" disabled={!many.length}>Done</button>}
         {field$ && <button type="submit" className="btn btn-pri btn-sm rounded-full" disabled={!text.trim()} aria-label="Send">Send ↵</button>}
       </div>
@@ -188,11 +207,6 @@ export function DesignPage({ studio, index, onIndex }: { studio?: Studio; index?
     );
   };
 
-  const bubble = (who: "bot" | "me", children: React.ReactNode) => (
-    <div className={`flex ${who === "me" ? "justify-end" : "justify-start"}`}>
-      <div className={`max-w-[88%] rounded-2xl px-4 py-2.5 text-[15px] leading-relaxed ${who === "me" ? "rounded-br-md bg-brand-500 text-white" : "rounded-bl-md border border-ink-700 bg-ink-900 text-ink-100"}`}>{children}</div>
-    </div>
-  );
   const ready = finished && !!copy && !writing;
 
   return (
@@ -207,44 +221,56 @@ export function DesignPage({ studio, index, onIndex }: { studio?: Studio; index?
         </span>
       </header>
 
-      <main className={`mx-auto flex w-full max-w-3xl flex-1 flex-col gap-5 px-4 pb-8 sm:px-6 ${started ? "pt-2" : "justify-center"}`}>
+      <main className={`mx-auto flex w-full max-w-2xl flex-1 flex-col gap-5 px-4 pb-10 sm:px-6 ${started ? "pt-2" : "justify-center"}`}>
         {!started && (
           <div className="text-center">
             <h1 className="font-display text-4xl font-extrabold tracking-tight sm:text-5xl">Design your own website</h1>
-            <p className="mx-auto mt-3 max-w-xl text-ink-300">Answer a few simple questions. Your website appears as you go. It's a preview, and we finish it together.</p>
+            <p className="mx-auto mt-3 max-w-xl text-ink-300">Answer a few simple questions and watch your website take shape. It's a preview; we finish it together.</p>
           </div>
         )}
         {!started && cur && <>{bar}<p className="text-center text-sm text-ink-400">or tap one:</p>{chips(cur)}</>}
-        <div className="flex flex-col gap-3" aria-live="polite">
-          {answered.map((s) => (
-            <div key={s.id} className="flex flex-col gap-2">
-              {bubble("bot", s.ask(a))}
-              <div className="group flex items-center justify-end gap-2">
-                <button type="button" className="text-xs text-ink-500 underline-offset-2 opacity-0 transition hover:text-ink-200 hover:underline focus:opacity-100 group-hover:opacity-100 max-sm:opacity-100" onClick={() => rewind(s.id)} aria-label={`Change your answer to: ${s.ask(a)}`}>Change</button>
-                {bubble("me", <span className="whitespace-pre-line">{sayAnswer(s, a)}</span>)}
-              </div>
+        {started && (
+          <>
+            <div className="flex items-center gap-3" aria-label={`Step ${Math.min(answered.length + 1, total)} of ${total}`}>
+              <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-ink-800" role="progressbar" aria-valuemin={0} aria-valuemax={total} aria-valuenow={answered.length}><div className="h-full rounded-full bg-brand-500 transition-all" style={{ width: `${Math.round((answered.length / total) * 100)}%` }} /></div>
+              <span className="text-xs tabular-nums text-ink-400">{Math.min(answered.length + 1, total)} / {total}</span>
             </div>
-          ))}
-          {cur && started && <div className="flex flex-col gap-3">{bubble("bot", <>{cur.ask(a)}{cur.help && <span className="mt-1 block text-[13px] text-ink-400">{cur.help(a)}</span>}</>)}{(cur.type === "choice" || cur.type === "many") && chips(cur)}</div>}
-          {finished && writing && <div className="flex flex-col gap-3">{bubble("bot", <span className="inline-flex items-center gap-2"><Spinner />Writing a short line about each of your topics…</span>)}</div>}
-          {ready && (
-            <div className="flex flex-col gap-3">
-              {bubble("bot", <>Your preview is ready{design ? <>: a <b>{TEMPLATES[design.kind].name}</b> in the <b>{design.themeName}</b> look</> : ""}. It isn't published. To make it real, connect with us and we'll finish it together: your own photos, your address on the web, payment and any extra features.</>)}
-              <div className="flex flex-wrap gap-2">
-                <button type="button" className="btn btn-pri" onClick={() => setShowPreview(true)}>View my preview</button>
-                <button type="button" className="btn" onClick={() => setConnect(true)}>{sent ? "Request sent ✓" : "Connect with Picaffectz"}</button>
-                <button type="button" className="btn btn-ghost" onClick={restart}>Design another</button>
-              </div>
+            <div className="flex flex-wrap gap-1.5" aria-label="Your answers so far">
+              {answered.map((s) => (
+                <button key={s.id} type="button" onClick={() => rewind(s.id)} title={`Change: ${s.ask(a)}`} aria-label={`Change your answer to: ${s.ask(a)}`} className="group inline-flex max-w-full items-center gap-1.5 rounded-full border border-ink-700 bg-ink-900 px-3 py-1 text-xs text-ink-300 transition hover:border-brand-400 hover:text-ink-100">
+                  <span className="text-ink-500">{STEP_LABEL[s.id] || s.id}</span>
+                  <span className="max-w-[14rem] truncate font-semibold text-ink-100">{a[s.id] ? sayAnswer(s, a).replace(/\s*\(from your document\)$/, "") : "Skipped"}</span>
+                  {(a.docfrom || "").split(",").includes(s.id) && <span className="text-brand-300" title="Found in your document">✦</span>}
+                  <span aria-hidden className="text-ink-500 opacity-0 transition group-hover:opacity-100 max-sm:opacity-100">✎</span>
+                </button>
+              ))}
             </div>
-          )}
-          <div ref={endRef} />
-        </div>
+            {cur && (
+              <section className="card flex flex-col gap-4 p-5 sm:p-7" aria-live="polite">
+                <h2 className="font-display text-2xl font-extrabold leading-snug tracking-tight sm:text-[28px]">{cur.ask(a)}</h2>
+                {cur.help && <p className="-mt-2 text-sm text-ink-400">{cur.help(a)}</p>}
+                {(cur.type === "choice" || cur.type === "many") && chips(cur)}
+                {bar}
+                {reading && <p className="inline-flex items-center gap-2 text-sm text-ink-300"><Spinner />Reading it…</p>}
+              </section>
+            )}
+            {finished && writing && <section className="card flex items-center gap-3 p-5" aria-live="polite"><Spinner /><span>Writing a short line about each of your topics…</span></section>}
+            {ready && (
+              <section className="card flex flex-col gap-4 p-5 sm:p-7" aria-live="polite">
+                <h2 className="font-display text-2xl font-extrabold tracking-tight">Your preview is ready</h2>
+                <p className="text-sm text-ink-300">{design ? <>A <b className="text-ink-100">{TEMPLATES[design.kind].name}</b> in the <b className="text-ink-100">{design.themeName}</b> look. </> : ""}It isn't published. Connect with us to finish it together: your own photos, your address on the web, payment and any extra features.</p>
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" className="btn btn-pri" onClick={() => setShowPreview(true)}>View my preview</button>
+                  <button type="button" className="btn" onClick={() => setConnect(true)}>{sent ? "Request sent ✓" : "Connect with Picaffectz"}</button>
+                  <button type="button" className="btn btn-ghost" onClick={restart}>Design another</button>
+                </div>
+                <p className="text-xs text-ink-500">Preview only. Nothing is published or charged.</p>
+              </section>
+            )}
+            <div ref={endRef} />
+          </>
+        )}
       </main>
-
-      {started && <div className="sticky bottom-0 z-10 border-t border-ink-800 bg-ink-950/90 px-4 py-4 backdrop-blur">
-        {bar}
-        {ready && <p className="mx-auto mt-2 max-w-2xl text-center text-xs text-ink-500">Preview only. Nothing is published or charged.</p>}
-      </div>}
 
       {showPreview && design && <PreviewPopup design={design} ver={ver} a={a} onClose={() => setShowPreview(false)} onConnect={() => setConnect(true)} done={ready} onTweak={ready ? tweak : undefined} />}
       {warn && (

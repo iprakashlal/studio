@@ -113,7 +113,8 @@ export function ThemesPage({ signedIn }: { signedIn: boolean }) {
     <div className="min-h-screen bg-ink-950 text-ink-100">
       <header className="sticky top-0 z-30 border-b border-ink-700 bg-ink-950/90 backdrop-blur">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-3 px-4 py-3">
-          <a href="#/" className="flex items-center gap-2.5 font-extrabold"><BrandMark fallback={<Logo />} />{studioBrand.name}</a>
+          {/* The Studio's name goes to the projects only for someone signed in. */}
+          {signedIn ? <a href="#/" className="flex items-center gap-2.5 font-extrabold"><BrandMark fallback={<Logo />} />{studioBrand.name}</a> : <span className="flex items-center gap-2.5 font-extrabold"><BrandMark fallback={<Logo />} />{studioBrand.name}</span>}
           <span className="text-ink-500">/</span><span className="font-bold">Theme gallery</span>
           <div className="ml-auto flex flex-wrap items-center gap-2">
             {designOn && <a href="#/design" className="btn btn-pri btn-sm">✦ Design yourself</a>}

@@ -1,5 +1,6 @@
 // "Design yourself": a plain-language question flow that builds a preview website for any of the four types.
 // Nothing here is published: the result is a preview (kept on this device, and in the Studio when signed in).
+import { outsideLines, packSections, readSections, unpackSections, type DocSections } from "./docsections";
 import { THEMES, type Theme } from "../themes/catalog";
 import { BIZ_THEMES } from "../themes/business";
 import { REST_THEMES } from "../themes/restaurant";
@@ -189,12 +190,15 @@ export function fromDoc(text: string, a: Answers, meta?: { name?: string; about?
   const short = (l: string) => l.length >= 3 && l.length <= 40 && l.split(/\s+/).length <= 5 && !/[.!?:@]|https?:|\d{3,}/.test(l) && !NAV.test(l) && l !== head && !used.has(l);
   let run: string[] = [], best: string[] = [];
   for (const l of ls) { if (short(l)) { run.push(l); if (run.length > best.length) best = run.slice(); } else run = []; }
-  if (!a.items) {
+  if (!a.items && (readSections(t).services?.length || 0) < 3) {
     if ((kind === "store" || kind === "restaurant") && priced.length >= 2) out.items = priced.map((m) => `${m[1].trim()} - ${m[2].replace(/,/g, "")}`).join("\n");
     else if (bullets.length >= 3) out.items = bullets.join("\n");
     else if (best.length >= 3 && best.length <= 8) out.items = best.join("\n");
   }
-  const prose = ls.filter((l) => l.length >= 45 && /[a-z]/.test(l) && !used.has(l) && !/@|https?:\/\//.test(l) && !/^[•●▪◦\-–*]\s/.test(l)).join(" ");
+  const secs = readSections(t), outside = new Set(outsideLines(t));
+  if (!a.items && (secs.services?.length || 0) >= 3) out.items = secs.services!.map((e) => e.title).slice(0, 8).join("\n");
+  const prose = ls.filter((l) => outside.has(l) && l.length >= 45 && /[a-z]/.test(l) && !used.has(l) && !/@|https?:\/\//.test(l) && !/^[•●▪◦\-–*]\s/.test(l)).join(" ");
+  if (!a.docsec) { const sec = packSections(readSections(t)); if (sec && sec !== "{}") out.docsec = sec; }
   if (!a.story && prose.length >= 120) out.story = prose.length > 700 ? prose.slice(0, 700).replace(/\s+\S*$/, "") + "…" : prose;
   return out;
 }
@@ -397,6 +401,7 @@ export async function buildDesign(a: Answers, copy?: Copy | null, files?: Design
   }
   if (kind === "business" && hours) put("contact.hours", hours);
   if (kind === "restaurant" && hours) { put("hours.note", hours); put("hours.days", []); put("hours.showStatus", false); }
+  applySections(kind, c, unpackSections(a.docsec), (...ids) => show(c, ...ids));
   if (files?.logo && kind !== "portfolio") put("brand.logo", { url: files.logo });
   if (kind === "restaurant" && files?.menu) { put("food.pdfUrl", "data:application/pdf;base64," + files.menu.b64); put("food.pdfLabel", "Download the menu (PDF)"); }
   if (theme) {
@@ -407,6 +412,39 @@ export async function buildDesign(a: Answers, copy?: Copy | null, files?: Design
   }
   return { kind, content: c, themeId: theme?.id || "", themeName: theme?.name || "", summary: tpl.summary(c) };
 }
+/** What the person's document says for each section of the website: it fills that section and shows it (sections the document says nothing about stay as they were). */
+function applySections(kind: Kind, c: any, d: DocSections, show: (...ids: string[]) => void) {
+  const has = (k: keyof DocSections) => { const v = (d as any)[k]; return Array.isArray(v) ? v.length > 0 : !!v; };
+  const icons = (list: any[] | undefined, i: number, dflt: string) => (list && list.length ? list[i % list.length].icon : dflt);
+  if (kind === "business") {
+    if (has("services")) { const base = c.services.items; c.services.items = d.services!.map((e, i) => ({ ...base[i % base.length], title: e.title, body: e.body || e.title, points: e.bullets || [] })); c.services.lede = ""; show("services"); }
+    if (has("stats")) { c.stats = { ...(c.stats || {}), items: d.stats }; show("stats"); }
+    if (has("clients")) { c.clients = { ...(c.clients || {}), title: "Our clients", logos: d.clients!.map((n) => ({ name: n, logo: null })) }; show("clients"); }
+    if (has("work")) { const base = c.work.items[0] || {}; c.work.items = d.work!.map((w) => ({ ...base, title: w.title, client: w.client, sector: "", summary: w.summary, result: w.result, image: null, url: "" })); c.work.lede = ""; show("work"); }
+    if (has("process")) { c.process = { ...(c.process || {}), lede: "", steps: d.process!.map((e) => ({ title: e.title, body: e.body || "" })) }; show("process"); }
+    if (has("team")) { c.team = { ...(c.team || {}), lede: "", members: d.team!.map((m) => ({ name: m.name, role: m.role, photo: null, linkedin: "" })) }; show("team"); }
+    if (has("testimonials")) { c.testimonials = { ...(c.testimonials || {}), items: d.testimonials }; show("testimonials"); }
+    if (has("pricing")) { c.pricing = { ...(c.pricing || {}), lede: "", plans: d.pricing!.map((p, i) => ({ name: p.name, price: p.price, period: p.period, blurb: p.blurb, features: p.features, cta: "Get in touch", featured: i === 1 })), note: "" }; show("pricing"); }
+    if (has("faq")) { c.faq = { ...(c.faq || {}), items: d.faq }; show("faq"); }
+    if (has("mission") || has("vision") || has("values")) { c.about = { ...(c.about || {}), mission: d.mission || "", vision: d.vision || "", values: (d.values || []).map((e) => ({ title: e.title, body: e.body || "" })) }; show("about"); }
+  } else if (kind === "restaurant") {
+    if (has("highlights")) { const base = c.highlights.items; c.highlights.items = d.highlights!.map((e, i) => ({ icon: icons(base, i, "flame"), title: e.title, body: e.body || "" })); show("highlights"); }
+    if (has("offers")) { c.offers.items = d.offers!.map((o) => ({ title: o.title, body: o.body, when: o.when, price: o.price, code: "", image: null })); show("offers"); }
+    if (has("events")) { const base = c.events.items; c.events.lede = ""; c.events.items = d.events!.map((e, i) => ({ icon: icons(base, i, "people"), title: e.title, body: e.body || "" })); show("events"); }
+    if (has("team")) { c.chef = { ...(c.chef || {}), lede: "", members: d.team!.map((m) => ({ name: m.name, role: m.role, bio: m.bio, photo: null })) }; show("chef"); }
+    if (has("clients")) { c.press = { ...(c.press || {}), logos: d.clients!.map((n) => ({ name: n, logo: null })) }; show("press"); }
+    if (has("testimonials")) { c.testimonials = { ...(c.testimonials || {}), items: d.testimonials!.map((t) => ({ ...t, rating: "" })) }; show("testimonials"); }
+    if (has("faq")) { c.faq = { ...(c.faq || {}), items: d.faq }; show("faq"); }
+    if (has("stats")) { c.about = { ...(c.about || {}), facts: d.stats }; show("about"); }
+  } else if (kind === "portfolio") {
+    const COL = ["c1", "c2", "c3", "surface"], SHAPE = ["circle", "square", "diamond", "triangle"];
+    if (has("experience")) { const base = c.work.items[0] || {}; c.work.items = d.experience!.map((x, i) => ({ ...base, period: x.period, title: x.title, org: x.org, orgNote: "", current: /present|now|current/i.test(x.period), color: COL[i % COL.length], image: null, bullets: x.bullets })); show("work"); }
+    if (has("education") || has("languages")) { const base = c.learning.items[0] || {}; c.learning = { ...(c.learning || {}), items: has("education") ? d.education!.map((x, i) => ({ ...base, period: x.period, title: x.title, sub: x.sub, shape: SHAPE[i % SHAPE.length], color: COL[i % 3] })) : [], languages: d.languages || c.learning.languages }; show("learning"); }
+    if (has("stats")) { c.about = { ...(c.about || {}), stats: d.stats!.map((x, i) => { const m = /^(\d[\d,.]*)\s*(\D*)$/.exec(x.value.replace(/,/g, "")); return { value: m ? +m[1] : 0, suffix: m ? m[2].trim() : x.value, label: x.label, color: COL[i % 3], shape: SHAPE[i % SHAPE.length] }; }) }; }
+    if (has("skills") && !(c.skills?.items || []).length) { const base = c.skills.items[0] || {}; c.skills.items = d.skills!.map((e, i) => ({ ...base, tag: `${String(i + 1).padStart(2, "0")} / Skill`, title: e.title, body: e.body || "", detail: "", color: COL[i % 3], shape: SHAPE[i % SHAPE.length] })); show("skills"); }
+  }
+}
+
 const show = (c: any, ...ids: string[]) => { for (const x of c.sections || []) if (ids.includes(x.id)) { if ("visible" in x) x.visible = true; else x.show = true; } };
 
 /** The topics the person gave, as plain names (prices removed). */

@@ -3,6 +3,7 @@ import { BrandMark, useBrand } from "../lib/brand";
 import { TEMPLATES } from "../schema";
 import { Preview } from "../editor/Preview";
 import { Logo, Spinner, useToast } from "../ui/kit";
+import { packSections, sectionNames, unpackSections } from "../lib/docsections";
 import { COLOUR_DOT, STEPS, STEP_LABEL, buildDesign, fromDoc, isOptional, nextStep, requestText, sayAnswer, themeOf, themesFor, tweakTheme, writeCopy, type Answers, type Design, type DesignFiles, type Step } from "../lib/designer";
 import { newDesignId, readDesignSettings, readLocalDesigns, writeLocalDesigns, type Copy, type DesignRec } from "../lib/designs";
 import { COLOUR_SLOTS, GROUPS, readColsAnswer, readLookAnswer, resolvedLook, visibleAxes, type Kind as LookKind } from "../lib/designlook";
@@ -122,9 +123,10 @@ export function DesignPage({ studio, index, onIndex }: { studio?: Studio; index?
   };
   /** What a document or page says fills in the answers it can (the questions it covers are then not asked). */
   const applyDoc = (label: string, text: string, link: string, meta?: { name?: string; about?: string }) => {
-    const fill = fromDoc(text, a, meta), got = Object.keys(fill);
+    const fill = fromDoc(text, a, meta), got = Object.keys(fill).filter((x) => x !== "docsec"), secs = sectionNames(unpackSections(fill.docsec));
     setA((o) => ({ ...o, doc: label, ...(link ? { doclink: link } : {}), ...(text ? { doctext: text } : {}), ...fromDoc(text, o, meta), ...(got.length ? { docfrom: got.join(",") } : {}) }));
-    toast(got.length ? `Found ${got.map((x) => (STEP_LABEL[x] || x).toLowerCase()).join(", ")}. You can change any answer.` : "Read it. It will help us write your text.");
+    const found = [...got.map((x) => (STEP_LABEL[x] || x).toLowerCase()), ...secs.filter((x) => !got.includes(x))];
+    toast(found.length ? `Found ${found.join(", ")}. You can change any answer.` : "Read it. It will help us write your text.");
     // The Studio's AI (when it is the chosen engine) reads it more closely: what it finds replaces the rule-based guesses, never what the person typed.
     if (host && text.length >= 30) void understandText(host, a.kind || "", text).then((u) => {
       const f = u.fields; if (!f || u.engine === "system") return;
@@ -132,7 +134,8 @@ export function DesignPage({ studio, index, onIndex }: { studio?: Studio; index?
         const typed = new Set((o.docfrom || "").split(",").filter(Boolean)), n: Answers = {}, put = (k: string, v: any) => { if (typeof v === "string" && v.trim() && (!o[k] || typed.has(k))) n[k] = v.trim(); };
         for (const k of ["name", "about", "city", "story", "usp", "phone", "email", "hours", "address", "social"]) { if (k === "address" || k === "hours" || k === "social") { if (!o[k]) put(k, f[k]); } else put(k, f[k]); }
         if (Array.isArray(f.items) && f.items.length && (!o.items || typed.has("items"))) n.items = f.items.filter((x: any) => typeof x === "string" && x.trim()).join("\n");
-        const keys = Object.keys(n); if (!keys.length) return o;
+        if (f.sections && typeof f.sections === "object") { const pk = packSections({ ...unpackSections(o.docsec), ...f.sections }); if (pk) n.docsec = pk; }
+        const keys = Object.keys(n).filter((x) => x !== "docsec"); if (!keys.length && !n.docsec) return o;
         return { ...o, ...n, docfrom: [...new Set([...typed, ...keys])].join(",") };
       });
     });
@@ -168,7 +171,7 @@ export function DesignPage({ studio, index, onIndex }: { studio?: Studio; index?
   const rewind = (id: string) => {
     const at = STEPS.findIndex((s) => s.id === id);
     const docAt = STEPS.findIndex((s) => s.id === "doc"), look = ["theme", "accent", "mode", "corners"];
-    const keep = Object.fromEntries(Object.entries(a).filter(([key]) => !look.includes(key) && !((key === "doctext" || key === "docfrom") && at <= docAt) && STEPS.findIndex((s) => s.id === key) < at));
+    const keep = Object.fromEntries(Object.entries(a).filter(([key]) => !look.includes(key) && !((key === "doctext" || key === "docfrom" || key === "docsec") && at <= docAt) && STEPS.findIndex((s) => s.id === key) < at));
     const old = a[id]; setA(keep); setCopy(null); if (STEPS[at].type === "text" || STEPS[at].type === "long") setTimeout(() => setText(old || ""), 60);
     lastSaved.current = ""; setShowPreview(false);
   };

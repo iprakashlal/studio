@@ -2350,6 +2350,12 @@ async function dqSubmit(env, id, req, ctx) {
   if (email && !EMAIL_RE.test(email)) return err(400, "That email address doesn't look right.");
   const answers = dqStrings(q.answers, 44, 1500), copy = dqCopy(q.copy);
   if (typeof q.answers?.doctext === "string" && q.answers.doctext.trim()) answers.doctext = q.answers.doctext.slice(0, 12e3);
+  if (typeof q.answers?.docsec === "string" && q.answers.docsec.length <= 9e3) {
+    try {
+      if (JSON.parse(q.answers.docsec)) answers.docsec = q.answers.docsec;
+    } catch {
+    }
+  }
   if (answers.doclink && !/^https?:\/\//i.test(answers.doclink)) delete answers.doclink;
   let logo = "";
   if (typeof q.logo === "string" && /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(q.logo) && q.logo.length <= 16e4) logo = q.logo;
@@ -2433,6 +2439,48 @@ async function dqEngine(env, idx) {
   } else if (choice === "cloudflare" && env.AI) ai = env.AI;
   return { choice, ai };
 }
+var DQ_SEC = {
+  services: [["title", 60], ["body", 220]],
+  process: [["title", 60], ["body", 220]],
+  highlights: [["title", 60], ["body", 220]],
+  events: [["title", 60], ["body", 220]],
+  values: [["title", 60], ["body", 220]],
+  skills: [["title", 60], ["body", 220]],
+  team: [["name", 50], ["role", 60], ["bio", 240]],
+  testimonials: [["quote", 300], ["name", 50], ["role", 60], ["company", 60]],
+  faq: [["q", 140], ["a", 400]],
+  pricing: [["name", 40], ["price", 20], ["period", 30], ["blurb", 160]],
+  stats: [["value", 20], ["label", 40]],
+  work: [["title", 70], ["summary", 220], ["client", 60], ["result", 80]],
+  offers: [["title", 60], ["body", 160], ["when", 40], ["price", 20]],
+  experience: [["period", 30], ["title", 60], ["org", 60]],
+  education: [["period", 30], ["title", 70], ["sub", 70]]
+};
+function dqSections(x) {
+  const out = {};
+  if (!x || typeof x !== "object") return out;
+  for (const [k, fields] of Object.entries(DQ_SEC)) {
+    if (!Array.isArray(x[k])) continue;
+    const list = x[k].slice(0, 8).map((e) => {
+      const o = {};
+      for (const [f, n] of fields) o[f] = clip(e?.[f], n);
+      if (k === "pricing") o.features = (Array.isArray(e?.features) ? e.features : []).slice(0, 7).map((v) => clip(v, 80)).filter(Boolean);
+      if (k === "experience") o.bullets = (Array.isArray(e?.bullets) ? e.bullets : []).slice(0, 4).map((v) => clip(v, 160)).filter(Boolean);
+      if (["services", "process", "highlights", "events", "values", "skills"].includes(k)) o.bullets = [];
+      return o;
+    }).filter((o) => fields.some(([f]) => k === "team" ? f === "name" && o[f] : o[fields[0][0]]));
+    if (list.length) out[k] = list;
+  }
+  for (const k of ["clients", "languages"]) if (Array.isArray(x[k])) {
+    const l = x[k].slice(0, 12).map((v) => clip(v, 40)).filter(Boolean);
+    if (l.length) out[k] = l;
+  }
+  for (const k of ["mission", "vision"]) {
+    const v = clip(x[k], 220);
+    if (v) out[k] = v;
+  }
+  return out;
+}
 async function dqUnderstand(env, id, req) {
   const ip = req.headers.get("cf-connecting-ip") || "x";
   if (!await dqRate(env, "dqun:" + id, 80, 3600) || !await dqRate(env, "dqunip:" + ip, 12, 3600)) return json({ engine: "system", error: "busy" });
@@ -2448,9 +2496,9 @@ async function dqUnderstand(env, id, req) {
   }
   const kind = DQ_KINDS.includes(q.kind) ? q.kind : "business", text = clip(q.text, 9e3);
   if (text.length < 30) return json({ engine: "system" });
-  const sys = `You read the text of a ${DQ_LABEL[kind].toLowerCase()}'s document or web page and pick out facts for a website. Use ONLY facts written in the text. Never invent anything. Leave out what isn't there. Reply with JSON only: {"name": short name (max 45 chars), "about": what they do in one short line (max 100 chars), "city": city or area, "story": 1-2 plain sentences about them (max 300 chars), "usp": what makes them special (max 160 chars), "items": up to 8 short names of the ${kind === "store" ? "products" : kind === "restaurant" ? "dishes" : kind === "portfolio" ? "skills" : "services"} they offer, "phone": phone number, "email": email address, "hours": opening hours in one line, "address": street address, "social": Instagram address}. Use plain words.`;
+  const sys = `You read the text of a ${DQ_LABEL[kind].toLowerCase()}'s document or web page and pick out facts for a website. Use ONLY facts written in the text. Never invent anything. Leave out what isn't there. Reply with JSON only: {"name": short name (max 45 chars), "about": what they do in one short line (max 100 chars), "city": city or area, "story": 1-2 plain sentences about them (max 300 chars), "usp": what makes them special (max 160 chars), "items": up to 8 short names of the ${kind === "store" ? "products" : kind === "restaurant" ? "dishes" : kind === "portfolio" ? "skills" : "services"} they offer, "phone": phone number, "email": email address, "hours": opening hours in one line, "address": street address, "social": Instagram address, "sections": {each of these only when the text has it: "services": [{"title","body"}], "team": [{"name","role","bio"}], "testimonials": [{"quote","name","role","company"}], "faq": [{"q","a"}], "pricing": [{"name","price","period","blurb","features":[]}], "process": [{"title","body"}], "stats": [{"value","label"}], "clients": [names], "work": [{"title","summary","client","result"}], "highlights": [{"title","body"}], "offers": [{"title","body","when","price"}], "events": [{"title","body"}], "experience": [{"period","title","org","bullets":[]}], "education": [{"period","title","sub"}], "languages": [names], "mission": text, "vision": text, "values": [{"title","body"}]}}. Copy the wording of the text; keep every entry short. Use plain words.`;
   try {
-    const r = await ai.run("@cf/meta/llama-3.3-70b-instruct-fp8-fast", { messages: [{ role: "system", content: sys }, { role: "user", content: text }], max_tokens: 700, temperature: 0.1, response_format: { type: "json_object" } });
+    const r = await ai.run("@cf/meta/llama-3.3-70b-instruct-fp8-fast", { messages: [{ role: "system", content: sys }, { role: "user", content: text }], max_tokens: 2200, temperature: 0.1, response_format: { type: "json_object" } });
     const t = typeof r?.response === "string" ? r.response : JSON.stringify(r?.response ?? r);
     let j;
     try {
@@ -2467,6 +2515,8 @@ async function dqUnderstand(env, id, req) {
     }
     const items = (Array.isArray(j.items) ? j.items : []).map((x) => clip(x, 60)).filter(Boolean).slice(0, 8);
     if (items.length) f.items = items;
+    const sections = dqSections(j.sections);
+    if (Object.keys(sections).length) f.sections = sections;
     return json({ engine: choice, fields: f });
   } catch (e) {
     return json({ engine: "system", error: String(e?.message || e).slice(0, 160) });

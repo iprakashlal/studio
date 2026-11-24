@@ -3,9 +3,9 @@ import { BrandMark, useBrand } from "../lib/brand";
 import { TEMPLATES } from "../schema";
 import { Preview } from "../editor/Preview";
 import { Logo, Spinner, useToast } from "../ui/kit";
-import { COLOUR_DOT, STEPS, STEP_LABEL, buildDesign, fromDoc, isOptional, nextStep, requestText, sayAnswer, themesFor, tweakTheme, writeCopy, type Answers, type Design, type DesignFiles, type Step } from "../lib/designer";
+import { COLOUR_DOT, STEPS, STEP_LABEL, buildDesign, fromDoc, isOptional, nextStep, requestText, sayAnswer, themeOf, themesFor, tweakTheme, writeCopy, type Answers, type Design, type DesignFiles, type Step } from "../lib/designer";
 import { newDesignId, readDesignSettings, readLocalDesigns, writeLocalDesigns, type Copy, type DesignRec } from "../lib/designs";
-import { COLOUR_SLOTS, readColsAnswer, readLookAnswer, resolvedLook, setsOf, visibleAxes, type Kind as LookKind } from "../lib/designlook";
+import { COLOUR_SLOTS, GROUPS, readColsAnswer, readLookAnswer, resolvedLook, setsOf, visibleAxes, type Kind as LookKind } from "../lib/designlook";
 import { designHost, readPage, submitQuery, type DesignHost } from "../lib/designapi";
 import { pdfLines } from "../lib/pdftext";
 import { watchDevtools } from "../lib/devtools";
@@ -350,87 +350,110 @@ export function PreviewPopup({ design, ver, a, onClose, onConnect, done, onTweak
   );
 }
 
-const ACCENTS = ["blue", "green", "red", "orange", "purple", "pink", "gold", "mono"] as const;
-const CORNERS: [string, string][] = [["0", "Sharp"], ["8", "Soft"], ["16", "Round"], ["28", "Pill"]];
-/** "Play with your design": the colours and look of the chosen type, changed live. */
+const DEFAULT_ACCENTS = ["blue", "green", "red", "orange", "purple", "pink", "gold", "mono"].map((c) => COLOUR_DOT[c]);
+
+/** A foldable group of controls in the customise panel. */
+function Group({ title, note, open, children }: { title: string; note?: string; open?: boolean; children: React.ReactNode }) {
+  return (
+    <details open={open} className="group rounded-2xl border border-ink-700 bg-ink-800/40">
+      <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-3 text-[13px] font-bold tracking-wide text-ink-100 [&::-webkit-details-marker]:hidden">
+        {title}<span aria-hidden className="ml-auto text-ink-500 transition-transform group-open:rotate-180">▾</span>
+      </summary>
+      <div className="flex flex-col gap-3.5 border-t border-ink-700/70 px-4 pb-4 pt-3.5">{note && <p className="text-[12px] leading-snug text-ink-400">{note}</p>}{children}</div>
+    </details>
+  );
+}
+const fieldLabel = "text-[12px] font-semibold text-ink-300";
+
+/** "Play with your design": the colours, layouts, style and interactions of the chosen type, changed live. What is offered here is set in the Studio's Settings → Design yourself. */
 function Tweaks({ a, design, onTweak, onClose }: { a: Answers; design: Design; onTweak: (p: Answers) => void; onClose: () => void }) {
   const [q, setQ] = useState("");
-  const all = useMemo(() => themesFor(design.kind), [design.kind]);
+  const kind = design.kind as LookKind;
+  const all = useMemo(() => themesFor(design.kind), [design.kind, a.theme]);
   const list = all.filter((t) => !q.trim() || (t.name + " " + t.tags.join(" ")).toLowerCase().includes(q.trim().toLowerCase()));
-  const seg = (label: string, key: string, opts: [string, string][], own = true) => (
-    <div className="flex flex-col gap-1.5"><span className="label">{label}</span>
-      <div className="flex flex-wrap rounded-lg border border-ink-600" role="radiogroup" aria-label={label}>
-        {[...(own ? [["", "Theme's own"] as [string, string]] : []), ...opts].map(([v, l]) => <button key={v || "own"} type="button" role="radio" aria-checked={(a[key] || "") === v} onClick={() => onTweak({ [key]: v })} className={`btn btn-sm border-0 ${(a[key] || "") === v ? "bg-ink-700" : "bg-transparent"}`}>{l}</button>)}
-      </div>
-    </div>
-  );
   const settings = useMemo(readDesignSettings, [a.kind]);
   const brand = useBrand();
   const sets = setsOf(settings, brand.tint);
-  const axes = visibleAxes(design.kind as LookKind, settings);
+  const axes = visibleAxes(kind, settings);
   const picks = readLookAnswer(a.look), own = readColsAnswer(a.cols);
-  const baseTheme = all.find((t) => t.id === design.themeId) || all[0];
+  const baseTheme = themeOf(kind, design.themeId) || all[0];
   const shown = tweakTheme(baseTheme, a).colors as Record<string, string>;
   const setCols = (c: Record<string, string>) => onTweak({ cols: Object.keys(c).length ? JSON.stringify(c) : "" });
-  const changed = ["theme", "accent", "mode", "corners", "cols", "look"].some((x) => a[x]);
+  const accents = settings.accents?.length ? settings.accents : DEFAULT_ACCENTS;
+  const changed = ["theme", "accent", "cols", "look"].some((x) => a[x]);
+  const grouped = GROUPS.map((g) => ({ g, rows: axes.filter((x) => x.group === g) })).filter((x) => x.rows.length);
+  const pick = (axis: (typeof axes)[number]) => {
+    const cur = picks[axis.axis.key] ?? axis.def ?? "";
+    return (
+      <label key={axis.axis.key} className="flex flex-col gap-1.5" title={"Shapes: " + axis.forAnswer}><span className={fieldLabel}>{axis.axis.label}</span>
+        <select className="input h-10 py-0 text-[13px]" value={cur || "-"} onChange={(e) => onTweak({ look: JSON.stringify({ ...picks, [axis.axis.key]: e.target.value }) })}>
+          <option value="-">Theme's own</option>
+          {axis.axis.options.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+        </select>
+      </label>
+    );
+  };
   return (
-    <aside aria-label="Play with your design" className="z-10 flex flex-col gap-4 overflow-y-auto border-ink-700 bg-ink-900 p-4 max-md:absolute max-md:inset-x-0 max-md:bottom-0 max-md:max-h-[58%] max-md:border-t md:w-[330px] md:flex-none md:border-l">
-      <div className="flex items-center gap-2"><b className="text-[15px]">Play with your design</b><button type="button" className="btn btn-ghost btn-sm ml-auto" onClick={onClose} aria-label="Close this panel">✕</button></div>
-      <p className="text-[13px] text-ink-400">Try other looks and colours for your {TEMPLATES[design.kind].name.toLowerCase()}. The preview changes as you tap.</p>
-      <div className="flex flex-col gap-1.5"><span className="label">Accent colour</span>
-        <div className="flex flex-wrap items-center gap-2">
-          {ACCENTS.map((c) => <button key={c} type="button" title={c} aria-label={c} aria-pressed={a.accent?.toLowerCase() === COLOUR_DOT[c].toLowerCase()} onClick={() => onTweak({ accent: COLOUR_DOT[c] })} className={`h-8 w-8 rounded-full border-2 ${a.accent?.toLowerCase() === COLOUR_DOT[c].toLowerCase() ? "border-white" : "border-white/20"}`} style={{ background: COLOUR_DOT[c] }} />)}
-          <input type="color" aria-label="Pick your own colour" className="h-8 w-10 cursor-pointer rounded border border-ink-600 bg-transparent" value={/^#[0-9a-f]{6}$/i.test(a.accent || "") ? a.accent : "#3b82f6"} onChange={(e) => onTweak({ accent: e.target.value })} />
-          {a.accent && <button type="button" className="btn btn-ghost btn-sm" onClick={() => onTweak({ accent: "" })}>Theme's own</button>}
+    <aside aria-label="Play with your design" className="z-10 flex flex-col gap-3 overflow-y-auto border-ink-700 bg-ink-900 p-4 max-md:absolute max-md:inset-x-0 max-md:bottom-0 max-md:max-h-[62%] max-md:border-t md:w-[360px] md:flex-none md:border-l">
+      <div className="flex items-start gap-2"><div className="min-w-0"><b className="text-[16px]">Play with your design</b><p className="mt-0.5 text-[12px] leading-snug text-ink-400">Try other looks for your {TEMPLATES[design.kind].name.toLowerCase()}. The preview changes as you tap.</p></div><button type="button" className="btn btn-ghost btn-sm ml-auto shrink-0" onClick={onClose} aria-label="Close this panel">✕</button></div>
+
+      <Group title="Colours" open>
+        <div className="flex flex-col gap-2"><span className={fieldLabel}>Accent colour</span>
+          <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Accent colour">
+            <button type="button" aria-pressed={!a.accent} onClick={() => onTweak({ accent: "" })} className={`h-8 rounded-full border px-3 text-[12px] font-semibold ${!a.accent ? "border-brand-400 bg-brand-500/15 text-ink-100" : "border-ink-600 text-ink-300 hover:border-ink-400"}`}>Theme's own</button>
+            {accents.map((c) => { const on = a.accent?.toLowerCase() === c.toLowerCase(); return <button key={c} type="button" title={c} aria-label={c} aria-pressed={on} onClick={() => onTweak({ accent: c })} className={`h-8 w-8 rounded-full border-2 transition ${on ? "scale-110 border-white" : "border-white/20 hover:border-white/60"}`} style={{ background: c }} />; })}
+            {settings.pick !== false && <input type="color" aria-label="Pick your own accent colour" className="h-8 w-9 cursor-pointer rounded-lg border border-ink-600 bg-transparent p-0.5" value={/^#[0-9a-f]{6}$/i.test(a.accent || "") ? a.accent : "#3b82f6"} onChange={(e) => onTweak({ accent: e.target.value })} />}
+          </div>
         </div>
-      </div>
-      {seg("Light or dark", "mode", [["light", "Light"], ["dark", "Dark"]])}
-      {seg("Corners", "corners", CORNERS)}
-      {(design.kind === "business" || design.kind === "restaurant") && seg("Pages", "pages", [["single", "One page"], ["multi", "Separate pages"]], false)}
-      <div className="flex flex-col gap-2 rounded-xl border border-ink-700 p-3"><span className="label">Colour palette</span>
-        {sets.length > 0 && <div className="flex flex-wrap gap-1.5" role="group" aria-label="Ready-made palettes">
-          {sets.map((st) => (
-            <button key={st.name} type="button" title={st.name} onClick={() => setCols(st.colours)} className="flex items-center gap-1.5 rounded-lg border border-ink-600 px-2 py-1 text-[12px] hover:border-ink-400">
-              <span className="flex overflow-hidden rounded-full border border-white/20" aria-hidden>{Object.values(st.colours).slice(0, 5).map((c, i) => <span key={i} className="h-4 w-3" style={{ background: c }} />)}</span>{st.name}
-            </button>
-          ))}
-        </div>}
-        {settings.pick !== false && <div className="grid grid-cols-3 gap-2">
-          {COLOUR_SLOTS.map(([k, label]) => (
-            <label key={k} className="flex flex-col gap-1 text-[11px] leading-tight text-ink-400">{label}
-              <input type="color" aria-label={label} className="h-8 w-full cursor-pointer rounded border border-ink-600 bg-transparent" value={/^#[0-9a-f]{6}$/i.test(shown[k] || "") ? shown[k] : "#888888"} onChange={(e) => setCols({ ...own, [k]: e.target.value })} />
-            </label>
-          ))}
-        </div>}
-        {Object.keys(own).length > 0 && <button type="button" className="btn btn-ghost btn-sm self-start" onClick={() => setCols({})}>Back to the theme's colours</button>}
-      </div>
-      {axes.length > 0 && <div className="flex flex-col gap-2 rounded-xl border border-ink-700 p-3"><span className="label">Layout</span>
-        {axes.map(({ axis, forAnswer, def }) => {
-          const cur = picks[axis.key] ?? def ?? "";
-          return (
-            <label key={axis.key} className="flex flex-col gap-1 text-[12px] text-ink-400" title={"Shapes: " + forAnswer}>{axis.label}
-              <select className="input py-1.5 text-[13px]" value={cur || "-"} onChange={(e) => onTweak({ look: JSON.stringify({ ...picks, [axis.key]: e.target.value }) })}>
-                <option value="-">Theme's own</option>
-                {axis.options.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-              </select>
-            </label>
-          );
-        })}
-      </div>}
-      <div className="flex flex-col gap-1.5"><span className="label">Look ({all.length})</span>
-        <input className="input" type="search" placeholder="Search, e.g. dark, warm, bold" aria-label="Search looks" value={q} onChange={(e) => setQ(e.target.value)} />
+        {sets.length > 0 && <div className="flex flex-col gap-2"><span className={fieldLabel}>Palettes</span>
+          <div className="flex flex-wrap gap-2" role="group" aria-label="Ready-made palettes">
+            {sets.map((st) => (
+              <button key={st.name} type="button" title={st.name} onClick={() => setCols(st.colours)} className="flex items-center gap-2 rounded-full border border-ink-600 py-1 pl-1.5 pr-3 text-[12px] font-semibold text-ink-200 hover:border-ink-400">
+                <span className="flex overflow-hidden rounded-full border border-white/20" aria-hidden>{Object.values(st.colours).slice(0, 5).map((c, i) => <span key={i} className="h-5 w-3.5" style={{ background: c }} />)}</span>{st.name}
+              </button>
+            ))}
+          </div></div>}
+        {settings.pick !== false && <div className="flex flex-col gap-2"><span className={fieldLabel}>Each colour</span>
+          <div className="grid grid-cols-3 gap-x-2.5 gap-y-3">
+            {COLOUR_SLOTS.map(([k, label]) => (
+              <label key={k} className="flex flex-col gap-1.5 text-[11px] leading-tight text-ink-400"><span className="min-h-[2.4em]">{label}</span>
+                <input type="color" aria-label={label} className="h-9 w-full cursor-pointer rounded-lg border border-ink-600 bg-transparent p-0.5" value={/^#[0-9a-f]{6}$/i.test(shown[k] || "") ? shown[k] : "#888888"} onChange={(e) => setCols({ ...own, [k]: e.target.value })} />
+              </label>
+            ))}
+          </div></div>}
+        {(Object.keys(own).length > 0 || a.accent) && <button type="button" className="btn btn-sm self-start" onClick={() => onTweak({ accent: "", cols: "" })}>Back to the theme's colours</button>}
+      </Group>
+
+      {grouped.map(({ g, rows }, i) => (
+        <Group key={g} title={g === "Layout" ? "Layout" : g} open={g === "Layout"} note={g === "Intro screen" ? "Shown while the site opens, when an intro is switched on." : undefined}>
+          {g === "Layout" && (design.kind === "business" || design.kind === "restaurant") && (
+            <div className="flex flex-col gap-1.5"><span className={fieldLabel}>Pages</span>
+              <div className="grid grid-cols-2 gap-1 rounded-xl border border-ink-600 p-1" role="radiogroup" aria-label="Pages">
+                {([["single", "One page"], ["multi", "Separate pages"]] as const).map(([v, l]) => <button key={v} type="button" role="radio" aria-checked={(a.pages || "single") === v} onClick={() => onTweak({ pages: v })} className={`h-8 rounded-lg text-[13px] font-semibold ${(a.pages || "single") === v ? "bg-ink-700 text-ink-100" : "text-ink-400 hover:text-ink-100"}`}>{l}</button>)}
+              </div>
+            </div>
+          )}
+          {rows.map(pick)}
+        </Group>
+      ))}
+
+      <Group title={`Look (${all.length})`}>
+        <input className="input h-10" type="search" placeholder="Search, e.g. dark, warm, bold" aria-label="Search looks" value={q} onChange={(e) => setQ(e.target.value)} />
         <div className="grid max-h-72 grid-cols-1 gap-1.5 overflow-y-auto pr-1">
           {list.map((t) => (
-            <button key={t.id} type="button" aria-pressed={design.themeId === t.id} onClick={() => onTweak({ theme: t.id })} className={`flex items-center gap-2 rounded-lg border px-2.5 py-2 text-left text-[13px] ${design.themeId === t.id ? "border-brand-400 bg-brand-500/15" : "border-ink-700 hover:border-ink-500"}`}>
+            <button key={t.id} type="button" aria-pressed={design.themeId === t.id} onClick={() => onTweak({ theme: t.id })} className={`flex items-center gap-2.5 rounded-xl border px-3 py-2 text-left text-[13px] ${design.themeId === t.id ? "border-brand-400 bg-brand-500/15" : "border-ink-700 hover:border-ink-500"}`}>
               <span className="flex flex-none overflow-hidden rounded-full border border-white/20" aria-hidden>{[t.colors.bg, t.colors.c1, t.colors.c2].map((c, i) => <span key={i} className="h-5 w-4" style={{ background: c }} />)}</span>
               <span className="min-w-0 flex-1 truncate font-semibold text-ink-100">{t.name}</span><span className="text-[11px] text-ink-500">{t.dark ? "Dark" : "Light"}</span>
             </button>
           ))}
           {!list.length && <p className="text-[13px] text-ink-400">No look matches that.</p>}
         </div>
+      </Group>
+
+      <div className="flex flex-wrap items-center gap-2 pb-1">
+        {changed && <button type="button" className="btn btn-sm" onClick={() => onTweak({ theme: "", accent: "", cols: "", look: "" })}>Back to my first design</button>}
+        <p className="text-[12px] text-ink-500">Your changes are kept with your request when you connect with us.</p>
       </div>
-      {changed && <button type="button" className="btn btn-sm self-start" onClick={() => onTweak({ theme: "", accent: "", mode: "", corners: "", cols: "", look: "" })}>Back to my first design</button>}
-      <p className="text-[12px] text-ink-500">Your changes are kept with your request when you connect with us.</p>
     </aside>
   );
 }

@@ -35,7 +35,7 @@ import { LOGO_ANIMS, UI_LAYOUTS, BrandMark, DEFAULT_NAME, brand as currentBrand,
 import { PushUpdatesCard, PushUpdatesHost } from "./PushUpdates";
 import { Dashboard } from "./Dashboard";
 import { DesignPage } from "./DesignPage";
-import { DesignPageCard } from "./DesignSettings";
+import { DesignLookTab, DesignPageCard } from "./DesignSettings";
 import { ProjectView } from "./ProjectView";
 import { NS } from "./App";
 import { autoUpdateStudio } from "../lib/autoupdate";
@@ -159,8 +159,9 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
     // Customize: the Studio's name, badge, pages and admin menus. Hostings: accounts and where each site is hosted.
     const showCustomize = ["brand", "badge", "pages", "menus"].some((k) => !hid(k)), showHostings = !hid("hosting");
     const want = route.split("/")[1] || "general";
-    const tab = (want === "customize" && !showCustomize) || (want === "hostings" && !showHostings) ? "general" : want;
-    const tabList = [["general", "General"], ...(showCustomize ? [["customize", "Customize"]] : []), ...(showHostings ? [["hostings", "Hostings"]] : []), ["update", "Updates"], ...(client ? [] : [["migration", "Migration"]]), ["help", "Help"]] as [string, string][];
+    const showDesign = !hid("design");
+    const tab = (want === "customize" && !showCustomize) || (want === "hostings" && !showHostings) || (want === "design" && !showDesign) ? "general" : want;
+    const tabList = [["general", "General"], ...(showCustomize ? [["customize", "Customize"]] : []), ...(showHostings ? [["hostings", "Hostings"]] : []), ...(showDesign ? [["design", "Design yourself"]] : []), ["update", "Updates"], ...(client ? [] : [["migration", "Migration"]]), ["help", "Help"]] as [string, string][];
     const tabs = <>
       {/* Phones: one dropdown, so the tabs never wrap onto a second row. */}
       <label className="flex flex-col gap-1.5 sm:hidden"><span className="label">Settings section</span>
@@ -170,6 +171,7 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
       {tabList.map(([k, l]) => <a key={k} href={`#/settings${k === "general" ? "" : "/" + k}`} role="tab" aria-selected={tab === k} className={`-mb-px border-b-2 px-3 py-2 text-sm font-semibold ${tab === k ? "border-brand-400 text-ink-100" : "border-transparent text-ink-400 hover:text-ink-100"}`}>{l}</a>)}
     </div></>;
     if (client === undefined && tab !== "general") return <>{header}<main className="mx-auto flex max-w-3xl flex-col gap-4 px-4 py-8 sm:px-6"><h1 className="font-display text-3xl font-extrabold">Settings</h1>{tabs}<SkelRows n={3} label="Loading settings" /></main></>;
+    if (tab === "design") return <>{header}<main className="mx-auto flex max-w-3xl flex-col gap-4 px-4 py-8 sm:px-6"><h1 className="font-display text-3xl font-extrabold">Settings</h1>{tabs}<DesignLookTab /></main></>;
     if (tab === "help") return <>{header}<main className="mx-auto flex max-w-3xl flex-col gap-4 px-4 py-8 sm:px-6"><h1 className="font-display text-3xl font-extrabold">Settings</h1>{tabs}<StudioHelp /></main></>;
     // Updates: this Studio build onto live sites, and (a hosted Studio) the Studio's own update.
     if (tab === "update" && !(isHosted(session) && !client)) return <>{header}<main className="mx-auto flex max-w-3xl flex-col gap-4 px-4 py-8 sm:px-6"><h1 className="font-display text-3xl font-extrabold">Settings</h1>{tabs}<PushUpdatesCard index={index} demo={repo.demo} /></main></>;

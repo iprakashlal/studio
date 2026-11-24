@@ -3,8 +3,9 @@ import { BrandMark, useBrand } from "../lib/brand";
 import { TEMPLATES } from "../schema";
 import { Preview } from "../editor/Preview";
 import { Logo, Spinner, useToast } from "../ui/kit";
-import { COLOUR_DOT, STEPS, STEP_LABEL, buildDesign, fromDoc, isOptional, nextStep, requestText, sayAnswer, themesFor, writeCopy, type Answers, type Design, type DesignFiles, type Step } from "../lib/designer";
-import { newDesignId, readLocalDesigns, writeLocalDesigns, type Copy, type DesignRec } from "../lib/designs";
+import { COLOUR_DOT, STEPS, STEP_LABEL, buildDesign, fromDoc, isOptional, nextStep, requestText, sayAnswer, themesFor, tweakTheme, writeCopy, type Answers, type Design, type DesignFiles, type Step } from "../lib/designer";
+import { newDesignId, readDesignSettings, readLocalDesigns, writeLocalDesigns, type Copy, type DesignRec } from "../lib/designs";
+import { COLOUR_SLOTS, readColsAnswer, readLookAnswer, resolvedLook, setsOf, visibleAxes, type Kind as LookKind } from "../lib/designlook";
 import { designHost, readPage, submitQuery, type DesignHost } from "../lib/designapi";
 import { pdfLines } from "../lib/pdftext";
 import { watchDevtools } from "../lib/devtools";
@@ -49,6 +50,8 @@ export function DesignPage({ studio, index, onIndex }: { studio?: Studio; index?
   const [host, setHost] = useState<DesignHost | null>(null);
   const [design, setDesign] = useState<Design | null>(null);
   const [ver, setVer] = useState(1);
+  const [setsVer, setSetsVer] = useState(0);
+  useEffect(() => { const f = () => setSetsVer((v) => v + 1); addEventListener("studio:design-page", f); return () => removeEventListener("studio:design-page", f); }, []);
   const [writing, setWriting] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [connect, setConnect] = useState(false);
@@ -78,7 +81,7 @@ export function DesignPage({ studio, index, onIndex }: { studio?: Studio; index?
     if (!a.kind) { setDesign(null); return; }
     buildDesign(a, copy, files).then((d) => { if (live && d) { setDesign(d); setVer((v) => v + 1); } }).catch(() => {});
     return () => { live = false; };
-  }, [a, copy, files]);
+  }, [a, copy, files, setsVer]);
 
   // The last question is answered: the text for each topic is written (by the Studio's AI engine, else the Picaffectz system), then the site is shown.
   const finished = !cur && !!a.kind;
@@ -340,7 +343,7 @@ export function PreviewPopup({ design, ver, a, onClose, onConnect, done, onTweak
         </span>
       </div>
       <div className="relative flex min-h-0 flex-1">
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col"><Preview key={design.kind} tpl={TEMPLATES[design.kind]} base={`templates/${design.kind}/`} content={design.content} version={ver} assets={{}} editable={false} /></div>
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col"><Preview key={design.kind} tpl={TEMPLATES[design.kind]} base={`templates/${design.kind}/`} content={design.content} version={ver} assets={{}} editable={false} hidePages /></div>
         {play && onTweak && <Tweaks a={a} design={design} onTweak={onTweak} onClose={() => setPlay(false)} />}
       </div>
     </div>
@@ -361,7 +364,15 @@ function Tweaks({ a, design, onTweak, onClose }: { a: Answers; design: Design; o
       </div>
     </div>
   );
-  const changed = ["theme", "accent", "mode", "corners"].some((x) => a[x]);
+  const settings = useMemo(readDesignSettings, [a.kind]);
+  const brand = useBrand();
+  const sets = setsOf(settings, brand.tint);
+  const axes = visibleAxes(design.kind as LookKind, settings);
+  const picks = readLookAnswer(a.look), own = readColsAnswer(a.cols);
+  const baseTheme = all.find((t) => t.id === design.themeId) || all[0];
+  const shown = tweakTheme(baseTheme, a).colors as Record<string, string>;
+  const setCols = (c: Record<string, string>) => onTweak({ cols: Object.keys(c).length ? JSON.stringify(c) : "" });
+  const changed = ["theme", "accent", "mode", "corners", "cols", "look"].some((x) => a[x]);
   return (
     <aside aria-label="Play with your design" className="z-10 flex flex-col gap-4 overflow-y-auto border-ink-700 bg-ink-900 p-4 max-md:absolute max-md:inset-x-0 max-md:bottom-0 max-md:max-h-[58%] max-md:border-t md:w-[330px] md:flex-none md:border-l">
       <div className="flex items-center gap-2"><b className="text-[15px]">Play with your design</b><button type="button" className="btn btn-ghost btn-sm ml-auto" onClick={onClose} aria-label="Close this panel">✕</button></div>
@@ -376,6 +387,36 @@ function Tweaks({ a, design, onTweak, onClose }: { a: Answers; design: Design; o
       {seg("Light or dark", "mode", [["light", "Light"], ["dark", "Dark"]])}
       {seg("Corners", "corners", CORNERS)}
       {(design.kind === "business" || design.kind === "restaurant") && seg("Pages", "pages", [["single", "One page"], ["multi", "Separate pages"]], false)}
+      <div className="flex flex-col gap-2 rounded-xl border border-ink-700 p-3"><span className="label">Colour palette</span>
+        {sets.length > 0 && <div className="flex flex-wrap gap-1.5" role="group" aria-label="Ready-made palettes">
+          {sets.map((st) => (
+            <button key={st.name} type="button" title={st.name} onClick={() => setCols(st.colours)} className="flex items-center gap-1.5 rounded-lg border border-ink-600 px-2 py-1 text-[12px] hover:border-ink-400">
+              <span className="flex overflow-hidden rounded-full border border-white/20" aria-hidden>{Object.values(st.colours).slice(0, 5).map((c, i) => <span key={i} className="h-4 w-3" style={{ background: c }} />)}</span>{st.name}
+            </button>
+          ))}
+        </div>}
+        {settings.pick !== false && <div className="grid grid-cols-3 gap-2">
+          {COLOUR_SLOTS.map(([k, label]) => (
+            <label key={k} className="flex flex-col gap-1 text-[11px] leading-tight text-ink-400">{label}
+              <input type="color" aria-label={label} className="h-8 w-full cursor-pointer rounded border border-ink-600 bg-transparent" value={/^#[0-9a-f]{6}$/i.test(shown[k] || "") ? shown[k] : "#888888"} onChange={(e) => setCols({ ...own, [k]: e.target.value })} />
+            </label>
+          ))}
+        </div>}
+        {Object.keys(own).length > 0 && <button type="button" className="btn btn-ghost btn-sm self-start" onClick={() => setCols({})}>Back to the theme's colours</button>}
+      </div>
+      {axes.length > 0 && <div className="flex flex-col gap-2 rounded-xl border border-ink-700 p-3"><span className="label">Layout</span>
+        {axes.map(({ axis, forAnswer, def }) => {
+          const cur = picks[axis.key] ?? def ?? "";
+          return (
+            <label key={axis.key} className="flex flex-col gap-1 text-[12px] text-ink-400" title={"Shapes: " + forAnswer}>{axis.label}
+              <select className="input py-1.5 text-[13px]" value={cur || "-"} onChange={(e) => onTweak({ look: JSON.stringify({ ...picks, [axis.key]: e.target.value }) })}>
+                <option value="-">Theme's own</option>
+                {axis.options.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+              </select>
+            </label>
+          );
+        })}
+      </div>}
       <div className="flex flex-col gap-1.5"><span className="label">Look ({all.length})</span>
         <input className="input" type="search" placeholder="Search, e.g. dark, warm, bold" aria-label="Search looks" value={q} onChange={(e) => setQ(e.target.value)} />
         <div className="grid max-h-72 grid-cols-1 gap-1.5 overflow-y-auto pr-1">
@@ -388,7 +429,7 @@ function Tweaks({ a, design, onTweak, onClose }: { a: Answers; design: Design; o
           {!list.length && <p className="text-[13px] text-ink-400">No look matches that.</p>}
         </div>
       </div>
-      {changed && <button type="button" className="btn btn-sm self-start" onClick={() => onTweak({ theme: "", accent: "", mode: "", corners: "" })}>Back to my first design</button>}
+      {changed && <button type="button" className="btn btn-sm self-start" onClick={() => onTweak({ theme: "", accent: "", mode: "", corners: "", cols: "", look: "" })}>Back to my first design</button>}
       <p className="text-[12px] text-ink-500">Your changes are kept with your request when you connect with us.</p>
     </aside>
   );
@@ -407,7 +448,7 @@ export function ConnectPopup({ a, design, copy, files, host, sent, onSent, onClo
     if (!f.phone.trim() && !f.email.trim()) return toast("Please give a phone number or an email address.", "bad");
     setBusy(true);
     try {
-      await submitQuery(host, { kind: a.kind, name: a.name || "Untitled", person: f.person.trim(), phone: f.phone.trim(), email: f.email.trim(), note: f.note.trim(), answers: a, ...(copy ? { copy } : {}), ...(files.logo ? { logo: files.logo } : {}), ...(files.menu ? { pdf: files.menu } : {}) });
+      await submitQuery(host, { kind: a.kind, name: a.name || "Untitled", person: f.person.trim(), phone: f.phone.trim(), email: f.email.trim(), note: f.note.trim(), answers: { ...a, ...(a.kind ? { look: resolvedLook(a.kind as LookKind, a.look, readDesignSettings()) } : {}) }, ...(copy ? { copy } : {}), ...(files.logo ? { logo: files.logo } : {}), ...(files.menu ? { pdf: files.menu } : {}) });
       setDone(true); onSent();
     } catch (e: any) { toast(e?.message || "Couldn't send. Please try again.", "bad"); }
     setBusy(false);

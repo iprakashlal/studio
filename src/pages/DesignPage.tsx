@@ -183,6 +183,26 @@ export function DesignPage({ studio, index, onIndex }: { studio?: Studio; index?
     </form>
   );
 
+  /** The answer controls inside the question card: a plain field and one row of buttons (nothing for a tap-one question). */
+  const cardBar = !cur || cur.type === "choice" ? null : (
+    <form className="flex flex-col gap-3" onSubmit={(e) => { e.preventDefault(); submit(); }} aria-label="Your answer">
+      {cur.type === "long"
+        ? <textarea ref={field} aria-label={cur.ask(a)} rows={4} className="input min-h-[7rem] resize-y" placeholder={cur.ph?.(a)} value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); submit(); } }} />
+        : field$ ? <input ref={field} aria-label={cur.ask(a)} className="input" disabled={reading} placeholder={reading ? "Reading…" : cur.ph?.(a)} value={text} onChange={(e) => setText(e.target.value)} /> : null}
+      <div className="flex flex-wrap items-center gap-2">
+        {cur.type === "long" && <span className="mr-auto text-xs text-ink-500">Enter = new line · Ctrl + Enter = send</span>}
+        {cur.type !== "long" && <span className="mr-auto" />}
+        {isOptional(cur, a) && <button type="button" className="btn btn-ghost" disabled={reading} onClick={() => answer(cur, "")}>Skip</button>}
+        {cur.type === "file" && <>
+          <input ref={pick} type="file" accept={cur.accept} className="sr-only" aria-label={cur.ask(a)} onChange={(e) => choose(cur, e.target.files?.[0])} />
+          <button type="button" className={`btn ${field$ ? "" : "btn-pri"}`} disabled={reading} onClick={() => pick.current?.click()}>{cur.id === "logo" ? "Choose logo" : cur.id === "doc" ? "Add a PDF" : "Choose PDF"}</button>
+        </>}
+        {cur.type === "many" && <button type="submit" className="btn btn-pri" disabled={!many.length}>Done</button>}
+        {field$ && <button type="submit" className="btn btn-pri" disabled={!text.trim() || reading}>{cur.id === "doc" ? "Read my link" : "Next"}</button>}
+      </div>
+    </form>
+  );
+
   const chips = (s: Step) => {
     const opts = s.options?.(a) || [];
     if (s.id === "kind") return (
@@ -211,17 +231,19 @@ export function DesignPage({ studio, index, onIndex }: { studio?: Studio; index?
 
   return (
     <div className="flex min-h-screen flex-col bg-ink-950 text-ink-100">
-      <header className="flex flex-wrap items-center gap-3 px-4 py-3 sm:px-6">
-        <a href="#/themes" className="btn btn-ghost btn-sm">← Themes</a>
+      <header className="mx-auto flex w-full max-w-5xl items-center gap-2 px-4 py-3 sm:px-6">
+        <a href="#/themes" className="btn btn-ghost btn-sm shrink-0">← Themes</a>
         {/* The Studio's name is a link only for someone signed in: it goes to their projects. */}
-        {studio ? <a href="#/" className="flex items-center gap-2 font-extrabold"><BrandMark fallback={<Logo />} />{brand.name}</a> : <span className="flex items-center gap-2 font-extrabold"><BrandMark fallback={<Logo />} />{brand.name}</span>}
-        <span className="ml-auto flex items-center gap-2">
-          {design && a.name && <button type="button" className="btn btn-sm" onClick={() => setShowPreview(true)}>See it so far</button>}
+        {studio
+          ? <a href="#/" className="flex min-w-0 items-center gap-2 font-extrabold"><BrandMark fallback={<Logo />} /><span className="truncate max-sm:hidden">{brand.name}</span></a>
+          : <span className="flex min-w-0 items-center gap-2 font-extrabold"><BrandMark fallback={<Logo />} /><span className="truncate max-sm:hidden">{brand.name}</span></span>}
+        <span className="ml-auto flex shrink-0 items-center gap-2">
+          {design && a.name && <button type="button" className="btn btn-sm" onClick={() => setShowPreview(true)}>Preview</button>}
           {started && <button type="button" className="btn btn-ghost btn-sm" onClick={restart}>Start again</button>}
         </span>
       </header>
 
-      <main className={`mx-auto flex w-full max-w-2xl flex-1 flex-col gap-5 px-4 pb-10 sm:px-6 ${started ? "pt-2" : "justify-center"}`}>
+      <main className={`mx-auto flex w-full max-w-2xl flex-1 flex-col gap-6 px-4 pb-12 sm:px-6 ${started ? "pt-4" : "justify-center pb-24"}`}>
         {!started && (
           <div className="text-center">
             <h1 className="font-display text-4xl font-extrabold tracking-tight sm:text-5xl">Design your own website</h1>
@@ -232,41 +254,52 @@ export function DesignPage({ studio, index, onIndex }: { studio?: Studio; index?
         {started && (
           <>
             <div className="flex items-center gap-3" aria-label={`Step ${Math.min(answered.length + 1, total)} of ${total}`}>
-              <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-ink-800" role="progressbar" aria-valuemin={0} aria-valuemax={total} aria-valuenow={answered.length}><div className="h-full rounded-full bg-brand-500 transition-all" style={{ width: `${Math.round((answered.length / total) * 100)}%` }} /></div>
-              <span className="text-xs tabular-nums text-ink-400">{Math.min(answered.length + 1, total)} / {total}</span>
-            </div>
-            <div className="flex flex-wrap gap-1.5" aria-label="Your answers so far">
-              {answered.map((s) => (
-                <button key={s.id} type="button" onClick={() => rewind(s.id)} title={`Change: ${s.ask(a)}`} aria-label={`Change your answer to: ${s.ask(a)}`} className="group inline-flex max-w-full items-center gap-1.5 rounded-full border border-ink-700 bg-ink-900 px-3 py-1 text-xs text-ink-300 transition hover:border-brand-400 hover:text-ink-100">
-                  <span className="text-ink-500">{STEP_LABEL[s.id] || s.id}</span>
-                  <span className="max-w-[14rem] truncate font-semibold text-ink-100">{a[s.id] ? sayAnswer(s, a).replace(/\s*\(from your document\)$/, "") : "Skipped"}</span>
-                  {(a.docfrom || "").split(",").includes(s.id) && <span className="text-brand-300" title="Found in your document">✦</span>}
-                  <span aria-hidden className="text-ink-500 opacity-0 transition group-hover:opacity-100 max-sm:opacity-100">✎</span>
-                </button>
-              ))}
+              <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-ink-800" role="progressbar" aria-valuemin={0} aria-valuemax={total} aria-valuenow={answered.length}><div className="h-full rounded-full bg-brand-500 transition-all duration-300" style={{ width: `${Math.round((answered.length / total) * 100)}%` }} /></div>
+              <span className="w-12 text-right text-xs tabular-nums text-ink-400">{Math.min(answered.length + 1, total)} / {total}</span>
             </div>
             {cur && (
-              <section className="card flex flex-col gap-4 p-5 sm:p-7" aria-live="polite">
-                <h2 className="font-display text-2xl font-extrabold leading-snug tracking-tight sm:text-[28px]">{cur.ask(a)}</h2>
-                {cur.help && <p className="-mt-2 text-sm text-ink-400">{cur.help(a)}</p>}
+              <section className="card flex flex-col gap-5 p-5 sm:p-8" aria-live="polite">
+                <div className="flex flex-col gap-2">
+                  <h2 className="font-display text-2xl font-extrabold leading-snug tracking-tight sm:text-[28px]">{cur.ask(a)}</h2>
+                  {cur.help && <p className="text-sm leading-relaxed text-ink-400">{cur.help(a)}</p>}
+                </div>
                 {(cur.type === "choice" || cur.type === "many") && chips(cur)}
-                {bar}
+                {cardBar}
                 {reading && <p className="inline-flex items-center gap-2 text-sm text-ink-300"><Spinner />Reading it…</p>}
               </section>
             )}
-            {finished && writing && <section className="card flex items-center gap-3 p-5" aria-live="polite"><Spinner /><span>Writing a short line about each of your topics…</span></section>}
+            {finished && writing && <section className="card flex items-center gap-3 p-5 sm:p-6" aria-live="polite"><Spinner /><span className="text-sm">Writing a short line about each of your topics…</span></section>}
             {ready && (
-              <section className="card flex flex-col gap-4 p-5 sm:p-7" aria-live="polite">
-                <h2 className="font-display text-2xl font-extrabold tracking-tight">Your preview is ready</h2>
-                <p className="text-sm text-ink-300">{design ? <>A <b className="text-ink-100">{TEMPLATES[design.kind].name}</b> in the <b className="text-ink-100">{design.themeName}</b> look. </> : ""}It isn't published. Connect with us to finish it together: your own photos, your address on the web, payment and any extra features.</p>
-                <div className="flex flex-wrap gap-2">
-                  <button type="button" className="btn btn-pri" onClick={() => setShowPreview(true)}>View my preview</button>
-                  <button type="button" className="btn" onClick={() => setConnect(true)}>{sent ? "Request sent ✓" : "Connect with Picaffectz"}</button>
-                  <button type="button" className="btn btn-ghost" onClick={restart}>Design another</button>
+              <section className="card flex flex-col gap-5 p-5 sm:p-8" aria-live="polite">
+                <div className="flex flex-col gap-2">
+                  <h2 className="font-display text-2xl font-extrabold tracking-tight sm:text-[28px]">Your preview is ready</h2>
+                  <p className="text-sm leading-relaxed text-ink-300">{design ? <>A <b className="text-ink-100">{TEMPLATES[design.kind].name}</b> in the <b className="text-ink-100">{design.themeName}</b> look. </> : ""}It isn't published. Connect with us to finish it together: your own photos, your address on the web, payment and any extra features.</p>
+                </div>
+                <div className="grid gap-2 sm:flex sm:flex-wrap">
+                  <button type="button" className="btn btn-pri justify-center" onClick={() => setShowPreview(true)}>View my preview</button>
+                  <button type="button" className="btn justify-center" onClick={() => setConnect(true)}>{sent ? "Request sent ✓" : "Connect with Picaffectz"}</button>
+                  <button type="button" className="btn btn-ghost justify-center" onClick={restart}>Design another</button>
                 </div>
                 <p className="text-xs text-ink-500">Preview only. Nothing is published or charged.</p>
               </section>
             )}
+            <details className="group rounded-2xl border border-ink-800 bg-ink-900/50">
+              <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-3 text-sm font-semibold text-ink-200 marker:hidden [&::-webkit-details-marker]:hidden">
+                <span>Your answers</span><span className="chip">{answered.filter((x) => a[x.id]).length}</span>
+                <span className="ml-auto text-xs font-normal text-ink-500 group-open:hidden">Tap to review or change</span>
+                <span aria-hidden className="text-ink-500 transition group-open:rotate-180">⌄</span>
+              </summary>
+              <div className="flex flex-wrap gap-1.5 border-t border-ink-800 p-4" aria-label="Your answers so far">
+                {answered.map((s) => (
+                  <button key={s.id} type="button" onClick={() => rewind(s.id)} title={`Change: ${s.ask(a)}`} aria-label={`Change your answer to: ${s.ask(a)}`} className={`inline-flex max-w-full items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs transition hover:border-brand-400 ${a[s.id] ? "border-ink-700 bg-ink-900 text-ink-300" : "border-ink-800 text-ink-500"}`}>
+                    <span className="text-ink-500">{STEP_LABEL[s.id] || s.id}</span>
+                    <span className={`max-w-[12rem] truncate font-semibold ${a[s.id] ? "text-ink-100" : "font-normal"}`}>{a[s.id] ? sayAnswer(s, a).replace(/\s*\(from your document\)$/, "") : "Skipped"}</span>
+                    {(a.docfrom || "").split(",").includes(s.id) && <span className="text-brand-300" title="Found in your document">✦</span>}
+                    <span aria-hidden className="text-ink-500">✎</span>
+                  </button>
+                ))}
+              </div>
+            </details>
             <div ref={endRef} />
           </>
         )}
@@ -297,13 +330,13 @@ export function PreviewPopup({ design, ver, a, onClose, onConnect, done, onTweak
   }, []);
   return (
     <div role="dialog" aria-modal="true" aria-label="Your website preview" className="fixed inset-0 z-[70] flex flex-col bg-ink-950">
-      <div className="flex flex-wrap items-center gap-2 border-b border-ink-700 bg-ink-900 px-4 py-2.5">
-        <b className="truncate text-sm">{a.name || "Your website"}</b>
-        <span className="chip border-amber-400/50 text-amber-200">{done ? "Preview · not published" : "Preview so far"}</span>
-        <span className="ml-auto flex items-center gap-2">
-          {onTweak && <button type="button" className={`btn btn-sm ${play ? "border-brand-400" : ""}`} aria-pressed={play} onClick={() => setPlay((v) => !v)}>Play with your design</button>}
-          {onConnect && <button type="button" className="btn btn-pri btn-sm" onClick={onConnect}>Connect with Picaffectz</button>}
-          <button type="button" className="btn btn-sm" onClick={onClose} autoFocus>{done ? "Close" : "Keep answering"}</button>
+      <div className="flex items-center gap-2 border-b border-ink-700 bg-ink-900 px-3 py-2 sm:px-4">
+        <b className="min-w-0 truncate text-sm">{a.name || "Your website"}</b>
+        <span className="chip shrink-0 border-amber-400/50 text-amber-200 max-sm:hidden">{done ? "Preview · not published" : "Preview so far"}</span>
+        <span className="ml-auto flex shrink-0 items-center gap-2">
+          {onTweak && <button type="button" className={`btn btn-sm ${play ? "border-brand-400" : ""}`} aria-pressed={play} onClick={() => setPlay((v) => !v)}><span className="max-sm:hidden">Play with your design</span><span className="sm:hidden">Customise</span></button>}
+          {onConnect && <button type="button" className="btn btn-pri btn-sm" onClick={onConnect}><span className="max-sm:hidden">Connect with Picaffectz</span><span className="sm:hidden">Connect</span></button>}
+          <button type="button" className="btn btn-sm" onClick={onClose} autoFocus>{done ? "Close" : "Back"}</button>
         </span>
       </div>
       <div className="relative flex min-h-0 flex-1">

@@ -402,8 +402,8 @@ export async function buildDesign(a: Answers, copy?: Copy | null, files?: Design
   if (theme) {
     const tt = tweakTheme(theme, a), lv = lookValues(kind, a.look, readDesignSettings());
     c.theme = { ...(c.theme || {}), ...tpl.themeValues(tt), ...lv };
-    // A picture frame only shows around a picture: until they add one, a sample picture in the theme's colours stands in.
-    if ((kind === "business" || kind === "restaurant") && lv.heroArt && lv.heroArt !== "default" && !c.hero?.image?.url && !c.hero?.video) put("hero.image", { url: samplePicture(tt.colors.c1, tt.colors.c3 || tt.colors.c2, tt.colors.surface) });
+    // Picture-side layouts and frames need a picture (otherwise that side stays empty): until they add one, a sample picture in the theme's colours stands in.
+    if ((kind === "business" || kind === "restaurant") && !c.hero?.image?.url && !c.hero?.video) put("hero.image", { url: samplePicture(tt.colors.c1, tt.colors.c3 || tt.colors.c2, tt.colors.surface) });
   }
   return { kind, content: c, themeId: theme?.id || "", themeName: theme?.name || "", summary: tpl.summary(c) };
 }

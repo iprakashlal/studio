@@ -17,12 +17,13 @@ export const BIZ_AXES: Record<string, Axis> = {
   width: { key: "width", label: "Page width", options: [["normal", "Standard"], ["wide", "Wide"], ["narrow", "Narrow"], ["xwide", "Extra wide"], ["full", "Full, edge to edge"]] },
 };
 
-export const BIZ_TAGS = ["Corporate", "Finance", "Legal", "Consulting", "Tech", "Health", "Creative", "Industry", "Property", "Hospitality", "Light", "Dark", "Classy", "Modern", "Bold", "Minimal", "Warm", "Calm", "Nature", "Luxury", "Factory", "Agency", "Education", "Picaffectz"];
+export const BIZ_TAGS = ["Corporate", "Finance", "Legal", "Consulting", "Tech", "Health", "Creative", "Industry", "Property", "Hospitality", "Light", "Dark", "Classy", "Modern", "Bold", "Minimal", "Warm", "Calm", "Nature", "Luxury", "Factory", "Agency", "Education", "Picaffectz", "Gym", "Fitness", "Trainer", "Coach", "Wellness", "Yoga", "Meditation", "Nutrition", "Dietitian", "Weight-Loss", "Sports", "Bodybuilding", "Health-Club", "Doctor", "Clinic", "Dentist", "PCOS", "Ayurveda"];
 
 // id | name | tags | colours (bg surface deep text soft line c1 c2 c3) | display | body | radius |
 // style "layout nav cards buttons heading shead pattern bands heroArt motion width" | blurb
+import { HEALTH_ROWS } from "./businessHealth";
 type Row = [string, string, string, string, string, string, number, string, string, string?];
-const ROWS: Row[] = [
+const BASE_ROWS: Row[] = [
   ["meridian", "Meridian", "Corporate Consulting Light Modern", "#F7F8FA #FFFFFF #0E1B2C #0E1B2C #5A6678 #DDE2EA #1D4ED8 #0E7490 #F59E0B", "Plus Jakarta Sans", "Inter", 12, "split bar outline rounded normal label none soft default rise normal", "Clean corporate blue for consultancies and service firms."],
   ["sterling", "Sterling", "Finance Classy Light", "#FAFAF7 #FFFFFF #13233A #13233A #5E6675 #E3E2DA #13233A #8C6D2F #B8913A", "DM Serif Display", "Inter", 4, "split line lined sharp serif line none lines frame fade normal", "Navy and brass for banks, wealth and advisory."],
   ["counsel", "Counsel", "Legal Classy Warm", "#F6F3EE #FFFFFF #2A1E17 #231A14 #6A5E55 #E2DAD0 #6B2D2A #2F4A3A #B08D57", "Cormorant Garamond", "Lora", 2, "editorial line lined underline serif number none lines default fade normal", "A law-firm look: serif headlines, ruled sections, oxblood accent."],
@@ -138,6 +139,8 @@ const lumHex = (h: string) => {
   const v = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((x) => { x /= 255; return x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4); });
   return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2];
 };
+/** The health, fitness and wellness themes come last, so existing theme codes (B-xx) never move. */
+const ROWS: Row[] = [...BASE_ROWS, ...HEALTH_ROWS];
 const NO_FX = Object.fromEntries(FX_KEYS.map((k) => [k, "none"])) as Theme["fx"];
 
 export type BizTheme = Theme & { biz: { bands: string } };

@@ -5,7 +5,7 @@
 /** The words written for a design (by the Studio's AI engine or the Picaffectz system): a summary for each topic the person gave. */
 export type Copy = { tagline?: string; hero_text?: string; about_text?: string; cta_text?: string; items?: { name: string; text: string }[]; faq?: { q: string; a: string }[] };
 export type DesignRec = { id: string; name: string; kind: string; themeId: string; themeName: string; answers: Record<string, string>; createdAt: string; summary?: string; copy?: Copy; /** A small logo (data URL), when one was added. */ logo?: string };
-import { cleanAi, cleanLook, cleanThemes, type DesignSettings } from "./designlook";
+import { cleanAi, cleanDomain, cleanLook, cleanThemes, type DesignSettings } from "./designlook";
 export type { DesignSettings };
 
 const LS = "site-studio:designs", SET = "site-studio:design-page";
@@ -22,6 +22,7 @@ export function cleanDesignSettings(x: any): DesignSettings {
   if (typeof x.on === "boolean") o.on = x.on;
   if (typeof x.pick === "boolean") o.pick = x.pick;
   const ai = cleanAi(x.ai); if (ai) o.ai = ai;
+  const dm = cleanDomain(x.domain); if (dm) o.domain = dm;
   const th = cleanThemes(x.themes); if (Object.keys(th).length) o.themes = th;
   const look = cleanLook(x.look); if (Object.keys(look).length) o.look = look;
   return o;

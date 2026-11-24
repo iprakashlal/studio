@@ -20,6 +20,8 @@ export type DesignSettings = {
   pick?: boolean;
   /** Which AI reads a visitor's document or link and writes their text: "" = the engine chosen in Settings → General. */
   ai?: "cloudflare" | "system" | "custom";
+  /** The page's own web address (a domain connected in Settings → Design yourself): it opens straight on Design yourself. */
+  domain?: string;
   /** Per type: the themes visitors are offered (none listed = all of them). */
   themes?: Partial<Record<Kind, string[]>>;
   /** Per type, per layout / style / interaction / intro choice. */
@@ -67,6 +69,7 @@ export function cleanColours(x: any): Colours {
   for (const k of Object.keys(x)) if (SLOT.has(k) && typeof x[k] === "string" && HEX.test(x[k])) o[k] = x[k].toLowerCase();
   return o;
 }
+export const cleanDomain = (v: unknown): string | undefined => (typeof v === "string" && /^(?=.{4,100}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,24}$/.test(v.trim().toLowerCase()) ? v.trim().toLowerCase() : undefined);
 export const cleanAi = (v: unknown): DesignSettings["ai"] => (v === "cloudflare" || v === "system" || v === "custom" ? v : undefined);
 export function cleanThemes(x: any): NonNullable<DesignSettings["themes"]> {
   const o: NonNullable<DesignSettings["themes"]> = {}; if (!x || typeof x !== "object") return o;

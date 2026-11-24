@@ -82,6 +82,8 @@ export function QueriesTab({ studio, index, onIndex }: { studio: Studio; index: 
                     {q.note && <p className="mt-1.5 whitespace-pre-line text-ink-300">{q.note}</p>}
                   </div>
                   {q.answers.about && <p className="line-clamp-2 text-[13px] text-ink-300">{q.answers.about}</p>}
+                  {(q.answers.doc || q.answers.doclink) && <p className="text-xs text-ink-400">{q.answers.doc ? `Document: ${q.answers.doc}${q.answers.doctext ? " (text read)" : ""}` : ""}{q.answers.doc && q.answers.doclink ? " · " : ""}{q.answers.doclink ? <>Link: <a className="underline" href={q.answers.doclink} target="_blank" rel="noopener noreferrer">{q.answers.doclink}</a></> : null}</p>}
+                  {(q.answers.theme || q.answers.accent || q.answers.mode) && <p className="text-xs text-ink-400">Chosen look: {[q.answers.theme, q.answers.accent, q.answers.mode].filter(Boolean).join(" · ")}</p>}
                   {(q.pdf_name || q.has_logo) && <p className="text-xs text-ink-400">{q.has_logo ? "Logo added" : ""}{q.has_logo && q.pdf_name ? " · " : ""}{q.pdf_name ? `Menu PDF: ${q.pdf_name}` : ""}</p>}
                   {q.mail && <p className="text-xs text-amber-200">{q.mail}</p>}
                   <div className="mt-auto flex flex-wrap gap-2 border-t border-ink-700/70 pt-4">

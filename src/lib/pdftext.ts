@@ -136,3 +136,13 @@ export async function pdfToText(file: File): Promise<{ title: string; text: stri
   catch (e: any) { throw new Error(/didn't load/.test(e?.message || "") ? "The PDF reader didn't load. Check your connection; on a site's admin page, publish the site once from the Studio to add it." : /password/i.test(e?.message || "") ? "This PDF is password-protected. Save it without a password and try again." : "This file isn't a readable PDF."); }
   return pdfItemsToText(items);
 }
+
+/** A PDF's text as it is laid out: one entry per line on the page, in reading order (used to pick out prices, hours and contact lines). */
+export async function pdfLines(file: File): Promise<string[]> {
+  if (!/\.pdf$/i.test(file.name) && file.type !== "application/pdf") throw new Error("Choose a PDF file.");
+  if (file.size > 25 * 1024 * 1024) throw new Error("This PDF is larger than 25 MB.");
+  let items: PdfItem[];
+  try { items = await readPdf(await file.arrayBuffer(), pdfBase(), 30, false); }
+  catch (e: any) { throw new Error(/password/i.test(e?.message || "") ? "This PDF is password-protected. Save it without a password and try again." : /didn't load/.test(e?.message || "") ? "The PDF reader didn't load. Check your connection and try again." : "This file isn't a readable PDF."); }
+  return lines(items).map((l) => l.text.trim()).filter(Boolean);
+}

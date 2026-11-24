@@ -32,6 +32,19 @@ export type Step = {
 const k = (a: Answers) => (a.kind || "portfolio") as Kind;
 const by = <T,>(a: Answers, m: Record<Kind, T>): T => m[k(a)];
 
+/** Every theme of a type (for the "play with your design" panel). */
+export const themesFor = (kind: Kind): Theme[] => poolOf(kind);
+const LIGHT = { bg: "#FFFFFF", surface: "#F5F6F8", deep: "#ECEEF2", text: "#14161A", soft: "#5B6270", line: "#E1E4EA" };
+const DARKK = { bg: "#0E1118", surface: "#161B26", deep: "#090B10", text: "#F2F4F8", soft: "#9AA3B5", line: "#262D3C" };
+/** A theme with the person's own colour, light/dark and corner choices on top. */
+export function tweakTheme(t: Theme, a: Answers): Theme {
+  const o: Theme = { ...t, colors: { ...t.colors } };
+  if (a.mode === "light" || a.mode === "dark") { Object.assign(o.colors, a.mode === "light" ? LIGHT : DARKK); o.dark = a.mode === "dark"; }
+  if (/^#[0-9a-f]{6}$/i.test(a.accent || "")) { o.colors.c1 = a.accent; o.colors.c2 = a.accent; }
+  if (a.corners && /^\d{1,2}$/.test(a.corners)) o.radius = +a.corners;
+  return o;
+}
+
 export const KIND_OPTIONS: Opt[] = [
   { v: "portfolio", label: "A website about me", hint: "Show my work, skills and story. Good for designers, developers, photographers, creators." },
   { v: "store", label: "An online shop", hint: "Sell products with a cart and orders on WhatsApp or by UPI." },
@@ -67,6 +80,12 @@ export const STEPS: Step[] = [
     help: () => "One short line is enough. You can change it later.",
   },
   { id: "city", type: "text", optional: true, ask: () => "Which city are you in?", ph: () => "e.g. Mumbai", help: () => "Skip it if you work online or don't want to show it." },
+  {
+    id: "doc", type: "file", optional: true, accept: "application/pdf", maxKB: 4000,
+    ask: (a) => by(a, { portfolio: "Do you have a document with your details, like a resume, profile or brochure? Add the PDF and we'll read it to fill your website.", store: "Do you have a document with your products, like a catalogue or price list? Add the PDF and we'll read it to fill your website.", business: "Do you have a document about your business, like a brochure, profile or price list? Add the PDF and we'll read it to fill your website.", restaurant: "Do you have a document with your details, like a brochure or about-us note? Add the PDF and we'll read it to fill your website." }),
+    help: () => "We only use what is written in it. No PDF? Skip, and you can paste a link next.",
+  },
+  { id: "doclink", type: "text", optional: true, when: (a) => !a.doc, ask: () => "Are your details on a web page instead? Paste its link and we'll pass it to our team.", ph: () => "e.g. https://yourname.com/about", help: () => "We can't read a web page from here, so it goes to our team with your request. Skip if you don't have one." },
   { id: "logo", type: "file", optional: true, accept: "image/png,image/jpeg,image/webp", maxKB: 4000, when: (a) => k(a) !== "portfolio", ask: () => "Do you have a logo? Add it here, or skip and we'll use your name.", help: () => "A PNG or JPG picture. You can send a better one later." },
   { id: "style", type: "choice", ask: () => "How should your website feel?", options: () => STYLE_OPTIONS },
   { id: "colour", type: "choice", ask: () => "Which colour do you like best?", options: () => COLOUR_OPTIONS },
@@ -120,13 +139,39 @@ export const stepOf = (id: string) => STEPS.find((s) => s.id === id)!;
 /** How an answer reads back to the person (their own chat bubble). */
 export function sayAnswer(s: Step, a: Answers): string {
   const v = a[s.id]; if (!v) return "Skip";
-  if (s.type === "file") return s.id === "logo" ? "Logo added" : `Menu added: ${v}`;
+  const src = (a.docfrom || "").split(",").includes(s.id) ? " (from your document)" : "";
+  if (s.type === "file") return s.id === "logo" ? "Logo added" : s.id === "doc" ? `Document added: ${v}` : `Menu added: ${v}`;
   if (s.id === "pages") return v === "multi" ? "Separate pages" : "One page";
   if (s.id === "kind") return KIND_OPTIONS.find((o) => o.v === v)?.label || v;
   if (s.type === "choice") return [...STYLE_OPTIONS, ...COLOUR_OPTIONS].find((o) => o.v === v)?.label || v;
   if (s.type === "many") return v.split(",").map((x) => (s.options?.(a) || []).find((o) => o.v === x)?.label || x).join(", ");
-  if (s.type === "long") return v.split("\n").filter(Boolean).join(" · ");
-  return v;
+  if (s.type === "long") return v.split("\n").filter(Boolean).join(" · ") + src;
+  return v + src;
+}
+
+// ---- reading the person's own document
+
+/** What a document's text can fill in: only things actually written in it (nothing is made up). Only fields not answered yet. */
+export function fromDoc(text: string, a: Answers): Answers {
+  const t = text.replace(/\r/g, ""), ls = t.split("\n").map((x) => x.trim()).filter(Boolean), out: Answers = {}, kind = k(a);
+  const email = /[\w.+-]+@[\w-]+(?:\.[\w-]+)+/.exec(t)?.[0];
+  const phone = /(?:\+\d{1,3}[\s-]?)?(?:\(?\d{3,5}\)?[\s-]?)?\d{3,5}[\s-]?\d{4,5}/.exec(t.replace(/[^\S\n]+/g, " "))?.[0]?.trim();
+  if (email && !a.email) out.email = email;
+  if (phone && /\d{10}/.test(phone.replace(/\D/g, "")) && !a.phone) out.phone = phone;
+  const insta = /(?:instagram\.com\/|@)([\w.]{3,30})\b/i.exec(t.replace(email || "\u0000", ""))?.[0];
+  if (insta && !a.social) out.social = insta.startsWith("@") ? insta : "https://" + insta.replace(/^https?:\/\//, "");
+  const hours = ls.find((l) => l.length < 90 && /(mon|tue|wed|thu|fri|sat|sun)[a-z]*\s*(?:-|–|to)\s*(mon|tue|wed|thu|fri|sat|sun)/i.test(l) && /\d/.test(l));
+  if (hours && !a.hours && (kind === "business" || kind === "restaurant")) out.hours = hours;
+  const priced = ls.map((l) => /^(.{2,50}?)\s*[-–—:.…]+\s*(?:₹|rs\.?|inr|\$)?\s*(\d[\d,.]*)\s*(?:\/-)?$/i.exec(l)).filter(Boolean).slice(0, 8) as RegExpExecArray[];
+  const bullets = ls.filter((l) => /^[•●▪◦\-–*]\s+\S/.test(l)).map((l) => l.replace(/^[•●▪◦\-–*]\s+/, "")).filter((l) => l.length >= 3 && l.length <= 60).slice(0, 6);
+  if (!a.items) {
+    if ((kind === "store" || kind === "restaurant") && priced.length >= 2) out.items = priced.map((m) => `${m[1].trim()} - ${m[2].replace(/,/g, "")}`).join("\n");
+    else if (bullets.length >= 3) out.items = bullets.join("\n");
+  }
+  const used = new Set<string>([...priced.map((m) => m[0]), ...(hours ? [hours] : [])]);
+  const prose = ls.filter((l) => l.length >= 45 && /[a-z]/.test(l) && !used.has(l) && !/@|https?:\/\//.test(l) && !/^[•●▪◦\-–*]\s/.test(l)).join(" ");
+  if (!a.story && prose.length >= 120) out.story = prose.length > 700 ? prose.slice(0, 700).replace(/\s+\S*$/, "") + "…" : prose;
+  return out;
 }
 
 // ---- choosing the look
@@ -154,6 +199,7 @@ const poolOf = (kind: Kind): Theme[] => (kind === "business" ? BIZ_THEMES : kind
 /** The theme that best matches the feel and colour chosen; the person's name picks between near ties so two people don't get the same one. */
 export function pickTheme(a: Answers): Theme | null {
   const kind = k(a), pool = poolOf(kind); if (!pool.length) return null;
+  const chosen = a.theme && pool.find((t) => t.id === a.theme); if (chosen) return chosen;
   const st = STYLE_TAGS[a.style || "clean"] || STYLE_TAGS.clean, col = a.colour || "any";
   const scored = pool.map((t) => {
     let s = st.want.reduce((n, tag, i) => n + (t.tags.includes(tag) ? 6 - Math.min(i, 4) : 0), 0);
@@ -310,7 +356,7 @@ export async function buildDesign(a: Answers, copy?: Copy | null, files?: Design
   if (kind === "restaurant" && hours) { put("hours.note", hours); put("hours.days", []); put("hours.showStatus", false); }
   if (files?.logo && kind !== "portfolio") put("brand.logo", { url: files.logo });
   if (kind === "restaurant" && files?.menu) { put("food.pdfUrl", "data:application/pdf;base64," + files.menu.b64); put("food.pdfLabel", "Download the menu (PDF)"); }
-  if (theme) c.theme = { ...(c.theme || {}), ...tpl.themeValues(theme) };
+  if (theme) c.theme = { ...(c.theme || {}), ...tpl.themeValues(tweakTheme(theme, a)) };
   return { kind, content: c, themeId: theme?.id || "", themeName: theme?.name || "", summary: tpl.summary(c) };
 }
 const show = (c: any, ...ids: string[]) => { for (const x of c.sections || []) if (ids.includes(x.id)) { if ("visible" in x) x.visible = true; else x.show = true; } };
@@ -320,9 +366,9 @@ export const topicsOf = (a: Answers) => lines(a.items).map((l) => priced(l).name
 
 /** Written text from the Picaffectz system, on this device: no AI service. It uses only what the person said. */
 export function systemCopy(a: Answers): Copy {
-  const kind = k(a), name = (a.name || "").trim() || "We", notes = [a.about, a.city ? "in " + a.city : "", a.story].filter(Boolean).join(". ");
+  const kind = k(a), name = (a.name || "").trim() || "We", notes = [a.about, a.city ? "in " + a.city : "", a.story, (a.doctext || "").slice(0, 1200)].filter(Boolean).join(". ");
   let b: any = {};
-  try { b = systemWrite({ brand: name, notes, kind, text: [a.about, a.story, a.usp].filter(Boolean).join("\n") }).brief; } catch { /* a plain fallback below */ }
+  try { b = systemWrite({ brand: name, notes, kind, text: [a.about, a.story, a.usp, (a.doctext || "").slice(0, 1200)].filter(Boolean).join("\n") }).brief; } catch { /* a plain fallback below */ }
   const tail: Record<Kind, string> = { portfolio: "done with care and attention to detail.", store: "chosen and made with care.", business: "done properly and explained clearly.", restaurant: "made fresh and served warm." };
   const out: Copy = {
     ...(b.brand_tagline ? { tagline: b.brand_tagline } : {}), ...(b.hero_text ? { hero_text: b.hero_text } : {}), ...(b.cta_text ? { cta_text: b.cta_text } : {}),
@@ -337,7 +383,7 @@ export function systemCopy(a: Answers): Copy {
 export async function writeCopy(a: Answers, host: { api: string; studio: string } | null): Promise<{ copy: Copy; engine: string }> {
   if (host) {
     try {
-      const r = await fetch(host.api.replace(/\/+$/, "") + "/dq/write/" + encodeURIComponent(host.studio), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind: a.kind, brand: a.name, about: a.about, city: a.city, story: a.story, usp: a.usp, items: topicsOf(a) }) });
+      const r = await fetch(host.api.replace(/\/+$/, "") + "/dq/write/" + encodeURIComponent(host.studio), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind: a.kind, brand: a.name, about: a.about, city: a.city, story: a.story, usp: a.usp, doc: a.doctext || "", items: topicsOf(a) }) });
       if (r.ok) { const j = await r.json(); if (j?.copy && Object.keys(j.copy).length) return { copy: j.copy, engine: j.engine }; }
     } catch { /* the Picaffectz system writes instead */ }
   }
@@ -353,6 +399,6 @@ export function requestText(a: Answers, d: Design | null, link = ""): string {
     "Hi Picaffectz, I designed a website preview and would like to take it forward.", "",
     row("Type", kindName), row("Name", a.name || ""), row("What I do", a.about || ""), row("City", a.city || ""),
     row("Feel", say("style")), row("Colour", say("colour")), row("Includes", (a.items || "").split("\n").filter(Boolean).join(", ")), row("Visitors can", say("goal")),
-    row("Phone", a.phone || ""), row("Email", a.email || ""), d ? row("Design", `${d.themeName} (${d.themeId})`) : "", link ? "Preview: " + link : "",
+    row("Phone", a.phone || ""), row("Email", a.email || ""), row("Document", a.doc || ""), row("Document link", a.doclink || ""), row("Chosen look", [a.theme, a.accent, a.mode].filter(Boolean).join(" · ")), d ? row("Design", `${d.themeName} (${d.themeId})`) : "", link ? "Preview: " + link : "",
   ].filter((x, i, all) => x || (i > 0 && all[i - 1])).join("\n");
 }

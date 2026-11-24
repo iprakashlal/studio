@@ -34,6 +34,8 @@ import { FoldAll, FoldCards } from "../ui/fold";
 import { LOGO_ANIMS, UI_LAYOUTS, BrandMark, DEFAULT_NAME, brand as currentBrand, setBrand, shrinkImage, useBrand } from "../lib/brand";
 import { PushUpdatesCard, PushUpdatesHost } from "./PushUpdates";
 import { Dashboard } from "./Dashboard";
+import { DesignPage } from "./DesignPage";
+import { DesignPageCard } from "./DesignSettings";
 import { ProjectView } from "./ProjectView";
 import { NS } from "./App";
 import { autoUpdateStudio } from "../lib/autoupdate";
@@ -145,6 +147,9 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
     return <>{updBanner}<ProjectView key={project.id} studio={studio} index={index} project={project} session={session} onIndex={setIndex} /></>;
   }
 
+  // Design yourself: the chat that builds a preview (signed in, its previews are kept in the Studio).
+  if (/^design(\?|$)/.test(route) && !hid("design")) return <DesignPage studio={studio} index={index} onIndex={setIndex} />;
+
   // Studio Partners: its own page (it used to be a tab of Settings; the old address still lands here).
   if ((route.startsWith("partners") || route === "settings/partners") && !repo.demo) {
     if (client === undefined) return <>{header}<main className="mx-auto flex max-w-3xl flex-col gap-4 px-4 py-8 sm:px-6"><Skel className="h-9 w-56" /><SkelRows n={3} label="Loading Studio Partners" /></main></>;
@@ -199,6 +204,7 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
           <p className="text-sm text-ink-300">Your Studio keeps everything as files in <b className="text-ink-100">{isHosted(session) ? `${session.cfg.owner === "cloudflare" ? "Cloudflare" : "Supabase"} (Studio “${session.cfg.repo}”)` : `${session.cfg.owner}/${session.cfg.repo}`}</b>: <code className="font-mono text-xs">studio.json</code> for the project list and <code className="font-mono text-xs">projects/</code> for each site's content, images and export snapshots.</p>
           <AiEngineCard studio={studio} index={index} onIndex={setIndex} />
           <StudioWhatsAppCard />
+          {!hid("design") && <DesignPageCard />}
           <DashNumbersCard studio={studio} index={index} onIndex={setIndex} />
           {isHosted(session)
             ? <section className="card flex flex-col gap-3 p-5" aria-label="Account"><h3 className="text-[15px] font-extrabold">Account</h3><p className="text-sm text-ink-300">Signed in as <b className="text-ink-100">{session.username}</b> with an email code.</p><button type="button" className="btn self-start" onClick={onSignOut}>Sign out</button></section>
@@ -211,7 +217,7 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
   }
 
   const only = /^type\/([a-z]+)$/.exec(route)?.[1];
-  return <>{header}<Dashboard key={only || "all"} studio={studio} index={index} onIndex={setIndex} token={session.token} hid={hid} max={limits.max} only={only && TEMPLATES[only] ? only : undefined} /><footer className="py-6"><StudioPageLinks host={null} repo={repo} where="footer" /></footer></>;
+  return <>{header}<Dashboard key={(only || "all") + (route === "designs" ? "-d" : "")} designsTab={route === "designs" && !hid("design")} studio={studio} index={index} onIndex={setIndex} token={session.token} hid={hid} max={limits.max} only={only && TEMPLATES[only] ? only : undefined} /><footer className="py-6"><StudioPageLinks host={null} repo={repo} where="footer" /></footer></>;
 }
 
 /** Settings → Help: guided tours of the Studio, end to end. */

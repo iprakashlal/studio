@@ -6,6 +6,7 @@ import { Gate } from "../ui/gate";
 import { useToast } from "../ui/kit";
 import { Workspace } from "./Workspace";
 import { ThemesPage } from "./ThemesPage";
+import { DesignPage } from "./DesignPage";
 import { StudioPageLinks, StudioPageView } from "./StudioPage";
 import { ReviewPage } from "./ReviewPage";
 import { useBrand } from "../lib/brand";
@@ -78,6 +79,8 @@ export function App() {
   if (handed) return <HelperLanding url={handed} />;
 
   // The theme gallery is public: anyone with the link can browse it without signing in.
+  // Design yourself: a chat that builds a preview site. Signed in, the Studio shows it (and keeps the previews).
+  if (/^#\/design(\?|$)/.test(hash) && !repo) return <DesignPage />;
   if (/^#\/themes(\?|$)/.test(hash)) return <ThemesPage signedIn={!!repo} />;
 
   // The Studio's own pages (privacy, terms…) are public too: #/pages/<name>.

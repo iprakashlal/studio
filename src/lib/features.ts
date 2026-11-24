@@ -15,6 +15,7 @@ export const CLIENT_FEATURES: { key: string; label: string; hint?: string }[] = 
   { key: "duplicate", label: "Duplicate sites" },
   { key: "delete", label: "Delete sites" },
   { key: "themes", label: "Themes gallery" },
+  { key: "design", label: "Design yourself page and previews" },
   { key: "festival", label: "Festival overlay on their sites" },
   { key: "brand", label: "Studio name and logo", hint: "Settings" },
   { key: "badge", label: "“Powered by” badge", hint: "Settings" },

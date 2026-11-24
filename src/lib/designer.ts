@@ -1,0 +1,280 @@
+// "Design yourself": a plain-language question flow that builds a preview website for any of the four types.
+// Nothing here is published: the result is a preview (kept on this device, and in the Studio when signed in).
+import { THEMES, type Theme } from "../themes/catalog";
+import { BIZ_THEMES } from "../themes/business";
+import { REST_THEMES } from "../themes/restaurant";
+import { TEMPLATES } from "../schema";
+import { loadStarter } from "./exporter";
+
+export type Kind = "portfolio" | "store" | "business" | "restaurant";
+export type Answers = Record<string, string>;
+export type Opt = { v: string; label: string; hint?: string };
+export type Step = {
+  id: string;
+  /** What the assistant says (plain words). */
+  ask: (a: Answers) => string;
+  /** choice: tap one; many: tap several; text: one line; long: one item per line. */
+  type: "choice" | "many" | "text" | "long";
+  options?: (a: Answers) => Opt[];
+  ph?: (a: Answers) => string;
+  /** Can be left out. */
+  optional?: boolean;
+  /** One line shown under the question. */
+  help?: (a: Answers) => string;
+};
+
+const k = (a: Answers) => (a.kind || "portfolio") as Kind;
+const by = <T,>(a: Answers, m: Record<Kind, T>): T => m[k(a)];
+
+export const KIND_OPTIONS: Opt[] = [
+  { v: "portfolio", label: "A website about me", hint: "Show my work, skills and story. Good for designers, developers, photographers, creators." },
+  { v: "store", label: "An online shop", hint: "Sell products with a cart and orders on WhatsApp or by UPI." },
+  { v: "business", label: "A website for my business", hint: "Explain my services and let customers get in touch." },
+  { v: "restaurant", label: "A restaurant or café site", hint: "Menu, opening hours, table booking and orders." },
+];
+
+export const STYLE_OPTIONS: Opt[] = [
+  { v: "clean", label: "Clean and simple" },
+  { v: "bold", label: "Bold and colourful" },
+  { v: "elegant", label: "Elegant and premium" },
+  { v: "dark", label: "Dark and modern" },
+  { v: "warm", label: "Warm and friendly" },
+  { v: "fun", label: "Playful and fun" },
+];
+export const COLOUR_OPTIONS: Opt[] = [
+  { v: "blue", label: "Blue" }, { v: "green", label: "Green" }, { v: "red", label: "Red" }, { v: "orange", label: "Orange" },
+  { v: "purple", label: "Purple" }, { v: "pink", label: "Pink" }, { v: "gold", label: "Gold" }, { v: "mono", label: "Black and white" }, { v: "any", label: "Surprise me" },
+];
+export const COLOUR_DOT: Record<string, string> = { blue: "#3b82f6", green: "#22a06b", red: "#e5484d", orange: "#f08a24", purple: "#8b5cf6", pink: "#ec4899", gold: "#d4a017", mono: "#222222", any: "linear-gradient(135deg,#3b82f6,#ec4899,#f08a24)" };
+
+export const STEPS: Step[] = [
+  { id: "kind", type: "choice", ask: () => "Hi! Let's design your website together. What kind of website do you want?", options: () => KIND_OPTIONS },
+  {
+    id: "name", type: "text",
+    ask: (a) => by(a, { portfolio: "What's your name?", store: "What is your shop called?", business: "What is your business called?", restaurant: "What is your restaurant or café called?" }),
+    ph: (a) => by(a, { portfolio: "e.g. Asha Verma", store: "e.g. Kala Ghar", business: "e.g. Verma & Co", restaurant: "e.g. The Tiffin Box" }),
+  },
+  {
+    id: "about", type: "text",
+    ask: (a) => by(a, { portfolio: "In a few words, what do you do?", store: "What do you sell?", business: "What does your business do?", restaurant: "What kind of food do you serve?" }),
+    ph: (a) => by(a, { portfolio: "e.g. Wedding photographer", store: "e.g. Handmade candles and gifts", business: "e.g. We repair and service home appliances", restaurant: "e.g. Home-style South Indian meals" }),
+    help: () => "One short line is enough. You can change it later.",
+  },
+  { id: "city", type: "text", optional: true, ask: () => "Which city are you in?", ph: () => "e.g. Mumbai", help: () => "Skip it if you work online or don't want to show it." },
+  { id: "style", type: "choice", ask: () => "How should your website feel?", options: () => STYLE_OPTIONS },
+  { id: "colour", type: "choice", ask: () => "Which colour do you like best?", options: () => COLOUR_OPTIONS },
+  {
+    id: "items", type: "long",
+    ask: (a) => by(a, {
+      portfolio: "List up to 6 things you are good at. Write one on each line.",
+      store: "Name some products you sell, one on each line. You can add a price after a dash.",
+      business: "What are your main services? Write one on each line.",
+      restaurant: "Name your best dishes, one on each line. You can add a price after a dash.",
+    }),
+    ph: (a) => by(a, { portfolio: "Portraits\nWeddings\nProduct shoots", store: "Soy candle - 450\nGift box - 899\nIncense set - 299", business: "Repairs\nAnnual service\nInstallation", restaurant: "Masala dosa - 120\nFilter coffee - 60\nThali - 250" }),
+    help: () => "Press Enter for a new line. You can leave this out and add them later.",
+    optional: true,
+  },
+  {
+    id: "goal", type: "many",
+    ask: (a) => by(a, { portfolio: "What should visitors do on your website?", store: "How will customers pay you?", business: "How should customers reach you?", restaurant: "What should guests be able to do?" }),
+    help: () => "Tap everything that applies. The first one you tap becomes the main button.",
+    options: (a) => by<Opt[]>(a, {
+      portfolio: [{ v: "work", label: "See my work" }, { v: "hire", label: "Hire me" }, { v: "story", label: "Read my story" }, { v: "contact", label: "Message me" }],
+      store: [{ v: "upi", label: "UPI" }, { v: "cod", label: "Cash on delivery" }, { v: "whatsapp", label: "Send the order on WhatsApp" }, { v: "card", label: "Card payment link" }],
+      business: [{ v: "quote", label: "Ask for a quote" }, { v: "call", label: "Call us" }, { v: "book", label: "Book a visit" }, { v: "whatsapp", label: "WhatsApp us" }],
+      restaurant: [{ v: "table", label: "Book a table" }, { v: "order", label: "Order food online" }, { v: "menu", label: "See the menu" }, { v: "event", label: "Plan a party" }],
+    }),
+  },
+  { id: "phone", type: "text", optional: true, ask: () => "What phone or WhatsApp number should customers see?", ph: () => "e.g. +91 98765 43210", help: () => "It is shown on the website. Skip if you'd rather not." },
+  { id: "email", type: "text", optional: true, ask: () => "And your email address?", ph: () => "e.g. hello@yourname.com", help: () => "Skip if you'd rather not." },
+];
+
+/** The steps still to ask, in order. */
+export const nextStep = (a: Answers): Step | null => STEPS.find((s) => !(s.id in a)) || null;
+export const stepOf = (id: string) => STEPS.find((s) => s.id === id)!;
+
+/** How an answer reads back to the person (their own chat bubble). */
+export function sayAnswer(s: Step, a: Answers): string {
+  const v = a[s.id]; if (!v) return "Skip";
+  if (s.id === "kind") return KIND_OPTIONS.find((o) => o.v === v)?.label || v;
+  if (s.type === "choice") return [...STYLE_OPTIONS, ...COLOUR_OPTIONS].find((o) => o.v === v)?.label || v;
+  if (s.type === "many") return v.split(",").map((x) => (s.options?.(a) || []).find((o) => o.v === x)?.label || x).join(", ");
+  if (s.type === "long") return v.split("\n").filter(Boolean).join(" · ");
+  return v;
+}
+
+// ---- choosing the look
+
+const hexOf = (c: string) => { const m = /^#?([0-9a-f]{6})$/i.exec(c || ""); return m ? m[1] : "888888"; };
+function hsl(c: string): { h: number; s: number; l: number } {
+  const x = hexOf(c), r = parseInt(x.slice(0, 2), 16) / 255, g = parseInt(x.slice(2, 4), 16) / 255, b = parseInt(x.slice(4, 6), 16) / 255;
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn, l = (mx + mn) / 2;
+  const s = d === 0 ? 0 : d / (1 - Math.abs(2 * l - 1));
+  let h = d === 0 ? 0 : mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
+  h = (h * 60 + 360) % 360; return { h, s, l };
+}
+const HUE: Record<string, number> = { blue: 220, green: 145, red: 358, orange: 28, purple: 272, pink: 328, gold: 45 };
+const STYLE_TAGS: Record<string, { want: string[]; dark?: boolean; light?: boolean }> = {
+  clean: { want: ["Minimal", "Light", "Modern", "Calm", "Fresh", "Classic"], light: true },
+  bold: { want: ["Bold", "Motion", "Playful", "Modern"] },
+  elegant: { want: ["Elegant", "Luxury", "Classy", "Fine dining"] },
+  dark: { want: ["Dark", "Tech", "Modern", "Bold"], dark: true },
+  warm: { want: ["Warm", "Homemade", "Craft", "Family", "Nature", "Rustic", "Café"] },
+  fun: { want: ["Playful", "Retro", "Street food", "Dessert", "Bold", "Motion"] },
+};
+const hash = (s: string) => { let h = 0; for (const c of s) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h; };
+const poolOf = (kind: Kind): Theme[] => (kind === "business" ? BIZ_THEMES : kind === "restaurant" ? REST_THEMES : THEMES);
+
+/** The theme that best matches the feel and colour chosen; the person's name picks between near ties so two people don't get the same one. */
+export function pickTheme(a: Answers): Theme | null {
+  const kind = k(a), pool = poolOf(kind); if (!pool.length) return null;
+  const st = STYLE_TAGS[a.style || "clean"] || STYLE_TAGS.clean, col = a.colour || "any";
+  const scored = pool.map((t) => {
+    let s = st.want.reduce((n, tag, i) => n + (t.tags.includes(tag) ? 6 - Math.min(i, 4) : 0), 0);
+    if (st.dark && t.dark) s += 8; if (st.dark && !t.dark) s -= 8; if (st.light && !t.dark) s += 4;
+    if (!st.dark && t.dark && a.style !== "bold" && a.style !== "elegant") s -= 3;
+    const c = hsl(t.colors.c1);
+    if (col === "mono") s += c.s < 0.15 ? 10 : -c.s * 10;
+    else if (col !== "any") { const d = Math.min(Math.abs(c.h - HUE[col]), 360 - Math.abs(c.h - HUE[col])); s += c.s < 0.2 ? -6 : Math.max(-8, 10 - d / 9); }
+    if (kind === "store" && t.tags.includes("Products")) s += 2;
+    return { t, s };
+  }).sort((x, y) => y.s - x.s);
+  const top = scored.filter((x) => x.s >= scored[0].s - 1.5).slice(0, 6);
+  return top[hash((a.name || "") + (a.about || "")) % top.length].t;
+}
+
+// ---- building the site
+
+const starters: Partial<Record<Kind, Promise<any>>> = {};
+const starter = (kind: Kind) => (starters[kind] ||= loadStarter(kind, "default"));
+const clone = <T,>(x: T): T => JSON.parse(JSON.stringify(x));
+const lines = (s: string | undefined) => String(s || "").split("\n").map((x) => x.trim()).filter(Boolean).slice(0, 8);
+const cap = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
+const digits = (s: string) => s.replace(/[^\d+]/g, "");
+/** "Soy candle - 450" → name and price. */
+const priced = (l: string) => { const m = /^(.*?)\s*[-–—:]\s*(?:₹|rs\.?|inr)?\s*([\d,.]+)\s*$/i.exec(l); return m ? { name: m[1].trim(), price: m[2].replace(/,/g, "") } : { name: l, price: "" }; };
+/** Replace the sample brand everywhere in text (not in theme, code or settings). */
+function rebrand(o: any, from: string, to: string, skip = new Set(["theme", "code", "i18n", "cms"])) {
+  if (Array.isArray(o)) { o.forEach((v, i) => { if (typeof v === "string") o[i] = v.split(from).join(to); else rebrand(v, from, to, skip); }); return; }
+  if (o && typeof o === "object") for (const key of Object.keys(o)) { if (skip.has(key)) continue; const v = o[key]; if (typeof v === "string") o[key] = v.split(from).join(to); else rebrand(v, from, to, skip); }
+}
+const goals = (a: Answers) => (a.goal || "").split(",").filter(Boolean);
+
+/** The starter holds made-up facts (years of experience, clients, reviews, prices). A preview built from a few answers shouldn't show someone else's story as theirs, so those parts are hidden or emptied. */
+function tidy(kind: Kind, c: any, o: { name: string; about: string; city: string; g: string[]; items: string[]; phone: string; email: string }) {
+  const hide = (...ids: string[]) => { for (const x of c.sections || []) if (ids.includes(x.id)) { if ("visible" in x) x.visible = false; else x.show = false; } };
+  const show = (...ids: string[]) => { for (const x of c.sections || []) if (ids.includes(x.id)) { if ("visible" in x) x.visible = true; else x.show = true; } };
+  const put = (path: string, v: any) => { const ks = path.split("."); let t = c; for (const x of ks.slice(0, -1)) { if (!t[x] || typeof t[x] !== "object") t[x] = {}; t = t[x]; } t[ks[ks.length - 1]] = v; };
+  const { name, about, city, items, g } = o, first = name.split(/\s+/)[0] || "";
+  if (!o.email && c.contact) put("contact.email", "");
+  if (!o.phone && c.contact) { put("contact.phone", ""); put("contact.whatsapp", ""); }
+  if (kind === "portfolio") {
+    hide("work", "learning", "projects");
+    if (name && about) { put("about.storyHeading", `I'm ${first}. *${about}.*`); put("about.story", `${name} is a ${about.toLowerCase()}${city ? " based in " + city : ""}.\n\nGet in touch to talk about your project.`); }
+    put("about.stats", []); put("about.facts", [...(about ? [{ k: "Focus", v: about }] : []), ...(city ? [{ k: "Based in", v: city }] : [])]);
+    put("hero.meta", city ? [{ value: city, label: "Based in" }] : []);
+    if (items.length) put("ticker", items.slice(0, 8));
+    for (const key of ["showStory", "showSplit", "showPartners"]) put("velocity." + key, false);
+    put("velocity.nextTitle", ""); put("velocity.nextDate", "");
+  } else if (kind === "store") {
+    put("home.banner.show", false); put("nav.showPortfolio", false); put("home.hero.eyebrow", "");
+  } else if (kind === "business") {
+    hide("clients", "stats", "work", "process", "team", "testimonials", "pricing", "faq", "products");
+    put("about.mission", ""); put("about.vision", ""); put("about.values", []);
+    put("stats.items", []); put("hero.ctaSecondary", ""); put("hero.ctaSecondaryTarget", "");
+    if (!city) put("contact.address", "");
+    if (!o.phone) put("contact.hours", "");
+  } else {
+    hide("highlights", "offers", "gallery", "chef", "events", "press", "testimonials", "order", "reserve", "faq");
+    if (g.includes("order")) show("order"); if (g.includes("table")) show("reserve"); if (g.includes("event")) show("events");
+    put("about.facts", []); put("about.signature", "");
+    const dishes = items.map((l) => { const m = /^(.*?)\s*[-–—:]\s*(?:₹|rs\.?|inr)?\s*([\d,.]+)\s*$/i.exec(l); return { name: m ? m[1].trim() : l, price: m ? m[2].replace(/,/g, "") : "" }; });
+    if (dishes.length) c.food.categories = [{ name: "Our menu", note: "", image: null, items: dishes.map((d) => ({ name: d.name, desc: "", price: d.price, diet: "", spice: "", tag: "", allergens: "", image: null, variants: [], soldOut: false })) }];
+    else hide("food");
+    put("hours.note", "");
+    if (!city) put("contact.address", ""); put("contact.parking", "");
+  }
+}
+
+export type Design = { kind: Kind; content: any; themeId: string; themeName: string; summary: string };
+
+/** The website so far, from the answers so far (whatever isn't answered keeps its sample wording). */
+export async function buildDesign(a: Answers): Promise<Design | null> {
+  if (!a.kind || !TEMPLATES[a.kind]) return null;
+  const kind = a.kind as Kind, tpl = TEMPLATES[kind], c: any = clone(await starter(kind)); tpl.prepare?.(c); c.festival = { ...(c.festival || {}), on: false }; // the festival overlay would hide the first screen of a preview
+  const name = (a.name || "").trim(), about = cap((a.about || "").trim()), city = (a.city || "").trim(), g = goals(a), items = lines(a.items);
+  const phone = (a.phone || "").trim(), email = (a.email || "").trim();
+  const theme = pickTheme(a);
+  if (name) rebrand(c, "Picaffectz", name);
+  const put = (path: string, v: any) => { const ks = path.split("."); let o = c; for (const x of ks.slice(0, -1)) { if (!o[x] || typeof o[x] !== "object") o[x] = {}; o = o[x]; } o[ks[ks.length - 1]] = v; };
+  const seo = () => { if (name) put("seo.title", about ? `${name} · ${about}` : name); if (about) put("seo.description", `${about}${city ? " in " + city : ""}.`); };
+
+  if (kind === "portfolio") {
+    if (name) { const p = name.split(/\s+/); put("hero.firstName", p[0]); put("hero.lastName", p.slice(1).join(" ")); put("brand.logoText", name); put("contact.footerLeft", `© ${new Date().getFullYear()} ${name}`); }
+    if (about) { put("hero.eyebrow", about + (city ? " · " + city : "")); put("hero.role", `I'm a ${about.toLowerCase()}${city ? " based in " + city : ""}. *Let's make something good together.*`); put("seo.description", `Portfolio of ${name || "me"}: ${about.toLowerCase()}.`); }
+    if (items.length >= 3) c.skills.items = items.slice(0, 6).map((t, i) => ({ ...c.skills.items[i % c.skills.items.length], tag: `${String(i + 1).padStart(2, "0")} / Skill`, title: t, body: "", detail: "" }));
+    const first: Record<string, [string, string]> = { work: ["See my work ↓", "work"], hire: ["Hire me", "contact"], story: ["Read my story ↓", "about"], contact: ["Message me", "contact"] };
+    if (g[0] && first[g[0]]) { put("hero.ctaPrimary", first[g[0]][0]); put("hero.ctaPrimaryTarget", first[g[0]][1]); }
+    if (email) { put("contact.email", email); c.contact.links = (c.contact.links || []).filter((l: any) => !/linkedin/i.test(l.label)); }
+    else c.contact.links = (c.contact.links || []).filter((l: any) => !/linkedin\.com\/?$/.test(l.url));
+    put("hero.ctaSecondary", ""); put("hero.ctaSecondaryUrl", "");
+    seo();
+  } else if (kind === "store") {
+    if (name) put("brand.name", name);
+    if (about) { put("brand.tagline", about); put("home.hero.text", about + "."); put("shop.intro", `Everything from ${name || "our shop"}, in one place.`); put("portfolio.intro", about + "."); }
+    if (name) { put("home.hero.title", `Welcome to\n${name}`); put("portfolio.title", `About ${name}`); }
+    put("brand.showAnnouncement", false);
+    if (items.length) {
+      const base = c.products, cat = { ...c.categories[0], id: "all", name: "Our range", description: about };
+      c.categories = [cat];
+      c.products = items.map((l, i) => { const { name: n, price } = priced(l), s = clone(base[i % base.length]); return { ...s, id: "p" + (i + 1), slug: n.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "item-" + (i + 1), name: n, category: "all", price: price ? +price : 0, compareAt: 0, short: "", description: "", features: [], options: [], optionName: "" }; });
+    }
+    if (g.length) { const P = c.payments; P.cod.enabled = g.includes("cod"); P.upi.enabled = g.includes("upi"); P.razorpay.enabled = g.includes("card"); put("orders.sendVia", g.includes("whatsapp") || !phone ? "whatsapp" : "email"); }
+    if (phone) { put("contact.phone", phone); put("contact.whatsapp", digits(phone)); put("orders.whatsapp", digits(phone)); }
+    if (email) { put("contact.email", email); put("orders.email", email); }
+    if (city) put("contact.address", city);
+    seo();
+  } else if (kind === "business") {
+    if (name) put("brand.name", name);
+    if (about) { put("brand.tagline", about); put("hero.title", about + "."); put("hero.lede", `${name || "We"}${city ? ", " + city : ""}. Get in touch and we'll take it from there.`); put("about.body", `${about}.`); put("cta.body", `Tell us what you need and we'll get back to you.`); }
+    if (city) { put("hero.eyebrow", city); put("contact.address", city); } else put("hero.eyebrow", "");
+    c.hero.badges = [];
+    if (items.length) c.services.items = items.slice(0, 6).map((t, i) => ({ ...c.services.items[i % c.services.items.length], title: t, body: `${t}${name ? " by " + name : ""}.`, points: [] }));
+    const cta: Record<string, [string, string]> = { quote: ["Ask for a quote", "contact"], call: ["Call us", "contact"], book: ["Book a visit", "contact"], whatsapp: ["WhatsApp us", "contact"] };
+    if (g[0] && cta[g[0]]) { put("nav.cta", cta[g[0]][0]); put("hero.ctaPrimary", cta[g[0]][0]); put("cta.button", cta[g[0]][0]); }
+    if (phone) { put("contact.phone", phone); put("contact.whatsapp", digits(phone)); }
+    if (email) put("contact.email", email);
+    put("footer.text", about ? `${name}. ${about}.` : name);
+    seo();
+  } else {
+    if (name) put("brand.name", name);
+    if (about) { put("brand.tagline", about); put("hero.eyebrow", about + (city ? " · " + city : "")); put("hero.lede", `${about}. Come hungry.`); put("about.body", `${name || "We"} serve ${about.toLowerCase()}${city ? " in " + city : ""}.`); }
+    if (name) put("hero.title", name);
+    put("hero.stamp", ""); c.hero.badges = [];
+    if (items.length) c.specials.items = items.slice(0, 8).map((l, i) => { const { name: n, price } = priced(l); return { ...c.specials.items[i % c.specials.items.length], name: n, desc: "", price, tag: "", image: null }; });
+    const cta: Record<string, [string, string]> = { table: ["Book a table", "reserve"], order: ["Order online", "order"], menu: ["See the menu", "food"], event: ["Plan a party", "events"] };
+    if (g[0] && cta[g[0]]) { put("nav.cta", cta[g[0]][0]); put("nav.ctaTarget", cta[g[0]][1]); put("hero.ctaPrimary", cta[g[0]][0]); put("hero.ctaPrimaryTarget", cta[g[0]][1]); }
+    if (city) put("contact.address", city);
+    if (phone) { put("contact.phone", phone); put("contact.whatsapp", digits(phone)); }
+    if (email) put("contact.email", email);
+    put("footer.text", about ? `${name}. ${about}.` : name);
+    seo();
+  }
+  tidy(kind, c, { name, about, city, g, items, phone, email });
+  if (theme) c.theme = { ...(c.theme || {}), ...tpl.themeValues(theme) };
+  return { kind, content: c, themeId: theme?.id || "", themeName: theme?.name || "", summary: tpl.summary(c) };
+}
+
+/** What Picaffectz needs to know, as a short message (for WhatsApp or email). */
+export function requestText(a: Answers, d: Design | null, link = ""): string {
+  const kindName = KIND_OPTIONS.find((o) => o.v === a.kind)?.label || a.kind || "";
+  const say = (id: string) => { const s = stepOf(id); return a[id] ? sayAnswer(s, a) : ""; };
+  const row = (label: string, v: string) => (v ? `${label}: ${v}` : "");
+  return [
+    "Hi Picaffectz, I designed a website preview and would like to take it forward.", "",
+    row("Type", kindName), row("Name", a.name || ""), row("What I do", a.about || ""), row("City", a.city || ""),
+    row("Feel", say("style")), row("Colour", say("colour")), row("Includes", (a.items || "").split("\n").filter(Boolean).join(", ")), row("Visitors can", say("goal")),
+    row("Phone", a.phone || ""), row("Email", a.email || ""), d ? row("Design", `${d.themeName} (${d.themeId})`) : "", link ? "Preview: " + link : "",
+  ].filter((x, i, all) => x || (i > 0 && all[i - 1])).join("\n");
+}

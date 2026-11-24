@@ -1300,6 +1300,7 @@ function dqDesignPub(d: any) {
   const out: any = { on: d?.on !== false }; if (!d || typeof d !== "object") return out;
   const HEX = /^#[0-9a-f]{6}$/i, KEY = /^[A-Za-z]{1,20}$/;
   if (typeof d.pick === "boolean") out.pick = d.pick;
+  if (typeof d.domain === "string" && /^(?=.{4,100}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,24}$/.test(d.domain.trim().toLowerCase())) out.domain = d.domain.trim().toLowerCase();
   if (d.themes && typeof d.themes === "object") { const th: any = {}; for (const kind of ["business", "restaurant", "portfolio", "store"]) if (Array.isArray(d.themes[kind])) th[kind] = d.themes[kind].filter((v: any) => typeof v === "string" && /^[A-Za-z0-9_-]{1,40}$/.test(v)).slice(0, 400); out.themes = th; }
   if (d.look && typeof d.look === "object") {
     const look: any = {};

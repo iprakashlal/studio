@@ -54,6 +54,9 @@ export function App() {
       if (!live || !b) return;
       setBrand({ name: b.name, logo: b.logo, v: b.v, tint: b.tint, mode: b.mode, anim: b.anim, layout: b.layout });
       writeDesignSettings(b.design);
+      // The Design yourself page's own address opens straight on that page.
+      const dom = b.design?.domain, here = location.hostname.toLowerCase().replace(/^www\./, "");
+      if (dom && here === dom && !/^#\/design/.test(location.hash)) location.hash = "#/design";
     });
     return () => { live = false; };
   }, [host?.kind, !!session]);

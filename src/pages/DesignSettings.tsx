@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { pushPref, savePrefNow } from "../lib/prefs";
 import { cleanDesignSettings, readDesignSettings, writeDesignSettings, type DesignSettings } from "../lib/designs";
 import { GROUPS, KINDS, LOOK_AXES, type Kind, type LookRule } from "../lib/designlook";
@@ -7,6 +7,13 @@ import { AI_ENGINES } from "../lib/ai";
 import { useAiEngine } from "./AiEngine";
 import { AiApiForm, useStudioWhere } from "./Connections";
 import { Toggle, useToast } from "../ui/kit";
+import { CfDomainCard } from "./HostDialog";
+import { useCfAccount } from "./CfPicker";
+import { Netlify } from "../lib/netlify";
+import { netlifyToken } from "../lib/hosting";
+import type { HostCfg } from "../lib/supa";
+import type { Session } from "../lib/auth";
+import type { Studio, StudioIndex } from "../lib/studio";
 
 /** Settings → General: the "Design yourself" page (a link on the Themes page): on or off. */
 export function DesignPageCard() { return <DesignOnCard />; }
@@ -40,7 +47,26 @@ function Block({ title, note, children, open = true }: { title: string; note?: s
 }
 
 /** Settings → Design yourself: the AI that reads and writes for visitors, the themes offered, and the layout, style, interaction and intro-screen choices (what each starts with, what shows, what can be picked). Saved with the Save button. */
-export function DesignLookTab() {
+/** Its own web address: the same one-click domain box as the Studio's own address; that address opens straight on Design yourself. */
+function DesignDomain({ session, studio, index, onIndex, onDomain }: { session: Session; studio: Studio; index: StudioIndex; onIndex: (i: StudioIndex) => void; onDomain: (d: string | undefined) => Promise<void> }) {
+  const [nf, setNf] = useState<Netlify | null | undefined>(undefined);
+  useEffect(() => { netlifyToken.load(session.token).then((t) => setNf(t ? new Netlify(t.token) : null)).catch(() => setNf(null)); }, [session.token]);
+  const cfAcc = useCfAccount(session.token, nf, true, true);
+  const hosted = index.hosted, dd = hosted?.designDomain;
+  if (!hosted || hosted.pages !== "cloudflare" || !hosted.siteId) return <p className="text-[13px] text-ink-400">An own address needs a Studio that runs on Cloudflare (Settings → Hosting accounts).</p>;
+  return (
+    <div aria-label="Design yourself address">
+      <CfDomainCard plain="Its own address" acc={cfAcc}
+        host={{ kind: "cloudflare", siteId: hosted.siteId, siteName: hosted.siteName, url: hosted.url, account: hosted.account, domain: dd?.domain, subdomain: dd?.subdomain, domainSetup: dd?.domainSetup } as HostCfg}
+        onHost={async (h) => {
+          onIndex(await studio.updateIndex((i) => { if (i.hosted) i.hosted = { ...i.hosted, designDomain: h.domain || h.domainSetup ? { domain: h.domain, subdomain: h.subdomain, domainSetup: h.domainSetup } : undefined }; }, h.domain ? `Design yourself address: ${h.domain}` : "Design yourself address removed"));
+          await onDomain(h.domain);
+        }} />
+    </div>
+  );
+}
+
+export function DesignLookTab({ session, studio, index, onIndex }: { session: Session; studio: Studio; index: StudioIndex; onIndex: (i: StudioIndex) => void }) {
   const toast = useToast(), general = useAiEngine(), where = useStudioWhere();
   const [saved, setSaved] = useState<DesignSettings>(readDesignSettings);
   const [d, setD] = useState<DesignSettings>(saved);
@@ -50,6 +76,12 @@ export function DesignLookTab() {
   const dirty = useMemo(() => !same(cleanDesignSettings({ ...d, on: saved.on }), cleanDesignSettings(saved)), [d, saved]);
   const upd = (p: Partial<DesignSettings>) => { setD((o) => ({ ...o, ...p })); setErr(""); };
 
+  /** A connected (or removed) address is saved at once: it isn't part of the Save bar below. */
+  const setDomain = async (domain: string | undefined) => {
+    const cur = readDesignSettings(), next: DesignSettings = { ...cur }; if (domain) next.domain = domain; else delete next.domain;
+    writeDesignSettings(next); setSaved((o) => ({ ...o, domain })); setD((o) => ({ ...o, domain }));
+    try { await savePrefNow({ design: next }); } catch (e: any) { toast(e?.message || "Couldn't save the address.", "bad"); }
+  };
   const rules = d.look?.[kind] || {};
   const setRule = (key: string, patch: Partial<LookRule>) => {
     const r: LookRule = { ...rules[key], ...patch };
@@ -81,6 +113,10 @@ export function DesignLookTab() {
     <div className="flex flex-col gap-4">
       <p className="text-sm text-ink-300">What the Design yourself page offers a visitor, and what each type starts with. Press <b className="text-ink-100">Save changes</b> to store it in your Studio's database; signed-out visitors get it with the next page load.</p>
 
+      <Block title="Its own web address" note="Give Design yourself its own address, like design.yourname.com. Visitors who open it land straight on the Design yourself page. Connect it in one click, the same way as the Studio's own address in Settings → Hosting accounts.">
+        <DesignDomain session={session} studio={studio} index={index} onIndex={onIndex} onDomain={setDomain} />
+        {d.domain && <p className="text-[13px] text-ink-300">Open <a className="underline" href={`https://${d.domain}/`} target="_blank" rel="noopener noreferrer">{d.domain}</a></p>}
+      </Block>
       <Block title="AI engine" note="Which AI reads a visitor's PDF or website link and writes their text. The choices are the same as Settings → General → AI engine. With the Picaffectz system nothing is sent to an AI service: the visitor's own device reads and writes by rules.">
         <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label="AI engine for Design yourself">
           {[{ id: "", name: "Same as Settings → General", line: `Currently ${generalName}. Changing it there changes it here.` }, ...AI_ENGINES].map((e) => (

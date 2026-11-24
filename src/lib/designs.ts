@@ -22,6 +22,7 @@ export function cleanDesignSettings(x: any): DesignSettings {
   if (typeof x.on === "boolean") o.on = x.on;
   const sets = cleanSets(x.sets); if (sets.length) o.sets = sets;
   if (typeof x.pick === "boolean") o.pick = x.pick;
+  const bgs = cleanAccents(x.backgrounds); if (bgs.length) o.backgrounds = bgs;
   const acc = cleanAccents(x.accents); if (acc.length) o.accents = acc;
   const th = cleanThemes(x.themes); if (Object.keys(th).length) o.themes = th;
   const look = cleanLook(x.look); if (Object.keys(look).length) o.look = look;

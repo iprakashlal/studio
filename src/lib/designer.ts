@@ -39,12 +39,22 @@ export const themesFor = (kind: Kind): Theme[] => offered(kind);
 export const themeOf = (kind: Kind, id: string): Theme | undefined => poolOf(kind).find((t) => t.id === id);
 const LIGHT = { bg: "#FFFFFF", surface: "#F5F6F8", deep: "#ECEEF2", text: "#14161A", soft: "#5B6270", line: "#E1E4EA" };
 const DARKK = { bg: "#0E1118", surface: "#161B26", deep: "#090B10", text: "#F2F4F8", soft: "#9AA3B5", line: "#262D3C" };
+const rgb = (h: string) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+const lum = (h: string) => { const [r, g, b] = rgb(h); return (r * 299 + g * 587 + b * 114) / 255000; };
+const mixHex = (a: string, b: string, t: number) => "#" + rgb(a).map((x, i) => Math.round(x + (rgb(b)[i] - x) * t).toString(16).padStart(2, "0")).join("");
+/** The colours that go with a background: light backgrounds get dark text, dark ones light text; cards, borders and panels follow. */
+export function onBackground(bg: string): Record<string, string> {
+  const dark = lum(bg) < 0.5, text = dark ? "#f4f6fa" : "#111827", edge = dark ? "#ffffff" : "#000000";
+  return { bg, surface: dark ? mixHex(bg, "#ffffff", 0.06) : mixHex(bg, "#ffffff", 0.65), text, soft: mixHex(text, bg, 0.38), line: mixHex(bg, edge, dark ? 0.16 : 0.1), deep: mixHex(bg, "#000000", dark ? 0.35 : 0.88) };
+}
 /** A theme with the person's own colour, light/dark and corner choices on top. */
 export function tweakTheme(t: Theme, a: Answers): Theme {
   const o: Theme = { ...t, colors: { ...t.colors } };
   if (a.mode === "light" || a.mode === "dark") { Object.assign(o.colors, a.mode === "light" ? LIGHT : DARKK); o.dark = a.mode === "dark"; }
   if (/^#[0-9a-f]{6}$/i.test(a.accent || "")) { o.colors.c1 = a.accent; o.colors.c2 = a.accent; }
   if (a.corners && /^\d{1,2}$/.test(a.corners)) o.radius = +a.corners;
+  if (/^#[0-9a-f]{6}$/i.test(a.bgc || "")) Object.assign(o.colors, onBackground(a.bgc)); // a chosen background: the text and cards follow
+  if (/^#[0-9a-f]{6}$/i.test(a.bgc || "")) o.dark = lum(a.bgc) < 0.5;
   const own = readColsAnswer(a.cols); // the person's own colours (the palette editor) come last
   for (const key of Object.keys(own)) (o.colors as any)[key] = own[key];
   if (own.bg && !a.mode) o.dark = (parseInt(own.bg.slice(1, 3), 16) * 299 + parseInt(own.bg.slice(3, 5), 16) * 587 + parseInt(own.bg.slice(5, 7), 16) * 114) / 1000 < 128;

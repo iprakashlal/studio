@@ -1,8 +1,7 @@
 import { useMemo, useState } from "react";
-import { useBrand } from "../lib/brand";
 import { pushPref, savePrefNow } from "../lib/prefs";
 import { cleanDesignSettings, readDesignSettings, writeDesignSettings, type DesignSettings } from "../lib/designs";
-import { COLOUR_SLOTS, GROUPS, KINDS, LOOK_AXES, type ColourSet, type Kind, type LookRule } from "../lib/designlook";
+import { DEFAULT_BACKGROUNDS, GROUPS, KINDS, LOOK_AXES, type Kind, type LookRule } from "../lib/designlook";
 import { allThemesOf } from "../lib/designer";
 import { COLOUR_DOT } from "../lib/designer";
 import { Toggle, useToast } from "../ui/kit";
@@ -25,8 +24,6 @@ function DesignOnCard() {
 }
 
 const KIND_NAME: Record<Kind, string> = { business: "Business", restaurant: "Restaurant", portfolio: "Portfolio", store: "Shop" };
-const DARK: Record<string, string> = { bg: "#0e1118", surface: "#161b26", text: "#f2f4f8", soft: "#9aa3b5", line: "#262d3c", deep: "#090b10" };
-const LIGHT: Record<string, string> = { bg: "#f7f8fa", surface: "#ffffff", text: "#0e1b2c", soft: "#5a6678", line: "#dde2ea", deep: "#0e1b2c" };
 const DEFAULT_ACCENTS = ["blue", "green", "red", "orange", "purple", "pink", "gold", "mono"].map((c) => COLOUR_DOT[c]);
 const same = (x: unknown, y: unknown) => JSON.stringify(x) === JSON.stringify(y);
 
@@ -43,7 +40,7 @@ function Block({ title, note, children, open = true }: { title: string; note?: s
 
 /** Settings → Design yourself: what a visitor can change on the Design yourself page (colours, themes, layout, style, interactions, intro screen) and what each type starts with. Saved with the Save button. */
 export function DesignLookTab() {
-  const brand = useBrand(), toast = useToast();
+  const toast = useToast();
   const [saved, setSaved] = useState<DesignSettings>(readDesignSettings);
   const [d, setD] = useState<DesignSettings>(saved);
   const [kind, setKind] = useState<Kind>("business");
@@ -52,9 +49,7 @@ export function DesignLookTab() {
   const dirty = useMemo(() => !same(cleanDesignSettings({ ...d, on: saved.on }), cleanDesignSettings(saved)), [d, saved]);
   const upd = (p: Partial<DesignSettings>) => { setD((o) => ({ ...o, ...p })); setErr(""); };
 
-  const sets = d.sets || [], accents = d.accents?.length ? d.accents : DEFAULT_ACCENTS;
-  const setSets = (l: ColourSet[]) => upd({ sets: l });
-  const addSet = () => { const t = /^#[0-9a-f]{6}$/i.test(brand.tint || "") ? brand.tint! : "#3b82f6"; setSets([...sets, { name: sets.length ? "Palette " + (sets.length + 1) : "Studio colours", colours: { ...(brand.mode === "light" ? LIGHT : DARK), c1: t, c2: t, c3: t } }]); };
+  const backgrounds = d.backgrounds?.length ? d.backgrounds : DEFAULT_BACKGROUNDS, accents = d.accents?.length ? d.accents : DEFAULT_ACCENTS;
   const rules = d.look?.[kind] || {};
   const setRule = (key: string, patch: Partial<LookRule>) => {
     const r: LookRule = { ...rules[key], ...patch };
@@ -67,7 +62,6 @@ export function DesignLookTab() {
   const setOffered = (ids: string[]) => { const th = { ...(d.themes || {}) }; if (ids.length && ids.length < themes.length) th[kind] = ids; else delete th[kind]; upd({ themes: th }); };
 
   const save = async () => {
-    if (sets.some((s) => !s.name.trim())) { setErr("Give every palette a name."); return; }
     const clean = cleanDesignSettings({ ...d, on: readDesignSettings().on });
     setBusy(true); setErr("");
     try {
@@ -95,21 +89,18 @@ export function DesignLookTab() {
         </div>
       </Block>
 
-      <Block title="Colour palettes" note="Ready-made palettes visitors can tap. Each uses the colours of Brand & theme → Colours; leave a colour out of a palette to keep the theme's own. With none, visitors get one made from your Studio's colour.">
-        {sets.map((st, i) => (
-          <div key={i} className="flex flex-col gap-3 rounded-xl border border-ink-700 bg-ink-800/40 p-4">
-            <div className="flex items-center gap-2"><input className="input h-10 max-w-[240px]" aria-label="Palette name" maxLength={30} value={st.name} onChange={(e) => setSets(sets.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))} /><button type="button" className="btn btn-ghost btn-sm ml-auto" onClick={() => setSets(sets.filter((_, j) => j !== i))}>Remove</button></div>
-            <div className="grid grid-cols-3 gap-x-3 gap-y-3 sm:grid-cols-5 lg:grid-cols-9">
-              {COLOUR_SLOTS.map(([k, label]) => (
-                <label key={k} className="flex flex-col gap-1.5 text-[11px] leading-tight text-ink-400"><span className="min-h-[2.4em]">{label}</span>
-                  <input type="color" aria-label={label} className="h-9 w-full cursor-pointer rounded-lg border border-ink-600 bg-transparent p-0.5" value={st.colours[k] || "#888888"} onChange={(e) => setSets(sets.map((x, j) => (j === i ? { ...x, colours: { ...x.colours, [k]: e.target.value } } : x)))} />
-                </label>
-              ))}
-            </div>
-          </div>
-        ))}
-        <div className="flex flex-wrap items-center gap-4"><button type="button" className="btn btn-sm" onClick={addSet} disabled={sets.length >= 12}>+ Add a palette</button>
-          <Toggle id="design-pick" label="Let visitors change each colour" checked={d.pick !== false} onChange={(v) => upd({ pick: v })} /></div>
+      <Block title="Background colours" note="A few backgrounds, light to dark, that visitors can tap. The text, cards and borders adjust automatically so the page stays easy to read. “Theme's own” is always the first choice and the default.">
+        <div className="flex flex-wrap items-center gap-2.5">
+          {backgrounds.map((c, i) => (
+            <span key={i} className="relative">
+              <input type="color" aria-label={`Background colour ${i + 1}`} className="h-10 w-10 cursor-pointer rounded-full border border-ink-600 bg-transparent p-0.5" value={c} onChange={(e) => upd({ backgrounds: backgrounds.map((x, j) => (j === i ? e.target.value : x)) })} />
+              <button type="button" aria-label={`Remove background colour ${i + 1}`} className="absolute -right-1.5 -top-1.5 grid h-5 w-5 place-items-center rounded-full border border-ink-600 bg-ink-800 text-[10px] text-ink-300 hover:text-ink-100" onClick={() => upd({ backgrounds: backgrounds.filter((_, j) => j !== i) })}>✕</button>
+            </span>
+          ))}
+          <button type="button" className="btn btn-sm" disabled={backgrounds.length >= 16} onClick={() => upd({ backgrounds: [...backgrounds, "#ffffff"] })}>+ Add</button>
+          {!!d.backgrounds?.length && <button type="button" className="btn btn-ghost btn-sm" onClick={() => upd({ backgrounds: [] })}>Use the standard set</button>}
+        </div>
+        <Toggle id="design-pick" label="Let visitors change each colour" checked={d.pick !== false} onChange={(v) => upd({ pick: v })} />
       </Block>
 
       <Block title="Themes, layout, style and interactions" note="Choose a type, then the themes it offers and, for each choice, the option it starts with. “Starts with” is filled in on every visitor's preview of that type (the theme's own if left alone). Each choice is labelled with the answer it shapes. Hide a choice, or narrow the options visitors can pick.">

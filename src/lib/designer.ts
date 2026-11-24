@@ -34,7 +34,9 @@ const k = (a: Answers) => (a.kind || "portfolio") as Kind;
 const by = <T,>(a: Answers, m: Record<Kind, T>): T => m[k(a)];
 
 /** Every theme of a type (for the "play with your design" panel). */
-export const themesFor = (kind: Kind): Theme[] => poolOf(kind);
+export const themesFor = (kind: Kind): Theme[] => offered(kind);
+/** A theme of a type by its id, whether or not it is currently offered. */
+export const themeOf = (kind: Kind, id: string): Theme | undefined => poolOf(kind).find((t) => t.id === id);
 const LIGHT = { bg: "#FFFFFF", surface: "#F5F6F8", deep: "#ECEEF2", text: "#14161A", soft: "#5B6270", line: "#E1E4EA" };
 const DARKK = { bg: "#0E1118", surface: "#161B26", deep: "#090B10", text: "#F2F4F8", soft: "#9AA3B5", line: "#262D3C" };
 /** A theme with the person's own colour, light/dark and corner choices on top. */
@@ -216,12 +218,17 @@ const STYLE_TAGS: Record<string, { want: string[]; dark?: boolean; light?: boole
   fun: { want: ["Playful", "Retro", "Street food", "Dessert", "Bold", "Motion"] },
 };
 const hash = (s: string) => { let h = 0; for (const c of s) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h; };
-const poolOf = (kind: Kind): Theme[] => (kind === "business" ? BIZ_THEMES : kind === "restaurant" ? REST_THEMES : THEMES);
+function poolOf(kind: Kind): Theme[] { return kind === "business" ? BIZ_THEMES : kind === "restaurant" ? REST_THEMES : THEMES; }
+/** The themes the Studio's owner offers (all of them unless the owner picked some). */
+function offered(kind: Kind): Theme[] { const al = readDesignSettings().themes?.[kind], all = poolOf(kind), l = al?.length ? all.filter((t) => al.includes(t.id)) : all; return l.length ? l : all; }
+
+/** A plain sample picture (soft shapes in the theme's colours) for previews that have no photo yet. */
+const samplePicture = (c1: string, c2: string, bg: string) => "data:image/svg+xml," + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 640"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${c1}"/><stop offset="1" stop-color="${c2}"/></linearGradient></defs><rect width="800" height="640" fill="${bg}"/><rect width="800" height="640" fill="url(#g)" opacity=".85"/><circle cx="560" cy="190" r="120" fill="#fff" opacity=".22"/><circle cx="250" cy="430" r="190" fill="#000" opacity=".12"/><path d="M0 520C160 440 300 560 460 500S700 420 800 470V640H0Z" fill="#fff" opacity=".2"/></svg>`);
 
 /** The theme that best matches the feel and colour chosen; the person's name picks between near ties so two people don't get the same one. */
 export function pickTheme(a: Answers): Theme | null {
-  const kind = k(a), pool = poolOf(kind); if (!pool.length) return null;
-  const chosen = a.theme && pool.find((t) => t.id === a.theme); if (chosen) return chosen;
+  const kind = k(a), pool = offered(kind); if (!pool.length) return null;
+  const chosen = a.theme && poolOf(kind).find((t) => t.id === a.theme); if (chosen) return chosen;
   const st = STYLE_TAGS[a.style || "clean"] || STYLE_TAGS.clean, col = a.colour || "any";
   const scored = pool.map((t) => {
     let s = st.want.reduce((n, tag, i) => n + (t.tags.includes(tag) ? 6 - Math.min(i, 4) : 0), 0);
@@ -389,7 +396,12 @@ export async function buildDesign(a: Answers, copy?: Copy | null, files?: Design
   if (kind === "restaurant" && hours) { put("hours.note", hours); put("hours.days", []); put("hours.showStatus", false); }
   if (files?.logo && kind !== "portfolio") put("brand.logo", { url: files.logo });
   if (kind === "restaurant" && files?.menu) { put("food.pdfUrl", "data:application/pdf;base64," + files.menu.b64); put("food.pdfLabel", "Download the menu (PDF)"); }
-  if (theme) c.theme = { ...(c.theme || {}), ...tpl.themeValues(tweakTheme(theme, a)), ...lookValues(kind, a.look, readDesignSettings()) };
+  if (theme) {
+    const tt = tweakTheme(theme, a), lv = lookValues(kind, a.look, readDesignSettings());
+    c.theme = { ...(c.theme || {}), ...tpl.themeValues(tt), ...lv };
+    // A picture frame only shows around a picture: until they add one, a sample picture in the theme's colours stands in.
+    if ((kind === "business" || kind === "restaurant") && lv.heroArt && lv.heroArt !== "default" && !c.hero?.image?.url && !c.hero?.video) put("hero.image", { url: samplePicture(tt.colors.c1, tt.colors.c3 || tt.colors.c2, tt.colors.surface) });
+  }
   return { kind, content: c, themeId: theme?.id || "", themeName: theme?.name || "", summary: tpl.summary(c) };
 }
 const show = (c: any, ...ids: string[]) => { for (const x of c.sections || []) if (ids.includes(x.id)) { if ("visible" in x) x.visible = true; else x.show = true; } };
@@ -435,3 +447,6 @@ export function requestText(a: Answers, d: Design | null, link = ""): string {
     row("Phone", a.phone || ""), row("Email", a.email || ""), row("Document", a.doc || ""), row("Document link", a.doclink || ""), row("Chosen look", [a.theme, a.accent, a.mode].filter(Boolean).join(" · ")), d ? row("Design", `${d.themeName} (${d.themeId})`) : "", link ? "Preview: " + link : "",
   ].filter((x, i, all) => x || (i > 0 && all[i - 1])).join("\n");
 }
+
+/** Every theme of a type, whether or not the Studio's owner offers it (for the owner's settings). */
+export const allThemesOf = (kind: Kind): Theme[] => poolOf(kind);

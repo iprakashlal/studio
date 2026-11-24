@@ -1301,6 +1301,8 @@ function dqDesignPub(d: any) {
   const HEX = /^#[0-9a-f]{6}$/i, KEY = /^[A-Za-z]{1,20}$/;
   if (Array.isArray(d.sets)) out.sets = d.sets.slice(0, 12).filter((x: any) => x && typeof x.name === "string" && x.colours && typeof x.colours === "object").map((x: any) => ({ name: clip(x.name, 30), colours: Object.fromEntries(Object.entries(x.colours).filter(([k, v]) => /^[a-z][a-z0-9]{0,11}$/.test(k) && typeof v === "string" && HEX.test(v as string)).slice(0, 9)) }));
   if (typeof d.pick === "boolean") out.pick = d.pick;
+  if (Array.isArray(d.accents)) out.accents = d.accents.filter((c: any) => typeof c === "string" && HEX.test(c)).slice(0, 16);
+  if (d.themes && typeof d.themes === "object") { const th: any = {}; for (const kind of ["business", "restaurant", "portfolio", "store"]) if (Array.isArray(d.themes[kind])) th[kind] = d.themes[kind].filter((v: any) => typeof v === "string" && /^[A-Za-z0-9_-]{1,40}$/.test(v)).slice(0, 400); out.themes = th; }
   if (d.look && typeof d.look === "object") {
     const look: any = {};
     for (const kind of ["business", "restaurant", "portfolio", "store"]) {

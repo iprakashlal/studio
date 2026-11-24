@@ -56,6 +56,14 @@ export function pushPref(p: SyncedPrefs) {
   pending = merge(pending, p); clearTimeout(timer); timer = setTimeout(flush, 800);
 }
 
+/** Save a choice to the Studio now and say whether it worked (the Save button of a settings tab). */
+export async function savePrefNow(p: SyncedPrefs): Promise<void> {
+  pending = merge(pending, p); clearTimeout(timer);
+  if (!sink) throw new Error("The Studio isn't connected right now. Reload the page and try again.");
+  const q = pending; pending = {};
+  try { await sink(q); } catch (e) { pending = merge(q, pending); throw e; }
+}
+
 const KEYS = { tour: "site-admin-tour", pay: "site-studio:pay-hidden", edit: "site-studio:click-to-edit", explorer: "studio-explorer", auto: "site-studio:auto-update", view: "studio-nav", wide: "studio-nav-wide", fold: "studio-menu-fold" };
 const put = (k: string, v: string) => { try { localStorage.setItem(k, v); } catch { /* private mode */ } };
 

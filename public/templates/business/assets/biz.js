@@ -24,7 +24,7 @@ const DEFAULT = {
   poweredBy: { show: true },
   brand: { name: "Picaffectz", tagline: "Strategy, design and engineering for growing companies", logo: null, showName: true },
   site: { multiPage: false, crumbs: true, pageLabels: { home: "Home", services: "Services", products: "Products", work: "Work", about: "About", contact: "Contact" } },
-  nav: { cta: "Book a call", ctaTarget: "contact" },
+  nav: { cta: "Book a call", ctaTarget: "contact", ctaTargetUrl: "" },
   sections: [
     { id: "hero", label: "Home", show: true, inNav: false },
     { id: "clients", label: "Clients", show: true, inNav: false },
@@ -45,7 +45,7 @@ const DEFAULT = {
     eyebrow: "Consulting · Design · Engineering",
     title: "We help growing companies\nbuild what's next.",
     lede: "Picaffectz is an independent team of strategists, designers and engineers. We plan, design and ship digital products for banks, insurers and healthcare companies.",
-    ctaPrimary: "Book a consultation", ctaPrimaryTarget: "contact", ctaSecondary: "See our work", ctaSecondaryTarget: "work",
+    ctaPrimary: "Book a consultation", ctaPrimaryTarget: "contact", ctaPrimaryTargetUrl: "", ctaSecondary: "See our work", ctaSecondaryTarget: "work", ctaSecondaryTargetUrl: "",
     image: null, badges: ["ISO 27001 certified", "120+ projects delivered", "Offices in Mumbai & London"],
     slides: { enabled: false, items: [], effect: "fade", interval: 6, speed: 1.2, overlay: 45, overlayColor: "#0E1B2C", overlayStyle: "left", textColor: "light", height: "tall", dots: true, arrows: false, pause: true, hideArt: true, artOpacity: 100 },
     panel: { show: true, source: "auto", aLabel: "", aValue: "", bars: true, rows: [], cLabel: "", cValue: "", dot: true },
@@ -121,7 +121,7 @@ const DEFAULT = {
       { q: "Can you work with our in-house team?", a: "Most of our projects are joint teams. We can lead, support or hand over, whichever suits you." },
     ],
   },
-  cta: { title: "Have a project in mind?", body: "Tell us where you are and where you want to be. We'll reply within one working day.", button: "Start a conversation", target: "contact" },
+  cta: { title: "Have a project in mind?", body: "Tell us where you are and where you want to be. We'll reply within one working day.", button: "Start a conversation", target: "contact", targetUrl: "" },
   contact: {
     eyebrow: "Contact", title: "Let's talk about your project", lede: "Send a few details and we'll set up a 30-minute call. No obligation.",
     email: "hello@picaffectz.example", phone: "+91 22 4000 1234", whatsapp: "", address: "Level 9, One BKC\nBandra Kurla Complex, Mumbai 400051", hours: "Mon–Fri, 9:30 am – 6:30 pm IST", mapUrl: "", linkedin: "https://www.linkedin.com/",
@@ -184,6 +184,14 @@ const ml = (s) => esc(String(s ?? "").replace(/\r\n?/g, "\n").trim()).replace(/\
 const rich = (s) => ml(s).replace(/\*([^*]+)\*/g, "<em>$1</em>");
 const paras = (s) => String(s || "").split(/\n\s*\n/).filter((x) => x.trim()).map((p) => `<p>${rich(p.trim())}</p>`).join("");
 const safeUrl = (u) => { u = String(u || "").trim(); return /^(https?:|mailto:|tel:)/i.test(u) ? u : ""; };
+/** A button that goes to "a custom link": the typed address becomes its target (only web, mail and phone links). */
+function norm(c) {
+  try {
+    const link = (o, k) => { if (o && o[k] === "url") { const u = String(o[k + "Url"] || "").trim(); o[k] = /^(https?:|mailto:|tel:)/i.test(u) ? u : /^[\w-]+(\.[\w-]+)+/.test(u) ? "https://" + u : ""; } };
+    link(c.nav, "ctaTarget"); link(c.hero, "ctaPrimaryTarget"); link(c.hero, "ctaSecondaryTarget"); link(c.cta, "target");
+  } catch (e) {}
+  return c;
+}
 function merge(def, val) {
   if (Array.isArray(def)) return Array.isArray(val) ? val : def;
   if (def && typeof def === "object") { const out = {}, v = val && typeof val === "object" && !Array.isArray(val) ? val : {}; for (const k of Object.keys(def)) out[k] = merge(def[k], v[k]); for (const k of Object.keys(v)) if (!(k in out)) out[k] = v[k]; return out; }
@@ -197,7 +205,7 @@ let ASSETS = {};
 const HOST = (() => { try { const e = document.getElementById("site-host"); return e ? JSON.parse(e.textContent) : null; } catch (e) { return null; } })();
 const hostPhoto = (p) => (HOST && /^assets\/uploads\//.test(p) ? HOST.assets + p.split("/").map(encodeURIComponent).join("/") : p);
 const imgUrl = (img) => (!img ? "" : img.path ? ASSETS[img.path] || hostPhoto(img.path) : img.url || "");
-let C = merge(DEFAULT, {});
+let C = norm(merge(DEFAULT, {}));
 const PAGE = document.body.dataset.page || "home";
 const PREVIEW = window.name === "cms-preview" && window.parent !== window;
 const PAGES = { home: "index.html", services: "services.html", products: "products.html", product: "product.html", work: "work.html", about: "about.html", contact: "contact.html", warranty: "warranty.html", page: "page.html", section: "section.html" };
@@ -794,14 +802,14 @@ if (PREVIEW) {
   addEventListener("message", (e) => {
     if (e.origin !== location.origin || e.source !== window.parent) return;
     const d = e.data || {};
-    if (d.type === "cms:content" && d.content && typeof d.content === "object") { if (SC && SC.take(d.content, { ...SCO, drawn: DREW })) return; DREW = true; ASSETS = d.assets || {}; const y = scrollY; C = merge(DEFAULT, d.content); render(); scrollTo(0, y); }
+    if (d.type === "cms:content" && d.content && typeof d.content === "object") { if (SC && SC.take(d.content, { ...SCO, drawn: DREW })) return; DREW = true; ASSETS = d.assets || {}; const y = scrollY; C = norm(merge(DEFAULT, d.content)); render(); scrollTo(0, y); }
   });
   window.parent.postMessage({ type: "cms:ready", page: (location.pathname.split("/").pop() || "index.html") + (PAGE === "page" && spCur() ? "?p=" + encodeURIComponent(spCur()) : MNT_Q ? "?maintenance=1" : "") }, location.origin);
   if (!(SC && SC.wait())) { DREW = true; render(); }
 } else {
   const CKEY = "site-content:" + location.pathname.replace(/[^/]*$/, "");
   let shownTxt = "";
-  try { const c = sessionStorage.getItem(CKEY); if (c) { const j = JSON.parse(c); if (SC && SC.take(j, SCO)) HAND = true; else { C = merge(DEFAULT, j); render(); shownTxt = c; } } } catch (e) {}
+  try { const c = sessionStorage.getItem(CKEY); if (c) { const j = JSON.parse(c); if (SC && SC.take(j, SCO)) HAND = true; else { C = norm(merge(DEFAULT, j)); render(); shownTxt = c; } } } catch (e) {}
   // A first visit: the page's outline shows while the content is fetched (the first render replaces it).
   if (!shownTxt && !HAND && window.SiteSkeleton) window.SiteSkeleton.show($("#app"));
   const giveUp = setTimeout(() => { if (!shownTxt && !HAND) { render(); shownTxt = "default"; } }, 6000);
@@ -816,7 +824,7 @@ if (PREVIEW) {
     try { sessionStorage.setItem(CKEY, txt); } catch (e) {}
     if (txt === shownTxt) return;
     const j = JSON.parse(txt); if (SC && SC.take(j, { ...SCO, drawn: !!shownTxt, text: txt })) return;
-    C = merge(DEFAULT, j); render();
+    C = norm(merge(DEFAULT, j)); render();
   }).catch(() => { clearTimeout(giveUp); if (!shownTxt) render(); });
 }
 if (SC) SC.untrack();

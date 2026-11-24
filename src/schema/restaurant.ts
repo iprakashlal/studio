@@ -14,6 +14,9 @@ export const REST_SECTIONS: [string, string][] = [["hero", "Home"], ["highlights
   ["press", "Featured in"], ["testimonials", "Reviews"], ["order", "Order online"], ["reserve", "Book a table"], ["contact", "Visit us"], ["faq", "FAQ"], ["cta", "Call to action"]];
 const IN_NAV = ["about", "food", "gallery", "events", "contact"];
 const TARGETS = [...REST_SECTIONS.filter(([id]) => id !== "hero").map(([value, label]) => ({ value, label })), { value: "ordering", label: "Order now page (when online ordering is on)" }];
+/** Where a button can go: a section, or a link the person types. */
+const GOES = [...TARGETS, { value: "url", label: "A custom link…" }];
+const linkWhen = (path: string, label: string): Field => ({ t: "when", path, is: "url", fields: [{ t: "text", path: path + "Url", label, ph: "https://…", hint: "A full web address (a link to another site, a WhatsApp link, a PDF…)." }] });
 const ICONS: [string, string][] = [["cutlery", "Fork and knife"], ["flame", "Flame"], ["leaf", "Leaf"], ["bowl", "Steaming bowl"], ["people", "People"], ["cup", "Cup"], ["glass", "Glass"], ["cake", "Cake"], ["pizza", "Pizza slice"], ["fish", "Fish"], ["hat", "Chef's hat"], ["truck", "Delivery van"],
   ["bag", "Takeaway bag"], ["calendar", "Calendar"], ["clock", "Clock"], ["pin", "Map pin"], ["phone", "Phone"], ["star", "Star"], ["heart", "Heart"], ["music", "Music"], ["wifi", "Wi-Fi"], ["car", "Parking"], ["sun", "Outdoor seating"], ["paw", "Pet friendly"], ["gift", "Gift"], ["shield", "Hygiene"], ["spark", "Spark"]];
 const ICON_OPTS = ICONS.map(([value, label]) => ({ value, label }));
@@ -69,7 +72,7 @@ const schema: Category[] = [
       { title: "Sections", fields: [{ t: "note", text: "Reorder with the arrows. Hidden sections stay in your content. On one page, sections with “In the menu bar” get a link at the top." },
         { t: "list", path: "sections", fixed: true, add: () => ({}), title: (it) => `${it.label || it.id}${it.show === false ? " (hidden)" : ""}`,
           item: [g2({ t: "text", path: "label", label: "Name in the menu bar" }, { t: "toggle", path: "show", label: "Show this section" }), { t: "toggle", path: "inNav", label: "In the menu bar (one-page mode)" }] }] },
-      { title: "Button in the menu bar", fields: [g2({ t: "text", path: "nav.cta", label: "Button label (empty hides it)" }, { t: "select", path: "nav.ctaTarget", label: "Goes to", options: TARGETS })] },
+      { title: "Button in the menu bar", fields: [g2({ t: "text", path: "nav.cta", label: "Button label (empty hides it)" }, { t: "select", path: "nav.ctaTarget", label: "Goes to", options: GOES }), linkWhen("nav.ctaTarget", "Custom link for the menu button")] },
       { title: "Announcement bar", fields: [{ t: "toggle", path: "notice.on", label: "Show a line above the menu bar" },
         { t: "when", path: "notice.on", is: "true", fields: [{ t: "text", path: "notice.text", label: "Announcement", ph: "Closed on 26 January. Open as usual from the 27th." },
           g2({ t: "text", path: "notice.label", label: "Link label (optional)", ph: "See offers" }, { t: "select", path: "notice.target", label: "Link goes to", options: TARGETS }),
@@ -83,7 +86,7 @@ const schema: Category[] = [
     id: "hero", label: "Hero", group: "Pages", sub: "Sections", desc: "The first screen: headline, intro, buttons, the open-now badge and the picture.",
     cards: [
       { title: "Text", fields: [{ t: "text", path: "hero.eyebrow", label: "Small label above", ph: "Modern Indian kitchen · Pune" }, { t: "text", path: "hero.title", label: "Headline", ml: true, hint: "Enter starts a new line. Wrap words in *asterisks* to highlight them." }, { t: "textarea", path: "hero.lede", label: "Intro", rows: 3 }] },
-      { title: "Buttons", fields: [g2({ t: "text", path: "hero.ctaPrimary", label: "Main button" }, { t: "select", path: "hero.ctaPrimaryTarget", label: "Goes to", options: TARGETS }, { t: "text", path: "hero.ctaSecondary", label: "Second button" }, { t: "select", path: "hero.ctaSecondaryTarget", label: "Goes to", options: TARGETS })] },
+      { title: "Buttons", fields: [g2({ t: "text", path: "hero.ctaPrimary", label: "Main button" }, { t: "select", path: "hero.ctaPrimaryTarget", label: "Goes to", options: GOES }, { t: "text", path: "hero.ctaSecondary", label: "Second button" }, { t: "select", path: "hero.ctaSecondaryTarget", label: "Goes to", options: GOES }), linkWhen("hero.ctaPrimaryTarget", "Custom link for the main button"), linkWhen("hero.ctaSecondaryTarget", "Custom link for the second button")] },
       { title: "Open now & points", fields: [{ t: "toggle", path: "hero.showStatus", label: "Show “Open now” or “Closed now” above the headline" },
         { t: "strings", path: "hero.badges", label: "Short points under the buttons", addLabel: "Add point" }] },
       { title: "Picture", fields: [{ t: "image", path: "hero.image", label: "Hero photo (optional)", hint: "Your best dish, the dining room or the shopfront. Without one, the hero shows a round stamp with the line below." },
@@ -319,7 +322,7 @@ const schema: Category[] = [
   },
   {
     id: "cta", label: "Call to action", group: "Pages", sub: "Sections", desc: "The dark band near the end that asks visitors to book.",
-    cards: [{ title: "Call to action", fields: [{ t: "text", path: "cta.title", label: "Heading", ml: true }, { t: "textarea", path: "cta.body", label: "Text", rows: 2 }, g2({ t: "text", path: "cta.button", label: "Button" }, { t: "select", path: "cta.target", label: "Goes to", options: TARGETS })] }],
+    cards: [{ title: "Call to action", fields: [{ t: "text", path: "cta.title", label: "Heading", ml: true }, { t: "textarea", path: "cta.body", label: "Text", rows: 2 }, g2({ t: "text", path: "cta.button", label: "Button" }, { t: "select", path: "cta.target", label: "Goes to", options: GOES }), linkWhen("cta.target", "Custom link for the button")] }],
   },
   videoCategory("Pages", "Sections"),
   socialCategory("Pages"),

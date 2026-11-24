@@ -26,7 +26,7 @@ const DEFAULT = {
   poweredBy: { show: true },
   brand: { name: "Picaffectz", tagline: "Slow-cooked food, served warm", logo: null, showName: true },
   site: { multiPage: false, crumbs: true, mobileBar: true, pageLabels: { home: "Home", menu: "Menu", about: "Our story", gallery: "Gallery", contact: "Visit & book" } },
-  nav: { cta: "Book a table", ctaTarget: "reserve" },
+  nav: { cta: "Book a table", ctaTarget: "reserve", ctaTargetUrl: "" },
   notice: { on: false, text: "", label: "", target: "offers" },
   sections: [
     { id: "hero", label: "Home", show: true, inNav: false },
@@ -50,7 +50,7 @@ const DEFAULT = {
     eyebrow: "Modern Indian kitchen · Pune",
     title: "Slow-cooked food,\nserved *warm*.",
     lede: "Copper-pot curries, breads from a clay oven and a short menu that changes with the season. Lunch and dinner, every day.",
-    ctaPrimary: "Book a table", ctaPrimaryTarget: "reserve", ctaSecondary: "See the menu", ctaSecondaryTarget: "food",
+    ctaPrimary: "Book a table", ctaPrimaryTarget: "reserve", ctaPrimaryTargetUrl: "", ctaSecondary: "See the menu", ctaSecondaryTarget: "food", ctaSecondaryTargetUrl: "",
     image: null, images: [], stamp: "Est. 2014 · Cooked over fire", showStatus: true,
     badges: ["Open all week", "Vegetarian and vegan dishes", "Private dining for 20"],
     slides: { enabled: false, items: [], effect: "fade", interval: 6, speed: 1.2, overlay: 45, overlayColor: "#2A1710", overlayStyle: "left", textColor: "light", height: "tall", dots: true, arrows: false, pause: true, hideArt: true, artOpacity: 100 },
@@ -188,7 +188,7 @@ const DEFAULT = {
       { q: "Can I bring a cake?", a: "Of course. We'll keep it chilled and bring it out when you're ready. No cakeage fee." },
     ],
   },
-  cta: { title: "Hungry yet?", body: "Book a table for tonight, or call us and we'll have it ready to take away.", button: "Book a table", target: "reserve" },
+  cta: { title: "Hungry yet?", body: "Book a table for tonight, or call us and we'll have it ready to take away.", button: "Book a table", target: "reserve", targetUrl: "" },
   footer: { text: "Slow-cooked food, served warm. Lunch and dinner, every day.", legal: "© {year} Picaffectz. All rights reserved.", links: [{ label: "Privacy", url: "" }, { label: "Terms", url: "" }] },
   seo: { title: "Picaffectz · Modern Indian restaurant in Pune", description: "Copper-pot curries, clay-oven breads and a seasonal menu. Book a table or order online.", titlePattern: "{page} · {site}", keywords: "", author: "", image: null, siteUrl: "", themeColor: "", noindex: false, googleVerification: "", meta: [], cuisine: "Indian", priceRange: "₹₹" },
 };
@@ -269,6 +269,14 @@ const paras = (s) => String(s || "").split(/\n\s*\n/).filter((x) => x.trim()).ma
 const safeUrl = (u) => { u = String(u || "").trim(); return /^(https?:|mailto:|tel:)/i.test(u) ? u : ""; };
 const slug = (s) => String(s || "").toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60) || "item";
 const tel = (p) => "tel:" + String(p || "").replace(/[^\d+]/g, "");
+/** A button that goes to "a custom link": the typed address becomes its target (only web, mail and phone links). */
+function norm(c) {
+  try {
+    const link = (o, k) => { if (o && o[k] === "url") { const u = String(o[k + "Url"] || "").trim(); o[k] = /^(https?:|mailto:|tel:)/i.test(u) ? u : /^[\w-]+(\.[\w-]+)+/.test(u) ? "https://" + u : ""; } };
+    link(c.nav, "ctaTarget"); link(c.hero, "ctaPrimaryTarget"); link(c.hero, "ctaSecondaryTarget"); link(c.cta, "target");
+  } catch (e) {}
+  return c;
+}
 function merge(def, val) {
   if (Array.isArray(def)) return Array.isArray(val) ? val : def;
   if (def && typeof def === "object") { const out = {}, v = val && typeof val === "object" && !Array.isArray(val) ? val : {}; for (const k of Object.keys(def)) out[k] = merge(def[k], v[k]); for (const k of Object.keys(v)) if (!(k in out)) out[k] = v[k]; return out; }
@@ -283,7 +291,7 @@ let ASSETS = {};
 const HOST = (() => { try { const e = document.getElementById("site-host"); return e ? JSON.parse(e.textContent) : null; } catch (e) { return null; } })();
 const hostPhoto = (p) => (HOST && /^assets\/uploads\//.test(p) ? HOST.assets + p.split("/").map(encodeURIComponent).join("/") : p);
 const imgUrl = (img) => (!img ? "" : img.path ? ASSETS[img.path] || hostPhoto(img.path) : img.url || "");
-let C = merge(DEFAULT, {});
+let C = norm(merge(DEFAULT, {}));
 const PAGE = document.body.dataset.page || "home";
 const PREVIEW = window.name === "cms-preview" && window.parent !== window;
 const PAGES = { home: "index.html", menu: "menu.html", about: "about.html", gallery: "gallery.html", contact: "contact.html", page: "page.html", order: "order.html", section: "section.html" };
@@ -1116,14 +1124,14 @@ if (PREVIEW) {
   addEventListener("message", (e) => {
     if (e.origin !== location.origin || e.source !== window.parent) return;
     const d = e.data || {};
-    if (d.type === "cms:content" && d.content && typeof d.content === "object") { if (SC && SC.take(d.content, { ...SCO, drawn: DREW })) return; DREW = true; ASSETS = d.assets || {}; const y = scrollY; C = merge(DEFAULT, d.content); render(); scrollTo(0, y); }
+    if (d.type === "cms:content" && d.content && typeof d.content === "object") { if (SC && SC.take(d.content, { ...SCO, drawn: DREW })) return; DREW = true; ASSETS = d.assets || {}; const y = scrollY; C = norm(merge(DEFAULT, d.content)); render(); scrollTo(0, y); }
   });
   window.parent.postMessage({ type: "cms:ready", page: (location.pathname.split("/").pop() || "index.html") + (PAGE === "page" && spCur() ? "?p=" + encodeURIComponent(spCur()) : MNT_Q ? "?maintenance=1" : PREVIEW && new URLSearchParams(location.search).get("preview") ? "?preview=" + new URLSearchParams(location.search).get("preview") : "") }, location.origin);
   if (!(SC && SC.wait())) { DREW = true; render(); }
 } else {
   const CKEY = "site-content:" + location.pathname.replace(/[^/]*$/, "");
   let shownTxt = "";
-  try { const c = sessionStorage.getItem(CKEY); if (c) { const j = JSON.parse(c); if (SC && SC.take(j, SCO)) HAND = true; else { C = merge(DEFAULT, j); render(); shownTxt = c; } } } catch (e) {}
+  try { const c = sessionStorage.getItem(CKEY); if (c) { const j = JSON.parse(c); if (SC && SC.take(j, SCO)) HAND = true; else { C = norm(merge(DEFAULT, j)); render(); shownTxt = c; } } } catch (e) {}
   // A first visit: the page's outline shows while the content is fetched (the first render replaces it).
   if (!shownTxt && !HAND && window.SiteSkeleton) window.SiteSkeleton.show($("#app"));
   const giveUp = setTimeout(() => { if (!shownTxt && !HAND) { render(); shownTxt = "default"; } }, 6000);
@@ -1138,7 +1146,7 @@ if (PREVIEW) {
     try { sessionStorage.setItem(CKEY, txt); } catch (e) {}
     if (txt === shownTxt) return;
     const j = JSON.parse(txt); if (SC && SC.take(j, { ...SCO, drawn: !!shownTxt, text: txt })) return;
-    C = merge(DEFAULT, j); render();
+    C = norm(merge(DEFAULT, j)); render();
   }).catch(() => { clearTimeout(giveUp); if (!shownTxt) render(); })
     // dishes with none left show as sold out, once the content is in (drawn again only when one has)
     .then(() => stockLoad()).then((ok) => { if (ok && Object.keys(STOCK).some((k) => STOCK[k] <= 0)) render(); });

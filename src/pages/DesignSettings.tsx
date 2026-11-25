@@ -1,4 +1,3 @@
-import { PROVIDERS } from "../lib/pictures";
 import { themeCode } from "../themes/codes";
 import { useEffect, useMemo, useState } from "react";
 import { pushPref, savePrefNow } from "../lib/prefs";
@@ -218,24 +217,22 @@ export function DesignLookTab({ session, studio, index, onIndex }: { session: Se
         ))}
       </Block>
 
-      <Block title="Pictures" note="Draw the hero picture of a visitor's preview with a free image generator, from what they said (business type, what they do).">
+      <Block title="Pictures drawn by AI" note="Pictures can be drawn from a few words by the free AI Horde (no key, no sign-up; volunteers' computers do the drawing, so it can queue for a short while).">
         <label className="flex items-start gap-2 text-[13px]">
-          <input type="checkbox" className="mt-1" checked={!!d.images?.on} onChange={(e) => upd({ images: e.target.checked ? { ...(d.images || {}), on: true } : undefined })} />
-          <span><b className="block">Generate the hero picture with a free image generator</b><span className="text-[11.5px] text-ink-500">Uses Pollinations (image.pollinations.ai): free, no key. Used for the hero picture of business, restaurant and shop previews; the drawn symbol is used when this is off.</span></span>
+          <input type="checkbox" className="mt-1" checked={d.adminAi !== false} onChange={(e) => upd({ adminAi: e.target.checked ? undefined : false })} />
+          <span><b className="block">"Draw with AI" in the site editor</b><span className="text-[11.5px] text-ink-500">Adds a button next to Upload on picture fields (not on logos). Turn it off to hide it.</span></span>
         </label>
-        {d.images?.on && <>
+        <label className="flex items-start gap-2 text-[13px]">
+          <input type="checkbox" className="mt-1" checked={!!d.images?.on} onChange={(e) => upd({ images: e.target.checked ? { ...(d.images || {}), on: true } : d.images?.style ? { style: d.images.style } : undefined })} />
+          <span><b className="block">Let visitors describe a logo or banner in "Design yourself"</b><span className="text-[11.5px] text-ink-500">The logo and banner questions are then drawn from their words (banners can't be uploaded). Turn it off and those two questions are not asked.</span></span>
+        </label>
+        {(d.adminAi !== false || d.images?.on) && <>
           <label className="flex flex-col gap-1 text-[13px] font-semibold">Picture style
-            <select className="input w-auto" value={d.images?.style || "photo"} onChange={(e) => upd({ images: { ...d.images, on: true, style: e.target.value as any } })}>
+            <select className="input w-auto" value={d.images?.style || "photo"} onChange={(e) => upd({ images: { ...(d.images || {}), style: e.target.value as any } })}>
               <option value="photo">Photo-like</option><option value="illustration">Illustration</option><option value="3d">Soft 3D</option><option value="flat">Flat and minimal</option>
             </select>
           </label>
-          <label className="flex flex-col gap-1 text-[13px] font-semibold">Free image generator
-            <select className="input w-auto" value={d.images?.provider || "pollinations"} onChange={(e) => upd({ images: { ...d.images, on: true, provider: e.target.value === "horde" ? "horde" : "pollinations" } })}>
-              {PROVIDERS.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
-            </select>
-            <span className="text-[11.5px] font-normal text-ink-500">{PROVIDERS.find((x) => x.id === (d.images?.provider || "pollinations"))?.note} Used when a visitor describes a logo or banner in words. No free service is guaranteed unlimited, so if one is busy, switch to the other.</span>
-          </label>
-          <p className="m-0 rounded-lg border border-yellow-400 bg-yellow-200 px-3 py-2 text-[12px] leading-snug text-yellow-950">Pictures come from a free third-party service: they can be slow, differ each time and may not load. The service's own terms apply to them, so check them before using a generated picture on a live site. A picture you upload always replaces a generated one.</p>
+          <p className="m-0 rounded-lg border border-yellow-400 bg-yellow-200 px-3 py-2 text-[12px] leading-snug text-yellow-950">AI pictures come from a free volunteer network: they can be slow and differ each time, what is typed is visible to it, and you may not own the result exclusively. Check them before using one on a live site.</p>
         </>}
       </Block>
 

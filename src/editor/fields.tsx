@@ -14,6 +14,7 @@ import type { Field as F, TemplateDef } from "../schema/types";
 import { staticPageDefault } from "../schema/common";
 import { LEGAL_PAGES, a11yChecks, collects, identity, legalPage, makeLegalPage, type LegalKind } from "../lib/legal";
 import { getP, setP, clone, vpaOk, paypalOk, httpsOk, hostIs, emailOk, phoneOk } from "../lib/util";
+import { AiDraw, aiDrawInEditor } from "../ui/AiDraw";
 import { Field, ProgressBar, Toggle, useConfirm, useToast } from "../ui/kit";
 import { GatewayForm, SiteDbSignIn, WhatsAppForm, useSiteDbSigned } from "../pages/Connections";
 
@@ -245,7 +246,7 @@ export function FieldView({ f, obj, base }: { f: F; obj: any; base: string }) {
       );
     }
     case "image":
-      return <ImageField id={id} label={f.label} hint={f.hint} value={val} onChange={set} />;
+      return <ImageField id={id} label={f.label} hint={f.hint} value={val} onChange={set} ai={canDraw(f.path)} />;
     case "videoFile":
       return <VideoFileField id={id} label={f.label} hint={f.hint} value={val} onChange={set} />;
     case "connection":
@@ -253,7 +254,7 @@ export function FieldView({ f, obj, base }: { f: F; obj: any; base: string }) {
     case "fontFile":
       return <FontFileField id={id} label={f.label} hint={f.hint} value={val} onChange={set} />;
     case "images":
-      return <ImagesField id={id} label={f.label} hint={f.hint} value={Array.isArray(val) ? val : []} onChange={set} />;
+      return <ImagesField id={id} label={f.label} hint={f.hint} value={Array.isArray(val) ? val : []} onChange={set} ai={canDraw(f.path)} />;
     case "strings":
       return <StringsField f={f} arr={Array.isArray(val) ? val : []} set={set} id={id} obj={obj} />;
     case "list":
@@ -353,9 +354,13 @@ function useUpload() {
   return { busy, run };
 }
 
-function ImageField({ id, label, hint, value, onChange }: { id: string; label: string; hint?: string; value: any; onChange: (v: any) => void }) {
+/** Pictures may be drawn by AI (when allowed in Settings), except logos and icons. */
+const canDraw = (path: string) => aiDrawInEditor() && !/logo|icon|favicon|avatar/i.test(path || "");
+
+function ImageField({ id, label, hint, value, onChange, ai }: { id: string; label: string; hint?: string; value: any; onChange: (v: any) => void; ai?: boolean }) {
   const { img } = useCtx();
   const { busy, run } = useUpload();
+  const [draw, setDraw] = useState(false);
   return (
     <div data-field className="flex flex-col gap-1.5 rounded-lg">
       <span className="label">{label}</span>
@@ -366,9 +371,11 @@ function ImageField({ id, label, hint, value, onChange }: { id: string; label: s
         <div className="flex flex-wrap gap-2">
           <label htmlFor={id} className="btn btn-sm cursor-pointer">{busy ? "Uploading…" : value ? "Replace" : "Upload"}</label>
           <input id={id} type="file" accept="image/*" hidden disabled={busy} onChange={async (e) => { const [r] = await run([...(e.target.files || [])].slice(0, 1)); e.target.value = ""; if (r) onChange(r); }} />
+          {ai && <button type="button" className="btn btn-sm" aria-expanded={draw} disabled={busy} onClick={() => setDraw((x) => !x)}>Draw with AI</button>}
           {value && <button type="button" className="btn btn-sm btn-danger" onClick={() => onChange(null)}>Remove</button>}
         </div>
       </div>
+      {ai && draw && <AiDraw count={2} disabled={busy} label={`Describe the picture for "${label}"`} onUse={async (f) => { const [r] = await run([f]); if (r) { onChange(r); setDraw(false); } }} />}
       <span className="hint">{hint || "JPG, PNG, WebP or SVG, up to 20 MB."}</span>
     </div>
   );
@@ -483,9 +490,10 @@ function VideoFileField({ id, label, hint, value, onChange }: { id: string; labe
   );
 }
 
-function ImagesField({ id, label, hint, value, onChange }: { id: string; label: string; hint?: string; value: any[]; onChange: (v: any[]) => void }) {
+function ImagesField({ id, label, hint, value, onChange, ai }: { id: string; label: string; hint?: string; value: any[]; onChange: (v: any[]) => void; ai?: boolean }) {
   const { img } = useCtx();
   const { busy, run } = useUpload();
+  const [draw, setDraw] = useState(false);
   const move = (i: number, d: number) => { const a = [...value]; [a[i], a[i + d]] = [a[i + d], a[i]]; onChange(a); };
   return (
     <div data-field className="flex flex-col gap-1.5 rounded-lg">
@@ -505,6 +513,8 @@ function ImagesField({ id, label, hint, value, onChange }: { id: string; label: 
         <label htmlFor={id} className="grid h-20 w-20 cursor-pointer place-items-center rounded-xl border border-dashed border-ink-500 text-center text-[11px] font-semibold text-ink-300 hover:border-brand-400">{busy ? "Uploading…" : "+ Add photos"}</label>
         <input id={id} type="file" accept="image/*" multiple hidden disabled={busy} onChange={async (e) => { const r = await run([...(e.target.files || [])].slice(0, 10)); e.target.value = ""; if (r.length) onChange([...value, ...r]); }} />
       </div>
+      {ai && <button type="button" className="btn btn-sm self-start" aria-expanded={draw} disabled={busy} onClick={() => setDraw((x) => !x)}>Draw with AI</button>}
+      {ai && draw && <AiDraw count={2} disabled={busy} label={`Describe a picture to add to "${label}"`} onUse={async (f) => { const r = await run([f]); if (r.length) onChange([...value, ...r]); }} />}
       <span className="hint">{hint || "Up to 20 MB each."}</span>
     </div>
   );

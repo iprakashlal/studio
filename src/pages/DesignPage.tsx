@@ -12,7 +12,7 @@ import { relatedThemes } from "../lib/designer";
 import { COLOUR_DOT, STEPS, STEP_LABEL, buildDesign, fromDoc, isOptional, nextStep, rowsFmt, requestText, stepAt, sayAnswer, themeOf, themesFor, tweakTheme, writeCopy, type Answers, type Design, type DesignFiles, type Step } from "../lib/designer";
 import { newDesignId, readDesignSettings, readLocalDesigns, writeLocalDesigns, type Copy, type DesignRec } from "../lib/designs";
 import { COLOUR_SLOTS, GROUPS, pagesChoice, readColsAnswer, readLookAnswer, resolvedLook, visibleAxes, type Kind as LookKind } from "../lib/designlook";
-import { generateImages, logoIdeas } from "../lib/pictures";
+import { AiDraw } from "../ui/AiDraw";
 import { designHost, otpCheck, otpSend, passLive, readPage, readPass, saveDraft, submitQuery, understandText, writePass, type DesignHost, type Pass } from "../lib/designapi";
 import { pdfLines } from "../lib/pdftext";
 import { watchDevtools } from "../lib/devtools";
@@ -57,62 +57,9 @@ async function fitPhoto(file: File): Promise<string> {
   return u;
 }
 const PIC_STEPS = ["photo", "banner", "bimage", "photos"];
+/** Banner pictures are drawn from a description only (no upload). */
+const NO_UPLOAD = ["banner", "bimage"];
 const toB64 = (buf: ArrayBuffer) => { const b = new Uint8Array(buf); let s = ""; for (let i = 0; i < b.length; i += 8192) s += String.fromCharCode(...b.subarray(i, i + 8192)); return btoa(s); };
-
-/** Logo ideas drawn by the free image generator; one can be tapped to use. */
-function LogoIdeas({ name, about, value, onPick, onSkip }: { name: string; about: string; value: string; onPick: (u: string) => void; onSkip: () => void }) {
-  const [round, setRound] = useState(0), [bad, setBad] = useState<Record<string, boolean>>({}), ideas = useMemo(() => logoIdeas(name, about, round), [name, about, round]);
-  return (
-    <div className="flex flex-col gap-3">
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4" role="group" aria-label="Logo ideas">
-        {ideas.map((u, i) => (
-          <button key={u} type="button" aria-pressed={value === u} aria-label={`Use logo idea ${i + 1}`} onClick={() => onPick(u)} className={`relative aspect-square overflow-hidden rounded-2xl border bg-white ${value === u ? "border-brand-400 ring-2 ring-brand-400" : "border-ink-700"}`}>
-            {bad[u] ? <span className="grid h-full place-items-center p-2 text-center text-xs text-ink-500">Couldn't load. Try other ideas.</span> : <img src={u} alt="" loading="lazy" className="h-full w-full object-contain" onError={() => setBad((o) => ({ ...o, [u]: true }))} />}
-          </button>
-        ))}
-      </div>
-      <div className="flex flex-wrap items-center gap-2">
-        <button type="button" className="btn btn-sm" onClick={() => setRound((r) => r + 1)}>Show other ideas</button>
-        <span className="mr-auto text-xs text-ink-500">Drawn by a free third-party generator; they can take a few seconds.</span>
-        <button type="button" className="btn btn-ghost" onClick={onSkip}>Skip</button>
-      </div>
-    </div>
-  );
-}
-
-
-/** "Or describe it": the free generator draws pictures from a few words; one is tapped to use (as if the person had chosen that file). */
-function Describe({ logo, count, onUse, disabled }: { logo: boolean; count: number; onUse: (f: File) => void; disabled?: boolean }) {
-  const gen = readDesignSettings().images, [what, setWhat] = useState(""), [busy, setBusy] = useState(""), [err, setErr] = useState(""), [got, setGot] = useState<{ f: File; u: string }[]>([]);
-  const stop = useRef<AbortController | null>(null);
-  useEffect(() => () => stop.current?.abort(), []);
-  useEffect(() => () => got.forEach((g) => URL.revokeObjectURL(g.u)), [got]);
-  if (!gen?.on) return null;
-  const go = async () => {
-    stop.current?.abort(); const ac = (stop.current = new AbortController()); setErr(""); setBusy("Drawing…"); setGot([]);
-    try {
-      const bl = await generateImages(what, { provider: gen.provider, style: gen.style, kind: logo ? "logo" : "photo", n: count, signal: ac.signal, status: setBusy });
-      setGot(bl.map((b, i) => { const f = new File([b], `generated-${i + 1}.${/png/.test(b.type) ? "png" : "webp"}`, { type: b.type || "image/webp" }); return { f, u: URL.createObjectURL(b) }; }));
-    } catch (e: any) { if (!ac.signal.aborted) setErr(e?.message || "Couldn't draw that. Please try again."); }
-    setBusy("");
-  };
-  return (
-    <div className="flex flex-col gap-2 rounded-2xl border border-ink-700 p-3">
-      <label className="flex flex-col gap-1 text-xs text-ink-400">Or describe it and we'll draw it
-        <span className="flex flex-wrap gap-2">
-          <input className="input min-w-0 flex-1 basis-[14rem]" maxLength={300} disabled={disabled || !!busy} placeholder={logo ? "e.g. a green leaf inside a circle, modern and simple" : "e.g. a sunny café interior with wooden tables"} value={what} onChange={(e) => setWhat(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); if (what.trim() && !busy) go(); } }} />
-          <button type="button" className="btn btn-sm" disabled={disabled || !!busy || !what.trim()} onClick={go}>{busy ? "Drawing…" : got.length ? "Draw again" : "Draw it"}</button>
-        </span>
-      </label>
-      {busy && <p className="m-0 text-xs text-ink-400" role="status">{busy} <button type="button" className="underline" onClick={() => { stop.current?.abort(); setBusy(""); }}>Cancel</button></p>}
-      {err && <p className="m-0 text-xs text-red-400" role="alert">{err}</p>}
-      {!!got.length && <div className="grid grid-cols-2 gap-2 sm:grid-cols-4" role="group" aria-label="Drawn pictures">
-        {got.map((g, i) => <button key={g.u} type="button" aria-label={`Use drawn picture ${i + 1}`} disabled={disabled} onClick={() => onUse(g.f)} className="aspect-square overflow-hidden rounded-xl border border-ink-700 bg-white hover:border-brand-400"><img src={g.u} alt="" className={`h-full w-full ${logo ? "object-contain" : "object-cover"}`} /></button>)}
-      </div>}
-      <p className="m-0 text-[11px] text-ink-500">Drawn by a free third-party generator ({gen.provider === "horde" ? "AI Horde, which can queue for a minute or two" : "Pollinations"}). Check the picture before using it on a live site.</p>
-    </div>
-  );
-}
 
 /** A list question asked as rows of sub-fields. Each row becomes one line of the answer (so it reads the same as typing it). */
 function RowsField({ step, value, onChange, label }: { step: Step; value: string; onChange: (v: string) => void; label: string }) {
@@ -321,7 +268,7 @@ export function DesignPage({ studio, index, onIndex }: { studio?: Studio; index?
         {cur?.type === "long"
           ? <textarea ref={field} aria-label={cur.ask(a)} rows={3} className="min-h-[3.5rem] min-w-0 flex-1 basis-[12rem] resize-none bg-transparent py-2 text-[15px] text-ink-100 outline-none placeholder:text-ink-500" placeholder={cur.ph?.(a)} value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); submit(); } }} />
           : <input ref={field} aria-label={cur ? cur.ask(a) : "Your answer"} className="min-w-0 flex-1 basis-[12rem] bg-transparent py-2.5 text-[15px] text-ink-100 outline-none placeholder:text-ink-500" disabled={!field$ || reading} placeholder={reading ? "Reading…" : writing ? "Writing your text…" : !cur ? "All done. Your preview is ready." : cur.id === "kind" ? "Tell me what you want, e.g. an online shop for my candles" : field$ ? cur.ph?.(a) : cur.type === "many" ? "Tap what applies above, then press Done" : cur.type === "file" ? "Choose a file, or skip" : "Pick one of the choices above"} value={field$ ? text : ""} onChange={(e) => setText(e.target.value)} />}
-        {cur?.type === "file" && <>
+        {cur?.type === "file" && !NO_UPLOAD.includes(cur.id) && <>
           <input ref={pick} type="file" accept={cur.accept} multiple={cur.id === "photos" || cur.id === "banner"} className="sr-only" aria-label={cur.ask(a)} onChange={(e) => choose(cur, e.target.files?.[0], Array.from(e.target.files || []).slice(1))} />
           <button type="button" className="btn btn-pri btn-sm rounded-full" onClick={() => pick.current?.click()}>{PIC_STEPS.includes(cur.id) ? (cur.id === "photos" || cur.id === "banner" ? "Choose pictures" : "Choose a picture") : cur.id === "logo" ? "Choose logo" : cur.id === "doc" ? "Choose document (PDF)" : "Choose PDF"}</button>
         </>}
@@ -336,12 +283,12 @@ export function DesignPage({ studio, index, onIndex }: { studio?: Studio; index?
   /** The answer controls inside the question card: a plain field and one row of buttons (nothing for a tap-one question). */
   const cardBar = !cur || cur.type === "choice" ? null : cur.id === "logo" ? (
     <div className="flex flex-col gap-3">
-      <LogoIdeas name={a.name || ""} about={a.about || ""} value={a.logo || ""} onPick={(u) => answer(cur, u)} onSkip={() => answer(cur, "")} />
-      <Describe logo count={4} disabled={reading} onUse={(f) => choose(cur, f)} />
+            <AiDraw logo count={2} initial={[a.name, a.about].filter(Boolean).join(", ").slice(0, 120)} label="Describe your logo and we'll draw it" disabled={reading} onUse={(f) => choose(cur, f)} />
+      <button type="button" className="btn btn-ghost self-start" onClick={() => answer(cur, "")}>Skip</button>
     </div>
   ) : (
     <form className="flex flex-col gap-3" onSubmit={(e) => { e.preventDefault(); submit(); }} aria-label="Your answer">
-      {PIC_STEPS.includes(cur.id) && <Describe logo={false} count={2} disabled={reading} onUse={(f) => choose(cur, f)} />}
+      {PIC_STEPS.includes(cur.id) && <AiDraw count={2} disabled={reading} onUse={(f) => choose(cur, f)} />}
       {cur.type === "long" && cur.cols
         ? <RowsField key={cur.id + (a.kind || "")} step={cur} value={text} onChange={setText} label={cur.ask(a)} />
         : cur.type === "long"
@@ -356,7 +303,7 @@ export function DesignPage({ studio, index, onIndex }: { studio?: Studio; index?
         {cur.type === "long" && !cur.cols && <span className="mr-auto text-xs text-ink-500">Enter = new line · Ctrl + Enter = send</span>}
         {(cur.type !== "long" || cur.cols) && <span className="mr-auto" />}
         {isOptional(cur, a) && <button type="button" className="btn btn-ghost" disabled={reading} onClick={() => answer(cur, "")}>Skip</button>}
-        {cur.type === "file" && <>
+        {cur.type === "file" && !NO_UPLOAD.includes(cur.id) && <>
           <input ref={pick} type="file" accept={cur.accept} multiple={cur.id === "photos" || cur.id === "banner"} className="sr-only" aria-label={cur.ask(a)} onChange={(e) => choose(cur, e.target.files?.[0], Array.from(e.target.files || []).slice(1))} />
           <button type="button" className={`btn ${field$ ? "" : "btn-pri"}`} disabled={reading} onClick={() => pick.current?.click()}>{PIC_STEPS.includes(cur.id) ? (cur.id === "photos" || cur.id === "banner" ? "Choose pictures" : "Choose a picture") : cur.id === "logo" ? "Choose logo" : cur.id === "doc" ? "Add a PDF" : "Choose PDF"}</button>
         </>}

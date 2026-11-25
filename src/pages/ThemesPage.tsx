@@ -2,7 +2,7 @@ import { BrandMark, useBrand } from "../lib/brand";
 import { STUDIO_BUILD } from "../build-info";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { THEMES, THEME_TAGS, portfolioThemeValues, storeThemeValues, type Theme } from "../themes/catalog";
-import { samplePicture } from "../lib/designer";
+import { defaultPicture } from "../lib/pictures";
 import { BIZ_STYLE_TAGS, BIZ_TYPES, BIZ_THEMES, businessThemeValues } from "../themes/business";
 import { REST_TAGS, REST_THEMES, restaurantThemeValues } from "../themes/restaurant";
 import { limitThemes } from "../themes/limit";
@@ -47,7 +47,7 @@ const values = (k: Kind, t: Theme) => (k === "store" ? storeThemeValues(t) : k =
 const withTheme = (sample: any, k: Kind, t: Theme) => {
   if (!sample) return sample;
   const out = { ...sample, theme: { ...(sample.theme || {}), ...values(k, t) } };
-  if ((k === "business" || k === "restaurant") && !sample.hero?.image?.url && !sample.hero?.video) out.hero = { ...(sample.hero || {}), image: { url: samplePicture(t.colors.c1, t.colors.c3 || t.colors.c2, t.colors.surface) } };
+  if ((k === "business" || k === "restaurant") && !sample.hero?.image?.url && !sample.hero?.video) out.hero = { ...(sample.hero || {}), image: { url: defaultPicture([...(t.tags || [])].join(" "), { c1: t.colors.c1, c2: t.colors.c3 || t.colors.c2, bg: t.colors.surface }) } };
   return out;
 };
 const readList = (): string[] => { try { return JSON.parse(localStorage.getItem(LS) || "[]").filter((id: string) => ALL.some((t) => t.id === id)); } catch { return []; } };

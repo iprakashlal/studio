@@ -468,6 +468,7 @@ export async function buildDesign(a: Answers, copy?: Copy | null, files?: Design
     if (g[0] && first[g[0]]) { put("hero.ctaPrimary", first[g[0]][0]); put("hero.ctaPrimaryTarget", first[g[0]][1]); }
     if (email) { put("contact.email", email); c.contact.links = (c.contact.links || []).filter((l: any) => !/linkedin/i.test(l.label)); }
     else c.contact.links = (c.contact.links || []).filter((l: any) => !/linkedin\.com\/?$/.test(l.url));
+    if (a.linkedin?.trim()) { const l = a.linkedin.trim(), u = /^https?:\/\//i.test(l) ? l : "https://" + l.replace(/^\/+/, ""); c.contact.links = [{ label: "LinkedIn", url: u }, ...(c.contact.links || []).filter((x: any) => !/linkedin/i.test(x.label))]; }
     if (social) c.contact.links = [...(c.contact.links || []), { label: /instagram/.test(social) ? "Instagram" : "My page", url: social }];
     if (cp.cta_text) put("contact.body", cp.cta_text);
     put("hero.ctaSecondary", ""); put("hero.ctaSecondaryUrl", "");
@@ -752,7 +753,7 @@ export function requestText(a: Answers, d: Design | null, link = ""): string {
     "Hi Picaffectz, I designed a website preview and would like to take it forward.", "",
     row("Type", kindName), row("Name", a.name || ""), row("What I do", a.about || ""), row("City", a.city || ""),
     row("Feel", say("style")), row("Colour", say("colour")), row("Includes", (a.items || "").split("\n").filter(Boolean).join(", ")), row("Work delivered", (a.work || "").split("\n").filter(Boolean).join(" · ")), row("Visitors can", say("goal")),
-    row("Phone", a.phone || ""), row("Email", a.email || ""), row("Document", a.doc || ""), row("Document link", a.doclink || ""), row("Chosen look", [a.theme, a.accent, a.mode].filter(Boolean).join(" · ")), d ? row("Design", `${d.themeName} (${d.themeId})`) : "", link ? "Preview: " + link : "",
+    row("Phone", a.phone || ""), row("Email", a.email || ""), row("Document", a.doc || ""), row("LinkedIn", a.linkedin || ""), row("Document link", a.doclink || ""), row("Chosen look", [a.theme, a.accent, a.mode].filter(Boolean).join(" · ")), d ? row("Design", `${d.themeName} (${d.themeId})`) : "", link ? "Preview: " + link : "",
   ].filter((x, i, all) => x || (i > 0 && all[i - 1])).join("\n");
 }
 

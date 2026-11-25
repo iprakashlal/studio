@@ -48,10 +48,14 @@ export async function generateImages(prompt: string, o: { /** "engine": the Stud
     }
     o.status?.("The Studio's AI can't draw right now; using the free generator…");
   }
-  const w = kind === "logo" ? 384 : 512, h = kind === "logo" ? 384 : 384, H = { "Content-Type": "application/json", apikey: "0000000000", "Client-Agent": "picaffectz-studio:1:web" };
-  const send = async (slow: boolean) => {
-    const r = await fetch("https://aihorde.net/api/v2/generate/async", { method: "POST", headers: H, signal: o.signal, body: JSON.stringify({ prompt: full, params: { width: w, height: h, steps: 15, n, cfg_scale: 7, sampler_name: "k_euler_a" }, nsfw: false, censor_nsfw: true, r2: false, slow_workers: slow }) });
+  // Anonymous users have no kudos, so a request over the free work budget is refused: it is asked again smaller (size, steps, count) until the Horde accepts it.
+  const LV: [number, number, number, number][] = kind === "logo" ? [[384, 384, 12, n], [320, 320, 8, n], [256, 256, 6, Math.min(n, 2)], [256, 256, 5, 1]] : [[512, 384, 12, n], [448, 320, 8, n], [384, 256, 6, Math.min(n, 2)], [320, 256, 5, 1]];
+  let lv = 0; const H = { "Content-Type": "application/json", apikey: "0000000000", "Client-Agent": "picaffectz-studio:1:web" };
+  const send = async (slow: boolean): Promise<string> => {
+    const [w, h, steps, cnt] = LV[lv];
+    const r = await fetch("https://aihorde.net/api/v2/generate/async", { method: "POST", headers: H, signal: o.signal, body: JSON.stringify({ prompt: full, params: { width: w, height: h, steps, n: cnt, cfg_scale: 7, sampler_name: "k_euler_a" }, nsfw: false, censor_nsfw: true, r2: false, slow_workers: slow }) });
     const j: any = await r.json().catch(() => ({}));
+    if (!r.ok && /kudos/i.test(String(j.message || "")) && lv < LV.length - 1) { lv++; o.status?.("Making it a little smaller for the free generator…"); return send(slow); }
     if (!r.ok || !j.id) throw new Error(j.message || "The free generator didn't accept the request. Please try again in a moment.");
     return j.id as string;
   };

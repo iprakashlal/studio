@@ -25,7 +25,7 @@ create index if not exists approvals_project on approvals (scope, project, creat
 create table if not exists approval_notes (id integer primary key autoincrement, token text not null, who text not null, body text not null, page text not null default '', kind text not null default 'comment', created_at text not null);
 create index if not exists approval_notes_token on approval_notes (token, id);
 `;
-var CFDB_VERSION = 79;
+var CFDB_VERSION = 80;
 var CFDB_WORKER_NAME = "picaffectz-db";
 
 // src/lib/lookdigest.ts
@@ -2671,12 +2671,34 @@ async function dqImage(env, id, req) {
   if (choice === "custom") {
     try {
       const c = await anySetting(env, "ai"), base = String(c?.base || "").trim().replace(/\/+$/, "").replace(/\/chat\/completions$/, "");
-      const model = String(c?.image || "").trim() || (/api\.openai\.com/.test(base) ? "dall-e-3" : /generativelanguage\.googleapis\.com/.test(base) ? "imagen-3.0-generate-002" : "");
-      if (!model) return json({ engine: "custom", error: "No picture model is set. Add one under Settings \u2192 AI engine (for example dall-e-3 or imagen-3.0-generate-002)." });
+      const model = String(c?.image || "").trim() || (/api\.openai\.com/.test(base) ? "dall-e-3" : /generativelanguage\.googleapis\.com/.test(base) ? "gemini-2.5-flash-image" : "");
+      if (!model) return json({ engine: "custom", error: "No picture model is set. Add one under Settings \u2192 AI engine (for example dall-e-3 or gemini-2.5-flash-image)." });
+      if (/generativelanguage\.googleapis\.com/.test(base) && !/imagen/i.test(model)) {
+        const g = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model.replace(/^models\//, ""))}:generateContent`, { signal: AbortSignal.timeout(6e4), method: "POST", headers: { "x-goog-api-key": c.key, "Content-Type": "application/json" }, body: JSON.stringify({ contents: [{ parts: [{ text: "Draw this picture: " + prompt }] }], generationConfig: { responseModalities: ["IMAGE", "TEXT"] } }) });
+        const gj = await g.json().catch(() => null);
+        if (!g.ok) return json({ engine: "custom", error: `Google answered ${g.status}: ` + String(gj?.error?.message || "").slice(0, 160) });
+        const part = (gj?.candidates?.[0]?.content?.parts || []).find((x2) => x2?.inlineData?.data || x2?.inline_data?.data), gi = part?.inlineData?.data || part?.inline_data?.data;
+        if (typeof gi !== "string" || gi.length < 100) return json({ engine: "custom", error: "Google returned no picture (the words may have been filtered, or this model doesn't draw)." });
+        return json({ engine: "custom", image: gi });
+      }
+      if (/generativelanguage\.googleapis\.com/.test(base) && !/^imagen/i.test(model)) {
+        const g = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model.replace(/^models\//, ""))}:generateContent`, { method: "POST", signal: AbortSignal.timeout(6e4), headers: { "x-goog-api-key": c.key, "Content-Type": "application/json" }, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseModalities: ["IMAGE"] } }) });
+        if (!g.ok) {
+          const t = (await g.text()).replace(/\s+/g, " ");
+          const m = /"message":\s*"([^"]{1,200})/.exec(t);
+          return json({ engine: "custom", error: `Gemini answered ${g.status}${m ? ": " + m[1] : ""}` });
+        }
+        const gj = await g.json().catch(() => null), parts = gj?.candidates?.[0]?.content?.parts || [], inl = parts.map((x2) => x2?.inlineData || x2?.inline_data).find((x2) => x2?.data);
+        if (!inl) return json({ engine: "custom", error: "Gemini returned no picture. That model may not draw pictures; try gemini-2.5-flash-image." });
+        return json({ engine: "custom", image: inl.data });
+      }
       const send = (fmt) => fetch(base + "/images/generations", { signal: AbortSignal.timeout(6e4), method: "POST", headers: { Authorization: "Bearer " + c.key, "Content-Type": "application/json" }, body: JSON.stringify({ model, prompt, n: 1, ...fmt ? { response_format: "b64_json" } : {} }) });
       let r = await send(true);
       if (r.status === 400) r = await send(false);
-      if (!r.ok) return json({ engine: choice, error: `Your AI API answered ${r.status}` });
+      if (!r.ok) {
+        const t = (await r.text().catch(() => "")).replace(/\s+/g, " ").slice(0, 140);
+        return json({ engine: choice, error: `Your AI API answered ${r.status} for the picture model "${model}"${t ? ": " + t : ""}` });
+      }
       const j = await r.json().catch(() => null), x = j?.data?.[0];
       let img = typeof x?.b64_json === "string" ? x.b64_json : "";
       if (!img && typeof x?.url === "string" && publicUrl(x.url)) {

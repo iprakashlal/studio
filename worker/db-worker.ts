@@ -1555,11 +1555,28 @@ async function dqImage(env: Env, id: string, req: Request): Promise<Response> {
     // The owner's own API: an OpenAI-style picture endpoint, with the picture model named in Settings (or a known one for OpenAI and Gemini).
     try {
       const c: any = await anySetting(env, "ai"), base = String(c?.base || "").trim().replace(/\/+$/, "").replace(/\/chat\/completions$/, "");
-      const model = String(c?.image || "").trim() || (/api\.openai\.com/.test(base) ? "dall-e-3" : /generativelanguage\.googleapis\.com/.test(base) ? "imagen-3.0-generate-002" : "");
-      if (!model) return json({ engine: "custom", error: "No picture model is set. Add one under Settings → AI engine (for example dall-e-3 or imagen-3.0-generate-002)." });
+      const model = String(c?.image || "").trim() || (/api\.openai\.com/.test(base) ? "dall-e-3" : /generativelanguage\.googleapis\.com/.test(base) ? "gemini-2.5-flash-image" : "");
+      if (!model) return json({ engine: "custom", error: "No picture model is set. Add one under Settings → AI engine (for example dall-e-3 or gemini-2.5-flash-image)." });
+      // Gemini's picture models ("…-image", "nano banana") are not on its OpenAI-style address: they are asked on Google's own endpoint.
+      if (/generativelanguage\.googleapis\.com/.test(base) && !/imagen/i.test(model)) {
+        const g = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model.replace(/^models\//, ""))}:generateContent`, { signal: AbortSignal.timeout(60000), method: "POST", headers: { "x-goog-api-key": c.key, "Content-Type": "application/json" }, body: JSON.stringify({ contents: [{ parts: [{ text: "Draw this picture: " + prompt }] }], generationConfig: { responseModalities: ["IMAGE", "TEXT"] } }) });
+        const gj: any = await g.json().catch(() => null);
+        if (!g.ok) return json({ engine: "custom", error: `Google answered ${g.status}: ` + String(gj?.error?.message || "").slice(0, 160) });
+        const part = (gj?.candidates?.[0]?.content?.parts || []).find((x: any) => x?.inlineData?.data || x?.inline_data?.data), gi = part?.inlineData?.data || part?.inline_data?.data;
+        if (typeof gi !== "string" || gi.length < 100) return json({ engine: "custom", error: "Google returned no picture (the words may have been filtered, or this model doesn't draw)." });
+        return json({ engine: "custom", image: gi });
+      }
+      // Gemini's own picture models (the "Nano Banana" ones) draw through generateContent; the OpenAI-style address only knows Imagen.
+      if (/generativelanguage\.googleapis\.com/.test(base) && !/^imagen/i.test(model)) {
+        const g = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model.replace(/^models\//, ""))}:generateContent`, { method: "POST", signal: AbortSignal.timeout(60000), headers: { "x-goog-api-key": c.key, "Content-Type": "application/json" }, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseModalities: ["IMAGE"] } }) });
+        if (!g.ok) { const t = (await g.text()).replace(/\s+/g, " "); const m = /"message":\s*"([^"]{1,200})/.exec(t); return json({ engine: "custom", error: `Gemini answered ${g.status}${m ? ": " + m[1] : ""}` }); }
+        const gj: any = await g.json().catch(() => null), parts: any[] = gj?.candidates?.[0]?.content?.parts || [], inl = parts.map((x) => x?.inlineData || x?.inline_data).find((x) => x?.data);
+        if (!inl) return json({ engine: "custom", error: "Gemini returned no picture. That model may not draw pictures; try gemini-2.5-flash-image." });
+        return json({ engine: "custom", image: inl.data });
+      }
       const send = (fmt: boolean) => fetch(base + "/images/generations", { signal: AbortSignal.timeout(60000), method: "POST", headers: { Authorization: "Bearer " + c.key, "Content-Type": "application/json" }, body: JSON.stringify({ model, prompt, n: 1, ...(fmt ? { response_format: "b64_json" } : {}) }) });
       let r = await send(true); if (r.status === 400) r = await send(false);
-      if (!r.ok) return json({ engine: choice, error: `Your AI API answered ${r.status}` });
+      if (!r.ok) { const t = (await r.text().catch(() => "")).replace(/\s+/g, " ").slice(0, 140); return json({ engine: choice, error: `Your AI API answered ${r.status} for the picture model "${model}"${t ? ": " + t : ""}` }); }
       const j: any = await r.json().catch(() => null), x = j?.data?.[0];
       let img = typeof x?.b64_json === "string" ? x.b64_json : "";
       if (!img && typeof x?.url === "string" && publicUrl(x.url)) { const b = new Uint8Array(await (await fetch(x.url)).arrayBuffer()); let s = ""; for (let i = 0; i < b.length; i += 8192) s += String.fromCharCode(...b.subarray(i, i + 8192)); img = btoa(s); }

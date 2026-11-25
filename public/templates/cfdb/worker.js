@@ -25,7 +25,7 @@ create index if not exists approvals_project on approvals (scope, project, creat
 create table if not exists approval_notes (id integer primary key autoincrement, token text not null, who text not null, body text not null, page text not null default '', kind text not null default 'comment', created_at text not null);
 create index if not exists approval_notes_token on approval_notes (token, id);
 `;
-var CFDB_VERSION = 73;
+var CFDB_VERSION = 74;
 var CFDB_WORKER_NAME = "picaffectz-db";
 
 // src/lib/lookdigest.ts
@@ -2315,7 +2315,7 @@ function dqDesignPub(d) {
     for (const kind of ["business", "restaurant", "portfolio", "store"]) if (Array.isArray(d.themes[kind])) th[kind] = d.themes[kind].filter((v) => typeof v === "string" && /^[A-Za-z0-9_-]{1,40}$/.test(v)).slice(0, 400);
     out.themes = th;
   }
-  if (d.images && typeof d.images === "object" && d.images.on === true) out.images = { on: true, ...["photo", "illustration", "3d", "flat"].includes(d.images.style) ? { style: d.images.style } : {} };
+  if (d.images && typeof d.images === "object" && d.images.on === true) out.images = { on: true, ...["photo", "illustration", "3d", "flat"].includes(d.images.style) ? { style: d.images.style } : {}, ...d.images.provider === "horde" ? { provider: "horde" } : {} };
   if (d.carousel && typeof d.carousel === "object") {
     const c = {};
     for (const kind of ["business", "restaurant", "portfolio", "store"]) if (d.carousel[kind] === "custom") c[kind] = "custom";

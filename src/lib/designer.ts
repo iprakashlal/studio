@@ -469,6 +469,9 @@ export async function buildDesign(a: Answers, copy?: Copy | null, files?: Design
     if (email) { put("contact.email", email); c.contact.links = (c.contact.links || []).filter((l: any) => !/linkedin/i.test(l.label)); }
     else c.contact.links = (c.contact.links || []).filter((l: any) => !/linkedin\.com\/?$/.test(l.url));
     if (a.linkedin?.trim()) { const l = a.linkedin.trim(), u = /^https?:\/\//i.test(l) ? l : "https://" + l.replace(/^\/+/, ""); c.contact.links = [{ label: "LinkedIn", url: u }, ...(c.contact.links || []).filter((x: any) => !/linkedin/i.test(x.label))]; }
+    // The starter's made-up links (GitHub home page, example.com address) are not theirs.
+    c.contact.links = (c.contact.links || []).filter((l: any) => !/^https:\/\/(www\.)?(github|linkedin)\.com\/?$/.test(l.url) && !/example\.com/.test(l.url));
+    if (email) c.contact.links = [...c.contact.links, { label: "Email", url: "mailto:" + email }];
     if (social) c.contact.links = [...(c.contact.links || []), { label: /instagram/.test(social) ? "Instagram" : "My page", url: social }];
     if (cp.cta_text) put("contact.body", cp.cta_text);
     put("hero.ctaSecondary", ""); put("hero.ctaSecondaryUrl", "");

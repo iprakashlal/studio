@@ -696,7 +696,7 @@ function bind() {
   const nav = $(".nav"); const onS = () => nav && nav.classList.toggle("scrolled", scrollY > 8); addEventListener("scroll", onS, { passive: true }); onS();
   // Reveal on scroll
   const rv = $$(".rv");
-  if (C.theme.motionStyle === "none" || matchMedia("(prefers-reduced-motion: reduce)").matches || !("IntersectionObserver" in window)) rv.forEach((e) => e.classList.add("in"));
+  if (C.theme.motionStyle === "none" || matchMedia("(prefers-reduced-motion: reduce)").matches || /[?&]lite=1\b/.test(location.search) || !("IntersectionObserver" in window)) rv.forEach((e) => e.classList.add("in"));
   else { const io = new IntersectionObserver((es) => es.forEach((e) => { if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); } }), { rootMargin: "0px 0px -8% 0px" }); rv.forEach((e) => io.observe(e)); }
   const f = $("#enquiry"); if (f) f.addEventListener("submit", submit);
   bindProducts();

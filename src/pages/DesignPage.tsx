@@ -447,6 +447,9 @@ export function PreviewPopup({ design, ver, a, onClose, onEdit, onEditLink, onCo
       build(t.id).then((x) => { if (x) setBuilt((b) => ({ ...b, [key]: x })); else seen.current.delete(key); }).catch(() => seen.current.delete(key));
     }
   }, [flow, at, akey, list]);
+  // On a phone the old live page is let go before the next one starts, so two never sit in memory together.
+  const [settled, setSettled] = useState(true);
+  useEffect(() => { if (!lite) return; setSettled(false); const t = setTimeout(() => setSettled(true), 350); return () => clearTimeout(t); }, [at, lite]);
   const go = (n: number) => { const i = Math.max(0, Math.min(list.length - 1, n)); if (i === at || !list[i]) return; setAt(i); onTweak?.({ theme: list[i].id }); };
   useEffect(() => {
     if (!flow) return;
@@ -479,7 +482,7 @@ export function PreviewPopup({ design, ver, a, onClose, onEdit, onEditLink, onCo
                 return (
                   <div key={t.id} role="group" aria-roledescription="slide" aria-label={`${t.name}, ${i + 1} of ${list.length}`} className="absolute bottom-2 top-2 flex flex-col overflow-hidden rounded-2xl border border-ink-600 bg-ink-950 shadow-2xl transition-all duration-300 ease-out"
                     style={{ left: "50%", width: "min(78%, 1180px)", transform: `translateX(calc(-50% + ${d * 42}%)) scale(${d ? 0.86 : 1})`, zIndex: d ? 1 : 2, filter: d ? "brightness(.6)" : undefined }}>
-                    {d !== 0 && lite ? <div className="flex min-h-0 flex-1 flex-col gap-3 p-4" style={{ background: t.colors.bg, color: t.colors.text }} aria-hidden><span className="h-3 w-1/3 rounded-full" style={{ background: t.colors.c1 }} /><span className="h-6 w-4/5 rounded-full" style={{ background: t.colors.text }} /><span className="h-6 w-3/5 rounded-full" style={{ background: t.colors.text }} /><span className="mt-2 h-8 w-28 rounded-full" style={{ background: t.colors.c1 }} /><b className="mt-auto text-sm">{t.name}</b></div> : dd ? <Preview key={t.id} tpl={TEMPLATES[design.kind]} base={`templates/${design.kind}/`} content={dd.content} version={ver} assets={{}} editable={false} hidePages onEditLink={d ? undefined : onEditLink} hints={hints} /> : <div className="grid min-h-0 flex-1 place-items-center"><Spinner /></div>}
+                    {d !== 0 && lite ? <div className="flex min-h-0 flex-1 flex-col gap-3 p-4" style={{ background: t.colors.bg, color: t.colors.text }} aria-hidden><span className="h-3 w-1/3 rounded-full" style={{ background: t.colors.c1 }} /><span className="h-6 w-4/5 rounded-full" style={{ background: t.colors.text }} /><span className="h-6 w-3/5 rounded-full" style={{ background: t.colors.text }} /><span className="mt-2 h-8 w-28 rounded-full" style={{ background: t.colors.c1 }} /><b className="mt-auto text-sm">{t.name}</b></div> : dd && settled ? <Preview key={t.id} lite={lite} tpl={TEMPLATES[design.kind]} base={`templates/${design.kind}/`} content={dd.content} version={ver} assets={{}} editable={false} hidePages onEditLink={d ? undefined : onEditLink} hints={hints} /> : <div className="grid min-h-0 flex-1 place-items-center"><Spinner /></div>}
                     {d !== 0 && <button type="button" aria-label={`Show ${t.name}`} className="absolute inset-0 z-10 cursor-pointer" onClick={() => go(i)} />}
                   </div>
                 );

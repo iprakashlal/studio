@@ -11,6 +11,7 @@ import { themeCode } from "../themes/codes";
 import { TEMPLATES } from "../schema";
 import { Preview } from "../editor/Preview";
 import { Logo, useToast, Skel } from "../ui/kit";
+import { DevtoolsGuard, LoadVeil } from "../ui/PageGuard";
 import { designPageOn, useDesignSettings } from "../lib/designs";
 
 // A public page (no sign-in) that shows every theme, so you can send it to a client.
@@ -71,12 +72,14 @@ export function ThemesPage({ signedIn }: { signedIn: boolean }) {
   // Switching between business and the other types changes the theme list: clear what doesn't belong.
   const switchKind = (k: Kind) => { if (family(k) !== family(kind)) { setTag(""); setOpen(""); setHover(null); } setKind(k); };
 
+  const [settled, setSettled] = useState(0), [fontsOk, setFontsOk] = useState(false);
   useEffect(() => {
     for (const k of ["portfolio", "store", "business", "restaurant"] as Kind[])
       fetch(`templates/${k}/content.json`, { cache: "no-store" }).then((r) => r.json()).then((c) => {
         TEMPLATES[k].prepare?.(c);
         setSamples((s) => ({ ...s, [k]: c }));
-      }).catch(() => {});
+      }).catch(() => {}).finally(() => setSettled((n) => n + 1));
+    const f = (document as any).fonts?.ready; (f ? Promise.race([f, new Promise((r) => setTimeout(r, 4000))]) : Promise.resolve()).finally(() => setFontsOk(true));
   }, []);
   useEffect(() => { try { localStorage.setItem(LS, JSON.stringify(mine)); } catch { /* private mode */ } }, [mine]);
   useEffect(() => { history.replaceState(null, "", link({ v: kind, t: open, list: only === "shared" ? shared : undefined })); }, [kind, open, only]);
@@ -122,6 +125,7 @@ export function ThemesPage({ signedIn }: { signedIn: boolean }) {
 
   return (
     <div className="min-h-screen bg-ink-950 text-ink-100">
+      <DevtoolsGuard /><LoadVeil title="Loading the themes" steps={["Loading the themes", "Preparing the previews"]} done={(fontsOk ? 1 : 0) + (settled >= 4 ? 1 : 0)} />
       <header className="sticky top-0 z-30 border-b border-ink-700 bg-ink-950/90 backdrop-blur">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-3 px-4 py-3">
           {/* The Studio's name goes to the projects only for someone signed in. */}

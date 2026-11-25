@@ -1,3 +1,4 @@
+import { DevtoolsGuard, LoadVeil } from "../ui/PageGuard";
 import { themeCode } from "../themes/codes";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BrandMark, useBrand } from "../lib/brand";
@@ -75,7 +76,8 @@ export function DesignPage({ studio, index, onIndex }: { studio?: Studio; index?
   const total = STEPS.filter((x) => (x.when ? x.when(a) : true)).length;
 
   useEffect(() => { document.title = "Design yourself · " + brand.name; }, [brand.name]);
-  useEffect(() => { designHost().then(setHost); }, []);
+  const [hostDone, setHostDone] = useState(false), [fontsOk, setFontsOk] = useState(false);
+  useEffect(() => { designHost().then(setHost).catch(() => {}).finally(() => setHostDone(true)); const f = (document as any).fonts?.ready; (f ? Promise.race([f, new Promise((r) => setTimeout(r, 4000))]) : Promise.resolve()).finally(() => setFontsOk(true)); }, []);
   useEffect(() => { try { sessionStorage.setItem(DRAFT, JSON.stringify({ a, copy, id: savedId, sent })); } catch { /* private mode */ } }, [a, copy, savedId, sent]);
   useEffect(() => { setText(""); setMany([]); setTimeout(() => field.current?.focus(), 50); window.scrollTo({ top: 0, behavior: "smooth" }); }, [cur?.id, answered.length, writing]);
 
@@ -253,6 +255,7 @@ export function DesignPage({ studio, index, onIndex }: { studio?: Studio; index?
 
   return (
     <div className="flex min-h-screen flex-col bg-ink-950 text-ink-100">
+      <DevtoolsGuard /><LoadVeil title="Loading Design yourself" steps={["Loading the designer", "Reading the Studio's settings"]} done={(fontsOk ? 1 : 0) + (hostDone ? 1 : 0)} />
       <header className="mx-auto flex w-full max-w-5xl items-center gap-2 px-4 py-3 sm:px-6">
         <a href="#/themes" className="btn btn-ghost btn-sm shrink-0">← Themes</a>
         {/* The Studio's name is a link only for someone signed in: it goes to their projects. */}

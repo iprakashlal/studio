@@ -7,6 +7,7 @@ import { TEMPLATES } from "../schema";
 import { Preview } from "../editor/Preview";
 import { Logo, Spinner, useToast } from "../ui/kit";
 import { packSections, sectionNames, unpackSections } from "../lib/docsections";
+import { relatedThemes } from "../lib/designer";
 import { COLOUR_DOT, STEPS, STEP_LABEL, buildDesign, fromDoc, isOptional, nextStep, requestText, sayAnswer, themeOf, themesFor, tweakTheme, writeCopy, type Answers, type Design, type DesignFiles, type Step } from "../lib/designer";
 import { newDesignId, readDesignSettings, readLocalDesigns, writeLocalDesigns, type Copy, type DesignRec } from "../lib/designs";
 import { COLOUR_SLOTS, GROUPS, pagesChoice, readColsAnswer, readLookAnswer, resolvedLook, visibleAxes, type Kind as LookKind } from "../lib/designlook";
@@ -320,6 +321,7 @@ export function DesignPage({ studio, index, onIndex }: { studio?: Studio; index?
                   <h2 className="font-display text-2xl font-extrabold tracking-tight sm:text-[28px]">Your preview is ready</h2>
                   <p className="text-sm leading-relaxed text-ink-300">{design ? <>A <b className="text-ink-100">{TEMPLATES[design.kind].name}</b> in the <b className="text-ink-100">{design.themeName}</b> look (theme ID <b className="font-mono text-ink-100">{themeCode({ id: design.themeId })}</b>). </> : ""}It isn't published. Connect with us to finish it together: your own photos, your address on the web, payment and any extra features.</p>
                 </div>
+                {design && <ThemeCarousel a={a} currentId={design.themeId} onUse={(id) => tweak({ theme: id })} />}
                 <div className="grid gap-2 sm:flex sm:flex-wrap">
                   <button type="button" className="btn btn-pri justify-center" onClick={() => setShowPreview(true)}>View my preview</button>
                   <button type="button" className="btn justify-center" onClick={(e) => openConnect(e.currentTarget.getBoundingClientRect())}>{sent ? "Request sent ✓" : "Connect with Picaffectz"}</button>
@@ -417,6 +419,54 @@ const answerHints = (a: Answers, logo = ""): { id: string; text?: string; img?: 
   for (const id of ["items", "usp", "work"]) for (const l of (a[id] || "").split("\n")) { const t = l.split(/\s*(?::|\s[-–—]\s)/)[0].trim(); if (t.length >= 3) out.push({ id, text: t }); }
   return out;
 };
+/** Every theme that goes with the person's answers, as a centred stack of cards: the one in focus in front, the ones either side peeking out behind. It starts at the left and moves right. */
+function ThemeCarousel({ a, currentId, onUse }: { a: Answers; currentId: string; onUse: (id: string) => void }) {
+  const first = useRef(currentId);
+  const key = JSON.stringify([a.kind, a.btype, a.about, a.name, a.style, a.colour]);
+  const list = useMemo(() => { const l = relatedThemes(a); const i = l.findIndex((t) => t.id === first.current); return i > 0 ? [l[i], ...l.slice(0, i), ...l.slice(i + 1)] : l; }, [key]);
+  const [at, setAt] = useState(0);
+  const drag = useRef<number | null>(null);
+  if (list.length < 2) return null;
+  const go = (n: number) => setAt(Math.max(0, Math.min(list.length - 1, n)));
+  const t = list[Math.min(at, list.length - 1)];
+  return (
+    <div className="flex flex-col gap-3" role="group" aria-roledescription="carousel" aria-label="Themes that suit your website">
+      <div className="flex items-baseline gap-2"><b className="text-sm">Themes that suit your website</b><span className="text-xs text-ink-400">{at + 1} of {list.length}</span></div>
+      <div tabIndex={0} className="relative h-[290px] select-none overflow-hidden rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-brand-400" style={{ touchAction: "pan-y" }}
+        onKeyDown={(e) => { if (e.key === "ArrowRight") { e.preventDefault(); go(at + 1); } if (e.key === "ArrowLeft") { e.preventDefault(); go(at - 1); } }}
+        onPointerDown={(e) => { drag.current = e.clientX; }} onPointerUp={(e) => { if (drag.current !== null) { const d = e.clientX - drag.current; if (Math.abs(d) > 40) go(at + (d < 0 ? 1 : -1)); } drag.current = null; }} onPointerCancel={() => { drag.current = null; }}>
+        {list.map((th, i) => {
+          const d = i - at, ad = Math.abs(d); if (ad > 2) return null;
+          const c = th.colors;
+          return (
+            <div key={th.id} role="group" aria-roledescription="slide" aria-label={`${th.name}, ${i + 1} of ${list.length}`} onClick={() => d !== 0 && go(i)}
+              className={`absolute left-1/2 top-3 w-[62%] max-w-[300px] overflow-hidden rounded-2xl border border-white/15 shadow-2xl transition-all duration-300 ease-out ${d !== 0 ? "cursor-pointer" : ""}`}
+              style={{ transform: `translateX(calc(-50% + ${d * 44}%)) scale(${1 - ad * 0.12})`, zIndex: 10 - ad, filter: ad ? `brightness(${1 - ad * 0.22})` : undefined, background: c.bg, color: c.text }}>
+              <div className="flex items-center gap-1.5 px-3 py-2" style={{ background: c.surface, borderBottom: `1px solid ${c.line}` }}>
+                <span className="h-2 w-6 rounded-full" style={{ background: c.c1 }} /><span className="ml-auto h-1.5 w-8 rounded-full" style={{ background: c.line }} /><span className="h-1.5 w-8 rounded-full" style={{ background: c.line }} />
+              </div>
+              <div className="flex flex-col gap-2 px-4 pb-3 pt-4">
+                <span className="h-3 w-4/5 rounded-full" style={{ background: c.text }} /><span className="h-3 w-3/5 rounded-full" style={{ background: c.text }} />
+                <span className="h-1.5 w-full rounded-full" style={{ background: c.soft, opacity: .6 }} /><span className="h-1.5 w-11/12 rounded-full" style={{ background: c.soft, opacity: .6 }} />
+                <span className="mt-1 h-6 w-24 rounded-full" style={{ background: c.c1 }} />
+                <div className="mt-2 grid grid-cols-3 gap-1.5">{[c.c1, c.c2, c.c3].map((x, j) => <span key={j} className="h-10 rounded-lg" style={{ background: c.surface, borderTop: `3px solid ${x}` }} />)}</div>
+              </div>
+              <div className="flex items-center gap-2 px-4 py-2.5 text-[12px]" style={{ background: c.surface, color: c.text, borderTop: `1px solid ${c.line}` }}>
+                <b className="min-w-0 flex-1 truncate">{th.name}</b><span className="font-mono opacity-80">{themeCode(th)}</span><span className="rounded border px-1.5 py-px text-[10px]" style={{ borderColor: c.line }}>{th.dark ? "Dark" : "Light"}</span>
+              </div>
+            </div>
+          );
+        })}
+        <button type="button" aria-label="Previous theme" disabled={at === 0} onClick={() => go(at - 1)} className="btn btn-sm absolute left-1 top-1/2 z-20 -translate-y-1/2 disabled:opacity-30">‹</button>
+        <button type="button" aria-label="Next theme" disabled={at >= list.length - 1} onClick={() => go(at + 1)} className="btn btn-sm absolute right-1 top-1/2 z-20 -translate-y-1/2 disabled:opacity-30">›</button>
+      </div>
+      <div className="flex items-center justify-center gap-3">
+        <button type="button" className={`btn btn-sm ${t.id === currentId ? "" : "btn-pri"}`} disabled={t.id === currentId} onClick={() => onUse(t.id)}>{t.id === currentId ? `${t.name}: in use` : `Use ${t.name}`}</button>
+      </div>
+    </div>
+  );
+}
+
 export function PreviewPopup({ design, ver, a, onClose, onEdit, onEditLink, onConnect, done, onTweak }: { design: Design; ver: number; a: Answers; onClose: () => void; onEdit?: () => void; onEditLink?: (id: string) => void; onConnect?: (from?: DOMRect) => void; done: boolean; onTweak?: (p: Answers) => void }) {
   const hints = useMemo(() => answerHints(a, design.content?.brand?.logo?.url || ""), [a, design]);
   const [play, setPlay] = useState(false);

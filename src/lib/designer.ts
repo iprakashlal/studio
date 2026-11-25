@@ -246,9 +246,8 @@ function offered(kind: Kind): Theme[] { const al = readDesignSettings().themes?.
 export const samplePicture = (c1: string, c2: string, bg: string) => "data:image/svg+xml," + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 640"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${c1}"/><stop offset="1" stop-color="${c2}"/></linearGradient></defs><rect width="800" height="640" fill="${bg}"/><rect width="800" height="640" fill="url(#g)" opacity=".85"/><circle cx="560" cy="190" r="120" fill="#fff" opacity=".22"/><circle cx="250" cy="430" r="190" fill="#000" opacity=".12"/><path d="M0 520C160 440 300 560 460 500S700 420 800 470V640H0Z" fill="#fff" opacity=".2"/></svg>`);
 
 /** The theme that best matches the feel and colour chosen; the person's name picks between near ties so two people don't get the same one. */
-export function pickTheme(a: Answers): Theme | null {
-  const kind = k(a), pool = offered(kind); if (!pool.length) return null;
-  const chosen = a.theme && poolOf(kind).find((t) => t.id === a.theme); if (chosen) return chosen;
+function scoreThemes(a: Answers) {
+  const kind = k(a), pool = offered(kind);
   const st = STYLE_TAGS[a.style || "clean"] || STYLE_TAGS.clean, col = a.colour || "any";
   // A business says what it does ("dental clinic", "wedding planner"): the themes made for that kind of business come first.
   const say = `${a.about || ""} ${a.name || ""}`.toLowerCase(), picked = kind === "business" && a.btype && BIZ_TYPES.includes(a.btype) ? [a.btype] : [], mine = kind === "business" ? picked.length ? picked : BIZ_TYPES.filter((ty) => say && new RegExp(BIZ_TYPE_WORDS[ty] || "(?!)", "i").test(say)) : [];
@@ -260,9 +259,22 @@ export function pickTheme(a: Answers): Theme | null {
     if (col === "mono") s += c.s < 0.15 ? 10 : -c.s * 10;
     else if (col !== "any") { const d = Math.min(Math.abs(c.h - HUE[col]), 360 - Math.abs(c.h - HUE[col])); s += c.s < 0.2 ? -6 : Math.max(-8, 10 - d / 9); }
     if (kind === "store" && t.tags.includes("Products")) s += 2;
-    for (const ty of mine) if (t.tags.includes(ty)) s += 12;
+    for (const ty of mine) if (t.tags.includes(ty)) s += picked.length ? 40 : 12;
     return { t, s };
   }).sort((x, y) => y.s - x.s);
+  return { kind, scored, mine };
+}
+/** The themes that go with what the person told us, best first: for a business, every theme made for its type; for the other kinds, the closest matches in feel and colour. */
+export function relatedThemes(a: Answers, max = 14): Theme[] {
+  const { kind, scored, mine } = scoreThemes(a);
+  const typed = kind === "business" && mine.length ? scored.filter((x) => mine.some((ty) => x.t.tags.includes(ty))) : [];
+  return (typed.length >= 3 ? typed : scored).slice(0, Math.max(max, typed.length >= 3 ? typed.length : 0)).map((x) => x.t);
+}
+export function pickTheme(a: Answers): Theme | null {
+  const kind = k(a), pool = offered(kind); if (!pool.length) return null;
+  const chosen = a.theme && poolOf(kind).find((t) => t.id === a.theme); if (chosen) return chosen;
+  const { scored } = scoreThemes(a);
+
   const top = scored.filter((x) => x.s >= scored[0].s - 1.5).slice(0, 6);
   return top[hash((a.name || "") + (a.about || "")) % top.length].t;
 }

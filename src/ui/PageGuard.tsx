@@ -12,6 +12,12 @@ export function LoadVeil({ title, steps, done }: { title: string; steps: string[
 }
 
 const trap = (e: Event) => e.preventDefault();
+/** The tools just opened: the pages reset themselves (answers, previews, open windows), every preview frame is emptied, and the tab's session is cleared. */
+function wipe() {
+  try { dispatchEvent(new Event("studio:guard")); } catch { /* none */ }
+  const clear = () => { document.querySelectorAll("iframe").forEach((f) => { try { f.removeAttribute("srcdoc"); f.src = "about:blank"; } catch { /* gone */ } }); try { sessionStorage.clear(); } catch { /* private mode */ } };
+  clear(); setTimeout(clear, 400); // (a page that saves its draft while it resets is cleared again)
+}
 // How far the window's outer size is ahead of its page area when the tools are closed (toolbars and borders), and the zoom it was measured at.
 let base = { w: 0, h: 0, dpr: 0 };
 /** Are the developer tools open? A docked panel shrinks the page area; an open console reads the logged element's getter. */
@@ -41,7 +47,7 @@ export function DevtoolsGuard() {
     let was = false;
     const check = () => {
       const now = devtoolsOpen();
-      if (now && !was) { try { sessionStorage.removeItem("site-studio:design-draft"); } catch { /* private mode */ } }
+      if (now && !was) wipe();
       if (!now && was) { try { sessionStorage.removeItem("site-studio:design-draft"); } catch { /* private mode */ } location.reload(); return; }
       was = now; setOpen(now);
     };

@@ -70,6 +70,8 @@ export function ThemesPage({ signedIn }: { signedIn: boolean }) {
   const [samples, setSamples] = useState<Record<Kind, any>>({ portfolio: null, store: null, business: null, restaurant: null });
   const pool = poolOf(kind), tags = kind === "business" ? BIZ_TAGS : kind === "restaurant" ? REST_TAGS : THEME_TAGS;
   // Switching between business and the other types changes the theme list: clear what doesn't belong.
+  // Developer tools opened (see PageGuard): the big preview and the hover preview (their frames) are removed.
+  useEffect(() => { const f = () => { setOpen(""); setHover(null); }; addEventListener("studio:guard", f); return () => removeEventListener("studio:guard", f); }, []);
   const switchKind = (k: Kind) => { if (family(k) !== family(kind)) { setTag(""); setOpen(""); setHover(null); } setKind(k); };
 
   const [settled, setSettled] = useState(0), [fontsOk, setFontsOk] = useState(false);

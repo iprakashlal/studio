@@ -185,6 +185,8 @@ export function DesignPage({ studio, index, onIndex }: { studio?: Studio; index?
   // Developer tools opened on this page (not for a signed-in owner): everything made here is cleared and a warning is shown.
   useEffect(() => { if (studio) return; return watchDevtools(() => { resetRef.current(); setWarn(true); }); }, [studio]);
   const tweak = (p: Answers) => setA((o) => { const n = { ...o, ...p }; for (const key of Object.keys(p)) if (p[key] === "") delete n[key]; return n; });
+  // Developer tools opened (see PageGuard): the preview (and its frame) goes and the questions start over.
+  useEffect(() => { const f = () => { restart(); setShowPreview(false); setConnect(false); setReviewOpen(false); }; addEventListener("studio:guard", f); return () => removeEventListener("studio:guard", f); }, []);
   function restart() { setA({}); setCopy(null); setFiles({}); setDesign(null); setSavedId(""); setSent(false); lastSaved.current = ""; try { sessionStorage.removeItem(DRAFT); } catch { /* none */ } }
 
   const field$ = cur && (cur.type === "text" || cur.type === "long" || cur.id === "kind" || cur.id === "doc");

@@ -107,7 +107,7 @@ const RAW: Step[] = [
     ph: (a) => by(a, { portfolio: "e.g. Asha Verma", store: "e.g. Kala Ghar", business: "e.g. Verma & Co", restaurant: "e.g. The Tiffin Box" }),
   },
   { id: "tagline", group: "basics", label: "Tagline", type: "text", optional: true, ask: () => "Your one-line tagline?", ph: () => "e.g. Honest work, on time", help: () => "A short line that sits under your name. Skip it and we'll write one." },
-  { id: "logo", group: "basics", label: "Logo", type: "file", optional: true, accept: "image/png,image/jpeg,image/webp", maxKB: 20480, ask: () => "Do you have a logo? Add it here, or skip and we'll use your name.", help: () => "A PNG or JPG picture. You can send a better one later." },
+  { id: "logo", group: "basics", label: "Logo", type: "file", optional: true, when: (a) => k(a) !== "portfolio" && !!readDesignSettings().images?.on, ask: () => "Pick a logo idea.", help: () => "A free image generator draws these from your name and what you do. Tap one to use it, or skip and we'll use your name. A designer can refine your final logo later." },
   { id: "colour", group: "basics", label: "Colour", type: "choice", ask: () => "Which is your main brand colour?", options: () => COLOUR_OPTIONS },
   { id: "style", group: "basics", label: "Look", type: "choice", ask: () => "Which look fits you best?", options: () => STYLE_OPTIONS },
   {
@@ -628,7 +628,7 @@ export async function buildDesign(a: Answers, copy?: Copy | null, files?: Design
     if (!(story || cp.about_text || about || ds.mission || ds.vision)) put("about.body", "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. (Edit:story)");
     show(c, "about");
   }
-  if (files?.logo && kind !== "portfolio") put("brand.logo", { url: files.logo });
+  { const lg = files?.logo || (/^https:\/\/image\.pollinations\.ai\//.test(a.logo || "") ? a.logo : ""); if (lg && kind !== "portfolio") put("brand.logo", { url: lg }); }
   if (kind === "restaurant" && files?.menu) { put("food.pdfUrl", "data:application/pdf;base64," + files.menu.b64); put("food.pdfLabel", "Download the menu (PDF)"); }
   if (theme) {
     const tt = tweakTheme(theme, a), lv = lookValues(kind, a.look, readDesignSettings());

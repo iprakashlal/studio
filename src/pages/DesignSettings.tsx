@@ -258,7 +258,7 @@ export function DesignLookTab({ session, studio, index, onIndex }: { session: Se
         })()}
       </Block>
 
-      <Block title="Notice bar" note='A yellow bar across the top of "Design yourself". Turn it off, or write your own words.'>
+      <Block title="Notice bar" note='A bar across the top of the final website preview. Turn it off, or write your own words.'>
         <label className="flex items-start gap-2 text-[13px]">
           <input type="checkbox" className="mt-1" checked={d.notice?.on !== false} onChange={(e) => upd({ notice: e.target.checked ? (d.notice?.text ? { text: d.notice.text } : undefined) : { ...(d.notice || {}), on: false } })} />
           <span><b className="block">Show the notice bar</b></span>

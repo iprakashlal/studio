@@ -11,7 +11,7 @@ export async function designHost(): Promise<DesignHost | null> {
   return hc && hc.kind === "cloudflare" ? { api: hc.api, studio: hc.studio } : null;
 }
 
-export type SubmitBody = { kind: string; name: string; person: string; phone: string; email: string; note: string; answers: Record<string, string>; copy?: Copy | null; logo?: string; pdf?: { name: string; b64: string } };
+export type SubmitBody = { /** The pass earned by confirming the email with its code (or given instead when the database can't send mail). */ otp?: string; skip?: string; kind: string; name: string; person: string; phone: string; email: string; note: string; answers: Record<string, string>; copy?: Copy | null; logo?: string; pdf?: { name: string; b64: string } };
 export const submitQuery = (h: DesignHost, b: SubmitBody) => cfCall(h.api, "/dq/" + encodeURIComponent(h.studio), { method: "POST", auth: false, body: JSON.stringify(b) });
 
 export type Query = { id: number; name: string; kind: string; person: string; phone: string; email: string; note: string; answers: Record<string, string>; copy: Copy; status: "new" | "read" | "done"; mail: string; pdf_name: string; has_logo: boolean; created_at: string };
@@ -38,3 +38,7 @@ export type Understood = { engine?: string; fields?: Record<string, any> };
 export async function understandText(h: DesignHost, kind: string, text: string): Promise<Understood> {
   try { return await cfCall<Understood>(h.api, "/dq/understand/" + encodeURIComponent(h.studio), { method: "POST", auth: false, body: JSON.stringify({ kind, text: text.slice(0, 9000) }) }); } catch { return {}; }
 }
+
+/** Confirm the visitor's email: a code is sent to it, and the right code earns a pass that the request must carry. */
+export const otpSend = (h: DesignHost, email: string) => cfCall<{ ok: boolean; skip?: string }>(h.api, "/dq/otp/send/" + encodeURIComponent(h.studio), { auth: false, method: "POST", body: JSON.stringify({ email }) });
+export const otpCheck = (h: DesignHost, email: string, code: string) => cfCall<{ ok: boolean; token: string }>(h.api, "/dq/otp/check/" + encodeURIComponent(h.studio), { auth: false, method: "POST", body: JSON.stringify({ email, code }) });

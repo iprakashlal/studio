@@ -81,6 +81,7 @@ export function QueriesTab({ studio, index, onIndex }: { studio: Studio; index: 
                     <b className="block text-ink-100">{q.person}</b>
                     {q.phone && <a className="block text-brand-200 hover:underline" href={`tel:${q.phone.replace(/[^\d+]/g, "")}`}>{q.phone}</a>}
                     {q.email && <a className="block break-all text-brand-200 hover:underline" href={`mailto:${q.email}`}>{q.email}</a>}
+                    {q.email && q.answers.emailverified && <span className={`text-xs ${q.answers.emailverified === "yes" ? "text-emerald-300" : "text-amber-300"}`}>{q.answers.emailverified === "yes" ? "Email verified" : "Email not verified"}</span>}
                     {q.note && <p className="mt-1.5 whitespace-pre-line text-ink-300">{q.note}</p>}
                   </div>
                   {q.answers.about && <p className="line-clamp-2 text-[13px] text-ink-300">{q.answers.about}</p>}

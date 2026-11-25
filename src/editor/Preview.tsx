@@ -38,7 +38,7 @@ const DEVICES = [
 /** The content shown in a preview: the same, with the "Powered by" badge turned off. */
 const quiet = (c: any) => (c && typeof c === "object" ? { ...c, poweredBy: { ...(c.poweredBy || {}), show: false } } : c);
 
-export function Preview({ tpl, base, content, version, assets, editable = true, hidePages = false, onEditLink, hints, lite = false }: { /** A still page (no animations or effects), for a phone showing a live preview. */ lite?: boolean; /** The answers the page was made from: hovering text that shows one gets a pencil that opens that answer. */ hints?: { id: string; text?: string; img?: string }[];  /** A note such as "(Edit:story)" in the preview becomes an Edit link that calls this with the answer it belongs to. */ onEditLink?: (id: string) => void; tpl: TemplateDef; base: string; content: any; version: number; assets: Record<string, string>; editable?: boolean; /** No page list (a single-site preview). */ hidePages?: boolean }) {
+export function Preview({ tpl, base, content, version, assets, editable = true, hidePages = false, onEditLink, hints, lite = false, note }: { /** A notice shown in a yellow strip beside the title. */ note?: string; /** A still page (no animations or effects), for a phone showing a live preview. */ lite?: boolean; /** The answers the page was made from: hovering text that shows one gets a pencil that opens that answer. */ hints?: { id: string; text?: string; img?: string }[];  /** A note such as "(Edit:story)" in the preview becomes an Edit link that calls this with the answer it belongs to. */ onEditLink?: (id: string) => void; tpl: TemplateDef; base: string; content: any; version: number; assets: Record<string, string>; editable?: boolean; /** No page list (a single-site preview). */ hidePages?: boolean }) {
   const frame = useRef<HTMLIFrameElement>(null);
   const box = useRef<HTMLDivElement>(null);
   const [device, setDevice] = useState<(typeof DEVICES)[number]["id"]>("desktop");
@@ -149,6 +149,7 @@ export function Preview({ tpl, base, content, version, assets, editable = true, 
     <div className="flex min-h-0 flex-1 flex-col bg-ink-950">
       <div className="flex flex-wrap items-center gap-2 border-b border-ink-700 px-3 py-2">
         <span className="text-xs font-bold uppercase tracking-wider text-ink-400">Live preview</span>
+        {note && <p role="note" className="m-0 min-w-0 flex-1 basis-[16rem] rounded-lg border border-yellow-400 bg-yellow-200 px-3 py-1.5 text-[12.5px] leading-snug text-yellow-950">{note}</p>}
         {!hidePages && pages.length > 1 && (
           <select aria-label="Preview page" className="input w-auto max-w-[260px] py-1.5 text-[13px]" value={page} onChange={(e) => go(e.target.value)}>
             {!pages.some((p) => p.file === page) && <option value={page}>{page}</option>}

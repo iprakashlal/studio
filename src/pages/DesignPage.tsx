@@ -441,10 +441,10 @@ const fieldLabel = "text-[12px] font-semibold text-ink-300";
 
 /** "Play with your design": the colours, layouts, style and interactions of the chosen type, changed live. What is offered here is set in the Studio's Settings → Design yourself. */
 function Tweaks({ a, design, onTweak, onClose }: { a: Answers; design: Design; onTweak: (p: Answers) => void; onClose: () => void }) {
-  const [q, setQ] = useState("");
+  const [tone, setTone] = useState<"" | "light" | "dark">("");
   const kind = design.kind as LookKind;
   const all = useMemo(() => themesFor(design.kind), [design.kind, a.theme]);
-  const list = all.filter((t) => !q.trim() || (t.name + " " + t.tags.join(" ")).toLowerCase().includes(q.trim().toLowerCase()));
+  const list = all.filter((t) => !tone || (tone === "dark" ? !!t.dark : !t.dark));
   const settings = useMemo(readDesignSettings, [a.kind]);
   const axes = visibleAxes(kind, settings);
   const picks = readLookAnswer(a.look), own = readColsAnswer(a.cols);
@@ -495,7 +495,9 @@ function Tweaks({ a, design, onTweak, onClose }: { a: Answers; design: Design; o
       ))}
 
       <Group title={`Themes (${all.length})`} note="Tap a theme to restyle your whole website.">
-        <input className="input h-10" type="search" placeholder="Search themes, e.g. dark, warm, bold" aria-label="Search themes" value={q} onChange={(e) => setQ(e.target.value)} />
+        <div className="grid grid-cols-3 gap-1 rounded-xl border border-ink-600 p-1" role="radiogroup" aria-label="Show themes">
+          {([["", "All"], ["light", "Light"], ["dark", "Dark"]] as const).map(([v, l]) => <button key={v || "all"} type="button" role="radio" aria-checked={tone === v} onClick={() => setTone(v)} className={`h-8 rounded-lg text-[13px] font-semibold ${tone === v ? "bg-ink-700 text-ink-100" : "text-ink-400 hover:text-ink-100"}`}>{l}</button>)}
+        </div>
         <div className="grid max-h-72 grid-cols-1 gap-1.5 overflow-y-auto pr-1">
           {list.map((t) => (
             <button key={t.id} type="button" aria-pressed={design.themeId === t.id} onClick={() => onTweak({ theme: t.id })} className={`flex items-center gap-2.5 rounded-xl border px-3 py-2 text-left text-[13px] ${design.themeId === t.id ? "border-brand-400 bg-brand-500/15" : "border-ink-700 hover:border-ink-500"}`}>
@@ -503,7 +505,7 @@ function Tweaks({ a, design, onTweak, onClose }: { a: Answers; design: Design; o
               <span className="min-w-0 flex-1 truncate font-semibold text-ink-100">{t.name}</span><span className="text-[11px] text-ink-500">{t.dark ? "Dark" : "Light"}</span>
             </button>
           ))}
-          {!list.length && <p className="text-[13px] text-ink-400">No theme matches that.</p>}
+          {!list.length && <p className="text-[13px] text-ink-400">No themes in this group.</p>}
         </div>
       </Group>
 

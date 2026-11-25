@@ -424,6 +424,8 @@ export function PreviewPopup({ design, ver, a, onClose, onEdit, onEditLink, onCo
   const [play, setPlay] = useState(false);
   // Finished: the whole preview is a carousel of the themes that suit the website (the one in use first, at the left); each card is the person's own site in that theme.
   const flow = !!(done && onTweak && build);
+  // A phone can't hold several live websites at once (its browser gives up and reloads the page): there only the card in focus is live; its neighbours are light colour cards.
+  const lite = useMemo(() => { try { return matchMedia("(max-width: 767px), (pointer: coarse)").matches; } catch { return false; } }, []);
   const first = useRef(design.themeId);
   const akey = JSON.stringify({ ...a, theme: "" });
   const list = useMemo<Theme[]>(() => {
@@ -439,7 +441,7 @@ export function PreviewPopup({ design, ver, a, onClose, onEdit, onEditLink, onCo
   useEffect(() => { if (!a.theme) { const i = list.findIndex((t) => t.id === design.themeId); if (i >= 0) setAt(i); } }, [a.theme]);
   useEffect(() => {
     if (!flow || !build) return;
-    for (const d of [0, 1, -1]) {
+    for (const d of lite ? [0] : [0, 1, -1]) {
       const t = list[at + d], key = t ? akey + t.id : ""; if (!t || seen.current.has(key)) continue;
       seen.current.add(key);
       build(t.id).then((x) => { if (x) setBuilt((b) => ({ ...b, [key]: x })); else seen.current.delete(key); }).catch(() => seen.current.delete(key));
@@ -477,7 +479,7 @@ export function PreviewPopup({ design, ver, a, onClose, onEdit, onEditLink, onCo
                 return (
                   <div key={t.id} role="group" aria-roledescription="slide" aria-label={`${t.name}, ${i + 1} of ${list.length}`} className="absolute bottom-2 top-2 flex flex-col overflow-hidden rounded-2xl border border-ink-600 bg-ink-950 shadow-2xl transition-all duration-300 ease-out"
                     style={{ left: "50%", width: "min(78%, 1180px)", transform: `translateX(calc(-50% + ${d * 42}%)) scale(${d ? 0.86 : 1})`, zIndex: d ? 1 : 2, filter: d ? "brightness(.6)" : undefined }}>
-                    {dd ? <Preview key={t.id} tpl={TEMPLATES[design.kind]} base={`templates/${design.kind}/`} content={dd.content} version={ver} assets={{}} editable={false} hidePages onEditLink={d ? undefined : onEditLink} hints={hints} /> : <div className="grid min-h-0 flex-1 place-items-center"><Spinner /></div>}
+                    {d !== 0 && lite ? <div className="flex min-h-0 flex-1 flex-col gap-3 p-4" style={{ background: t.colors.bg, color: t.colors.text }} aria-hidden><span className="h-3 w-1/3 rounded-full" style={{ background: t.colors.c1 }} /><span className="h-6 w-4/5 rounded-full" style={{ background: t.colors.text }} /><span className="h-6 w-3/5 rounded-full" style={{ background: t.colors.text }} /><span className="mt-2 h-8 w-28 rounded-full" style={{ background: t.colors.c1 }} /><b className="mt-auto text-sm">{t.name}</b></div> : dd ? <Preview key={t.id} tpl={TEMPLATES[design.kind]} base={`templates/${design.kind}/`} content={dd.content} version={ver} assets={{}} editable={false} hidePages onEditLink={d ? undefined : onEditLink} hints={hints} /> : <div className="grid min-h-0 flex-1 place-items-center"><Spinner /></div>}
                     {d !== 0 && <button type="button" aria-label={`Show ${t.name}`} className="absolute inset-0 z-10 cursor-pointer" onClick={() => go(i)} />}
                   </div>
                 );

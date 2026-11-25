@@ -25,7 +25,7 @@ create index if not exists approvals_project on approvals (scope, project, creat
 create table if not exists approval_notes (id integer primary key autoincrement, token text not null, who text not null, body text not null, page text not null default '', kind text not null default 'comment', created_at text not null);
 create index if not exists approval_notes_token on approval_notes (token, id);
 `;
-var CFDB_VERSION = 77;
+var CFDB_VERSION = 78;
 var CFDB_WORKER_NAME = "picaffectz-db";
 
 // src/lib/lookdigest.ts
@@ -1107,7 +1107,7 @@ async function ensure(env) {
   ensured = true;
 }
 var SETTINGS = {
-  ai: { secret: ["key"], text: ["base", "model", "vision"], flags: ["on"] },
+  ai: { secret: ["key"], text: ["base", "model", "vision", "image"], flags: ["on"] },
   wa: { secret: ["token"], text: ["phoneId", "waba", "cc", "lang", "to", "phones", "tplOtp", "tplOrder", "tplEnquiry"], flags: ["on", "login", "orderOtp", "orderAlert", "enquiryAlert"] },
   rz: { secret: ["secret"], text: ["keyId"], flags: ["on"] },
   cf: { secret: ["secret"], text: ["appId"], flags: ["test"] },
@@ -2653,7 +2653,7 @@ async function dqImage(env, id, req) {
   const d = idx?.prefs?.design;
   if (d?.images?.source !== "engine") return json({ engine: "system" });
   const { choice, ai } = await dqEngine(env, idx);
-  if (choice !== "cloudflare" || !ai) return json({ engine: "system" });
+  if (choice !== "cloudflare" && choice !== "custom" || !ai) return json({ engine: "system" });
   let q;
   try {
     q = JSON.parse((await req.text()).slice(0, 2e3) || "{}");
@@ -2662,6 +2662,29 @@ async function dqImage(env, id, req) {
   }
   const prompt = clip(q.prompt, 400);
   if (prompt.length < 3) return err(400, "Describe the picture first.");
+  if (choice === "custom") {
+    try {
+      const c = await anySetting(env, "ai"), base = String(c?.base || "").trim().replace(/\/+$/, "").replace(/\/chat\/completions$/, "");
+      const model = String(c?.image || "").trim() || (/api\.openai\.com/.test(base) ? "dall-e-3" : /generativelanguage\.googleapis\.com/.test(base) ? "imagen-3.0-generate-002" : "");
+      if (!model) return json({ engine: "system", error: "no picture model" });
+      const send = (fmt) => fetch(base + "/images/generations", { method: "POST", headers: { Authorization: "Bearer " + c.key, "Content-Type": "application/json" }, body: JSON.stringify({ model, prompt, n: 1, ...fmt ? { response_format: "b64_json" } : {} }) });
+      let r = await send(true);
+      if (r.status === 400) r = await send(false);
+      if (!r.ok) return json({ engine: "system", error: `Your AI API answered ${r.status}` });
+      const j = await r.json().catch(() => null), x = j?.data?.[0];
+      let img = typeof x?.b64_json === "string" ? x.b64_json : "";
+      if (!img && typeof x?.url === "string" && publicUrl(x.url)) {
+        const b = new Uint8Array(await (await fetch(x.url)).arrayBuffer());
+        let s = "";
+        for (let i = 0; i < b.length; i += 8192) s += String.fromCharCode(...b.subarray(i, i + 8192));
+        img = btoa(s);
+      }
+      if (img.length < 100) return json({ engine: "system", error: "empty" });
+      return json({ engine: "custom", image: img });
+    } catch (e) {
+      return json({ engine: "system", error: String(e?.message || e).slice(0, 160) });
+    }
+  }
   try {
     const r = await ai.run("@cf/black-forest-labs/flux-1-schnell", { prompt, steps: 4 });
     const img = typeof r?.image === "string" ? r.image : "";

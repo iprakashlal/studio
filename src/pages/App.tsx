@@ -95,30 +95,13 @@ export function App() {
     });
   }, [session]);
 
-  // Is someone already signed in here (without a saved tab session)? Asked once, quietly, for the public pages.
-  const [probed, setProbed] = useState<"idle" | "done">("idle");
-  useEffect(() => {
-    if (!host || session || probed === "done") return;
-    if (!/^#\/(design|themes)(\?|$)/.test(hash)) return;
-    let live = true;
-    (async () => {
-      try {
-        const be = backendOf(host), who = await be.signedIn(), role = who ? await be.role() : null;
-        if (live && who && role) { const s: Session = { cfg: { owner: host.kind, repo: host.studio, branch: "main" }, token: deviceSecret(host.studio), username: who }; sess.save(NS, s); setSession(s); }
-      } catch { /* signed out */ }
-      if (live) setProbed("done");
-    })();
-    return () => { live = false; };
-  }, [host, session, hash]);
-
   // The helper's page hands its address back here (#helper=…): confirm it, then the Studio tab connects it.
   const handed = helperHandoff.fromHash(hash);
   if (handed) return <HelperLanding url={handed} />;
 
-  // Themes and Design yourself are public pages, but someone already signed in (on this browser) should see them as signed in: wait for that check, with a progress bar, instead of showing the signed-out page first.
+  // Themes and Design yourself are public pages: no sign-in is checked for them; they open at once (a tab that is already signed in keeps showing them as signed in).
   const publicHash = /^#\/(design|themes)(\?|$)/.test(hash);
-  if (publicHash && !repo && host !== undefined && probed !== "done" && host) return <div className="grid min-h-screen place-items-center bg-ink-950"><StepLoader title="Checking your sign-in" at={0} steps={["Checking your sign-in"]} /></div>;
-  if (publicHash && !repo && host === undefined) return <div className="grid min-h-screen place-items-center bg-ink-950"><StepLoader title="Starting the Studio" at={0} steps={["Finding where this Studio keeps its files", "Checking your sign-in"]} /></div>;
+  if (publicHash && !repo && host === undefined) return <div className="grid min-h-screen place-items-center bg-ink-950"><StepLoader title="Starting the Studio" at={0} steps={["Finding where this Studio keeps its files"]} /></div>;
 
   // The theme gallery is public: anyone with the link can browse it without signing in.
   // Design yourself: a chat that builds a preview site. Signed in, the Studio shows it (and keeps the previews).

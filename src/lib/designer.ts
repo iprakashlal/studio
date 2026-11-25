@@ -8,7 +8,7 @@ import { REST_THEMES, REST_TAGS } from "../themes/restaurant";
 import { TEMPLATES } from "../schema";
 import { themeCode } from "../themes/codes";
 import { loadStarter } from "./exporter";
-import { defaultPicture, generatedPicture } from "./pictures";
+import { defaultPicture } from "./pictures";
 import { systemWrite } from "./syswrite";
 import { readDesignSettings, type Copy } from "./designs";
 import { lookValues, pagesChoice, readColsAnswer } from "./designlook";
@@ -107,7 +107,7 @@ const RAW: Step[] = [
     ph: (a) => by(a, { portfolio: "e.g. Asha Verma", store: "e.g. Kala Ghar", business: "e.g. Verma & Co", restaurant: "e.g. The Tiffin Box" }),
   },
   { id: "tagline", group: "basics", label: "Tagline", type: "text", optional: true, ask: () => "Your one-line tagline?", ph: () => "e.g. Honest work, on time", help: () => "A short line that sits under your name. Skip it and we'll write one." },
-  { id: "logo", group: "basics", label: "Logo", type: "file", optional: true, when: (a) => k(a) !== "portfolio" && !!readDesignSettings().images?.on, ask: () => "Pick a logo idea.", help: () => "A free image generator draws these from your name and what you do. Tap one to use it, or skip and we'll use your name. A designer can refine your final logo later." },
+  { id: "logo", group: "basics", label: "Logo", type: "file", optional: true, when: (a) => k(a) !== "portfolio" && !!readDesignSettings().images?.on, ask: () => "Describe a logo and we'll draw it.", help: () => "A free image generator draws these from your name and what you do. Tap one to use it, or skip and we'll use your name. A designer can refine your final logo later." },
   { id: "colour", group: "basics", label: "Colour", type: "choice", ask: () => "Which is your main brand colour?", options: () => COLOUR_OPTIONS },
   { id: "style", group: "basics", label: "Look", type: "choice", ask: () => "Which look fits you best?", options: () => STYLE_OPTIONS },
   {
@@ -147,7 +147,7 @@ const RAW: Step[] = [
   // Shop
   { id: "about", group: "store", label: "What you sell", type: "text", when: S, ask: () => "What do you sell?", ph: () => "e.g. Handmade candles and gifts", help: () => "One short line is enough. You can change it later." },
   { id: "story", group: "store", label: "About the store", type: "long", optional: true, when: S, ask: () => "Describe your store in 2–3 lines.", ph: () => "Write it the way you'd tell a friend.", help: () => "We'll tidy it into proper website text." },
-  { id: "banner", group: "store", label: "Homepage banners", type: "file", optional: true, when: S, accept: "image/png,image/jpeg,image/webp", maxKB: 5120, ask: () => "Add pictures for your homepage banner." },
+  { id: "banner", group: "store", label: "Homepage banners", type: "file", optional: true, when: (a) => S(a) && !!readDesignSettings().images?.on, accept: "image/png,image/jpeg,image/webp", maxKB: 5120, ask: () => "Describe a picture for your homepage banner." },
   { id: "currency", group: "store", label: "Currency", type: "choice", optional: true, when: S, ask: () => "Which currency do you sell in?", options: () => [{ v: "INR", label: "₹ Indian rupee" }, { v: "USD", label: "$ US dollar" }, { v: "EUR", label: "€ Euro" }, { v: "GBP", label: "£ Pound" }, { v: "AED", label: "AED Dirham" }] },
   { id: "cats", group: "store", label: "Product categories", type: "long", optional: true, when: S, ask: () => "What are your product categories? One on each line.", ph: () => "Candles\nGift boxes\nIncense" },
   { id: "items", group: "store", label: "Products", type: "long", when: S, optional: false, ask: () => "Name some products you sell, one on each line. You can add a price after a dash.", ph: () => "Soy candle - 450\nGift box - 899\nIncense set - 299", help: () => "Press Enter for a new line. Pictures, MRP, variants and stock can be added later." },
@@ -169,7 +169,7 @@ const RAW: Step[] = [
   { id: "teamsize", group: "business", label: "Team size", type: "text", optional: true, when: B, ask: () => "How big is your team?", ph: () => "e.g. 25" },
   { id: "story", group: "business", label: "About the company", type: "long", optional: true, when: B, ask: () => "Tell us about your company in a few lines: how it started and who you help.", ph: () => "Write it the way you'd tell a friend.", help: () => "We'll tidy it into proper website text. Skip it and we'll write something simple from your answers." },
   { id: "mission", group: "business", label: "Mission / vision", type: "long", optional: true, when: (a) => B(a) && !doc(a, "mission") && !doc(a, "vision"), ask: () => "What is your mission or vision?", ph: () => "Mission: …\nVision: …" },
-  { id: "bimage", group: "business", label: "Main banner image", type: "file", optional: true, when: B, accept: "image/png,image/jpeg,image/webp", maxKB: 5120, ask: () => "Add your main banner picture." },
+  { id: "bimage", group: "business", label: "Main banner image", type: "file", optional: true, when: (a) => B(a) && !!readDesignSettings().images?.on, accept: "image/png,image/jpeg,image/webp", maxKB: 5120, ask: () => "Describe your main banner picture." },
   { id: "items", group: "business", label: "Services", type: "long", optional: true, when: (a) => B(a) && !doc(a, "services"), ask: () => "What are your main services or solutions? Write one on each line.", ph: () => "Repairs – quick fixes at your door\nAnnual service\nInstallation", help: () => "Name, then a dash and a short description (optional). Icons are chosen for you." },
   { id: "stats", group: "business", label: "Attributes", type: "long", optional: true, when: (a) => B(a) && !doc(a, "stats"), ask: () => "Which attributes would you like to show? One on each line.", ph: () => "120+ – Projects\n15 – Years\n98% – Clients return", help: () => "The number, a dash, then what it counts. Only true numbers." },
   { id: "work", group: "business", label: "Our work", type: "long", optional: true, when: (a) => B(a) && !doc(a, "work"), ask: (a) => `Which ${workWords(a).many} would you like to show?`, ph: () => "Name – a short line about it", help: (a) => `The ${workWords(a).one}, then what it is or what you did. Only things that are true.` },
@@ -628,14 +628,14 @@ export async function buildDesign(a: Answers, copy?: Copy | null, files?: Design
     if (!(story || cp.about_text || about || ds.mission || ds.vision)) put("about.body", "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. (Edit:story)");
     show(c, "about");
   }
-  { const lg = files?.logo || (/^https:\/\/image\.pollinations\.ai\//.test(a.logo || "") ? a.logo : ""); if (lg && kind !== "portfolio") put("brand.logo", { url: lg }); }
+  { const lg = files?.logo || ""; if (lg && kind !== "portfolio") put("brand.logo", { url: lg }); }
   if (kind === "restaurant" && files?.menu) { put("food.pdfUrl", "data:application/pdf;base64," + files.menu.b64); put("food.pdfLabel", "Download the menu (PDF)"); }
   if (theme) {
     const tt = tweakTheme(theme, a), lv = lookValues(kind, a.look, readDesignSettings());
     c.theme = { ...(c.theme || {}), ...tpl.themeValues(tt), ...lv };
     // Picture-side layouts and frames need a picture (otherwise that side stays empty): until they add one, a sample picture in the theme's colours stands in.
     const pal = { c1: tt.colors.c1, c2: tt.colors.c3 || tt.colors.c2, bg: tt.colors.surface }, subject = [a.btype, a.genre, a.ptype, a.about, a.name, kind === "store" ? "shop" : kind === "restaurant" ? "restaurant" : ""].filter(Boolean).join(" ");
-    const gen = readDesignSettings().images, pic = (w = 1280, h = 1024) => (gen?.on ? generatedPicture(subject, name || about, gen.style, w, h) : defaultPicture(subject, pal));
+    const pic = () => defaultPicture(subject, pal);
     if ((kind === "business" || kind === "restaurant") && !c.hero?.image?.url && !c.hero?.video) put("hero.image", { url: pic() });
     if (kind === "store") { if (!c.home?.hero?.image) put("home.hero.image", { url: pic() }); if (c.home?.banner?.show && !c.home?.banner?.image) put("home.banner.image", { url: defaultPicture(subject + " gift", { ...pal, c1: pal.c2, c2: pal.c1 }, "scene", 2.4) }); }
     if (kind === "portfolio" && !c.hero?.photo) put("hero.photo", { url: defaultPicture("", pal, "person", 1) });

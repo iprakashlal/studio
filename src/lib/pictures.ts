@@ -29,64 +29,37 @@ export function defaultPicture(subject: string, c: { c1: string; c2: string; bg:
 }
 
 const STYLE: Record<string, string> = { photo: "professional photograph, natural light, high quality", illustration: "clean modern illustration, vector style", "3d": "soft 3D render, pastel lighting", flat: "flat minimal graphic, simple shapes" };
-/** A picture from the free Pollinations generator (no key), asked for in words from what the person said. */
-export function generatedPicture(subject: string, name: string, style = "photo", w = 1280, h = 1024): string {
-  const what = subject.replace(/\s+/g, " ").trim().slice(0, 120) || "small business";
-  const prompt = `${what}, website hero image, ${STYLE[style] || STYLE.photo}, no text, no logo`;
-  let seed = 7; for (const ch of name) seed = (seed * 31 + ch.charCodeAt(0)) % 100000;
-  return `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=${w}&height=${h}&nologo=true&seed=${seed}`;
-}
 
-/** Logo ideas from the same free generator: `n` pictures for a name and what the business does (`round` asks for new ones). */
-export function logoIdeas(name: string, about: string, round = 0, n = 4): string[] {
-  const what = about.replace(/\s+/g, " ").trim().slice(0, 80);
-  return Array.from({ length: n }, (_, i) => {
-    const prompt = `minimal vector logo mark for ${name.trim().slice(0, 40) || "a small business"}${what ? ", " + what : ""}, simple flat icon, centered, plain white background, no text`;
-    return `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=512&height=512&nologo=true&seed=${round * 10 + i + 1}`;
-  });
-}
-
-/** Free generators the person can choose in Settings. Pollinations: no key, drawn from the web address. AI Horde: no key and no sign-up, run by volunteers' computers; anonymous requests simply wait longer in the queue. */
-export type ImageProvider = "pollinations" | "horde";
-export const PROVIDERS: { id: ImageProvider; name: string; note: string }[] = [
-  { id: "pollinations", name: "Pollinations", note: "Fast, no key. The service may slow down or ask to wait when it is busy." },
-  { id: "horde", name: "AI Horde (Stable Horde)", note: "No key, no sign-up, no daily quota. Run by volunteers, so a picture can take a minute or two in the queue." },
-];
+/** Pictures drawn from words by the free AI Horde (no key, no sign-up, no daily quota: volunteers' computers do the drawing, so anonymous
+ *  requests may wait in a queue). Small sizes and few steps keep it quick; the caller fits the result to the page. */
 const sleep = (ms: number, sig?: AbortSignal) => new Promise<void>((ok, no) => { const t = setTimeout(ok, ms); sig?.addEventListener("abort", () => { clearTimeout(t); no(new Error("Stopped.")); }); });
 const b64Blob = (b: string) => { const bin = atob(b), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return new Blob([u], { type: "image/webp" }); };
-
-/** Pictures drawn from the words `prompt`, as image files. `kind` "logo" asks for a plain icon, "photo" for a picture to put on a page. */
-export async function generateImages(prompt: string, o: { provider?: ImageProvider; style?: string; kind?: "logo" | "photo"; n?: number; w?: number; h?: number; signal?: AbortSignal; status?: (t: string) => void } = {}): Promise<Blob[]> {
+export async function generateImages(prompt: string, o: { style?: string; kind?: "logo" | "photo"; n?: number; signal?: AbortSignal; status?: (t: string) => void } = {}): Promise<Blob[]> {
   const kind = o.kind || "photo", n = Math.max(1, Math.min(4, o.n || 1)), what = prompt.replace(/\s+/g, " ").trim().slice(0, 300);
   if (!what) throw new Error("Describe the picture first.");
   const full = kind === "logo" ? `minimal vector logo mark, ${what}, simple flat icon, centered, plain white background, no text` : `${what}, ${STYLE[o.style || "photo"] || STYLE.photo}, no text, no logo`;
-  if ((o.provider || "pollinations") === "horde") {
-    const w = o.w || (kind === "logo" ? 512 : 576), h = o.h || (kind === "logo" ? 512 : 448), H = { "Content-Type": "application/json", apikey: "0000000000", "Client-Agent": "picaffectz-studio:1:web" };
-    o.status?.("Joining the queue…");
-    const r = await fetch("https://aihorde.net/api/v2/generate/async", { method: "POST", headers: H, signal: o.signal, body: JSON.stringify({ prompt: full, params: { width: Math.round(w / 64) * 64, height: Math.round(h / 64) * 64, steps: 25, n, cfg_scale: 7 }, nsfw: false, censor_nsfw: true, r2: false, slow_workers: true }) });
+  const w = kind === "logo" ? 384 : 512, h = kind === "logo" ? 384 : 384, H = { "Content-Type": "application/json", apikey: "0000000000", "Client-Agent": "picaffectz-studio:1:web" };
+  const send = async (slow: boolean) => {
+    const r = await fetch("https://aihorde.net/api/v2/generate/async", { method: "POST", headers: H, signal: o.signal, body: JSON.stringify({ prompt: full, params: { width: w, height: h, steps: 15, n, cfg_scale: 7, sampler_name: "k_euler_a" }, nsfw: false, censor_nsfw: true, r2: false, slow_workers: slow }) });
     const j: any = await r.json().catch(() => ({}));
     if (!r.ok || !j.id) throw new Error(j.message || "The free generator didn't accept the request. Please try again in a moment.");
-    const t0 = Date.now();
-    for (;;) {
-      await sleep(3500, o.signal);
-      if (Date.now() - t0 > 240_000) { fetch(`https://aihorde.net/api/v2/generate/status/${j.id}`, { method: "DELETE", headers: H }).catch(() => {}); throw new Error("The free generator is very busy right now. Please try again in a few minutes."); }
-      const c: any = await fetch(`https://aihorde.net/api/v2/generate/check/${j.id}`, { signal: o.signal }).then((x) => x.json()).catch(() => ({}));
-      if (c.faulted) throw new Error("The free generator couldn't draw that. Try other words.");
-      if (c.done) break;
-      o.status?.(c.queue_position ? `In the queue (place ${c.queue_position})… about ${Math.max(5, c.wait_time || 0)} s` : "Drawing…");
-    }
-    const st: any = await fetch(`https://aihorde.net/api/v2/generate/status/${j.id}`, { signal: o.signal }).then((x) => x.json());
-    const out = (st.generations || []).filter((g: any) => g && !g.censored && typeof g.img === "string" && g.img.length > 100).map((g: any) => b64Blob(g.img));
-    if (!out.length) throw new Error("Nothing came back (the picture may have been filtered). Try other words.");
-    return out;
+    return j.id as string;
+  };
+  o.status?.("Sending…");
+  // Quick workers first (usually a few seconds); if none picks it up soon, it is sent again to any worker.
+  let id = await send(false), t0 = Date.now(), slowSent = false;
+  const stop = (i: string) => fetch(`https://aihorde.net/api/v2/generate/status/${i}`, { method: "DELETE", headers: H }).catch(() => {});
+  for (;;) {
+    await sleep(1500, o.signal);
+    if (Date.now() - t0 > 200_000) { stop(id); throw new Error("The free generator is very busy right now. Please try again in a few minutes."); }
+    const c: any = await fetch(`https://aihorde.net/api/v2/generate/check/${id}`, { signal: o.signal }).then((x) => x.json()).catch(() => ({}));
+    if (c.faulted) throw new Error("The free generator couldn't draw that. Try other words.");
+    if (c.done) break;
+    if (!slowSent && !c.processing && Date.now() - t0 > 12_000) { slowSent = true; stop(id); id = await send(true); t0 = Date.now(); }
+    o.status?.(c.queue_position ? `In the queue (place ${c.queue_position})…` : "Drawing…");
   }
-  o.status?.("Drawing…");
-  const w = o.w || (kind === "logo" ? 512 : 1024), h = o.h || (kind === "logo" ? 512 : 768);
-  const got = await Promise.all(Array.from({ length: n }, async (_, i) => {
-    const res = await fetch(`https://image.pollinations.ai/prompt/${encodeURIComponent(full)}?width=${w}&height=${h}&nologo=true&seed=${Math.floor(Math.random() * 99999) + i}`, { signal: o.signal });
-    if (!res.ok) throw new Error("busy"); const b = await res.blob(); if (!/^image\//.test(b.type)) throw new Error("busy"); return b;
-  }).map((p) => p.catch(() => null)));
-  const ok = got.filter((x): x is Blob => !!x);
-  if (!ok.length) throw new Error("The free generator is busy or unreachable right now. Please try again in a moment, or choose the other generator.");
-  return ok;
+  const st: any = await fetch(`https://aihorde.net/api/v2/generate/status/${id}`, { signal: o.signal }).then((x) => x.json());
+  const out = (st.generations || []).filter((g: any) => g && !g.censored && typeof g.img === "string" && g.img.length > 100).map((g: any) => b64Blob(g.img));
+  if (!out.length) throw new Error("Nothing came back (the picture may have been filtered). Try other words.");
+  return out;
 }

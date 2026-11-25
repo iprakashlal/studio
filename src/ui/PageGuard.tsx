@@ -12,20 +12,22 @@ export function LoadVeil({ title, steps, done }: { title: string; steps: string[
 }
 
 const trap = (e: Event) => e.preventDefault();
-/** Is the browser's developer tools window open? A paused `debugger` takes long only while it is; the logged element's getter runs only while the console is open. */
+// How far the window's outer size is ahead of its page area when the tools are closed (toolbars and borders), and the zoom it was measured at.
+let base = { w: 0, h: 0, dpr: 0 };
+/** Are the developer tools open? A docked panel shrinks the page area; an open console reads the logged element's getter. */
 function devtoolsOpen(): boolean {
-  let hit = false;
-  try {
-    const t = performance.now(); new Function("debugger")(); if (performance.now() - t > 80) hit = true;
-    const el = new Image(); Object.defineProperty(el, "id", { get() { hit = true; return ""; } }); console.log(el);
-  } catch { /* not detectable here */ }
+  const dpr = window.devicePixelRatio || 1, w = outerWidth - innerWidth, h = outerHeight - innerHeight;
+  if (base.dpr !== dpr) base = { w, h, dpr };   // zooming changes the sizes: measure again
+  let hit = w - base.w > 160 || h - base.h > 160;
+  try { const el = new Image(); Object.defineProperty(el, "id", { get() { hit = true; return ""; } }); console.log(el); } catch { /* not detectable here */ }
   return hit;
 }
 
 /**
  * On the public Themes and Design yourself pages: the right-click menu and the shortcuts that open the developer tools are blocked,
- * and while the tools are open the page is hidden behind a "Restricted" notice. This discourages casual copying; it can't stop a
- * determined person (nothing running in a browser can), so nothing secret must ever be on these pages.
+ * and while the tools are open the page is hidden behind a "Restricted" notice and what the visitor typed is cleared; closing the tools
+ * reloads the page fresh. This discourages casual copying; it can't stop a determined person (nothing running in a browser can), so
+ * nothing secret must ever be on these pages.
  */
 export function DevtoolsGuard() {
   const [open, setOpen] = useState(false);
@@ -35,9 +37,16 @@ export function DevtoolsGuard() {
       if (e.key === "F12" || ((e.ctrlKey || e.metaKey) && e.shiftKey && ["i", "j", "c", "k"].includes(k)) || ((e.ctrlKey || e.metaKey) && ["u", "s"].includes(k)) || (e.metaKey && e.altKey && ["i", "j", "c", "u"].includes(k))) { e.preventDefault(); e.stopPropagation(); }
     };
     addEventListener("contextmenu", trap, true); addEventListener("keydown", key, true);
-    const check = () => setOpen(devtoolsOpen());
-    check(); const t = setInterval(check, 1000);
-    return () => { removeEventListener("contextmenu", trap, true); removeEventListener("keydown", key, true); clearInterval(t); };
+    // Opened: hide the page and forget the draft. Closed again: start the page over.
+    let was = false;
+    const check = () => {
+      const now = devtoolsOpen();
+      if (now && !was) { try { sessionStorage.removeItem("site-studio:design-draft"); } catch { /* private mode */ } }
+      if (!now && was) { try { sessionStorage.removeItem("site-studio:design-draft"); } catch { /* private mode */ } location.reload(); return; }
+      was = now; setOpen(now);
+    };
+    check(); const t = setInterval(check, 700); addEventListener("resize", check);
+    return () => { removeEventListener("resize", check); removeEventListener("contextmenu", trap, true); removeEventListener("keydown", key, true); clearInterval(t); };
   }, []);
   // The page itself goes blank while the tools are open.
   useEffect(() => {

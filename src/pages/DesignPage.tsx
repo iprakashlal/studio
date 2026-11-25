@@ -383,7 +383,16 @@ function AnswersReview({ rows, a, jump, open, onOpen, onRewind, onSave }: { rows
 }
 
 /** The preview, over the whole screen. */
+/** The answers whose words show on the page, so hovering them can offer a pencil that opens the answer. */
+const answerHints = (a: Answers): { id: string; text: string }[] => {
+  const out: { id: string; text: string }[] = [];
+  for (const id of ["name", "about", "city", "phone", "email", "address", "hours", "social"]) if ((a[id] || "").trim()) out.push({ id, text: a[id].trim() });
+  if ((a.story || "").trim()) out.push({ id: "story", text: a.story.trim().slice(0, 90) });
+  for (const id of ["items", "usp", "work"]) for (const l of (a[id] || "").split("\n")) { const t = l.split(/\s*(?::|\s[-–—]\s)/)[0].trim(); if (t.length >= 3) out.push({ id, text: t }); }
+  return out;
+};
 export function PreviewPopup({ design, ver, a, onClose, onEdit, onEditLink, onConnect, done, onTweak }: { design: Design; ver: number; a: Answers; onClose: () => void; onEdit?: () => void; onEditLink?: (id: string) => void; onConnect?: () => void; done: boolean; onTweak?: (p: Answers) => void }) {
+  const hints = useMemo(() => answerHints(a), [a]);
   const [play, setPlay] = useState(false);
   useEffect(() => {
     const k = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
@@ -402,7 +411,7 @@ export function PreviewPopup({ design, ver, a, onClose, onEdit, onEditLink, onCo
         </span>
       </div>
       <div className="relative flex min-h-0 flex-1">
-        <div className="relative flex min-h-0 min-w-0 flex-1 flex-col"><Preview key={design.kind} tpl={TEMPLATES[design.kind]} base={`templates/${design.kind}/`} content={design.content} version={ver} assets={{}} editable={false} hidePages onEditLink={onEditLink} />
+        <div className="relative flex min-h-0 min-w-0 flex-1 flex-col"><Preview key={design.kind} tpl={TEMPLATES[design.kind]} base={`templates/${design.kind}/`} content={design.content} version={ver} assets={{}} editable={false} hidePages onEditLink={onEditLink} hints={hints} />
           {onConnect && <button type="button" onClick={onConnect} className="btn btn-pri absolute bottom-5 left-1/2 z-[5] -translate-x-1/2 whitespace-nowrap rounded-full px-6 shadow-xl shadow-black/40">Connect with Picaffectz</button>}
         </div>
         {play && onTweak && <Tweaks a={a} design={design} onTweak={onTweak} onClose={() => setPlay(false)} />}

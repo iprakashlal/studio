@@ -56,7 +56,7 @@ export function tweakTheme(t: Theme, a: Answers): Theme {
 /** Whether a question may be skipped. */
 export const isOptional = (s: Step, a: Answers) => (typeof s.optional === "function" ? s.optional(a) : !!s.optional);
 /** A short name for each question (for the answers shown above the current question). */
-export const STEP_LABEL: Record<string, string> = { kind: "Type", doc: "Starting point", name: "Name", about: "About", city: "City", logo: "Logo", style: "Feel", colour: "Colour", pages: "Pages", story: "Story", items: "Offerings", usp: "Highlights", goal: "Goal", menu: "Menu", hours: "Hours", address: "Address", social: "Social", phone: "Phone", email: "Email" };
+export const STEP_LABEL: Record<string, string> = { kind: "Type", doc: "Starting point", name: "Name", about: "About", city: "City", logo: "Logo", style: "Feel", colour: "Colour", pages: "Pages", story: "Story", items: "Offerings", usp: "Highlights", work: "Case studies", goal: "Goal", menu: "Menu", hours: "Hours", address: "Address", social: "Social", phone: "Phone", email: "Email" };
 
 export const KIND_OPTIONS: Opt[] = [
   { v: "portfolio", label: "A website about me", hint: "Show my work, skills and story. Good for designers, developers, photographers, creators." },
@@ -126,6 +126,11 @@ export const STEPS: Step[] = [
     optional: (a) => k(a) !== "store",
   },
   { id: "usp", type: "long", optional: true, ask: () => "What makes you different from others? Write one thing on each line.", ph: () => "Same-day delivery\nFamily recipes\nFree first consultation", help: () => "Only things that are true. They appear as highlights on your site." },
+  {
+    id: "work", type: "long", optional: true, when: (a) => k(a) === "business",
+    ask: () => "Any client projects or work you have delivered? Write one on each line.", ph: () => "Booking app for a gym chain: built in 6 weeks\nNew website for a dental clinic",
+    help: () => "Write the project, then a dash and what you did. They appear as case studies. Only things that are true.",
+  },
   {
     id: "goal", type: "many",
     ask: (a) => by(a, { portfolio: "What should visitors do on your website?", store: "How will customers pay you?", business: "How should customers reach you?", restaurant: "What should guests be able to do?" }),
@@ -317,11 +322,12 @@ export async function buildDesign(a: Answers, copy?: Copy | null, files?: Design
   const kind = a.kind as Kind, tpl = TEMPLATES[kind], c: any = clone(await starter(kind)); tpl.prepare?.(c); c.festival = { ...(c.festival || {}), on: false }; // the festival overlay would hide the first screen of a preview
   const name = (a.name || "").trim(), about = cap((a.about || "").trim()), city = (a.city || "").trim(), g = goals(a), items = lines(a.items), usp = lines(a.usp), story = (a.story || "").trim();
   const phone = (a.phone || "").trim(), email = (a.email || "").trim(), address = (a.address || "").trim(), hours = (a.hours || "").trim(), social = urlOf(a.social || "");
+  const base0 = { service: clone(c.services?.items?.[0] || {}), work: clone(c.work?.items?.[0] || {}) };
   const theme = pickTheme(a), cp: Copy = copy || {}, noteOf = (n: string) => cp.items?.find((x) => x.name.toLowerCase() === n.toLowerCase())?.text || "";
   if (name) rebrand(c, "Picaffectz", name);
   const put = (path: string, v: any) => { const ks = path.split("."); let o = c; for (const x of ks.slice(0, -1)) { if (!o[x] || typeof o[x] !== "object") o[x] = {}; o = o[x]; } o[ks[ks.length - 1]] = v; };
   const seo = () => { if (name) put("seo.title", about ? `${name} · ${about}` : name); if (about) put("seo.description", `${about}${city ? " in " + city : ""}.`); };
-  const aboutText = cp.about_text || story;
+  const aboutText = story || cp.about_text;
 
   if (kind === "portfolio") {
     if (name) { const p = name.split(/\s+/); put("hero.firstName", p[0]); put("hero.lastName", p.slice(1).join(" ")); put("brand.logoText", name); put("contact.footerLeft", `© ${new Date().getFullYear()} ${name}`); }
@@ -389,8 +395,8 @@ export async function buildDesign(a: Answers, copy?: Copy | null, files?: Design
   if (kind === "restaurant") put("about.title", "Our story");
   if (kind === "store") { put("footer.text", about ? `${name}. ${about}.` : name); put("home.featuredText", ""); put("home.banner.title", usp[0] || ""); for (const x of c.products || []) x.badge = ""; }
   if (kind === "portfolio") { hideIf(!items.length, "skills"); hideIf(!(email || phone || social || address), "contact"); hideIf(!(story || cp.about_text || about), "about"); }
-  if (kind === "business") { hideIf(!items.length, "services"); hideIf(!(story || cp.about_text), "about"); hideIf(!(phone || email || address || city || hours), "contact"); }
-  if (kind === "restaurant") { hideIf(!items.length, "specials"); hideIf(!(story || cp.about_text), "about"); hideIf(!(phone || email || address || city || hours), "contact"); }
+  if (kind === "business") { hideIf(!(phone || email || address || city || hours), "contact"); }
+  if (kind === "restaurant") { hideIf(!items.length, "specials"); hideIf(!(phone || email || address || city || hours), "contact"); }
 
   // What only some types and answers add (after the starter's made-up parts are cleared).
   if (kind === "business" || kind === "restaurant") {
@@ -401,7 +407,23 @@ export async function buildDesign(a: Answers, copy?: Copy | null, files?: Design
   }
   if (kind === "business" && hours) put("contact.hours", hours);
   if (kind === "restaurant" && hours) { put("hours.note", hours); put("hours.days", []); put("hours.showStatus", false); }
-  applySections(kind, c, unpackSections(a.docsec), (...ids) => show(c, ...ids));
+  const ds = unpackSections(a.docsec); if (a.work?.trim()) delete ds.work;
+  // Case studies: the work they said they delivered, each "project – what you did".
+  const workLines = lines(a.work);
+  if (kind === "business" && workLines.length) {
+    c.work.items = workLines.slice(0, 6).map((l) => { const m = /^(.{2,70}?)\s*(?::|\s[-–—]\s)\s*(.{3,})$/.exec(l), title = (m ? m[1] : l).trim(), sum = (m ? m[2] : "").trim(); return { ...base0.work, title, client: "", sector: "", summary: sum || `${name || "We"} delivered ${title.charAt(0).toLowerCase() + title.slice(1)}.`, result: "", image: null, url: "" }; });
+    c.work.lede = ""; show(c, "work");
+  }
+  applySections(kind, c, ds, (...ids) => show(c, ...ids));
+  // The sections a person gave nothing for yet show a short note with an (Edit) link that goes to the answer.
+  if (kind === "business") {
+    if (!(items.length || ds.services?.length)) { c.services.items = [{ ...base0.service, title: "Your services", body: "Tell us what you offer and we will write about each one. (Edit:items)", points: [] }]; c.services.lede = ""; show(c, "services"); }
+    if (!(workLines.length || ds.work?.length)) { c.work.items = [{ ...base0.work, title: "Your case studies", client: "", sector: "", summary: "Tell us about projects or work you have delivered. (Edit:work)", result: "", image: null, url: "" }]; c.work.lede = ""; show(c, "work"); }
+  }
+  if (kind === "business" || kind === "restaurant") {
+    if (!(story || cp.about_text || about || ds.mission || ds.vision)) put("about.body", "Tell us about yourself and we will write this part. (Edit:story)");
+    show(c, "about");
+  }
   if (files?.logo && kind !== "portfolio") put("brand.logo", { url: files.logo });
   if (kind === "restaurant" && files?.menu) { put("food.pdfUrl", "data:application/pdf;base64," + files.menu.b64); put("food.pdfLabel", "Download the menu (PDF)"); }
   if (theme) {
@@ -451,6 +473,15 @@ const show = (c: any, ...ids: string[]) => { for (const x of c.sections || []) i
 export const topicsOf = (a: Answers) => lines(a.items).map((l) => priced(l).name);
 
 /** Written text from the Picaffectz system, on this device: no AI service. It uses only what the person said. */
+/** A short line for each offering from the owner's own words: the offering, then one of their highlights, else the opening of their story, else their About line. */
+function topicLine(n: string, i: number, a: Answers, name: string, tail: string): string {
+  const usp = lines(a.usp), first = ((a.story || "").trim().split(/(?<=[.!?])\s+/)[0] || "").trim(), about = cap((a.about || "").trim());
+  const end = (x: string) => (/[.!?]$/.test(x.trim()) ? x.trim() : x.trim() + ".");
+  const tie = usp.length ? usp[i % usp.length] : first && first.length <= 110 ? first : "";
+  if (tie) return `${end(n + (name && name !== "We" ? " by " + name : ""))} ${end(tie)}`.slice(0, 220);
+  if (about) return `${n} from ${name !== "We" ? name : "us"}, ${about.charAt(0).toLowerCase() + about.slice(1)}${a.city ? " in " + a.city : ""}.`.slice(0, 220);
+  return `${n}, ${tail}`;
+}
 export function systemCopy(a: Answers): Copy {
   const kind = k(a), name = (a.name || "").trim() || "We", notes = [a.about, a.city ? "in " + a.city : "", a.story, (a.doctext || "").slice(0, 1200)].filter(Boolean).join(". ");
   let b: any = {};
@@ -458,8 +489,8 @@ export function systemCopy(a: Answers): Copy {
   const tail: Record<Kind, string> = { portfolio: "done with care and attention to detail.", store: "chosen and made with care.", business: "done properly and explained clearly.", restaurant: "made fresh and served warm." };
   const out: Copy = {
     ...(b.brand_tagline ? { tagline: b.brand_tagline } : {}), ...(b.hero_text ? { hero_text: b.hero_text } : {}), ...(b.cta_text ? { cta_text: b.cta_text } : {}),
-    about_text: [(a.story || "").trim(), b.about_text].filter(Boolean).join("\n\n").slice(0, 900) || undefined,
-    items: topicsOf(a).map((n) => ({ name: n, text: `${n}, ${tail[kind]}` })),
+    about_text: ((a.story || "").trim() || b.about_text || "").slice(0, 900) || undefined,
+    items: topicsOf(a).map((n, i) => ({ name: n, text: topicLine(n, i, a, name, tail[kind]) })),
     ...(Array.isArray(b.faq) && b.faq.length ? { faq: b.faq.slice(0, 4).map((x: any) => ({ q: String(x.q), a: String(x.a) })) } : {}),
   };
   if (kind === "portfolio") delete out.faq;
@@ -484,7 +515,7 @@ export function requestText(a: Answers, d: Design | null, link = ""): string {
   return [
     "Hi Picaffectz, I designed a website preview and would like to take it forward.", "",
     row("Type", kindName), row("Name", a.name || ""), row("What I do", a.about || ""), row("City", a.city || ""),
-    row("Feel", say("style")), row("Colour", say("colour")), row("Includes", (a.items || "").split("\n").filter(Boolean).join(", ")), row("Visitors can", say("goal")),
+    row("Feel", say("style")), row("Colour", say("colour")), row("Includes", (a.items || "").split("\n").filter(Boolean).join(", ")), row("Work delivered", (a.work || "").split("\n").filter(Boolean).join(" · ")), row("Visitors can", say("goal")),
     row("Phone", a.phone || ""), row("Email", a.email || ""), row("Document", a.doc || ""), row("Document link", a.doclink || ""), row("Chosen look", [a.theme, a.accent, a.mode].filter(Boolean).join(" · ")), d ? row("Design", `${d.themeName} (${d.themeId})`) : "", link ? "Preview: " + link : "",
   ].filter((x, i, all) => x || (i > 0 && all[i - 1])).join("\n");
 }

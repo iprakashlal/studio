@@ -180,3 +180,9 @@
 .sp { color: var(--text); }
 .sp-body, .sp-body p, .sp-body li, .sp-body td, .sp-body th, .sp-body h2, .sp-body h3, .sp-head h1 { color: var(--text); }
 .sp-sub, .sp-date, .sp-crumbs { color: var(--soft); }
+
+/* "Play with your design": a soft, slowly shifting mix of colours behind the button. */
+@keyframes play-mix { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
+.play-btn { color: #fff; border-color: transparent; background-image: linear-gradient(110deg, #ff5fa2, #ff9a3c, #ffd23f, #3ddc97, #35b6ff, #8b5cf6, #ff5fa2); background-size: 300% 300%; animation: play-mix 7s ease-in-out infinite; text-shadow: 0 1px 2px rgb(0 0 0 / .35); }
+.play-btn:hover { filter: brightness(1.08); }
+@media (prefers-reduced-motion: reduce) { .play-btn { animation: none; } }

@@ -265,7 +265,7 @@ export function DesignPage({ studio, index, onIndex }: { studio?: Studio; index?
 
   const field$ = cur && (cur.type === "text" || cur.type === "long" || cur.id === "kind" || cur.id === "doc");
   const bar = (
-    <form className="mx-auto flex w-full max-w-2xl flex-col gap-2" onSubmit={(e) => { e.preventDefault(); submit(); }} aria-label="Your answer">
+    <form className="mx-auto flex w-full max-w-5xl flex-col gap-2" onSubmit={(e) => { e.preventDefault(); submit(); }} aria-label="Your answer">
       <div className={`flex flex-wrap items-end gap-2 rounded-3xl border bg-ink-900 p-2 pl-4 shadow-xl transition focus-within:border-brand-400 ${field$ || cur?.type === "file" ? "border-ink-600" : "border-ink-700 opacity-80"}`}>
         {cur?.type === "long"
           ? <textarea ref={field} aria-label={cur.ask(a)} rows={3} className="min-h-[3.5rem] min-w-0 flex-1 basis-[12rem] resize-none bg-transparent py-2 text-[15px] text-ink-100 outline-none placeholder:text-ink-500" placeholder={cur.ph?.(a)} value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); submit(); } }} />
@@ -376,8 +376,8 @@ export function DesignPage({ studio, index, onIndex }: { studio?: Studio; index?
         <div className="absolute inset-x-0 bottom-0 h-0.5 bg-ink-900" role="progressbar" aria-label="Progress" aria-valuemin={0} aria-valuemax={total} aria-valuenow={answered.length}><div className="h-full bg-brand-500 transition-all duration-500" style={{ width: `${chatStarted ? Math.round((answered.length / total) * 100) : 0}%` }} /></div>
       </header>
 
-      <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-3 pb-4 sm:px-6">
-        <div role="log" aria-label="Conversation" className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-8 pb-8 pt-8">
+      <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col px-3 pb-4 sm:px-6">
+        <div role="log" aria-label="Conversation" className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-8 pb-8 pt-8">
           <ChatBot><p className="m-0 text-[15px] leading-relaxed"><b>Welcome 👋</b> I'm the {brand.name} design assistant. Answer a few quick questions and your website takes shape as we go. It's only a preview.</p></ChatBot>
           {needMail && mailChat.thread}
           {!needMail && !chatStarted && cur && <ChatBot stack><section aria-live="polite"><h2 className="m-0 text-[15px] font-semibold leading-snug">{cur.ask(a)}</h2>{cur.help && cur.help(a) && <p className="mb-0 mt-1 text-[13px] leading-relaxed text-ink-400">{cur.help(a)}</p>}</section></ChatBot>}
@@ -409,12 +409,12 @@ export function DesignPage({ studio, index, onIndex }: { studio?: Studio; index?
         </div>
         {!needMail && cur && (
           <div className="sticky bottom-0 -mx-3 border-t border-ink-800 bg-ink-950/95 px-3 pb-4 pt-4 backdrop-blur sm:-mx-6 sm:px-6">
-            <div className="mx-auto flex max-h-[62vh] max-w-2xl flex-col gap-4 overflow-y-auto px-0.5 py-0.5">
+            <div className="mx-auto flex max-h-[62vh] max-w-5xl flex-col gap-4 overflow-y-auto px-0.5 py-0.5">
               {!chatStarted ? <>{chips(cur)}<div className="flex items-center gap-3 text-[11px] uppercase tracking-wide text-ink-500"><span className="h-px flex-1 bg-ink-800" />or type your own<span className="h-px flex-1 bg-ink-800" /></div>{bar}</> : <>{(cur.type === "choice" || cur.type === "many") && chips(cur)}{cardBar}</>}
             </div>
           </div>
         )}
-        {needMail && <div className="sticky bottom-0 -mx-3 border-t border-ink-800 bg-ink-950/95 px-3 pb-4 pt-4 backdrop-blur sm:-mx-6 sm:px-6"><div className="mx-auto max-w-2xl">{mailChat.composer}</div></div>}
+        {needMail && <div className="sticky bottom-0 -mx-3 border-t border-ink-800 bg-ink-950/95 px-3 pb-4 pt-4 backdrop-blur sm:-mx-6 sm:px-6"><div className="mx-auto max-w-5xl">{mailChat.composer}</div></div>}
       </main>
       <StudioPageLinksHere where="design" />
 
@@ -766,7 +766,7 @@ function ChatBot({ children, typing, stack }: { children: React.ReactNode; typin
   return (
     <div className="chat-in flex items-end gap-2.5">
       {stack ? <span className="w-8 flex-none" aria-hidden /> : <span className="grid h-8 w-8 flex-none place-items-center overflow-hidden rounded-full border border-ink-700 bg-ink-900" aria-hidden><BrandMark fallback={<Logo />} size={22} /></span>}
-      <div style={st} className={`max-w-[88%] rounded-2xl rounded-bl-md border border-ink-800 bg-ink-900 px-5 py-3.5 text-ink-100 shadow-sm ${bot ? "[&_p]:text-[inherit]" : ""}`}>
+      <div style={st} className={`max-w-[80%] rounded-2xl rounded-bl-md border border-ink-800 bg-ink-900 px-5 py-3.5 text-ink-100 shadow-sm ${bot ? "[&_p]:text-[inherit]" : ""}`}>
         {typing && <span className="mr-2 inline-flex items-center gap-1 align-middle" aria-hidden><i className="chat-dot" /><i className="chat-dot" /><i className="chat-dot" /></span>}
         {children}
       </div>
@@ -778,7 +778,7 @@ function ChatYou({ children, onEdit, label }: { children: React.ReactNode; onEdi
   const you = readDesignSettings().chat?.you, st = you ? { background: you, color: onColour(you) } : undefined;
   return (
     <div className="chat-in group flex justify-end">
-      <div className="flex max-w-[82%] items-end gap-2">
+      <div className="flex max-w-[75%] items-end gap-2">
         {onEdit && <button type="button" className="mb-1 rounded px-1.5 text-[11px] text-ink-500 opacity-0 transition hover:text-ink-200 focus:opacity-100 group-hover:opacity-100 max-sm:opacity-100" onClick={onEdit} aria-label={`Change your answer: ${label || ""}`}>Edit</button>}
         <div style={st} className="break-words rounded-2xl rounded-br-md bg-brand-500 px-5 py-3 text-[14.5px] font-semibold leading-snug text-white shadow-sm">{children}</div>
       </div>

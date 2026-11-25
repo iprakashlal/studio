@@ -17,7 +17,15 @@ export type SyncedPrefs = {
   clickToEdit?: boolean;
   /** The "Design yourself" page: on or off, and where requests are sent. */
   design?: import("./designs").DesignSettings;
+  /** Own links in the Studio's header (name + address), after the standard ones. */
+  links?: { label: string; url: string }[];
 };
+
+/** Header links: a name (24 letters) and an address that is a web address (https://…), a mail link, or a page of this Studio (#/…). */
+export const navLinkOk = (u: string) => /^(https:\/\/[^\s<>"']{3,300}|mailto:[^\s<>"']{3,200}|#\/[A-Za-z0-9\-_/?=&.%]{0,200})$/.test(u);
+export function cleanNavLinks(l: any[]): { label: string; url: string }[] {
+  return l.filter((x) => x && typeof x.label === "string" && typeof x.url === "string").map((x) => ({ label: x.label.replace(/[<>]/g, "").trim().slice(0, 24), url: x.url.trim() })).filter((x) => x.label && navLinkOk(x.url)).slice(0, 5);
+}
 
 /** Only the choices this file knows about, in their right shapes (what is kept when the Studio's data is read). */
 export function cleanPrefs(p: any): SyncedPrefs {
@@ -28,6 +36,7 @@ export function cleanPrefs(p: any): SyncedPrefs {
   if (typeof p.tour === "boolean") o.tour = p.tour;
   if (Array.isArray(p.payHidden)) o.payHidden = p.payHidden.filter((x: any) => typeof x === "string").slice(-300);
   if (typeof p.clickToEdit === "boolean") o.clickToEdit = p.clickToEdit;
+  if (Array.isArray(p.links)) { const l = cleanNavLinks(p.links); if (l.length) o.links = l; }
   if (p.design && typeof p.design === "object") { const d = cleanDesignSettings(p.design); if (Object.keys(d).length) o.design = d; }
   return o;
 }

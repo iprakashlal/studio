@@ -44,6 +44,8 @@ export type DesignSettings = {
   carousel?: Partial<Record<Kind, "answers" | "custom">>;
   /** Visitors can describe a logo or banner and the free AI Horde draws it (style is added to the words). */
   images?: { on?: boolean; style?: "photo" | "illustration" | "3d" | "flat" };
+  /** How the Design yourself chat looks: bubble colours, page colour, and a background picture (dimmed by `dim` %). */
+  chat?: { you?: string; bot?: string; page?: string; image?: string; dim?: number };
   /** false: the site editor has no "Draw with AI" button (on unless turned off). */
   adminAi?: boolean;
   /** The questions Design yourself asks: per group ("basics" or a type), per question: hidden (h), own wording (t), own help line (p). */

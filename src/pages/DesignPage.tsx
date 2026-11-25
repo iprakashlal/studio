@@ -343,6 +343,8 @@ export function DesignPage({ studio, index, onIndex }: { studio?: Studio; index?
     );
   };
 
+  const ch = readDesignSettings().chat, chatBg: React.CSSProperties | undefined = ch && (ch.page || ch.image)
+    ? { ...(ch.page ? { backgroundColor: ch.page } : {}), ...(ch.image ? { backgroundImage: `${ch.dim ? `linear-gradient(rgba(0,0,0,${ch.dim / 100}),rgba(0,0,0,${ch.dim / 100})),` : ""}url(${JSON.stringify(ch.image)})`, backgroundSize: "cover", backgroundPosition: "center", backgroundAttachment: "fixed" } : {}) } : undefined;
   const ready = finished && !!copy && !writing;
   const wasReady = useRef(false);
   useEffect(() => { if (ready && !wasReady.current) { wasReady.current = true; setReviewOpen(true); } if (!finished) wasReady.current = false; }, [ready, finished]);
@@ -358,10 +360,9 @@ export function DesignPage({ studio, index, onIndex }: { studio?: Studio; index?
   );
 
   return (
-    <div className="flex min-h-screen flex-col bg-ink-950 text-ink-100">
+    <div className="flex min-h-screen flex-col bg-ink-950 text-ink-100" style={chatBg}>
       <DevtoolsGuard /><LoadVeil title="Loading Design yourself" steps={["Loading the designer", "Reading the Studio's settings"]} done={(fontsOk ? 1 : 0) + (hostDone ? 1 : 0)} />
       <header className="mx-auto flex w-full max-w-5xl items-center gap-2 px-4 py-3 sm:px-6">
-        <a href="#/themes" className="btn btn-ghost btn-sm shrink-0">← Themes</a>
         {/* The Studio's name is a link only for someone signed in: it goes to their projects. */}
         {studio
           ? <a href="#/" className="flex min-w-0 items-center gap-2 font-extrabold"><BrandMark fallback={<Logo />} /><span className="truncate max-sm:hidden">{brand.name}</span></a>
@@ -795,11 +796,14 @@ function useEmailChat(host: DesignHost | null, onPass: (p: Pass) => void): { thr
 }
 
 /** A message from the designer assistant (left), with the brand's mark as its avatar. `typing` adds animated dots. */
+/** Readable text on a colour: dark on light colours, white on dark ones. */
+const onColour = (hex: string) => { const n = parseInt(hex.slice(1), 16), l = (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255; return l > 0.6 ? "#111111" : "#ffffff"; };
 function ChatBot({ children, typing }: { children: React.ReactNode; typing?: boolean }) {
+  const bot = readDesignSettings().chat?.bot, st = bot ? { background: bot, color: onColour(bot), borderColor: "transparent" } : undefined;
   return (
     <div className="chat-in flex items-end gap-2.5">
       <span className="grid h-8 w-8 flex-none place-items-center overflow-hidden rounded-full border border-ink-700 bg-ink-900" aria-hidden><BrandMark fallback={<Logo />} size={22} /></span>
-      <div className="max-w-[88%] rounded-2xl rounded-bl-md border border-ink-800 bg-ink-900 px-4 py-3 text-ink-100 shadow-sm">
+      <div style={st} className={`max-w-[88%] rounded-2xl rounded-bl-md border border-ink-800 bg-ink-900 px-4 py-3 text-ink-100 shadow-sm ${bot ? "[&_p]:text-[inherit]" : ""}`}>
         {typing && <span className="mr-2 inline-flex items-center gap-1 align-middle" aria-hidden><i className="chat-dot" /><i className="chat-dot" /><i className="chat-dot" /></span>}
         {children}
       </div>
@@ -808,11 +812,12 @@ function ChatBot({ children, typing }: { children: React.ReactNode; typing?: boo
 }
 /** The person's answer (right). An answer can be changed from here. */
 function ChatYou({ children, onEdit, label }: { children: React.ReactNode; onEdit?: () => void; label?: string }) {
+  const you = readDesignSettings().chat?.you, st = you ? { background: you, color: onColour(you) } : undefined;
   return (
     <div className="chat-in group flex justify-end">
       <div className="flex max-w-[82%] items-end gap-2">
         {onEdit && <button type="button" className="mb-1 rounded px-1.5 text-[11px] text-ink-500 opacity-0 transition hover:text-ink-200 focus:opacity-100 group-hover:opacity-100 max-sm:opacity-100" onClick={onEdit} aria-label={`Change your answer: ${label || ""}`}>Edit</button>}
-        <div className="break-words rounded-2xl rounded-br-md bg-brand-500 px-4 py-2.5 text-[14.5px] font-semibold leading-snug text-white shadow-sm">{children}</div>
+        <div style={st} className="break-words rounded-2xl rounded-br-md bg-brand-500 px-4 py-2.5 text-[14.5px] font-semibold leading-snug text-white shadow-sm">{children}</div>
       </div>
     </div>
   );

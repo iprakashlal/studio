@@ -57,7 +57,7 @@ export function tweakTheme(t: Theme, a: Answers): Theme {
 /** Whether a question may be skipped. */
 export const isOptional = (s: Step, a: Answers) => (typeof s.optional === "function" ? s.optional(a) : !!s.optional);
 /** A short name for each question (for the answers shown above the current question). */
-export const STEP_LABEL: Record<string, string> = { kind: "Type", doc: "Starting point", name: "Name", about: "About", city: "City", logo: "Logo", style: "Feel", colour: "Colour", pages: "Pages", story: "Story", items: "Offerings", usp: "Highlights", work: "Case studies", goal: "Goal", menu: "Menu", hours: "Hours", address: "Address", social: "Social", phone: "Phone", email: "Email" };
+export const STEP_LABEL: Record<string, string> = { kind: "Type", doc: "Starting point", name: "Name", btype: "Business type", about: "About", city: "City", logo: "Logo", style: "Feel", colour: "Colour", pages: "Pages", story: "Story", items: "Offerings", usp: "Highlights", work: "Case studies", goal: "Goal", menu: "Menu", hours: "Hours", address: "Address", social: "Social", phone: "Phone", email: "Email" };
 
 export const KIND_OPTIONS: Opt[] = [
   { v: "portfolio", label: "A website about me", hint: "Show my work, skills and story. Good for designers, developers, photographers, creators." },
@@ -92,6 +92,12 @@ export const STEPS: Step[] = [
     id: "name", type: "text",
     ask: (a) => by(a, { portfolio: "What's your name?", store: "What is your shop called?", business: "What is your business called?", restaurant: "What is your restaurant or café called?" }),
     ph: (a) => by(a, { portfolio: "e.g. Asha Verma", store: "e.g. Kala Ghar", business: "e.g. Verma & Co", restaurant: "e.g. The Tiffin Box" }),
+  },
+  {
+    id: "btype", type: "choice", when: (a) => k(a) === "business",
+    ask: () => "What type of business is it?",
+    options: () => [...BIZ_TYPES.map((t) => ({ v: t, label: t.replace(/([a-z])([A-Z])/g, "$1 $2") })), { v: "Other", label: "Something else" }],
+    help: () => "Pick the closest one. We use it to choose a design made for that kind of business.",
   },
   {
     id: "about", type: "text",
@@ -162,6 +168,7 @@ export function sayAnswer(s: Step, a: Answers): string {
   if (s.type === "file") return s.id === "logo" ? "Logo added" : s.id === "doc" ? (a.doclink ? `Link: ${v}` : `PDF: ${v}`) : `Menu added: ${v}`;
   if (s.id === "pages") return v === "multi" ? "Separate pages" : "One page";
   if (s.id === "kind") return KIND_OPTIONS.find((o) => o.v === v)?.label || v;
+  if (s.id === "btype") return s.options!(a).find((o) => o.v === v)?.label || v;
   if (s.type === "choice") return [...STYLE_OPTIONS, ...COLOUR_OPTIONS].find((o) => o.v === v)?.label || v;
   if (s.type === "many") return v.split(",").map((x) => (s.options?.(a) || []).find((o) => o.v === x)?.label || x).join(", ");
   if (s.type === "long") return v.split("\n").filter(Boolean).join(" · ") + src;
@@ -244,7 +251,7 @@ export function pickTheme(a: Answers): Theme | null {
   const chosen = a.theme && poolOf(kind).find((t) => t.id === a.theme); if (chosen) return chosen;
   const st = STYLE_TAGS[a.style || "clean"] || STYLE_TAGS.clean, col = a.colour || "any";
   // A business says what it does ("dental clinic", "wedding planner"): the themes made for that kind of business come first.
-  const say = `${a.about || ""} ${a.name || ""}`.toLowerCase(), mine = kind === "business" ? BIZ_TYPES.filter((ty) => say && new RegExp(BIZ_TYPE_WORDS[ty] || "(?!)", "i").test(say)) : [];
+  const say = `${a.about || ""} ${a.name || ""}`.toLowerCase(), picked = kind === "business" && a.btype && BIZ_TYPES.includes(a.btype) ? [a.btype] : [], mine = kind === "business" ? picked.length ? picked : BIZ_TYPES.filter((ty) => say && new RegExp(BIZ_TYPE_WORDS[ty] || "(?!)", "i").test(say)) : [];
   const scored = pool.map((t) => {
     let s = st.want.reduce((n, tag, i) => n + (t.tags.includes(tag) ? 6 - Math.min(i, 4) : 0), 0);
     if (st.dark && t.dark) s += 8; if (st.dark && !t.dark) s -= 8; if (st.light && !t.dark) s += 4;

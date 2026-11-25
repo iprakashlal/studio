@@ -362,19 +362,19 @@ export function DesignPage({ studio, index, onIndex }: { studio?: Studio; index?
   return (
     <div className="flex min-h-screen flex-col bg-ink-950 text-ink-100" style={chatBg}>
       <DevtoolsGuard /><LoadVeil title="Loading Design yourself" steps={["Loading the designer", "Reading the Studio's settings"]} done={(fontsOk ? 1 : 0) + (hostDone ? 1 : 0)} />
-      <header className="mx-auto flex w-full max-w-5xl items-center gap-2 px-4 py-3 sm:px-6">
-        <a href="#/themes" className="btn btn-ghost btn-sm shrink-0">← Themes</a>
+      <header className="sticky top-0 z-20 flex w-full items-center gap-3 border-b border-ink-800 bg-ink-950/90 px-4 py-3 backdrop-blur sm:px-6">
         {/* The Studio's name is a link only for someone signed in: it goes to their projects. */}
         {studio
           ? <a href="#/" className="flex min-w-0 items-center gap-2 font-extrabold"><BrandMark fallback={<Logo />} /><span className="truncate max-sm:hidden">{brand.name}</span></a>
           : <span className="flex min-w-0 items-center gap-2 font-extrabold"><BrandMark fallback={<Logo />} /><span className="truncate max-sm:hidden">{brand.name}</span></span>}
+        <span className="text-ink-600 max-sm:hidden" aria-hidden>/</span><span className="truncate font-semibold text-ink-300 max-sm:hidden">Design your website</span>
         <span className="ml-auto flex shrink-0 items-center gap-2">
           {design && a.name && <button type="button" className="btn btn-sm" onClick={() => setShowPreview(true)}>Preview</button>}
           {started && <button type="button" className="btn btn-ghost btn-sm" onClick={restart}>Start again</button>}
         </span>
+        <div className="absolute inset-x-0 bottom-0 h-0.5 bg-ink-900" role="progressbar" aria-label="Progress" aria-valuemin={0} aria-valuemax={total} aria-valuenow={answered.length}><div className="h-full bg-brand-500 transition-all duration-500" style={{ width: `${started ? Math.round((answered.length / total) * 100) : 0}%` }} /></div>
       </header>
 
-      <div className="sticky top-0 z-10 h-1 bg-ink-900" role="progressbar" aria-label="Progress" aria-valuemin={0} aria-valuemax={total} aria-valuenow={answered.length}><div className="h-full bg-brand-500 transition-all duration-500" style={{ width: `${started ? Math.round((answered.length / total) * 100) : 0}%` }} /></div>
       <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-3 pb-4 sm:px-6">
         <div role="log" aria-label="Conversation" className="flex flex-1 flex-col gap-3 pb-4 pt-4">
           <ChatBot><p className="m-0 text-[15px] leading-relaxed"><b>Welcome 👋</b> I'm the {brand.name} design assistant. I'll ask a few simple questions and your website takes shape as we go. It's only a preview; we finish it together.</p></ChatBot>

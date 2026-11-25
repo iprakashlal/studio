@@ -11,7 +11,7 @@ export async function designHost(): Promise<DesignHost | null> {
   return hc && hc.kind === "cloudflare" ? { api: hc.api, studio: hc.studio } : null;
 }
 
-export type SubmitBody = { /** The pass earned by confirming the email with its code (or given instead when the database can't send mail). */ otp?: string; skip?: string; kind: string; name: string; person: string; phone: string; email: string; note: string; answers: Record<string, string>; copy?: Copy | null; logo?: string; pdf?: { name: string; b64: string } };
+export type SubmitBody = { /** The saved progress this request comes from (it then moves out of Design previews). */ draft?: string; /** The pass earned by confirming the email with its code (or given instead when the database can't send mail). */ otp?: string; skip?: string; kind: string; name: string; person: string; phone: string; email: string; note: string; answers: Record<string, string>; copy?: Copy | null; logo?: string; pdf?: { name: string; b64: string } };
 export const submitQuery = (h: DesignHost, b: SubmitBody) => cfCall(h.api, "/dq/" + encodeURIComponent(h.studio), { method: "POST", auth: false, body: JSON.stringify(b) });
 
 export type Query = { id: number; name: string; kind: string; person: string; phone: string; email: string; note: string; answers: Record<string, string>; copy: Copy; status: "new" | "read" | "done"; mail: string; pdf_name: string; has_logo: boolean; created_at: string };
@@ -42,3 +42,17 @@ export async function understandText(h: DesignHost, kind: string, text: string):
 /** Confirm the visitor's email: a code is sent to it, and the right code earns a pass that the request must carry. */
 export const otpSend = (h: DesignHost, email: string) => cfCall<{ ok: boolean; skip?: string }>(h.api, "/dq/otp/send/" + encodeURIComponent(h.studio), { auth: false, method: "POST", body: JSON.stringify({ email }) });
 export const otpCheck = (h: DesignHost, email: string, code: string) => cfCall<{ ok: boolean; token: string }>(h.api, "/dq/otp/check/" + encodeURIComponent(h.studio), { auth: false, method: "POST", body: JSON.stringify({ email, code }) });
+
+/** The pass a visitor earns by confirming their email (kept for this tab). */
+export type Pass = { email: string; otp?: string; skip?: string };
+const PASS = "site-studio:design-pass";
+export const passLive = (p: Pass | null): p is Pass => { const t = p?.otp || p?.skip || ""; return !!p && +t.split(".")[0] > Date.now() + 60_000; };
+export const readPass = (): Pass | null => { try { const p = JSON.parse(sessionStorage.getItem(PASS) || "null"); return p && typeof p.email === "string" && passLive(p) ? { email: p.email, ...(p.otp ? { otp: String(p.otp) } : {}), ...(p.skip ? { skip: String(p.skip) } : {}) } : null; } catch { return null; } };
+export const writePass = (p: Pass | null) => { try { if (p) sessionStorage.setItem(PASS, JSON.stringify(p)); else sessionStorage.removeItem(PASS); } catch { /* private mode */ } };
+
+/** Progress kept in the Studio's database while someone designs (after their email is confirmed): it shows in Projects → Design previews. */
+export type DraftBody = { id: string; name: string; kind: string; themeId: string; themeName: string; summary: string; answers: Record<string, string>; copy?: Copy | null; logo?: string };
+export const saveDraft = (h: DesignHost, pass: Pass, b: DraftBody) => cfCall(h.api, "/dq/draft/" + encodeURIComponent(h.studio), { method: "POST", auth: false, body: JSON.stringify({ ...(pass.otp ? { otp: pass.otp } : { skip: pass.skip }), email: pass.email, ...b }) });
+export type Draft = { id: string; email: string; name: string; kind: string; themeId: string; themeName: string; summary: string; answers: Record<string, string>; copy: Copy; logo?: string; createdAt: string; updatedAt: string };
+export const listDrafts = (h: DesignHost) => cfCall<Draft[]>(h.api, `/dq/drafts?${sc(h)}`);
+export const deleteDraft = (h: DesignHost, id: string) => cfCall(h.api, `/dq/draft-delete?${sc(h)}`, { method: "POST", body: JSON.stringify({ id }) });

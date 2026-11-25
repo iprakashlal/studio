@@ -10,7 +10,7 @@ import { packSections, sectionNames, unpackSections } from "../lib/docsections";
 import { COLOUR_DOT, STEPS, STEP_LABEL, buildDesign, fromDoc, isOptional, nextStep, requestText, sayAnswer, themeOf, themesFor, tweakTheme, writeCopy, type Answers, type Design, type DesignFiles, type Step } from "../lib/designer";
 import { newDesignId, readDesignSettings, readLocalDesigns, writeLocalDesigns, type Copy, type DesignRec } from "../lib/designs";
 import { COLOUR_SLOTS, GROUPS, pagesChoice, readColsAnswer, readLookAnswer, resolvedLook, visibleAxes, type Kind as LookKind } from "../lib/designlook";
-import { designHost, otpCheck, otpSend, readPage, submitQuery, understandText, type DesignHost } from "../lib/designapi";
+import { designHost, otpCheck, otpSend, passLive, readPage, readPass, saveDraft, submitQuery, understandText, writePass, type DesignHost, type Pass } from "../lib/designapi";
 import { pdfLines } from "../lib/pdftext";
 import { watchDevtools } from "../lib/devtools";
 import type { Studio, StudioIndex } from "../lib/studio";
@@ -64,7 +64,10 @@ export function DesignPage({ studio, index, onIndex }: { studio?: Studio; index?
   const openConnect = (r?: DOMRect) => { setConnectFrom(r || null); setConnect(true); };
   const [text, setText] = useState("");
   const [many, setMany] = useState<string[]>([]);
-  const [savedId, setSavedId] = useState(first.id);
+  const [savedId, setSavedId] = useState(first.id || newDesignId());
+  // The visitor's confirmed email (asked first, with a code). A signed-in owner needs none.
+  const [pass, setPass] = useState<Pass | null>(readPass);
+  const ownPass = (p: Pass | null) => { setPass(p); writePass(p); };
   const [sent, setSent] = useState(first.sent);
   const [warn, setWarn] = useState(false);
   const [reading, setReading] = useState(false);
@@ -79,6 +82,7 @@ export function DesignPage({ studio, index, onIndex }: { studio?: Studio; index?
 
   useEffect(() => { document.title = "Design yourself · " + brand.name; }, [brand.name]);
   const [hostDone, setHostDone] = useState(false), [fontsOk, setFontsOk] = useState(false);
+  const needMail = !studio && hostDone && !!host && !passLive(pass);
   useEffect(() => { designHost().then(setHost).catch(() => {}).finally(() => setHostDone(true)); const f = (document as any).fonts?.ready; (f ? Promise.race([f, new Promise((r) => setTimeout(r, 4000))]) : Promise.resolve()).finally(() => setFontsOk(true)); }, []);
   useEffect(() => { try { sessionStorage.setItem(DRAFT, JSON.stringify({ a, copy, id: savedId, sent })); } catch { /* private mode */ } }, [a, copy, savedId, sent]);
   useEffect(() => { setText(""); setMany([]); setTimeout(() => field.current?.focus(), 50); window.scrollTo({ top: 0, behavior: "smooth" }); }, [cur?.id, answered.length, writing]);
@@ -118,6 +122,16 @@ export function DesignPage({ studio, index, onIndex }: { studio?: Studio; index?
     })();
     setShowPreview(true);
   }, [doneKey]);
+
+  // Once the email is confirmed, the progress is kept in the Studio's database as they answer (Projects → Design previews); sending it moves it to DIY Submissions.
+  useEffect(() => {
+    if (studio || !host || !passLive(pass) || sent || !a.kind) return;
+    const t = setTimeout(() => {
+      const logo = files.logo && files.logo.length < 60000 ? files.logo : "";
+      saveDraft(host, pass, { id: savedId, name: a.name || "Untitled", kind: a.kind || "", themeId: design?.themeId || "", themeName: design?.themeName || "", summary: design?.summary || "", answers: a, ...(copy ? { copy } : {}), ...(logo ? { logo } : {}) }).catch((e: any) => { if (/confirm your email/i.test(e?.message || "")) ownPass(null); });
+    }, 1500);
+    return () => clearTimeout(t);
+  }, [a, copy, design?.themeId, files.logo, pass, host, sent, savedId]);
 
   const answer = useCallback((s: Step, v: string) => { setA((o) => ({ ...o, [s.id]: v.trim() })); }, []);
   const submit = () => {
@@ -182,13 +196,13 @@ export function DesignPage({ studio, index, onIndex }: { studio?: Studio; index?
     const old = a[id]; setA(keep); setCopy(null); if (STEPS[at].type === "text" || STEPS[at].type === "long") setTimeout(() => setText(old || ""), 60);
     lastSaved.current = ""; setShowPreview(false);
   };
-  resetRef.current = () => { restart(); try { writeLocalDesigns([]); } catch { /* none */ } setShowPreview(false); setConnect(false); };
+  resetRef.current = () => { restart(); ownPass(null); try { writeLocalDesigns([]); } catch { /* none */ } setShowPreview(false); setConnect(false); };
   // Developer tools opened on this page (not for a signed-in owner): everything made here is cleared and a warning is shown.
   useEffect(() => { if (studio) return; return watchDevtools(() => { resetRef.current(); setWarn(true); }); }, [studio]);
   const tweak = (p: Answers) => setA((o) => { const n = { ...o, ...p }; for (const key of Object.keys(p)) if (p[key] === "") delete n[key]; return n; });
   // Developer tools opened (see PageGuard): the preview (and its frame) goes and the questions start over.
-  useEffect(() => { const f = () => { restart(); setShowPreview(false); setConnect(false); setReviewOpen(false); }; addEventListener("studio:guard", f); return () => removeEventListener("studio:guard", f); }, []);
-  function restart() { setA({}); setCopy(null); setFiles({}); setDesign(null); setSavedId(""); setSent(false); lastSaved.current = ""; try { sessionStorage.removeItem(DRAFT); } catch { /* none */ } }
+  useEffect(() => { const f = () => { restart(); setPass(null); setShowPreview(false); setConnect(false); setReviewOpen(false); }; addEventListener("studio:guard", f); return () => removeEventListener("studio:guard", f); }, []);
+  function restart() { setA({}); setCopy(null); setFiles({}); setDesign(null); setSavedId(newDesignId()); setSent(false); lastSaved.current = ""; try { sessionStorage.removeItem(DRAFT); } catch { /* none */ } }
 
   const field$ = cur && (cur.type === "text" || cur.type === "long" || cur.id === "kind" || cur.id === "doc");
   const bar = (
@@ -273,14 +287,15 @@ export function DesignPage({ studio, index, onIndex }: { studio?: Studio; index?
       </header>
 
       <main className={`mx-auto flex w-full max-w-2xl flex-1 flex-col gap-6 px-4 pb-12 sm:px-6 ${started ? "pt-4" : "justify-center pb-24"}`}>
-        {!started && (
+        {needMail && <EmailGate host={host!} onPass={(p) => { ownPass(p); setA((o) => (o.email ? o : { ...o, email: p.email })); }} />}
+        {!needMail && !started && (
           <div className="text-center">
             <h1 className="font-display text-4xl font-extrabold tracking-tight sm:text-5xl">Design your own website</h1>
             <p className="mx-auto mt-3 max-w-xl text-ink-300">Answer a few simple questions and watch your website take shape. It's a preview; we finish it together.</p>
           </div>
         )}
-        {!started && cur && <>{bar}<p className="text-center text-sm text-ink-400">or tap one:</p>{chips(cur)}</>}
-        {started && (
+        {!needMail && !started && cur && <>{bar}<p className="text-center text-sm text-ink-400">or tap one:</p>{chips(cur)}</>}
+        {!needMail && started && (
           <>
             <div className="flex items-center gap-3" aria-label={`Step ${Math.min(answered.length + 1, total)} of ${total}`}>
               <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-ink-800" role="progressbar" aria-valuemin={0} aria-valuemax={total} aria-valuenow={answered.length}><div className="h-full rounded-full bg-brand-500 transition-all duration-300" style={{ width: `${Math.round((answered.length / total) * 100)}%` }} /></div>
@@ -330,7 +345,7 @@ export function DesignPage({ studio, index, onIndex }: { studio?: Studio; index?
           </div>
         </div>
       )}
-      {connect && <ConnectPopup from={connectFrom} a={a} design={design} copy={copy} files={files} host={host} sent={sent} onSent={() => setSent(true)} onClose={() => setConnect(false)} />}
+      {connect && <ConnectPopup from={connectFrom} pass={pass} draft={savedId} a={a} design={design} copy={copy} files={files} host={host} sent={sent} onSent={() => setSent(true)} onClose={() => setConnect(false)} />}
     </div>
   );
 }
@@ -522,13 +537,13 @@ function Tweaks({ a, design, onTweak, onClose }: { a: Answers; design: Design; o
 }
 
 /** Send the request: it is saved in the Studio's own database and emailed to its owners. */
-export function ConnectPopup({ a, design, copy, files, host, sent, onSent, onClose, from }: { a: Answers; design: Design | null; copy: Copy | null; files: DesignFiles; host: DesignHost | null; sent: boolean; onSent: () => void; onClose: () => void; /** Where the Connect button was: the form grows out of it. */ from?: DOMRect | null }) {
+export function ConnectPopup({ a, design, copy, files, host, sent, onSent, onClose, from, pass: given, draft }: { /** The email already confirmed on this page: nothing more to confirm here. */ pass?: Pass | null; draft?: string; a: Answers; design: Design | null; copy: Copy | null; files: DesignFiles; host: DesignHost | null; sent: boolean; onSent: () => void; onClose: () => void; /** Where the Connect button was: the form grows out of it. */ from?: DOMRect | null }) {
   const toast = useToast();
-  const [f, setF] = useState({ person: "", phone: a.phone || "", email: a.email || "", note: "" });
+  const [f, setF] = useState({ person: "", phone: a.phone || "", email: given?.email || a.email || "", note: "" });
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(sent);
   // Email: confirmed with a code sent to it. `pass` is what the request carries once that is done.
-  const [pass, setPass] = useState<{ email: string; otp?: string; skip?: string } | null>(null), [asked, setAsked] = useState(false), [code, setCode] = useState(""), [wait, setWait] = useState(0), [okMail, setOkMail] = useState(true);
+  const [pass, setPass] = useState<{ email: string; otp?: string; skip?: string } | null>(passLive(given ?? null) ? given! : null), [asked, setAsked] = useState(false), [code, setCode] = useState(""), [wait, setWait] = useState(0), [okMail, setOkMail] = useState(true);
   const mail = f.email.trim().toLowerCase(), verified = !!pass && pass.email === mail;
   useEffect(() => { if (wait <= 0) return; const t = setTimeout(() => setWait((w) => w - 1), 1000); return () => clearTimeout(t); }, [wait]);
   const msg = useMemo(() => requestText(a, design), [a, design]);
@@ -565,7 +580,7 @@ export function ConnectPopup({ a, design, copy, files, host, sent, onSent, onClo
     if (!verified || !pass) return toast("Please confirm your email with the code we send you.", "bad");
     setBusy(true);
     try {
-      await submitQuery(host, { ...(pass.otp ? { otp: pass.otp } : { skip: pass.skip }), kind: a.kind, name: a.name || "Untitled", person: f.person.trim(), phone: f.phone.trim(), email: f.email.trim(), note: f.note.trim(), answers: { ...a, ...(design?.themeId ? { themeid: design.themeId } : {}), ...(a.kind ? { look: resolvedLook(a.kind as LookKind, a.look, readDesignSettings()) } : {}) }, ...(copy ? { copy } : {}), ...(files.logo ? { logo: files.logo } : {}), ...(files.menu ? { pdf: files.menu } : {}) });
+      await submitQuery(host, { ...(draft ? { draft } : {}), ...(pass.otp ? { otp: pass.otp } : { skip: pass.skip }), kind: a.kind, name: a.name || "Untitled", person: f.person.trim(), phone: f.phone.trim(), email: f.email.trim(), note: f.note.trim(), answers: { ...a, ...(design?.themeId ? { themeid: design.themeId } : {}), ...(a.kind ? { look: resolvedLook(a.kind as LookKind, a.look, readDesignSettings()) } : {}) }, ...(copy ? { copy } : {}), ...(files.logo ? { logo: files.logo } : {}), ...(files.menu ? { pdf: files.menu } : {}) });
       setDone(true); onSent();
     } catch (e: any) { toast(e?.message || "Couldn't send. Please try again.", "bad"); }
     setBusy(false);
@@ -586,7 +601,7 @@ export function ConnectPopup({ a, design, copy, files, host, sent, onSent, onClo
               <label className="flex flex-col gap-1.5 sm:col-span-2"><span className="label">Your name</span><input className="input" autoFocus value={f.person} onChange={(e) => setF({ ...f, person: e.target.value })} /></label>
               <label className="flex flex-col gap-1.5"><span className="label">Phone or WhatsApp (optional)</span><input className="input" inputMode="tel" value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} /></label>
               <div className="flex flex-col gap-1.5"><label className="label" htmlFor="cp-email">Email (required)</label>
-                <div className="flex gap-2"><input id="cp-email" className="input min-w-0 flex-1" type="email" autoComplete="email" required value={f.email} onChange={(e) => { setF({ ...f, email: e.target.value }); setAsked(false); setCode(""); }} />
+                <div className="flex gap-2"><input id="cp-email" className="input min-w-0 flex-1" type="email" autoComplete="email" required readOnly={!!given} value={f.email} onChange={(e) => { setF({ ...f, email: e.target.value }); setAsked(false); setCode(""); }} />
                   {verified ? <span className="chip shrink-0 self-center border-emerald-400/60 text-emerald-200">{okMail ? "Verified ✓" : "Accepted ✓"}</span> : <button type="button" className="btn btn-sm shrink-0 self-center" disabled={busy || (asked && wait > 0) || !mail} onClick={askCode}>{asked ? (wait > 0 ? `Resend (${wait})` : "Resend code") : "Send code"}</button>}</div>
               </div>
               {asked && !verified && <div className="flex flex-col gap-1.5 sm:col-span-2"><label className="label" htmlFor="cp-code">The 6-digit code we emailed you</label>
@@ -603,5 +618,54 @@ export function ConnectPopup({ a, design, copy, files, host, sent, onSent, onClo
         </>}
       </div>
     </div>
+  );
+}
+
+/** Design yourself starts here: the visitor's email, confirmed with a code, before any question. */
+function EmailGate({ host, onPass }: { host: DesignHost; onPass: (p: Pass) => void }) {
+  const toast = useToast();
+  const [email, setEmail] = useState(""), [code, setCode] = useState(""), [asked, setAsked] = useState(false), [wait, setWait] = useState(0), [busy, setBusy] = useState(false);
+  const mail = email.trim().toLowerCase();
+  useEffect(() => { if (wait <= 0) return; const t = setTimeout(() => setWait((w) => w - 1), 1000); return () => clearTimeout(t); }, [wait]);
+  const ask = async (e?: React.FormEvent) => {
+    e?.preventDefault();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(mail)) return toast("Enter a valid email address.", "bad");
+    setBusy(true);
+    try {
+      const r = await otpSend(host, mail);
+      if (r.skip) { onPass({ email: mail, skip: r.skip }); toast("We couldn't email a code from here, so your email is accepted without one."); }
+      else { setAsked(true); setWait(45); toast("Code sent. Check your email (and spam)."); }
+    } catch (x: any) { toast(x?.message || "Couldn't send the code.", "bad"); }
+    setBusy(false);
+  };
+  const check = async (e?: React.FormEvent) => {
+    e?.preventDefault(); if (code.trim().length < 6) return; setBusy(true);
+    try { const r = await otpCheck(host, mail, code.trim()); onPass({ email: mail, otp: r.token }); }
+    catch (x: any) { toast(x?.message || "That code isn't right.", "bad"); }
+    setBusy(false);
+  };
+  return (
+    <section className="mx-auto flex w-full max-w-md flex-col gap-5 text-center" aria-live="polite">
+      <div>
+        <h1 className="font-display text-4xl font-extrabold tracking-tight sm:text-5xl">Design your own website</h1>
+        <p className="mx-auto mt-3 max-w-xl text-ink-300">First, your email: we send a code to confirm it. Then answer a few simple questions and watch your website take shape.</p>
+      </div>
+      <form className="card flex flex-col gap-3 p-5 text-left" onSubmit={asked ? check : ask}>
+        <label className="label" htmlFor="eg-email">Your email</label>
+        <input id="eg-email" className="input" type="email" autoComplete="email" autoFocus required readOnly={asked} value={email} onChange={(e) => setEmail(e.target.value)} />
+        {asked && <>
+          <label className="label" htmlFor="eg-code">The 6-digit code we emailed you</label>
+          <input id="eg-code" className="input font-mono text-lg tracking-widest" inputMode="numeric" autoComplete="one-time-code" maxLength={6} autoFocus value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))} />
+        </>}
+        <div className="flex flex-wrap gap-2">
+          {asked
+            ? <><button type="submit" className="btn btn-pri" disabled={busy || code.length < 6}>{busy ? "Checking…" : "Verify and start"}</button>
+              <button type="button" className="btn btn-ghost" disabled={busy || wait > 0} onClick={() => ask()}>{wait > 0 ? `Resend (${wait})` : "Resend code"}</button>
+              <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => { setAsked(false); setCode(""); }}>Use another email</button></>
+            : <button type="submit" className="btn btn-pri" disabled={busy || !mail}>{busy ? "Sending…" : "Send code"}</button>}
+        </div>
+        <p className="text-xs text-ink-500">We use it only to keep your design and to get back to you.</p>
+      </form>
+    </section>
   );
 }

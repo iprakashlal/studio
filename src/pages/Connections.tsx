@@ -49,11 +49,19 @@ function WithButton({ label, htmlFor, hint, children, button }: { label: string;
 const FOOT = "mt-1 flex items-center gap-2 border-t border-ink-700 pt-3";
 const Missing = ({ why }: { why: string }) => <p className="rounded-lg border border-ink-600 px-3 py-2 text-[13px] text-ink-300">{why}</p>;
 
+/** Ready-made settings for the common providers: picking one fills in the address and a good starting model, and links to where the key is made. */
+const AI_PRESETS: { id: string; name: string; base: string; model: string; keyUrl: string; keyLabel: string; note: string }[] = [
+  { id: "openai", name: "ChatGPT (OpenAI)", base: "https://api.openai.com/v1", model: "gpt-4o-mini", keyUrl: "https://platform.openai.com/api-keys", keyLabel: "platform.openai.com/api-keys", note: "Create a secret key, add a little credit under Billing, and paste the key here." },
+  { id: "gemini", name: "Gemini (Google)", base: "https://generativelanguage.googleapis.com/v1beta/openai", model: "gemini-2.5-flash", keyUrl: "https://aistudio.google.com/app/apikey", keyLabel: "aistudio.google.com/app/apikey", note: "Press Create API key in Google AI Studio (it has a free tier) and paste the key here." },
+  { id: "claude", name: "Claude (Anthropic)", base: "https://api.anthropic.com/v1", model: "claude-haiku-5-5", keyUrl: "https://console.anthropic.com/settings/keys", keyLabel: "console.anthropic.com/settings/keys", note: "Create a key in the Anthropic Console (add credit under Billing) and paste it here. Uses Anthropic's OpenAI-compatible address." },
+];
+
 /** Settings → AI engine: the owner's own OpenAI-compatible API. */
 export function AiApiForm({ where }: { where: Where | null | undefined }) {
   const toast = useToast(), { saved, err, save } = useSaved(where || null);
-  const [f, setF] = useState({ base: "", model: "", vision: "", key: "" }), [busy, setBusy] = useState("");
-  useEffect(() => { const a = saved?.ai; if (a) setF({ base: txt(a.base), model: txt(a.model), vision: txt(a.vision), key: "" }); }, [saved]);
+  const [f, setF] = useState({ base: "", model: "", vision: "", key: "" }), [busy, setBusy] = useState(""), [prov, setProv] = useState("");
+  useEffect(() => { const a = saved?.ai; if (a) { setF({ base: txt(a.base), model: txt(a.model), vision: txt(a.vision), key: "" }); setProv(AI_PRESETS.find((x) => x.base === txt(a.base).replace(/\/+$/, ""))?.id || "other"); } }, [saved]);
+  const preset = AI_PRESETS.find((x) => x.id === prov);
   if (where === undefined) return <Missing why="Checking your database…" />;
   if (!where) return <Missing why="Your own AI API is kept on the Studio's Cloudflare database. Host the Studio on Cloudflare (Settings → Hostings) and sign in there as its owner to set it up." />;
   if (err) return <Missing why={err} />;
@@ -63,8 +71,14 @@ export function AiApiForm({ where }: { where: Where | null | undefined }) {
     <div className="flex flex-col gap-3 rounded-lg border border-ink-600 p-3" aria-label="Your own AI API">
       <b className="text-ink-100">Your own AI API {a?.on && a.key ? <span className="chip border-emerald-400/50 text-emerald-200">Set up</span> : <span className="chip border-ink-600 text-ink-400">Not set up</span>}</b>
       <p className="text-[13px] text-ink-300">Works with any API that speaks the OpenAI chat format: OpenAI, OpenRouter, Groq, Together, Google Gemini's OpenAI address, or a model you host. Translating, reading pamphlets and menus, and writing text then use it in place of Cloudflare AI.</p>
+      <div className="flex flex-col gap-2 rounded-lg border border-ink-700 p-3">
+        <Field label="Provider" htmlFor="ai-prov" hint="Pick one to fill in the address and a starting model; you can still change them below."><select id="ai-prov" className="input" value={prov} onChange={(e) => { const id = e.target.value, p = AI_PRESETS.find((x) => x.id === id); setProv(id); if (p) setF((x) => ({ ...x, base: p.base, model: p.model, vision: "" })); }}>
+          <option value="">Choose a provider…</option>{AI_PRESETS.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}<option value="other">Other (OpenRouter, Groq, my own…)</option>
+        </select></Field>
+        {preset && <p className="m-0 text-[12.5px] text-ink-300"><a className="btn btn-sm btn-pri mr-2 no-underline" href={preset.keyUrl} target="_blank" rel="noopener noreferrer">Get your {preset.name.split(" ")[0]} API key ↗</a>{preset.note}</p>}
+      </div>
       <div className="grid gap-3 sm:grid-cols-2">
-        <Field label="API address" htmlFor="ai-base" hint="The part before /chat/completions, for example https://api.openai.com/v1 or https://openrouter.ai/api/v1"><input id="ai-base" className="input" placeholder="https://api.openai.com/v1" value={f.base} onChange={(e) => setF({ ...f, base: e.target.value })} /></Field>
+        <Field label="API address" htmlFor="ai-base" hint="The part before /chat/completions, for example https://api.openai.com/v1 or https://openrouter.ai/api/v1"><input id="ai-base" className="input" placeholder="https://api.openai.com/v1" value={f.base} onChange={(e) => { setF({ ...f, base: e.target.value }); setProv(AI_PRESETS.find((x) => x.base === e.target.value.trim().replace(/\/+$/, ""))?.id || "other"); }} /></Field>
         <Field label="Model" htmlFor="ai-model" hint="As the provider names it, for example gpt-4o-mini."><input id="ai-model" className="input" placeholder="gpt-4o-mini" value={f.model} onChange={(e) => setF({ ...f, model: e.target.value })} /></Field>
         <Field label="Model for reading pictures (optional)" htmlFor="ai-vision" hint="Used for photos of pamphlets and menus. Empty uses the model above, which must then accept pictures."><input id="ai-vision" className="input" value={f.vision} onChange={(e) => setF({ ...f, vision: e.target.value })} /></Field>
         <Secret id="ai-key" label="API key" saved={!!a?.key} value={f.key} onChange={(v) => setF({ ...f, key: v })} />

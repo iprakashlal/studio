@@ -8,7 +8,7 @@ import { REST_THEMES, REST_TAGS } from "../themes/restaurant";
 import { TEMPLATES } from "../schema";
 import { themeCode } from "../themes/codes";
 import { loadStarter } from "./exporter";
-import { defaultPicture } from "./pictures";
+import { defaultPicture, generatedPicture } from "./pictures";
 import { systemWrite } from "./syswrite";
 import { readDesignSettings, type Copy } from "./designs";
 import { lookValues, pagesChoice, readColsAnswer } from "./designlook";
@@ -246,7 +246,7 @@ const qrule = (s: Step) => readDesignSettings().questions?.[s.group || "basics"]
 export const STEPS: Step[] = RAW.filter((s) => !s.soon).map((s) => ({
   ...s, ...(ROWS[`${s.group}.${s.id}`] || {}),
   when: (a: Answers) => !qrule(s)?.h && (s.when ? s.when(a) : true),
-  ask: (a: Answers) => qrule(s)?.t || (ROWS[`${s.group}.${s.id}`] ? s.ask(a).replace(/\s*(Write )?one (person )?on each line\.?/i, "").trim() : s.ask(a)),
+  ask: (a: Answers) => qrule(s)?.t || (ROWS[`${s.group}.${s.id}`] ? s.ask(a).replace(/\s*(Write )?one (person )?on each line\.?/i, "").replace(/[,;:\s]+$/, "").trim() : s.ask(a)),
   help: (a: Answers) => qrule(s)?.p ?? (ROWS[`${s.group}.${s.id}`] ? "Fill one row for each. Use the + button to add more." : s.help?.(a) ?? ""),
 }));
 
@@ -635,8 +635,9 @@ export async function buildDesign(a: Answers, copy?: Copy | null, files?: Design
     c.theme = { ...(c.theme || {}), ...tpl.themeValues(tt), ...lv };
     // Picture-side layouts and frames need a picture (otherwise that side stays empty): until they add one, a sample picture in the theme's colours stands in.
     const pal = { c1: tt.colors.c1, c2: tt.colors.c3 || tt.colors.c2, bg: tt.colors.surface }, subject = [a.btype, a.genre, a.ptype, a.about, a.name, kind === "store" ? "shop" : kind === "restaurant" ? "restaurant" : ""].filter(Boolean).join(" ");
-    if ((kind === "business" || kind === "restaurant") && !c.hero?.image?.url && !c.hero?.video) put("hero.image", { url: defaultPicture(subject, pal) });
-    if (kind === "store") { if (!c.home?.hero?.image) put("home.hero.image", { url: defaultPicture(subject, pal) }); if (c.home?.banner?.show && !c.home?.banner?.image) put("home.banner.image", { url: defaultPicture(subject + " gift", { ...pal, c1: pal.c2, c2: pal.c1 }, "scene", 2.4) }); }
+    const gen = readDesignSettings().images, pic = (w = 1280, h = 1024) => (gen?.on ? generatedPicture(subject, name || about, gen.style, w, h) : defaultPicture(subject, pal));
+    if ((kind === "business" || kind === "restaurant") && !c.hero?.image?.url && !c.hero?.video) put("hero.image", { url: pic() });
+    if (kind === "store") { if (!c.home?.hero?.image) put("home.hero.image", { url: pic() }); if (c.home?.banner?.show && !c.home?.banner?.image) put("home.banner.image", { url: defaultPicture(subject + " gift", { ...pal, c1: pal.c2, c2: pal.c1 }, "scene", 2.4) }); }
     if (kind === "portfolio" && !c.hero?.photo) put("hero.photo", { url: defaultPicture("", pal, "person", 1) });
   }
   return { kind, content: c, themeId: theme?.id || "", themeName: theme?.name || "", summary: tpl.summary(c) };

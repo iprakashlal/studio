@@ -53,7 +53,10 @@ function RowsField({ step, value, onChange, label }: { step: Step; value: string
     const init = value.split("\n").filter(Boolean).map((l) => { const parts = l.replace(/^["“]|["”]$/g, "").split(/\s[–-]\s|,\s*|\s(?=\d)/).map((x) => x.trim()); return Array.from({ length: n }, (_, i) => parts[i] || ""); });
     return init.length ? init : [Array(n).fill("")];
   });
-  const set = (next: string[][]) => { setRows(next); onChange(next.map((r) => rowsFmt(step, r)).filter(Boolean).join("\n")); };
+  const text = (r: string[][]) => r.map((x) => rowsFmt(step, x)).filter(Boolean).join("\n");
+  const set = (next: string[][]) => { setRows(next); onChange(text(next)); };
+  // The page clears its answer box when a step changes or text is being written: the rows say what they hold again.
+  useEffect(() => { const t = text(rows); if (t !== value) onChange(t); }, [value]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <div className="flex flex-col gap-3" role="group" aria-label={label}>
       {rows.map((r, i) => (
@@ -108,6 +111,8 @@ export function DesignPage({ studio, index, onIndex }: { studio?: Studio; index?
   const pick = useRef<HTMLInputElement>(null);
   const cur = nextStep(a);
   const curRef = useRef(cur); curRef.current = cur;
+  /** Leaves out every remaining optional question (stops at one that is needed). */
+  const skipRest = () => setA((o) => { const n = { ...o }; let s: Step | null; while ((s = nextStep(n)) && isOptional(s, n)) n[s.id] = ""; return n; });
   const answered = STEPS.filter((s) => s.id in a && (s.when ? s.when(a) : true));
   const started = answered.length > 0;
   const total = STEPS.filter((x) => (x.when ? x.when(a) : true)).length;
@@ -279,6 +284,7 @@ export function DesignPage({ studio, index, onIndex }: { studio?: Studio; index?
         {cur.type === "many" && <button type="submit" className="btn btn-pri" disabled={!many.length}>Done</button>}
         {field$ && <button type="submit" className="btn btn-pri" disabled={!text.trim() || reading}>{cur.id === "doc" ? "Read my link" : "Next"}</button>}
       </div>
+      {answered.length >= 6 && isOptional(cur, a) && !reading && <button type="button" className="self-start text-xs text-ink-400 underline underline-offset-2 hover:text-ink-200" onClick={skipRest}>Skip the remaining optional questions and see my preview</button>}
     </form>
   );
 

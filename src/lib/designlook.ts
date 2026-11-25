@@ -42,6 +42,8 @@ export type DesignSettings = {
   themes?: Partial<Record<Kind, string[]>>;
   /** Per type: what the carousel on a visitor's finished preview shows: "answers" (default) = the themes that match what they said (business type, genre); "custom" = the themes the owner ticked above. */
   carousel?: Partial<Record<Kind, "answers" | "custom">>;
+  /** A free image generator (Pollinations, no key) draws the hero picture of a visitor's preview from what they said, instead of the drawn symbol. */
+  images?: { on?: boolean; style?: "photo" | "illustration" | "3d" | "flat" };
   /** The questions Design yourself asks: per group ("basics" or a type), per question: hidden (h), own wording (t), own help line (p). */
   questions?: Record<string, Record<string, { h?: boolean; t?: string; p?: string }>>;
   /** Per type, per layout / style / interaction / intro choice. */

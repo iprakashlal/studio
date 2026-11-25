@@ -217,6 +217,21 @@ export function DesignLookTab({ session, studio, index, onIndex }: { session: Se
         ))}
       </Block>
 
+      <Block title="Pictures" note="Draw the hero picture of a visitor's preview with a free image generator, from what they said (business type, what they do).">
+        <label className="flex items-start gap-2 text-[13px]">
+          <input type="checkbox" className="mt-1" checked={!!d.images?.on} onChange={(e) => upd({ images: e.target.checked ? { ...(d.images || {}), on: true } : undefined })} />
+          <span><b className="block">Generate the hero picture with a free image generator</b><span className="text-[11.5px] text-ink-500">Uses Pollinations (image.pollinations.ai): free, no key. Used for the hero picture of business, restaurant and shop previews; the drawn symbol is used when this is off.</span></span>
+        </label>
+        {d.images?.on && <>
+          <label className="flex flex-col gap-1 text-[13px] font-semibold">Picture style
+            <select className="input w-auto" value={d.images?.style || "photo"} onChange={(e) => upd({ images: { on: true, style: e.target.value as any } })}>
+              <option value="photo">Photo-like</option><option value="illustration">Illustration</option><option value="3d">Soft 3D</option><option value="flat">Flat and minimal</option>
+            </select>
+          </label>
+          <p className="m-0 rounded-lg border border-yellow-400 bg-yellow-200 px-3 py-2 text-[12px] leading-snug text-yellow-950">Pictures come from a free third-party service: they can be slow, differ each time and may not load. The service's own terms apply to them, so check them before using a generated picture on a live site. A picture you upload always replaces a generated one.</p>
+        </>}
+      </Block>
+
       <Block title={`Themes · ${KIND_NAME[kind]}`} note="Your Studio's themes. Show all of them to visitors, or only the ones you tick.">
         <div className="flex flex-col gap-1.5">
           <span className="text-[13px] font-semibold">Themes in the visitor's finished preview</span>

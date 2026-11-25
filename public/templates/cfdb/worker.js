@@ -2314,6 +2314,7 @@ function dqDesignPub(d) {
     for (const kind of ["business", "restaurant", "portfolio", "store"]) if (Array.isArray(d.themes[kind])) th[kind] = d.themes[kind].filter((v) => typeof v === "string" && /^[A-Za-z0-9_-]{1,40}$/.test(v)).slice(0, 400);
     out.themes = th;
   }
+  if (d.images && typeof d.images === "object" && d.images.on === true) out.images = { on: true, ...["photo", "illustration", "3d", "flat"].includes(d.images.style) ? { style: d.images.style } : {} };
   if (d.carousel && typeof d.carousel === "object") {
     const c = {};
     for (const kind of ["business", "restaurant", "portfolio", "store"]) if (d.carousel[kind] === "custom") c[kind] = "custom";

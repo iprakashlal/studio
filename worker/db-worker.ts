@@ -1315,6 +1315,7 @@ function dqDesignPub(d: any) {
     if (Object.keys(o).length) out.gallery = o;
   }
   if (d.themes && typeof d.themes === "object") { const th: any = {}; for (const kind of ["business", "restaurant", "portfolio", "store"]) if (Array.isArray(d.themes[kind])) th[kind] = d.themes[kind].filter((v: any) => typeof v === "string" && /^[A-Za-z0-9_-]{1,40}$/.test(v)).slice(0, 400); out.themes = th; }
+  if (d.images && typeof d.images === "object" && d.images.on === true) out.images = { on: true, ...(["photo", "illustration", "3d", "flat"].includes(d.images.style) ? { style: d.images.style } : {}) };
   if (d.carousel && typeof d.carousel === "object") { const c: any = {}; for (const kind of ["business", "restaurant", "portfolio", "store"]) if (d.carousel[kind] === "custom") c[kind] = "custom"; if (Object.keys(c).length) out.carousel = c; }
   if (d.questions && typeof d.questions === "object") {
     const q: any = {}, tx = (v: any, n: number) => (typeof v === "string" ? v.replace(/[<>]/g, "").trim().slice(0, n) : "");

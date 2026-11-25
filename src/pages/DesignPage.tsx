@@ -12,7 +12,7 @@ import { relatedThemes } from "../lib/designer";
 import { COLOUR_DOT, STEPS, STEP_LABEL, buildDesign, fromDoc, isOptional, nextStep, rowsFmt, requestText, stepAt, sayAnswer, themeOf, themesFor, tweakTheme, writeCopy, type Answers, type Design, type DesignFiles, type Step } from "../lib/designer";
 import { newDesignId, readDesignSettings, readLocalDesigns, writeLocalDesigns, type Copy, type DesignRec } from "../lib/designs";
 import { COLOUR_SLOTS, GROUPS, pagesChoice, readColsAnswer, readLookAnswer, resolvedLook, visibleAxes, type Kind as LookKind } from "../lib/designlook";
-import { logoIdeas } from "../lib/pictures";
+import { generateImages, logoIdeas } from "../lib/pictures";
 import { designHost, otpCheck, otpSend, passLive, readPage, readPass, saveDraft, submitQuery, understandText, writePass, type DesignHost, type Pass } from "../lib/designapi";
 import { pdfLines } from "../lib/pdftext";
 import { watchDevtools } from "../lib/devtools";
@@ -76,6 +76,40 @@ function LogoIdeas({ name, about, value, onPick, onSkip }: { name: string; about
         <span className="mr-auto text-xs text-ink-500">Drawn by a free third-party generator; they can take a few seconds.</span>
         <button type="button" className="btn btn-ghost" onClick={onSkip}>Skip</button>
       </div>
+    </div>
+  );
+}
+
+
+/** "Or describe it": the free generator draws pictures from a few words; one is tapped to use (as if the person had chosen that file). */
+function Describe({ logo, count, onUse, disabled }: { logo: boolean; count: number; onUse: (f: File) => void; disabled?: boolean }) {
+  const gen = readDesignSettings().images, [what, setWhat] = useState(""), [busy, setBusy] = useState(""), [err, setErr] = useState(""), [got, setGot] = useState<{ f: File; u: string }[]>([]);
+  const stop = useRef<AbortController | null>(null);
+  useEffect(() => () => stop.current?.abort(), []);
+  useEffect(() => () => got.forEach((g) => URL.revokeObjectURL(g.u)), [got]);
+  if (!gen?.on) return null;
+  const go = async () => {
+    stop.current?.abort(); const ac = (stop.current = new AbortController()); setErr(""); setBusy("Drawing…"); setGot([]);
+    try {
+      const bl = await generateImages(what, { provider: gen.provider, style: gen.style, kind: logo ? "logo" : "photo", n: count, signal: ac.signal, status: setBusy });
+      setGot(bl.map((b, i) => { const f = new File([b], `generated-${i + 1}.${/png/.test(b.type) ? "png" : "webp"}`, { type: b.type || "image/webp" }); return { f, u: URL.createObjectURL(b) }; }));
+    } catch (e: any) { if (!ac.signal.aborted) setErr(e?.message || "Couldn't draw that. Please try again."); }
+    setBusy("");
+  };
+  return (
+    <div className="flex flex-col gap-2 rounded-2xl border border-ink-700 p-3">
+      <label className="flex flex-col gap-1 text-xs text-ink-400">Or describe it and we'll draw it
+        <span className="flex flex-wrap gap-2">
+          <input className="input min-w-0 flex-1 basis-[14rem]" maxLength={300} disabled={disabled || !!busy} placeholder={logo ? "e.g. a green leaf inside a circle, modern and simple" : "e.g. a sunny café interior with wooden tables"} value={what} onChange={(e) => setWhat(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); if (what.trim() && !busy) go(); } }} />
+          <button type="button" className="btn btn-sm" disabled={disabled || !!busy || !what.trim()} onClick={go}>{busy ? "Drawing…" : got.length ? "Draw again" : "Draw it"}</button>
+        </span>
+      </label>
+      {busy && <p className="m-0 text-xs text-ink-400" role="status">{busy} <button type="button" className="underline" onClick={() => { stop.current?.abort(); setBusy(""); }}>Cancel</button></p>}
+      {err && <p className="m-0 text-xs text-red-400" role="alert">{err}</p>}
+      {!!got.length && <div className="grid grid-cols-2 gap-2 sm:grid-cols-4" role="group" aria-label="Drawn pictures">
+        {got.map((g, i) => <button key={g.u} type="button" aria-label={`Use drawn picture ${i + 1}`} disabled={disabled} onClick={() => onUse(g.f)} className="aspect-square overflow-hidden rounded-xl border border-ink-700 bg-white hover:border-brand-400"><img src={g.u} alt="" className={`h-full w-full ${logo ? "object-contain" : "object-cover"}`} /></button>)}
+      </div>}
+      <p className="m-0 text-[11px] text-ink-500">Drawn by a free third-party generator ({gen.provider === "horde" ? "AI Horde, which can queue for a minute or two" : "Pollinations"}). Check the picture before using it on a live site.</p>
     </div>
   );
 }
@@ -301,9 +335,13 @@ export function DesignPage({ studio, index, onIndex }: { studio?: Studio; index?
 
   /** The answer controls inside the question card: a plain field and one row of buttons (nothing for a tap-one question). */
   const cardBar = !cur || cur.type === "choice" ? null : cur.id === "logo" ? (
-    <LogoIdeas name={a.name || ""} about={a.about || ""} value={a.logo || ""} onPick={(u) => answer(cur, u)} onSkip={() => answer(cur, "")} />
+    <div className="flex flex-col gap-3">
+      <LogoIdeas name={a.name || ""} about={a.about || ""} value={a.logo || ""} onPick={(u) => answer(cur, u)} onSkip={() => answer(cur, "")} />
+      <Describe logo count={4} disabled={reading} onUse={(f) => choose(cur, f)} />
+    </div>
   ) : (
     <form className="flex flex-col gap-3" onSubmit={(e) => { e.preventDefault(); submit(); }} aria-label="Your answer">
+      {PIC_STEPS.includes(cur.id) && <Describe logo={false} count={2} disabled={reading} onUse={(f) => choose(cur, f)} />}
       {cur.type === "long" && cur.cols
         ? <RowsField key={cur.id + (a.kind || "")} step={cur} value={text} onChange={setText} label={cur.ask(a)} />
         : cur.type === "long"

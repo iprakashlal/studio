@@ -1,3 +1,4 @@
+import { PROVIDERS } from "../lib/pictures";
 import { themeCode } from "../themes/codes";
 import { useEffect, useMemo, useState } from "react";
 import { pushPref, savePrefNow } from "../lib/prefs";
@@ -224,9 +225,15 @@ export function DesignLookTab({ session, studio, index, onIndex }: { session: Se
         </label>
         {d.images?.on && <>
           <label className="flex flex-col gap-1 text-[13px] font-semibold">Picture style
-            <select className="input w-auto" value={d.images?.style || "photo"} onChange={(e) => upd({ images: { on: true, style: e.target.value as any } })}>
+            <select className="input w-auto" value={d.images?.style || "photo"} onChange={(e) => upd({ images: { ...d.images, on: true, style: e.target.value as any } })}>
               <option value="photo">Photo-like</option><option value="illustration">Illustration</option><option value="3d">Soft 3D</option><option value="flat">Flat and minimal</option>
             </select>
+          </label>
+          <label className="flex flex-col gap-1 text-[13px] font-semibold">Free image generator
+            <select className="input w-auto" value={d.images?.provider || "pollinations"} onChange={(e) => upd({ images: { ...d.images, on: true, provider: e.target.value === "horde" ? "horde" : "pollinations" } })}>
+              {PROVIDERS.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+            </select>
+            <span className="text-[11.5px] font-normal text-ink-500">{PROVIDERS.find((x) => x.id === (d.images?.provider || "pollinations"))?.note} Used when a visitor describes a logo or banner in words. No free service is guaranteed unlimited, so if one is busy, switch to the other.</span>
           </label>
           <p className="m-0 rounded-lg border border-yellow-400 bg-yellow-200 px-3 py-2 text-[12px] leading-snug text-yellow-950">Pictures come from a free third-party service: they can be slow, differ each time and may not load. The service's own terms apply to them, so check them before using a generated picture on a live site. A picture you upload always replaces a generated one.</p>
         </>}

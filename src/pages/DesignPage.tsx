@@ -100,7 +100,7 @@ function useNarrow() {
 function NoticeBar() {
   const n = readDesignSettings().notice;
   if (n?.on === false) return null;
-  return <div role="note" className="w-full bg-[#b8abba] px-4 py-2 text-center text-[13px] font-medium leading-snug text-neutral-900">{n?.text || NOTICE_TEXT}</div>;
+  return <div role="note" className="w-full bg-[#b8abba] px-4 py-2 text-center text-[13px] font-medium leading-snug text-white">{n?.text || NOTICE_TEXT}</div>;
 }
 function PhoneNotice() {
   const brand = useBrand();

@@ -172,7 +172,7 @@ const RAW: Step[] = [
   { id: "bimage", group: "business", label: "Main banner image", type: "file", soon: true, optional: true, when: B, accept: "image/png,image/jpeg,image/webp", maxKB: 5120, ask: () => "Add your main banner picture." },
   { id: "items", group: "business", label: "Services", type: "long", optional: true, when: (a) => B(a) && !doc(a, "services"), ask: () => "What are your main services or solutions? Write one on each line.", ph: () => "Repairs – quick fixes at your door\nAnnual service\nInstallation", help: () => "Name, then a dash and a short description (optional). Icons are chosen for you." },
   { id: "stats", group: "business", label: "Attributes", type: "long", optional: true, when: (a) => B(a) && !doc(a, "stats"), ask: () => "Which attributes would you like to show? One on each line.", ph: () => "120+ – Projects\n15 – Years\n98% – Clients return", help: () => "The number, a dash, then what it counts. Only true numbers." },
-  { id: "work", group: "business", label: "Case studies", type: "long", optional: true, when: (a) => B(a) && !doc(a, "work"), ask: () => "Any case studies or featured projects? Write one on each line.", ph: () => "Booking app for a gym chain – built in 6 weeks\nNew website for a dental clinic", help: () => "Write the project, then a dash and what you did (client and outcome can go in the same line). Only things that are true." },
+  { id: "work", group: "business", label: "Our work", type: "long", optional: true, when: (a) => B(a) && !doc(a, "work"), ask: (a) => `Which ${workWords(a).many} would you like to show?`, ph: () => "Name – a short line about it", help: (a) => `The ${workWords(a).one}, then what it is or what you did. Only things that are true.` },
   { id: "clients", group: "business", label: "Clients", type: "long", optional: true, when: (a) => B(a) && !doc(a, "clients"), ask: () => "Which clients would you like to name? One on each line.", ph: () => "Tata Motors\nCity Hospital" },
   { id: "team", group: "business", label: "Team members", type: "long", optional: true, when: (a) => B(a) && !doc(a, "team"), ask: () => "Who leads the company? Write one person on each line.", ph: () => "Asha Verma – Founder & CEO – linkedin.com/in/asha", help: () => "Name, designation, and a LinkedIn link if you like. Photos can be added later." },
   { id: "quotes", group: "business", label: "Testimonials", type: "long", optional: true, when: (a) => B(a) && !doc(a, "testimonials"), ask: () => "Any kind words from clients? One on each line.", ph: () => "Ravi, Acme Ltd – “They finished two weeks early.”", help: () => "Name and company, then the quote. Only real ones." },
@@ -207,6 +207,22 @@ const RAW: Step[] = [
 export const QUESTION_LIST = RAW;
 export const QUESTION_GROUPS: { id: QGroup; name: string }[] = [{ id: "basics", name: "Basics (asked for every type)" }, { id: "portfolio", name: "Personal portfolio" }, { id: "store", name: "Shop" }, { id: "business", name: "Business portfolio" }, { id: "restaurant", name: "Restaurant & café" }];
 
+/** What a business shows as its "work", by kind of business (case studies suit only some). Singular, plural and the heading. */
+export function workWords(a: Answers): { one: string; many: string; title: string } {
+  const t = a.btype || "", is = (re: RegExp) => re.test(t);
+  if (is(/^(Restaurant|Café|Bakery|Catering|Florist)$/)) return { one: "signature item", many: "signature items", title: "Signature items" };
+  if (is(/^(Hotel|Travel)$/)) return { one: "stay or experience", many: "stays and experiences", title: "Stays & experiences" };
+  if (is(/^(Retail|Boutique|Grocery|Pharmacy|Jewellery|Electronics|Furniture|Handicrafts|Textile|Automobile|Printing)$/)) return { one: "featured product", many: "featured products", title: "Featured products" };
+  if (is(/^(Salon|Spa|Laundry|Cleaning|Petcare|Repair)$/)) return { one: "popular service", many: "popular services", title: "Popular treatments" };
+  if (is(/^(Gym)$/)) return { one: "programme", many: "programmes", title: "Programmes" };
+  if (is(/^(Clinic|Hospital|Dental)$/)) return { one: "treatment or success story", many: "treatments and success stories", title: "Treatments & results" };
+  if (is(/^(School|Coaching|Tutoring)$/)) return { one: "result or achievement", many: "results and achievements", title: "Results & achievements" };
+  if (is(/^(Events|Wedding)$/)) return { one: "event", many: "events", title: "Events we've done" };
+  if (is(/^(Photography|Studio|Design|Interiors|Creator|Music|Gaming|Blogger|Freelancer)$/)) return { one: "project", many: "projects", title: "Selected work" };
+  if (is(/^(NGO)$/)) return { one: "initiative", many: "initiatives", title: "Our initiatives" };
+  if (is(/^(RealEstate|Construction)$/)) return { one: "project", many: "projects", title: "Our projects" };
+  return { one: "project", many: "projects", title: "Our work" };
+}
 const dash = (c: string[]) => c.map((x) => x.trim()).filter(Boolean).join(" – ");
 /** Questions whose answer is a list of items with several parts: each is asked as rows of sub-fields (same text format as typing it). */
 const ROWS: Record<string, Pick<Step, "cols" | "fmt" | "addLabel">> = {
@@ -216,7 +232,7 @@ const ROWS: Record<string, Pick<Step, "cols" | "fmt" | "addLabel">> = {
   "portfolio.quotes": { addLabel: "Add a testimonial", fmt: (c) => (c[0]?.trim() ? `"${c[0].trim()}" – ${[c[1], c[2]].map((x) => (x || "").trim()).filter(Boolean).join(", ")}` : ""), cols: [{ label: "What they said", ph: "She made our day effortless." }, { label: "Name", ph: "Priya Nair" }, { label: "Role / company", ph: "Bride" }] },
   "store.items": { addLabel: "Add a product", fmt: (c) => [c[0]?.trim(), c[1]?.trim()].filter(Boolean).join(" - "), cols: [{ label: "Product", ph: "Soy candle" }, { label: "Price", ph: "450" }] },
   "business.stats": { addLabel: "Add an attribute", fmt: (c) => [c[0]?.trim(), c[1]?.trim()].filter(Boolean).join(" "), cols: [{ label: "Value", ph: "120+" }, { label: "Attribute", ph: "Projects" }] },
-  "business.work": { addLabel: "Add a case study", cols: [{ label: "Project", ph: "Clinic booking app" }, { label: "What you did", ph: "Rebuilt booking, cut drop-off by 30%" }] },
+  "business.work": { addLabel: "Add another", cols: [{ label: "Name", ph: "e.g. Clinic booking app" }, { label: "Details", ph: "e.g. Rebuilt booking, cut drop-off by 30%" }] },
   "business.team": { addLabel: "Add a person", cols: [{ label: "Name", ph: "Asha Verma" }, { label: "Designation", ph: "Founder & CEO" }, { label: "LinkedIn (optional)", ph: "linkedin.com/in/asha" }] },
   "business.quotes": { addLabel: "Add a testimonial", fmt: (c) => (c[0]?.trim() ? `"${c[0].trim()}" – ${[c[1], c[2]].map((x) => (x || "").trim()).filter(Boolean).join(", ")}` : ""), cols: [{ label: "What they said", ph: "Brilliant team." }, { label: "Name", ph: "Priya Nair" }, { label: "Role / company", ph: "CDO, Arcadia" }] },
   "business.offices": { addLabel: "Add an office", cols: [{ label: "Office", ph: "Head office" }, { label: "Address", ph: "12 MG Road, Pune" }] },
@@ -601,7 +617,8 @@ export async function buildDesign(a: Answers, copy?: Copy | null, files?: Design
   // The sections a person gave nothing for yet show a short note with an (Edit) link that goes to the answer.
   if (kind === "business") {
     if (!(items.length || ds.services?.length)) { c.services.items = [{ ...base0.service, title: "Your services", body: "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. (Edit:items)", points: [] }]; c.services.lede = ""; show(c, "services"); }
-    if (!(workLines.length || ds.work?.length)) { c.work.items = [{ ...base0.work, title: "Your case studies", client: "", sector: "", summary: "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. (Edit:work)", result: "", image: null, url: "" }]; c.work.lede = ""; show(c, "work"); }
+    if (!(workLines.length || ds.work?.length)) { c.work.items = [{ ...base0.work, title: `Your ${workWords(a).many}`, client: "", sector: "", summary: "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. (Edit:work)", result: "", image: null, url: "" }]; c.work.lede = ""; show(c, "work"); }
+    if (c.work) { c.work.eyebrow = "Our work"; c.work.title = workWords(a).title; }
   }
   if (kind === "business" || kind === "restaurant") {
     if (!(story || cp.about_text || about || ds.mission || ds.vision)) put("about.body", "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. (Edit:story)");

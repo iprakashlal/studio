@@ -3,6 +3,7 @@ import { THEMES, THEME_TAGS, hasFx, Motifs, type Theme } from "./catalog";
 import { themeCode } from "./codes";
 import { RestSwatch, restLine } from "./RestSwatch";
 import { Logo } from "../ui/kit";
+import { BIZ_TYPES } from "./businessTypes";
 
 /** A small drawing of the theme: background, a card in its card style, a button in its button style, and the hero layout. */
 export function ThemeSwatch({ t }: { t: Theme }) {
@@ -74,14 +75,17 @@ export function ThemeGallery({ current, onPick, compact, dense, themes = THEMES,
   const [q, setQ] = useState("");
   const num = (x: string) => x.trim().toUpperCase().replace(/^[TBR]-?0*/, "");
   const list = useMemo(() => themes.filter((t) => (!tag || t.tags.includes(tag)) && (!q || t.name.toLowerCase().includes(q.toLowerCase()) || num(themeCode(t)) === num(q))), [themes, tag, q]);
+  // Business themes also carry the kind of business they suit (60 of them): those go in a menu, the styles stay as buttons.
+  const present = tags.filter((x) => themes.some((t) => t.tags.includes(x))), typeSet = new Set(BIZ_TYPES), typeTags = present.filter((x) => typeSet.has(x)), styleTags = typeTags.length >= 20 ? present.filter((x) => !typeSet.has(x)) : present;
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-1.5">
         <input className="input w-40 py-1.5 text-sm" placeholder="Search name or ID" aria-label="Search themes" value={q} onChange={(e) => setQ(e.target.value)} />
-        {["", ...tags.filter((x) => themes.some((t) => t.tags.includes(x)))].map((x) => (
+        {["", ...styleTags].map((x) => (
           <button key={x || "all"} type="button" aria-pressed={tag === x} onClick={() => setTag(x)}
             className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${tag === x ? "border-brand-500 bg-brand-500/15 text-ink-100" : "border-ink-600 text-ink-400 hover:text-ink-100"}`}>{x || `All ${themes.length}`}</button>
         ))}
+        {typeTags.length >= 20 && <select aria-label="Type of business" className={`input w-auto py-1 text-xs ${typeSet.has(tag) ? "border-brand-500" : ""}`} value={typeSet.has(tag) ? tag : ""} onChange={(e) => setTag(e.target.value)}><option value="">Type of business…</option>{typeTags.map((x) => <option key={x} value={x}>{x}</option>)}</select>}
       </div>
       <div className="grid gap-2.5" style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${dense ? 92 : compact ? 150 : 112}px, 1fr))` }} role={chosen ? "group" : "radiogroup"} aria-label="Themes">
         {list.map((t) => (

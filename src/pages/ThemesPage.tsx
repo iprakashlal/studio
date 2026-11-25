@@ -3,7 +3,7 @@ import { STUDIO_BUILD } from "../build-info";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { THEMES, THEME_TAGS, portfolioThemeValues, storeThemeValues, type Theme } from "../themes/catalog";
 import { samplePicture } from "../lib/designer";
-import { BIZ_TAGS, BIZ_THEMES, businessThemeValues } from "../themes/business";
+import { BIZ_STYLE_TAGS, BIZ_TYPES, BIZ_THEMES, businessThemeValues } from "../themes/business";
 import { REST_TAGS, REST_THEMES, restaurantThemeValues } from "../themes/restaurant";
 import { limitThemes } from "../themes/limit";
 import { ThemeSwatch } from "../themes/ThemeGallery";
@@ -69,7 +69,7 @@ export function ThemesPage({ signedIn }: { signedIn: boolean }) {
   const [shared] = useState<string[]>(init.list);
   const [only, setOnly] = useState<"" | "shared" | "mine">(init.list.length ? "shared" : "");
   const [samples, setSamples] = useState<Record<Kind, any>>({ portfolio: null, store: null, business: null, restaurant: null });
-  const pool = poolOf(kind), tags = kind === "business" ? BIZ_TAGS : kind === "restaurant" ? REST_TAGS : THEME_TAGS;
+  const pool = poolOf(kind), tags = kind === "business" ? BIZ_STYLE_TAGS : kind === "restaurant" ? REST_TAGS : THEME_TAGS;
   // Switching between business and the other types changes the theme list: clear what doesn't belong.
   // Developer tools opened (see PageGuard): the big preview and the hover preview (their frames) are removed.
   useEffect(() => { const f = () => { setOpen(""); setHover(null); }; addEventListener("studio:guard", f); return () => removeEventListener("studio:guard", f); }, []);
@@ -169,6 +169,7 @@ export function ThemesPage({ signedIn }: { signedIn: boolean }) {
             <button key={x || "all"} type="button" aria-pressed={tag === x} onClick={() => setTag(x)}
               className={`rounded-full border px-3 py-1.5 text-xs font-semibold ${tag === x ? "border-brand-500 bg-brand-500/15 text-ink-100" : "border-ink-600 text-ink-400 hover:text-ink-100"}`}>{x || "All"}</button>
           ))}
+          {kind === "business" && gal.tags !== false && <select aria-label="Type of business" className={`input w-auto py-1.5 text-xs font-semibold ${BIZ_TYPES.includes(tag) ? "border-brand-500 bg-brand-500/15" : ""}`} value={BIZ_TYPES.includes(tag) ? tag : ""} onChange={(e) => setTag(e.target.value)}><option value="">Type of business…</option>{BIZ_TYPES.map((x) => <option key={x} value={x}>{x}</option>)}</select>}
           <div className="ml-auto flex items-center gap-2">
             <button type="button" aria-pressed={only === "mine"} onClick={() => setOnly(only === "mine" ? "" : "mine")}
               className={`btn btn-sm ${only === "mine" ? "border-amber-400 text-amber-300" : ""}`}>★ My shortlist ({mine.length})</button>

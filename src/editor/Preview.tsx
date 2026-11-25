@@ -38,7 +38,7 @@ const DEVICES = [
 /** The content shown in a preview: the same, with the "Powered by" badge turned off. */
 const quiet = (c: any) => (c && typeof c === "object" ? { ...c, poweredBy: { ...(c.poweredBy || {}), show: false } } : c);
 
-export function Preview({ tpl, base, content, version, assets, editable = true, hidePages = false }: { tpl: TemplateDef; base: string; content: any; version: number; assets: Record<string, string>; editable?: boolean; /** No page list (a single-site preview). */ hidePages?: boolean }) {
+export function Preview({ tpl, base, content, version, assets, editable = true, hidePages = false, onEditLink }: { /** A note such as "(Edit:story)" in the preview becomes an Edit link that calls this with the answer it belongs to. */ onEditLink?: (id: string) => void; tpl: TemplateDef; base: string; content: any; version: number; assets: Record<string, string>; editable?: boolean; /** No page list (a single-site preview). */ hidePages?: boolean }) {
   const frame = useRef<HTMLIFrameElement>(null);
   const box = useRef<HTMLDivElement>(null);
   const [device, setDevice] = useState<(typeof DEVICES)[number]["id"]>("desktop");
@@ -53,6 +53,28 @@ export function Preview({ tpl, base, content, version, assets, editable = true, 
   useEffect(() => { live.current.idx = contentIndex(content); }, [version]);
   useEffect(() => { if (editable) try { const was = localStorage.getItem(EDIT_KEY) !== "off"; localStorage.setItem(EDIT_KEY, editOn ? "on" : "off"); if (was !== editOn) pushPref({ clickToEdit: editOn }); } catch { /* private mode */ } if (!editOn) frame.current?.contentDocument?.getElementById("cms-edit-ui")?.remove(); }, [editOn]);
   const wire = () => { if (!editable) return; try { const d = frame.current?.contentDocument; if (d) clickToEdit(d, live); } catch { /* another origin */ } };
+
+  const linkRef = useRef(onEditLink); linkRef.current = onEditLink;
+  const wireLinks = () => {
+    if (!onEditLink) return;
+    try {
+      const d = frame.current?.contentDocument; if (!d || (d as any).__editLinks) return; (d as any).__editLinks = true;
+      const TOKEN = /\(Edit:([a-z]{2,12})\)/;
+      const run = () => {
+        const w = d.createTreeWalker(d.body, NodeFilter.SHOW_TEXT), hits: Text[] = [];
+        for (let n = w.nextNode(); n; n = w.nextNode()) if (TOKEN.test(n.nodeValue || "") && !(n.parentElement?.closest("script,style"))) hits.push(n as Text);
+        for (const t of hits) {
+          const m = TOKEN.exec(t.nodeValue || ""); if (!m) continue;
+          const before = t.nodeValue!.slice(0, m.index), after = t.nodeValue!.slice(m.index + m[0].length), a = d.createElement("a");
+          a.href = "#edit"; a.textContent = "Edit"; a.setAttribute("data-answer", m[1]); a.setAttribute("style", "text-decoration:underline;font-weight:700;color:inherit;cursor:pointer");
+          const parent = t.parentNode!; parent.insertBefore(d.createTextNode(before + "("), t); parent.insertBefore(a, t); t.nodeValue = ")" + after;
+        }
+      };
+      let timer = 0; const later = () => { clearTimeout(timer); timer = window.setTimeout(run, 80); };
+      new MutationObserver(later).observe(d.body, { childList: true, subtree: true, characterData: true }); run();
+      d.addEventListener("click", (e) => { const el = (e.target as HTMLElement | null)?.closest?.("[data-answer]"); if (el) { e.preventDefault(); e.stopPropagation(); linkRef.current?.(el.getAttribute("data-answer") || ""); } }, true);
+    } catch { /* another origin */ }
+  };
 
   const send = () => {
     const w = frame.current?.contentWindow;
@@ -114,7 +136,7 @@ export function Preview({ tpl, base, content, version, assets, editable = true, 
       </div>
       <div ref={box} className="relative min-h-0 flex-1 overflow-hidden">
         <div className="absolute left-1/2 top-3 origin-top overflow-hidden rounded-lg border border-ink-700 bg-white shadow-2xl" style={{ width: dw, height: (size.h - 24) / scale, transform: `translateX(-50%) scale(${scale})` }}>
-          <iframe ref={frame} name="cms-preview" title="Site preview" src={src} onLoad={wire} className="h-full w-full border-0" />
+          <iframe ref={frame} name="cms-preview" title="Site preview" src={src} onLoad={() => { wire(); wireLinks(); }} className="h-full w-full border-0" />
         </div>
       </div>
     </div>

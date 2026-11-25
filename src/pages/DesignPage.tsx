@@ -56,6 +56,7 @@ export function DesignPage({ studio, index, onIndex }: { studio?: Studio; index?
   const [writing, setWriting] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [reviewOpen, setReviewOpen] = useState(false);
+  const [jump, setJump] = useState<{ id: string; n: number } | null>(null);
   const [connect, setConnect] = useState(false);
   const [text, setText] = useState("");
   const [many, setMany] = useState<string[]>([]);
@@ -303,14 +304,14 @@ export function DesignPage({ studio, index, onIndex }: { studio?: Studio; index?
                 <p className="text-xs text-ink-500">Preview only. Nothing is published or charged.</p>
               </section>
             )}
-            <AnswersReview rows={answered} a={a} open={reviewOpen} onOpen={setReviewOpen} onRewind={rewind}
+            <AnswersReview rows={answered} a={a} jump={jump} open={reviewOpen} onOpen={setReviewOpen} onRewind={rewind}
               onSave={(id, v) => { setA((o) => ({ ...o, [id]: v, docfrom: (o.docfrom || "").split(",").filter((x) => x && x !== id).join(",") })); setCopy(null); lastSaved.current = ""; toast("Updated. Your preview follows."); }} />
             <div ref={endRef} />
           </>
         )}
       </main>
 
-      {showPreview && design && <PreviewPopup design={design} ver={ver} a={a} onClose={() => setShowPreview(false)} onEdit={() => { setShowPreview(false); setReviewOpen(true); setTimeout(() => document.getElementById("design-answers")?.scrollIntoView({ block: "start", behavior: "smooth" }), 80); }} onConnect={() => setConnect(true)} done={ready} onTweak={ready ? tweak : undefined} />}
+      {showPreview && design && <PreviewPopup design={design} ver={ver} a={a} onClose={() => setShowPreview(false)} onEditLink={(id) => { setShowPreview(false); setReviewOpen(true); if (!(id in a)) setA((o) => ({ ...o, [id]: "" })); setTimeout(() => setJump({ id, n: Date.now() }), 60); }} onEdit={() => { setShowPreview(false); setReviewOpen(true); setTimeout(() => document.getElementById("design-answers")?.scrollIntoView({ block: "start", behavior: "smooth" }), 80); }} onConnect={() => setConnect(true)} done={ready} onTweak={ready ? tweak : undefined} />}
       {warn && (
         <div role="alertdialog" aria-modal="true" aria-label="Developer tools detected" className="fixed inset-0 z-[100] grid place-items-center bg-black/85 p-4">
           <div className="card flex w-full max-w-md flex-col gap-3 p-6">
@@ -326,13 +327,19 @@ export function DesignPage({ studio, index, onIndex }: { studio?: Studio; index?
 }
 
 /** Every answer so far, each one changeable in place (the later answers stay). Questions that shape everything after them (the type, the starting document or link, a file) go back to that question instead. */
-function AnswersReview({ rows, a, open, onOpen, onRewind, onSave }: { rows: Step[]; a: Answers; open: boolean; onOpen: (v: boolean) => void; onRewind: (id: string) => void; onSave: (id: string, v: string) => void }) {
+function AnswersReview({ rows, a, jump, open, onOpen, onRewind, onSave }: { rows: Step[]; a: Answers; jump: { id: string; n: number } | null; open: boolean; onOpen: (v: boolean) => void; onRewind: (id: string) => void; onSave: (id: string, v: string) => void }) {
   const [edit, setEdit] = useState<string | null>(null), [draft, setDraft] = useState(""), [pick, setPick] = useState<string[]>([]);
   const start = (s: Step) => {
     if (s.type === "file" || s.id === "kind") { onRewind(s.id); return; }
     setEdit(s.id); setDraft(a[s.id] || ""); setPick((a[s.id] || "").split(",").filter(Boolean));
   };
   const save = (s: Step, v: string) => { onSave(s.id, v.trim()); setEdit(null); };
+  // An (Edit) link in the preview: open that answer, ready to type.
+  useEffect(() => {
+    if (!jump) return; const s = rows.find((x) => x.id === jump.id); if (!s) return;
+    setEdit(s.id); setDraft(a[s.id] || ""); setPick((a[s.id] || "").split(",").filter(Boolean));
+    setTimeout(() => document.getElementById("answer-" + s.id)?.scrollIntoView({ block: "center", behavior: "smooth" }), 120);
+  }, [jump?.n]);
   const req = (s: Step) => !(typeof s.optional === "function" ? s.optional(a) : s.optional);
   return (
     <details id="design-answers" open={open} onToggle={(e) => onOpen((e.currentTarget as HTMLDetailsElement).open)} className="group rounded-2xl border border-ink-800 bg-ink-900/50">
@@ -345,7 +352,7 @@ function AnswersReview({ rows, a, open, onOpen, onRewind, onSave }: { rows: Step
         {rows.map((s) => {
           const on = edit === s.id, opts = s.options?.(a) || [];
           return (
-            <li key={s.id} className="flex flex-col gap-2 px-4 py-3">
+            <li key={s.id} id={"answer-" + s.id} className="flex flex-col gap-2 px-4 py-3">
               <div className="flex items-start gap-3">
                 <div className="min-w-0 flex-1">
                   <div className="text-xs text-ink-500">{STEP_LABEL[s.id] || s.id}{(a.docfrom || "").split(",").includes(s.id) && <span className="ml-1.5 text-brand-300" title="Found in your document">✦ from your document</span>}</div>
@@ -375,7 +382,7 @@ function AnswersReview({ rows, a, open, onOpen, onRewind, onSave }: { rows: Step
 }
 
 /** The preview, over the whole screen. */
-export function PreviewPopup({ design, ver, a, onClose, onEdit, onConnect, done, onTweak }: { design: Design; ver: number; a: Answers; onClose: () => void; onEdit?: () => void; onConnect?: () => void; done: boolean; onTweak?: (p: Answers) => void }) {
+export function PreviewPopup({ design, ver, a, onClose, onEdit, onEditLink, onConnect, done, onTweak }: { design: Design; ver: number; a: Answers; onClose: () => void; onEdit?: () => void; onEditLink?: (id: string) => void; onConnect?: () => void; done: boolean; onTweak?: (p: Answers) => void }) {
   const [play, setPlay] = useState(false);
   useEffect(() => {
     const k = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
@@ -388,14 +395,15 @@ export function PreviewPopup({ design, ver, a, onClose, onEdit, onConnect, done,
         <b className="min-w-0 truncate text-sm">{a.name || "Your website"}</b>
         <span className="chip shrink-0 border-amber-400/50 text-amber-200 max-sm:hidden">{done ? "Preview · not published" : "Preview so far"}</span>
         <span className="ml-auto flex shrink-0 items-center gap-2">
-          {onTweak && <button type="button" className={`btn btn-sm ${play ? "border-brand-400" : ""}`} aria-pressed={play} onClick={() => setPlay((v) => !v)}><span className="max-sm:hidden">Play with your design</span><span className="sm:hidden">Customise</span></button>}
-          {onConnect && <button type="button" className="btn btn-pri btn-sm" onClick={onConnect}><span className="max-sm:hidden">Connect with Picaffectz</span><span className="sm:hidden">Connect</span></button>}
+          {onTweak && <button type="button" className={`btn btn-sm play-btn ${play ? "ring-2 ring-white/70" : ""}`} aria-pressed={play} onClick={() => setPlay((v) => !v)}><span className="max-sm:hidden">Play with your design</span><span className="sm:hidden">Customise</span></button>}
           {onEdit && <button type="button" className="btn btn-sm" onClick={onEdit}>Edit answers</button>}
           <button type="button" className="btn btn-sm" onClick={onClose} autoFocus>{done ? "Close" : "Back"}</button>
         </span>
       </div>
       <div className="relative flex min-h-0 flex-1">
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col"><Preview key={design.kind} tpl={TEMPLATES[design.kind]} base={`templates/${design.kind}/`} content={design.content} version={ver} assets={{}} editable={false} hidePages /></div>
+        <div className="relative flex min-h-0 min-w-0 flex-1 flex-col"><Preview key={design.kind} tpl={TEMPLATES[design.kind]} base={`templates/${design.kind}/`} content={design.content} version={ver} assets={{}} editable={false} hidePages onEditLink={onEditLink} />
+          {onConnect && <button type="button" onClick={onConnect} className="btn btn-pri absolute bottom-5 left-1/2 z-[5] -translate-x-1/2 whitespace-nowrap rounded-full px-6 shadow-xl shadow-black/40">Connect with Picaffectz</button>}
+        </div>
         {play && onTweak && <Tweaks a={a} design={design} onTweak={onTweak} onClose={() => setPlay(false)} />}
       </div>
     </div>

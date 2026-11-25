@@ -59,8 +59,8 @@ const AI_PRESETS: { id: string; name: string; base: string; model: string; keyUr
 /** Settings → AI engine: the owner's own OpenAI-compatible API. */
 export function AiApiForm({ where }: { where: Where | null | undefined }) {
   const toast = useToast(), { saved, err, save } = useSaved(where || null);
-  const [f, setF] = useState({ base: "", model: "", vision: "", key: "" }), [busy, setBusy] = useState(""), [prov, setProv] = useState("");
-  useEffect(() => { const a = saved?.ai; if (a) { setF({ base: txt(a.base), model: txt(a.model), vision: txt(a.vision), key: "" }); setProv(AI_PRESETS.find((x) => x.base === txt(a.base).replace(/\/+$/, ""))?.id || "other"); } }, [saved]);
+  const [f, setF] = useState({ base: "", model: "", vision: "", image: "", key: "" }), [busy, setBusy] = useState(""), [prov, setProv] = useState("");
+  useEffect(() => { const a = saved?.ai; if (a) { setF({ base: txt(a.base), model: txt(a.model), vision: txt(a.vision), image: txt(a.image), key: "" }); setProv(AI_PRESETS.find((x) => x.base === txt(a.base).replace(/\/+$/, ""))?.id || "other"); } }, [saved]);
   const preset = AI_PRESETS.find((x) => x.id === prov);
   if (where === undefined) return <Missing why="Checking your database…" />;
   if (!where) return <Missing why="Your own AI API is kept on the Studio's Cloudflare database. Host the Studio on Cloudflare (Settings → Hostings) and sign in there as its owner to set it up." />;
@@ -84,9 +84,10 @@ export function AiApiForm({ where }: { where: Where | null | undefined }) {
         <Secret id="ai-key" label="API key" saved={!!a?.key} value={f.key} onChange={(v) => setF({ ...f, key: v })} />
       </div>
       <div className="flex flex-wrap gap-2">
-        <button type="button" className="btn btn-sm btn-pri" disabled={!ok || !!busy} onClick={go("Saving", async () => { await save("ai", { on: true, base: f.base.trim(), model: f.model.trim(), vision: f.vision.trim(), key: f.key.trim() }); setF((x) => ({ ...x, key: "" })); toast("Your AI API is saved."); })}>{busy === "Saving" ? "Saving…" : "Save"}</button>
+        <Field label="Model for drawing pictures (optional)" htmlFor="ai-image" hint="Used when pictures are set to be drawn by the Studio's AI engine. Empty uses dall-e-3 for ChatGPT and imagen-3.0-generate-002 for Gemini. Claude can't draw pictures."><input id="ai-image" className="input" value={f.image} onChange={(e) => setF({ ...f, image: e.target.value })} /></Field>
+        <button type="button" className="btn btn-sm btn-pri" disabled={!ok || !!busy} onClick={go("Saving", async () => { await save("ai", { on: true, base: f.base.trim(), model: f.model.trim(), vision: f.vision.trim(), image: f.image.trim(), key: f.key.trim() }); setF((x) => ({ ...x, key: "" })); toast("Your AI API is saved."); })}>{busy === "Saving" ? "Saving…" : "Save"}</button>
         <button type="button" className="btn btn-sm" disabled={!a?.key || !!busy} onClick={go("Testing", async () => { const r = await cfCall<any>(where.api, "/set/test?scope=" + encodeURIComponent(where.scope), { method: "POST", body: JSON.stringify({ name: "ai" }) }); if (r?.error) throw new Error(r.error); toast(`It answered: “${r.said || "(nothing)"}”. The connection works.`); })}>{busy === "Testing" ? "Testing…" : "Test the connection"}</button>
-        {a && <button type="button" className="btn btn-sm btn-danger ml-auto" disabled={!!busy} onClick={go("Removing", async () => { await save("ai", null); setF({ base: "", model: "", vision: "", key: "" }); toast("Removed."); })}>Remove</button>}
+        {a && <button type="button" className="btn btn-sm btn-danger ml-auto" disabled={!!busy} onClick={go("Removing", async () => { await save("ai", null); setF({ base: "", model: "", vision: "", image: "", key: "" }); toast("Removed."); })}>Remove</button>}
       </div>
       <p className="text-[12.5px] text-ink-400">Your text and pictures are sent to that provider when you use a helper, under that provider's terms and prices. The key is stored encrypted on your database and is never shown again or put in a site.</p>
     </div>

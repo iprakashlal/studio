@@ -460,7 +460,7 @@ async function ensure(env: Env) {
   ensured = true;
 }
 const SETTINGS: Record<string, { secret: string[]; text: string[]; flags: string[] }> = {
-  ai: { secret: ["key"], text: ["base", "model", "vision"], flags: ["on"] },
+  ai: { secret: ["key"], text: ["base", "model", "vision", "image"], flags: ["on"] },
   wa: { secret: ["token"], text: ["phoneId", "waba", "cc", "lang", "to", "phones", "tplOtp", "tplOrder", "tplEnquiry"], flags: ["on", "login", "orderOtp", "orderAlert", "enquiryAlert"] },
   rz: { secret: ["secret"], text: ["keyId"], flags: ["on"] },
   cf: { secret: ["secret"], text: ["appId"], flags: ["test"] },
@@ -1548,9 +1548,25 @@ async function dqImage(env: Env, id: string, req: Request): Promise<Response> {
   const idx = await studioIndex(env, id); if (!idx) return err(404, "Not found.");
   const d = idx?.prefs?.design;
   if (d?.images?.source !== "engine") return json({ engine: "system" });
-  const { choice, ai } = await dqEngine(env, idx); if (choice !== "cloudflare" || !ai) return json({ engine: "system" });
+  const { choice, ai } = await dqEngine(env, idx); if ((choice !== "cloudflare" && choice !== "custom") || !ai) return json({ engine: "system" });
   let q: any; try { q = JSON.parse((await req.text()).slice(0, 2000) || "{}"); } catch { return err(400, "Couldn't read the request."); }
   const prompt = clip(q.prompt, 400); if (prompt.length < 3) return err(400, "Describe the picture first.");
+  if (choice === "custom") {
+    // The owner's own API: an OpenAI-style picture endpoint, with the picture model named in Settings (or a known one for OpenAI and Gemini).
+    try {
+      const c: any = await anySetting(env, "ai"), base = String(c?.base || "").trim().replace(/\/+$/, "").replace(/\/chat\/completions$/, "");
+      const model = String(c?.image || "").trim() || (/api\.openai\.com/.test(base) ? "dall-e-3" : /generativelanguage\.googleapis\.com/.test(base) ? "imagen-3.0-generate-002" : "");
+      if (!model) return json({ engine: "system", error: "no picture model" });
+      const send = (fmt: boolean) => fetch(base + "/images/generations", { method: "POST", headers: { Authorization: "Bearer " + c.key, "Content-Type": "application/json" }, body: JSON.stringify({ model, prompt, n: 1, ...(fmt ? { response_format: "b64_json" } : {}) }) });
+      let r = await send(true); if (r.status === 400) r = await send(false);
+      if (!r.ok) return json({ engine: "system", error: `Your AI API answered ${r.status}` });
+      const j: any = await r.json().catch(() => null), x = j?.data?.[0];
+      let img = typeof x?.b64_json === "string" ? x.b64_json : "";
+      if (!img && typeof x?.url === "string" && publicUrl(x.url)) { const b = new Uint8Array(await (await fetch(x.url)).arrayBuffer()); let s = ""; for (let i = 0; i < b.length; i += 8192) s += String.fromCharCode(...b.subarray(i, i + 8192)); img = btoa(s); }
+      if (img.length < 100) return json({ engine: "system", error: "empty" });
+      return json({ engine: "custom", image: img });
+    } catch (e: any) { return json({ engine: "system", error: String(e?.message || e).slice(0, 160) }); }
+  }
   try {
     const r: any = await ai.run("@cf/black-forest-labs/flux-1-schnell", { prompt, steps: 4 });
     const img = typeof r?.image === "string" ? r.image : "";

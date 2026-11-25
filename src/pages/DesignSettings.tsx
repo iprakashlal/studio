@@ -1,3 +1,4 @@
+import { themeCode } from "../themes/codes";
 import { useEffect, useMemo, useState } from "react";
 import { pushPref, savePrefNow } from "../lib/prefs";
 import { cleanDesignSettings, readDesignSettings, writeDesignSettings, type DesignSettings } from "../lib/designs";
@@ -202,6 +203,7 @@ export function DesignLookTab({ session, studio, index, onIndex }: { session: Se
                 <input type="checkbox" checked={offered.includes(t.id)} onChange={(e) => setOffered(e.target.checked ? [...offered, t.id] : offered.filter((x) => x !== t.id))} />
                 <span className="flex flex-none overflow-hidden rounded-full border border-white/20" aria-hidden>{[t.colors.bg, t.colors.c1, t.colors.c2].map((c, i) => <span key={i} className="h-4 w-3.5" style={{ background: c }} />)}</span>
                 <span className="min-w-0 flex-1 truncate">{t.name}</span>
+                <span className="flex flex-none items-center gap-1.5 text-[11px] text-ink-400"><span className="rounded border border-ink-600 px-1.5 py-px">{t.dark ? "Dark" : "Light"}</span><span className="font-mono">{themeCode(t)}</span></span>
               </label>
             ))}
             {!shownThemes.length && <p className="text-[13px] text-ink-400">No theme matches that.</p>}

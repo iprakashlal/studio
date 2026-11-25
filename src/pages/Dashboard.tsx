@@ -1,4 +1,4 @@
-import { DesignsTab } from "./DesignsTab";
+import { DesignsTab, useDrafts } from "./DesignsTab";
 import { QueriesTab, useNewQueries } from "./QueriesTab";
 import { useEffect, useMemo, useState } from "react";
 import { THEMES } from "../themes/catalog";
@@ -147,7 +147,7 @@ export function Dashboard({ studio, index, onIndex, token, hid = () => false, ma
   const [sort, setSort] = useState("updated");
   const [creating, setCreating] = useState(false);
   const [managing, setManaging] = useState(false);
-  const newQ = useNewQueries();
+  const newQ = useNewQueries(), draftsN = useDrafts().list.filter((d) => d.kind).length;
   const [busy, setBusy] = useState("");
 
   const cats = index.categories;
@@ -244,7 +244,7 @@ export function Dashboard({ studio, index, onIndex, token, hid = () => false, ma
 
       {!only && !hid("design") && (
         <div className="flex flex-wrap gap-1 border-b border-ink-700" role="tablist" aria-label="Projects and design previews">
-          {([["", "#/", "Projects", String(index.projects.length)], ["previews", "#/designs", "Design previews", String((index.designs || []).length)]] as [string, string, string, string][]).map(([k, h, l, n]) => (
+          {([["", "#/", "Projects", String(index.projects.length)], ["previews", "#/designs", "Design previews", String((index.designs || []).length + draftsN)]] as [string, string, string, string][]).map(([k, h, l, n]) => (
             <a key={k} href={h} role="tab" aria-selected={designsTab === k} className={`-mb-px border-b-2 px-3 py-2 text-sm font-semibold ${designsTab === k ? "border-brand-400 text-ink-100" : "border-transparent text-ink-400 hover:text-ink-100"}`}>{l} {n && <span className={k === "queries" ? "ml-1 rounded-full bg-emerald-500/20 px-2 py-0.5 text-xs text-emerald-200" : "opacity-60"}>{n}</span>}</a>
           ))}
         </div>

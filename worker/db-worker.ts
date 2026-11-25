@@ -451,6 +451,8 @@ async function ensure(env: Env) {
     env.DB.prepare("create table if not exists pin_dev (email text not null, dev text not null, at integer not null, primary key (email, dev))"),
     env.DB.prepare("create table if not exists design_queries (id integer primary key autoincrement, studio text not null, name text not null default '', kind text not null default '', person text not null default '', phone text not null default '', email text not null default '', note text not null default '', answers text not null default '{}', copy text not null default '{}', logo text not null default '', pdf_name text not null default '', pdf text not null default '', status text not null default 'new', mail text not null default '', created_at text not null)"),
     env.DB.prepare("create index if not exists design_queries_studio on design_queries (studio, id)"),
+    env.DB.prepare("create table if not exists design_drafts (studio text not null, id text not null, email text not null, name text not null default '', kind text not null default '', theme_id text not null default '', theme_name text not null default '', summary text not null default '', answers text not null default '{}', copy text not null default '{}', logo text not null default '', created_at text not null, updated_at text not null, primary key (studio, id))"),
+    env.DB.prepare("create index if not exists design_drafts_studio on design_drafts (studio, updated_at)"),
     env.DB.prepare("create table if not exists dq_rate (k text primary key, n integer not null, exp integer not null)"),
     env.DB.prepare("create table if not exists payments (rz_order text primary key, site text not null, order_no text not null, amount integer not null, status text not null default 'created', created_at text not null)"),
   ]);
@@ -1355,7 +1357,7 @@ async function dqOtp(env: Env, id: string, req: Request, send: boolean): Promise
     await env.DB.prepare("insert into otps (k, hash, expires, tries, sent) values (?, ?, ?, 0, ?) on conflict (k) do update set hash = excluded.hash, expires = excluded.expires, tries = 0, sent = excluded.sent").bind(k, b64u(await hmac(env.SECRET, k + ":" + code)), now + 10 * 60_000, now).run();
     const name = oneLine(String((await studioIndex(env, id))?.brand?.name || "")).slice(0, 60) || "Picaffectz";
     try { await sendMail(env, em, `${code} is your code for ${name}`, `<p>Your code to confirm this email address for ${hesc(name)}:</p><p style="font-size:28px;font-weight:700;letter-spacing:4px">${code}</p><p>It works for 10 minutes. If you didn't ask for it, ignore this email.</p>`); }
-    catch { const exp = now + 45 * 60_000; return json({ ok: false, skip: exp + "." + b64u(await hmac(env.SECRET, "dqskip:" + id + ":" + em + ":" + exp)) }); }
+    catch { const exp = now + 8 * 3600_000; return json({ ok: false, skip: exp + "." + b64u(await hmac(env.SECRET, "dqskip:" + id + ":" + em + ":" + exp)) }); }
     return json({ ok: true });
   }
   const c: any = await env.DB.prepare("select hash, expires, tries from otps where k = ?").bind(k).first();
@@ -1363,8 +1365,40 @@ async function dqOtp(env: Env, id: string, req: Request, send: boolean): Promise
   if (c.tries >= 5) return err(429, "Too many tries. Ask for a new code.");
   if (c.hash !== b64u(await hmac(env.SECRET, k + ":" + String(b.code || "").trim()))) { await env.DB.prepare("update otps set tries = tries + 1 where k = ?").bind(k).run(); return err(403, "That code isn't right."); }
   await env.DB.prepare("update otps set expires = 0 where k = ?").bind(k).run();
-  const exp = now + 45 * 60_000;
+  const exp = now + 8 * 3600_000;
   return json({ ok: true, token: exp + "." + b64u(await hmac(env.SECRET, "dqotp:" + id + ":" + em + ":" + exp)) });
+}
+/** Does this pass (earned by confirming the email with its code, or given instead when mail can't be sent) belong to this email? */
+async function dqPass(env: Env, id: string, email: string, otp: any, skip: any): Promise<"otp" | "skip" | ""> {
+  const em = emailKey(email), [oexp, osig] = String(otp || "").split("."), [sexp, ssig] = String(skip || "").split(".");
+  if (!em) return "";
+  if (+oexp > Date.now() && osig === b64u(await hmac(env.SECRET, "dqotp:" + id + ":" + em + ":" + oexp))) return "otp";
+  if (+sexp > Date.now() && ssig === b64u(await hmac(env.SECRET, "dqskip:" + id + ":" + em + ":" + sexp))) return "skip";
+  return "";
+}
+/** Design yourself: the progress of someone whose email is confirmed is kept here as they answer (Projects → Design previews), until they send it (then it is a DIY submission). */
+async function dqDraft(env: Env, id: string, req: Request): Promise<Response> {
+  await ensure(env);
+  const raw = await req.text(); if (raw.length > 400_000) return err(413, "That is too big.");
+  let q: any; try { q = JSON.parse(raw || "{}"); } catch { return err(400, "Couldn't read the request."); }
+  if (!(await env.DB.prepare("select 1 from members where scope = ? limit 1").bind("studio:" + id).first())) return err(404, "Not found.");
+  const ip = req.headers.get("cf-connecting-ip") || "x";
+  if (!(await dqRate(env, "dqdr:" + id, 1500, 3600)) || !(await dqRate(env, "dqdrip:" + ip, 300, 3600))) return err(429, "Too many requests just now.");
+  const email = clip(q.email, 120); if (!EMAIL_RE.test(email)) return err(400, "Confirm your email first.");
+  if (!(await dqPass(env, id, email, q.otp, q.skip))) return err(403, "Please confirm your email address with the code we send you.");
+  const did = String(q.id || "").replace(/[^a-z0-9_-]/gi, "").slice(0, 40); if (!did) return err(400, "Which design?");
+  const answers = dqStrings(q.answers, 44, 1500), copy = dqCopy(q.copy);
+  if (typeof q.answers?.doctext === "string" && q.answers.doctext.trim()) answers.doctext = q.answers.doctext.slice(0, 12000);
+  if (typeof q.answers?.docsec === "string" && q.answers.docsec.length <= 9000) { try { if (JSON.parse(q.answers.docsec)) answers.docsec = q.answers.docsec; } catch { /* not kept */ } }
+  if (answers.doclink && !/^https?:\/\//i.test(answers.doclink)) delete answers.doclink;
+  const logo = typeof q.logo === "string" && /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(q.logo) && q.logo.length <= 60_000 ? q.logo : "";
+  const kind = DQ_KINDS.includes(q.kind) ? q.kind : "", now = new Date().toISOString();
+  // (a design already sent is not brought back as a preview)
+  if (await env.DB.prepare("select 1 from design_queries where studio = ? and json_extract(answers, '$.draftid') = ? limit 1").bind(id, did).first()) return json({ ok: true, sent: true });
+  await env.DB.prepare("insert into design_drafts (studio, id, email, name, kind, theme_id, theme_name, summary, answers, copy, logo, created_at, updated_at) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) on conflict (studio, id) do update set email = excluded.email, name = excluded.name, kind = excluded.kind, theme_id = excluded.theme_id, theme_name = excluded.theme_name, summary = excluded.summary, answers = excluded.answers, copy = excluded.copy, logo = excluded.logo, updated_at = excluded.updated_at where design_drafts.email = excluded.email")
+    .bind(id, did, email, clip(q.name, 120), kind, clip(q.themeId, 60), clip(q.themeName, 80), clip(q.summary, 300), JSON.stringify(answers), JSON.stringify(copy), logo, now, now).run();
+  await env.DB.prepare("delete from design_drafts where studio = ? and updated_at < ?").bind(id, new Date(Date.now() - 90 * 86400_000).toISOString()).run().catch(() => {});
+  return json({ ok: true });
 }
 async function dqSubmit(env: Env, id: string, req: Request, ctx?: { waitUntil(p: Promise<unknown>): void }): Promise<Response> {
   await ensure(env);
@@ -1384,6 +1418,7 @@ async function dqSubmit(env: Env, id: string, req: Request, ctx?: { waitUntil(p:
   const okSkip = !okOtp && !!em && +sexp > Date.now() && ssig === b64u(await hmac(env.SECRET, "dqskip:" + id + ":" + em + ":" + sexp));
   if (!okOtp && !okSkip) return err(403, "Please confirm your email address with the code we send you.");
   const answers = dqStrings(q.answers, 44, 1500), copy = dqCopy(q.copy);
+  const draftId = String(q.draft || "").replace(/[^a-z0-9_-]/gi, "").slice(0, 40); if (draftId) answers.draftid = draftId;
   // The text read from the person's own document (kept longer than an ordinary answer) and the link they gave.
   answers.emailverified = okOtp ? "yes" : "no";
   if (typeof q.answers?.doctext === "string" && q.answers.doctext.trim()) answers.doctext = q.answers.doctext.slice(0, 12000);
@@ -1394,6 +1429,7 @@ async function dqSubmit(env: Env, id: string, req: Request, ctx?: { waitUntil(p:
   if (q.pdf && typeof q.pdf.b64 === "string") { if (!/^JVBER/.test(q.pdf.b64) || q.pdf.b64.length > 1_700_000 || !/^[A-Za-z0-9+/=]+$/.test(q.pdf.b64)) return err(400, "The menu must be a PDF under 1.2 MB."); pdf = q.pdf.b64; pdfName = clip(q.pdf.name, 100) || "menu.pdf"; }
   const made: any = await env.DB.prepare("insert into design_queries (studio, name, kind, person, phone, email, note, answers, copy, logo, pdf_name, pdf, created_at) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) returning id")
     .bind(id, name, kind, person, phone, email, note, JSON.stringify(answers), JSON.stringify(copy), logo, pdfName, pdf, new Date().toISOString()).first();
+  if (draftId) await env.DB.prepare("delete from design_drafts where studio = ? and id = ?").bind(id, draftId).run().catch(() => {});
   // The request is kept either way; the email is a copy, so a mail problem never fails it.
   const mail = (async () => {
     let said = "";
@@ -2033,8 +2069,9 @@ export default {
       if (p.startsWith("/dq/understand/") && req.method === "POST") { const id = studioId(p.split("/")[3] || ""); if (!id) return err(404, "Not found."); return dqUnderstand(env, id, req); }
       if (p.startsWith("/dq/read/") && req.method === "POST") { const id = studioId(p.split("/")[3] || ""); if (!id) return err(404, "Not found."); return dqRead(env, id, req); }
       if (/^\/dq\/otp\/(send|check)\/[a-z0-9-]+$/.test(p) && req.method === "POST") { const id = studioId(p.split("/")[4] || ""); if (!id) return err(404, "Not found."); return dqOtp(env, id, req, p.startsWith("/dq/otp/send/")); }
+      if (p.startsWith("/dq/draft/") && req.method === "POST") { const id = studioId(p.split("/")[3] || ""); if (!id) return err(404, "Not found."); return dqDraft(env, id, req); }
       if (p.startsWith("/dq/write/") && req.method === "POST") { const id = studioId(p.split("/")[3] || ""); if (!id) return err(404, "Not found."); return dqWrite(env, id, req); }
-      if (/^\/dq\/[a-z0-9-]+$/.test(p) && !["/dq/list", "/dq/get", "/dq/status", "/dq/delete"].includes(p) && req.method === "POST") { const id = studioId(p.split("/")[2]); if (!id) return err(404, "Not found."); return dqSubmit(env, id, req, ctx); }
+      if (/^\/dq\/[a-z0-9-]+$/.test(p) && !["/dq/list", "/dq/get", "/dq/status", "/dq/delete", "/dq/drafts", "/dq/draft-delete"].includes(p) && req.method === "POST") { const id = studioId(p.split("/")[2]); if (!id) return err(404, "Not found."); return dqSubmit(env, id, req, ctx); }
 
       if (p.startsWith("/enquire/") && req.method === "POST") {
         const site = p.split("/")[2]; if (!/^[a-z0-9][a-z0-9-]{0,59}$/.test(site)) return err(404, "Not found.");
@@ -2651,6 +2688,16 @@ export default {
         return json({ ok: true, points: next });
       }
       // ---- Design yourself requests, for the Studio's members
+      if (p === "/dq/drafts" || p === "/dq/draft-delete") {
+        if (!scope.startsWith("studio:")) return err(400, "Unknown scope.");
+        await ensure(env); const sid = scope.slice(7);
+        if (p === "/dq/drafts") {
+          const rows = (await env.DB.prepare("select id, email, name, kind, theme_id, theme_name, summary, answers, copy, logo, created_at, updated_at from design_drafts where studio = ? order by updated_at desc limit 200").bind(sid).all()).results || [];
+          return json(rows.map((r: any) => ({ id: r.id, email: r.email, name: r.name, kind: r.kind, themeId: r.theme_id, themeName: r.theme_name, summary: r.summary, answers: JSON.parse(r.answers || "{}"), copy: JSON.parse(r.copy || "{}"), ...(r.logo ? { logo: r.logo } : {}), createdAt: r.created_at, updatedAt: r.updated_at })));
+        }
+        const b: any = await req.json().catch(() => ({}));
+        await env.DB.prepare("delete from design_drafts where studio = ? and id = ?").bind(sid, String(b.id || "")).run(); return json({ ok: true });
+      }
       if (p === "/dq/list" || p === "/dq/get" || p === "/dq/status" || p === "/dq/delete") {
         if (!scope.startsWith("studio:")) return err(400, "Unknown scope.");
         await ensure(env); const sid = scope.slice(7);

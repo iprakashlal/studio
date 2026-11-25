@@ -508,6 +508,74 @@ export async function buildDesign(a: Answers, copy?: Copy | null, files?: Design
     c.work.items = workLines.slice(0, 6).map((l) => { const m = /^(.{2,70}?)\s*(?::|\s[-–—]\s)\s*(.{3,})$/.exec(l), title = (m ? m[1] : l).trim(), sum = (m ? m[2] : "").trim(); return { ...base0.work, title, client: "", sector: "", summary: sum || `${name || "We"} delivered ${title.charAt(0).toLowerCase() + title.slice(1)}.`, result: "", image: null, url: "" }; });
     c.work.lede = cp.work_text || ""; show(c, "work");
   }
+  // The other answers, each into the part of the website that shows it (nothing is made up: only what was said).
+  const yes = (v?: string) => v === "yes", many = (v?: string) => (v || "").split(",").map((x) => x.trim()).filter(Boolean), TS = typedSections(a);
+  for (const k of Object.keys(TS) as (keyof DocSections)[]) if (!(ds as any)[k]?.length && !(ds as any)[k]) (ds as any)[k] = (TS as any)[k];
+  if (a.domain?.trim()) put("seo.siteUrl", /^https?:\/\//i.test(a.domain.trim()) ? a.domain.trim() : "https://" + a.domain.trim().replace(/^\/+/, ""));
+  if (yes(a.wabtn) && phone) put("addons.chat", { on: true, kind: "whatsapp", value: digits(phone), label: "Chat with us", message: name ? `Hello ${name}!` : "Hello!", side: "right", showLabel: true });
+  if (kind === "portfolio") {
+    const intro = (a.intro || "").trim(), yrs = (a.years || "").trim().replace(/[^\d+]/g, "");
+    if (intro) put("hero.role", intro);
+    if (yrs) put("hero.meta", [{ value: yrs + (yrs.includes("+") ? "" : "+"), label: "Years of experience" }, ...(city ? [{ value: city, label: "Based in" }] : [])]);
+    if (yes(a.openwork)) { put("addons.badge", { on: true, text: "Open to work", side: "left" }); put("velocity.status", "Open to work"); }
+    const proj = lines(a.projects);
+    if (proj.length) {
+      const SH = ["circle", "square", "diamond", "triangle"], CL = ["c1", "c2", "c3"];
+      c.projects = { ...(c.projects || {}), items: proj.slice(0, 8).map((l, i) => { const m = /^(.{2,70}?)\s*(?::|\s[-–—]\s)\s*(.{3,})$/.exec(l); return { title: (m ? m[1] : l).trim(), body: (m ? m[2] : "").trim(), url: "", linkLabel: "", image: null, image2: null, color: CL[i % 3], shape: SH[i % 4], tags: [] }; }) };
+      show(c, "projects");
+    }
+    const off = lines(a.offer).map((l) => priced(l).name);
+    if (off.length) put("contact.body", `${cp.cta_text || ""}${cp.cta_text ? " " : ""}Available for: ${off.join(", ")}.`);
+    if (ds.testimonials?.length) c.testimonials = { ...(c.testimonials || {}), items: ds.testimonials };
+    if (yes(a.cform)) put("contactForm.on", true);
+    if (yes(a.cform) || email || phone) show(c, "contact");
+  } else if (kind === "store") {
+    if (a.currency) put("settings.currency", a.currency);
+    if (story) { put("portfolio.intro", story); put("home.hero.text", story.split(/(?<=[.!?])\s+/)[0] || story); }
+    const cats = lines(a.cats);
+    if (cats.length) {
+      const slug = (x: string) => x.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "cat", base = c.categories?.[0] || { description: "", image: null };
+      c.categories = cats.slice(0, 8).map((n) => ({ ...base, id: slug(n), name: n, description: "" }));
+      (c.products || []).forEach((p: any, i: number) => { p.category = c.categories[i % c.categories.length].id; });
+    }
+    put("backend.accounts", yes(a.accounts)); put("backend.wishlist", yes(a.accounts));
+    if (a.backend === "supabase") put("backend.provider", "supabase");
+    if ((a.alertmail || "").trim()) put("orders.email", a.alertmail.trim());
+    const num = (v?: string) => { const n = +String(v || "").replace(/[^\d.]/g, ""); return Number.isFinite(n) && n > 0 ? n : 0; };
+    if (num(a.minorder)) put("settings.minOrder", num(a.minorder));
+    if (a.ship?.trim()) put("settings.shippingFee", num(a.ship)); if (num(a.freeship)) put("settings.freeShippingOver", num(a.freeship));
+    const where = many(a.deliver).map((x) => ({ city: city || "your city", state: "your state", india: "all over India", world: "worldwide" } as Record<string, string>)[x]).filter(Boolean);
+    const pol = (id: string, title: string, text: string) => { const L = (c.policies = c.policies || []); const i = L.findIndex((x: any) => x.id === id); if (i >= 0) L[i] = { ...L[i], text }; else L.push({ id, title, text }); };
+    if (where.length || a.dtime?.trim()) pol("shipping", "Shipping", [where.length ? `We deliver ${where.join(", ")}.` : "", a.dtime?.trim() ? `Delivery usually takes ${a.dtime.trim()}.` : ""].filter(Boolean).join(" "));
+    if (a.returns?.trim()) pol("refunds", "Returns and refunds", a.returns.trim());
+    if (a.gstin?.trim()) { put("footer.text", `${c.footer?.text || ""} GSTIN ${a.gstin.trim()}.`.trim()); }
+    if (address) put("contact.address", address);
+  } else if (kind === "business") {
+    const yrNow = new Date().getFullYear(), fy = +(a.founded || "").replace(/\D/g, ""), ts = (a.teamsize || "").trim().replace(/[^\d+]/g, "");
+    if (!(ds.stats?.length)) { const st: { value: string; label: string }[] = []; if (fy > 1900 && fy <= yrNow) st.push({ value: String(Math.max(1, yrNow - fy)) + "+", label: "Years in business" }); if (ts) st.push({ value: ts, label: "People in the team" }); if (st.length) { c.stats = { ...(c.stats || {}), items: st }; show(c, "stats"); } }
+    if (fy > 1900 && fy <= yrNow) put("about.body", `${c.about?.body || ""}\n\nFounded in ${fy}.`.trim());
+    const certs = lines(a.certs); if (certs.length) c.hero.badges = [...certs, ...usp].slice(0, 4);
+    const offices = lines(a.offices); if (offices.length) { put("contact.address", offices.join("\n")); show(c, "contact"); }
+    const f = many(a.enqfields); if (f.length) { const F = (c.contact.form = c.contact.form || {}); F.enabled = true; F.askPhone = f.includes("phone"); F.askCompany = f.includes("company"); F.askService = f.includes("service"); F.askBudget = f.includes("budget"); }
+    const link = (a.booklink || "").trim(); if (a.cta === "book" && link) { for (const k of ["nav.cta", "hero.ctaPrimary", "cta.button"]) { const t = k.split(".")[0]; put(`${t}.${t === "hero" ? "ctaPrimaryTarget" : t === "nav" ? "ctaTarget" : "target"}`, "url"); put(`${t}.${t === "hero" ? "ctaPrimaryTargetUrl" : t === "nav" ? "ctaTargetUrl" : "targetUrl"}`, /^https?:/i.test(link) ? link : "https://" + link); } }
+  } else {
+    const bits = [a.ptype, a.foodtype, many(a.serves).join(" · ")].filter(Boolean) as string[];
+    if (bits.length) c.hero.badges = [...bits, ...usp].slice(0, 4);
+    const facts: { value: string; label: string }[] = [];
+    if (a.cost?.trim()) facts.push({ value: "₹" + a.cost.trim().replace(/[^\d,]/g, ""), label: "For two" });
+    if (a.foodtype) facts.push({ value: a.foodtype, label: "Food" });
+    if (a.ptype) facts.push({ value: a.ptype, label: "Kind of place" });
+    if (facts.length && !ds.stats?.length) { c.about = { ...(c.about || {}), facts }; }
+    if (a.cost?.trim()) put("seo.priceRange", Number(a.cost.replace(/\D/g, "")) > 1500 ? "₹₹₹" : Number(a.cost.replace(/\D/g, "")) > 600 ? "₹₹" : "₹");
+    const outlets = lines(a.outlets); if (outlets.length) { put("contact.address", outlets.join("\n")); show(c, "contact"); }
+    if (yes(a.ordering)) { put("ordering.on", true); show(c, "order"); }
+    if (yes(a.reserve)) {
+      show(c, "reserve");
+      if (a.reserveto === "email" && email) { put("contact.form.notify", true); put("contact.form.notifyTo", email); }
+      if (a.reserveto === "link" && (a.booklink || "").trim()) { const l = a.booklink.trim(); put("hero.ctaPrimaryTarget", "url"); put("hero.ctaPrimaryTargetUrl", /^https?:/i.test(l) ? l : "https://" + l); }
+    }
+    if ((a.reviews || "").trim()) { const l = a.reviews.trim(), u = /^https?:/i.test(l) ? l : "https://" + l; c.footer.links = [{ label: "Reviews on Google", url: u }, ...(c.footer.links || [])]; }
+  }
   applySections(kind, c, ds, (...ids) => show(c, ...ids));
   // The sections a person gave nothing for yet show a short note with an (Edit) link that goes to the answer.
   if (kind === "business") {
@@ -559,6 +627,37 @@ function applySections(kind: Kind, c: any, d: DocSections, show: (...ids: string
     if (has("stats")) { c.about = { ...(c.about || {}), stats: d.stats!.map((x, i) => { const m = /^(\d[\d,.]*)\s*(\D*)$/.exec(x.value.replace(/,/g, "")); return { value: m ? +m[1] : 0, suffix: m ? m[2].trim() : x.value, label: x.label, color: COL[i % 3], shape: SHAPE[i % SHAPE.length] }; }) }; }
     if (has("skills") && !(c.skills?.items || []).length) { const base = c.skills.items[0] || {}; c.skills.items = d.skills!.map((e, i) => ({ ...base, tag: `${String(i + 1).padStart(2, "0")} / Skill`, title: e.title, body: e.body || "", detail: "", color: COL[i % 3], shape: SHAPE[i % SHAPE.length] })); show("skills"); }
   }
+}
+
+
+/** "“Great work.” – Priya Nair, CEO, Arcadia": the words, then who said them. */
+function quotesOf(text: string | undefined): { quote: string; name: string; role: string; company: string }[] {
+  return lines(text).map((l) => {
+    const m = /^["“'‘]?(.{8,300}?)["”'’]?\s*(?:[-–—~]|\bby\b)\s*([^"”]{2,80})$/.exec(l); if (!m) return null;
+    const [name, role, company] = m[2].split(",").map((x) => x.trim());
+    return { quote: m[1].replace(/["“”]/g, "").trim(), name: name || "", role: role || "", company: company || "" };
+  }).filter((x): x is { quote: string; name: string; role: string; company: string } => !!x && !!x.name);
+}
+/** "500+ customers", "Years: 12" or "98% - retention" as value and label. */
+function statsOf(text: string | undefined): { value: string; label: string }[] {
+  return lines(text).map((l) => {
+    let m = /^(\d[\d,.]*\s?[%+kKxX×]?\+?)\s+(.{2,40})$/.exec(l); if (m) return { value: m[1].trim(), label: m[2].trim() };
+    m = /^(.{2,40}?)\s*(?::|\s[-–—]\s)\s*(\d[\d,.]*\s?[%+kKxX×]?\+?)$/.exec(l); return m ? { value: m[2].trim(), label: m[1].trim() } : null;
+  }).filter((x): x is { value: string; label: string } => !!x).slice(0, 6);
+}
+/** The long answers (typed in the chat) read the same way as a document's sections, so the same parts of the website fill from either. */
+function typedSections(a: Answers): DocSections {
+  const out: DocSections = {}, read = (heading: string, text: string | undefined) => (text?.trim() ? (readSections(heading + "\n" + text) as any) : {});
+  const kind = a.kind as Kind;
+  if (kind === "portfolio") { const e = read("Experience", a.exp).experience, d = read("Education", a.edu).education, t = quotesOf(a.quotes); if (e?.length) out.experience = e; if (d?.length) out.education = d.map((x: any) => ({ ...x, sub: String(x.sub || "").replace(/[,;.\s]+$/, "") })); if (t.length) out.testimonials = t; }
+  if (kind === "business") {
+    const st = statsOf(a.stats), t = quotesOf(a.quotes), tm = read("Team", a.team).team, cl = read("Clients", a.clients).clients;
+    if (st.length) out.stats = st; if (t.length) out.testimonials = t; if (tm?.length) out.team = tm; if (cl?.length) out.clients = cl;
+    const ml = (a.mission || "").trim();
+    if (ml) { const v = /(?:^|\n)\s*vision\s*[:\-–—]\s*(.+)/i.exec(ml), m = ml.replace(/(?:^|\n)\s*vision\s*[:\-–—].*/i, "").replace(/^\s*mission\s*[:\-–—]\s*/i, "").trim(); if (m) out.mission = m; if (v) out.vision = v[1].trim(); }
+  }
+  if (kind === "restaurant") { const o = lines(a.specials).map((l) => { const m = /^(.{2,70}?)\s*(?:[-–—:]\s*)?(?:₹|rs\.?\s*)?(\d[\d,]*)\s*$/i.exec(l), pct = /\b(\d+\s?%\s*off)\b/i.exec(l); return { title: (m ? m[1] : l).trim(), body: "", when: "", price: m ? "₹" + m[2].replace(/,/g, "") : pct ? pct[1] : "" }; }); if (o.length) out.offers = o; }
+  return out;
 }
 
 const show = (c: any, ...ids: string[]) => { for (const x of c.sections || []) if (ids.includes(x.id)) { if ("visible" in x) x.visible = true; else x.show = true; } };

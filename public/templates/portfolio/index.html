@@ -1508,7 +1508,7 @@ function renderSite(c){
   siteRoot.innerHTML=`<div id="siteInner">${siteHTML(c)}</div>`;
   if(SC&&SC.drawn)SC.drawn(siteRoot,c);
   initSite(c);}
-  heroSlides(c);heroLogo(c);video(c);social(c);spLinks(c);menu(c);lang(c);consent(c);addons(c);festival(c);
+  heroSlides(c);heroLogo(c);video(c);social(c);spLinks(c);menu(c);lang(c);consent(c);addons(c);extras(c);festival(c);
   if(window.SiteFX)try{window.SiteFX.init({root:$("#siteInner"),brand:c.theme.introTitle||c.brand.logoText,badge:c.poweredBy,bgs:c.sectionBg,asset:imgUrl,fonts:FONTS,c:c,policy:"",again:()=>renderSite(saved)})}catch(e){}
   setIcon(c);fitLines();
   // Links inside the page follow the sections: to a section's own page, or back to the main page from one.
@@ -1517,6 +1517,29 @@ function renderSite(c){
   {const old=document.getElementById("soloBack");if(old)old.remove();
    if(SOLO.cur){const sec=c.sections.find(x=>x.id===SOLO.cur);if(sec&&sec.navLabel)document.title=sec.navLabel+" · "+document.title;
     const a=document.createElement("a");a.id="soloBack";a.href="./";a.textContent="← "+(c.brand.logoText||"Home");document.body.appendChild(a)}}
+}
+/* Kind words and a message form for every layout: put before and after the contact panel, in the page's own colours.
+   The form opens the visitor's email (or WhatsApp) with the message filled in, so it needs no server. */
+function extras(c){
+  document.querySelectorAll(".pf-extra").forEach(n=>n.remove());
+  if(["kinetic-noir","decode","gallery","velvet-cinema"].includes(KIT))return;/* these layouts are scenes, not a page that can take another section */
+  const root=document.getElementById("siteInner");if(!root)return;
+  if(!document.getElementById("pfExtraCss")){const st=document.createElement("style");st.id="pfExtraCss";
+    st.textContent=".pf-extra{position:relative;z-index:2;padding:72px 0;color:var(--text);font-family:var(--fb)}.pf-extra .pf-w{max-width:1080px;margin:0 auto;padding:0 24px}.pf-extra small{display:block;font-weight:700;letter-spacing:.12em;text-transform:uppercase;font-size:12px;color:var(--c1);margin-bottom:10px}.pf-extra h2{font-family:var(--fd);font-size:clamp(26px,4vw,40px);line-height:1.1;margin:0 0 28px}.pf-extra h2 em{font-style:normal;color:var(--c1)}.pf-q{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr));gap:18px}.pf-q figure{margin:0;padding:24px;border-radius:calc(var(--radius,20)*1px);background:var(--surface);border:1px solid var(--line)}.pf-q blockquote{margin:0 0 16px;font-size:16px;line-height:1.55}.pf-q figcaption{font-size:13.5px;color:var(--soft)}.pf-q figcaption b{color:var(--text)}.pf-f{display:grid;gap:12px;max-width:560px}.pf-f label{display:grid;gap:6px;font-size:13.5px;color:var(--soft)}.pf-f input,.pf-f textarea{font:inherit;color:var(--text);background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px}.pf-f textarea{min-height:120px;resize:vertical}.pf-f button{justify-self:start;font:700 15px var(--fb);padding:13px 22px;border-radius:999px;border:0;background:var(--c1);color:#fff;cursor:pointer}";
+    document.head.appendChild(st)}
+  const mk=(cls,html)=>{const el=document.createElement("section");el.className="pf-extra "+cls;el.innerHTML='<div class="pf-w">'+html+"</div>";return el};
+  const contact=root.querySelector("#contact")||root.querySelector('[id*="contact"]');
+  const T=c.testimonials,F=c.contactForm;
+  if(T&&(T.items||[]).length){
+    const el=mk("pf-quotes",(T.eyebrow?"<small>"+esc(T.eyebrow)+"</small>":"")+"<h2>"+rich(T.title||"Kind words")+'</h2><div class="pf-q">'+T.items.map(q=>"<figure><blockquote>“"+esc(q.quote)+"”</blockquote><figcaption><b>"+esc(q.name)+"</b>"+(q.role||q.company?" · "+esc([q.role,q.company].filter(Boolean).join(", ")):"")+"</figcaption></figure>").join("")+"</div>");
+    el.id="testimonials";if(contact&&contact.parentNode)contact.parentNode.insertBefore(el,contact);else root.appendChild(el)}
+  if(F&&F.on){
+    const el=mk("pf-form",(F.eyebrow?"<small>"+esc(F.eyebrow)+"</small>":"")+"<h2>"+rich(F.title||"Send me a message")+'</h2><form class="pf-f"><label>Your name<input name="n" required autocomplete="name"></label><label>Your email<input name="e" type="email" required autocomplete="email"></label>'+(F.askPhone?'<label>Phone<input name="p" type="tel" autocomplete="tel"></label>':"")+'<label>Message<textarea name="m" required></textarea></label><button type="submit">'+esc(F.submit||"Send message")+"</button></form>");
+    el.id="message";
+    el.querySelector("form").addEventListener("submit",ev=>{ev.preventDefault();if(PREVIEW)return;const f=ev.target,v=k=>(f.elements[k]?f.elements[k].value:"").trim(),
+      body=v("m")+"\n\n— "+v("n")+" ("+v("e")+(v("p")?", "+v("p"):"")+")",to=(c.contact&&c.contact.email)||"";
+      location.href=to?"mailto:"+to+"?subject="+encodeURIComponent("Message from "+v("n"))+"&body="+encodeURIComponent(body):"#"});
+    if(contact&&contact.parentNode)contact.parentNode.insertBefore(el,contact.nextSibling);else root.appendChild(el)}
 }
 /* Features (assets/addons.js): chat button, badge, custom code and the custom API for form entries. */
 let adP;

@@ -9,7 +9,7 @@ import { Preview } from "../editor/Preview";
 import { Logo, Spinner, useToast } from "../ui/kit";
 import { packSections, sectionNames, unpackSections } from "../lib/docsections";
 import { relatedThemes } from "../lib/designer";
-import { COLOUR_DOT, STEPS, STEP_LABEL, buildDesign, fromDoc, isOptional, nextStep, requestText, sayAnswer, themeOf, themesFor, tweakTheme, writeCopy, type Answers, type Design, type DesignFiles, type Step } from "../lib/designer";
+import { COLOUR_DOT, STEPS, STEP_LABEL, buildDesign, fromDoc, isOptional, nextStep, requestText, stepAt, sayAnswer, themeOf, themesFor, tweakTheme, writeCopy, type Answers, type Design, type DesignFiles, type Step } from "../lib/designer";
 import { newDesignId, readDesignSettings, readLocalDesigns, writeLocalDesigns, type Copy, type DesignRec } from "../lib/designs";
 import { COLOUR_SLOTS, GROUPS, pagesChoice, readColsAnswer, readLookAnswer, resolvedLook, visibleAxes, type Kind as LookKind } from "../lib/designlook";
 import { designHost, otpCheck, otpSend, passLive, readPage, readPass, saveDraft, submitQuery, understandText, writePass, type DesignHost, type Pass } from "../lib/designapi";
@@ -193,9 +193,9 @@ export function DesignPage({ studio, index, onIndex }: { studio?: Studio; index?
   };
   /** Go back to a question: it and every later answer are cleared. */
   const rewind = (id: string) => {
-    const at = STEPS.findIndex((s) => s.id === id);
-    const docAt = STEPS.findIndex((s) => s.id === "doc"), look = ["theme", "accent", "mode", "corners"];
-    const keep = Object.fromEntries(Object.entries(a).filter(([key]) => !look.includes(key) && !((key === "doctext" || key === "docfrom" || key === "docsec") && at <= docAt) && STEPS.findIndex((s) => s.id === key) < at));
+    const at = stepAt(id, a);
+    const docAt = stepAt("doc", a), look = ["theme", "accent", "mode", "corners"];
+    const keep = Object.fromEntries(Object.entries(a).filter(([key]) => !look.includes(key) && !((key === "doctext" || key === "docfrom" || key === "docsec") && at <= docAt) && stepAt(key, a) < at));
     const old = a[id]; setA(keep); setCopy(null); if (STEPS[at].type === "text" || STEPS[at].type === "long") setTimeout(() => setText(old || ""), 60);
     lastSaved.current = ""; setShowPreview(false);
   };
@@ -266,6 +266,7 @@ export function DesignPage({ studio, index, onIndex }: { studio?: Studio; index?
             </button>
           );
         })}
+        {s.type === "choice" && isOptional(s, a) && <button type="button" className="inline-flex items-center rounded-full border border-dashed border-ink-600 px-4 py-2 text-sm font-semibold text-ink-400 transition hover:border-brand-400" onClick={() => answer(s, "")}>Skip</button>}
       </div>
     );
   };
@@ -308,7 +309,7 @@ export function DesignPage({ studio, index, onIndex }: { studio?: Studio; index?
               <section className="card flex flex-col gap-5 p-5 sm:p-8" aria-live="polite">
                 <div className="flex flex-col gap-2">
                   <h2 className="font-display text-2xl font-extrabold leading-snug tracking-tight sm:text-[28px]">{cur.ask(a)}</h2>
-                  {cur.help && <p className="text-sm leading-relaxed text-ink-400">{cur.help(a)}</p>}
+                  {cur.help && cur.help(a) && <p className="text-sm leading-relaxed text-ink-400">{cur.help(a)}</p>}
                 </div>
                 {(cur.type === "choice" || cur.type === "many") && chips(cur)}
                 {cardBar}

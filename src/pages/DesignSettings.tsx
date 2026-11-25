@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { pushPref, savePrefNow } from "../lib/prefs";
 import { cleanDesignSettings, readDesignSettings, writeDesignSettings, type DesignSettings } from "../lib/designs";
 import { GROUPS, KINDS, LOOK_AXES, type Gallery, type Kind, type LookRule } from "../lib/designlook";
-import { allThemesOf } from "../lib/designer";
+import { QUESTION_GROUPS, QUESTION_LIST, allThemesOf } from "../lib/designer";
 import { AI_ENGINES } from "../lib/ai";
 import { useAiEngine } from "./AiEngine";
 import { AiApiForm, useStudioWhere } from "./Connections";
@@ -142,6 +142,13 @@ export function DesignLookTab({ session, studio, index, onIndex }: { session: Se
     const look = { ...(d.look || {}) }; if (Object.keys(next).length) look[kind] = next; else delete look[kind];
     upd({ look });
   };
+  const setQ = (group: string, id: string, patch: { h?: boolean; t?: string; p?: string }) => {
+    const all = { ...(d.questions || {}) }, g = { ...(all[group] || {}) }, r = { ...g[id], ...patch };
+    if (!r.h) delete r.h; if (!r.t?.trim()) delete r.t; if (!r.p?.trim()) delete r.p;
+    if (Object.keys(r).length) g[id] = r; else delete g[id];
+    if (Object.keys(g).length) all[group] = g; else delete all[group];
+    upd({ questions: Object.keys(all).length ? all : undefined });
+  };
   const themes = allThemesOf(kind), picked = d.themes?.[kind]?.length ? d.themes[kind]!.filter((id) => themes.some((t) => t.id === id)) : [];
   const all = !picked.length, offered = all ? themes.map((t) => t.id) : picked;
   const setOffered = (ids: string[]) => { const th = { ...(d.themes || {}) }; if (ids.length && ids.length < themes.length) th[kind] = ids; else delete th[kind]; upd({ themes: th }); };
@@ -184,6 +191,31 @@ export function DesignLookTab({ session, studio, index, onIndex }: { session: Se
       <div className="flex flex-wrap gap-1 rounded-xl border border-ink-700 bg-ink-800/40 p-1" role="tablist" aria-label="Type of website">
         {KINDS.map((k) => <button key={k} type="button" role="tab" aria-selected={kind === k} onClick={() => setKind(k)} className={`h-10 flex-1 rounded-lg px-3 text-[13px] font-semibold ${kind === k ? "bg-ink-700 text-ink-100 shadow" : "text-ink-400 hover:text-ink-100"}`}>{KIND_NAME[k]}</button>)}
       </div>
+
+      <Block open={false} title={`Questions · ${KIND_NAME[kind]}`} note="The questions a visitor is asked: untick one to hide it, or change its wording. A question is also skipped when the visitor's PDF or link has already answered it. Press Save changes to store it in your Studio's database.">
+        {QUESTION_GROUPS.filter((g) => g.id === "basics" || g.id === kind).map((g) => (
+          <div key={g.id} className="flex flex-col gap-2">
+            <b className="text-[13px]">{g.name}</b>
+            <div className="flex flex-col divide-y divide-ink-700 rounded-xl border border-ink-700">
+              {QUESTION_LIST.filter((q) => q.group === g.id).map((q) => {
+                const r = d.questions?.[g.id]?.[q.id] || {}, hidden = !!r.h, def = q.ask({ kind }), defHelp = q.help?.({ kind }) || "";
+                return (
+                  <div key={g.id + q.id} className={`grid gap-x-4 gap-y-2 p-3 sm:grid-cols-[minmax(0,13rem)_minmax(0,1fr)] ${hidden ? "opacity-60" : ""}`}>
+                    <label className="flex items-start gap-2 text-[13px]">
+                      <input type="checkbox" className="mt-0.5" checked={!hidden && !q.soon} disabled={q.soon} onChange={(e) => setQ(g.id, q.id, { h: !e.target.checked })} aria-label={`Ask: ${q.label}`} />
+                      <span><b className="block">{q.label}</b><span className="text-[11px] text-ink-500">{q.soon ? "Needs picture upload: coming next" : q.type === "file" ? "File upload" : q.type === "choice" ? "Tap one" : q.type === "many" ? "Tap several" : q.type === "long" ? "One per line" : "One line"}{q.when && !q.soon ? " · only when it applies" : ""}</span></span>
+                    </label>
+                    <div className="flex min-w-0 flex-col gap-1.5">
+                      <input className="input h-9 py-0 text-[13px]" aria-label={`Wording: ${q.label}`} disabled={q.soon} placeholder={def} value={r.t || ""} onChange={(e) => setQ(g.id, q.id, { t: e.target.value })} />
+                      {(defHelp || r.p) && <input className="input h-8 py-0 text-[12px]" aria-label={`Help line: ${q.label}`} disabled={q.soon} placeholder={defHelp} value={r.p || ""} onChange={(e) => setQ(g.id, q.id, { p: e.target.value })} />}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </Block>
 
       <Block title={`Themes · ${KIND_NAME[kind]}`} note="Your Studio's themes. Show all of them to visitors, or only the ones you tick.">
         <div className="flex flex-col gap-1.5">

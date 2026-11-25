@@ -76,6 +76,8 @@ function RowsField({ step, value, onChange, label }: { step: Step; value: string
 export function DesignPage({ studio, index, onIndex }: { studio?: Studio; index?: StudioIndex | null; onIndex?: (i: StudioIndex) => void }) {
   const toast = useToast();
   const brand = useBrand();
+  const [phone, setPhone] = useState(() => typeof matchMedia === "function" && matchMedia("(max-width: 767px)").matches);
+  useEffect(() => { if (typeof matchMedia !== "function") return; const m = matchMedia("(max-width: 767px)"), f = () => setPhone(m.matches); m.addEventListener("change", f); return () => m.removeEventListener("change", f); }, []);
   const first = useMemo(readDraft, []);
   const [a, setA] = useState<Answers>(first.a);
   const [copy, setCopy] = useState<Copy | null>(first.copy);
@@ -304,6 +306,16 @@ export function DesignPage({ studio, index, onIndex }: { studio?: Studio; index?
   const wasReady = useRef(false);
   useEffect(() => { if (ready && !wasReady.current) { wasReady.current = true; setReviewOpen(true); } if (!finished) wasReady.current = false; }, [ready, finished]);
 
+  if (phone && !studio) return (
+    <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-ink-950 px-6 text-center text-ink-100">
+      <div className="max-w-md rounded-3xl border border-ink-700 bg-ink-900 p-7 shadow-xl">
+        <h1 className="m-0 text-xl font-bold">Design yourself is not available on mobile</h1>
+        <p className="mt-3 text-[15px] leading-relaxed text-ink-300">Website design and editing are available only on a desktop, laptop or tablet display. Please open this page on one of those devices to continue.</p>
+        <a href="#/themes" className="btn mt-5 inline-flex">← Back to themes</a>
+      </div>
+    </div>
+  );
+
   return (
     <div className="flex min-h-screen flex-col bg-ink-950 text-ink-100">
       <DevtoolsGuard /><LoadVeil title="Loading Design yourself" steps={["Loading the designer", "Reading the Studio's settings"]} done={(fontsOk ? 1 : 0) + (hostDone ? 1 : 0)} />
@@ -525,7 +537,7 @@ export function PreviewPopup({ design, ver, a, onClose, onEdit, onEditLink, onCo
               <button type="button" className="btn btn-sm" aria-label="Next theme" disabled={at >= list.length - 1} onClick={() => go(at + 1)}>›</button>
             </div>
           </>) : (
-            <div className="relative flex min-h-0 flex-1 flex-col"><Preview key={design.kind} tpl={TEMPLATES[design.kind]} base={`templates/${design.kind}/`} content={design.content} version={ver} assets={{}} editable={false} hidePages onEditLink={onEditLink} hints={hints} />
+            <div className="relative flex min-h-0 flex-1 flex-col"><Preview key={design.kind} tpl={TEMPLATES[design.kind]} base={`templates/${design.kind}/`} content={design.content} version={ver} assets={{}} editable={false} note="Please note that this is just a preview to help you select a theme. Both the theme and the actual development can be customized to fit your specific requirements." hidePages onEditLink={onEditLink} hints={hints} />
               {onConnect && <button type="button" onClick={(e) => onConnect(e.currentTarget.getBoundingClientRect())} className="btn btn-pri absolute bottom-6 left-1/2 z-[5] -translate-x-1/2 whitespace-nowrap rounded-full px-10 py-4 text-base font-extrabold shadow-2xl shadow-black/50 ring-4 ring-brand-400/25">Connect with Picaffectz</button>}
             </div>
           )}

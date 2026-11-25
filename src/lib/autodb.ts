@@ -33,12 +33,12 @@ export function useUpdateStatus(): UpdateStatus {
 
 const clean = (a: string) => a.replace(/\/+$/, "");
 /** The databases this Studio uses: its own, and those of sites hosted on a Cloudflare account of their own. */
-async function targets(index: StudioIndex): Promise<{ api: string; main: boolean }[]> {
-  const out: { api: string; main: boolean }[] = [];
+async function targets(index: StudioIndex): Promise<{ api: string; main: boolean; sites: string[] }[]> {
+  const out: { api: string; main: boolean; sites: string[] }[] = [];
   const cfg = await loadHostConfig().catch(() => null);
   const main = cfg?.kind === "cloudflare" ? clean(cfg.api) : "";
-  if (main) out.push({ api: main, main: true });
-  for (const p of index.projects) { const a = p.host?.cf?.api ? clean(p.host.cf.api) : ""; if (a && a !== main && !out.some((x) => x.api === a)) out.push({ api: a, main: false }); }
+  if (main) out.push({ api: main, main: true, sites: [] });
+  for (const p of index.projects) { const a = p.host?.cf?.api ? clean(p.host.cf.api) : ""; if (!a || a === main) continue; const e = out.find((x) => x.api === a); if (e) e.sites.push(p.name); else out.push({ api: a, main: false, sites: [p.name] }); }
   return out;
 }
 
@@ -82,12 +82,13 @@ async function clientFor(session: Session, api: string, main: boolean): Promise<
 export async function autoUpdateDatabases(session: Session, index: StudioIndex, step: (s: string, pct: number) => void = () => {}): Promise<"updated" | "current" | "skip"> {
   const list = await targets(index); let did = false, skipped = false;
   // Every database that is behind, so the progress counts them all (one bar for the whole update).
-  const behind: { api: string; main: boolean; info: Awaited<ReturnType<typeof cfDeployInfo>> }[] = [];
+  const behind: { api: string; main: boolean; sites: string[]; info: Awaited<ReturnType<typeof cfDeployInfo>> }[] = [];
   for (const t of list) { const info = await cfDeployInfo(t.api); if (info.v && info.v < CFDB_VERSION) behind.push({ ...t, info }); }
   let at = -1;
   for (const { info, ...t } of behind) {
     at++;
-    const note = (x: string) => step(behind.length > 1 ? `${x} (database ${at + 1} of ${behind.length})` : x, ((at + stepAt(x) / 100) / behind.length) * 100);
+    const what = t.main ? "Studio database" : `${t.sites.slice(0, 2).join(", ")}${t.sites.length > 2 ? ` +${t.sites.length - 2}` : ""} database`;
+    const note = (x: string) => step(behind.length > 1 ? `${x} (${what}, ${at + 1} of ${behind.length})` : x, ((at + stepAt(x) / 100) / behind.length) * 100);
     // Up to three tries per build and database in this browser session (a short failure is tried again), so a failing update can't loop.
     const key = `site-studio:auto-db-tried:${STUDIO_BUILD.id}:${t.api}`;
     try { const n = +(sessionStorage.getItem(key) || 0); if (n >= 3) { skipped = true; continue; } sessionStorage.setItem(key, String(n + 1)); } catch { /* private mode */ }

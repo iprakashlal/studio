@@ -1315,6 +1315,17 @@ function dqDesignPub(d: any) {
     if (Object.keys(o).length) out.gallery = o;
   }
   if (d.themes && typeof d.themes === "object") { const th: any = {}; for (const kind of ["business", "restaurant", "portfolio", "store"]) if (Array.isArray(d.themes[kind])) th[kind] = d.themes[kind].filter((v: any) => typeof v === "string" && /^[A-Za-z0-9_-]{1,40}$/.test(v)).slice(0, 400); out.themes = th; }
+  if (d.carousel && typeof d.carousel === "object") { const c: any = {}; for (const kind of ["business", "restaurant", "portfolio", "store"]) if (d.carousel[kind] === "custom") c[kind] = "custom"; if (Object.keys(c).length) out.carousel = c; }
+  if (d.questions && typeof d.questions === "object") {
+    const q: any = {}, tx = (v: any, n: number) => (typeof v === "string" ? v.replace(/[<>]/g, "").trim().slice(0, n) : "");
+    for (const g of ["basics", "business", "restaurant", "portfolio", "store"]) {
+      const src = d.questions[g]; if (!src || typeof src !== "object") continue;
+      const rules: any = {};
+      for (const id of Object.keys(src).slice(0, 80)) { if (!/^[a-z]{1,20}$/.test(id)) continue; const r = src[id] || {}, o: any = {}; if (r.h === true) o.h = true; if (tx(r.t, 300)) o.t = tx(r.t, 300); if (tx(r.p, 300)) o.p = tx(r.p, 300); if (Object.keys(o).length) rules[id] = o; }
+      if (Object.keys(rules).length) q[g] = rules;
+    }
+    if (Object.keys(q).length) out.questions = q;
+  }
   if (d.look && typeof d.look === "object") {
     const look: any = {};
     for (const kind of ["business", "restaurant", "portfolio", "store"]) {
@@ -1329,7 +1340,7 @@ function dqDesignPub(d: any) {
     }
     out.look = look;
   }
-  return JSON.stringify(out).length > 12000 ? { on: out.on } : out;
+  return JSON.stringify(out).length > 40000 ? { on: out.on } : out;
 }
 
 /** The Studio's name, logo and colours, for its sign-in and public pages (no secrets, nothing about the owner). */
@@ -1387,7 +1398,7 @@ async function dqDraft(env: Env, id: string, req: Request): Promise<Response> {
   const email = clip(q.email, 120); if (!EMAIL_RE.test(email)) return err(400, "Confirm your email first.");
   if (!(await dqPass(env, id, email, q.otp, q.skip))) return err(403, "Please confirm your email address with the code we send you.");
   const did = String(q.id || "").replace(/[^a-z0-9_-]/gi, "").slice(0, 40); if (!did) return err(400, "Which design?");
-  const answers = dqStrings(q.answers, 44, 1500), copy = dqCopy(q.copy);
+  const answers = dqStrings(q.answers, 110, 3000), copy = dqCopy(q.copy);
   if (typeof q.answers?.doctext === "string" && q.answers.doctext.trim()) answers.doctext = q.answers.doctext.slice(0, 12000);
   if (typeof q.answers?.docsec === "string" && q.answers.docsec.length <= 9000) { try { if (JSON.parse(q.answers.docsec)) answers.docsec = q.answers.docsec; } catch { /* not kept */ } }
   if (answers.doclink && !/^https?:\/\//i.test(answers.doclink)) delete answers.doclink;
@@ -1417,7 +1428,7 @@ async function dqSubmit(env: Env, id: string, req: Request, ctx?: { waitUntil(p:
   const okOtp = !!em && +oexp > Date.now() && osig === b64u(await hmac(env.SECRET, "dqotp:" + id + ":" + em + ":" + oexp));
   const okSkip = !okOtp && !!em && +sexp > Date.now() && ssig === b64u(await hmac(env.SECRET, "dqskip:" + id + ":" + em + ":" + sexp));
   if (!okOtp && !okSkip) return err(403, "Please confirm your email address with the code we send you.");
-  const answers = dqStrings(q.answers, 44, 1500), copy = dqCopy(q.copy);
+  const answers = dqStrings(q.answers, 110, 3000), copy = dqCopy(q.copy);
   const draftId = String(q.draft || "").replace(/[^a-z0-9_-]/gi, "").slice(0, 40); if (draftId) answers.draftid = draftId;
   // The text read from the person's own document (kept longer than an ordinary answer) and the link they gave.
   answers.emailverified = okOtp ? "yes" : "no";

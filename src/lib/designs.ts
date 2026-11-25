@@ -15,7 +15,7 @@ const str = (x: any, n: number) => (typeof x === "string" ? x.slice(0, n) : "");
 export function cleanDesigns(x: any): DesignRec[] {
   return (Array.isArray(x) ? x : []).filter((d) => d && typeof d.id === "string" && d.answers && typeof d.answers === "object").slice(0, 200).map((d) => ({
     id: str(d.id, 40), name: str(d.name, 120), kind: str(d.kind, 20), themeId: str(d.themeId, 60), themeName: str(d.themeName, 80), createdAt: str(d.createdAt, 40), summary: str(d.summary, 300), ...(d.copy ? { copy: cleanCopy(d.copy) } : {}), ...(typeof d.logo === "string" && /^data:image\/(png|jpeg|webp);base64,/.test(d.logo) && d.logo.length < 60000 ? { logo: d.logo } : {}),
-    answers: Object.fromEntries(Object.entries(d.answers).filter(([k, v]) => /^[a-z]{1,20}$/.test(k) && typeof v === "string").map(([k, v]) => [k, (v as string).slice(0, 1200)])),
+    answers: Object.fromEntries(Object.entries(d.answers).filter(([k, v]) => /^[a-z]{1,20}$/.test(k) && typeof v === "string").map(([k, v]) => [k, (v as string).slice(0, 3000)])),
   }));
 }
 export function cleanDesignSettings(x: any): DesignSettings {
@@ -27,6 +27,16 @@ export function cleanDesignSettings(x: any): DesignSettings {
   const ga = cleanGallery(x.gallery); if (ga) o.gallery = ga;
   const th = cleanThemes(x.themes); if (Object.keys(th).length) o.themes = th;
   if (x.carousel && typeof x.carousel === "object") { const c: NonNullable<DesignSettings["carousel"]> = {}; for (const k of ["portfolio", "store", "business", "restaurant"] as const) if (x.carousel[k] === "custom") c[k] = "custom"; if (Object.keys(c).length) o.carousel = c; }
+  if (x.questions && typeof x.questions === "object") {
+    const q: NonNullable<DesignSettings["questions"]> = {}, tx = (v: any, n: number) => (typeof v === "string" ? v.replace(/[<>]/g, "").trim().slice(0, n) : "");
+    for (const g of ["basics", "portfolio", "store", "business", "restaurant"]) {
+      const src = x.questions[g]; if (!src || typeof src !== "object") continue;
+      const rules: Record<string, { h?: boolean; t?: string; p?: string }> = {};
+      for (const id of Object.keys(src).slice(0, 80)) { if (!/^[a-z]{1,20}$/.test(id)) continue; const r = src[id] || {}, o: { h?: boolean; t?: string; p?: string } = {}; if (r.h === true) o.h = true; if (tx(r.t, 300)) o.t = tx(r.t, 300); if (tx(r.p, 300)) o.p = tx(r.p, 300); if (Object.keys(o).length) rules[id] = o; }
+      if (Object.keys(rules).length) q[g] = rules;
+    }
+    if (Object.keys(q).length) o.questions = q;
+  }
   const look = cleanLook(x.look); if (Object.keys(look).length) o.look = look;
   return o;
 }
@@ -37,7 +47,8 @@ export function cleanCopy(c: any): Copy {
   if (Array.isArray(c.faq)) o.faq = c.faq.slice(0, 6).filter((i: any) => i && typeof i.q === "string" && typeof i.a === "string").map((i: any) => ({ q: str(i.q, 160), a: str(i.a, 420) }));
   return o;
 }
-export const readDesignSettings = (): DesignSettings => { try { return cleanDesignSettings(JSON.parse(localStorage.getItem(SET) || "{}")); } catch { return {}; } };
+let setRaw: string | null = null, setVal: DesignSettings = {};
+export const readDesignSettings = (): DesignSettings => { try { const raw = localStorage.getItem(SET) || "{}"; if (raw !== setRaw) { setVal = cleanDesignSettings(JSON.parse(raw)); setRaw = raw; } return setVal; } catch { return {}; } };
 export const writeDesignSettings = (s: DesignSettings) => { try { localStorage.setItem(SET, JSON.stringify(s)); dispatchEvent(new Event("studio:design-page")); } catch { /* private mode */ } };
 /** Is the Design yourself page on? (On unless the Studio's owner turned it off.) */
 export const designPageOn = () => readDesignSettings().on !== false;

@@ -2314,6 +2314,29 @@ function dqDesignPub(d) {
     for (const kind of ["business", "restaurant", "portfolio", "store"]) if (Array.isArray(d.themes[kind])) th[kind] = d.themes[kind].filter((v) => typeof v === "string" && /^[A-Za-z0-9_-]{1,40}$/.test(v)).slice(0, 400);
     out.themes = th;
   }
+  if (d.carousel && typeof d.carousel === "object") {
+    const c = {};
+    for (const kind of ["business", "restaurant", "portfolio", "store"]) if (d.carousel[kind] === "custom") c[kind] = "custom";
+    if (Object.keys(c).length) out.carousel = c;
+  }
+  if (d.questions && typeof d.questions === "object") {
+    const q = {}, tx = (v, n) => typeof v === "string" ? v.replace(/[<>]/g, "").trim().slice(0, n) : "";
+    for (const g of ["basics", "business", "restaurant", "portfolio", "store"]) {
+      const src = d.questions[g];
+      if (!src || typeof src !== "object") continue;
+      const rules = {};
+      for (const id of Object.keys(src).slice(0, 80)) {
+        if (!/^[a-z]{1,20}$/.test(id)) continue;
+        const r = src[id] || {}, o = {};
+        if (r.h === true) o.h = true;
+        if (tx(r.t, 300)) o.t = tx(r.t, 300);
+        if (tx(r.p, 300)) o.p = tx(r.p, 300);
+        if (Object.keys(o).length) rules[id] = o;
+      }
+      if (Object.keys(rules).length) q[g] = rules;
+    }
+    if (Object.keys(q).length) out.questions = q;
+  }
   if (d.look && typeof d.look === "object") {
     const look = {};
     for (const kind of ["business", "restaurant", "portfolio", "store"]) {
@@ -2333,7 +2356,7 @@ function dqDesignPub(d) {
     }
     out.look = look;
   }
-  return JSON.stringify(out).length > 12e3 ? { on: out.on } : out;
+  return JSON.stringify(out).length > 4e4 ? { on: out.on } : out;
 }
 async function dqBrand(env, id) {
   const idx = await studioIndex(env, id);
@@ -2410,7 +2433,7 @@ async function dqDraft(env, id, req) {
   if (!await dqPass(env, id, email, q.otp, q.skip)) return err(403, "Please confirm your email address with the code we send you.");
   const did = String(q.id || "").replace(/[^a-z0-9_-]/gi, "").slice(0, 40);
   if (!did) return err(400, "Which design?");
-  const answers = dqStrings(q.answers, 44, 1500), copy = dqCopy(q.copy);
+  const answers = dqStrings(q.answers, 110, 3e3), copy = dqCopy(q.copy);
   if (typeof q.answers?.doctext === "string" && q.answers.doctext.trim()) answers.doctext = q.answers.doctext.slice(0, 12e3);
   if (typeof q.answers?.docsec === "string" && q.answers.docsec.length <= 9e3) {
     try {
@@ -2449,7 +2472,7 @@ async function dqSubmit(env, id, req, ctx) {
   const okOtp = !!em && +oexp > Date.now() && osig === b64u(await hmac(env.SECRET, "dqotp:" + id + ":" + em + ":" + oexp));
   const okSkip = !okOtp && !!em && +sexp > Date.now() && ssig === b64u(await hmac(env.SECRET, "dqskip:" + id + ":" + em + ":" + sexp));
   if (!okOtp && !okSkip) return err(403, "Please confirm your email address with the code we send you.");
-  const answers = dqStrings(q.answers, 44, 1500), copy = dqCopy(q.copy);
+  const answers = dqStrings(q.answers, 110, 3e3), copy = dqCopy(q.copy);
   const draftId = String(q.draft || "").replace(/[^a-z0-9_-]/gi, "").slice(0, 40);
   if (draftId) answers.draftid = draftId;
   answers.emailverified = okOtp ? "yes" : "no";

@@ -6,6 +6,7 @@ import { BIZ_THEMES } from "../themes/business";
 import { BIZ_TYPES, BIZ_TYPE_WORDS } from "../themes/businessTypes";
 import { REST_THEMES, REST_TAGS } from "../themes/restaurant";
 import { TEMPLATES } from "../schema";
+import { themeCode } from "../themes/codes";
 import { loadStarter } from "./exporter";
 import { systemWrite } from "./syswrite";
 import { readDesignSettings, type Copy } from "./designs";
@@ -31,7 +32,12 @@ export type Step = {
   optional?: boolean | ((a: Answers) => boolean);
   /** One line shown under the question. */
   help?: (a: Answers) => string;
+  /** Where the Studio's Settings lists it, and its short name there and in the answers. */
+  group?: QGroup; label?: string;
+  /** Listed in Settings but not asked yet (it needs a picture upload). */
+  soon?: boolean;
 };
+export type QGroup = "basics" | Kind;
 
 const k = (a: Answers) => (a.kind || "portfolio") as Kind;
 const by = <T,>(a: Answers, m: Record<Kind, T>): T => m[k(a)];
@@ -56,8 +62,6 @@ export function tweakTheme(t: Theme, a: Answers): Theme {
 
 /** Whether a question may be skipped. */
 export const isOptional = (s: Step, a: Answers) => (typeof s.optional === "function" ? s.optional(a) : !!s.optional);
-/** A short name for each question (for the answers shown above the current question). */
-export const STEP_LABEL: Record<string, string> = { kind: "Type", doc: "Starting point", name: "Name", btype: "Business type", genre: "Genre", about: "About", city: "City", logo: "Logo", style: "Feel", colour: "Colour", pages: "Pages", story: "Story", items: "Offerings", usp: "Highlights", work: "Case studies", goal: "Goal", menu: "Menu", hours: "Hours", address: "Address", social: "Social", phone: "Phone", email: "Email" };
 
 export const KIND_OPTIONS: Opt[] = [
   { v: "portfolio", label: "A website about me", hint: "Show my work, skills and story. Good for designers, developers, photographers, creators." },
@@ -67,105 +71,157 @@ export const KIND_OPTIONS: Opt[] = [
 ];
 
 export const STYLE_OPTIONS: Opt[] = [
-  { v: "clean", label: "Clean and simple" },
-  { v: "bold", label: "Bold and colourful" },
-  { v: "elegant", label: "Elegant and premium" },
-  { v: "dark", label: "Dark and modern" },
-  { v: "warm", label: "Warm and friendly" },
-  { v: "fun", label: "Playful and fun" },
+  { v: "clean", label: "Minimal" },
+  { v: "bold", label: "Bold" },
+  { v: "elegant", label: "Elegant" },
+  { v: "fun", label: "Playful" },
+  { v: "corporate", label: "Corporate" },
 ];
+/** Looks an older draft may still hold. */
+const OLD_STYLES: Opt[] = [{ v: "dark", label: "Dark and modern" }, { v: "warm", label: "Warm and friendly" }];
 export const COLOUR_OPTIONS: Opt[] = [
   { v: "blue", label: "Blue" }, { v: "green", label: "Green" }, { v: "red", label: "Red" }, { v: "orange", label: "Orange" },
   { v: "purple", label: "Purple" }, { v: "pink", label: "Pink" }, { v: "gold", label: "Gold" }, { v: "mono", label: "Black and white" }, { v: "any", label: "Surprise me" },
 ];
 export const COLOUR_DOT: Record<string, string> = { blue: "#3b82f6", green: "#22a06b", red: "#e5484d", orange: "#f08a24", purple: "#8b5cf6", pink: "#ec4899", gold: "#d4a017", mono: "#222222", any: "linear-gradient(135deg,#3b82f6,#ec4899,#f08a24)" };
 
-export const STEPS: Step[] = [
-  { id: "kind", type: "choice", ask: () => "Hi! Let's design your website together. What kind of website do you want?", options: () => KIND_OPTIONS },
+const YN = (): Opt[] => [{ v: "yes", label: "Yes" }, { v: "no", label: "No" }];
+const doc = (a: Answers, key: keyof DocSections) => { const v: any = unpackSections(a.docsec)[key]; return !!(v && v.length); };
+const P = (a: Answers) => k(a) === "portfolio", S = (a: Answers) => k(a) === "store", B = (a: Answers) => k(a) === "business", R = (a: Answers) => k(a) === "restaurant";
+
+/** Every question, in the order they are asked. `group` is where the Studio's Settings → Design yourself → Questions lists it; `soon` ones (they need a picture upload) are listed but not asked yet. */
+const RAW: Step[] = [
+  { id: "kind", group: "basics", label: "Type", type: "choice", ask: () => "Hi! Let's design your website together. What kind of website do you want?", options: () => KIND_OPTIONS },
   {
-    id: "doc", type: "file", optional: true, accept: "application/pdf", maxKB: 20480,
-    ask: (a) => by(a, { portfolio: "Do you already have your details somewhere? Add a PDF (resume, profile) or paste a link, and we'll fill in what we can.", store: "Do you already have your products somewhere? Add a PDF (catalogue, price list) or paste your website or Instagram link, and we'll fill in what we can.", business: "Do you already have your details somewhere? Add a PDF (brochure, profile, price list) or paste your website link, and we'll fill in what we can.", restaurant: "Do you already have your menu or details somewhere? Add a PDF or paste your website or Instagram link, and we'll fill in what we can." }),
+    id: "doc", group: "basics", label: "Starting point", type: "file", optional: true, accept: "application/pdf", maxKB: 20480,
+    ask: (a) => by(a, { portfolio: "Do you already have your details somewhere? Add your resume (PDF) or paste your LinkedIn or website link, and we'll fill in what we can.", store: "Do you already have your products somewhere? Add a catalogue or product menu (PDF) or paste your website or Instagram link, and we'll fill in what we can.", business: "Do you already have your details somewhere? Add a company profile or brochure (PDF) or paste your website link, and we'll fill in what we can.", restaurant: "Do you already have your menu or details somewhere? Add your menu or brochure (PDF) or paste your website or Instagram link, and we'll fill in what we can." }),
     ph: () => "Paste a link, e.g. https://yourname.com",
     help: () => "We only use what is written there, and we won't ask again for what we find. You can skip this.",
   },
   {
-    id: "name", type: "text",
-    ask: (a) => by(a, { portfolio: "What's your name?", store: "What is your shop called?", business: "What is your business called?", restaurant: "What is your restaurant or café called?" }),
+    id: "name", group: "basics", label: "Name", type: "text",
+    ask: (a) => by(a, { portfolio: "What's your full name?", store: "What is your shop or brand called?", business: "What is your registered company name?", restaurant: "What is your restaurant or café called?" }),
     ph: (a) => by(a, { portfolio: "e.g. Asha Verma", store: "e.g. Kala Ghar", business: "e.g. Verma & Co", restaurant: "e.g. The Tiffin Box" }),
   },
+  { id: "tagline", group: "basics", label: "Tagline", type: "text", optional: true, ask: () => "Your one-line tagline?", ph: () => "e.g. Honest work, on time", help: () => "A short line that sits under your name. Skip it and we'll write one." },
+  { id: "logo", group: "basics", label: "Logo", type: "file", optional: true, accept: "image/png,image/jpeg,image/webp", maxKB: 20480, ask: () => "Do you have a logo? Add it here, or skip and we'll use your name.", help: () => "A PNG or JPG picture. You can send a better one later." },
+  { id: "colour", group: "basics", label: "Colour", type: "choice", ask: () => "Which is your main brand colour?", options: () => COLOUR_OPTIONS },
+  { id: "style", group: "basics", label: "Look", type: "choice", ask: () => "Which look fits you best?", options: () => STYLE_OPTIONS },
   {
-    id: "btype", type: "choice", when: (a) => k(a) === "business",
+    id: "btype", group: "business", label: "Business type", type: "choice", when: B,
     ask: () => "What type of business is it?",
     options: () => [...BIZ_TYPES.map((t) => ({ v: t, label: t.replace(/([a-z])([A-Z])/g, "$1 $2") })), { v: "Other", label: "Something else" }],
     help: () => "Pick the closest one. We use it to choose a design made for that kind of business.",
   },
   {
-    id: "genre", type: "choice", when: (a) => k(a) !== "business",
+    id: "genre", group: "basics", label: "Theme type", type: "choice", when: (a) => !B(a),
     ask: () => "What genre of website?",
-    options: (a) => [...(k(a) === "restaurant" ? REST_TAGS : THEME_TAGS).map((t) => ({ v: t, label: t })), { v: "Any", label: "Any genre" }],
+    options: (a) => [...(R(a) ? REST_TAGS : THEME_TAGS).map((t) => ({ v: t, label: t })), { v: "Any", label: "Any genre" }],
     help: () => "Pick the closest one. We use it to choose designs of that genre.",
   },
-  {
-    id: "about", type: "text",
-    ask: (a) => by(a, { portfolio: "In a few words, what do you do?", store: "What do you sell?", business: "What does your business do?", restaurant: "What kind of food do you serve?" }),
-    ph: (a) => by(a, { portfolio: "e.g. Wedding photographer", store: "e.g. Handmade candles and gifts", business: "e.g. We repair and service home appliances", restaurant: "e.g. Home-style South Indian meals" }),
-    help: () => "One short line is enough. You can change it later.",
-  },
-  { id: "city", type: "text", optional: true, ask: () => "Which city are you in?", ph: () => "e.g. Mumbai", help: () => "Skip it if you work online or don't want to show it." },
-  { id: "logo", type: "file", optional: true, accept: "image/png,image/jpeg,image/webp", maxKB: 20480, when: (a) => k(a) !== "portfolio", ask: () => "Do you have a logo? Add it here, or skip and we'll use your name.", help: () => "A PNG or JPG picture. You can send a better one later." },
-  { id: "style", type: "choice", ask: () => "How should your website feel?", options: () => STYLE_OPTIONS },
-  { id: "colour", type: "choice", ask: () => "Which colour do you like best?", options: () => COLOUR_OPTIONS },
-  {
-    id: "pages", type: "choice", when: (a) => (k(a) === "business" || k(a) === "restaurant") && !readDesignSettings().look?.[k(a)]?.pages?.h,
-    ask: () => "Should your website be one long page, or have separate pages (Home, About, Contact…)?",
-    options: (a) => { const al = readDesignSettings().look?.[k(a)]?.pages?.a; return [{ v: "single", label: "One page", hint: "Everything on one page you scroll down." }, { v: "multi", label: "Separate pages", hint: "Each topic gets its own page." }].filter((o) => !al?.length || al.includes(o.v)); },
-  },
-  {
-    id: "story", type: "long", optional: true,
-    ask: (a) => by(a, { portfolio: "Tell us about yourself in a few lines: where you started and what you enjoy most.", store: "How did your shop start? Tell us your story in a few lines.", business: "Tell us about your business in a few lines: how it started and who you help.", restaurant: "Tell us your story in a few lines: how the place started and what makes the food yours." }),
-    ph: () => "Write it the way you'd tell a friend.",
-    help: () => "We'll tidy it into proper website text. Skip it and we'll write something simple from your answers.",
-  },
-  {
-    id: "items", type: "long",
-    ask: (a) => by(a, {
-      portfolio: "List up to 6 things you are good at. Write one on each line.",
-      store: "Name some products you sell, one on each line. You can add a price after a dash.",
-      business: "What are your main services? Write one on each line.",
-      restaurant: "Name your best dishes, one on each line. You can add a price after a dash.",
-    }),
-    ph: (a) => by(a, { portfolio: "Portraits\nWeddings\nProduct shoots", store: "Soy candle - 450\nGift box - 899\nIncense set - 299", business: "Repairs\nAnnual service\nInstallation", restaurant: "Masala dosa - 120\nFilter coffee - 60\nThali - 250" }),
-    help: () => "Press Enter for a new line. We'll write a short line about each one.",
-    optional: (a) => k(a) !== "store",
-  },
-  { id: "usp", type: "long", optional: true, ask: () => "What makes you different from others? Write one thing on each line.", ph: () => "Same-day delivery\nFamily recipes\nFree first consultation", help: () => "Only things that are true. They appear as highlights on your site." },
-  {
-    id: "work", type: "long", optional: true, when: (a) => k(a) === "business",
-    ask: () => "Any client projects or work you have delivered? Write one on each line.", ph: () => "Booking app for a gym chain: built in 6 weeks\nNew website for a dental clinic",
-    help: () => "Write the project, then a dash and what you did. They appear as case studies. Only things that are true.",
-  },
-  {
-    id: "goal", type: "many",
-    ask: (a) => by(a, { portfolio: "What should visitors do on your website?", store: "How will customers pay you?", business: "How should customers reach you?", restaurant: "What should guests be able to do?" }),
-    help: () => "Tap everything that applies. The first one you tap becomes the main button.",
-    options: (a) => by<Opt[]>(a, {
-      portfolio: [{ v: "work", label: "See my work" }, { v: "hire", label: "Hire me" }, { v: "story", label: "Read my story" }, { v: "contact", label: "Message me" }],
-      store: [{ v: "upi", label: "UPI" }, { v: "cod", label: "Cash on delivery" }, { v: "whatsapp", label: "Send the order on WhatsApp" }, { v: "card", label: "Card payment link" }],
-      business: [{ v: "quote", label: "Ask for a quote" }, { v: "call", label: "Call us" }, { v: "book", label: "Book a visit" }, { v: "whatsapp", label: "WhatsApp us" }],
-      restaurant: [{ v: "table", label: "Book a table" }, { v: "order", label: "Order food online" }, { v: "menu", label: "See the menu" }, { v: "event", label: "Plan a party" }],
-    }),
-  },
-  { id: "menu", type: "file", optional: true, accept: "application/pdf", maxKB: 1200, when: (a) => k(a) === "restaurant", ask: () => "Do you have your menu as a PDF? Add it here, or skip.", help: () => "A PDF up to 1.2 MB. Visitors can download it from your site." },
-  { id: "hours", type: "text", optional: true, when: (a) => k(a) === "business" || k(a) === "restaurant", ask: () => "When are you open?", ph: () => "e.g. Monday to Saturday, 10 am to 7 pm", help: () => "Skip it if you don't want to show hours." },
-  { id: "address", type: "text", optional: true, when: (a) => k(a) !== "portfolio", ask: () => "What is your full address?", ph: () => "e.g. 12 MG Road, Bengaluru 560001", help: () => "Shown on your contact page. Skip it if you work from home or online." },
-  { id: "social", type: "text", optional: true, ask: () => "Do you have an Instagram or another page to link? Paste the link or your @name.", ph: () => "e.g. @yourname or https://instagram.com/yourname" },
-  { id: "phone", type: "text", optional: true, ask: () => "What phone or WhatsApp number should customers see?", ph: () => "e.g. +91 98765 43210", help: () => "It is shown on the website. Skip if you'd rather not." },
-  { id: "email", type: "text", optional: true, ask: () => "And your email address?", ph: () => "e.g. hello@yourname.com", help: () => "Skip if you'd rather not." },
+  { id: "themeid", group: "basics", label: "Theme ID", type: "text", optional: true, ask: () => "Do you already have a theme ID from the theme gallery?", ph: () => "e.g. B-27", help: () => "Type it to start with that exact design. Skip it and we'll pick one for you." },
+  { id: "email", group: "basics", label: "Contact email", type: "text", optional: true, ask: () => "Which email address should customers see?", ph: () => "e.g. hello@yourname.com", help: () => "Skip if you'd rather not." },
+  { id: "phone", group: "basics", label: "Phone / WhatsApp", type: "text", optional: true, ask: () => "What phone or WhatsApp number should customers see?", ph: () => "e.g. +91 98765 43210", help: () => "It is shown on the website. Skip if you'd rather not." },
+  { id: "wabtn", group: "basics", label: "WhatsApp button", type: "choice", optional: true, when: (a) => !!a.phone?.trim(), ask: () => "Show a WhatsApp chat button on your website?", options: YN },
+  { id: "city", group: "basics", label: "City", type: "text", optional: true, ask: () => "Which city are you in?", ph: () => "e.g. Mumbai", help: () => "Skip it if you work online or don't want to show it." },
+  { id: "social", group: "basics", label: "Social links", type: "text", optional: true, ask: (a) => (S(a) ? "What is your Instagram page link?" : "Do you have an Instagram or another page to link? Paste the link or your @name."), ph: () => "e.g. @yourname or https://instagram.com/yourname" },
+  { id: "domain", group: "basics", label: "Custom domain", type: "text", optional: true, ask: () => "Do you already have your own website address (domain)?", ph: () => "e.g. yourname.com", help: () => "Only if you have one. We'll connect it when we publish." },
+
+  // Personal portfolio
+  { id: "about", group: "portfolio", label: "Role / title", type: "text", when: P, ask: () => "What is your role or title?", ph: () => "e.g. Wedding photographer", help: () => "One short line is enough. You can change it later." },
+  { id: "photo", group: "portfolio", label: "Profile photo", type: "file", soon: true, optional: true, when: P, accept: "image/png,image/jpeg,image/webp", maxKB: 5120, ask: () => "Add a profile photo." },
+  { id: "intro", group: "portfolio", label: "Short intro", type: "text", optional: true, when: P, ask: () => "Write a short intro for the top of your page (1–2 lines).", ph: () => "e.g. I design brands that people remember." },
+  { id: "story", group: "portfolio", label: "About", type: "long", optional: true, when: P, ask: () => "Tell us about yourself in a few lines: where you started and what you enjoy most.", ph: () => "Write it the way you'd tell a friend.", help: () => "We'll tidy it into proper website text. Skip it and we'll write something simple from your answers." },
+  { id: "years", group: "portfolio", label: "Years of experience", type: "text", optional: true, when: P, ask: () => "How many years of experience do you have?", ph: () => "e.g. 6" },
+  { id: "openwork", group: "portfolio", label: "Open to work badge", type: "choice", optional: true, when: P, ask: () => "Show an “Open to work / freelance” badge?", options: YN },
+  { id: "items", group: "portfolio", label: "Key skills", type: "long", when: P, optional: true, ask: () => "List up to 6 things you are good at. Write one on each line.", ph: () => "Portraits\nWeddings\nProduct shoots", help: () => "Press Enter for a new line. We'll write a short line about each one." },
+  { id: "projects", group: "portfolio", label: "Projects", type: "long", optional: true, when: P, ask: () => "List your projects or work samples, one on each line.", ph: () => "Brand film for Kora – a 2-minute story – https://kora.com\nWedding in Goa – photo series", help: () => "Write the name, then a dash and what it was. A link at the end is optional. Cover pictures can be added later." },
+  { id: "offer", group: "portfolio", label: "Services", type: "long", optional: true, when: P, ask: () => "Do you offer services as a freelancer? List them, one on each line.", ph: () => "Logo design\nWebsite design\nSocial media posts" },
+  { id: "exp", group: "portfolio", label: "Work experience", type: "long", optional: true, when: (a) => P(a) && !doc(a, "experience"), ask: () => "Tell us your work experience, one job on each line.", ph: () => "Acme Studio – Senior designer – 2019 to 2023 – led the brand team", help: () => "Company, position, from–to, and a highlight, with dashes between." },
+  { id: "edu", group: "portfolio", label: "Education", type: "long", optional: true, when: (a) => P(a) && !doc(a, "education"), ask: () => "Where did you study? One on each line.", ph: () => "NID Ahmedabad – B.Des – 2018" },
+  { id: "quotes", group: "portfolio", label: "Testimonials", type: "long", optional: true, when: (a) => P(a) && !doc(a, "testimonials"), ask: () => "Any kind words from clients or colleagues? One on each line.", ph: () => "Asha, Creative Director – “She delivered early and the work was brilliant.”", help: () => "Name and role, then the quote. Only real ones." },
+  { id: "cform", group: "portfolio", label: "Contact form", type: "choice", optional: true, when: P, ask: () => "Add a contact form to your website?", options: YN },
+
+  // Shop
+  { id: "about", group: "store", label: "What you sell", type: "text", when: S, ask: () => "What do you sell?", ph: () => "e.g. Handmade candles and gifts", help: () => "One short line is enough. You can change it later." },
+  { id: "story", group: "store", label: "About the store", type: "long", optional: true, when: S, ask: () => "Describe your store in 2–3 lines.", ph: () => "Write it the way you'd tell a friend.", help: () => "We'll tidy it into proper website text." },
+  { id: "banner", group: "store", label: "Homepage banners", type: "file", soon: true, optional: true, when: S, accept: "image/png,image/jpeg,image/webp", maxKB: 5120, ask: () => "Add pictures for your homepage banner." },
+  { id: "currency", group: "store", label: "Currency", type: "choice", optional: true, when: S, ask: () => "Which currency do you sell in?", options: () => [{ v: "INR", label: "₹ Indian rupee" }, { v: "USD", label: "$ US dollar" }, { v: "EUR", label: "€ Euro" }, { v: "GBP", label: "£ Pound" }, { v: "AED", label: "AED Dirham" }] },
+  { id: "cats", group: "store", label: "Product categories", type: "long", optional: true, when: S, ask: () => "What are your product categories? One on each line.", ph: () => "Candles\nGift boxes\nIncense" },
+  { id: "items", group: "store", label: "Products", type: "long", when: S, optional: false, ask: () => "Name some products you sell, one on each line. You can add a price after a dash.", ph: () => "Soy candle - 450\nGift box - 899\nIncense set - 299", help: () => "Press Enter for a new line. Pictures, MRP, variants and stock can be added later." },
+  { id: "accounts", group: "store", label: "Customer accounts", type: "choice", optional: true, when: S, ask: () => "Let customers create accounts?", options: YN },
+  { id: "backend", group: "store", label: "Order backend", type: "choice", optional: true, when: S, ask: () => "Where should your orders be kept?", options: () => [{ v: "cloudflare", label: "Cloudflare (recommended)" }, { v: "supabase", label: "Supabase" }], help: () => "Cloudflare is the default if you skip this." },
+  { id: "alertmail", group: "store", label: "Order alerts email", type: "text", optional: true, when: S, ask: () => "Which email should get new order alerts?", ph: () => "e.g. orders@yourname.com", help: () => "Orders alerts come by email. Skip it to use your contact email." },
+  { id: "minorder", group: "store", label: "Minimum order", type: "text", optional: true, when: S, ask: () => "Is there a minimum order value?", ph: () => "e.g. 499" },
+  { id: "deliver", group: "store", label: "Delivery area", type: "many", optional: true, when: S, ask: () => "Where do you deliver?", options: () => [{ v: "city", label: "My city" }, { v: "state", label: "My state" }, { v: "india", label: "All India" }, { v: "world", label: "International" }], help: () => "Tap everything that applies." },
+  { id: "ship", group: "store", label: "Flat shipping", type: "text", optional: true, when: S, ask: () => "What is your flat shipping charge?", ph: () => "e.g. 60" },
+  { id: "freeship", group: "store", label: "Free shipping above", type: "text", optional: true, when: S, ask: () => "Free shipping above what order value?", ph: () => "e.g. 999" },
+  { id: "dtime", group: "store", label: "Delivery time", type: "text", optional: true, when: S, ask: () => "What is your usual delivery time?", ph: () => "e.g. 3–5 working days" },
+  { id: "returns", group: "store", label: "Return policy", type: "long", optional: true, when: S, ask: () => "What is your return or exchange policy?", ph: () => "e.g. Return or exchange within 7 days if unused." },
+  { id: "gstin", group: "store", label: "GSTIN", type: "text", optional: true, when: S, ask: () => "What is your GSTIN? (optional)", ph: () => "e.g. 27ABCDE1234F1Z5" },
+  { id: "address", group: "store", label: "Business address", type: "text", optional: true, when: S, ask: () => "What is your registered business address?", ph: () => "e.g. 12 MG Road, Bengaluru 560001", help: () => "Shown on your contact page. Skip it if you work from home." },
+
+  // Business portfolio
+  { id: "about", group: "business", label: "Industry", type: "text", when: B, ask: () => "Which industry are you in, or what does your business do?", ph: () => "e.g. We repair and service home appliances", help: () => "One short line is enough. You can change it later." },
+  { id: "founded", group: "business", label: "Year founded", type: "text", optional: true, when: B, ask: () => "Which year was the company founded?", ph: () => "e.g. 2012" },
+  { id: "teamsize", group: "business", label: "Team size", type: "text", optional: true, when: B, ask: () => "How big is your team?", ph: () => "e.g. 25" },
+  { id: "story", group: "business", label: "About the company", type: "long", optional: true, when: B, ask: () => "Tell us about your company in a few lines: how it started and who you help.", ph: () => "Write it the way you'd tell a friend.", help: () => "We'll tidy it into proper website text. Skip it and we'll write something simple from your answers." },
+  { id: "mission", group: "business", label: "Mission / vision", type: "long", optional: true, when: (a) => B(a) && !doc(a, "mission") && !doc(a, "vision"), ask: () => "What is your mission or vision?", ph: () => "Mission: …\nVision: …" },
+  { id: "bimage", group: "business", label: "Main banner image", type: "file", soon: true, optional: true, when: B, accept: "image/png,image/jpeg,image/webp", maxKB: 5120, ask: () => "Add your main banner picture." },
+  { id: "items", group: "business", label: "Services", type: "long", optional: true, when: (a) => B(a) && !doc(a, "services"), ask: () => "What are your main services or solutions? Write one on each line.", ph: () => "Repairs – quick fixes at your door\nAnnual service\nInstallation", help: () => "Name, then a dash and a short description (optional). Icons are chosen for you." },
+  { id: "stats", group: "business", label: "Key numbers", type: "long", optional: true, when: (a) => B(a) && !doc(a, "stats"), ask: () => "Which key numbers would you like to show? One on each line.", ph: () => "120+ – Projects\n15 – Years\n98% – Clients return", help: () => "The number, a dash, then what it counts. Only true numbers." },
+  { id: "work", group: "business", label: "Case studies", type: "long", optional: true, when: (a) => B(a) && !doc(a, "work"), ask: () => "Any case studies or featured projects? Write one on each line.", ph: () => "Booking app for a gym chain – built in 6 weeks\nNew website for a dental clinic", help: () => "Write the project, then a dash and what you did (client and outcome can go in the same line). Only things that are true." },
+  { id: "clients", group: "business", label: "Clients", type: "long", optional: true, when: (a) => B(a) && !doc(a, "clients"), ask: () => "Which clients would you like to name? One on each line.", ph: () => "Tata Motors\nCity Hospital" },
+  { id: "team", group: "business", label: "Team members", type: "long", optional: true, when: (a) => B(a) && !doc(a, "team"), ask: () => "Who leads the company? Write one person on each line.", ph: () => "Asha Verma – Founder & CEO – linkedin.com/in/asha", help: () => "Name, designation, and a LinkedIn link if you like. Photos can be added later." },
+  { id: "quotes", group: "business", label: "Testimonials", type: "long", optional: true, when: (a) => B(a) && !doc(a, "testimonials"), ask: () => "Any kind words from clients? One on each line.", ph: () => "Ravi, Acme Ltd – “They finished two weeks early.”", help: () => "Name and company, then the quote. Only real ones." },
+  { id: "certs", group: "business", label: "Certifications / awards", type: "long", optional: true, when: B, ask: () => "Any certifications or awards? One on each line.", ph: () => "ISO 9001:2015\nBest Service Award 2023" },
+  { id: "cta", group: "business", label: "Main button", type: "choice", when: B, ask: () => "What should the main button on your website say?", options: () => [{ v: "quote", label: "Get a quote" }, { v: "book", label: "Book a call" }, { v: "contact", label: "Contact us" }, { v: "demo", label: "Request a demo" }] },
+  { id: "booklink", group: "business", label: "Booking link", type: "text", optional: true, when: (a) => B(a) && a.cta === "book", ask: () => "What is your calendar booking link?", ph: () => "e.g. https://cal.com/yourname", help: () => "Shown because you chose “Book a call”." },
+  { id: "enqfields", group: "business", label: "Enquiry form fields", type: "many", optional: true, when: B, ask: () => "Which fields should your enquiry form have?", options: () => [{ v: "name", label: "Name" }, { v: "email", label: "Email" }, { v: "phone", label: "Phone" }, { v: "company", label: "Company" }, { v: "service", label: "Service needed" }, { v: "budget", label: "Budget" }, { v: "message", label: "Message" }], help: () => "Tap everything you want." },
+  { id: "offices", group: "business", label: "Office locations", type: "long", optional: true, when: B, ask: () => "Where are your offices? One on each line.", ph: () => "Head office – 12 MG Road, Bengaluru 560001 – https://maps.app.goo.gl/…", help: () => "Name, address, and a map link if you like." },
+  { id: "hours", group: "business", label: "Business hours", type: "text", optional: true, when: B, ask: () => "When are you open?", ph: () => "e.g. Monday to Saturday, 10 am to 7 pm", help: () => "Skip it if you don't want to show hours." },
+
+  // Restaurant & café
+  { id: "ptype", group: "restaurant", label: "Kind of place", type: "choice", when: R, ask: () => "What kind of place is it?", options: () => ["Restaurant", "Cafe", "Bakery", "Cloud kitchen", "Bar & lounge", "Food truck"].map((x) => ({ v: x, label: x })) },
+  { id: "about", group: "restaurant", label: "Cuisines", type: "text", when: R, ask: () => "Which cuisines do you serve?", ph: () => "e.g. Home-style South Indian meals", help: () => "One short line is enough. You can change it later." },
+  { id: "foodtype", group: "restaurant", label: "Food type", type: "choice", optional: true, when: R, ask: () => "What type of food is it?", options: () => ["Pure veg", "Veg & non-veg", "Non-veg focused", "Jain options"].map((x) => ({ v: x, label: x })) },
+  { id: "story", group: "restaurant", label: "Your story", type: "long", optional: true, when: R, ask: () => "Tell us your story: what makes you special?", ph: () => "Write it the way you'd tell a friend.", help: () => "We'll tidy it into proper website text." },
+  { id: "cost", group: "restaurant", label: "Cost for two", type: "text", optional: true, when: R, ask: () => "What is the average cost for two?", ph: () => "e.g. 800" },
+  { id: "serves", group: "restaurant", label: "What you offer", type: "many", optional: true, when: R, ask: () => "What do you offer?", options: () => ["Dine-in", "Takeaway", "Delivery", "Catering", "Private dining"].map((x) => ({ v: x, label: x })), help: () => "Tap everything that applies." },
+  { id: "photos", group: "restaurant", label: "Food & ambience photos", type: "file", soon: true, optional: true, when: R, accept: "image/png,image/jpeg,image/webp", maxKB: 5120, ask: () => "Add photos of your food and the place." },
+  { id: "menuhow", group: "restaurant", label: "How to add the menu", type: "choice", when: R, ask: () => "How do you want to add your menu?", options: () => [{ v: "type", label: "Type it in" }, { v: "upload", label: "Upload a photo or PDF" }] },
+  { id: "menu", group: "restaurant", label: "Menu file", type: "file", optional: true, when: (a) => R(a) && a.menuhow === "upload", accept: "application/pdf", maxKB: 1200, ask: () => "Add your menu as a PDF here, or skip.", help: () => "A PDF up to 1.2 MB. Visitors can download it from your site." },
+  { id: "items", group: "restaurant", label: "Menu dishes", type: "long", when: (a) => R(a) && a.menuhow !== "upload", optional: false, ask: () => "Name your best dishes, one on each line. You can add a price after a dash.", ph: () => "Masala dosa - 120\nFilter coffee - 60\nThali - 250", help: () => "Press Enter for a new line. Sections, photos, spice level and tags can be added later." },
+  { id: "specials", group: "restaurant", label: "Offers / specials", type: "long", optional: true, when: (a) => R(a) && !doc(a, "offers"), ask: () => "Any current offers or specials? One on each line.", ph: () => "Sunday brunch – 2 for 1 on coffee" },
+  { id: "outlets", group: "restaurant", label: "Outlets", type: "long", optional: true, when: R, ask: () => "Where are your outlets? One on each line.", ph: () => "HSR Layout – 12 27th Main, Bengaluru – 080 1234 5678 – 11 am to 11 pm", help: () => "Name or area, address, phone, map link and opening hours, with dashes between." },
+  { id: "reserve", group: "restaurant", label: "Table reservations", type: "choice", optional: true, when: R, ask: () => "Take table reservations on your website?", options: YN },
+  { id: "reserveto", group: "restaurant", label: "Where reservations go", type: "choice", optional: true, when: (a) => R(a) && a.reserve === "yes", ask: () => "How should reservations reach you?", options: () => [{ v: "whatsapp", label: "WhatsApp" }, { v: "email", label: "Email" }, { v: "phone", label: "Phone" }, { v: "link", label: "An outside booking link" }] },
+  { id: "booklink", group: "restaurant", label: "Booking link", type: "text", optional: true, when: (a) => R(a) && a.reserve === "yes" && a.reserveto === "link", ask: () => "What is your booking link?", ph: () => "e.g. https://dineout.co.in/yourplace" },
+  { id: "ordering", group: "restaurant", label: "Online ordering", type: "choice", optional: true, when: R, ask: () => "Take online orders on this website?", options: YN },
+  { id: "reviews", group: "restaurant", label: "Google reviews link", type: "text", optional: true, when: R, ask: () => "What is your Google reviews link?", ph: () => "e.g. https://g.page/r/…" },
 ];
+
+/** The questions as the Studio's settings list them (every one, even those not asked yet). */
+export const QUESTION_LIST = RAW;
+export const QUESTION_GROUPS: { id: QGroup; name: string }[] = [{ id: "basics", name: "Basics (asked for every type)" }, { id: "portfolio", name: "Personal portfolio" }, { id: "store", name: "Shop" }, { id: "business", name: "Business portfolio" }, { id: "restaurant", name: "Restaurant & café" }];
+const qrule = (s: Step) => readDesignSettings().questions?.[s.group || "basics"]?.[s.id];
+/** What is asked: the owner's settings (hide a question, change its wording) are applied on top. */
+export const STEPS: Step[] = RAW.filter((s) => !s.soon).map((s) => ({
+  ...s,
+  when: (a: Answers) => !qrule(s)?.h && (s.when ? s.when(a) : true),
+  ask: (a: Answers) => qrule(s)?.t || s.ask(a),
+  help: (a: Answers) => qrule(s)?.p ?? s.help?.(a) ?? "",
+}));
+
+/** A short name for each question (for the answers shown above the current question). */
+export const STEP_LABEL: Record<string, string> = { pages: "Pages", usp: "Highlights", goal: "Goal", hours: "Hours", address: "Address", ...Object.fromEntries(RAW.filter((x) => x.label).map((x) => [x.id, x.label!])), about: "About", story: "Story", items: "Offerings" };
 
 /** The steps still to ask, in order. */
 export const nextStep = (a: Answers): Step | null => STEPS.find((s) => (s.when ? s.when(a) : true) && !(s.id in a)) || null;
-export const stepOf = (id: string) => STEPS.find((s) => s.id === id)!;
+/** The question with this id (several types share ids such as "about"): the one that applies to these answers. */
+export const stepOf = (id: string, a?: Answers) => (a && STEPS.find((s) => s.id === id && (!s.when || s.when(a)))) || STEPS.find((s) => s.id === id)!;
+/** Its place in the order asked (-1 when it is not a question). */
+export const stepAt = (id: string, a: Answers) => { const i = STEPS.findIndex((s) => s.id === id && (!s.when || s.when(a))); return i >= 0 ? i : STEPS.findIndex((s) => s.id === id); };
 
 /** How an answer reads back to the person (their own chat bubble). */
 export function sayAnswer(s: Step, a: Answers): string {
@@ -174,9 +230,7 @@ export function sayAnswer(s: Step, a: Answers): string {
   if (s.type === "file") return s.id === "logo" ? "Logo added" : s.id === "doc" ? (a.doclink ? `Link: ${v}` : `PDF: ${v}`) : `Menu added: ${v}`;
   if (s.id === "pages") return v === "multi" ? "Separate pages" : "One page";
   if (s.id === "kind") return KIND_OPTIONS.find((o) => o.v === v)?.label || v;
-  if (s.id === "genre") return v === "Any" ? "Any genre" : v;
-  if (s.id === "btype") return s.options!(a).find((o) => o.v === v)?.label || v;
-  if (s.type === "choice") return [...STYLE_OPTIONS, ...COLOUR_OPTIONS].find((o) => o.v === v)?.label || v;
+  if (s.type === "choice") return [...(s.options?.(a) || []), ...STYLE_OPTIONS, ...OLD_STYLES, ...COLOUR_OPTIONS].find((o) => o.v === v)?.label || v;
   if (s.type === "many") return v.split(",").map((x) => (s.options?.(a) || []).find((o) => o.v === x)?.label || x).join(", ");
   if (s.type === "long") return v.split("\n").filter(Boolean).join(" · ") + src;
   return v + src;
@@ -241,7 +295,10 @@ const STYLE_TAGS: Record<string, { want: string[]; dark?: boolean; light?: boole
   dark: { want: ["Dark", "Tech", "Modern", "Bold"], dark: true },
   warm: { want: ["Warm", "Homemade", "Craft", "Family", "Nature", "Rustic", "Café"] },
   fun: { want: ["Playful", "Retro", "Street food", "Dessert", "Bold", "Motion"] },
+  corporate: { want: ["Corporate", "Classic", "Minimal", "Light", "Modern", "Consulting"], light: true },
 };
+/** "B-27", "b27" and "B-027" are the same theme ID. */
+const codeKey = (v?: string) => { const m = /^([a-z])[\s-]*0*(\d{1,4})$/i.exec((v || "").trim()); return m ? m[1].toLowerCase() + m[2] : ""; };
 const hash = (s: string) => { let h = 0; for (const c of s) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h; };
 function poolOf(kind: Kind): Theme[] { return kind === "business" ? BIZ_THEMES : kind === "restaurant" ? REST_THEMES : THEMES; }
 /** The Studio's own themes of a type (the ones its Themes page shows). */
@@ -285,6 +342,7 @@ export function relatedThemes(a: Answers, max = 14): Theme[] {
 export function pickTheme(a: Answers): Theme | null {
   const kind = k(a), pool = offered(kind); if (!pool.length) return null;
   const chosen = a.theme && poolOf(kind).find((t) => t.id === a.theme); if (chosen) return chosen;
+  const ask = codeKey(a.themeid), byCode = ask ? poolOf(kind).find((t) => codeKey(themeCode(t)) === ask) : undefined; if (byCode) return byCode;
   const { scored } = scoreThemes(a);
 
   const top = scored.filter((x) => x.s >= scored[0].s - 1.5).slice(0, 6);
@@ -306,7 +364,7 @@ function rebrand(o: any, from: string, to: string, skip = new Set(["theme", "cod
   if (Array.isArray(o)) { o.forEach((v, i) => { if (typeof v === "string") o[i] = v.split(from).join(to); else rebrand(v, from, to, skip); }); return; }
   if (o && typeof o === "object") for (const key of Object.keys(o)) { if (skip.has(key)) continue; const v = o[key]; if (typeof v === "string") o[key] = v.split(from).join(to); else rebrand(v, from, to, skip); }
 }
-const goals = (a: Answers) => (a.goal || "").split(",").filter(Boolean);
+const goals = (a: Answers) => { const g = (a.goal || "").split(",").filter(Boolean); if (a.cta) g.unshift(a.cta); if (a.reserve === "yes") g.push("table"); if (a.ordering === "yes") g.push("order"); return [...new Set(g)]; };
 
 /** The starter holds made-up facts (years of experience, clients, reviews, prices). A preview built from a few answers shouldn't show someone else's story as theirs, so those parts are hidden or emptied. */
 /** The starter holds made-up facts (years of experience, clients, reviews, prices). A preview built from a few answers shouldn't show someone else's story as theirs, so those parts are hidden or emptied. */
@@ -379,7 +437,7 @@ export async function buildDesign(a: Answers, copy?: Copy | null, files?: Design
     seo();
   } else if (kind === "store") {
     if (name) put("brand.name", name);
-    if (about) { put("brand.tagline", cp.tagline || about); put("home.hero.text", cp.hero_text || about + "."); put("shop.intro", `Everything from ${name || "our shop"}, in one place.`); put("portfolio.intro", aboutText || about + "."); }
+    if (about) { put("brand.tagline", a.tagline?.trim() || cp.tagline || about); put("home.hero.text", cp.hero_text || about + "."); put("shop.intro", `Everything from ${name || "our shop"}, in one place.`); put("portfolio.intro", aboutText || about + "."); }
     if (name) { put("home.hero.title", `Welcome to\n${name}`); put("portfolio.title", `About ${name}`); }
     put("brand.showAnnouncement", false);
     if (items.length) {
@@ -396,12 +454,12 @@ export async function buildDesign(a: Answers, copy?: Copy | null, files?: Design
     seo();
   } else if (kind === "business") {
     if (name) put("brand.name", name);
-    if (about) { put("brand.tagline", cp.tagline || about); put("hero.title", about + "."); put("hero.lede", cp.hero_text || `${name || "We"}${city ? ", " + city : ""}. Get in touch and we'll take it from there.`); put("about.body", aboutText || `${about}.`); put("cta.body", cp.cta_text || `Tell us what you need and we'll get back to you.`); }
+    if (about) { put("brand.tagline", a.tagline?.trim() || cp.tagline || about); put("hero.title", about + "."); put("hero.lede", cp.hero_text || `${name || "We"}${city ? ", " + city : ""}. Get in touch and we'll take it from there.`); put("about.body", aboutText || `${about}.`); put("cta.body", cp.cta_text || `Tell us what you need and we'll get back to you.`); }
     if (city) { put("hero.eyebrow", city); put("contact.address", city); } else put("hero.eyebrow", "");
     c.hero.badges = usp.slice(0, 4);
     if (items.length) c.services.items = items.slice(0, 6).map((t, i) => ({ ...c.services.items[i % c.services.items.length], title: t, body: noteOf(t) || `${t}${name ? " by " + name : ""}.`, points: [] }));
     if (cp.services_text && items.length) c.services.lede = cp.services_text;
-    const cta: Record<string, [string, string]> = { quote: ["Ask for a quote", "contact"], call: ["Call us", "contact"], book: ["Book a visit", "contact"], whatsapp: ["WhatsApp us", "contact"] };
+    const cta: Record<string, [string, string]> = { quote: ["Get a quote", "contact"], call: ["Call us", "contact"], book: [a.cta === "book" ? "Book a call" : "Book a visit", "contact"], whatsapp: ["WhatsApp us", "contact"], contact: ["Contact us", "contact"], demo: ["Request a demo", "contact"] };
     if (g[0] && cta[g[0]]) { put("nav.cta", cta[g[0]][0]); put("hero.ctaPrimary", cta[g[0]][0]); put("cta.button", cta[g[0]][0]); }
     if (phone) { put("contact.phone", phone); put("contact.whatsapp", digits(phone)); }
     if (email) put("contact.email", email);
@@ -409,7 +467,7 @@ export async function buildDesign(a: Answers, copy?: Copy | null, files?: Design
     seo();
   } else {
     if (name) put("brand.name", name);
-    if (about) { put("brand.tagline", cp.tagline || about); put("hero.eyebrow", about + (city ? " · " + city : "")); put("hero.lede", cp.hero_text || `${about}. Come hungry.`); put("about.body", aboutText || `${name || "We"} serve ${about.toLowerCase()}${city ? " in " + city : ""}.`); put("cta.body", cp.cta_text || "Book a table, or call us for takeaway."); }
+    if (about) { put("brand.tagline", a.tagline?.trim() || cp.tagline || about); put("hero.eyebrow", about + (city ? " · " + city : "")); put("hero.lede", cp.hero_text || `${about}. Come hungry.`); put("about.body", aboutText || `${name || "We"} serve ${about.toLowerCase()}${city ? " in " + city : ""}.`); put("cta.body", cp.cta_text || "Book a table, or call us for takeaway."); }
     if (name) put("hero.title", name);
     put("hero.stamp", ""); c.hero.badges = usp.slice(0, 4);
     if (items.length) c.specials.items = items.slice(0, 8).map((l, i) => { const { name: n, price } = priced(l); return { ...c.specials.items[i % c.specials.items.length], name: n, desc: noteOf(n), price, tag: "", image: null }; });
@@ -548,7 +606,7 @@ export async function writeCopy(a: Answers, host: { api: string; studio: string 
 /** What Picaffectz needs to know, as a short message (for WhatsApp or email). */
 export function requestText(a: Answers, d: Design | null, link = ""): string {
   const kindName = KIND_OPTIONS.find((o) => o.v === a.kind)?.label || a.kind || "";
-  const say = (id: string) => { const s = stepOf(id); return a[id] ? sayAnswer(s, a) : ""; };
+  const say = (id: string) => { const s = stepOf(id, a); return a[id] ? sayAnswer(s, a) : ""; };
   const row = (label: string, v: string) => (v ? `${label}: ${v}` : "");
   return [
     "Hi Picaffectz, I designed a website preview and would like to take it forward.", "",

@@ -42,6 +42,8 @@ export type DesignSettings = {
   themes?: Partial<Record<Kind, string[]>>;
   /** Per type: what the carousel on a visitor's finished preview shows: "answers" (default) = the themes that match what they said (business type, genre); "custom" = the themes the owner ticked above. */
   carousel?: Partial<Record<Kind, "answers" | "custom">>;
+  /** The questions Design yourself asks: per group ("basics" or a type), per question: hidden (h), own wording (t), own help line (p). */
+  questions?: Record<string, Record<string, { h?: boolean; t?: string; p?: string }>>;
   /** Per type, per layout / style / interaction / intro choice. */
   look?: Partial<Record<Kind, Record<string, LookRule>>>;
 };

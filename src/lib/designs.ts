@@ -26,7 +26,7 @@ export function cleanDesignSettings(x: any): DesignSettings {
   const dm = cleanDomain(x.domain); if (dm) o.domain = dm;
   const ga = cleanGallery(x.gallery); if (ga) o.gallery = ga;
   const th = cleanThemes(x.themes); if (Object.keys(th).length) o.themes = th;
-  if (x.images && typeof x.images === "object") { const im: NonNullable<DesignSettings["images"]> = {}; if (x.images.on === true) im.on = true; if (["photo", "illustration", "3d", "flat"].includes(x.images.style)) im.style = x.images.style; if (Object.keys(im).length) o.images = im; }
+  if (x.images && typeof x.images === "object") { const im: NonNullable<DesignSettings["images"]> = {}; if (x.images.on === true) im.on = true; if (["photo", "illustration", "3d", "flat"].includes(x.images.style)) im.style = x.images.style; if (x.images.source === "engine") im.source = "engine"; if (Object.keys(im).length) o.images = im; }
   if (x.adminAi === false) o.adminAi = false;
   if (x.chat && typeof x.chat === "object") {
     const c: NonNullable<DesignSettings["chat"]> = {}, hex = (v: any) => (typeof v === "string" && /^#[0-9a-f]{6}$/i.test(v) ? v.toLowerCase() : "");

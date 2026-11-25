@@ -6,6 +6,7 @@ import { deleteQuery, designHost, listQueries, queryFiles, setQueryStatus, type 
 import type { Studio, StudioIndex } from "../lib/studio";
 import { explain } from "../lib/repo";
 import { Empty, SkelRows, useConfirm, useToast } from "../ui/kit";
+import { Pager, usePage } from "../ui/Pager";
 import { PreviewPopup } from "./DesignPage";
 
 const ACC: Record<string, string> = { portfolio: "#8b5cf6", store: "#f08a24", business: "#3b82f6", restaurant: "#e5484d" };
@@ -28,6 +29,7 @@ export function QueriesTab({ studio, index, onIndex }: { studio: Studio; index: 
   const toast = useToast(), confirm = useConfirm();
   const [host, setHost] = useState<DesignHost | null | undefined>(undefined);
   const [rows, setRows] = useState<Query[] | null>(null);
+  const [pg, setPg] = useState(0), pageOf = usePage(rows || [], 6, pg, setPg);
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState<{ q: Query; design: Design; ver: number } | null>(null);
@@ -67,7 +69,7 @@ export function QueriesTab({ studio, index, onIndex }: { studio: Studio; index: 
         <Empty title="No submissions yet" body="When someone finishes a design and presses Connect with Picaffectz, their request appears here." action={<a className="btn btn-pri" href="#/design">Open Design yourself</a>} />
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {rows.map((q) => {
+          {pageOf.slice.map((q) => {
             const acc = ACC[q.kind] || "#5B7CFF", st = STATUS[q.status] || STATUS.new, t = TEMPLATES[q.kind];
             return (
               <article key={q.id} style={{ "--acc": acc } as React.CSSProperties} className="card group relative flex flex-col overflow-hidden rounded-3xl transition duration-200 hover:-translate-y-1 hover:border-ink-500 hover:shadow-[0_22px_44px_-22px_var(--acc)]">
@@ -104,6 +106,7 @@ export function QueriesTab({ studio, index, onIndex }: { studio: Studio; index: 
           })}
         </div>
       )}
+      {rows && rows.length > 0 && <Pager page={pageOf.at} pages={pageOf.pages} total={rows.length} per={6} onPage={setPg} noun="submissions" />}
       {open && <PreviewPopup design={open.design} ver={open.ver} a={open.q.answers} done onClose={() => setOpen(null)} />}
     </>
   );

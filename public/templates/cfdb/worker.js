@@ -25,7 +25,7 @@ create index if not exists approvals_project on approvals (scope, project, creat
 create table if not exists approval_notes (id integer primary key autoincrement, token text not null, who text not null, body text not null, page text not null default '', kind text not null default 'comment', created_at text not null);
 create index if not exists approval_notes_token on approval_notes (token, id);
 `;
-var CFDB_VERSION = 75;
+var CFDB_VERSION = 76;
 var CFDB_WORKER_NAME = "picaffectz-db";
 
 // src/lib/lookdigest.ts
@@ -2315,7 +2315,13 @@ function dqDesignPub(d) {
     for (const kind of ["business", "restaurant", "portfolio", "store"]) if (Array.isArray(d.themes[kind])) th[kind] = d.themes[kind].filter((v) => typeof v === "string" && /^[A-Za-z0-9_-]{1,40}$/.test(v)).slice(0, 400);
     out.themes = th;
   }
-  if (d.images && typeof d.images === "object" && d.images.on === true) out.images = { on: true, ...["photo", "illustration", "3d", "flat"].includes(d.images.style) ? { style: d.images.style } : {}, ...d.images.provider === "horde" ? { provider: "horde" } : {} };
+  if (d.images && typeof d.images === "object") {
+    const im = {};
+    if (d.images.on === true) im.on = true;
+    if (["photo", "illustration", "3d", "flat"].includes(d.images.style)) im.style = d.images.style;
+    if (d.images.source === "engine") im.source = "engine";
+    if (Object.keys(im).length) out.images = im;
+  }
   if (d.chat && typeof d.chat === "object") {
     const c = {}, hex3 = (v) => typeof v === "string" && /^#[0-9a-f]{6}$/i.test(v) ? v.toLowerCase() : "";
     for (const k of ["you", "bot", "page"]) if (hex3(d.chat[k])) c[k] = hex3(d.chat[k]);
@@ -2631,6 +2637,32 @@ function dqSections(x) {
     if (v) out[k] = v;
   }
   return out;
+}
+async function dqImage(env, id, req) {
+  const ip = req.headers.get("cf-connecting-ip") || "x";
+  if (!await dqRate(env, "dqimg:" + id, 120, 3600) || !await dqRate(env, "dqimgip:" + ip, 16, 3600)) return json({ engine: "system", error: "busy" });
+  const idx = await studioIndex(env, id);
+  if (!idx) return err(404, "Not found.");
+  const d = idx?.prefs?.design;
+  if (d?.images?.source !== "engine") return json({ engine: "system" });
+  const { choice, ai } = await dqEngine(env, idx);
+  if (choice !== "cloudflare" || !ai) return json({ engine: "system" });
+  let q;
+  try {
+    q = JSON.parse((await req.text()).slice(0, 2e3) || "{}");
+  } catch {
+    return err(400, "Couldn't read the request.");
+  }
+  const prompt = clip(q.prompt, 400);
+  if (prompt.length < 3) return err(400, "Describe the picture first.");
+  try {
+    const r = await ai.run("@cf/black-forest-labs/flux-1-schnell", { prompt, steps: 4 });
+    const img = typeof r?.image === "string" ? r.image : "";
+    if (img.length < 100) return json({ engine: "system", error: "empty" });
+    return json({ engine: "cloudflare", image: img });
+  } catch (e) {
+    return json({ engine: "system", error: String(e?.message || e).slice(0, 160) });
+  }
 }
 async function dqUnderstand(env, id, req) {
   const ip = req.headers.get("cf-connecting-ip") || "x";
@@ -3396,6 +3428,11 @@ ${body}`)}${paras("Approve or hide it under Reviews in your site's admin page.",
         const b = id ? await dqBrand(env, id) : null;
         if (!b) return err(404, "Not found.");
         return new Response(JSON.stringify(b), { headers: { ...cors, "Content-Type": "application/json", "Cache-Control": "public, max-age=60" } });
+      }
+      if (p.startsWith("/dq/image/") && req.method === "POST") {
+        const id = studioId(p.split("/")[3] || "");
+        if (!id) return err(404, "Not found.");
+        return dqImage(env, id, req);
       }
       if (p.startsWith("/dq/understand/") && req.method === "POST") {
         const id = studioId(p.split("/")[3] || "");

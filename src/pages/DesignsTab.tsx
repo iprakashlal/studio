@@ -7,6 +7,7 @@ import type { DesignRec } from "../lib/designs";
 import type { Studio, StudioIndex } from "../lib/studio";
 import { explain } from "../lib/repo";
 import { Empty, useConfirm, useToast } from "../ui/kit";
+import { Pager, usePage } from "../ui/Pager";
 import { PreviewPopup } from "./DesignPage";
 
 const KIND_ACC: Record<string, string> = { portfolio: "#8b5cf6", store: "#f08a24", business: "#3b82f6", restaurant: "#e5484d" };
@@ -30,7 +31,8 @@ export function DesignsTab({ studio, index, onIndex }: { studio: Studio; index: 
   const asRec = (d: Draft): DesignRec & { email: string } => ({ id: d.id, name: d.name || "Untitled", kind: d.kind, themeId: d.themeId, themeName: d.themeName, answers: d.answers, createdAt: d.updatedAt || d.createdAt, summary: d.summary, copy: d.copy, ...(d.logo ? { logo: d.logo } : {}), email: d.email });
   const list: (DesignRec & { email?: string })[] = [...dr.list.filter((d) => d.kind).map(asRec), ...saved];
   const [open, setOpen] = useState<{ rec: DesignRec; design: Design; ver: number } | null>(null);
-  const [busy, setBusy] = useState("");
+  const [busy, setBusy] = useState(""), [pg, setPg] = useState(0);
+  const pageOf = usePage(list, 9, pg, setPg);
   const load = async (rec: DesignRec) => { const d = await buildDesign(rec.answers, rec.copy, rec.logo ? { logo: rec.logo } : null); if (!d) throw new Error("This preview can't be rebuilt."); return d; };
   const act = async (id: string, fn: () => Promise<void>) => { setBusy(id); try { await fn(); } catch (e) { toast(explain(e), "bad"); } setBusy(""); };
 
@@ -39,7 +41,7 @@ export function DesignsTab({ studio, index, onIndex }: { studio: Studio; index: 
     <>
       <p className="text-sm text-ink-400">Websites designed by answering simple questions. They are previews: nothing is published. Turn one into a real project when you take it forward.</p>
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        {list.map((r) => {
+        {pageOf.slice.map((r) => {
           const acc = KIND_ACC[r.kind] || "#5B7CFF", t = TEMPLATES[r.kind];
           return (
             <article key={r.id} style={{ "--acc": acc } as React.CSSProperties} className="card group relative flex flex-col overflow-hidden rounded-3xl transition duration-200 hover:-translate-y-1 hover:border-ink-500 hover:shadow-[0_22px_44px_-22px_var(--acc)]">
@@ -63,6 +65,7 @@ export function DesignsTab({ studio, index, onIndex }: { studio: Studio; index: 
           );
         })}
       </div>
+      <Pager page={pageOf.at} pages={pageOf.pages} total={list.length} per={9} onPage={setPg} noun="previews" />
       {open && <PreviewPopup design={open.design} ver={open.ver} a={open.rec.answers} done onClose={() => setOpen(null)} />}
     </>
   );

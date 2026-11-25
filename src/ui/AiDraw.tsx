@@ -14,7 +14,7 @@ export function AiDraw({ logo = false, count = 2, onUse, disabled, initial = "",
   const go = async () => {
     stop.current?.abort(); const ac = (stop.current = new AbortController()); setErr(""); setBusy("Sending…"); setGot([]);
     try {
-      const bl = await generateImages(what, { style: readDesignSettings().images?.style, kind: logo ? "logo" : "photo", n: count, signal: ac.signal, status: setBusy });
+      const bl = await generateImages(what, { style: readDesignSettings().images?.style, source: readDesignSettings().images?.source, kind: logo ? "logo" : "photo", n: count, signal: ac.signal, status: setBusy });
       setGot(bl.map((b, i) => ({ f: new File([b], `drawn-${i + 1}.webp`, { type: b.type || "image/webp" }), u: URL.createObjectURL(b) })));
     } catch (e: any) { if (!ac.signal.aborted) setErr(e?.message || "Couldn't draw that. Please try again."); }
     setBusy("");
@@ -32,7 +32,7 @@ export function AiDraw({ logo = false, count = 2, onUse, disabled, initial = "",
       {!!got.length && <div className="grid grid-cols-2 gap-2 sm:grid-cols-4" role="group" aria-label="Drawn pictures">
         {got.map((g, i) => <button key={g.u} type="button" aria-label={`Use drawn picture ${i + 1}`} disabled={disabled} onClick={() => onUse(g.f)} className="aspect-[4/3] overflow-hidden rounded-xl border border-ink-700 bg-white hover:border-brand-400"><img src={g.u} alt="" className={`h-full w-full ${logo ? "object-contain" : "object-cover"}`} /></button>)}
       </div>}
-      <p className="m-0 text-[11px] text-ink-500">Drawn by the free AI Horde (volunteer computers, so it can queue for a short while). Don't type private details, and check the picture before using it on a live site; the result may not be yours exclusively.</p>
+      <p className="m-0 text-[11px] text-ink-500">Drawn by AI (the Studio's own engine, or the free AI Horde on volunteers' computers, which can queue for a short while). Don't type private details, and check the picture before using it on a live site; the result may not be yours exclusively.</p>
     </div>
   );
 }

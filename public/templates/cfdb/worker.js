@@ -25,7 +25,7 @@ create index if not exists approvals_project on approvals (scope, project, creat
 create table if not exists approval_notes (id integer primary key autoincrement, token text not null, who text not null, body text not null, page text not null default '', kind text not null default 'comment', created_at text not null);
 create index if not exists approval_notes_token on approval_notes (token, id);
 `;
-var CFDB_VERSION = 76;
+var CFDB_VERSION = 77;
 var CFDB_WORKER_NAME = "picaffectz-db";
 
 // src/lib/lookdigest.ts
@@ -2321,6 +2321,13 @@ function dqDesignPub(d) {
     if (["photo", "illustration", "3d", "flat"].includes(d.images.style)) im.style = d.images.style;
     if (d.images.source === "engine") im.source = "engine";
     if (Object.keys(im).length) out.images = im;
+  }
+  if (d.notice && typeof d.notice === "object") {
+    const n = {};
+    if (d.notice.on === false) n.on = false;
+    const t = typeof d.notice.text === "string" ? d.notice.text.replace(/[<>]/g, "").trim().slice(0, 400) : "";
+    if (t) n.text = t;
+    if (Object.keys(n).length) out.notice = n;
   }
   if (d.chat && typeof d.chat === "object") {
     const c = {}, hex3 = (v) => typeof v === "string" && /^#[0-9a-f]{6}$/i.test(v) ? v.toLowerCase() : "";

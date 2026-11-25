@@ -1317,6 +1317,7 @@ function dqDesignPub(d: any) {
   }
   if (d.themes && typeof d.themes === "object") { const th: any = {}; for (const kind of ["business", "restaurant", "portfolio", "store"]) if (Array.isArray(d.themes[kind])) th[kind] = d.themes[kind].filter((v: any) => typeof v === "string" && /^[A-Za-z0-9_-]{1,40}$/.test(v)).slice(0, 400); out.themes = th; }
   if (d.images && typeof d.images === "object") { const im: any = {}; if (d.images.on === true) im.on = true; if (["photo", "illustration", "3d", "flat"].includes(d.images.style)) im.style = d.images.style; if (d.images.source === "engine") im.source = "engine"; if (Object.keys(im).length) out.images = im; }
+  if (d.notice && typeof d.notice === "object") { const n: any = {}; if (d.notice.on === false) n.on = false; const t = typeof d.notice.text === "string" ? d.notice.text.replace(/[<>]/g, "").trim().slice(0, 400) : ""; if (t) n.text = t; if (Object.keys(n).length) out.notice = n; }
   if (d.chat && typeof d.chat === "object") {
     const c: any = {}, hex = (v: any) => (typeof v === "string" && /^#[0-9a-f]{6}$/i.test(v) ? v.toLowerCase() : "");
     for (const k of ["you", "bot", "page"]) if (hex(d.chat[k])) c[k] = hex(d.chat[k]);

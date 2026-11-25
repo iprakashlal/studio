@@ -28,6 +28,7 @@ export function cleanDesignSettings(x: any): DesignSettings {
   const th = cleanThemes(x.themes); if (Object.keys(th).length) o.themes = th;
   if (x.images && typeof x.images === "object") { const im: NonNullable<DesignSettings["images"]> = {}; if (x.images.on === true) im.on = true; if (["photo", "illustration", "3d", "flat"].includes(x.images.style)) im.style = x.images.style; if (x.images.source === "engine") im.source = "engine"; if (Object.keys(im).length) o.images = im; }
   if (x.adminAi === false) o.adminAi = false;
+  if (x.notice && typeof x.notice === "object") { const n: NonNullable<DesignSettings["notice"]> = {}; if (x.notice.on === false) n.on = false; const t = typeof x.notice.text === "string" ? x.notice.text.replace(/[<>]/g, "").trim().slice(0, 400) : ""; if (t) n.text = t; if (Object.keys(n).length) o.notice = n; }
   if (x.chat && typeof x.chat === "object") {
     const c: NonNullable<DesignSettings["chat"]> = {}, hex = (v: any) => (typeof v === "string" && /^#[0-9a-f]{6}$/i.test(v) ? v.toLowerCase() : "");
     for (const k of ["you", "bot", "page"] as const) if (hex(x.chat[k])) c[k] = hex(x.chat[k]);

@@ -28,6 +28,7 @@ export type Gallery = {
   /** The page's heading and the line under it (default text when empty). */
   title?: string; intro?: string;
 };
+export const NOTICE_TEXT = "Please note that this is just a preview to help you select a theme. Both the theme and the actual development can be customized to fit your specific requirements.";
 export type DesignSettings = {
   on?: boolean;
   /** Visitors may change each colour (default on). */
@@ -48,6 +49,8 @@ export type DesignSettings = {
   chat?: { you?: string; bot?: string; page?: string; image?: string; dim?: number };
   /** false: the site editor has no "Draw with AI" button (on unless turned off). */
   adminAi?: boolean;
+  /** The yellow notice bar at the top of "Design yourself": hidden when on === false, own words in text. */
+  notice?: { on?: boolean; text?: string };
   /** The questions Design yourself asks: per group ("basics" or a type), per question: hidden (h), own wording (t), own help line (p). */
   questions?: Record<string, Record<string, { h?: boolean; t?: string; p?: string }>>;
   /** Per type, per layout / style / interaction / intro choice. */

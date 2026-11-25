@@ -2,7 +2,7 @@ import { themeCode } from "../themes/codes";
 import { useEffect, useMemo, useState } from "react";
 import { pushPref, savePrefNow } from "../lib/prefs";
 import { cleanDesignSettings, readDesignSettings, writeDesignSettings, type DesignSettings } from "../lib/designs";
-import { GROUPS, KINDS, LOOK_AXES, type Gallery, type Kind, type LookRule } from "../lib/designlook";
+import { NOTICE_TEXT, GROUPS, KINDS, LOOK_AXES, type Gallery, type Kind, type LookRule } from "../lib/designlook";
 import { QUESTION_GROUPS, QUESTION_LIST, allThemesOf } from "../lib/designer";
 import { AI_ENGINES } from "../lib/ai";
 import { useAiEngine } from "./AiEngine";
@@ -256,6 +256,15 @@ export function DesignLookTab({ session, studio, index, onIndex }: { session: Se
             </div>
           </>;
         })()}
+      </Block>
+
+      <Block title="Notice bar" note='A yellow bar across the top of "Design yourself". Turn it off, or write your own words.'>
+        <label className="flex items-start gap-2 text-[13px]">
+          <input type="checkbox" className="mt-1" checked={d.notice?.on !== false} onChange={(e) => upd({ notice: e.target.checked ? (d.notice?.text ? { text: d.notice.text } : undefined) : { ...(d.notice || {}), on: false } })} />
+          <span><b className="block">Show the notice bar</b></span>
+        </label>
+        {d.notice?.on !== false && <div className="flex flex-col gap-1"><label htmlFor="ds-notice" className="text-[13px] font-semibold">Message</label><textarea id="ds-notice" className="input min-h-[5rem]" maxLength={400} value={d.notice?.text ?? NOTICE_TEXT} onChange={(e) => upd({ notice: { ...(d.notice || {}), text: e.target.value } })} />
+          {d.notice?.text && d.notice.text !== NOTICE_TEXT && <button type="button" className="btn btn-ghost btn-sm mt-1" onClick={() => upd({ notice: undefined })}>Use the standard message</button>}</div>}
       </Block>
 
       <Block title="Pictures drawn by AI" note="Pictures can be drawn from a few words by the free AI Horde (no key, no sign-up; volunteers' computers do the drawing, so it can queue for a short while).">

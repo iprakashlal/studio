@@ -107,8 +107,7 @@ export function DesignPage({ studio, index, onIndex }: { studio?: Studio; index?
   useEffect(() => { const f = () => setSetsVer((v) => v + 1); addEventListener("studio:design-page", f); return () => removeEventListener("studio:design-page", f); }, []);
   const [writing, setWriting] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
-  const [reviewOpen, setReviewOpen] = useState(false);
-  const [jump, setJump] = useState<{ id: string; n: number } | null>(null);
+  const [editId, setEditId] = useState<string | null>(null);
   const [connect, setConnect] = useState(false), [connectFrom, setConnectFrom] = useState<DOMRect | null>(null);
   const openConnect = (r?: DOMRect) => { setConnectFrom(r || null); setConnect(true); };
   const [text, setText] = useState("");
@@ -132,7 +131,6 @@ export function DesignPage({ studio, index, onIndex }: { studio?: Studio; index?
   /** Leaves out every remaining optional question (stops at one that is needed). */
   const skipRest = () => setA((o) => { const n = { ...o }; let s: Step | null; while ((s = nextStep(n)) && isOptional(s, n)) n[s.id] = ""; return n; });
   const answered = STEPS.filter((s) => s.id in a && (s.when ? s.when(a) : true));
-  const started = answered.length > 0;
   const total = STEPS.filter((x) => (x.when ? x.when(a) : true)).length;
 
   useEffect(() => { document.title = "Design yourself · " + brand.name; }, [brand.name]);
@@ -262,7 +260,7 @@ export function DesignPage({ studio, index, onIndex }: { studio?: Studio; index?
   useEffect(() => { if (studio) return; return watchDevtools(() => { resetRef.current(); setWarn(true); }); }, [studio]);
   const tweak = (p: Answers) => setA((o) => { const n = { ...o, ...p }; for (const key of Object.keys(p)) if (p[key] === "") delete n[key]; return n; });
   // Developer tools opened (see PageGuard): the preview (and its frame) goes and the questions start over.
-  useEffect(() => { const f = () => { restart(); setPass(null); setShowPreview(false); setConnect(false); setReviewOpen(false); }; addEventListener("studio:guard", f); return () => removeEventListener("studio:guard", f); }, []);
+  useEffect(() => { const f = () => { restart(); setPass(null); setShowPreview(false); setConnect(false); setEditId(null); }; addEventListener("studio:guard", f); return () => removeEventListener("studio:guard", f); }, []);
   function restart() { setA({}); setCopy(null); setFiles({}); setDesign(null); setSavedId(newDesignId()); setSent(false); lastSaved.current = ""; try { sessionStorage.removeItem(DRAFT); } catch { /* none */ } }
 
   const field$ = cur && (cur.type === "text" || cur.type === "long" || cur.id === "kind" || cur.id === "doc");
@@ -321,10 +319,10 @@ export function DesignPage({ studio, index, onIndex }: { studio?: Studio; index?
   const chips = (s: Step) => {
     const opts = s.options?.(a) || [];
     if (s.id === "kind") return (
-      <div className="grid gap-2 sm:grid-cols-2">{opts.map((o) => <button key={o.v} type="button" className="card flex flex-col items-start gap-1 rounded-2xl p-4 text-left transition hover:-translate-y-0.5 hover:border-brand-400" onClick={() => answer(s, o.v)}><b className="text-[15px] text-ink-100">{o.label}</b><span className="text-[13px] text-ink-400">{o.hint}</span></button>)}</div>
+      <div className="grid gap-2 sm:grid-cols-2">{opts.map((o) => <button key={o.v} type="button" className="card flex flex-col items-start gap-0.5 rounded-2xl px-4 py-3 text-left transition hover:border-brand-400 hover:bg-ink-800" onClick={() => answer(s, o.v)}><b className="text-[14.5px] text-ink-100">{o.label}</b><span className="text-[12.5px] leading-snug text-ink-400">{o.hint}</span></button>)}</div>
     );
     if (s.id === "pages") return (
-      <div className="grid gap-2 sm:grid-cols-2">{opts.map((o) => <button key={o.v} type="button" className="card flex flex-col items-start gap-1 rounded-2xl p-4 text-left transition hover:-translate-y-0.5 hover:border-brand-400" onClick={() => answer(s, o.v)}><b className="text-[15px] text-ink-100">{o.label}</b><span className="text-[13px] text-ink-400">{o.hint}</span></button>)}</div>
+      <div className="grid gap-2 sm:grid-cols-2">{opts.map((o) => <button key={o.v} type="button" className="card flex flex-col items-start gap-0.5 rounded-2xl px-4 py-3 text-left transition hover:border-brand-400 hover:bg-ink-800" onClick={() => answer(s, o.v)}><b className="text-[14.5px] text-ink-100">{o.label}</b><span className="text-[12.5px] leading-snug text-ink-400">{o.hint}</span></button>)}</div>
     );
     return (
       <div className="flex flex-wrap gap-2" role={s.type === "many" ? "group" : undefined}>
@@ -345,10 +343,12 @@ export function DesignPage({ studio, index, onIndex }: { studio?: Studio; index?
 
   const ch = readDesignSettings().chat, chatBg: React.CSSProperties | undefined = ch && (ch.page || ch.image)
     ? { ...(ch.page ? { backgroundColor: ch.page } : {}), ...(ch.image ? { backgroundImage: `${ch.dim ? `linear-gradient(rgba(0,0,0,${ch.dim / 100}),rgba(0,0,0,${ch.dim / 100})),` : ""}url(${JSON.stringify(ch.image)})`, backgroundSize: "cover", backgroundPosition: "center", backgroundAttachment: "fixed" } : {}) } : undefined;
+  // What the chat shows so far: the answers before the question being asked (an email filled in from the sign-in waits for its turn).
+  const shown = cur ? answered.filter((x) => STEPS.indexOf(x) < STEPS.indexOf(cur)) : answered, chatStarted = shown.length > 0;
+  const saveAnswer = (id: string, v: string) => { setA((o) => { const n: Answers = { ...o, [id]: v, docfrom: (o.docfrom || "").split(",").filter((x) => x && x !== id).join(",") }; if (id === "kind" && o.kind !== v) for (const k of ["theme", "accent", "mode", "corners"]) delete n[k]; /* (a look belongs to one type; everything else they said stays) */ return n; }); setCopy(null); lastSaved.current = ""; setEditId(null); toast("Updated. Your preview follows."); };
+  const startEdit = (s: Step) => { if (s.type === "file") { rewind(s.id); return; } setEditId(s.id); setTimeout(() => document.getElementById("answer-" + s.id)?.scrollIntoView({ block: "center", behavior: "smooth" }), 80); };
   const ready = finished && !!copy && !writing;
-  const wasReady = useRef(false);
-  useEffect(() => { if (ready && !wasReady.current) { wasReady.current = true; setReviewOpen(true); } if (!finished) wasReady.current = false; }, [ready, finished]);
-
+  
   if (phone && !studio) return (
     <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-ink-950 px-6 text-center text-ink-100">
       <div className="max-w-md rounded-3xl border border-ink-700 bg-ink-900 p-7 shadow-xl">
@@ -369,26 +369,27 @@ export function DesignPage({ studio, index, onIndex }: { studio?: Studio; index?
           : <span className="flex min-w-0 items-center gap-2 font-extrabold"><BrandMark fallback={<Logo />} /><span className="truncate max-sm:hidden">{brand.name}</span></span>}
         <span className="text-ink-600 max-sm:hidden" aria-hidden>/</span><span className="truncate font-semibold text-ink-300 max-sm:hidden">Design your website</span>
         <span className="ml-auto flex shrink-0 items-center gap-2">
+          {cur && chatStarted && <span className="mr-1 text-xs tabular-nums text-ink-500" aria-label={`Step ${Math.min(answered.length + 1, total)} of ${total}`}>{Math.min(answered.length + 1, total)} / {total}</span>}
           {design && a.name && <button type="button" className="btn btn-sm" onClick={() => setShowPreview(true)}>Preview</button>}
-          {started && <button type="button" className="btn btn-ghost btn-sm" onClick={restart}>Start again</button>}
+          {chatStarted && <button type="button" className="btn btn-ghost btn-sm" onClick={restart}>Start again</button>}
         </span>
-        <div className="absolute inset-x-0 bottom-0 h-0.5 bg-ink-900" role="progressbar" aria-label="Progress" aria-valuemin={0} aria-valuemax={total} aria-valuenow={answered.length}><div className="h-full bg-brand-500 transition-all duration-500" style={{ width: `${started ? Math.round((answered.length / total) * 100) : 0}%` }} /></div>
+        <div className="absolute inset-x-0 bottom-0 h-0.5 bg-ink-900" role="progressbar" aria-label="Progress" aria-valuemin={0} aria-valuemax={total} aria-valuenow={answered.length}><div className="h-full bg-brand-500 transition-all duration-500" style={{ width: `${chatStarted ? Math.round((answered.length / total) * 100) : 0}%` }} /></div>
       </header>
 
       <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-3 pb-4 sm:px-6">
-        <div role="log" aria-label="Conversation" className="flex flex-1 flex-col gap-3 pb-4 pt-4">
-          <ChatBot><p className="m-0 text-[15px] leading-relaxed"><b>Welcome 👋</b> I'm the {brand.name} design assistant. I'll ask a few simple questions and your website takes shape as we go. It's only a preview; we finish it together.</p></ChatBot>
+        <div role="log" aria-label="Conversation" className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-5 pb-6 pt-6">
+          <ChatBot><p className="m-0 text-[15px] leading-relaxed"><b>Welcome 👋</b> I'm the {brand.name} design assistant. Answer a few quick questions and your website takes shape as we go. It's only a preview.</p></ChatBot>
           {needMail && mailChat.thread}
-          {!needMail && !started && cur && <ChatBot><section aria-live="polite"><h2 className="m-0 text-[15px] font-semibold leading-snug">{cur.ask(a)}</h2>{cur.help && cur.help(a) && <p className="mb-0 mt-1 text-[13px] leading-relaxed text-ink-400">{cur.help(a)}</p>}</section></ChatBot>}
-          {!needMail && started && answered.map((s) => (
-            <div key={s.id} className="flex flex-col gap-3">
+          {!needMail && !chatStarted && cur && <ChatBot stack><section aria-live="polite"><h2 className="m-0 text-[15px] font-semibold leading-snug">{cur.ask(a)}</h2>{cur.help && cur.help(a) && <p className="mb-0 mt-1 text-[13px] leading-relaxed text-ink-400">{cur.help(a)}</p>}</section></ChatBot>}
+          {!needMail && chatStarted && shown.map((s) => (
+            <div key={s.id} id={"answer-" + s.id} className="flex flex-col gap-2">
               <ChatBot><p className="m-0 text-[14px] leading-snug text-ink-200">{s.ask(a)}</p></ChatBot>
-              <ChatYou onEdit={() => { setReviewOpen(true); setTimeout(() => setJump({ id: s.id, n: Date.now() }), 60); }} label={STEP_LABEL[s.id] || s.id}>
-                {a[s.id] ? sayAnswer(s, a).replace(/\s*\(from your document\)$/, "") : <i className="opacity-80">Skipped</i>}
-              </ChatYou>
+              {editId === s.id
+                ? <div className="chat-in pl-[42px]"><AnswerEdit s={s} a={a} onSave={saveAnswer} onCancel={() => setEditId(null)} /></div>
+                : <ChatYou onEdit={() => startEdit(s)} label={STEP_LABEL[s.id] || s.id}>{a[s.id] ? sayAnswer(s, a).replace(/\s*\(from your document\)$/, "") : <i className="opacity-80">Skipped</i>}</ChatYou>}
             </div>
           ))}
-          {!needMail && started && cur && <ChatBot><section aria-live="polite"><h2 className="m-0 text-[15px] font-semibold leading-snug">{cur.ask(a)}</h2>{cur.help && cur.help(a) && <p className="mb-0 mt-1 text-[13px] leading-relaxed text-ink-400">{cur.help(a)}</p>}{reading && <p className="mb-0 mt-2 inline-flex items-center gap-2 text-sm text-ink-300"><Spinner />Reading it…</p>}</section></ChatBot>}
+          {!needMail && chatStarted && cur && <ChatBot><section aria-live="polite"><h2 className="m-0 text-[15px] font-semibold leading-snug">{cur.ask(a)}</h2>{cur.help && cur.help(a) && <p className="mb-0 mt-1 text-[13px] leading-relaxed text-ink-400">{cur.help(a)}</p>}{reading && <p className="mb-0 mt-2 inline-flex items-center gap-2 text-sm text-ink-300"><Spinner />Reading it…</p>}</section></ChatBot>}
           {finished && writing && <ChatBot typing><span className="text-sm">Writing a short line about each of your topics…</span></ChatBot>}
           {ready && (<ChatBot>
               <section className="flex flex-col gap-4" aria-live="polite">
@@ -404,23 +405,20 @@ export function DesignPage({ studio, index, onIndex }: { studio?: Studio; index?
                 <p className="text-xs text-ink-500">Preview only. Nothing is published or charged.</p>
               </section>
             </ChatBot>)}
-          {!needMail && started && (<AnswersReview rows={answered} a={a} jump={jump} open={reviewOpen} onOpen={setReviewOpen} onRewind={rewind}
-              onSave={(id, v) => { setA((o) => { const n: Answers = { ...o, [id]: v, docfrom: (o.docfrom || "").split(",").filter((x) => x && x !== id).join(",") }; if (id === "kind" && o.kind !== v) for (const k of ["theme", "accent", "mode", "corners"]) delete n[k]; /* (a look belongs to one type; everything else they said stays) */ return n; }); setCopy(null); lastSaved.current = ""; toast("Updated. Your preview follows."); }} />)}
           <div ref={endRef} />
         </div>
         {!needMail && cur && (
-          <div className="sticky bottom-0 -mx-3 border-t border-ink-800 bg-ink-950/95 px-3 pb-3 pt-3 backdrop-blur sm:-mx-6 sm:px-6">
-            <div className="mb-2 flex items-center justify-between text-[11px] text-ink-500"><span>{started ? "Your reply" : "Pick one, or type below"}</span><span className="tabular-nums" aria-label={`Step ${Math.min(answered.length + 1, total)} of ${total}`}>{Math.min(answered.length + 1, total)} / {total}</span></div>
-            <div className="flex max-h-[58vh] flex-col gap-3 overflow-y-auto pr-0.5">
-              {!started ? <>{bar}<p className="m-0 text-center text-xs text-ink-500">or tap one</p>{chips(cur)}</> : <>{(cur.type === "choice" || cur.type === "many") && chips(cur)}{cardBar}</>}
+          <div className="sticky bottom-0 -mx-3 border-t border-ink-800 bg-ink-950/95 px-3 pb-4 pt-4 backdrop-blur sm:-mx-6 sm:px-6">
+            <div className="mx-auto flex max-h-[62vh] max-w-2xl flex-col gap-4 overflow-y-auto px-0.5 py-0.5">
+              {!chatStarted ? <>{chips(cur)}<div className="flex items-center gap-3 text-[11px] uppercase tracking-wide text-ink-500"><span className="h-px flex-1 bg-ink-800" />or type your own<span className="h-px flex-1 bg-ink-800" /></div>{bar}</> : <>{(cur.type === "choice" || cur.type === "many") && chips(cur)}{cardBar}</>}
             </div>
           </div>
         )}
-        {needMail && <div className="sticky bottom-0 -mx-3 border-t border-ink-800 bg-ink-950/95 px-3 pb-3 pt-3 backdrop-blur sm:-mx-6 sm:px-6">{mailChat.composer}</div>}
+        {needMail && <div className="sticky bottom-0 -mx-3 border-t border-ink-800 bg-ink-950/95 px-3 pb-4 pt-4 backdrop-blur sm:-mx-6 sm:px-6"><div className="mx-auto max-w-2xl">{mailChat.composer}</div></div>}
       </main>
       <StudioPageLinksHere where="design" />
 
-      {showPreview && design && <PreviewPopup design={design} ver={ver} a={a} build={(id) => buildDesign({ ...a, theme: id }, copy, files)} onClose={() => setShowPreview(false)} onEditLink={(id) => { setShowPreview(false); if (cur && id === cur.id && !(id in a)) { /* the question being asked now: answer it in the box above, nothing is filled in or skipped */ window.scrollTo({ top: 0, behavior: "smooth" }); setTimeout(() => field.current?.focus(), 150); return; } setReviewOpen(true); if (!(id in a)) setA((o) => ({ ...o, [id]: "" })); setTimeout(() => setJump({ id, n: Date.now() }), 60); }} onEdit={() => { setShowPreview(false); setReviewOpen(true); setTimeout(() => document.getElementById("design-answers")?.scrollIntoView({ block: "start", behavior: "smooth" }), 80); }} onConnect={openConnect} done={ready} onTweak={ready ? tweak : undefined} />}
+      {showPreview && design && <PreviewPopup design={design} ver={ver} a={a} build={(id) => buildDesign({ ...a, theme: id }, copy, files)} onClose={() => setShowPreview(false)} onEditLink={(id) => { setShowPreview(false); if (cur && id === cur.id && !(id in a)) { /* the question being asked now: answer it in the box above, nothing is filled in or skipped */ window.scrollTo({ top: 0, behavior: "smooth" }); setTimeout(() => field.current?.focus(), 150); return; } if (!(id in a)) setA((o) => ({ ...o, [id]: "" })); const st = STEPS.find((x) => x.id === id); setTimeout(() => { if (st) startEdit(st); }, 60); }} onEdit={() => { setShowPreview(false); setTimeout(() => endRef.current?.scrollIntoView({ block: "end", behavior: "smooth" }), 80); }} onConnect={openConnect} done={ready} onTweak={ready ? tweak : undefined} />}
       {warn && (
         <div role="alertdialog" aria-modal="true" aria-label="Developer tools detected" className="fixed inset-0 z-[100] grid place-items-center bg-black/85 p-4">
           <div className="card flex w-full max-w-md flex-col gap-3 p-6">
@@ -435,44 +433,14 @@ export function DesignPage({ studio, index, onIndex }: { studio?: Studio; index?
   );
 }
 
-/** Every answer so far, each one changeable in place (the later answers stay). Questions that shape everything after them (the type, the starting document or link, a file) go back to that question instead. */
-function AnswersReview({ rows, a, jump, open, onOpen, onRewind, onSave }: { rows: Step[]; a: Answers; jump: { id: string; n: number } | null; open: boolean; onOpen: (v: boolean) => void; onRewind: (id: string) => void; onSave: (id: string, v: string) => void }) {
-  const [edit, setEdit] = useState<string | null>(null), [draft, setDraft] = useState(""), [pick, setPick] = useState<string[]>([]);
-  const start = (s: Step) => {
-    if (s.type === "file") { onRewind(s.id); return; }
-    setEdit(s.id); setDraft(a[s.id] || ""); setPick((a[s.id] || "").split(",").filter(Boolean));
-  };
-  const save = (s: Step, v: string) => { onSave(s.id, v.trim()); setEdit(null); };
-  // An (Edit) link in the preview: open that answer, ready to type.
-  useEffect(() => {
-    if (!jump) return; const s = rows.find((x) => x.id === jump.id); if (!s) return;
-    if (s.type === "file") { setTimeout(() => document.getElementById("answer-" + s.id)?.scrollIntoView({ block: "center", behavior: "smooth" }), 120); return; }
-    setEdit(s.id); setDraft(a[s.id] || ""); setPick((a[s.id] || "").split(",").filter(Boolean));
-    setTimeout(() => document.getElementById("answer-" + s.id)?.scrollIntoView({ block: "center", behavior: "smooth" }), 120);
-  }, [jump?.n]);
-  const req = (s: Step) => !(typeof s.optional === "function" ? s.optional(a) : s.optional);
+/** An answer changed in place in the chat: the same question, its choices or box, Save and Cancel. */
+function AnswerEdit({ s, a, onSave, onCancel }: { s: Step; a: Answers; onSave: (id: string, v: string) => void; onCancel: () => void }) {
+  const [draft, setDraft] = useState(a[s.id] || ""), [pick, setPick] = useState<string[]>((a[s.id] || "").split(",").filter(Boolean));
+  const opts = s.options?.(a) || [], req = (x: Step) => !(typeof x.optional === "function" ? x.optional(a) : x.optional);
+  const save = (x: Step, v: string) => onSave(x.id, v.trim());
+  const setEdit = (_: null) => onCancel();
   return (
-    <details id="design-answers" open={open} onToggle={(e) => onOpen((e.currentTarget as HTMLDetailsElement).open)} className="group rounded-2xl border border-ink-800 bg-ink-900/50">
-      <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-3 text-sm font-semibold text-ink-200 marker:hidden [&::-webkit-details-marker]:hidden">
-        <span>Your answers</span><span className="chip">{rows.filter((x) => a[x.id]).length}</span>
-        <span className="ml-auto text-xs font-normal text-ink-500 group-open:hidden">Review or change</span>
-        <span aria-hidden className="text-ink-500 transition group-open:rotate-180">⌄</span>
-      </summary>
-      <ul className="divide-y divide-ink-800 border-t border-ink-800" aria-label="Your answers so far">
-        {rows.map((s) => {
-          const on = edit === s.id, opts = s.options?.(a) || [];
-          return (
-            <li key={s.id} id={"answer-" + s.id} className="flex flex-col gap-2 px-4 py-3">
-              <div className="flex items-start gap-3">
-                <div className="min-w-0 flex-1">
-                  <div className="text-xs text-ink-500">{STEP_LABEL[s.id] || s.id}{(a.docfrom || "").split(",").includes(s.id) && <span className="ml-1.5 text-brand-300" title="Found in your document">✦ from your document</span>}</div>
-                  {!on && <div className={`mt-0.5 break-words text-sm ${a[s.id] ? "font-semibold text-ink-100" : "text-ink-500"}`}>{a[s.id] ? sayAnswer(s, a).replace(/\s*\(from your document\)$/, "") : "Skipped"}</div>}
-                </div>
-                {!on && <button type="button" className="btn btn-sm shrink-0" onClick={() => start(s)} aria-label={`Change your answer to: ${s.ask(a)}`}>{a[s.id] ? "Edit" : "Add"}</button>}
-              </div>
-              {on && (
-                <div className="flex flex-col gap-2">
-                  <p className="text-[13px] text-ink-400">{s.ask(a)}</p>
+                <div className="flex flex-col gap-2 rounded-2xl border border-brand-400/60 bg-ink-900 p-4 shadow-sm">
                   {s.type === "choice" && <div className="flex flex-wrap gap-2" role="radiogroup">{opts.map((o) => <button key={o.v} type="button" role="radio" aria-checked={a[s.id] === o.v} onClick={() => save(s, o.v)} className={`rounded-full border px-3.5 py-1.5 text-sm font-semibold transition ${a[s.id] === o.v ? "border-brand-400 bg-brand-500/15 text-ink-100" : "border-ink-700 text-ink-300 hover:border-brand-400"}`}>{o.label}</button>)}</div>}
                   {s.type === "many" && <><div className="flex flex-wrap gap-2" role="group">{opts.map((o) => { const sel = pick.includes(o.v); return <button key={o.v} type="button" aria-pressed={sel} onClick={() => setPick((m) => (sel ? m.filter((x) => x !== o.v) : [...m, o.v]))} className={`rounded-full border px-3.5 py-1.5 text-sm font-semibold transition ${sel ? "border-brand-400 bg-brand-500/15 text-ink-100" : "border-ink-700 text-ink-300 hover:border-brand-400"}`}>{o.label}</button>; })}</div>
                     <div className="flex gap-2"><button type="button" className="btn btn-pri btn-sm" disabled={!pick.length && req(s)} onClick={() => save(s, pick.join(","))}>Save</button><button type="button" className="btn btn-sm" onClick={() => setEdit(null)}>Cancel</button></div></>}
@@ -482,12 +450,6 @@ function AnswersReview({ rows, a, jump, open, onOpen, onRewind, onSave }: { rows
                     {s.type === "long" && <p className="text-xs text-ink-500">One item per line.</p>}
                     <div className="flex gap-2"><button type="button" className="btn btn-pri btn-sm" disabled={!draft.trim() && req(s)} onClick={() => save(s, draft)}>Save</button><button type="button" className="btn btn-sm" onClick={() => setEdit(null)}>Cancel</button></div></>}
                 </div>
-              )}
-            </li>
-          );
-        })}
-      </ul>
-    </details>
   );
 }
 
@@ -772,7 +734,7 @@ function useEmailChat(host: DesignHost | null, onPass: (p: Pass) => void): { thr
   };
   const thread = (
     <>
-      <ChatBot><p className="m-0 text-[15px] leading-relaxed">First, what's your email? I'll send you a code to confirm it. We use it only to keep your design and to get back to you.</p></ChatBot>
+      <ChatBot stack><p className="m-0 text-[15px] leading-relaxed">First, what's your email? I'll send you a code to confirm it. We use it only to keep your design and to get back to you.</p></ChatBot>
       {asked && <ChatYou label="Your email">{mail}</ChatYou>}
       {asked && <ChatBot><p className="m-0 text-[15px] leading-relaxed">Thanks! I've sent a 6-digit code to <b>{mail}</b>. Type it below (check your spam folder too).</p></ChatBot>}
       {busy && <ChatBot typing><span className="text-sm">{asked ? "Checking…" : "Sending…"}</span></ChatBot>}
@@ -799,11 +761,11 @@ function useEmailChat(host: DesignHost | null, onPass: (p: Pass) => void): { thr
 /** A message from the designer assistant (left), with the brand's mark as its avatar. `typing` adds animated dots. */
 /** Readable text on a colour: dark on light colours, white on dark ones. */
 const onColour = (hex: string) => { const n = parseInt(hex.slice(1), 16), l = (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255; return l > 0.6 ? "#111111" : "#ffffff"; };
-function ChatBot({ children, typing }: { children: React.ReactNode; typing?: boolean }) {
+function ChatBot({ children, typing, stack }: { children: React.ReactNode; typing?: boolean; stack?: boolean }) {
   const bot = readDesignSettings().chat?.bot, st = bot ? { background: bot, color: onColour(bot), borderColor: "transparent" } : undefined;
   return (
     <div className="chat-in flex items-end gap-2.5">
-      <span className="grid h-8 w-8 flex-none place-items-center overflow-hidden rounded-full border border-ink-700 bg-ink-900" aria-hidden><BrandMark fallback={<Logo />} size={22} /></span>
+      {stack ? <span className="w-8 flex-none" aria-hidden /> : <span className="grid h-8 w-8 flex-none place-items-center overflow-hidden rounded-full border border-ink-700 bg-ink-900" aria-hidden><BrandMark fallback={<Logo />} size={22} /></span>}
       <div style={st} className={`max-w-[88%] rounded-2xl rounded-bl-md border border-ink-800 bg-ink-900 px-4 py-3 text-ink-100 shadow-sm ${bot ? "[&_p]:text-[inherit]" : ""}`}>
         {typing && <span className="mr-2 inline-flex items-center gap-1 align-middle" aria-hidden><i className="chat-dot" /><i className="chat-dot" /><i className="chat-dot" /></span>}
         {children}

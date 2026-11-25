@@ -51,7 +51,7 @@
     var items = (S.items || []).map(function (it) { return { u: url(it && it.image), v: url(it && it.video), it: it || {} }; }).filter(function (x) { return x.u || x.v; });
     if (!items.length) return;
     css();
-    var reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    var reduced = matchMedia("(prefers-reduced-motion: reduce)").matches || /[?&]lite=1\b/.test(location.search);
     var effect = ["fade", "slide", "zoom", "kenburns"].indexOf(S.effect) >= 0 ? S.effect : "fade";
     var iv = Math.max(2, Math.min(30, +S.interval || 6)), sp = Math.max(.2, Math.min(4, S.speed == null ? 1 : +S.speed));
     var tone = S.textColor === "dark" ? "hs-dark" : S.textColor === "theme" ? "" : "hs-light";

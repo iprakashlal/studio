@@ -30,7 +30,7 @@
   if (window.SiteFX) return;
 
   var doc = document.documentElement;
-  var RM = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  var RM = matchMedia("(prefers-reduced-motion: reduce)").matches || /[?&]lite=1\b/.test(location.search); /* lite=1: a phone showing a live preview asks for a still page, so it can hold it */
   var FINE = matchMedia("(hover:hover) and (pointer:fine)").matches;
   var PREVIEW = window.name === "cms-preview" && window.parent !== window;
   var T0 = Date.now();

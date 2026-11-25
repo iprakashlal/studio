@@ -10,7 +10,7 @@ const EDIT_KEY = "site-studio:click-to-edit";
 const editPref = () => { try { return localStorage.getItem(EDIT_KEY) !== "off"; } catch { return true; } };
 
 /** The template page for this Studio build, so a Studio update never previews a cached older template. */
-const pageUrl = (base: string, file: string, r = 0) => `${base}${file}${file.includes("?") ? "&" : "?"}v=${STUDIO_BUILD.id}${r ? `&r=${r}` : ""}`;
+const pageUrl = (base: string, file: string, r = 0, lite = false) => `${base}${file}${file.includes("?") ? "&" : "?"}v=${STUDIO_BUILD.id}${r ? `&r=${r}` : ""}${lite ? "&lite=1" : ""}`;
 /** The template's pages plus the site's static pages (content.staticPages), e.g. page.html?p=privacy. */
 function previewPages(tpl: TemplateDef, content: any): { file: string; label: string }[] {
   const extra = (Array.isArray(content?.staticPages) ? content.staticPages : [])
@@ -38,12 +38,12 @@ const DEVICES = [
 /** The content shown in a preview: the same, with the "Powered by" badge turned off. */
 const quiet = (c: any) => (c && typeof c === "object" ? { ...c, poweredBy: { ...(c.poweredBy || {}), show: false } } : c);
 
-export function Preview({ tpl, base, content, version, assets, editable = true, hidePages = false, onEditLink, hints }: { /** The answers the page was made from: hovering text that shows one gets a pencil that opens that answer. */ hints?: { id: string; text?: string; img?: string }[];  /** A note such as "(Edit:story)" in the preview becomes an Edit link that calls this with the answer it belongs to. */ onEditLink?: (id: string) => void; tpl: TemplateDef; base: string; content: any; version: number; assets: Record<string, string>; editable?: boolean; /** No page list (a single-site preview). */ hidePages?: boolean }) {
+export function Preview({ tpl, base, content, version, assets, editable = true, hidePages = false, onEditLink, hints, lite = false }: { /** A still page (no animations or effects), for a phone showing a live preview. */ lite?: boolean; /** The answers the page was made from: hovering text that shows one gets a pencil that opens that answer. */ hints?: { id: string; text?: string; img?: string }[];  /** A note such as "(Edit:story)" in the preview becomes an Edit link that calls this with the answer it belongs to. */ onEditLink?: (id: string) => void; tpl: TemplateDef; base: string; content: any; version: number; assets: Record<string, string>; editable?: boolean; /** No page list (a single-site preview). */ hidePages?: boolean }) {
   const frame = useRef<HTMLIFrameElement>(null);
   const box = useRef<HTMLDivElement>(null);
   const [device, setDevice] = useState<(typeof DEVICES)[number]["id"]>("desktop");
   const [page, setPage] = useState(tpl.pages[0].file);
-  const [src, setSrc] = useState(pageUrl(base, tpl.pages[0].file));
+  const [src, setSrc] = useState(pageUrl(base, tpl.pages[0].file, 0, lite));
   const [size, setSize] = useState({ w: 600, h: 600 });
   const latest = useRef({ content, assets });
   latest.current = { content: quiet(content), assets }; // the "Powered by" badge only belongs on a published site, not in a preview
@@ -140,7 +140,7 @@ export function Preview({ tpl, base, content, version, assets, editable = true, 
   const scale = Math.min(1, (size.w - 24) / dw);
   const go = (file: string) => {
     setPage(file);
-    setSrc(pageUrl(base, file, file === page ? Date.now() : 0));
+    setSrc(pageUrl(base, file, file === page ? Date.now() : 0, lite));
   };
 
   useEffect(() => { const on = (e: Event) => { const f = (e as CustomEvent).detail?.file; if (typeof f === "string") go(f); }; addEventListener("studio:preview-page", on); return () => removeEventListener("studio:preview-page", on); });

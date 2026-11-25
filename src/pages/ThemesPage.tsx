@@ -12,6 +12,7 @@ import { TEMPLATES } from "../schema";
 import { Preview } from "../editor/Preview";
 import { Logo, useToast, Skel } from "../ui/kit";
 import { DevtoolsGuard, LoadVeil } from "../ui/PageGuard";
+import { StudioPageLinksHere } from "./StudioPage";
 import { designPageOn, useDesignSettings } from "../lib/designs";
 
 // A public page (no sign-in) that shows every theme, so you can send it to a client.
@@ -200,6 +201,7 @@ export function ThemesPage({ signedIn }: { signedIn: boolean }) {
         </div>
         {!list.length && <p className="mt-10 text-center text-ink-400">No themes match. Try another filter, or clear the search.</p>}
       </main>
+      <StudioPageLinksHere where="themes" repo={undefined} />
 
       {hover && !openTheme && pool.some((t) => t.id === hover.id) && <HoverPreview kind={kind} sample={samples[kind]} theme={pool.find((t) => t.id === hover.id)!} rect={hover.rect} onEnter={() => clearTimeout(timer.current)} onLeave={onLeave} />}
 

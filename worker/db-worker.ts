@@ -453,6 +453,7 @@ async function ensure(env: Env) {
     env.DB.prepare("create index if not exists design_queries_studio on design_queries (studio, id)"),
     env.DB.prepare("create table if not exists design_drafts (studio text not null, id text not null, email text not null, name text not null default '', kind text not null default '', theme_id text not null default '', theme_name text not null default '', summary text not null default '', answers text not null default '{}', copy text not null default '{}', logo text not null default '', created_at text not null, updated_at text not null, primary key (studio, id))"),
     env.DB.prepare("create index if not exists design_drafts_studio on design_drafts (studio, updated_at)"),
+    env.DB.prepare("create table if not exists design_pics (studio text not null, ref integer not null, slot text not null, idx integer not null, data text not null, primary key (studio, ref, slot, idx))"),
     env.DB.prepare("create table if not exists dq_rate (k text primary key, n integer not null, exp integer not null)"),
     env.DB.prepare("create table if not exists payments (rz_order text primary key, site text not null, order_no text not null, amount integer not null, status text not null default 'created', created_at text not null)"),
   ]);
@@ -1414,7 +1415,7 @@ async function dqDraft(env: Env, id: string, req: Request): Promise<Response> {
 }
 async function dqSubmit(env: Env, id: string, req: Request, ctx?: { waitUntil(p: Promise<unknown>): void }): Promise<Response> {
   await ensure(env);
-  const raw = await req.text(); if (raw.length > 2_000_000) return err(413, "That is too big. Use a smaller logo or PDF.");
+  const raw = await req.text(); if (raw.length > 3_200_000) return err(413, "That is too big. Use smaller pictures or a smaller PDF.");
   let q: any; try { q = JSON.parse(raw || "{}"); } catch { return err(400, "Couldn't read the request."); }
   if (q.website) return json({ ok: true });
   if (!(await env.DB.prepare("select 1 from members where scope = ? limit 1").bind("studio:" + id).first())) return err(404, "Not found.");
@@ -1441,6 +1442,14 @@ async function dqSubmit(env: Env, id: string, req: Request, ctx?: { waitUntil(p:
   if (q.pdf && typeof q.pdf.b64 === "string") { if (!/^JVBER/.test(q.pdf.b64) || q.pdf.b64.length > 1_700_000 || !/^[A-Za-z0-9+/=]+$/.test(q.pdf.b64)) return err(400, "The menu must be a PDF under 1.2 MB."); pdf = q.pdf.b64; pdfName = clip(q.pdf.name, 100) || "menu.pdf"; }
   const made: any = await env.DB.prepare("insert into design_queries (studio, name, kind, person, phone, email, note, answers, copy, logo, pdf_name, pdf, created_at) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) returning id")
     .bind(id, name, kind, person, phone, email, note, JSON.stringify(answers), JSON.stringify(copy), logo, pdfName, pdf, new Date().toISOString()).first();
+  // The pictures they chose (profile photo, banners, restaurant photos): each already made small on their device.
+  if (made?.id && q.pics && typeof q.pics === "object") {
+    const rows: [string, number, string][] = []; let total = 0;
+    for (const slot of ["photo", "banner", "bimage", "photos"]) for (const [i, d] of (Array.isArray(q.pics[slot]) ? q.pics[slot] : []).slice(0, 4).entries()) {
+      if (typeof d === "string" && /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(d) && d.length <= 190_000 && total + d.length <= 700_000) { total += d.length; rows.push([slot, i, d]); }
+    }
+    if (rows.length) await env.DB.batch(rows.map(([slot, i, d]) => env.DB.prepare("insert or replace into design_pics (studio, ref, slot, idx, data) values (?, ?, ?, ?, ?)").bind(id, made.id, slot, i, d))).catch(() => {});
+  }
   if (draftId) await env.DB.prepare("delete from design_drafts where studio = ? and id = ?").bind(id, draftId).run().catch(() => {});
   // The request is kept either way; the email is a copy, so a mail problem never fails it.
   const mail = (async () => {
@@ -2714,14 +2723,14 @@ export default {
         if (!scope.startsWith("studio:")) return err(400, "Unknown scope.");
         await ensure(env); const sid = scope.slice(7);
         if (p === "/dq/list") {
-          const rows = (await env.DB.prepare("select id, name, kind, person, phone, email, note, answers, copy, status, mail, pdf_name, (logo != '') as has_logo, created_at from design_queries where studio = ? order by id desc limit 300").bind(sid).all()).results || [];
-          return json(rows.map((r: any) => ({ ...r, answers: JSON.parse(r.answers || "{}"), copy: JSON.parse(r.copy || "{}"), has_logo: !!r.has_logo })));
+          const rows = (await env.DB.prepare("select id, name, kind, person, phone, email, note, answers, copy, status, mail, pdf_name, (logo != '') as has_logo, exists (select 1 from design_pics p where p.studio = design_queries.studio and p.ref = design_queries.id) as has_pics, created_at from design_queries where studio = ? order by id desc limit 300").bind(sid).all()).results || [];
+          return json(rows.map((r: any) => ({ ...r, answers: JSON.parse(r.answers || "{}"), copy: JSON.parse(r.copy || "{}"), has_logo: !!r.has_logo, has_pics: !!r.has_pics })));
         }
         const b: any = req.method === "POST" ? await req.json().catch(() => ({})) : {}, qid = Math.floor(+(b.id ?? u.searchParams.get("id")) || 0);
         if (!qid) return err(400, "Which request?");
-        if (p === "/dq/get") { const r: any = await env.DB.prepare("select logo, pdf_name, pdf from design_queries where studio = ? and id = ?").bind(sid, qid).first(); return r ? json(r) : err(404, "Not found."); }
+        if (p === "/dq/get") { const r: any = await env.DB.prepare("select logo, pdf_name, pdf from design_queries where studio = ? and id = ?").bind(sid, qid).first(); if (!r) return err(404, "Not found."); const pics: Record<string, string[]> = {}; for (const x of ((await env.DB.prepare("select slot, data from design_pics where studio = ? and ref = ? order by slot, idx").bind(sid, qid).all().catch(() => ({ results: [] }))).results || []) as any[]) (pics[x.slot] ||= []).push(x.data); return json({ ...r, pics }); }
         if (p === "/dq/status") { if (!["new", "read", "done"].includes(b.status)) return err(400, "Unknown status."); await env.DB.prepare("update design_queries set status = ? where studio = ? and id = ?").bind(b.status, sid, qid).run(); return json({ ok: true }); }
-        await env.DB.prepare("delete from design_queries where studio = ? and id = ?").bind(sid, qid).run(); return json({ ok: true });
+        await env.DB.prepare("delete from design_pics where studio = ? and ref = ?").bind(sid, qid).run().catch(() => {}); await env.DB.prepare("delete from design_queries where studio = ? and id = ?").bind(sid, qid).run(); return json({ ok: true });
       }
       if (p === "/e/list") {
         const site = scope.replace(/^site:/, "");

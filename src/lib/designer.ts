@@ -131,7 +131,7 @@ const RAW: Step[] = [
 
   // Personal portfolio
   { id: "about", group: "portfolio", label: "Role / title", type: "text", when: P, ask: () => "What is your role or title?", ph: () => "e.g. Wedding photographer", help: () => "One short line is enough. You can change it later." },
-  { id: "photo", group: "portfolio", label: "Profile photo", type: "file", soon: true, optional: true, when: P, accept: "image/png,image/jpeg,image/webp", maxKB: 5120, ask: () => "Add a profile photo." },
+  { id: "photo", group: "portfolio", label: "Profile photo", type: "file", optional: true, when: P, accept: "image/png,image/jpeg,image/webp", maxKB: 5120, ask: () => "Add a profile photo." },
   { id: "intro", group: "portfolio", label: "Short intro", type: "text", optional: true, when: P, ask: () => "Write a short intro for the top of your page (1–2 lines).", ph: () => "e.g. I design brands that people remember." },
   { id: "story", group: "portfolio", label: "About", type: "long", optional: true, when: P, ask: () => "Tell us about yourself in a few lines: where you started and what you enjoy most.", ph: () => "Write it the way you'd tell a friend.", help: () => "We'll tidy it into proper website text. Skip it and we'll write something simple from your answers." },
   { id: "years", group: "portfolio", label: "Years of experience", type: "text", optional: true, when: P, ask: () => "How many years of experience do you have?", ph: () => "e.g. 6" },
@@ -147,7 +147,7 @@ const RAW: Step[] = [
   // Shop
   { id: "about", group: "store", label: "What you sell", type: "text", when: S, ask: () => "What do you sell?", ph: () => "e.g. Handmade candles and gifts", help: () => "One short line is enough. You can change it later." },
   { id: "story", group: "store", label: "About the store", type: "long", optional: true, when: S, ask: () => "Describe your store in 2–3 lines.", ph: () => "Write it the way you'd tell a friend.", help: () => "We'll tidy it into proper website text." },
-  { id: "banner", group: "store", label: "Homepage banners", type: "file", soon: true, optional: true, when: S, accept: "image/png,image/jpeg,image/webp", maxKB: 5120, ask: () => "Add pictures for your homepage banner." },
+  { id: "banner", group: "store", label: "Homepage banners", type: "file", optional: true, when: S, accept: "image/png,image/jpeg,image/webp", maxKB: 5120, ask: () => "Add pictures for your homepage banner." },
   { id: "currency", group: "store", label: "Currency", type: "choice", optional: true, when: S, ask: () => "Which currency do you sell in?", options: () => [{ v: "INR", label: "₹ Indian rupee" }, { v: "USD", label: "$ US dollar" }, { v: "EUR", label: "€ Euro" }, { v: "GBP", label: "£ Pound" }, { v: "AED", label: "AED Dirham" }] },
   { id: "cats", group: "store", label: "Product categories", type: "long", optional: true, when: S, ask: () => "What are your product categories? One on each line.", ph: () => "Candles\nGift boxes\nIncense" },
   { id: "items", group: "store", label: "Products", type: "long", when: S, optional: false, ask: () => "Name some products you sell, one on each line. You can add a price after a dash.", ph: () => "Soy candle - 450\nGift box - 899\nIncense set - 299", help: () => "Press Enter for a new line. Pictures, MRP, variants and stock can be added later." },
@@ -169,7 +169,7 @@ const RAW: Step[] = [
   { id: "teamsize", group: "business", label: "Team size", type: "text", optional: true, when: B, ask: () => "How big is your team?", ph: () => "e.g. 25" },
   { id: "story", group: "business", label: "About the company", type: "long", optional: true, when: B, ask: () => "Tell us about your company in a few lines: how it started and who you help.", ph: () => "Write it the way you'd tell a friend.", help: () => "We'll tidy it into proper website text. Skip it and we'll write something simple from your answers." },
   { id: "mission", group: "business", label: "Mission / vision", type: "long", optional: true, when: (a) => B(a) && !doc(a, "mission") && !doc(a, "vision"), ask: () => "What is your mission or vision?", ph: () => "Mission: …\nVision: …" },
-  { id: "bimage", group: "business", label: "Main banner image", type: "file", soon: true, optional: true, when: B, accept: "image/png,image/jpeg,image/webp", maxKB: 5120, ask: () => "Add your main banner picture." },
+  { id: "bimage", group: "business", label: "Main banner image", type: "file", optional: true, when: B, accept: "image/png,image/jpeg,image/webp", maxKB: 5120, ask: () => "Add your main banner picture." },
   { id: "items", group: "business", label: "Services", type: "long", optional: true, when: (a) => B(a) && !doc(a, "services"), ask: () => "What are your main services or solutions? Write one on each line.", ph: () => "Repairs – quick fixes at your door\nAnnual service\nInstallation", help: () => "Name, then a dash and a short description (optional). Icons are chosen for you." },
   { id: "stats", group: "business", label: "Attributes", type: "long", optional: true, when: (a) => B(a) && !doc(a, "stats"), ask: () => "Which attributes would you like to show? One on each line.", ph: () => "120+ – Projects\n15 – Years\n98% – Clients return", help: () => "The number, a dash, then what it counts. Only true numbers." },
   { id: "work", group: "business", label: "Our work", type: "long", optional: true, when: (a) => B(a) && !doc(a, "work"), ask: (a) => `Which ${workWords(a).many} would you like to show?`, ph: () => "Name – a short line about it", help: (a) => `The ${workWords(a).one}, then what it is or what you did. Only things that are true.` },
@@ -190,7 +190,7 @@ const RAW: Step[] = [
   { id: "story", group: "restaurant", label: "Your story", type: "long", optional: true, when: R, ask: () => "Tell us your story: what makes you special?", ph: () => "Write it the way you'd tell a friend.", help: () => "We'll tidy it into proper website text." },
   { id: "cost", group: "restaurant", label: "Cost for two", type: "text", optional: true, when: R, ask: () => "What is the average cost for two?", ph: () => "e.g. 800" },
   { id: "serves", group: "restaurant", label: "What you offer", type: "many", optional: true, when: R, ask: () => "What do you offer?", options: () => ["Dine-in", "Takeaway", "Delivery", "Catering", "Private dining"].map((x) => ({ v: x, label: x })), help: () => "Tap everything that applies." },
-  { id: "photos", group: "restaurant", label: "Food & ambience photos", type: "file", soon: true, optional: true, when: R, accept: "image/png,image/jpeg,image/webp", maxKB: 5120, ask: () => "Add photos of your food and the place." },
+  { id: "photos", group: "restaurant", label: "Food & ambience photos", type: "file", optional: true, when: R, accept: "image/png,image/jpeg,image/webp", maxKB: 5120, ask: () => "Add photos of your food and the place." },
   { id: "menuhow", group: "restaurant", label: "How to add the menu", type: "choice", when: R, ask: () => "How do you want to add your menu?", options: () => [{ v: "type", label: "Type it in" }, { v: "upload", label: "Upload a photo or PDF" }] },
   { id: "menu", group: "restaurant", label: "Menu file", type: "file", optional: true, when: (a) => R(a) && a.menuhow === "upload", accept: "application/pdf", maxKB: 1200, ask: () => "Add your menu as a PDF here, or skip.", help: () => "A PDF up to 1.2 MB. Visitors can download it from your site." },
   { id: "items", group: "restaurant", label: "Menu dishes", type: "long", when: (a) => R(a) && a.menuhow !== "upload", optional: false, ask: () => "Name your best dishes, one on each line. You can add a price after a dash.", ph: () => "Masala dosa - 120\nFilter coffee - 60\nThali - 250", help: () => "Press Enter for a new line. Sections, photos, spice level and tags can be added later." },
@@ -442,7 +442,7 @@ function tidy(kind: Kind, c: any, o: { name: string; about: string; city: string
 
 export type Design = { kind: Kind; content: any; themeId: string; themeName: string; summary: string };
 /** Pictures and files chosen in the chat (kept on this device until the request is sent). */
-export type DesignFiles = { logo?: string; menu?: { name: string; b64: string } };
+export type DesignFiles = { logo?: string; menu?: { name: string; b64: string }; /** Pictures for the picture questions (photo, banner, bimage, photos), each made small on the person's device. */ pics?: Record<string, string[]> };
 
 const urlOf = (v: string) => { const t = v.trim(); if (!t) return ""; if (/^@?[\w.]{2,30}$/.test(t)) return "https://instagram.com/" + t.replace(/^@/, ""); return /^https?:\/\//i.test(t) ? t : /^[\w-]+(\.[\w-]+)+/.test(t) ? "https://" + t : ""; };
 
@@ -639,6 +639,12 @@ export async function buildDesign(a: Answers, copy?: Copy | null, files?: Design
     if ((kind === "business" || kind === "restaurant") && !c.hero?.image?.url && !c.hero?.video) put("hero.image", { url: pic() });
     if (kind === "store") { if (!c.home?.hero?.image) put("home.hero.image", { url: pic() }); if (c.home?.banner?.show && !c.home?.banner?.image) put("home.banner.image", { url: defaultPicture(subject + " gift", { ...pal, c1: pal.c2, c2: pal.c1 }, "scene", 2.4) }); }
     if (kind === "portfolio" && !c.hero?.photo) put("hero.photo", { url: defaultPicture("", pal, "person", 1) });
+    // The pictures they chose replace the drawn ones.
+    const mine = files?.pics || {};
+    if (mine.photo?.[0] && kind === "portfolio") put("hero.photo", { url: mine.photo[0] });
+    if (mine.bimage?.[0] && kind === "business") put("hero.image", { url: mine.bimage[0] });
+    if (mine.banner?.[0] && kind === "store") { put("home.hero.image", { url: mine.banner[0] }); if (mine.banner[1]) { put("home.banner.show", true); put("home.banner.image", { url: mine.banner[1] }); } }
+    if (mine.photos?.[0] && kind === "restaurant") { put("hero.image", { url: mine.photos[0] }); if (mine.photos.length > 1) { put("gallery.items", mine.photos.slice(1).map((u, i) => ({ image: { url: u }, caption: "", alt: `Photo ${i + 1}` }))); show(c, "gallery"); } }
   }
   return { kind, content: c, themeId: theme?.id || "", themeName: theme?.name || "", summary: tpl.summary(c) };
 }

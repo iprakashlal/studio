@@ -44,6 +44,18 @@ async function fitImage(file: File, max = 320): Promise<string> {
   if (u.length > 150_000) throw new Error("That picture is too detailed. Please use a simpler or smaller one.");
   return u;
 }
+/** A photo made small enough to keep with the request: at most ~1000 px across, as a JPEG under ~150 KB. */
+async function fitPhoto(file: File): Promise<string> {
+  const bmp = await createImageBitmap(file); let max = 1000, q = 0.8, u = "";
+  for (let i = 0; i < 8; i++) {
+    const k = Math.min(1, max / Math.max(bmp.width, bmp.height)), c = document.createElement("canvas"); c.width = Math.max(1, Math.round(bmp.width * k)); c.height = Math.max(1, Math.round(bmp.height * k));
+    const g = c.getContext("2d")!; g.fillStyle = "#fff"; g.fillRect(0, 0, c.width, c.height); g.drawImage(bmp, 0, 0, c.width, c.height);
+    u = c.toDataURL("image/jpeg", q); if (u.length <= 150_000) break; if (q > 0.55) q -= 0.1; else max = Math.round(max * 0.8);
+  }
+  bmp.close?.(); if (u.length > 190_000) throw new Error("That picture is too detailed. Please use a smaller one.");
+  return u;
+}
+const PIC_STEPS = ["photo", "banner", "bimage", "photos"];
 const toB64 = (buf: ArrayBuffer) => { const b = new Uint8Array(buf); let s = ""; for (let i = 0; i < b.length; i += 8192) s += String.fromCharCode(...b.subarray(i, i + 8192)); return btoa(s); };
 
 /** A list question asked as rows of sub-fields. Each row becomes one line of the answer (so it reads the same as typing it). */
@@ -209,11 +221,16 @@ export function DesignPage({ studio, index, onIndex }: { studio?: Studio; index?
     setReading(false);
   };
   /** A picture or PDF chosen for a file question. */
-  const choose = async (s: Step, f: File | undefined) => {
+  const choose = async (s: Step, f: File | undefined, extra: File[] = []) => {
     if (!f) return;
     try {
       if (f.size > (s.maxKB || 1000) * 1024) throw new Error(`That file is over ${s.maxKB === 20480 ? 20 : Math.round((s.maxKB || 1000) / 1000)} MB. Please choose a smaller one.`);
-      if (s.id === "logo") { const u = await fitImage(f); setFiles((o) => ({ ...o, logo: u })); answer(s, "added"); }
+      if (PIC_STEPS.includes(s.id)) {
+        const list = [f, ...extra].filter((x) => /^image\//.test(x.type)).slice(0, s.id === "photos" ? 4 : s.id === "banner" ? 2 : 1);
+        if (!list.length) throw new Error("Please choose a picture (PNG, JPG or WebP).");
+        const urls = await Promise.all(list.map(fitPhoto));
+        setFiles((o) => ({ ...o, pics: { ...(o.pics || {}), [s.id]: urls } })); answer(s, `${urls.length} picture${urls.length > 1 ? "s" : ""} added`);
+      } else if (s.id === "logo") { const u = await fitImage(f); setFiles((o) => ({ ...o, logo: u })); answer(s, "added"); }
       else if (s.id === "doc") {
         setReading(true);
         const text = (await pdfLines(f)).join("\n").slice(0, 12000);
@@ -249,8 +266,8 @@ export function DesignPage({ studio, index, onIndex }: { studio?: Studio; index?
           ? <textarea ref={field} aria-label={cur.ask(a)} rows={3} className="min-h-[3.5rem] min-w-0 flex-1 basis-[12rem] resize-none bg-transparent py-2 text-[15px] text-ink-100 outline-none placeholder:text-ink-500" placeholder={cur.ph?.(a)} value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); submit(); } }} />
           : <input ref={field} aria-label={cur ? cur.ask(a) : "Your answer"} className="min-w-0 flex-1 basis-[12rem] bg-transparent py-2.5 text-[15px] text-ink-100 outline-none placeholder:text-ink-500" disabled={!field$ || reading} placeholder={reading ? "Reading…" : writing ? "Writing your text…" : !cur ? "All done. Your preview is ready." : cur.id === "kind" ? "Tell me what you want, e.g. an online shop for my candles" : field$ ? cur.ph?.(a) : cur.type === "many" ? "Tap what applies above, then press Done" : cur.type === "file" ? "Choose a file, or skip" : "Pick one of the choices above"} value={field$ ? text : ""} onChange={(e) => setText(e.target.value)} />}
         {cur?.type === "file" && <>
-          <input ref={pick} type="file" accept={cur.accept} className="sr-only" aria-label={cur.ask(a)} onChange={(e) => choose(cur, e.target.files?.[0])} />
-          <button type="button" className="btn btn-pri btn-sm rounded-full" onClick={() => pick.current?.click()}>{cur.id === "logo" ? "Choose logo" : cur.id === "doc" ? "Choose document (PDF)" : "Choose PDF"}</button>
+          <input ref={pick} type="file" accept={cur.accept} multiple={cur.id === "photos" || cur.id === "banner"} className="sr-only" aria-label={cur.ask(a)} onChange={(e) => choose(cur, e.target.files?.[0], Array.from(e.target.files || []).slice(1))} />
+          <button type="button" className="btn btn-pri btn-sm rounded-full" onClick={() => pick.current?.click()}>{PIC_STEPS.includes(cur.id) ? (cur.id === "photos" || cur.id === "banner" ? "Choose pictures" : "Choose a picture") : cur.id === "logo" ? "Choose logo" : cur.id === "doc" ? "Choose document (PDF)" : "Choose PDF"}</button>
         </>}
         {cur && isOptional(cur, a) && (field$ || cur.type === "file") && <button type="button" className="btn btn-ghost btn-sm" onClick={() => answer(cur, "")}>Skip</button>}
         {cur?.type === "many" && <button type="submit" className="btn btn-pri btn-sm rounded-full" disabled={!many.length}>Done</button>}
@@ -278,8 +295,8 @@ export function DesignPage({ studio, index, onIndex }: { studio?: Studio; index?
         {(cur.type !== "long" || cur.cols) && <span className="mr-auto" />}
         {isOptional(cur, a) && <button type="button" className="btn btn-ghost" disabled={reading} onClick={() => answer(cur, "")}>Skip</button>}
         {cur.type === "file" && <>
-          <input ref={pick} type="file" accept={cur.accept} className="sr-only" aria-label={cur.ask(a)} onChange={(e) => choose(cur, e.target.files?.[0])} />
-          <button type="button" className={`btn ${field$ ? "" : "btn-pri"}`} disabled={reading} onClick={() => pick.current?.click()}>{cur.id === "logo" ? "Choose logo" : cur.id === "doc" ? "Add a PDF" : "Choose PDF"}</button>
+          <input ref={pick} type="file" accept={cur.accept} multiple={cur.id === "photos" || cur.id === "banner"} className="sr-only" aria-label={cur.ask(a)} onChange={(e) => choose(cur, e.target.files?.[0], Array.from(e.target.files || []).slice(1))} />
+          <button type="button" className={`btn ${field$ ? "" : "btn-pri"}`} disabled={reading} onClick={() => pick.current?.click()}>{PIC_STEPS.includes(cur.id) ? (cur.id === "photos" || cur.id === "banner" ? "Choose pictures" : "Choose a picture") : cur.id === "logo" ? "Choose logo" : cur.id === "doc" ? "Add a PDF" : "Choose PDF"}</button>
         </>}
         {cur.type === "many" && <button type="submit" className="btn btn-pri" disabled={!many.length}>Done</button>}
         {field$ && <button type="submit" className="btn btn-pri" disabled={!text.trim() || reading}>{cur.id === "doc" ? "Read my link" : "Next"}</button>}
@@ -677,7 +694,7 @@ export function ConnectPopup({ a, design, copy, files, host, sent, onSent, onClo
     if (!verified || !pass) return toast("Please confirm your email with the code we send you.", "bad");
     setBusy(true);
     try {
-      await submitQuery(host, { ...(draft ? { draft } : {}), ...(pass.otp ? { otp: pass.otp } : { skip: pass.skip }), kind: a.kind, name: a.name || "Untitled", person: f.person.trim(), phone: f.phone.trim(), email: f.email.trim(), note: f.note.trim(), answers: { ...a, ...(design?.themeId ? { themeid: design.themeId } : {}), ...(a.kind ? { look: resolvedLook(a.kind as LookKind, a.look, readDesignSettings()) } : {}) }, ...(copy ? { copy } : {}), ...(files.logo ? { logo: files.logo } : {}), ...(files.menu ? { pdf: files.menu } : {}) });
+      await submitQuery(host, { ...(draft ? { draft } : {}), ...(pass.otp ? { otp: pass.otp } : { skip: pass.skip }), kind: a.kind, name: a.name || "Untitled", person: f.person.trim(), phone: f.phone.trim(), email: f.email.trim(), note: f.note.trim(), answers: { ...a, ...(design?.themeId ? { themeid: design.themeId } : {}), ...(a.kind ? { look: resolvedLook(a.kind as LookKind, a.look, readDesignSettings()) } : {}) }, ...(copy ? { copy } : {}), ...(files.logo ? { logo: files.logo } : {}), ...(files.menu ? { pdf: files.menu } : {}), ...(files.pics && Object.keys(files.pics).length ? { pics: files.pics } : {}) });
       setDone(true); onSent();
     } catch (e: any) { toast(e?.message || "Couldn't send. Please try again.", "bad"); }
     setBusy(false);

@@ -11,13 +11,13 @@ export async function designHost(): Promise<DesignHost | null> {
   return hc && hc.kind === "cloudflare" ? { api: hc.api, studio: hc.studio } : null;
 }
 
-export type SubmitBody = { /** The saved progress this request comes from (it then moves out of Design previews). */ draft?: string; /** The pass earned by confirming the email with its code (or given instead when the database can't send mail). */ otp?: string; skip?: string; kind: string; name: string; person: string; phone: string; email: string; note: string; answers: Record<string, string>; copy?: Copy | null; logo?: string; pdf?: { name: string; b64: string } };
+export type SubmitBody = { /** The saved progress this request comes from (it then moves out of Design previews). */ draft?: string; /** The pass earned by confirming the email with its code (or given instead when the database can't send mail). */ otp?: string; skip?: string; kind: string; name: string; person: string; phone: string; email: string; note: string; answers: Record<string, string>; copy?: Copy | null; logo?: string; pdf?: { name: string; b64: string }; /** Pictures chosen for the picture questions, by question. */ pics?: Record<string, string[]> };
 export const submitQuery = (h: DesignHost, b: SubmitBody) => cfCall(h.api, "/dq/" + encodeURIComponent(h.studio), { method: "POST", auth: false, body: JSON.stringify(b) });
 
-export type Query = { id: number; name: string; kind: string; person: string; phone: string; email: string; note: string; answers: Record<string, string>; copy: Copy; status: "new" | "read" | "done"; mail: string; pdf_name: string; has_logo: boolean; created_at: string };
+export type Query = { id: number; name: string; kind: string; person: string; phone: string; email: string; note: string; answers: Record<string, string>; copy: Copy; status: "new" | "read" | "done"; mail: string; pdf_name: string; has_logo: boolean; has_pics?: boolean; created_at: string };
 const sc = (h: DesignHost) => "scope=" + encodeURIComponent("studio:" + h.studio);
 export const listQueries = (h: DesignHost) => cfCall<Query[]>(h.api, `/dq/list?${sc(h)}`);
-export const queryFiles = (h: DesignHost, id: number) => cfCall<{ logo: string; pdf_name: string; pdf: string }>(h.api, `/dq/get?${sc(h)}&id=${id}`);
+export const queryFiles = (h: DesignHost, id: number) => cfCall<{ logo: string; pdf_name: string; pdf: string; pics?: Record<string, string[]> }>(h.api, `/dq/get?${sc(h)}&id=${id}`);
 export const setQueryStatus = (h: DesignHost, id: number, status: string) => cfCall(h.api, `/dq/status?${sc(h)}`, { method: "POST", body: JSON.stringify({ id, status }) });
 export const deleteQuery = (h: DesignHost, id: number) => cfCall(h.api, `/dq/delete?${sc(h)}`, { method: "POST", body: JSON.stringify({ id }) });
 

@@ -46,9 +46,9 @@ export function QueriesTab({ studio, index, onIndex }: { studio: Studio; index: 
 
   const act = async (id: string, fn: () => Promise<void>) => { setBusy(id); try { await fn(); } catch (e) { toast(explain(e), "bad"); } setBusy(""); };
   const design = async (q: Query) => {
-    let logo = ""; let menu: { name: string; b64: string } | undefined;
-    if (q.has_logo || q.pdf_name) { const f = await queryFiles(host!, q.id); logo = f.logo || ""; if (f.pdf) menu = { name: f.pdf_name, b64: f.pdf }; }
-    const d = await buildDesign(q.answers, q.copy, { ...(logo ? { logo } : {}), ...(menu ? { menu } : {}) });
+    let logo = ""; let menu: { name: string; b64: string } | undefined; let pics: Record<string, string[]> | undefined;
+    if (q.has_logo || q.pdf_name || q.has_pics) { const f = await queryFiles(host!, q.id); logo = f.logo || ""; if (f.pdf) menu = { name: f.pdf_name, b64: f.pdf }; if (f.pics && Object.keys(f.pics).length) pics = f.pics; }
+    const d = await buildDesign(q.answers, q.copy, { ...(logo ? { logo } : {}), ...(menu ? { menu } : {}), ...(pics ? { pics } : {}) });
     if (!d) throw new Error("This request can't be rebuilt.");
     return d;
   };
@@ -87,7 +87,7 @@ export function QueriesTab({ studio, index, onIndex }: { studio: Studio; index: 
                   {q.answers.about && <p className="line-clamp-2 text-[13px] text-ink-300">{q.answers.about}</p>}
                   {(q.answers.doc || q.answers.doclink) && <p className="text-xs text-ink-400">{q.answers.doc ? `Document: ${q.answers.doc}${q.answers.doctext ? " (text read)" : ""}` : ""}{q.answers.doc && q.answers.doclink ? " · " : ""}{q.answers.doclink ? <>Link: <a className="underline" href={q.answers.doclink} target="_blank" rel="noopener noreferrer">{q.answers.doclink}</a></> : null}</p>}
                   {(q.answers.theme || q.answers.accent || q.answers.mode) && <p className="text-xs text-ink-400">Chosen look: {[q.answers.theme, q.answers.accent, q.answers.mode].filter(Boolean).join(" · ")}</p>}
-                  {(q.pdf_name || q.has_logo) && <p className="text-xs text-ink-400">{q.has_logo ? "Logo added" : ""}{q.has_logo && q.pdf_name ? " · " : ""}{q.pdf_name ? `Menu PDF: ${q.pdf_name}` : ""}</p>}
+                  {(q.pdf_name || q.has_logo || q.has_pics) && <p className="text-xs text-ink-400">{[q.has_logo ? "Logo added" : "", q.has_pics ? "Pictures added" : "", q.pdf_name ? `Menu PDF: ${q.pdf_name}` : ""].filter(Boolean).join(" · ")}</p>}
                   {q.mail && <p className="text-xs text-amber-200">{q.mail}</p>}
                   <div className="mt-auto flex flex-wrap gap-2 border-t border-ink-700/70 pt-4">
                     <button type="button" className="btn btn-pri btn-sm" disabled={!!busy} onClick={() => act("pv" + q.id, async () => { const d = await design(q); setOpen({ q, design: d, ver: 1 }); if (q.status === "new") mark(q, "read").catch(() => {}); })}>{busy === "pv" + q.id ? "Opening…" : "Preview"}</button>

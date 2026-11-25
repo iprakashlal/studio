@@ -26,6 +26,7 @@ export function cleanDesignSettings(x: any): DesignSettings {
   const dm = cleanDomain(x.domain); if (dm) o.domain = dm;
   const ga = cleanGallery(x.gallery); if (ga) o.gallery = ga;
   const th = cleanThemes(x.themes); if (Object.keys(th).length) o.themes = th;
+  if (x.images && typeof x.images === "object" && x.images.on === true) o.images = { on: true, ...(["photo", "illustration", "3d", "flat"].includes(x.images.style) ? { style: x.images.style } : {}) };
   if (x.carousel && typeof x.carousel === "object") { const c: NonNullable<DesignSettings["carousel"]> = {}; for (const k of ["portfolio", "store", "business", "restaurant"] as const) if (x.carousel[k] === "custom") c[k] = "custom"; if (Object.keys(c).length) o.carousel = c; }
   if (x.questions && typeof x.questions === "object") {
     const q: NonNullable<DesignSettings["questions"]> = {}, tx = (v: any, n: number) => (typeof v === "string" ? v.replace(/[<>]/g, "").trim().slice(0, n) : "");

@@ -27,3 +27,12 @@ export function defaultPicture(subject: string, c: { c1: string; c2: string; bg:
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${c.c1}"/><stop offset="1" stop-color="${c.c2}"/></linearGradient></defs><rect width="${W}" height="${H}" fill="${c.bg}"/><rect width="${W}" height="${H}" fill="url(#g)" opacity=".88"/><circle cx="${W * 0.78}" cy="${H * 0.24}" r="${H * 0.2}" fill="#fff" opacity=".18"/><circle cx="${W * 0.2}" cy="${H * 0.78}" r="${H * 0.3}" fill="#000" opacity=".12"/><path d="M0 ${H * 0.82}C${W * 0.2} ${H * 0.7} ${W * 0.38} ${H * 0.9} ${W * 0.58} ${H * 0.8}S${W * 0.88} ${H * 0.68} ${W} ${H * 0.76}V${H}H0Z" fill="#fff" opacity=".18"/><g transform="translate(${(W - 200 * s) / 2} ${(H - 200 * s) / 2 - H * 0.03}) scale(${s})" fill="#fff" opacity=".92"><path d="${g}"/></g></svg>`;
   return "data:image/svg+xml," + encodeURIComponent(svg);
 }
+
+const STYLE: Record<string, string> = { photo: "professional photograph, natural light, high quality", illustration: "clean modern illustration, vector style", "3d": "soft 3D render, pastel lighting", flat: "flat minimal graphic, simple shapes" };
+/** A picture from the free Pollinations generator (no key), asked for in words from what the person said. */
+export function generatedPicture(subject: string, name: string, style = "photo", w = 1280, h = 1024): string {
+  const what = subject.replace(/\s+/g, " ").trim().slice(0, 120) || "small business";
+  const prompt = `${what}, website hero image, ${STYLE[style] || STYLE.photo}, no text, no logo`;
+  let seed = 7; for (const ch of name) seed = (seed * 31 + ch.charCodeAt(0)) % 100000;
+  return `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=${w}&height=${h}&nologo=true&seed=${seed}`;
+}

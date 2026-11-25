@@ -33,6 +33,8 @@ export type Step = {
   optional?: boolean | ((a: Answers) => boolean);
   /** One line shown under the question. */
   help?: (a: Answers) => string;
+  /** long: asked as rows with these sub-fields (each row is one line of the answer, joined by `fmt`). */
+  cols?: { label: string; ph?: string }[]; fmt?: (c: string[]) => string; addLabel?: string;
   /** Where the Studio's Settings lists it, and its short name there and in the answers. */
   group?: QGroup; label?: string;
   /** Listed in Settings but not asked yet (it needs a picture upload). */
@@ -205,13 +207,32 @@ const RAW: Step[] = [
 /** The questions as the Studio's settings list them (every one, even those not asked yet). */
 export const QUESTION_LIST = RAW;
 export const QUESTION_GROUPS: { id: QGroup; name: string }[] = [{ id: "basics", name: "Basics (asked for every type)" }, { id: "portfolio", name: "Personal portfolio" }, { id: "store", name: "Shop" }, { id: "business", name: "Business portfolio" }, { id: "restaurant", name: "Restaurant & café" }];
+
+const dash = (c: string[]) => c.map((x) => x.trim()).filter(Boolean).join(" – ");
+/** Questions whose answer is a list of items with several parts: each is asked as rows of sub-fields (same text format as typing it). */
+const ROWS: Record<string, Pick<Step, "cols" | "fmt" | "addLabel">> = {
+  "portfolio.projects": { addLabel: "Add a project", cols: [{ label: "Project", ph: "Brand film for Kora" }, { label: "What you did", ph: "Direction and edit" }] },
+  "portfolio.exp": { addLabel: "Add a job", fmt: (c) => c.map((x) => x.trim()).filter(Boolean).join(", "), cols: [{ label: "Role", ph: "Lead photographer" }, { label: "Company", ph: "Lumen Studio" }, { label: "Period", ph: "2020 – Present" }] },
+  "portfolio.edu": { addLabel: "Add a course", fmt: (c) => c.map((x) => x.trim()).filter(Boolean).join(", "), cols: [{ label: "Institute", ph: "NID Ahmedabad" }, { label: "Course", ph: "M.Des" }, { label: "Year", ph: "2014" }] },
+  "portfolio.quotes": { addLabel: "Add a testimonial", fmt: (c) => (c[0]?.trim() ? `"${c[0].trim()}" – ${[c[1], c[2]].map((x) => (x || "").trim()).filter(Boolean).join(", ")}` : ""), cols: [{ label: "What they said", ph: "She made our day effortless." }, { label: "Name", ph: "Priya Nair" }, { label: "Role / company", ph: "Bride" }] },
+  "store.items": { addLabel: "Add a product", fmt: (c) => [c[0]?.trim(), c[1]?.trim()].filter(Boolean).join(" - "), cols: [{ label: "Product", ph: "Soy candle" }, { label: "Price", ph: "450" }] },
+  "business.stats": { addLabel: "Add a number", fmt: (c) => [c[0]?.trim(), c[1]?.trim()].filter(Boolean).join(" "), cols: [{ label: "Number", ph: "120+" }, { label: "What it counts", ph: "Projects" }] },
+  "business.work": { addLabel: "Add a case study", cols: [{ label: "Project", ph: "Clinic booking app" }, { label: "What you did", ph: "Rebuilt booking, cut drop-off by 30%" }] },
+  "business.team": { addLabel: "Add a person", cols: [{ label: "Name", ph: "Asha Verma" }, { label: "Designation", ph: "Founder & CEO" }, { label: "LinkedIn (optional)", ph: "linkedin.com/in/asha" }] },
+  "business.quotes": { addLabel: "Add a testimonial", fmt: (c) => (c[0]?.trim() ? `"${c[0].trim()}" – ${[c[1], c[2]].map((x) => (x || "").trim()).filter(Boolean).join(", ")}` : ""), cols: [{ label: "What they said", ph: "Brilliant team." }, { label: "Name", ph: "Priya Nair" }, { label: "Role / company", ph: "CDO, Arcadia" }] },
+  "business.offices": { addLabel: "Add an office", cols: [{ label: "Office", ph: "Head office" }, { label: "Address", ph: "12 MG Road, Pune" }] },
+  "restaurant.items": { addLabel: "Add a dish", fmt: (c) => [c[0]?.trim(), c[1]?.trim()].filter(Boolean).join(" - "), cols: [{ label: "Dish", ph: "Masala dosa" }, { label: "Price", ph: "120" }] },
+  "restaurant.specials": { addLabel: "Add an offer", fmt: (c) => [c[0]?.trim(), c[1]?.trim()].filter(Boolean).join(" - "), cols: [{ label: "Offer", ph: "Weekday lunch thali" }, { label: "Price or discount", ph: "399" }] },
+  "restaurant.outlets": { addLabel: "Add an outlet", cols: [{ label: "Outlet", ph: "HSR Layout" }, { label: "Address", ph: "12 27th Main, Bengaluru" }] },
+};
+export const rowsFmt = (s: Step, cells: string[]) => (s.fmt || dash)(cells);
 const qrule = (s: Step) => readDesignSettings().questions?.[s.group || "basics"]?.[s.id];
 /** What is asked: the owner's settings (hide a question, change its wording) are applied on top. */
 export const STEPS: Step[] = RAW.filter((s) => !s.soon).map((s) => ({
-  ...s,
+  ...s, ...(ROWS[`${s.group}.${s.id}`] || {}),
   when: (a: Answers) => !qrule(s)?.h && (s.when ? s.when(a) : true),
-  ask: (a: Answers) => qrule(s)?.t || s.ask(a),
-  help: (a: Answers) => qrule(s)?.p ?? s.help?.(a) ?? "",
+  ask: (a: Answers) => qrule(s)?.t || (ROWS[`${s.group}.${s.id}`] ? s.ask(a).replace(/\s*(Write )?one (person )?on each line\.?/i, "").trim() : s.ask(a)),
+  help: (a: Answers) => qrule(s)?.p ?? (ROWS[`${s.group}.${s.id}`] ? "Fill one row for each. Use the + button to add more." : s.help?.(a) ?? ""),
 }));
 
 /** A short name for each question (for the answers shown above the current question). */

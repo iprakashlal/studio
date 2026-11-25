@@ -9,7 +9,7 @@ import { Preview } from "../editor/Preview";
 import { Logo, Spinner, useToast } from "../ui/kit";
 import { packSections, sectionNames, unpackSections } from "../lib/docsections";
 import { relatedThemes } from "../lib/designer";
-import { COLOUR_DOT, STEPS, STEP_LABEL, buildDesign, fromDoc, isOptional, nextStep, requestText, stepAt, sayAnswer, themeOf, themesFor, tweakTheme, writeCopy, type Answers, type Design, type DesignFiles, type Step } from "../lib/designer";
+import { COLOUR_DOT, STEPS, STEP_LABEL, buildDesign, fromDoc, isOptional, nextStep, rowsFmt, requestText, stepAt, sayAnswer, themeOf, themesFor, tweakTheme, writeCopy, type Answers, type Design, type DesignFiles, type Step } from "../lib/designer";
 import { newDesignId, readDesignSettings, readLocalDesigns, writeLocalDesigns, type Copy, type DesignRec } from "../lib/designs";
 import { COLOUR_SLOTS, GROUPS, pagesChoice, readColsAnswer, readLookAnswer, resolvedLook, visibleAxes, type Kind as LookKind } from "../lib/designlook";
 import { designHost, otpCheck, otpSend, passLive, readPage, readPass, saveDraft, submitQuery, understandText, writePass, type DesignHost, type Pass } from "../lib/designapi";
@@ -45,6 +45,33 @@ async function fitImage(file: File, max = 320): Promise<string> {
   return u;
 }
 const toB64 = (buf: ArrayBuffer) => { const b = new Uint8Array(buf); let s = ""; for (let i = 0; i < b.length; i += 8192) s += String.fromCharCode(...b.subarray(i, i + 8192)); return btoa(s); };
+
+/** A list question asked as rows of sub-fields. Each row becomes one line of the answer (so it reads the same as typing it). */
+function RowsField({ step, value, onChange, label }: { step: Step; value: string; onChange: (v: string) => void; label: string }) {
+  const cols = step.cols!, n = cols.length;
+  const [rows, setRows] = useState<string[][]>(() => {
+    const init = value.split("\n").filter(Boolean).map((l) => { const parts = l.replace(/^["“]|["”]$/g, "").split(/\s[–-]\s|,\s*|\s(?=\d)/).map((x) => x.trim()); return Array.from({ length: n }, (_, i) => parts[i] || ""); });
+    return init.length ? init : [Array(n).fill("")];
+  });
+  const set = (next: string[][]) => { setRows(next); onChange(next.map((r) => rowsFmt(step, r)).filter(Boolean).join("\n")); };
+  return (
+    <div className="flex flex-col gap-3" role="group" aria-label={label}>
+      {rows.map((r, i) => (
+        <div key={i} className="rounded-2xl border border-ink-700 p-3">
+          <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(auto-fit,minmax(${n > 2 ? 9 : 11}rem,1fr))` }}>
+            {cols.map((c, j) => (
+              <label key={j} className="flex min-w-0 flex-col gap-1 text-xs text-ink-400">{c.label}
+                <input className="input" value={r[j]} placeholder={c.ph} onChange={(e) => set(rows.map((x, k) => (k === i ? x.map((y, m) => (m === j ? e.target.value : y)) : x)))} />
+              </label>
+            ))}
+          </div>
+          {rows.length > 1 && <button type="button" className="btn btn-ghost btn-sm mt-2" onClick={() => set(rows.filter((_, k) => k !== i))}>Remove</button>}
+        </div>
+      ))}
+      {rows.length < 8 && <button type="button" className="btn btn-sm self-start" onClick={() => set([...rows, Array(n).fill("")])}>+ {step.addLabel || "Add another"}</button>}
+    </div>
+  );
+}
 
 export function DesignPage({ studio, index, onIndex }: { studio?: Studio; index?: StudioIndex | null; onIndex?: (i: StudioIndex) => void }) {
   const toast = useToast();
@@ -229,12 +256,14 @@ export function DesignPage({ studio, index, onIndex }: { studio?: Studio; index?
   /** The answer controls inside the question card: a plain field and one row of buttons (nothing for a tap-one question). */
   const cardBar = !cur || cur.type === "choice" ? null : (
     <form className="flex flex-col gap-3" onSubmit={(e) => { e.preventDefault(); submit(); }} aria-label="Your answer">
-      {cur.type === "long"
+      {cur.type === "long" && cur.cols
+        ? <RowsField key={cur.id + (a.kind || "")} step={cur} value={text} onChange={setText} label={cur.ask(a)} />
+        : cur.type === "long"
         ? <textarea ref={field} aria-label={cur.ask(a)} rows={4} className="input min-h-[7rem] resize-y" placeholder={cur.ph?.(a)} value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); submit(); } }} />
         : field$ ? <input ref={field} aria-label={cur.ask(a)} className="input" disabled={reading} placeholder={reading ? "Reading…" : cur.ph?.(a)} value={text} onChange={(e) => setText(e.target.value)} /> : null}
       <div className="flex flex-wrap items-center gap-2">
-        {cur.type === "long" && <span className="mr-auto text-xs text-ink-500">Enter = new line · Ctrl + Enter = send</span>}
-        {cur.type !== "long" && <span className="mr-auto" />}
+        {cur.type === "long" && !cur.cols && <span className="mr-auto text-xs text-ink-500">Enter = new line · Ctrl + Enter = send</span>}
+        {(cur.type !== "long" || cur.cols) && <span className="mr-auto" />}
         {isOptional(cur, a) && <button type="button" className="btn btn-ghost" disabled={reading} onClick={() => answer(cur, "")}>Skip</button>}
         {cur.type === "file" && <>
           <input ref={pick} type="file" accept={cur.accept} className="sr-only" aria-label={cur.ask(a)} onChange={(e) => choose(cur, e.target.files?.[0])} />

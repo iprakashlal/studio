@@ -100,7 +100,7 @@ function useNarrow() {
 function NoticeBar() {
   const n = readDesignSettings().notice;
   if (n?.on === false) return null;
-  return <div role="note" className="w-full bg-yellow-300 px-4 py-2 text-center text-[13px] font-medium leading-snug text-neutral-900">{n?.text || NOTICE_TEXT}</div>;
+  return <div role="note" className="w-full bg-[#b8abba] px-4 py-2 text-center text-[13px] font-medium leading-snug text-neutral-900">{n?.text || NOTICE_TEXT}</div>;
 }
 function PhoneNotice() {
   const brand = useBrand();
@@ -390,7 +390,6 @@ function DesignPageInner({ studio, index, onIndex }: { studio?: Studio; index?: 
   return (
     <div className="flex min-h-screen flex-col bg-ink-950 text-ink-100" style={chatBg}>
       <DevtoolsGuard /><LoadVeil title="Loading Design yourself" steps={["Loading the designer", "Reading the Studio's settings"]} done={(fontsOk ? 1 : 0) + (hostDone ? 1 : 0)} />
-      <NoticeBar />
       <header className="sticky top-0 z-20 flex w-full items-center gap-3 border-b border-ink-800 bg-ink-950/90 px-4 py-3 backdrop-blur sm:px-6">
         {/* The Studio's name is a link only for someone signed in: it goes to their projects. */}
         {studio
@@ -536,7 +535,7 @@ export function PreviewPopup({ design, ver, a, onClose, onEdit, onEditLink, onCo
   }, []);
   return (
     <div role="dialog" aria-modal="true" aria-label="Your website preview" className="fixed inset-0 z-[70] flex flex-col bg-ink-950">
-      <NoticeBar />
+      {done && <NoticeBar />}
       <div className="flex items-center gap-2 border-b border-ink-700 bg-ink-900 px-3 py-2 sm:px-4">
         <b className="min-w-0 truncate text-sm">{a.name || "Your website"}</b>
         <span className="chip shrink-0 border-amber-400/50 text-amber-200 max-sm:hidden">{done ? "Preview · not published" : "Preview so far"}</span>

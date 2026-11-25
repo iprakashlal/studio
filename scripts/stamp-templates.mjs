@@ -4,6 +4,7 @@
 import { execSync } from "node:child_process";
 import { readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { stampTree, stamp } from "./stamp-source.mjs";
 
 let v = "dev";
 try { v = (process.env.GITHUB_SHA || execSync("git rev-parse HEAD").toString()).trim().slice(0, 7); } catch { /* not a git checkout */ }
@@ -18,4 +19,6 @@ for (const t of readdirSync(root)) {
     if (out !== s) writeFileSync(p, out);
   }
 }
+const added = stampTree("dist") + (stamp("dist/index.html") ? 1 : 0);
+console.log(`notice added to ${added} built pages;`);
 console.log(`stamped ${n} template links with build ${v}`);

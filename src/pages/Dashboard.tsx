@@ -236,7 +236,7 @@ export function Dashboard({ studio, index, onIndex, token, hid = () => false, ma
         <div className="flex flex-wrap gap-2">
           {!only && !hid("design") && (
             <a href="#/design-queries" aria-current={designsTab === "queries" ? "page" : undefined} className={`btn rounded-full ${designsTab === "queries" ? "border-brand-400 bg-brand-500/15" : ""}`}>
-              Design yourself queries{newQ ? <span className="ml-1 rounded-full bg-emerald-500/20 px-2 py-0.5 text-xs text-emerald-200">{newQ} new</span> : null}
+              DIY Submissions{newQ ? <span className="ml-1 rounded-full bg-emerald-500/20 px-2 py-0.5 text-xs text-emerald-200">{newQ} new</span> : null}
             </a>
           )}
           {canNew && <button className="btn btn-pri" data-tour="new-project" onClick={() => setCreating(true)}>+ New project</button>}

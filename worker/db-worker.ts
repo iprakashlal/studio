@@ -1301,6 +1301,17 @@ function dqDesignPub(d: any) {
   const HEX = /^#[0-9a-f]{6}$/i, KEY = /^[A-Za-z]{1,20}$/;
   if (typeof d.pick === "boolean") out.pick = d.pick;
   if (typeof d.domain === "string" && /^(?=.{4,100}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,24}$/.test(d.domain.trim().toLowerCase())) out.domain = d.domain.trim().toLowerCase();
+  if (d.gallery && typeof d.gallery === "object") {
+    const g = d.gallery, o: any = {}, tx = (v: any, n: number) => (typeof v === "string" ? v.replace(/[<>]/g, "").trim().slice(0, n) : "");
+    if (typeof g.domain === "string" && /^(?=.{4,100}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,24}$/.test(g.domain.trim().toLowerCase())) o.domain = g.domain.trim().toLowerCase();
+    if (tx(g.link, 24)) o.link = tx(g.link, 24);
+    if (g.count === "total" || g.count === "off") o.count = g.count;
+    if (Array.isArray(g.types)) { const l = ["business", "restaurant", "portfolio", "store"].filter((k) => g.types.includes(k)); if (l.length && l.length < 4) o.types = l; }
+    if (g.tags === false) o.tags = false;
+    if (tx(g.title, 80)) o.title = tx(g.title, 80);
+    if (tx(g.intro, 400)) o.intro = tx(g.intro, 400);
+    if (Object.keys(o).length) out.gallery = o;
+  }
   if (d.themes && typeof d.themes === "object") { const th: any = {}; for (const kind of ["business", "restaurant", "portfolio", "store"]) if (Array.isArray(d.themes[kind])) th[kind] = d.themes[kind].filter((v: any) => typeof v === "string" && /^[A-Za-z0-9_-]{1,40}$/.test(v)).slice(0, 400); out.themes = th; }
   if (d.look && typeof d.look === "object") {
     const look: any = {};

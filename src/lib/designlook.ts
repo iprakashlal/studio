@@ -14,6 +14,20 @@ export type Colours = Record<string, string>;
 
 /** One layout choice in the owner's settings: the default it fills in, the options offered, or hidden. */
 export type LookRule = { /** default option ("" = the theme's own) */ d?: string; /** options offered (empty = all) */ a?: string[]; /** not shown to visitors */ h?: boolean };
+export type Gallery = {
+  /** Its own web address: it opens straight on the gallery. */
+  domain?: string;
+  /** The text of the Studio's link to it (default "Themes"). */
+  link?: string;
+  /** The count line: "found" = "12 of 48 themes" (default), "total" = "48 themes", "off" = none. */
+  count?: "found" | "total" | "off";
+  /** The types of site shown (none listed = all four). */
+  types?: Kind[];
+  /** Show the tag filters (default on). */
+  tags?: boolean;
+  /** The page's heading and the line under it (default text when empty). */
+  title?: string; intro?: string;
+};
 export type DesignSettings = {
   on?: boolean;
   /** Visitors may change each colour (default on). */
@@ -22,6 +36,8 @@ export type DesignSettings = {
   ai?: "cloudflare" | "system" | "custom";
   /** The page's own web address (a domain connected in Settings → Design yourself): it opens straight on Design yourself. */
   domain?: string;
+  /** The public theme gallery (Settings → Themes): its own address, the Studio's link to it, what it shows and says. */
+  gallery?: Gallery;
   /** Per type: the themes visitors are offered (none listed = all of them). */
   themes?: Partial<Record<Kind, string[]>>;
   /** Per type, per layout / style / interaction / intro choice. */
@@ -72,6 +88,18 @@ export function cleanColours(x: any): Colours {
   return o;
 }
 export const cleanDomain = (v: unknown): string | undefined => (typeof v === "string" && /^(?=.{4,100}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,24}$/.test(v.trim().toLowerCase()) ? v.trim().toLowerCase() : undefined);
+export function cleanGallery(x: any): Gallery | undefined {
+  if (!x || typeof x !== "object") return undefined;
+  const o: Gallery = {}, t = (v: unknown, n: number) => (typeof v === "string" ? v.replace(/[<>]/g, "").trim().slice(0, n) : "");
+  const dm = cleanDomain(x.domain); if (dm) o.domain = dm;
+  if (t(x.link, 24)) o.link = t(x.link, 24);
+  if (x.count === "total" || x.count === "off") o.count = x.count;
+  if (Array.isArray(x.types)) { const l = KINDS.filter((k) => x.types.includes(k)); if (l.length && l.length < KINDS.length) o.types = l; }
+  if (x.tags === false) o.tags = false;
+  if (t(x.title, 80)) o.title = t(x.title, 80);
+  if (t(x.intro, 400)) o.intro = t(x.intro, 400);
+  return Object.keys(o).length ? o : undefined;
+}
 export const cleanAi = (v: unknown): DesignSettings["ai"] => (v === "cloudflare" || v === "system" || v === "custom" ? v : undefined);
 export function cleanThemes(x: any): NonNullable<DesignSettings["themes"]> {
   const o: NonNullable<DesignSettings["themes"]> = {}; if (!x || typeof x !== "object") return o;

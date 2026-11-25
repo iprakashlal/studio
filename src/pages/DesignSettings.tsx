@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { pushPref, savePrefNow } from "../lib/prefs";
 import { cleanDesignSettings, readDesignSettings, writeDesignSettings, type DesignSettings } from "../lib/designs";
-import { GROUPS, KINDS, LOOK_AXES, type Kind, type LookRule } from "../lib/designlook";
+import { GROUPS, KINDS, LOOK_AXES, type Gallery, type Kind, type LookRule } from "../lib/designlook";
 import { allThemesOf } from "../lib/designer";
 import { AI_ENGINES } from "../lib/ai";
 import { useAiEngine } from "./AiEngine";
@@ -27,7 +27,7 @@ function DesignOnCard() {
       <h3 className="text-[15px] font-extrabold">Design yourself</h3>
       <p className="text-sm text-ink-300">A page on the Themes gallery where a visitor answers a few simple questions and sees a preview of their own website. Nothing is published. When they press Connect, the request is saved in your Studio's Cloudflare database and emailed to the Studio's owners. Open them with the “Design yourself queries” button next to New project on the Projects page (you read them with your own sign-in; visitors only send). Everything stays in your own Studio: the page, the AI text and the requests.</p>
       <Toggle id="design-on" label="Show “Design yourself” on the Themes page" checked={on} onChange={(v) => save({ ...s, on: v })} />
-      <div className="flex flex-wrap gap-2"><a className="btn btn-sm" href="#/design">Open the page</a><a className="btn btn-ghost btn-sm" href="#/design-queries">See the requests</a></div>
+      <div className="flex flex-wrap gap-2"><a className="btn btn-sm" href="#/design">Open the page</a><a className="btn btn-ghost btn-sm" href="#/design-queries">See the submissions</a></div>
     </section>
   );
 }
@@ -48,20 +48,71 @@ function Block({ title, note, children, open = true }: { title: string; note?: s
 
 /** Settings → Design yourself: the AI that reads and writes for visitors, the themes offered, and the layout, style, interaction and intro-screen choices (what each starts with, what shows, what can be picked). Saved with the Save button. */
 /** Its own web address: the same one-click domain box as the Studio's own address; that address opens straight on Design yourself. */
-function DesignDomain({ session, studio, index, onIndex, onDomain }: { session: Session; studio: Studio; index: StudioIndex; onIndex: (i: StudioIndex) => void; onDomain: (d: string | undefined) => Promise<void> }) {
+function DesignDomain({ session, studio, index, onIndex, onDomain, field = "designDomain", noun = "Design yourself" }: { session: Session; studio: Studio; index: StudioIndex; onIndex: (i: StudioIndex) => void; onDomain: (d: string | undefined) => Promise<void>; field?: "designDomain" | "themesDomain"; noun?: string }) {
   const [nf, setNf] = useState<Netlify | null | undefined>(undefined);
   useEffect(() => { netlifyToken.load(session.token).then((t) => setNf(t ? new Netlify(t.token) : null)).catch(() => setNf(null)); }, [session.token]);
   const cfAcc = useCfAccount(session.token, nf, true, true);
-  const hosted = index.hosted, dd = hosted?.designDomain;
+  const hosted = index.hosted, dd = hosted?.[field];
   if (!hosted || hosted.pages !== "cloudflare" || !hosted.siteId) return <p className="text-[13px] text-ink-400">An own address needs a Studio that runs on Cloudflare (Settings → Hosting accounts).</p>;
   return (
-    <div aria-label="Design yourself address">
+    <div aria-label={`${noun} address`}>
       <CfDomainCard plain="Its own address" acc={cfAcc}
         host={{ kind: "cloudflare", siteId: hosted.siteId, siteName: hosted.siteName, url: hosted.url, account: hosted.account, domain: dd?.domain, subdomain: dd?.subdomain, domainSetup: dd?.domainSetup } as HostCfg}
         onHost={async (h) => {
-          onIndex(await studio.updateIndex((i) => { if (i.hosted) i.hosted = { ...i.hosted, designDomain: h.domain || h.domainSetup ? { domain: h.domain, subdomain: h.subdomain, domainSetup: h.domainSetup } : undefined }; }, h.domain ? `Design yourself address: ${h.domain}` : "Design yourself address removed"));
+          onIndex(await studio.updateIndex((i) => { if (i.hosted) i.hosted = { ...i.hosted, [field]: h.domain || h.domainSetup ? { domain: h.domain, subdomain: h.subdomain, domainSetup: h.domainSetup } : undefined }; }, h.domain ? `${noun} address: ${h.domain}` : `${noun} address removed`));
           await onDomain(h.domain);
         }} />
+    </div>
+  );
+}
+
+/** Settings → Themes: the public theme gallery's own address, the Studio's link to it, what it shows and what it says. Saved at once (small, and visitors see it on their next load). */
+export function ThemesSettingsTab({ session, studio, index, onIndex }: { session: Session; studio: Studio; index: StudioIndex; onIndex: (i: StudioIndex) => void }) {
+  const toast = useToast();
+  const [d, setD] = useState<DesignSettings>(readDesignSettings);
+  const g = d.gallery || {};
+  const [busy, setBusy] = useState(false);
+  const [txt, setTxt] = useState({ link: g.link || "", title: g.title || "", intro: g.intro || "" });
+  const persist = async (gallery: Gallery | undefined, quiet = false) => {
+    const cur = readDesignSettings(), next: DesignSettings = { ...cur }; if (gallery && Object.keys(gallery).length) next.gallery = gallery; else delete next.gallery;
+    const clean = cleanDesignSettings(next); writeDesignSettings(clean); setD(clean);
+    try { await savePrefNow({ design: clean }); if (!quiet) toast("Saved"); } catch (e: any) { toast(e?.message || "Couldn't save. Try again.", "bad"); }
+  };
+  const set = (p: Partial<Gallery>) => { const n: any = { ...(readDesignSettings().gallery || {}), ...p }; for (const k of Object.keys(n)) if (n[k] === undefined || n[k] === "") delete n[k]; return persist(n); };
+  const setDomain = (domain: string | undefined) => set({ domain });
+  const types = g.types || KINDS;
+  const toggleType = (k: Kind, on: boolean) => { const l = KINDS.filter((x) => (x === k ? on : types.includes(x))); if (!l.length) return toast("Keep at least one type.", "bad"); set({ types: l.length === KINDS.length ? undefined : l }); };
+  const dirtyText = txt.link.trim() !== (g.link || "") || txt.title.trim() !== (g.title || "") || txt.intro.trim() !== (g.intro || "");
+  const base = g.domain ? `https://${g.domain}/` : location.origin + location.pathname + "#/themes";
+  return (
+    <div className="flex flex-col gap-4">
+      <p className="text-sm text-ink-300">The public theme gallery: the page visitors open to browse your themes and quote a theme ID. Each choice here is saved at once.</p>
+      <Block title="Its own web address" note="Give the gallery its own address, like themes.yourname.com. Visitors who open it land straight on the gallery. Connect it in one click, the same way as the Studio's own address in Settings → Hosting accounts.">
+        <DesignDomain session={session} studio={studio} index={index} onIndex={onIndex} onDomain={setDomain} field="themesDomain" noun="Theme gallery" />
+        <p className="text-[13px] text-ink-300">Open <a className="underline" href={base} target="_blank" rel="noopener noreferrer">{g.domain || "the gallery"}</a></p>
+      </Block>
+      <Block title="What it says" note="The Studio's link to the gallery, and the heading and line at the top of the page. Leave a box empty to keep the standard text.">
+        <div className="grid gap-3">
+          <label className="flex flex-col gap-1.5"><span className="label">Link in the Studio menu</span><input className="input h-10 max-w-xs" maxLength={24} placeholder="Themes" value={txt.link} onChange={(e) => setTxt({ ...txt, link: e.target.value })} /></label>
+          <label className="flex flex-col gap-1.5"><span className="label">Heading</span><input className="input" maxLength={80} placeholder="Pick a look for your site" value={txt.title} onChange={(e) => setTxt({ ...txt, title: e.target.value })} /></label>
+          <label className="flex flex-col gap-1.5"><span className="label">Line under the heading</span><textarea className="input" rows={3} maxLength={400} placeholder="Leave empty to show the theme count and what the themes are for." value={txt.intro} onChange={(e) => setTxt({ ...txt, intro: e.target.value })} /></label>
+        </div>
+        <div className="flex gap-2"><button type="button" className="btn btn-pri btn-sm" disabled={!dirtyText || busy} onClick={async () => { setBusy(true); await set({ link: txt.link, title: txt.title, intro: txt.intro }); setBusy(false); }}>{busy ? "Saving…" : "Save text"}</button>
+          <button type="button" className="btn btn-ghost btn-sm" disabled={!dirtyText} onClick={() => setTxt({ link: g.link || "", title: g.title || "", intro: g.intro || "" })}>Discard</button></div>
+      </Block>
+      <Block title="What it shows">
+        <div className="flex flex-col gap-2" role="radiogroup" aria-label="Theme count">
+          <span className="label">Theme count</span>
+          {([["found", "Themes found: “12 of 48 themes” (follows the search and filters)"], ["total", "Total only: “48 themes”"], ["off", "Don't show a count"]] as const).map(([v, l]) => (
+            <label key={v} className="flex items-center gap-2 text-[13px]"><input type="radio" name="gal-count" checked={(g.count || "found") === v} onChange={() => set({ count: v === "found" ? undefined : v })} />{l}</label>
+          ))}
+        </div>
+        <div className="flex flex-col gap-2"><span className="label">Types of site shown</span>
+          {KINDS.map((k) => <label key={k} className="flex items-center gap-2 text-[13px]"><input type="checkbox" checked={types.includes(k)} onChange={(e) => toggleType(k, e.target.checked)} />{KIND_NAME[k]}</label>)}
+        </div>
+        <Toggle id="gal-tags" label="Show the tag filters (Dark, Warm, Bold…)" checked={g.tags !== false} onChange={(v) => set({ tags: v ? undefined : false })} />
+      </Block>
+      <p className="text-[13px] text-ink-400">Theme IDs (like T-07, B-12 or R-005) show on every theme card. They also appear on each Design yourself submission, so you know which look a visitor chose. <a className="underline" href="#/themes">Open the gallery</a></p>
     </div>
   );
 }

@@ -1,3 +1,4 @@
+import { themeCode } from "../themes/codes";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { TEMPLATES } from "../schema";
 import { buildDesign, type Design } from "../lib/designer";
@@ -22,7 +23,7 @@ export function useNewQueries(): number | null {
   return n;
 }
 
-/** Projects → Design yourself Query: the requests people sent from the Design yourself page, read from the Studio's database as it loads. */
+/** Projects → DIY Submissions: the requests people sent from the Design yourself page, read from the Studio's database as it loads. */
 export function QueriesTab({ studio, index, onIndex }: { studio: Studio; index: StudioIndex; onIndex: (i: StudioIndex) => void }) {
   const toast = useToast(), confirm = useConfirm();
   const [host, setHost] = useState<DesignHost | null | undefined>(undefined);
@@ -54,16 +55,16 @@ export function QueriesTab({ studio, index, onIndex }: { studio: Studio; index: 
   const mark = async (q: Query, status: string) => { await setQueryStatus(host!, q.id, status); setRows((r) => (r || []).map((x) => (x.id === q.id ? { ...x, status: status as Query["status"] } : x))); };
 
   if (host === undefined) return <SkelRows n={2} label="Loading requests" />;
-  if (!host) return <Empty title="Requests need the Cloudflare database" body="Design yourself saves each request in your Studio's own Cloudflare database. This Studio isn't on one, so requests can't be received here." />;
+  if (!host) return <Empty title="Submissions need the Cloudflare database" body="Design yourself saves each request in your Studio's own Cloudflare database. This Studio isn't on one, so requests can't be received here." />;
   return (
     <>
       <div className="flex flex-wrap items-center gap-3">
-        <p className="min-w-0 flex-1 text-sm text-ink-400">Requests sent from the Design yourself page. Each was saved in your Studio's database and emailed to the owners.</p>
+        <p className="min-w-0 flex-1 text-sm text-ink-400">Submissions sent from the Design yourself page (DIY). Each was saved in your Studio's database and emailed to the owners.</p>
         <button type="button" className="btn btn-sm" disabled={loading} onClick={() => load(host)}>{loading ? "Loading…" : "Refresh"}</button>
       </div>
       {err && <p className="rounded-lg border border-red-400/40 bg-red-400/5 px-3 py-2 text-[13px] text-red-200" role="alert">{err}</p>}
       {rows === null ? (err ? null : <SkelRows n={3} label="Loading requests" />) : !rows.length ? (
-        <Empty title="No requests yet" body="When someone finishes a design and presses Connect with Picaffectz, their request appears here." action={<a className="btn btn-pri" href="#/design">Open Design yourself</a>} />
+        <Empty title="No submissions yet" body="When someone finishes a design and presses Connect with Picaffectz, their request appears here." action={<a className="btn btn-pri" href="#/design">Open Design yourself</a>} />
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {rows.map((q) => {
@@ -75,6 +76,7 @@ export function QueriesTab({ studio, index, onIndex }: { studio: Studio; index: 
                   <div className="flex items-center gap-2 text-xs"><span className={`chip ${st.cls}`}>{st.label}</span><span className="ml-auto text-ink-400">{ago(q.created_at)}</span></div>
                   <h2 className="truncate font-display text-xl font-extrabold leading-tight">{q.name}</h2>
                   <p className="text-[13px] text-ink-400">{t?.name || q.kind}{q.answers.city ? ` · ${q.answers.city}` : ""}</p>
+                  {(q.answers.themeid || q.answers.theme) && <p className="text-xs text-ink-300">Theme ID: <b className="rounded bg-ink-800 px-1.5 py-0.5 font-mono text-brand-200">{themeCode({ id: q.answers.themeid || q.answers.theme })}</b></p>}
                   <div className="rounded-xl border border-ink-700 bg-ink-950/40 p-3 text-[13px]">
                     <b className="block text-ink-100">{q.person}</b>
                     {q.phone && <a className="block text-brand-200 hover:underline" href={`tel:${q.phone.replace(/[^\d+]/g, "")}`}>{q.phone}</a>}

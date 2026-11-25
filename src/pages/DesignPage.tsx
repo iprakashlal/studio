@@ -1,3 +1,4 @@
+import { themeCode } from "../themes/codes";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BrandMark, useBrand } from "../lib/brand";
 import { TEMPLATES } from "../schema";
@@ -294,7 +295,7 @@ export function DesignPage({ studio, index, onIndex }: { studio?: Studio; index?
               <section className="card flex flex-col gap-5 p-5 sm:p-8" aria-live="polite">
                 <div className="flex flex-col gap-2">
                   <h2 className="font-display text-2xl font-extrabold tracking-tight sm:text-[28px]">Your preview is ready</h2>
-                  <p className="text-sm leading-relaxed text-ink-300">{design ? <>A <b className="text-ink-100">{TEMPLATES[design.kind].name}</b> in the <b className="text-ink-100">{design.themeName}</b> look. </> : ""}It isn't published. Connect with us to finish it together: your own photos, your address on the web, payment and any extra features.</p>
+                  <p className="text-sm leading-relaxed text-ink-300">{design ? <>A <b className="text-ink-100">{TEMPLATES[design.kind].name}</b> in the <b className="text-ink-100">{design.themeName}</b> look (theme ID <b className="font-mono text-ink-100">{themeCode({ id: design.themeId })}</b>). </> : ""}It isn't published. Connect with us to finish it together: your own photos, your address on the web, payment and any extra features.</p>
                 </div>
                 <div className="grid gap-2 sm:flex sm:flex-wrap">
                   <button type="button" className="btn btn-pri justify-center" onClick={() => setShowPreview(true)}>View my preview</button>
@@ -512,7 +513,7 @@ export function ConnectPopup({ a, design, copy, files, host, sent, onSent, onClo
     if (!f.phone.trim() && !f.email.trim()) return toast("Please give a phone number or an email address.", "bad");
     setBusy(true);
     try {
-      await submitQuery(host, { kind: a.kind, name: a.name || "Untitled", person: f.person.trim(), phone: f.phone.trim(), email: f.email.trim(), note: f.note.trim(), answers: { ...a, ...(a.kind ? { look: resolvedLook(a.kind as LookKind, a.look, readDesignSettings()) } : {}) }, ...(copy ? { copy } : {}), ...(files.logo ? { logo: files.logo } : {}), ...(files.menu ? { pdf: files.menu } : {}) });
+      await submitQuery(host, { kind: a.kind, name: a.name || "Untitled", person: f.person.trim(), phone: f.phone.trim(), email: f.email.trim(), note: f.note.trim(), answers: { ...a, ...(design?.themeId ? { themeid: design.themeId } : {}), ...(a.kind ? { look: resolvedLook(a.kind as LookKind, a.look, readDesignSettings()) } : {}) }, ...(copy ? { copy } : {}), ...(files.logo ? { logo: files.logo } : {}), ...(files.menu ? { pdf: files.menu } : {}) });
       setDone(true); onSent();
     } catch (e: any) { toast(e?.message || "Couldn't send. Please try again.", "bad"); }
     setBusy(false);

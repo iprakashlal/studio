@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 // "Design yourself": the previews people have made, and the page's own settings (on/off, where requests go).
 // Signed in, previews live in the Studio (studio.json → designs) and show in Projects → Design previews; without
 // signing in they stay on this device. Only the answers are kept: the preview is rebuilt from them.
@@ -5,7 +6,7 @@
 /** The words written for a design (by the Studio's AI engine or the Picaffectz system): a summary for each topic the person gave. */
 export type Copy = { tagline?: string; hero_text?: string; about_text?: string; cta_text?: string; items?: { name: string; text: string }[]; faq?: { q: string; a: string }[] };
 export type DesignRec = { id: string; name: string; kind: string; themeId: string; themeName: string; answers: Record<string, string>; createdAt: string; summary?: string; copy?: Copy; /** A small logo (data URL), when one was added. */ logo?: string };
-import { cleanAi, cleanDomain, cleanLook, cleanThemes, type DesignSettings } from "./designlook";
+import { cleanAi, cleanDomain, cleanGallery, cleanLook, cleanThemes, type DesignSettings } from "./designlook";
 export type { DesignSettings };
 
 const LS = "site-studio:designs", SET = "site-studio:design-page";
@@ -23,6 +24,7 @@ export function cleanDesignSettings(x: any): DesignSettings {
   if (typeof x.pick === "boolean") o.pick = x.pick;
   const ai = cleanAi(x.ai); if (ai) o.ai = ai;
   const dm = cleanDomain(x.domain); if (dm) o.domain = dm;
+  const ga = cleanGallery(x.gallery); if (ga) o.gallery = ga;
   const th = cleanThemes(x.themes); if (Object.keys(th).length) o.themes = th;
   const look = cleanLook(x.look); if (Object.keys(look).length) o.look = look;
   return o;
@@ -42,3 +44,10 @@ export const designPageOn = () => readDesignSettings().on !== false;
 export const readLocalDesigns = (): DesignRec[] => { try { return cleanDesigns(JSON.parse(localStorage.getItem(LS) || "[]")); } catch { return []; } };
 export const writeLocalDesigns = (l: DesignRec[]) => { try { localStorage.setItem(LS, JSON.stringify(l)); } catch { /* private mode */ } };
 export const newDesignId = () => "d" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+
+/** The owner's design settings, kept fresh when they change (Settings, or a signed-out page loading them). */
+export function useDesignSettings(): DesignSettings {
+  const [s, setS] = useState<DesignSettings>(readDesignSettings);
+  useEffect(() => { const f = () => setS(readDesignSettings()); addEventListener("studio:design-page", f); return () => removeEventListener("studio:design-page", f); }, []);
+  return s;
+}

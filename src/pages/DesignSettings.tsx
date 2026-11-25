@@ -279,7 +279,7 @@ export function DesignLookTab({ session, studio, index, onIndex }: { session: Se
         {(d.adminAi !== false || d.images?.on) && <>
           <div className="flex flex-col gap-1.5" role="radiogroup" aria-label="Who draws the pictures">
             <span className="text-[13px] font-semibold">Who draws the pictures</span>
-            {([["horde", "The free AI Horde", "No key, no sign-up. Volunteers' computers draw, so a picture can queue for a minute or two."], ["engine", "The AI engine selected for this Studio", "Drawn by whichever AI engine this Studio uses: Cloudflare (fast, within its free allowance) or your own AI API. If that engine can't draw, the free AI Horde is used."]] as const).map(([v, l, h]) => {
+            {([["horde", "The free AI Horde", "No key, no sign-up. Volunteers' computers draw, so a picture can queue for a minute or two."], ["engine", "The AI engine selected for this Studio", "Drawn by whichever AI engine this Studio uses: Cloudflare (fast, within its free allowance) or your own AI API. If it can't draw, you see the reason; the free AI Horde is used only for the Picaffectz system engine, which can't draw."]] as const).map(([v, l, h]) => {
               const on = (d.images?.source || "horde") === v;
               return (
                 <label key={v} className={`flex cursor-pointer items-start gap-2 rounded-xl border p-3 text-[13px] ${on ? "border-brand-400 bg-brand-500/10" : "border-ink-600"}`}>
@@ -289,7 +289,7 @@ export function DesignLookTab({ session, studio, index, onIndex }: { session: Se
               );
             })}
             {d.images?.source === "engine" && d.ai === "system" && <span className="text-[11.5px] text-amber-300" role="note">This Studio's AI engine is set to the Picaffectz system, which can't draw pictures here, so the free AI Horde will be used until it is set to Cloudflare or your own AI.</span>}
-            {d.images?.source === "engine" && d.ai === "custom" && <span className="text-[11.5px] text-ink-500" role="note">Your own AI draws the pictures through its picture endpoint (ChatGPT and Gemini work; add a picture model under Settings → AI engine for others). If it can't draw, the free AI Horde is used.</span>}
+            {d.images?.source === "engine" && d.ai === "custom" && <span className="text-[11.5px] text-ink-500" role="note">Your own AI draws the pictures through its picture endpoint (ChatGPT and Gemini work; add a picture model under Settings → AI engine for others). If it fails you see the reason; the AI Horde is not used.</span>}
           </div>
           <label className="flex flex-col gap-1 text-[13px] font-semibold">Picture style
             <select className="input w-auto" value={d.images?.style || "photo"} onChange={(e) => upd({ images: { ...(d.images || {}), style: e.target.value as any } })}>

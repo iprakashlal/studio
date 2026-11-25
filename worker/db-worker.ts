@@ -601,9 +601,9 @@ function customAI(c: any) {
     run: async (_model: string, o: any) => {
       if (!o?.messages) return { response: "" };
       const vision = o.messages.some((m: any) => Array.isArray(m.content));
-      const send = (fmt: boolean) => fetch(base + "/chat/completions", { method: "POST", headers: { Authorization: "Bearer " + c.key, "Content-Type": "application/json" },
+      const send = (fmt: boolean) => fetch(base + "/chat/completions", { signal: AbortSignal.timeout(40000), method: "POST", headers: { Authorization: "Bearer " + c.key, "Content-Type": "application/json" },
         body: JSON.stringify({ model: (vision && c.vision) || c.model, messages: o.messages, ...(o.max_tokens ? { max_tokens: Math.min(o.max_tokens, 8000) } : {}), ...(o.temperature != null ? { temperature: o.temperature } : {}), ...(fmt && o.response_format ? { response_format: o.response_format } : {}) }) });
-      let r = await send(true);
+      let r: Response; try { r = await send(true); } catch (e: any) { throw new Error(e?.name === "TimeoutError" || e?.name === "AbortError" ? "Your AI API took too long to answer (40 s). Check the model name, or try a faster model." : String(e?.message || e)); }
       // Not every API knows the JSON switch: asked again without it (the prompts already ask for JSON).
       if (r.status === 400 && o.response_format) r = await send(false);
       if (!r.ok) { const t = (await r.text()).replace(/\s+/g, " ").slice(0, 240); throw new Error(r.status === 401 || r.status === 403 ? `Your AI API refused the key (${r.status}). Check it under Settings → AI engine.` : r.status === 429 ? "Your AI API says its limit is reached (429)." : `Your AI API answered ${r.status}: ${t}`); }
@@ -1556,23 +1556,23 @@ async function dqImage(env: Env, id: string, req: Request): Promise<Response> {
     try {
       const c: any = await anySetting(env, "ai"), base = String(c?.base || "").trim().replace(/\/+$/, "").replace(/\/chat\/completions$/, "");
       const model = String(c?.image || "").trim() || (/api\.openai\.com/.test(base) ? "dall-e-3" : /generativelanguage\.googleapis\.com/.test(base) ? "imagen-3.0-generate-002" : "");
-      if (!model) return json({ engine: "system", error: "no picture model" });
-      const send = (fmt: boolean) => fetch(base + "/images/generations", { method: "POST", headers: { Authorization: "Bearer " + c.key, "Content-Type": "application/json" }, body: JSON.stringify({ model, prompt, n: 1, ...(fmt ? { response_format: "b64_json" } : {}) }) });
+      if (!model) return json({ engine: "custom", error: "No picture model is set. Add one under Settings → AI engine (for example dall-e-3 or imagen-3.0-generate-002)." });
+      const send = (fmt: boolean) => fetch(base + "/images/generations", { signal: AbortSignal.timeout(60000), method: "POST", headers: { Authorization: "Bearer " + c.key, "Content-Type": "application/json" }, body: JSON.stringify({ model, prompt, n: 1, ...(fmt ? { response_format: "b64_json" } : {}) }) });
       let r = await send(true); if (r.status === 400) r = await send(false);
-      if (!r.ok) return json({ engine: "system", error: `Your AI API answered ${r.status}` });
+      if (!r.ok) return json({ engine: choice, error: `Your AI API answered ${r.status}` });
       const j: any = await r.json().catch(() => null), x = j?.data?.[0];
       let img = typeof x?.b64_json === "string" ? x.b64_json : "";
       if (!img && typeof x?.url === "string" && publicUrl(x.url)) { const b = new Uint8Array(await (await fetch(x.url)).arrayBuffer()); let s = ""; for (let i = 0; i < b.length; i += 8192) s += String.fromCharCode(...b.subarray(i, i + 8192)); img = btoa(s); }
-      if (img.length < 100) return json({ engine: "system", error: "empty" });
+      if (img.length < 100) return json({ engine: choice, error: "empty" });
       return json({ engine: "custom", image: img });
-    } catch (e: any) { return json({ engine: "system", error: String(e?.message || e).slice(0, 160) }); }
+    } catch (e: any) { return json({ engine: choice, error: String(e?.message || e).slice(0, 160) }); }
   }
   try {
     const r: any = await ai.run("@cf/black-forest-labs/flux-1-schnell", { prompt, steps: 4 });
     const img = typeof r?.image === "string" ? r.image : "";
-    if (img.length < 100) return json({ engine: "system", error: "empty" });
+    if (img.length < 100) return json({ engine: choice, error: "empty" });
     return json({ engine: "cloudflare", image: img });
-  } catch (e: any) { return json({ engine: "system", error: String(e?.message || e).slice(0, 160) }); }
+  } catch (e: any) { return json({ engine: choice, error: String(e?.message || e).slice(0, 160) }); }
 }
 
 async function dqUnderstand(env: Env, id: string, req: Request): Promise<Response> {

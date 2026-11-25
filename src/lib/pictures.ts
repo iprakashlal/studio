@@ -43,10 +43,14 @@ export async function generateImages(prompt: string, o: { /** "engine": the Stud
     const h = await designHost().catch(() => null);
     if (h) {
       o.status?.("Drawing…");
-      const got = (await Promise.all(Array.from({ length: n }, () => engineImage(h, full)))).filter((x): x is string => !!x).map((x) => b64Blob(x, "image/jpeg"));
+      const res = await Promise.all(Array.from({ length: n }, () => engineImage(h, full)));
+      const got = res.filter((x) => x.image).map((x) => b64Blob(x.image!, "image/jpeg"));
       if (got.length) return got;
+      // The chosen engine tried and failed: say why, rather than quietly using another generator. Only an engine that cannot draw at all (the Picaffectz system) hands over to the free one.
+      const why = res.find((x) => x.error)?.error;
+      if (why) throw new Error("The Studio's AI engine couldn't draw this: " + why);
     }
-    o.status?.("The Studio's AI can't draw right now; using the free generator…");
+    o.status?.("This Studio's AI engine can't draw pictures; using the free generator…");
   }
   // Anonymous users have no kudos, so a request over the free work budget is refused: it is asked again smaller (size, steps, count) until the Horde accepts it.
   const LV: [number, number, number, number][] = kind === "logo" ? [[384, 384, 12, n], [320, 320, 8, n], [256, 256, 6, Math.min(n, 2)], [256, 256, 5, 1]] : [[512, 384, 12, n], [448, 320, 8, n], [384, 256, 6, Math.min(n, 2)], [320, 256, 5, 1]];

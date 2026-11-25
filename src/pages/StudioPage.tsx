@@ -20,11 +20,19 @@ const SP = () => (window as any).SitePages as { article: (p: any, o: any) => str
 const VARS = { "--text": "rgb(var(--ink-100, 238 241 246))", "--soft": "rgb(var(--ink-300, 169 179 196))", "--line": "rgb(var(--ink-600, 46 58 76))", "--c1": "rgb(var(--brand-500, 99 120 255))", "--r": "14px", "--fd": "inherit", "--fb": "inherit" } as CSSProperties;
 
 /** Links to the Studio's pages; `where` picks those switched on for the sign-in screen or the Studio's footer. */
-export function StudioPageLinks({ host, repo, where, className = "" }: { host: StudioHostCfg | null | undefined; repo?: Repo | null; where: "gate" | "footer"; className?: string }) {
+export function StudioPageLinks({ host, repo, where, className = "" }: { host: StudioHostCfg | null | undefined; repo?: Repo | null; where: "gate" | "footer" | "design" | "themes"; className?: string }) {
   const { pages } = useStudioPages(host, repo);
-  const list = pages.filter((p) => (where === "gate" ? p.inGate !== false : p.inFooter !== false));
+  const list = pages.filter((p) => (where === "gate" ? p.inGate !== false : where === "design" ? p.inDesign === true : where === "themes" ? p.inThemes === true : p.inFooter !== false));
   if (!list.length) return null;
   return <nav aria-label="Studio pages" className={`flex flex-wrap justify-center gap-x-4 gap-y-1 text-[12.5px] text-ink-400 ${className}`}>{list.map((p) => <a key={p.id} className="hover:text-ink-100 hover:underline" href={pageHref(p)}>{p.navLabel || p.title}</a>)}</nav>;
+}
+
+/** The same links at the bottom of a public page (Design yourself, Themes), found from the Studio's own address. */
+export function StudioPageLinksHere({ where, repo }: { where: "design" | "themes"; repo?: Repo | null }) {
+  const [host, setHost] = useState<StudioHostCfg | null | undefined>(undefined);
+  useEffect(() => { loadHostConfig().then(setHost).catch(() => setHost(null)); }, []);
+  if (host === undefined) return null;
+  return <footer className="border-t border-ink-800 px-4 py-5"><StudioPageLinks host={host} repo={repo} where={where} /></footer>;
 }
 
 /** #/pages/<name>: one page, readable without signing in (a hidden page only by signed-in people, marked). */
@@ -74,7 +82,7 @@ export function StudioPagesCard({ repo }: { repo: Repo }) {
   }, []);
   const addr = location.origin + basePath() + "#/pages/";
   const fields = useMemo(() => [{ t: "list" as const, path: "pages", max: 30, add: () => studioPageDefault(), title: (it: any) => `${it?.title || "Untitled page"}${it?.show === false ? " (hidden)" : ""}`,
-    item: staticPageFields(addr, [{ t: "toggle", path: "inGate", label: "Link on the sign-in screen" }, { t: "toggle", path: "inFooter", label: "Link under the Studio" }, { t: "text", path: "navLabel", label: "Link name (optional)", ph: "the title" }], "Show “Studio / page” at the top") }], [addr]);
+    item: staticPageFields(addr, [{ t: "toggle", path: "inGate", label: "Link on the sign-in screen" }, { t: "toggle", path: "inFooter", label: "Link at the bottom of the Studio" }, { t: "toggle", path: "inDesign", label: "Link at the bottom of Design yourself" }, { t: "toggle", path: "inThemes", label: "Link at the bottom of the Themes page" }, { t: "text", path: "navLabel", label: "Link name (optional)", ph: "the title" }], "Show “Studio / page” at the top") }], [addr]);
   const dirty = !!draft && JSON.stringify(draft.pages) !== saved;
   const save = async () => {
     if (!draft) return;
@@ -89,7 +97,7 @@ export function StudioPagesCard({ repo }: { repo: Repo }) {
   return (
     <section className="card flex flex-col gap-4 p-5" aria-label="Additional pages">
       <h3 className="text-[15px] font-extrabold">Additional pages</h3>
-      <p className="text-sm text-ink-300">The Studio's own reading pages, such as its privacy policy and terms. Each one opens at <span className="font-mono text-[12.5px]">{addr}&lt;name&gt;</span> and can be linked on the sign-in screen and under the Studio. Saved in the Studio's files (<code className="font-mono text-xs">{PAGES_FILE}</code>), so every device shows the same.</p>
+      <p className="text-sm text-ink-300">The Studio's own reading pages, such as its privacy policy and terms. Each one opens at <span className="font-mono text-[12.5px]">{addr}&lt;name&gt;</span> and can be linked on the sign-in screen, at the bottom of the Studio, Design yourself and the Themes page. Saved in the Studio's files (<code className="font-mono text-xs">{PAGES_FILE}</code>), so every device shows the same.</p>
       {reach === "update" && <p className="rounded-lg border border-amber-400/40 bg-amber-400/5 px-3 py-2 text-[13px] text-amber-100">People who aren't signed in can read these after one update of your Studio's database: Settings → Hostings → Sites and hosting accounts → Update the database.</p>}
       {reach === "private" && <p className="rounded-lg border border-amber-400/40 bg-amber-400/5 px-3 py-2 text-[13px] text-amber-100">This Studio keeps its files in a private GitHub repository, so only people signed in to the Studio can read these pages. A Studio on Cloudflare (Settings → Migration) shows them to everyone.</p>}
       {!draft ? <SkelRows n={3} label="Loading the pages" /> : (

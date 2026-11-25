@@ -1,3 +1,4 @@
+import { StudioPageLinksHere } from "./StudioPage";
 import { DevtoolsGuard, LoadVeil } from "../ui/PageGuard";
 import { themeCode } from "../themes/codes";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -317,6 +318,7 @@ export function DesignPage({ studio, index, onIndex }: { studio?: Studio; index?
           </>
         )}
       </main>
+      <StudioPageLinksHere where="design" />
 
       {showPreview && design && <PreviewPopup design={design} ver={ver} a={a} onClose={() => setShowPreview(false)} onEditLink={(id) => { setShowPreview(false); setReviewOpen(true); if (!(id in a)) setA((o) => ({ ...o, [id]: "" })); setTimeout(() => setJump({ id, n: Date.now() }), 60); }} onEdit={() => { setShowPreview(false); setReviewOpen(true); setTimeout(() => document.getElementById("design-answers")?.scrollIntoView({ block: "start", behavior: "smooth" }), 80); }} onConnect={openConnect} done={ready} onTweak={ready ? tweak : undefined} />}
       {warn && (

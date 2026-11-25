@@ -8,7 +8,7 @@ import { basePath, textToB64 } from "./util";
 import { pageSlug } from "../schema/common";
 
 export const PAGES_FILE = "public/pages.json";
-export type StudioPage = { id: string; title: string; slug?: string; subtitle?: string; updated?: string; body?: string; show?: boolean; inGate?: boolean; inFooter?: boolean; navLabel?: string; showTitle?: boolean; align?: string; size?: string; width?: string; toc?: boolean; crumbs?: boolean; noindex?: boolean };
+export type StudioPage = { id: string; title: string; slug?: string; subtitle?: string; updated?: string; body?: string; show?: boolean; inGate?: boolean; inFooter?: boolean; /** Also linked at the bottom of the Design yourself page / the Themes page (off unless switched on). */ inDesign?: boolean; inThemes?: boolean; navLabel?: string; showTitle?: boolean; align?: string; size?: string; width?: string; toc?: boolean; crumbs?: boolean; noindex?: boolean };
 
 export const studioPageDefault = (title = "New page"): StudioPage => ({ id: "sp-" + Math.random().toString(36).slice(2, 8), title, slug: "", subtitle: "", updated: "", body: "", show: true, inGate: true, inFooter: true, navLabel: "", showTitle: true, align: "left", size: "large", width: "narrow", toc: false, crumbs: true, noindex: false });
 export const slugOf = (p: StudioPage) => pageSlug(p.slug || p.title) || p.id;

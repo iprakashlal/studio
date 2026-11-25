@@ -335,7 +335,7 @@ export function DesignPage({ studio, index, onIndex }: { studio?: Studio; index?
       </main>
       <StudioPageLinksHere where="design" />
 
-      {showPreview && design && <PreviewPopup design={design} ver={ver} a={a} onClose={() => setShowPreview(false)} onEditLink={(id) => { setShowPreview(false); setReviewOpen(true); if (!(id in a)) setA((o) => ({ ...o, [id]: "" })); setTimeout(() => setJump({ id, n: Date.now() }), 60); }} onEdit={() => { setShowPreview(false); setReviewOpen(true); setTimeout(() => document.getElementById("design-answers")?.scrollIntoView({ block: "start", behavior: "smooth" }), 80); }} onConnect={openConnect} done={ready} onTweak={ready ? tweak : undefined} />}
+      {showPreview && design && <PreviewPopup design={design} ver={ver} a={a} onClose={() => setShowPreview(false)} onEditLink={(id) => { setShowPreview(false); if (cur && id === cur.id && !(id in a)) { /* the question being asked now: answer it in the box above, nothing is filled in or skipped */ window.scrollTo({ top: 0, behavior: "smooth" }); setTimeout(() => field.current?.focus(), 150); return; } setReviewOpen(true); if (!(id in a)) setA((o) => ({ ...o, [id]: "" })); setTimeout(() => setJump({ id, n: Date.now() }), 60); }} onEdit={() => { setShowPreview(false); setReviewOpen(true); setTimeout(() => document.getElementById("design-answers")?.scrollIntoView({ block: "start", behavior: "smooth" }), 80); }} onConnect={openConnect} done={ready} onTweak={ready ? tweak : undefined} />}
       {warn && (
         <div role="alertdialog" aria-modal="true" aria-label="Developer tools detected" className="fixed inset-0 z-[100] grid place-items-center bg-black/85 p-4">
           <div className="card flex w-full max-w-md flex-col gap-3 p-6">

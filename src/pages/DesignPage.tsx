@@ -55,6 +55,7 @@ export function DesignPage({ studio, index, onIndex }: { studio?: Studio; index?
   useEffect(() => { const f = () => setSetsVer((v) => v + 1); addEventListener("studio:design-page", f); return () => removeEventListener("studio:design-page", f); }, []);
   const [writing, setWriting] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
+  const [reviewOpen, setReviewOpen] = useState(false);
   const [connect, setConnect] = useState(false);
   const [text, setText] = useState("");
   const [many, setMany] = useState<string[]>([]);
@@ -245,6 +246,8 @@ export function DesignPage({ studio, index, onIndex }: { studio?: Studio; index?
   };
 
   const ready = finished && !!copy && !writing;
+  const wasReady = useRef(false);
+  useEffect(() => { if (ready && !wasReady.current) { wasReady.current = true; setReviewOpen(true); } if (!finished) wasReady.current = false; }, [ready, finished]);
 
   return (
     <div className="flex min-h-screen flex-col bg-ink-950 text-ink-100">
@@ -300,29 +303,14 @@ export function DesignPage({ studio, index, onIndex }: { studio?: Studio; index?
                 <p className="text-xs text-ink-500">Preview only. Nothing is published or charged.</p>
               </section>
             )}
-            <details className="group rounded-2xl border border-ink-800 bg-ink-900/50">
-              <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-3 text-sm font-semibold text-ink-200 marker:hidden [&::-webkit-details-marker]:hidden">
-                <span>Your answers</span><span className="chip">{answered.filter((x) => a[x.id]).length}</span>
-                <span className="ml-auto text-xs font-normal text-ink-500 group-open:hidden">Tap to review or change</span>
-                <span aria-hidden className="text-ink-500 transition group-open:rotate-180">⌄</span>
-              </summary>
-              <div className="flex flex-wrap gap-1.5 border-t border-ink-800 p-4" aria-label="Your answers so far">
-                {answered.map((s) => (
-                  <button key={s.id} type="button" onClick={() => rewind(s.id)} title={`Change: ${s.ask(a)}`} aria-label={`Change your answer to: ${s.ask(a)}`} className={`inline-flex max-w-full items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs transition hover:border-brand-400 ${a[s.id] ? "border-ink-700 bg-ink-900 text-ink-300" : "border-ink-800 text-ink-500"}`}>
-                    <span className="text-ink-500">{STEP_LABEL[s.id] || s.id}</span>
-                    <span className={`max-w-[12rem] truncate font-semibold ${a[s.id] ? "text-ink-100" : "font-normal"}`}>{a[s.id] ? sayAnswer(s, a).replace(/\s*\(from your document\)$/, "") : "Skipped"}</span>
-                    {(a.docfrom || "").split(",").includes(s.id) && <span className="text-brand-300" title="Found in your document">✦</span>}
-                    <span aria-hidden className="text-ink-500">✎</span>
-                  </button>
-                ))}
-              </div>
-            </details>
+            <AnswersReview rows={answered} a={a} open={reviewOpen} onOpen={setReviewOpen} onRewind={rewind}
+              onSave={(id, v) => { setA((o) => ({ ...o, [id]: v, docfrom: (o.docfrom || "").split(",").filter((x) => x && x !== id).join(",") })); setCopy(null); lastSaved.current = ""; toast("Updated. Your preview follows."); }} />
             <div ref={endRef} />
           </>
         )}
       </main>
 
-      {showPreview && design && <PreviewPopup design={design} ver={ver} a={a} onClose={() => setShowPreview(false)} onConnect={() => setConnect(true)} done={ready} onTweak={ready ? tweak : undefined} />}
+      {showPreview && design && <PreviewPopup design={design} ver={ver} a={a} onClose={() => setShowPreview(false)} onEdit={() => { setShowPreview(false); setReviewOpen(true); setTimeout(() => document.getElementById("design-answers")?.scrollIntoView({ block: "start", behavior: "smooth" }), 80); }} onConnect={() => setConnect(true)} done={ready} onTweak={ready ? tweak : undefined} />}
       {warn && (
         <div role="alertdialog" aria-modal="true" aria-label="Developer tools detected" className="fixed inset-0 z-[100] grid place-items-center bg-black/85 p-4">
           <div className="card flex w-full max-w-md flex-col gap-3 p-6">
@@ -337,8 +325,57 @@ export function DesignPage({ studio, index, onIndex }: { studio?: Studio; index?
   );
 }
 
+/** Every answer so far, each one changeable in place (the later answers stay). Questions that shape everything after them (the type, the starting document or link, a file) go back to that question instead. */
+function AnswersReview({ rows, a, open, onOpen, onRewind, onSave }: { rows: Step[]; a: Answers; open: boolean; onOpen: (v: boolean) => void; onRewind: (id: string) => void; onSave: (id: string, v: string) => void }) {
+  const [edit, setEdit] = useState<string | null>(null), [draft, setDraft] = useState(""), [pick, setPick] = useState<string[]>([]);
+  const start = (s: Step) => {
+    if (s.type === "file" || s.id === "kind") { onRewind(s.id); return; }
+    setEdit(s.id); setDraft(a[s.id] || ""); setPick((a[s.id] || "").split(",").filter(Boolean));
+  };
+  const save = (s: Step, v: string) => { onSave(s.id, v.trim()); setEdit(null); };
+  const req = (s: Step) => !(typeof s.optional === "function" ? s.optional(a) : s.optional);
+  return (
+    <details id="design-answers" open={open} onToggle={(e) => onOpen((e.currentTarget as HTMLDetailsElement).open)} className="group rounded-2xl border border-ink-800 bg-ink-900/50">
+      <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-3 text-sm font-semibold text-ink-200 marker:hidden [&::-webkit-details-marker]:hidden">
+        <span>Your answers</span><span className="chip">{rows.filter((x) => a[x.id]).length}</span>
+        <span className="ml-auto text-xs font-normal text-ink-500 group-open:hidden">Review or change</span>
+        <span aria-hidden className="text-ink-500 transition group-open:rotate-180">⌄</span>
+      </summary>
+      <ul className="divide-y divide-ink-800 border-t border-ink-800" aria-label="Your answers so far">
+        {rows.map((s) => {
+          const on = edit === s.id, opts = s.options?.(a) || [];
+          return (
+            <li key={s.id} className="flex flex-col gap-2 px-4 py-3">
+              <div className="flex items-start gap-3">
+                <div className="min-w-0 flex-1">
+                  <div className="text-xs text-ink-500">{STEP_LABEL[s.id] || s.id}{(a.docfrom || "").split(",").includes(s.id) && <span className="ml-1.5 text-brand-300" title="Found in your document">✦ from your document</span>}</div>
+                  {!on && <div className={`mt-0.5 break-words text-sm ${a[s.id] ? "font-semibold text-ink-100" : "text-ink-500"}`}>{a[s.id] ? sayAnswer(s, a).replace(/\s*\(from your document\)$/, "") : "Skipped"}</div>}
+                </div>
+                {!on && <button type="button" className="btn btn-sm shrink-0" onClick={() => start(s)} aria-label={`Change your answer to: ${s.ask(a)}`}>{a[s.id] ? "Edit" : "Add"}</button>}
+              </div>
+              {on && (
+                <div className="flex flex-col gap-2">
+                  <p className="text-[13px] text-ink-400">{s.ask(a)}</p>
+                  {s.type === "choice" && <div className="flex flex-wrap gap-2" role="radiogroup">{opts.map((o) => <button key={o.v} type="button" role="radio" aria-checked={a[s.id] === o.v} onClick={() => save(s, o.v)} className={`rounded-full border px-3.5 py-1.5 text-sm font-semibold transition ${a[s.id] === o.v ? "border-brand-400 bg-brand-500/15 text-ink-100" : "border-ink-700 text-ink-300 hover:border-brand-400"}`}>{o.label}</button>)}</div>}
+                  {s.type === "many" && <><div className="flex flex-wrap gap-2" role="group">{opts.map((o) => { const sel = pick.includes(o.v); return <button key={o.v} type="button" aria-pressed={sel} onClick={() => setPick((m) => (sel ? m.filter((x) => x !== o.v) : [...m, o.v]))} className={`rounded-full border px-3.5 py-1.5 text-sm font-semibold transition ${sel ? "border-brand-400 bg-brand-500/15 text-ink-100" : "border-ink-700 text-ink-300 hover:border-brand-400"}`}>{o.label}</button>; })}</div>
+                    <div className="flex gap-2"><button type="button" className="btn btn-pri btn-sm" disabled={!pick.length && req(s)} onClick={() => save(s, pick.join(","))}>Save</button><button type="button" className="btn btn-sm" onClick={() => setEdit(null)}>Cancel</button></div></>}
+                  {(s.type === "text" || s.type === "long") && <>
+                    {s.type === "long" ? <textarea autoFocus rows={4} className="input text-[14px]" value={draft} onChange={(e) => setDraft(e.target.value)} placeholder={s.ph?.(a) || ""} />
+                      : <input autoFocus className="input h-10 py-0 text-[14px]" value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && (draft.trim() || !req(s))) save(s, draft); }} placeholder={s.ph?.(a) || ""} />}
+                    {s.type === "long" && <p className="text-xs text-ink-500">One item per line.</p>}
+                    <div className="flex gap-2"><button type="button" className="btn btn-pri btn-sm" disabled={!draft.trim() && req(s)} onClick={() => save(s, draft)}>Save</button><button type="button" className="btn btn-sm" onClick={() => setEdit(null)}>Cancel</button></div></>}
+                </div>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </details>
+  );
+}
+
 /** The preview, over the whole screen. */
-export function PreviewPopup({ design, ver, a, onClose, onConnect, done, onTweak }: { design: Design; ver: number; a: Answers; onClose: () => void; onConnect?: () => void; done: boolean; onTweak?: (p: Answers) => void }) {
+export function PreviewPopup({ design, ver, a, onClose, onEdit, onConnect, done, onTweak }: { design: Design; ver: number; a: Answers; onClose: () => void; onEdit?: () => void; onConnect?: () => void; done: boolean; onTweak?: (p: Answers) => void }) {
   const [play, setPlay] = useState(false);
   useEffect(() => {
     const k = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
@@ -353,6 +390,7 @@ export function PreviewPopup({ design, ver, a, onClose, onConnect, done, onTweak
         <span className="ml-auto flex shrink-0 items-center gap-2">
           {onTweak && <button type="button" className={`btn btn-sm ${play ? "border-brand-400" : ""}`} aria-pressed={play} onClick={() => setPlay((v) => !v)}><span className="max-sm:hidden">Play with your design</span><span className="sm:hidden">Customise</span></button>}
           {onConnect && <button type="button" className="btn btn-pri btn-sm" onClick={onConnect}><span className="max-sm:hidden">Connect with Picaffectz</span><span className="sm:hidden">Connect</span></button>}
+          {onEdit && <button type="button" className="btn btn-sm" onClick={onEdit}>Edit answers</button>}
           <button type="button" className="btn btn-sm" onClick={onClose} autoFocus>{done ? "Close" : "Back"}</button>
         </span>
       </div>

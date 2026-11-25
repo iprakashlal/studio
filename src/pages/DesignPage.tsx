@@ -76,6 +76,7 @@ export function DesignPage({ studio, index, onIndex }: { studio?: Studio; index?
   const field = useRef<HTMLInputElement & HTMLTextAreaElement>(null);
   const pick = useRef<HTMLInputElement>(null);
   const cur = nextStep(a);
+  const curRef = useRef(cur); curRef.current = cur;
   const answered = STEPS.filter((s) => s.id in a && (s.when ? s.when(a) : true));
   const started = answered.length > 0;
   const total = STEPS.filter((x) => (x.when ? x.when(a) : true)).length;
@@ -152,9 +153,9 @@ export function DesignPage({ studio, index, onIndex }: { studio?: Studio; index?
     if (host && text.length >= 30) void understandText(host, a.kind || "", text).then((u) => {
       const f = u.fields; if (!f || u.engine === "system") return;
       setA((o) => {
-        const typed = new Set((o.docfrom || "").split(",").filter(Boolean)), n: Answers = {}, put = (k: string, v: any) => { if (typeof v === "string" && v.trim() && (!o[k] || typed.has(k))) n[k] = v.trim(); };
+        const typed = new Set((o.docfrom || "").split(",").filter(Boolean)), n: Answers = {}, put = (k: string, v: any) => { if (k === curRef.current?.id) return; /* (the question they are answering now is theirs: it never fills in under their hands) */ if (typeof v === "string" && v.trim() && (!o[k] || typed.has(k))) n[k] = v.trim(); };
         for (const k of ["name", "about", "city", "story", "usp", "phone", "email", "hours", "address", "social"]) { if (k === "address" || k === "hours" || k === "social") { if (!o[k]) put(k, f[k]); } else put(k, f[k]); }
-        if (Array.isArray(f.items) && f.items.length && (!o.items || typed.has("items"))) n.items = f.items.filter((x: any) => typeof x === "string" && x.trim()).join("\n");
+        if (Array.isArray(f.items) && f.items.length && curRef.current?.id !== "items" && (!o.items || typed.has("items"))) n.items = f.items.filter((x: any) => typeof x === "string" && x.trim()).join("\n");
         if (f.sections && typeof f.sections === "object") { const pk = packSections({ ...unpackSections(o.docsec), ...f.sections }); if (pk) n.docsec = pk; }
         const keys = Object.keys(n).filter((x) => x !== "docsec"); if (!keys.length && !n.docsec) return o;
         return { ...o, ...n, docfrom: [...new Set([...typed, ...keys])].join(",") };
@@ -328,7 +329,7 @@ export function DesignPage({ studio, index, onIndex }: { studio?: Studio; index?
               </section>
             )}
             <AnswersReview rows={answered} a={a} jump={jump} open={reviewOpen} onOpen={setReviewOpen} onRewind={rewind}
-              onSave={(id, v) => { setA((o) => ({ ...o, [id]: v, docfrom: (o.docfrom || "").split(",").filter((x) => x && x !== id).join(",") })); setCopy(null); lastSaved.current = ""; toast("Updated. Your preview follows."); }} />
+              onSave={(id, v) => { setA((o) => { const n: Answers = { ...o, [id]: v, docfrom: (o.docfrom || "").split(",").filter((x) => x && x !== id).join(",") }; if (id === "kind" && o.kind !== v) for (const k of ["theme", "accent", "mode", "corners"]) delete n[k]; /* (a look belongs to one type; everything else they said stays) */ return n; }); setCopy(null); lastSaved.current = ""; toast("Updated. Your preview follows."); }} />
             <div ref={endRef} />
           </>
         )}
@@ -354,14 +355,14 @@ export function DesignPage({ studio, index, onIndex }: { studio?: Studio; index?
 function AnswersReview({ rows, a, jump, open, onOpen, onRewind, onSave }: { rows: Step[]; a: Answers; jump: { id: string; n: number } | null; open: boolean; onOpen: (v: boolean) => void; onRewind: (id: string) => void; onSave: (id: string, v: string) => void }) {
   const [edit, setEdit] = useState<string | null>(null), [draft, setDraft] = useState(""), [pick, setPick] = useState<string[]>([]);
   const start = (s: Step) => {
-    if (s.type === "file" || s.id === "kind") { onRewind(s.id); return; }
+    if (s.type === "file") { onRewind(s.id); return; }
     setEdit(s.id); setDraft(a[s.id] || ""); setPick((a[s.id] || "").split(",").filter(Boolean));
   };
   const save = (s: Step, v: string) => { onSave(s.id, v.trim()); setEdit(null); };
   // An (Edit) link in the preview: open that answer, ready to type.
   useEffect(() => {
     if (!jump) return; const s = rows.find((x) => x.id === jump.id); if (!s) return;
-    if (s.type === "file" || s.id === "kind") { setTimeout(() => document.getElementById("answer-" + s.id)?.scrollIntoView({ block: "center", behavior: "smooth" }), 120); return; }
+    if (s.type === "file") { setTimeout(() => document.getElementById("answer-" + s.id)?.scrollIntoView({ block: "center", behavior: "smooth" }), 120); return; }
     setEdit(s.id); setDraft(a[s.id] || ""); setPick((a[s.id] || "").split(",").filter(Boolean));
     setTimeout(() => document.getElementById("answer-" + s.id)?.scrollIntoView({ block: "center", behavior: "smooth" }), 120);
   }, [jump?.n]);

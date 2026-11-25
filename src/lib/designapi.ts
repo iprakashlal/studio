@@ -56,3 +56,8 @@ export const saveDraft = (h: DesignHost, pass: Pass, b: DraftBody) => cfCall(h.a
 export type Draft = { id: string; email: string; name: string; kind: string; themeId: string; themeName: string; summary: string; answers: Record<string, string>; copy: Copy; logo?: string; createdAt: string; updatedAt: string };
 export const listDrafts = (h: DesignHost) => cfCall<Draft[]>(h.api, `/dq/drafts?${sc(h)}`);
 export const deleteDraft = (h: DesignHost, id: string) => cfCall(h.api, `/dq/draft-delete?${sc(h)}`, { method: "POST", body: JSON.stringify({ id }) });
+
+/** A picture drawn by the Studio's own AI engine (only when the owner chose it, and the engine can draw): its image as base64, or null to use the free generator instead. */
+export async function engineImage(h: DesignHost, prompt: string): Promise<string | null> {
+  try { const r = await cfCall<{ engine?: string; image?: string }>(h.api, "/dq/image/" + encodeURIComponent(h.studio), { method: "POST", auth: false, body: JSON.stringify({ prompt: prompt.slice(0, 400) }) }); return r.engine === "cloudflare" && r.image ? r.image : null; } catch { return null; }
+}

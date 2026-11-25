@@ -268,6 +268,19 @@ export function DesignLookTab({ session, studio, index, onIndex }: { session: Se
           <span><b className="block">Let visitors describe a logo or banner in "Design yourself"</b><span className="text-[11.5px] text-ink-500">The logo and banner questions are then drawn from their words (banners can't be uploaded). Turn it off and those two questions are not asked.</span></span>
         </label>
         {(d.adminAi !== false || d.images?.on) && <>
+          <div className="flex flex-col gap-1.5" role="radiogroup" aria-label="Who draws the pictures">
+            <span className="text-[13px] font-semibold">Who draws the pictures</span>
+            {([["horde", "The free AI Horde", "No key, no sign-up. Volunteers' computers draw, so a picture can queue for a minute or two."], ["engine", "The AI engine selected for this Studio", "Drawn by Cloudflare's AI engine in your Studio's database: fast, and within your Cloudflare account's free allowance. Works only when the selected engine is Cloudflare; with another engine the free AI Horde is used."]] as const).map(([v, l, h]) => {
+              const on = (d.images?.source || "horde") === v;
+              return (
+                <label key={v} className={`flex cursor-pointer items-start gap-2 rounded-xl border p-3 text-[13px] ${on ? "border-brand-400 bg-brand-500/10" : "border-ink-600"}`}>
+                  <input type="radio" name="img-source" className="mt-1" checked={on} onChange={() => upd({ images: { ...(d.images || {}), ...(v === "engine" ? { source: "engine" as const } : { source: undefined }) } })} />
+                  <span><b className="block">{l}</b><span className="text-[11.5px] text-ink-500">{h}</span></span>
+                </label>
+              );
+            })}
+            {d.images?.source === "engine" && (d.ai || "") !== "" && (d.ai === "custom" || d.ai === "system") && <span className="text-[11.5px] text-amber-300" role="note">This Studio's AI engine is set to {d.ai === "system" ? "the Picaffectz system" : "your own AI"}, which can't draw pictures here, so the free AI Horde will be used until it is set to Cloudflare.</span>}
+          </div>
           <label className="flex flex-col gap-1 text-[13px] font-semibold">Picture style
             <select className="input w-auto" value={d.images?.style || "photo"} onChange={(e) => upd({ images: { ...(d.images || {}), style: e.target.value as any } })}>
               <option value="photo">Photo-like</option><option value="illustration">Illustration</option><option value="3d">Soft 3D</option><option value="flat">Flat and minimal</option>

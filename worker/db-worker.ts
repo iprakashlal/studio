@@ -1316,7 +1316,7 @@ function dqDesignPub(d: any) {
     if (Object.keys(o).length) out.gallery = o;
   }
   if (d.themes && typeof d.themes === "object") { const th: any = {}; for (const kind of ["business", "restaurant", "portfolio", "store"]) if (Array.isArray(d.themes[kind])) th[kind] = d.themes[kind].filter((v: any) => typeof v === "string" && /^[A-Za-z0-9_-]{1,40}$/.test(v)).slice(0, 400); out.themes = th; }
-  if (d.images && typeof d.images === "object" && d.images.on === true) out.images = { on: true, ...(["photo", "illustration", "3d", "flat"].includes(d.images.style) ? { style: d.images.style } : {}), ...(d.images.provider === "horde" ? { provider: "horde" } : {}) };
+  if (d.images && typeof d.images === "object") { const im: any = {}; if (d.images.on === true) im.on = true; if (["photo", "illustration", "3d", "flat"].includes(d.images.style)) im.style = d.images.style; if (d.images.source === "engine") im.source = "engine"; if (Object.keys(im).length) out.images = im; }
   if (d.chat && typeof d.chat === "object") {
     const c: any = {}, hex = (v: any) => (typeof v === "string" && /^#[0-9a-f]{6}$/i.test(v) ? v.toLowerCase() : "");
     for (const k of ["you", "bot", "page"]) if (hex(d.chat[k])) c[k] = hex(d.chat[k]);
@@ -1538,6 +1538,24 @@ function dqSections(x: any): Record<string, any> {
   for (const k of ["clients", "languages"]) if (Array.isArray(x[k])) { const l = x[k].slice(0, 12).map((v: any) => clip(v, 40)).filter(Boolean); if (l.length) out[k] = l; }
   for (const k of ["mission", "vision"]) { const v = clip(x[k], 220); if (v) out[k] = v; }
   return out;
+}
+
+/** A picture drawn from words by the Studio's own AI engine (Cloudflare's: the fast FLUX model). Only when the owner chose it under Settings → Design yourself → Pictures drawn by AI; other engines can't draw here, and the page then uses the free generator. */
+async function dqImage(env: Env, id: string, req: Request): Promise<Response> {
+  const ip = req.headers.get("cf-connecting-ip") || "x";
+  if (!(await dqRate(env, "dqimg:" + id, 120, 3600)) || !(await dqRate(env, "dqimgip:" + ip, 16, 3600))) return json({ engine: "system", error: "busy" });
+  const idx = await studioIndex(env, id); if (!idx) return err(404, "Not found.");
+  const d = idx?.prefs?.design;
+  if (d?.images?.source !== "engine") return json({ engine: "system" });
+  const { choice, ai } = await dqEngine(env, idx); if (choice !== "cloudflare" || !ai) return json({ engine: "system" });
+  let q: any; try { q = JSON.parse((await req.text()).slice(0, 2000) || "{}"); } catch { return err(400, "Couldn't read the request."); }
+  const prompt = clip(q.prompt, 400); if (prompt.length < 3) return err(400, "Describe the picture first.");
+  try {
+    const r: any = await ai.run("@cf/black-forest-labs/flux-1-schnell", { prompt, steps: 4 });
+    const img = typeof r?.image === "string" ? r.image : "";
+    if (img.length < 100) return json({ engine: "system", error: "empty" });
+    return json({ engine: "cloudflare", image: img });
+  } catch (e: any) { return json({ engine: "system", error: String(e?.message || e).slice(0, 160) }); }
 }
 
 async function dqUnderstand(env: Env, id: string, req: Request): Promise<Response> {
@@ -2094,6 +2112,7 @@ export default {
         const id = studioId(p.split("/")[2] || ""); const b = id ? await dqBrand(env, id) : null; if (!b) return err(404, "Not found.");
         return new Response(JSON.stringify(b), { headers: { ...cors, "Content-Type": "application/json", "Cache-Control": "public, max-age=60" } });
       }
+      if (p.startsWith("/dq/image/") && req.method === "POST") { const id = studioId(p.split("/")[3] || ""); if (!id) return err(404, "Not found."); return dqImage(env, id, req); }
       if (p.startsWith("/dq/understand/") && req.method === "POST") { const id = studioId(p.split("/")[3] || ""); if (!id) return err(404, "Not found."); return dqUnderstand(env, id, req); }
       if (p.startsWith("/dq/read/") && req.method === "POST") { const id = studioId(p.split("/")[3] || ""); if (!id) return err(404, "Not found."); return dqRead(env, id, req); }
       if (/^\/dq\/otp\/(send|check)\/[a-z0-9-]+$/.test(p) && req.method === "POST") { const id = studioId(p.split("/")[4] || ""); if (!id) return err(404, "Not found."); return dqOtp(env, id, req, p.startsWith("/dq/otp/send/")); }

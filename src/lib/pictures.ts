@@ -1,3 +1,4 @@
+import { designHost, engineImage } from "./designapi";
 // Default pictures for a website made in "Design yourself": drawn here (no photos, nothing downloaded) in the theme's own
 // colours, with a simple symbol that suits the kind of business or the theme type. They stand in until the person adds their own.
 
@@ -33,11 +34,20 @@ const STYLE: Record<string, string> = { photo: "professional photograph, natural
 /** Pictures drawn from words by the free AI Horde (no key, no sign-up, no daily quota: volunteers' computers do the drawing, so anonymous
  *  requests may wait in a queue). Small sizes and few steps keep it quick; the caller fits the result to the page. */
 const sleep = (ms: number, sig?: AbortSignal) => new Promise<void>((ok, no) => { const t = setTimeout(ok, ms); sig?.addEventListener("abort", () => { clearTimeout(t); no(new Error("Stopped.")); }); });
-const b64Blob = (b: string) => { const bin = atob(b), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return new Blob([u], { type: "image/webp" }); };
-export async function generateImages(prompt: string, o: { style?: string; kind?: "logo" | "photo"; n?: number; signal?: AbortSignal; status?: (t: string) => void } = {}): Promise<Blob[]> {
+const b64Blob = (b: string, type = "image/webp") => { const bin = atob(b), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return new Blob([u], { type }); };
+export async function generateImages(prompt: string, o: { /** "engine": the Studio's own AI engine draws it (quick), with the free generator as the fallback. */ source?: "horde" | "engine"; style?: string; kind?: "logo" | "photo"; n?: number; signal?: AbortSignal; status?: (t: string) => void } = {}): Promise<Blob[]> {
   const kind = o.kind || "photo", n = Math.max(1, Math.min(4, o.n || 1)), what = prompt.replace(/\s+/g, " ").trim().slice(0, 300);
   if (!what) throw new Error("Describe the picture first.");
   const full = kind === "logo" ? `minimal vector logo mark, ${what}, simple flat icon, centered, plain white background, no text` : `${what}, ${STYLE[o.style || "photo"] || STYLE.photo}, no text, no logo`;
+  if (o.source === "engine") {
+    const h = await designHost().catch(() => null);
+    if (h) {
+      o.status?.("Drawing…");
+      const got = (await Promise.all(Array.from({ length: n }, () => engineImage(h, full)))).filter((x): x is string => !!x).map((x) => b64Blob(x, "image/jpeg"));
+      if (got.length) return got;
+    }
+    o.status?.("The Studio's AI can't draw right now; using the free generator…");
+  }
   const w = kind === "logo" ? 384 : 512, h = kind === "logo" ? 384 : 384, H = { "Content-Type": "application/json", apikey: "0000000000", "Client-Agent": "picaffectz-studio:1:web" };
   const send = async (slow: boolean) => {
     const r = await fetch("https://aihorde.net/api/v2/generate/async", { method: "POST", headers: H, signal: o.signal, body: JSON.stringify({ prompt: full, params: { width: w, height: h, steps: 15, n, cfg_scale: 7, sampler_name: "k_euler_a" }, nsfw: false, censor_nsfw: true, r2: false, slow_workers: slow }) });

@@ -43,7 +43,7 @@ export type DesignSettings = {
   /** Per type: what the carousel on a visitor's finished preview shows: "answers" (default) = the themes that match what they said (business type, genre); "custom" = the themes the owner ticked above. */
   carousel?: Partial<Record<Kind, "answers" | "custom">>;
   /** Visitors can describe a logo or banner and the free AI Horde draws it (style is added to the words). */
-  images?: { on?: boolean; style?: "photo" | "illustration" | "3d" | "flat" };
+  images?: { on?: boolean; style?: "photo" | "illustration" | "3d" | "flat"; /** Who draws: the free AI Horde (default) or the Studio's own AI engine (Cloudflare's, when that is the engine selected). */ source?: "horde" | "engine" };
   /** How the Design yourself chat looks: bubble colours, page colour, and a background picture (dimmed by `dim` %). */
   chat?: { you?: string; bot?: string; page?: string; image?: string; dim?: number };
   /** false: the site editor has no "Draw with AI" button (on unless turned off). */

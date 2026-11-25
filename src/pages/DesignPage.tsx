@@ -122,6 +122,9 @@ export function DesignPage({ studio, index, onIndex }: { studio?: Studio; index?
   const [reading, setReading] = useState(false);
   const resetRef = useRef<() => void>(() => {});
   const endRef = useRef<HTMLDivElement>(null);
+  const lastCount = useRef(0);
+  // New messages scroll into view (the first screen stays put).
+  useEffect(() => { const n = Object.keys(a).length; if (n > lastCount.current && lastCount.current > 0) setTimeout(() => endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" }), 60); lastCount.current = n; }, [a]);
   const field = useRef<HTMLInputElement & HTMLTextAreaElement>(null);
   const pick = useRef<HTMLInputElement>(null);
   const cur = nextStep(a);
@@ -135,6 +138,7 @@ export function DesignPage({ studio, index, onIndex }: { studio?: Studio; index?
   useEffect(() => { document.title = "Design yourself · " + brand.name; }, [brand.name]);
   const [hostDone, setHostDone] = useState(false), [fontsOk, setFontsOk] = useState(false);
   const needMail = !studio && hostDone && !!host && !passLive(pass);
+  const mailChat = useEmailChat(host, (p) => { ownPass(p); setA((o) => (o.email ? o : { ...o, email: p.email })); });
   useEffect(() => { designHost().then(setHost).catch(() => {}).finally(() => setHostDone(true)); const f = (document as any).fonts?.ready; (f ? Promise.race([f, new Promise((r) => setTimeout(r, 4000))]) : Promise.resolve()).finally(() => setFontsOk(true)); }, []);
   useEffect(() => { try { sessionStorage.setItem(DRAFT, JSON.stringify({ a, copy, id: savedId, sent })); } catch { /* private mode */ } }, [a, copy, savedId, sent]);
   useEffect(() => { setText(""); setMany([]); setTimeout(() => field.current?.focus(), 50); window.scrollTo({ top: 0, behavior: "smooth" }); }, [cur?.id, answered.length, writing]);
@@ -368,37 +372,26 @@ export function DesignPage({ studio, index, onIndex }: { studio?: Studio; index?
         </span>
       </header>
 
-      <main className={`mx-auto flex w-full max-w-2xl flex-1 flex-col gap-6 px-4 pb-12 sm:px-6 ${started ? "pt-4" : "justify-center pb-24"}`}>
-        {needMail && <EmailGate host={host!} onPass={(p) => { ownPass(p); setA((o) => (o.email ? o : { ...o, email: p.email })); }} />}
-        {!needMail && !started && (
-          <div className="text-center">
-            <h1 className="font-display text-4xl font-extrabold tracking-tight sm:text-5xl">Design your own website</h1>
-            <p className="mx-auto mt-3 max-w-xl text-ink-300">Answer a few simple questions and watch your website take shape. It's a preview; we finish it together.</p>
-          </div>
-        )}
-        {!needMail && !started && cur && <>{bar}<p className="text-center text-sm text-ink-400">or tap one:</p>{chips(cur)}</>}
-        {!needMail && started && (
-          <>
-            <div className="flex items-center gap-3" aria-label={`Step ${Math.min(answered.length + 1, total)} of ${total}`}>
-              <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-ink-800" role="progressbar" aria-valuemin={0} aria-valuemax={total} aria-valuenow={answered.length}><div className="h-full rounded-full bg-brand-500 transition-all duration-300" style={{ width: `${Math.round((answered.length / total) * 100)}%` }} /></div>
-              <span className="w-12 text-right text-xs tabular-nums text-ink-400">{Math.min(answered.length + 1, total)} / {total}</span>
+      <div className="sticky top-0 z-10 h-1 bg-ink-900" role="progressbar" aria-label="Progress" aria-valuemin={0} aria-valuemax={total} aria-valuenow={answered.length}><div className="h-full bg-brand-500 transition-all duration-500" style={{ width: `${started ? Math.round((answered.length / total) * 100) : 0}%` }} /></div>
+      <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-3 pb-4 sm:px-6">
+        <div role="log" aria-label="Conversation" className="flex flex-1 flex-col gap-3 pb-4 pt-4">
+          <ChatBot><p className="m-0 text-[15px] leading-relaxed"><b>Welcome 👋</b> I'm the {brand.name} design assistant. I'll ask a few simple questions and your website takes shape as we go. It's only a preview; we finish it together.</p></ChatBot>
+          {needMail && mailChat.thread}
+          {!needMail && !started && cur && <ChatBot><section aria-live="polite"><h2 className="m-0 text-[15px] font-semibold leading-snug">{cur.ask(a)}</h2>{cur.help && cur.help(a) && <p className="mb-0 mt-1 text-[13px] leading-relaxed text-ink-400">{cur.help(a)}</p>}</section></ChatBot>}
+          {!needMail && started && answered.map((s) => (
+            <div key={s.id} className="flex flex-col gap-3">
+              <ChatBot><p className="m-0 text-[14px] leading-snug text-ink-200">{s.ask(a)}</p></ChatBot>
+              <ChatYou onEdit={() => { setReviewOpen(true); setTimeout(() => setJump({ id: s.id, n: Date.now() }), 60); }} label={STEP_LABEL[s.id] || s.id}>
+                {a[s.id] ? sayAnswer(s, a).replace(/\s*\(from your document\)$/, "") : <i className="opacity-80">Skipped</i>}
+              </ChatYou>
             </div>
-            {cur && (
-              <section className="card flex flex-col gap-5 p-5 sm:p-8" aria-live="polite">
+          ))}
+          {!needMail && started && cur && <ChatBot><section aria-live="polite"><h2 className="m-0 text-[15px] font-semibold leading-snug">{cur.ask(a)}</h2>{cur.help && cur.help(a) && <p className="mb-0 mt-1 text-[13px] leading-relaxed text-ink-400">{cur.help(a)}</p>}{reading && <p className="mb-0 mt-2 inline-flex items-center gap-2 text-sm text-ink-300"><Spinner />Reading it…</p>}</section></ChatBot>}
+          {finished && writing && <ChatBot typing><span className="text-sm">Writing a short line about each of your topics…</span></ChatBot>}
+          {ready && (<ChatBot>
+              <section className="flex flex-col gap-4" aria-live="polite">
                 <div className="flex flex-col gap-2">
-                  <h2 className="font-display text-2xl font-extrabold leading-snug tracking-tight sm:text-[28px]">{cur.ask(a)}</h2>
-                  {cur.help && cur.help(a) && <p className="text-sm leading-relaxed text-ink-400">{cur.help(a)}</p>}
-                </div>
-                {(cur.type === "choice" || cur.type === "many") && chips(cur)}
-                {cardBar}
-                {reading && <p className="inline-flex items-center gap-2 text-sm text-ink-300"><Spinner />Reading it…</p>}
-              </section>
-            )}
-            {finished && writing && <section className="card flex items-center gap-3 p-5 sm:p-6" aria-live="polite"><Spinner /><span className="text-sm">Writing a short line about each of your topics…</span></section>}
-            {ready && (
-              <section className="card flex flex-col gap-5 p-5 sm:p-8" aria-live="polite">
-                <div className="flex flex-col gap-2">
-                  <h2 className="font-display text-2xl font-extrabold tracking-tight sm:text-[28px]">Your preview is ready</h2>
+                  <h2 className="font-display text-xl font-extrabold tracking-tight">Your preview is ready</h2>
                   <p className="text-sm leading-relaxed text-ink-300">{design ? <>A <b className="text-ink-100">{TEMPLATES[design.kind].name}</b> in the <b className="text-ink-100">{design.themeName}</b> look (theme ID <b className="font-mono text-ink-100">{themeCode({ id: design.themeId })}</b>). </> : ""}It isn't published. Connect with us to finish it together: your own photos, your address on the web, payment and any extra features.</p>
                 </div>
                 <div className="grid gap-2 sm:flex sm:flex-wrap">
@@ -408,12 +401,20 @@ export function DesignPage({ studio, index, onIndex }: { studio?: Studio; index?
                 </div>
                 <p className="text-xs text-ink-500">Preview only. Nothing is published or charged.</p>
               </section>
-            )}
-            <AnswersReview rows={answered} a={a} jump={jump} open={reviewOpen} onOpen={setReviewOpen} onRewind={rewind}
-              onSave={(id, v) => { setA((o) => { const n: Answers = { ...o, [id]: v, docfrom: (o.docfrom || "").split(",").filter((x) => x && x !== id).join(",") }; if (id === "kind" && o.kind !== v) for (const k of ["theme", "accent", "mode", "corners"]) delete n[k]; /* (a look belongs to one type; everything else they said stays) */ return n; }); setCopy(null); lastSaved.current = ""; toast("Updated. Your preview follows."); }} />
-            <div ref={endRef} />
-          </>
+            </ChatBot>)}
+          {!needMail && started && (<AnswersReview rows={answered} a={a} jump={jump} open={reviewOpen} onOpen={setReviewOpen} onRewind={rewind}
+              onSave={(id, v) => { setA((o) => { const n: Answers = { ...o, [id]: v, docfrom: (o.docfrom || "").split(",").filter((x) => x && x !== id).join(",") }; if (id === "kind" && o.kind !== v) for (const k of ["theme", "accent", "mode", "corners"]) delete n[k]; /* (a look belongs to one type; everything else they said stays) */ return n; }); setCopy(null); lastSaved.current = ""; toast("Updated. Your preview follows."); }} />)}
+          <div ref={endRef} />
+        </div>
+        {!needMail && cur && (
+          <div className="sticky bottom-0 -mx-3 border-t border-ink-800 bg-ink-950/95 px-3 pb-3 pt-3 backdrop-blur sm:-mx-6 sm:px-6">
+            <div className="mb-2 flex items-center justify-between text-[11px] text-ink-500"><span>{started ? "Your reply" : "Pick one, or type below"}</span><span className="tabular-nums" aria-label={`Step ${Math.min(answered.length + 1, total)} of ${total}`}>{Math.min(answered.length + 1, total)} / {total}</span></div>
+            <div className="flex max-h-[58vh] flex-col gap-3 overflow-y-auto pr-0.5">
+              {!started ? <>{bar}<p className="m-0 text-center text-xs text-ink-500">or tap one</p>{chips(cur)}</> : <>{(cur.type === "choice" || cur.type === "many") && chips(cur)}{cardBar}</>}
+            </div>
+          </div>
         )}
+        {needMail && <div className="sticky bottom-0 -mx-3 border-t border-ink-800 bg-ink-950/95 px-3 pb-3 pt-3 backdrop-blur sm:-mx-6 sm:px-6">{mailChat.composer}</div>}
       </main>
       <StudioPageLinksHere where="design" />
 
@@ -745,13 +746,13 @@ export function ConnectPopup({ a, design, copy, files, host, sent, onSent, onClo
 }
 
 /** Design yourself starts here: the visitor's email, confirmed with a code, before any question. */
-function EmailGate({ host, onPass }: { host: DesignHost; onPass: (p: Pass) => void }) {
+function useEmailChat(host: DesignHost | null, onPass: (p: Pass) => void): { thread: React.ReactNode; composer: React.ReactNode } {
   const toast = useToast();
   const [email, setEmail] = useState(""), [code, setCode] = useState(""), [asked, setAsked] = useState(false), [wait, setWait] = useState(0), [busy, setBusy] = useState(false);
   const mail = email.trim().toLowerCase();
   useEffect(() => { if (wait <= 0) return; const t = setTimeout(() => setWait((w) => w - 1), 1000); return () => clearTimeout(t); }, [wait]);
   const ask = async (e?: React.FormEvent) => {
-    e?.preventDefault();
+    e?.preventDefault(); if (!host) return;
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(mail)) return toast("Enter a valid email address.", "bad");
     setBusy(true);
     try {
@@ -762,33 +763,57 @@ function EmailGate({ host, onPass }: { host: DesignHost; onPass: (p: Pass) => vo
     setBusy(false);
   };
   const check = async (e?: React.FormEvent) => {
-    e?.preventDefault(); if (code.trim().length < 6) return; setBusy(true);
+    e?.preventDefault(); if (!host || code.trim().length < 6) return; setBusy(true);
     try { const r = await otpCheck(host, mail, code.trim()); onPass({ email: mail, otp: r.token }); }
     catch (x: any) { toast(x?.message || "That code isn't right.", "bad"); }
     setBusy(false);
   };
-  return (
-    <section className="mx-auto flex w-full max-w-md flex-col gap-5 text-center" aria-live="polite">
-      <div>
-        <h1 className="font-display text-4xl font-extrabold tracking-tight sm:text-5xl">Design your own website</h1>
-        <p className="mx-auto mt-3 max-w-xl text-ink-300">First, your email: we send a code to confirm it. Then answer a few simple questions and watch your website take shape.</p>
+  const thread = (
+    <>
+      <ChatBot><p className="m-0 text-[15px] leading-relaxed">First, what's your email? I'll send you a code to confirm it. We use it only to keep your design and to get back to you.</p></ChatBot>
+      {asked && <ChatYou label="Your email">{mail}</ChatYou>}
+      {asked && <ChatBot><p className="m-0 text-[15px] leading-relaxed">Thanks! I've sent a 6-digit code to <b>{mail}</b>. Type it below (check your spam folder too).</p></ChatBot>}
+      {busy && <ChatBot typing><span className="text-sm">{asked ? "Checking…" : "Sending…"}</span></ChatBot>}
+    </>
+  );
+  const composer = (
+    <form className="flex flex-col gap-2" onSubmit={asked ? check : ask} aria-label={asked ? "Your code" : "Your email"}>
+      <div className="flex items-end gap-2 rounded-3xl border border-ink-600 bg-ink-900 p-2 pl-4 shadow-xl focus-within:border-brand-400">
+        {asked
+          ? <><label className="sr-only" htmlFor="eg-code">The 6-digit code we emailed you</label><input id="eg-code" className="min-w-0 flex-1 bg-transparent py-2.5 font-mono text-lg tracking-widest text-ink-100 outline-none placeholder:text-ink-500" inputMode="numeric" autoComplete="one-time-code" maxLength={6} placeholder="6-digit code" autoFocus value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))} />
+            <button type="submit" className="btn btn-pri btn-sm rounded-full" disabled={busy || code.length < 6}>{busy ? "Checking…" : "Verify and start"}</button></>
+          : <><label className="sr-only" htmlFor="eg-email">Your email</label><input id="eg-email" className="min-w-0 flex-1 bg-transparent py-2.5 text-[15px] text-ink-100 outline-none placeholder:text-ink-500" type="email" autoComplete="email" autoFocus required placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} />
+            <button type="submit" className="btn btn-pri btn-sm rounded-full" disabled={busy || !mail}>{busy ? "Sending…" : "Send code"}</button></>}
       </div>
-      <form className="card flex flex-col gap-3 p-5 text-left" onSubmit={asked ? check : ask}>
-        <label className="label" htmlFor="eg-email">Your email</label>
-        <input id="eg-email" className="input" type="email" autoComplete="email" autoFocus required readOnly={asked} value={email} onChange={(e) => setEmail(e.target.value)} />
-        {asked && <>
-          <label className="label" htmlFor="eg-code">The 6-digit code we emailed you</label>
-          <input id="eg-code" className="input font-mono text-lg tracking-widest" inputMode="numeric" autoComplete="one-time-code" maxLength={6} autoFocus value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))} />
-        </>}
-        <div className="flex flex-wrap gap-2">
-          {asked
-            ? <><button type="submit" className="btn btn-pri" disabled={busy || code.length < 6}>{busy ? "Checking…" : "Verify and start"}</button>
-              <button type="button" className="btn btn-ghost" disabled={busy || wait > 0} onClick={() => ask()}>{wait > 0 ? `Resend (${wait})` : "Resend code"}</button>
-              <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => { setAsked(false); setCode(""); }}>Use another email</button></>
-            : <button type="submit" className="btn btn-pri" disabled={busy || !mail}>{busy ? "Sending…" : "Send code"}</button>}
-        </div>
-        <p className="text-xs text-ink-500">We use it only to keep your design and to get back to you.</p>
-      </form>
-    </section>
+      {asked && <div className="flex flex-wrap gap-2 px-1">
+        <button type="button" className="btn btn-ghost btn-sm" disabled={busy || wait > 0} onClick={() => ask()}>{wait > 0 ? `Resend (${wait})` : "Resend code"}</button>
+        <button type="button" className="btn btn-ghost btn-sm" disabled={busy} onClick={() => { setAsked(false); setCode(""); }}>Use another email</button>
+      </div>}
+    </form>
+  );
+  return { thread, composer };
+}
+
+/** A message from the designer assistant (left), with the brand's mark as its avatar. `typing` adds animated dots. */
+function ChatBot({ children, typing }: { children: React.ReactNode; typing?: boolean }) {
+  return (
+    <div className="chat-in flex items-end gap-2.5">
+      <span className="grid h-8 w-8 flex-none place-items-center overflow-hidden rounded-full border border-ink-700 bg-ink-900" aria-hidden><BrandMark fallback={<Logo />} size={22} /></span>
+      <div className="max-w-[88%] rounded-2xl rounded-bl-md border border-ink-800 bg-ink-900 px-4 py-3 text-ink-100 shadow-sm">
+        {typing && <span className="mr-2 inline-flex items-center gap-1 align-middle" aria-hidden><i className="chat-dot" /><i className="chat-dot" /><i className="chat-dot" /></span>}
+        {children}
+      </div>
+    </div>
+  );
+}
+/** The person's answer (right). An answer can be changed from here. */
+function ChatYou({ children, onEdit, label }: { children: React.ReactNode; onEdit?: () => void; label?: string }) {
+  return (
+    <div className="chat-in group flex justify-end">
+      <div className="flex max-w-[82%] items-end gap-2">
+        {onEdit && <button type="button" className="mb-1 rounded px-1.5 text-[11px] text-ink-500 opacity-0 transition hover:text-ink-200 focus:opacity-100 group-hover:opacity-100 max-sm:opacity-100" onClick={onEdit} aria-label={`Change your answer: ${label || ""}`}>Edit</button>}
+        <div className="break-words rounded-2xl rounded-br-md bg-brand-500 px-4 py-2.5 text-[14.5px] font-semibold leading-snug text-white shadow-sm">{children}</div>
+      </div>
+    </div>
   );
 }

@@ -36,3 +36,12 @@ export function generatedPicture(subject: string, name: string, style = "photo",
   let seed = 7; for (const ch of name) seed = (seed * 31 + ch.charCodeAt(0)) % 100000;
   return `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=${w}&height=${h}&nologo=true&seed=${seed}`;
 }
+
+/** Logo ideas from the same free generator: `n` pictures for a name and what the business does (`round` asks for new ones). */
+export function logoIdeas(name: string, about: string, round = 0, n = 4): string[] {
+  const what = about.replace(/\s+/g, " ").trim().slice(0, 80);
+  return Array.from({ length: n }, (_, i) => {
+    const prompt = `minimal vector logo mark for ${name.trim().slice(0, 40) || "a small business"}${what ? ", " + what : ""}, simple flat icon, centered, plain white background, no text`;
+    return `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=512&height=512&nologo=true&seed=${round * 10 + i + 1}`;
+  });
+}

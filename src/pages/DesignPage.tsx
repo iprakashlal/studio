@@ -12,6 +12,7 @@ import { relatedThemes } from "../lib/designer";
 import { COLOUR_DOT, STEPS, STEP_LABEL, buildDesign, fromDoc, isOptional, nextStep, rowsFmt, requestText, stepAt, sayAnswer, themeOf, themesFor, tweakTheme, writeCopy, type Answers, type Design, type DesignFiles, type Step } from "../lib/designer";
 import { newDesignId, readDesignSettings, readLocalDesigns, writeLocalDesigns, type Copy, type DesignRec } from "../lib/designs";
 import { COLOUR_SLOTS, GROUPS, pagesChoice, readColsAnswer, readLookAnswer, resolvedLook, visibleAxes, type Kind as LookKind } from "../lib/designlook";
+import { logoIdeas } from "../lib/pictures";
 import { designHost, otpCheck, otpSend, passLive, readPage, readPass, saveDraft, submitQuery, understandText, writePass, type DesignHost, type Pass } from "../lib/designapi";
 import { pdfLines } from "../lib/pdftext";
 import { watchDevtools } from "../lib/devtools";
@@ -57,6 +58,27 @@ async function fitPhoto(file: File): Promise<string> {
 }
 const PIC_STEPS = ["photo", "banner", "bimage", "photos"];
 const toB64 = (buf: ArrayBuffer) => { const b = new Uint8Array(buf); let s = ""; for (let i = 0; i < b.length; i += 8192) s += String.fromCharCode(...b.subarray(i, i + 8192)); return btoa(s); };
+
+/** Logo ideas drawn by the free image generator; one can be tapped to use. */
+function LogoIdeas({ name, about, value, onPick, onSkip }: { name: string; about: string; value: string; onPick: (u: string) => void; onSkip: () => void }) {
+  const [round, setRound] = useState(0), [bad, setBad] = useState<Record<string, boolean>>({}), ideas = useMemo(() => logoIdeas(name, about, round), [name, about, round]);
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4" role="group" aria-label="Logo ideas">
+        {ideas.map((u, i) => (
+          <button key={u} type="button" aria-pressed={value === u} aria-label={`Use logo idea ${i + 1}`} onClick={() => onPick(u)} className={`relative aspect-square overflow-hidden rounded-2xl border bg-white ${value === u ? "border-brand-400 ring-2 ring-brand-400" : "border-ink-700"}`}>
+            {bad[u] ? <span className="grid h-full place-items-center p-2 text-center text-xs text-ink-500">Couldn't load. Try other ideas.</span> : <img src={u} alt="" loading="lazy" className="h-full w-full object-contain" onError={() => setBad((o) => ({ ...o, [u]: true }))} />}
+          </button>
+        ))}
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <button type="button" className="btn btn-sm" onClick={() => setRound((r) => r + 1)}>Show other ideas</button>
+        <span className="mr-auto text-xs text-ink-500">Drawn by a free third-party generator; they can take a few seconds.</span>
+        <button type="button" className="btn btn-ghost" onClick={onSkip}>Skip</button>
+      </div>
+    </div>
+  );
+}
 
 /** A list question asked as rows of sub-fields. Each row becomes one line of the answer (so it reads the same as typing it). */
 function RowsField({ step, value, onChange, label }: { step: Step; value: string; onChange: (v: string) => void; label: string }) {
@@ -278,7 +300,9 @@ export function DesignPage({ studio, index, onIndex }: { studio?: Studio; index?
   );
 
   /** The answer controls inside the question card: a plain field and one row of buttons (nothing for a tap-one question). */
-  const cardBar = !cur || cur.type === "choice" ? null : (
+  const cardBar = !cur || cur.type === "choice" ? null : cur.id === "logo" ? (
+    <LogoIdeas name={a.name || ""} about={a.about || ""} value={a.logo || ""} onPick={(u) => answer(cur, u)} onSkip={() => answer(cur, "")} />
+  ) : (
     <form className="flex flex-col gap-3" onSubmit={(e) => { e.preventDefault(); submit(); }} aria-label="Your answer">
       {cur.type === "long" && cur.cols
         ? <RowsField key={cur.id + (a.kind || "")} step={cur} value={text} onChange={setText} label={cur.ask(a)} />

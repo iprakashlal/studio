@@ -36,6 +36,8 @@ import { PushUpdatesCard, PushUpdatesHost } from "./PushUpdates";
 import { Dashboard } from "./Dashboard";
 import { DesignPage } from "./DesignPage";
 import { useDesignSettings } from "../lib/designs";
+import { UpdateDots } from "../ui/UpdateDots";
+import { refreshStatus, syncDatabases } from "../lib/autodb";
 import { DesignLookTab, DesignPageCard, ThemesSettingsTab } from "./DesignSettings";
 import { ProjectView } from "./ProjectView";
 import { NS } from "./App";
@@ -55,6 +57,7 @@ function useHash() {
 const olderData = () => { try { return sessionStorage.getItem("site-studio:data") === "github"; } catch { return false; } };
 
 export function Workspace({ repo, session, onSession, onSignOut, onForget }: { repo: Repo; session: Session; onSession: (s: Session) => void; onSignOut: () => void; onForget: () => void }) {
+  const toast = useToast();
   const studio = useMemo(() => {
     const st = new Studio(repo);
     if (!repo.demo) st.siteRepo = (p) => siteRepoFor(p, session.token);
@@ -91,6 +94,15 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
     if (!index || repo.demo || !isHosted(session)) return;
     studioUpdate.start(async (step) => (await autoUpdateStudio(session, index, step)) === "updated", { quietErrors: true });
   }, [hostedId]);
+  // The two status icons, and the database update that follows a Studio update: once this build is running, any database still on an older build is updated by itself.
+  const hostedOn = !!index?.hosted?.siteId || !!index?.projects.some((p) => p.host?.cf?.api);
+  useEffect(() => {
+    if (!index || repo.demo || !isHosted(session)) return;
+    syncDatabases(session, index, toast).catch(() => {});
+    const again = () => refreshStatus(index).catch(() => {});
+    addEventListener("focus", again); const t = setInterval(again, 10 * 60_000);
+    return () => { removeEventListener("focus", again); clearInterval(t); };
+  }, [hostedId, hostedOn, upd.running]);
   // Choices kept in the Studio (lib/prefs.ts): saved there when changed, applied here when the Studio loads.
   useEffect(() => {
     if (repo.demo) return;
@@ -123,7 +135,7 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
   // The live-sites update is mounted once here, so it carries on (minimised) on every Studio screen.
   const updBanner = <><Dock>{updNote}</Dock><PushUpdatesHost studio={studio} index={index} token={session.token} />{!repo.demo && <Explorer studio={studio} index={index} route={route} hosted={isHosted(session)} />}</>;
   const gal = useDesignSettings().gallery || {};
-  const header = (<>{updBanner}
+  const header = (<>{updBanner}{!repo.demo && <UpdateDots />}
     <header className="sticky top-0 z-40 border-b border-ink-700 bg-ink-950/90 pt-[env(safe-area-inset-top)] backdrop-blur">
       <div className="mx-auto flex max-w-[1400px] flex-wrap items-center gap-3 px-4 py-3 sm:px-6">
         <a href="#/" className="flex items-center gap-2.5 font-extrabold"><BrandMark fallback={<Logo />} />{b.name}</a>

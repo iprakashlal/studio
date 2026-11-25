@@ -35,10 +35,10 @@ import { LOGO_ANIMS, UI_LAYOUTS, BrandMark, DEFAULT_NAME, brand as currentBrand,
 import { PushUpdatesCard, PushUpdatesHost } from "./PushUpdates";
 import { Dashboard } from "./Dashboard";
 import { DesignPage } from "./DesignPage";
-import { useDesignSettings } from "../lib/designs";
 import { UpdateDots } from "../ui/UpdateDots";
 import { chainOn, chainSet, refreshStatus, syncDatabases, useUpdateStatus } from "../lib/autodb";
 import { DesignLookTab, DesignPageCard, ThemesSettingsTab } from "./DesignSettings";
+import { NavLinksCard } from "./NavLinksCard";
 import { ProjectView } from "./ProjectView";
 import { NS } from "./App";
 import { autoUpdateStudio } from "../lib/autoupdate";
@@ -136,7 +136,6 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
     : dbs.dbBusy || chainOn() ? <div role="status" aria-label="Database update" className="flex w-full flex-col gap-2 rounded-lg border border-brand-500/40 bg-ink-900 px-4 py-3 text-[13px] text-ink-100 shadow-xl"><span><b>Updating the database</b> (part 2 of 2): {dbs.dbStep || "Checking the database"}…</span><span className="h-1.5 overflow-hidden rounded-full bg-ink-700"><i className="block h-full rounded-full bg-brand-500 transition-[width] duration-300" style={{ width: `${60 + (dbs.dbBusy ? dbs.dbPct : 0) * 0.4}%` }} /></span><span className="text-ink-400">Your Studio and its sites keep working while this runs.</span></div> : null;
   // The live-sites update is mounted once here, so it carries on (minimised) on every Studio screen.
   const updBanner = <><Dock>{updNote}</Dock><PushUpdatesHost studio={studio} index={index} token={session.token} />{!repo.demo && <Explorer studio={studio} index={index} route={route} hosted={isHosted(session)} />}</>;
-  const gal = useDesignSettings().gallery || {};
   const header = (<>{updBanner}{!repo.demo && <UpdateDots />}
     <header className="sticky top-0 z-40 border-b border-ink-700 bg-ink-950/90 pt-[env(safe-area-inset-top)] backdrop-blur">
       <div className="mx-auto flex max-w-[1400px] flex-wrap items-center gap-3 px-4 py-3 sm:px-6">
@@ -145,7 +144,7 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
         {!repo.demo && !isHosted(session) && olderData() && <a href="?data=shared" className="chip border-amber-400/50 text-amber-200" title="This tab shows the GitHub data from before the Studio moved. Press to go back to the shared projects.">Older GitHub data · switch back</a>}
         <nav className="ml-auto flex items-center gap-1" aria-label="Studio">
           <a href="#/" className={`btn btn-ghost btn-sm ${!route || route === "/" || route.startsWith("type/") ? "text-ink-100" : "text-ink-400"}`}>Projects</a>
-          {!hid("themes") && <a href={gal.domain ? `https://${gal.domain}/` : "#/themes"} className="btn btn-ghost btn-sm text-ink-400">{gal.link || "Themes"}</a>}
+          {(index?.prefs?.links || []).map((l) => <a key={l.label + l.url} href={l.url} {...(l.url.startsWith("https://") ? { target: "_blank", rel: "noopener noreferrer" } : {})} className="btn btn-ghost btn-sm text-ink-400">{l.label}</a>)}
           {!repo.demo && client === false && <a href="#/partners" className={`btn btn-ghost btn-sm ${route.startsWith("partners") ? "text-ink-100" : "text-ink-400"}`}>Partners</a>}
           {!repo.demo && <a href="#/settings" className={`btn btn-ghost btn-sm ${route.startsWith("settings") ? "text-ink-100" : "text-ink-400"}`}>Settings</a>}
           <span className="hidden px-2 text-sm text-ink-400 sm:inline">{session.username}</span>
@@ -223,6 +222,7 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
           <p className="text-sm text-ink-300">Your Studio keeps everything as files in <b className="text-ink-100">{isHosted(session) ? `${session.cfg.owner === "cloudflare" ? "Cloudflare" : "Supabase"} (Studio “${session.cfg.repo}”)` : `${session.cfg.owner}/${session.cfg.repo}`}</b>: <code className="font-mono text-xs">studio.json</code> for the project list and <code className="font-mono text-xs">projects/</code> for each site's content, images and export snapshots.</p>
           <AiEngineCard studio={studio} index={index} onIndex={setIndex} />
           <StudioWhatsAppCard />
+          <NavLinksCard studio={studio} index={index} onIndex={setIndex} />
           {!hid("design") && <DesignPageCard />}
           <DashNumbersCard studio={studio} index={index} onIndex={setIndex} />
           {isHosted(session)

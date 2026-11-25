@@ -1317,6 +1317,13 @@ function dqDesignPub(d: any) {
   }
   if (d.themes && typeof d.themes === "object") { const th: any = {}; for (const kind of ["business", "restaurant", "portfolio", "store"]) if (Array.isArray(d.themes[kind])) th[kind] = d.themes[kind].filter((v: any) => typeof v === "string" && /^[A-Za-z0-9_-]{1,40}$/.test(v)).slice(0, 400); out.themes = th; }
   if (d.images && typeof d.images === "object" && d.images.on === true) out.images = { on: true, ...(["photo", "illustration", "3d", "flat"].includes(d.images.style) ? { style: d.images.style } : {}), ...(d.images.provider === "horde" ? { provider: "horde" } : {}) };
+  if (d.chat && typeof d.chat === "object") {
+    const c: any = {}, hex = (v: any) => (typeof v === "string" && /^#[0-9a-f]{6}$/i.test(v) ? v.toLowerCase() : "");
+    for (const k of ["you", "bot", "page"]) if (hex(d.chat[k])) c[k] = hex(d.chat[k]);
+    const im = d.chat.image; if (typeof im === "string" && im.length <= 100000 && /^(data:image\/(jpeg|webp|png);base64,[A-Za-z0-9+/=]+|https:\/\/[^\s<>"']{3,400})$/.test(im)) c.image = im;
+    if (Number.isFinite(+d.chat.dim) && +d.chat.dim > 0) c.dim = Math.min(80, Math.round(+d.chat.dim));
+    if (Object.keys(c).length) out.chat = c;
+  }
   if (d.carousel && typeof d.carousel === "object") { const c: any = {}; for (const kind of ["business", "restaurant", "portfolio", "store"]) if (d.carousel[kind] === "custom") c[kind] = "custom"; if (Object.keys(c).length) out.carousel = c; }
   if (d.questions && typeof d.questions === "object") {
     const q: any = {}, tx = (v: any, n: number) => (typeof v === "string" ? v.replace(/[<>]/g, "").trim().slice(0, n) : "");

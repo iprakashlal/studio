@@ -28,6 +28,13 @@ export function cleanDesignSettings(x: any): DesignSettings {
   const th = cleanThemes(x.themes); if (Object.keys(th).length) o.themes = th;
   if (x.images && typeof x.images === "object") { const im: NonNullable<DesignSettings["images"]> = {}; if (x.images.on === true) im.on = true; if (["photo", "illustration", "3d", "flat"].includes(x.images.style)) im.style = x.images.style; if (Object.keys(im).length) o.images = im; }
   if (x.adminAi === false) o.adminAi = false;
+  if (x.chat && typeof x.chat === "object") {
+    const c: NonNullable<DesignSettings["chat"]> = {}, hex = (v: any) => (typeof v === "string" && /^#[0-9a-f]{6}$/i.test(v) ? v.toLowerCase() : "");
+    for (const k of ["you", "bot", "page"] as const) if (hex(x.chat[k])) c[k] = hex(x.chat[k]);
+    const im = x.chat.image; if (typeof im === "string" && im.length <= 100_000 && /^(data:image\/(jpeg|webp|png);base64,[A-Za-z0-9+/=]+|https:\/\/[^\s<>"']{3,400})$/.test(im)) c.image = im;
+    if (Number.isFinite(+x.chat.dim) && +x.chat.dim > 0) c.dim = Math.min(80, Math.round(+x.chat.dim));
+    if (Object.keys(c).length) o.chat = c;
+  }
   if (x.carousel && typeof x.carousel === "object") { const c: NonNullable<DesignSettings["carousel"]> = {}; for (const k of ["portfolio", "store", "business", "restaurant"] as const) if (x.carousel[k] === "custom") c[k] = "custom"; if (Object.keys(c).length) o.carousel = c; }
   if (x.questions && typeof x.questions === "object") {
     const q: NonNullable<DesignSettings["questions"]> = {}, tx = (v: any, n: number) => (typeof v === "string" ? v.replace(/[<>]/g, "").trim().slice(0, n) : "");

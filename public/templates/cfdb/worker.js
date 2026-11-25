@@ -25,7 +25,7 @@ create index if not exists approvals_project on approvals (scope, project, creat
 create table if not exists approval_notes (id integer primary key autoincrement, token text not null, who text not null, body text not null, page text not null default '', kind text not null default 'comment', created_at text not null);
 create index if not exists approval_notes_token on approval_notes (token, id);
 `;
-var CFDB_VERSION = 74;
+var CFDB_VERSION = 75;
 var CFDB_WORKER_NAME = "picaffectz-db";
 
 // src/lib/lookdigest.ts
@@ -2316,6 +2316,14 @@ function dqDesignPub(d) {
     out.themes = th;
   }
   if (d.images && typeof d.images === "object" && d.images.on === true) out.images = { on: true, ...["photo", "illustration", "3d", "flat"].includes(d.images.style) ? { style: d.images.style } : {}, ...d.images.provider === "horde" ? { provider: "horde" } : {} };
+  if (d.chat && typeof d.chat === "object") {
+    const c = {}, hex3 = (v) => typeof v === "string" && /^#[0-9a-f]{6}$/i.test(v) ? v.toLowerCase() : "";
+    for (const k of ["you", "bot", "page"]) if (hex3(d.chat[k])) c[k] = hex3(d.chat[k]);
+    const im = d.chat.image;
+    if (typeof im === "string" && im.length <= 1e5 && /^(data:image\/(jpeg|webp|png);base64,[A-Za-z0-9+/=]+|https:\/\/[^\s<>"']{3,400})$/.test(im)) c.image = im;
+    if (Number.isFinite(+d.chat.dim) && +d.chat.dim > 0) c.dim = Math.min(80, Math.round(+d.chat.dim));
+    if (Object.keys(c).length) out.chat = c;
+  }
   if (d.carousel && typeof d.carousel === "object") {
     const c = {};
     for (const kind of ["business", "restaurant", "portfolio", "store"]) if (d.carousel[kind] === "custom") c[kind] = "custom";

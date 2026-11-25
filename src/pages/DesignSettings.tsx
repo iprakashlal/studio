@@ -33,6 +33,18 @@ function DesignOnCard() {
   );
 }
 
+/** A background picture made small enough to keep in the Studio's settings: at most ~1400 px across, a JPEG under ~90 KB. */
+async function fitBackdrop(file: File): Promise<string> {
+  if (!/^image\/(png|jpe?g|webp)$/.test(file.type)) throw new Error("Please choose a PNG, JPG or WebP picture.");
+  const bmp = await createImageBitmap(file); let max = 1400, q = 0.75, u = "";
+  for (let i = 0; i < 8; i++) {
+    const k = Math.min(1, max / Math.max(bmp.width, bmp.height)), c = document.createElement("canvas"); c.width = Math.max(1, Math.round(bmp.width * k)); c.height = Math.max(1, Math.round(bmp.height * k));
+    const g = c.getContext("2d")!; g.fillStyle = "#000"; g.fillRect(0, 0, c.width, c.height); g.drawImage(bmp, 0, 0, c.width, c.height);
+    u = c.toDataURL("image/jpeg", q); if (u.length <= 90_000) break; if (q > 0.4) q -= 0.08; else max = Math.round(max * 0.8);
+  }
+  bmp.close?.(); if (u.length > 100_000) throw new Error("That picture is too detailed. Please use a simpler or smaller one.");
+  return u;
+}
 const KIND_NAME: Record<Kind, string> = { business: "Business", restaurant: "Restaurant", portfolio: "Portfolio", store: "Shop" };
 const same = (x: unknown, y: unknown) => JSON.stringify(x) === JSON.stringify(y);
 
@@ -92,9 +104,8 @@ export function ThemesSettingsTab({ session, studio, index, onIndex }: { session
         <DesignDomain session={session} studio={studio} index={index} onIndex={onIndex} onDomain={setDomain} field="themesDomain" noun="Theme gallery" />
         <p className="text-[13px] text-ink-300">Open <a className="underline" href={base} target="_blank" rel="noopener noreferrer">{g.domain || "the gallery"}</a></p>
       </Block>
-      <Block title="What it says" note="The Studio's link to the gallery, and the heading and line at the top of the page. Leave a box empty to keep the standard text.">
+      <Block title="What it says" note="The heading and line at the top of the page (add a header link to the gallery in Settings → General → Header links). Leave a box empty to keep the standard text.">
         <div className="grid gap-3">
-          <label className="flex flex-col gap-1.5"><span className="label">Link in the Studio menu</span><input className="input h-10 max-w-xs" maxLength={24} placeholder="Themes" value={txt.link} onChange={(e) => setTxt({ ...txt, link: e.target.value })} /></label>
           <label className="flex flex-col gap-1.5"><span className="label">Heading</span><input className="input" maxLength={80} placeholder="Pick a look for your site" value={txt.title} onChange={(e) => setTxt({ ...txt, title: e.target.value })} /></label>
           <label className="flex flex-col gap-1.5"><span className="label">Line under the heading</span><textarea className="input" rows={3} maxLength={400} placeholder="Leave empty to show the theme count and what the themes are for." value={txt.intro} onChange={(e) => setTxt({ ...txt, intro: e.target.value })} /></label>
         </div>
@@ -215,6 +226,35 @@ export function DesignLookTab({ session, studio, index, onIndex }: { session: Se
             </div>
           </div>
         ))}
+      </Block>
+
+      <Block title="Chat look" note="Colours and a background picture for the Design yourself chat. Leave a colour unset to keep the standard look.">
+        {(() => {
+          const c = d.chat || {}, setC = (p: Partial<NonNullable<typeof d.chat>>) => { const n: any = { ...c, ...p }; for (const k of Object.keys(n)) if (n[k] === undefined || n[k] === "" || n[k] === 0) delete n[k]; upd({ chat: Object.keys(n).length ? n : undefined }); };
+          const col = (k: "you" | "bot" | "page", label: string, def: string) => (
+            <label className="flex flex-col gap-1 text-[13px] font-semibold">{label}
+              <span className="flex items-center gap-2"><input type="color" aria-label={label} className="h-9 w-12 cursor-pointer rounded border border-ink-600 bg-transparent p-0.5" value={c[k] || def} onChange={(e) => setC({ [k]: e.target.value })} />
+                <span className="font-mono text-xs font-normal text-ink-400">{c[k] || "standard"}</span>
+                {c[k] && <button type="button" className="btn btn-ghost btn-sm" onClick={() => setC({ [k]: undefined })}>Reset</button>}</span>
+            </label>
+          );
+          const pickImg = async (f: File | undefined) => { if (!f) return; try { setC({ image: await fitBackdrop(f) }); } catch (e: any) { alert(e?.message || "Couldn't use that picture."); } };
+          return <>
+            <div className="grid gap-3 sm:grid-cols-3">{col("you", "Your visitor's messages", "#ff3fa4")}{col("bot", "The assistant's messages", "#1f1218")}{col("page", "Page background", "#150b10")}</div>
+            <div className="flex flex-col gap-2">
+              <span className="text-[13px] font-semibold">Background picture</span>
+              <div className="flex flex-wrap items-center gap-2">
+                <label className="btn btn-sm cursor-pointer">{c.image ? "Replace picture" : "Choose a picture"}<input type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" onChange={(e) => { pickImg(e.target.files?.[0]); e.target.value = ""; }} /></label>
+                {c.image && <button type="button" className="btn btn-ghost btn-sm" onClick={() => setC({ image: undefined, dim: undefined })}>Remove</button>}
+              </div>
+              {c.image && <>
+                <div className="relative h-28 max-w-sm overflow-hidden rounded-xl border border-ink-600" style={{ background: `${c.page || "#150b10"} url(${JSON.stringify(c.image)}) center/cover` }}><div className="absolute inset-0" style={{ background: `rgba(0,0,0,${(c.dim ?? 0) / 100})` }} /></div>
+                <label className="flex max-w-sm flex-col gap-1 text-[13px] font-semibold">Darken the picture ({c.dim ?? 0}%)<input type="range" min={0} max={80} step={5} value={c.dim ?? 0} onChange={(e) => setC({ dim: +e.target.value })} /></label>
+              </>}
+              <span className="text-[11.5px] text-ink-500">A wide picture works best (it is shrunk and compressed to stay small). Darken it if text is hard to read.</span>
+            </div>
+          </>;
+        })()}
       </Block>
 
       <Block title="Pictures drawn by AI" note="Pictures can be drawn from a few words by the free AI Horde (no key, no sign-up; volunteers' computers do the drawing, so it can queue for a short while).">

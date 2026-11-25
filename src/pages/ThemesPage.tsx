@@ -13,7 +13,7 @@ import { Preview } from "../editor/Preview";
 import { Logo, useToast, Skel } from "../ui/kit";
 import { DevtoolsGuard, LoadVeil } from "../ui/PageGuard";
 import { StudioPageLinksHere } from "./StudioPage";
-import { designPageOn, useDesignSettings } from "../lib/designs";
+import { useDesignSettings } from "../lib/designs";
 
 // A public page (no sign-in) that shows every theme, so you can send it to a client.
 // Hover a card for a live preview, click it for a bigger one, and quote the theme ID (T-07) to choose.
@@ -54,8 +54,6 @@ const readList = (): string[] => { try { return JSON.parse(localStorage.getItem(
 
 export function ThemesPage({ signedIn }: { signedIn: boolean }) {
   const toast = useToast();
-  const [designOn, setDesignOn] = useState(designPageOn);
-  useEffect(() => { const f = () => setDesignOn(designPageOn()); addEventListener("studio:design-page", f); return () => removeEventListener("studio:design-page", f); }, []);
   const init = useMemo(parse, []);
   const gal = useDesignSettings().gallery || {};
   const shownKinds = KINDS.filter((k) => !gal.types || gal.types.includes(k.id));
@@ -135,7 +133,6 @@ export function ThemesPage({ signedIn }: { signedIn: boolean }) {
           {signedIn ? <a href="#/" className="flex items-center gap-2.5 font-extrabold"><BrandMark fallback={<Logo />} />{studioBrand.name}</a> : <span className="flex items-center gap-2.5 font-extrabold"><BrandMark fallback={<Logo />} />{studioBrand.name}</span>}
           <span className="text-ink-500">/</span><span className="font-bold">Theme gallery</span>
           <div className="ml-auto flex flex-wrap items-center gap-2">
-            {designOn && <a href="#/design" className="btn btn-pri btn-sm">✦ Design yourself</a>}
             <button type="button" className="btn btn-sm" onClick={() => copy(link({ v: kind }), "Gallery link copied")}>Copy gallery link</button>
             {signedIn && <a href="#/" className="btn btn-sm">Back to projects</a>}
           </div>

@@ -57,6 +57,7 @@ export function App() {
       // The Design yourself page's own address opens straight on that page.
       const dom = b.design?.domain, here = location.hostname.toLowerCase().replace(/^www\./, "");
       if (dom && here === dom && !/^#\/design/.test(location.hash)) location.hash = "#/design";
+      if (b.design?.gallery?.domain && here === b.design.gallery.domain && !/^#\/themes/.test(location.hash)) location.hash = "#/themes";
     });
     return () => { live = false; };
   }, [host?.kind, !!session]);

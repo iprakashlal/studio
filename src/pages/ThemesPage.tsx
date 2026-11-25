@@ -11,7 +11,7 @@ import { themeCode } from "../themes/codes";
 import { TEMPLATES } from "../schema";
 import { Preview } from "../editor/Preview";
 import { Logo, useToast, Skel } from "../ui/kit";
-import { designPageOn } from "../lib/designs";
+import { designPageOn, useDesignSettings } from "../lib/designs";
 
 // A public page (no sign-in) that shows every theme, so you can send it to a client.
 // Hover a card for a live preview, click it for a bigger one, and quote the theme ID (T-07) to choose.
@@ -55,7 +55,11 @@ export function ThemesPage({ signedIn }: { signedIn: boolean }) {
   const [designOn, setDesignOn] = useState(designPageOn);
   useEffect(() => { const f = () => setDesignOn(designPageOn()); addEventListener("studio:design-page", f); return () => removeEventListener("studio:design-page", f); }, []);
   const init = useMemo(parse, []);
+  const gal = useDesignSettings().gallery || {};
+  const shownKinds = KINDS.filter((k) => !gal.types || gal.types.includes(k.id));
   const [kind, setKind] = useState<Kind>(init.v);
+  // The owner may show only some types: a link to another one opens the first that is shown.
+  useEffect(() => { if (shownKinds.length && !shownKinds.some((k) => k.id === kind)) setKind(shownKinds[0].id); }, [gal.types?.join(",")]);
   const [tag, setTag] = useState("");
   const [q, setQ] = useState("");
   const [open, setOpen] = useState<string>(init.t);
@@ -134,11 +138,11 @@ export function ThemesPage({ signedIn }: { signedIn: boolean }) {
       <main className="mx-auto max-w-7xl px-4 pb-24 pt-8">
         <div className="flex flex-wrap items-end justify-between gap-6">
           <div className="max-w-2xl">
-            <h1 className="text-3xl font-extrabold tracking-tight sm:text-4xl">Pick a look for your site</h1>
-            <p className="mt-2 text-ink-300">{kind === "restaurant" ? `${REST_THEMES.length} restaurant themes for restaurants, cafés, bakeries and bars: half classic, half modern, no two alike.` : kind === "business" ? `${BIZ_THEMES.length} business themes for companies, firms, agencies and practices.` : `${THEMES.length} themes for personal portfolios and shops.`} Hover a theme to preview it, or click it to open a bigger preview. When you've chosen, send the <b className="text-ink-100">theme ID</b> (like <code className="rounded bg-ink-800 px-1.5 py-0.5 text-brand-300">{kind === "business" ? "B-07" : "T-07"}</code>), or star a few and share your shortlist.</p>
+            <h1 className="text-3xl font-extrabold tracking-tight sm:text-4xl">{gal.title || "Pick a look for your site"}</h1>
+            <p className="mt-2 text-ink-300">{gal.intro || <>{kind === "restaurant" ? `${REST_THEMES.length} restaurant themes for restaurants, cafés, bakeries and bars: half classic, half modern, no two alike.` : kind === "business" ? `${BIZ_THEMES.length} business themes for companies, firms, agencies and practices.` : `${THEMES.length} themes for personal portfolios and shops.`} Hover a theme to preview it, or click it to open a bigger preview. When you've chosen, send the <b className="text-ink-100">theme ID</b> (like <code className="rounded bg-ink-800 px-1.5 py-0.5 text-brand-300">{kind === "business" ? "B-07" : "T-07"}</code>), or star a few and share your shortlist.</>}</p>
           </div>
           <div className="flex rounded-xl border border-ink-600 p-1" role="group" aria-label="Preview as">
-            {KINDS.map((k) => (
+            {shownKinds.map((k) => (
               <button key={k.id} type="button" aria-pressed={kind === k.id} onClick={() => switchKind(k.id)}
                 className={`rounded-lg px-4 py-2 text-sm font-bold ${kind === k.id ? "bg-brand-500 text-white" : "text-ink-300 hover:text-ink-100"}`}>{k.label}</button>
             ))}
@@ -154,7 +158,7 @@ export function ThemesPage({ signedIn }: { signedIn: boolean }) {
 
         <div className="sticky top-[57px] z-20 -mx-4 mt-6 flex flex-wrap items-center gap-2 border-b border-ink-800 bg-ink-950/95 px-4 py-3 backdrop-blur">
           <input className="input w-56 py-2 text-sm" placeholder={`Search name or ID, e.g. ${kind === "restaurant" ? "R-007" : kind === "business" ? "B-07" : "T-07"}`} aria-label="Search themes" value={q} onChange={(e) => setQ(e.target.value)} />
-          {["", ...tags].map((x) => (
+          {(gal.tags === false ? [] : ["", ...tags]).map((x) => (
             <button key={x || "all"} type="button" aria-pressed={tag === x} onClick={() => setTag(x)}
               className={`rounded-full border px-3 py-1.5 text-xs font-semibold ${tag === x ? "border-brand-500 bg-brand-500/15 text-ink-100" : "border-ink-600 text-ink-400 hover:text-ink-100"}`}>{x || "All"}</button>
           ))}
@@ -165,7 +169,7 @@ export function ThemesPage({ signedIn }: { signedIn: boolean }) {
           </div>
         </div>
 
-        <p className="mt-4 text-sm text-ink-400">{list.length} of {pool.length} themes</p>
+        {gal.count !== "off" && <p className="mt-4 text-sm text-ink-400">{gal.count === "total" ? `${pool.length} themes` : `${list.length} of ${pool.length} themes`}</p>}
         <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {list.map((t) => {
             const starred = mine.includes(t.id);

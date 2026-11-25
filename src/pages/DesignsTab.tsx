@@ -1,3 +1,4 @@
+import { themeCode } from "../themes/codes";
 import { useState } from "react";
 import { TEMPLATES } from "../schema";
 import { buildDesign, type Design } from "../lib/designer";
@@ -32,7 +33,7 @@ export function DesignsTab({ studio, index, onIndex }: { studio: Studio; index: 
               <div className="flex flex-1 flex-col gap-3 p-5">
                 <div className="flex items-center gap-2 text-xs"><span className="chip border-amber-400/50 text-amber-200">Preview · not published</span><span className="ml-auto text-ink-400">{ago(r.createdAt)}</span></div>
                 <h2 className="truncate font-display text-xl font-extrabold leading-tight">{r.name}</h2>
-                <p className="text-[13px] text-ink-400">{t?.name || r.kind} · {r.themeName || "Theme"}{r.answers.city ? ` · ${r.answers.city}` : ""}</p>
+                <p className="text-[13px] text-ink-400">{t?.name || r.kind} · {r.themeName || "Theme"}{r.themeId ? ` (${themeCode({ id: r.themeId })})` : ""}{r.answers.city ? ` · ${r.answers.city}` : ""}</p>
                 {r.answers.about && <p className="line-clamp-2 text-[13px] text-ink-300">{r.answers.about}</p>}
                 <div className="mt-auto flex flex-wrap gap-2 border-t border-ink-700/70 pt-4">
                   <button type="button" className="btn btn-pri btn-sm" disabled={!!busy} onClick={() => act(r.id, async () => setOpen({ rec: r, design: await load(r), ver: 1 }))}>{busy === r.id ? "Opening…" : "Preview"}</button>

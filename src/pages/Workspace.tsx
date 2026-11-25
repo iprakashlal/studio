@@ -35,7 +35,8 @@ import { LOGO_ANIMS, UI_LAYOUTS, BrandMark, DEFAULT_NAME, brand as currentBrand,
 import { PushUpdatesCard, PushUpdatesHost } from "./PushUpdates";
 import { Dashboard } from "./Dashboard";
 import { DesignPage } from "./DesignPage";
-import { DesignLookTab, DesignPageCard } from "./DesignSettings";
+import { useDesignSettings } from "../lib/designs";
+import { DesignLookTab, DesignPageCard, ThemesSettingsTab } from "./DesignSettings";
 import { ProjectView } from "./ProjectView";
 import { NS } from "./App";
 import { autoUpdateStudio } from "../lib/autoupdate";
@@ -121,6 +122,7 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
     : upd.running && updStep ? <div role="status" aria-label="Studio update" className="flex w-full flex-col gap-2 rounded-lg border border-brand-500/40 bg-ink-900 px-4 py-3 text-[13px] text-ink-100 shadow-xl"><span><b>Updating the Studio</b>: {updStep}…</span><span className="h-1.5 overflow-hidden rounded-full bg-ink-700"><i className="block h-full rounded-full bg-brand-500 transition-[width] duration-300" style={{ width: `${/^Reading the Studio/.test(updStep) ? 8 : /^Creating the Studio/.test(updStep) ? 15 : /^Uploading the Studio/.test(updStep) ? partOf(updStep, 20, 98) : /^Updated/.test(updStep) ? 100 : 5}%` }} /></span><span className="text-ink-400">It carries on if you move to another screen or browser tab, then opens your projects. Your projects aren't touched.</span></div> : null;
   // The live-sites update is mounted once here, so it carries on (minimised) on every Studio screen.
   const updBanner = <><Dock>{updNote}</Dock><PushUpdatesHost studio={studio} index={index} token={session.token} />{!repo.demo && <Explorer studio={studio} index={index} route={route} hosted={isHosted(session)} />}</>;
+  const gal = useDesignSettings().gallery || {};
   const header = (<>{updBanner}
     <header className="sticky top-0 z-40 border-b border-ink-700 bg-ink-950/90 pt-[env(safe-area-inset-top)] backdrop-blur">
       <div className="mx-auto flex max-w-[1400px] flex-wrap items-center gap-3 px-4 py-3 sm:px-6">
@@ -129,7 +131,7 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
         {!repo.demo && !isHosted(session) && olderData() && <a href="?data=shared" className="chip border-amber-400/50 text-amber-200" title="This tab shows the GitHub data from before the Studio moved. Press to go back to the shared projects.">Older GitHub data · switch back</a>}
         <nav className="ml-auto flex items-center gap-1" aria-label="Studio">
           <a href="#/" className={`btn btn-ghost btn-sm ${!route || route === "/" || route.startsWith("type/") ? "text-ink-100" : "text-ink-400"}`}>Projects</a>
-          {!hid("themes") && <a href="#/themes" className="btn btn-ghost btn-sm text-ink-400">Themes</a>}
+          {!hid("themes") && <a href={gal.domain ? `https://${gal.domain}/` : "#/themes"} className="btn btn-ghost btn-sm text-ink-400">{gal.link || "Themes"}</a>}
           {!repo.demo && client === false && <a href="#/partners" className={`btn btn-ghost btn-sm ${route.startsWith("partners") ? "text-ink-100" : "text-ink-400"}`}>Partners</a>}
           {!repo.demo && <a href="#/settings" className={`btn btn-ghost btn-sm ${route.startsWith("settings") ? "text-ink-100" : "text-ink-400"}`}>Settings</a>}
           <span className="hidden px-2 text-sm text-ink-400 sm:inline">{session.username}</span>
@@ -159,9 +161,9 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
     // Customize: the Studio's name, badge, pages and admin menus. Hostings: accounts and where each site is hosted.
     const showCustomize = ["brand", "badge", "pages", "menus"].some((k) => !hid(k)), showHostings = !hid("hosting");
     const want = route.split("/")[1] || "general";
-    const showDesign = !hid("design");
-    const tab = (want === "customize" && !showCustomize) || (want === "hostings" && !showHostings) || (want === "design" && !showDesign) ? "general" : want;
-    const tabList = [["general", "General"], ...(showCustomize ? [["customize", "Customize"]] : []), ...(showHostings ? [["hostings", "Hostings"]] : []), ...(showDesign ? [["design", "Design yourself"]] : []), ["update", "Updates"], ...(client ? [] : [["migration", "Migration"]]), ["help", "Help"]] as [string, string][];
+    const showDesign = !hid("design"), showThemes = !hid("themes");
+    const tab = (want === "customize" && !showCustomize) || (want === "hostings" && !showHostings) || (want === "design" && !showDesign) || (want === "themes" && !showThemes) ? "general" : want;
+    const tabList = [["general", "General"], ...(showCustomize ? [["customize", "Customize"]] : []), ...(showHostings ? [["hostings", "Hostings"]] : []), ...(showDesign ? [["design", "Design yourself"]] : []), ...(showThemes ? [["themes", "Themes"]] : []), ["update", "Updates"], ...(client ? [] : [["migration", "Migration"]]), ["help", "Help"]] as [string, string][];
     const tabs = <>
       {/* Phones: one dropdown, so the tabs never wrap onto a second row. */}
       <label className="flex flex-col gap-1.5 sm:hidden"><span className="label">Settings section</span>
@@ -172,6 +174,7 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
     </div></>;
     if (client === undefined && tab !== "general") return <>{header}<main className="mx-auto flex max-w-3xl flex-col gap-4 px-4 py-8 sm:px-6"><h1 className="font-display text-3xl font-extrabold">Settings</h1>{tabs}<SkelRows n={3} label="Loading settings" /></main></>;
     if (tab === "design") return <>{header}<main className="mx-auto flex max-w-3xl flex-col gap-4 px-4 py-8 sm:px-6"><h1 className="font-display text-3xl font-extrabold">Settings</h1>{tabs}<DesignLookTab session={session} studio={studio} index={index} onIndex={setIndex} /></main></>;
+    if (tab === "themes") return <>{header}<main className="mx-auto flex max-w-3xl flex-col gap-4 px-4 py-8 sm:px-6"><h1 className="font-display text-3xl font-extrabold">Settings</h1>{tabs}<ThemesSettingsTab session={session} studio={studio} index={index} onIndex={setIndex} /></main></>;
     if (tab === "help") return <>{header}<main className="mx-auto flex max-w-3xl flex-col gap-4 px-4 py-8 sm:px-6"><h1 className="font-display text-3xl font-extrabold">Settings</h1>{tabs}<StudioHelp /></main></>;
     // Updates: this Studio build onto live sites, and (a hosted Studio) the Studio's own update.
     if (tab === "update" && !(isHosted(session) && !client)) return <>{header}<main className="mx-auto flex max-w-3xl flex-col gap-4 px-4 py-8 sm:px-6"><h1 className="font-display text-3xl font-extrabold">Settings</h1>{tabs}<PushUpdatesCard index={index} demo={repo.demo} /></main></>;

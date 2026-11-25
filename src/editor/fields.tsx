@@ -333,7 +333,7 @@ function useUpload() {
     const ok: File[] = [];
     for (const file of files) {
       if (!/^image\/(png|jpe?g|webp|gif|svg\+xml)$/.test(file.type)) toast(`${file.name}: use JPG, PNG, WebP, GIF or SVG.`, "bad");
-      else if (file.size > 5 * 1024 * 1024) toast(`${file.name} is over 5 MB. Choose a smaller image.`, "bad");
+      else if (file.size > 20 * 1024 * 1024) toast(`${file.name} is over 20 MB. Choose a smaller image.`, "bad");
       else ok.push(file);
     }
     if (!ok.length) return [];
@@ -369,7 +369,7 @@ function ImageField({ id, label, hint, value, onChange }: { id: string; label: s
           {value && <button type="button" className="btn btn-sm btn-danger" onClick={() => onChange(null)}>Remove</button>}
         </div>
       </div>
-      <span className="hint">{hint || "JPG, PNG, WebP or SVG, up to 5 MB."}</span>
+      <span className="hint">{hint || "JPG, PNG, WebP or SVG, up to 20 MB."}</span>
     </div>
   );
 }
@@ -404,7 +404,7 @@ function FontFileField({ id, label, hint, value, onChange }: { id: string; label
   const pick = async (file?: File) => {
     if (!file) return;
     if (!/\.(woff2|woff|ttf|otf)$/i.test(file.name)) { toast(`${file.name}: use a font file (WOFF2, WOFF, TTF or OTF).`, "bad"); return; }
-    if (file.size > 3 * 1024 * 1024) { toast(`${file.name} is ${(file.size / 1048576).toFixed(1)} MB. Font uploads go up to 3 MB: a WOFF2 version is usually far smaller.`, "bad"); return; }
+    if (file.size > 20 * 1024 * 1024) { toast(`${file.name} is ${(file.size / 1048576).toFixed(1)} MB. Font uploads go up to 20 MB: a WOFF2 version is usually far smaller.`, "bad"); return; }
     setBusy(true);
     try { const variable = await isVariableFont(file); onChange({ ...(await upload(file)), ...(variable ? { variable: true } : {}) }); toast("Font uploaded. Save to keep it."); }
     catch (e: any) { toast("Upload failed: " + (e?.message || "try again"), "bad"); }
@@ -436,7 +436,7 @@ function FontFileField({ id, label, hint, value, onChange }: { id: string; label
           </div>
         </div>
       </div>
-      <span className="hint">{hint || "WOFF2, WOFF, TTF or OTF, up to 3 MB. WOFF2 loads fastest."}</span>
+      <span className="hint">{hint || "WOFF2, WOFF, TTF or OTF, up to 20 MB. WOFF2 loads fastest."}</span>
     </div>
   );
 }
@@ -505,7 +505,7 @@ function ImagesField({ id, label, hint, value, onChange }: { id: string; label: 
         <label htmlFor={id} className="grid h-20 w-20 cursor-pointer place-items-center rounded-xl border border-dashed border-ink-500 text-center text-[11px] font-semibold text-ink-300 hover:border-brand-400">{busy ? "Uploading…" : "+ Add photos"}</label>
         <input id={id} type="file" accept="image/*" multiple hidden disabled={busy} onChange={async (e) => { const r = await run([...(e.target.files || [])].slice(0, 10)); e.target.value = ""; if (r.length) onChange([...value, ...r]); }} />
       </div>
-      <span className="hint">{hint || "Up to 5 MB each."}</span>
+      <span className="hint">{hint || "Up to 20 MB each."}</span>
     </div>
   );
 }

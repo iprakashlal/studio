@@ -25,7 +25,7 @@ create index if not exists approvals_project on approvals (scope, project, creat
 create table if not exists approval_notes (id integer primary key autoincrement, token text not null, who text not null, body text not null, page text not null default '', kind text not null default 'comment', created_at text not null);
 create index if not exists approval_notes_token on approval_notes (token, id);
 `;
-var CFDB_VERSION = 70;
+var CFDB_VERSION = 71;
 var CFDB_WORKER_NAME = "picaffectz-db";
 
 // src/lib/lookdigest.ts
@@ -3510,7 +3510,7 @@ ${body}`)}${paras("Approve or hide it under Reviews in your site's admin page.",
           const type = (r2.headers.get("content-type") || "").split(";")[0].trim().toLowerCase();
           if (!/^image\/(jpeg|png|webp|gif|avif)$/.test(type)) return json({ error: "That address isn't a picture the site can use (JPG, PNG, WebP, GIF or AVIF)." });
           const buf = await r2.arrayBuffer();
-          if (buf.byteLength > 6 * 1024 * 1024) return json({ error: "That picture is over 6 MB." });
+          if (buf.byteLength > 20 * 1024 * 1024) return json({ error: "That picture is over 20 MB." });
           return new Response(buf, { headers: { ...cors, "Content-Type": type, "Cache-Control": "no-store" } });
         }
         return json({ pictures: picturesOf((await r2.text()).slice(0, 3e6), u2) });

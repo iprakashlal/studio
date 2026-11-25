@@ -8,7 +8,7 @@ import { ProgressBar, useToast } from "../ui/kit";
 type Pick = { file: File; url: string; to: string; auto: boolean };
 type Opt = { key: string; label: string; group: string; has: number; put: (img: { path: string }) => void };
 const words = (v: string) => v.toLowerCase().replace(/\.[a-z0-9]+$/i, "").replace(/[^a-z0-9ऀ-ॿ]+/g, " ").trim().split(" ").filter(Boolean);
-const MAX = 80, BIG = 5 * 1024 * 1024;
+const MAX = 80, BIG = 20 * 1024 * 1024;
 
 export function BulkPhotos({ kind }: { kind: "dish" | "product" }) {
   const { root, upload, bump } = useContext(Ctx)!, toast = useToast();
@@ -33,7 +33,7 @@ export function BulkPhotos({ kind }: { kind: "dish" | "product" }) {
   const choose = (list: FileList | null) => {
     const files = Array.from(list || []), ok: Pick[] = []; let bad = 0;
     for (const f of files) { if (!/^image\/(png|jpe?g|webp|gif)$/.test(f.type) || f.size > BIG) { bad++; continue; } if (ok.length >= MAX) break; const to = match(f.name); ok.push({ file: f, url: URL.createObjectURL(f), to, auto: !!to }); }
-    if (bad) toast(`${bad} file${bad === 1 ? " was" : "s were"} left out: use JPG, PNG, WebP or GIF, up to 5 MB each.`, "bad");
+    if (bad) toast(`${bad} file${bad === 1 ? " was" : "s were"} left out: use JPG, PNG, WebP or GIF, up to 20 MB each.`, "bad");
     if (files.length - bad > MAX) toast(`Only the first ${MAX} photos were taken. Add the rest in another round.`, "bad");
     if (ok.length) setPicks(ok); if (input.current) input.current.value = "";
   };

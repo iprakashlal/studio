@@ -95,7 +95,7 @@ export function WriteFromSiteDialog({ session, project, draft, upload, onApply, 
     if (chosen.length && mine && upload) {
       setBusy("Copying pictures"); let n = 0, missed = 0;
       for (const p of chosen.slice(0, 60)) {
-        try { const f = await cfPicture(api!, p.url); if (f.size > 6 * 1024 * 1024) throw new Error("big"); placePicture(kind, next, use[p.url], await upload(f), p.alt); n++; setBusy(`Copying pictures (${n} of ${chosen.length})`); } catch { missed++; }
+        try { const f = await cfPicture(api!, p.url); if (f.size > 20 * 1024 * 1024) throw new Error("big"); placePicture(kind, next, use[p.url], await upload(f), p.alt); n++; setBusy(`Copying pictures (${n} of ${chosen.length})`); } catch { missed++; }
       }
       setBusy("");
       // Said after the editor's own "new text" note, so it isn't covered by it.

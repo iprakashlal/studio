@@ -2166,7 +2166,7 @@ export default {
         if (p === "/ai/picture") {
           const type = (r2.headers.get("content-type") || "").split(";")[0].trim().toLowerCase();
           if (!/^image\/(jpeg|png|webp|gif|avif)$/.test(type)) return json({ error: "That address isn't a picture the site can use (JPG, PNG, WebP, GIF or AVIF)." });
-          const buf = await r2.arrayBuffer(); if (buf.byteLength > 6 * 1024 * 1024) return json({ error: "That picture is over 6 MB." });
+          const buf = await r2.arrayBuffer(); if (buf.byteLength > 20 * 1024 * 1024) return json({ error: "That picture is over 20 MB." });
           return new Response(buf, { headers: { ...cors, "Content-Type": type, "Cache-Control": "no-store" } });
         }
         return json({ pictures: picturesOf((await r2.text()).slice(0, 3_000_000), u2) });

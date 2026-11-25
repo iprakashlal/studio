@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 // signing in they stay on this device. Only the answers are kept: the preview is rebuilt from them.
 
 /** The words written for a design (by the Studio's AI engine or the Picaffectz system): a summary for each topic the person gave. */
-export type Copy = { tagline?: string; hero_text?: string; about_text?: string; cta_text?: string; items?: { name: string; text: string }[]; faq?: { q: string; a: string }[] };
+export type Copy = { tagline?: string; hero_text?: string; about_text?: string; services_text?: string; work_text?: string; cta_text?: string; items?: { name: string; text: string }[]; faq?: { q: string; a: string }[] };
 export type DesignRec = { id: string; name: string; kind: string; themeId: string; themeName: string; answers: Record<string, string>; createdAt: string; summary?: string; copy?: Copy; /** A small logo (data URL), when one was added. */ logo?: string };
 import { cleanAi, cleanDomain, cleanGallery, cleanLook, cleanThemes, type DesignSettings } from "./designlook";
 export type { DesignSettings };
@@ -31,7 +31,7 @@ export function cleanDesignSettings(x: any): DesignSettings {
 }
 export function cleanCopy(c: any): Copy {
   const o: Copy = {}; if (!c || typeof c !== "object") return o;
-  for (const k of ["tagline", "hero_text", "about_text", "cta_text"] as const) if (typeof c[k] === "string" && c[k].trim()) o[k] = c[k].trim().slice(0, 900);
+  for (const k of ["tagline", "hero_text", "about_text", "services_text", "work_text", "cta_text"] as const) if (typeof c[k] === "string" && c[k].trim()) o[k] = c[k].trim().slice(0, 900);
   if (Array.isArray(c.items)) o.items = c.items.slice(0, 12).filter((i: any) => i && typeof i.name === "string").map((i: any) => ({ name: str(i.name, 120), text: str(i.text, 260) }));
   if (Array.isArray(c.faq)) o.faq = c.faq.slice(0, 6).filter((i: any) => i && typeof i.q === "string" && typeof i.a === "string").map((i: any) => ({ q: str(i.q, 160), a: str(i.a, 420) }));
   return o;

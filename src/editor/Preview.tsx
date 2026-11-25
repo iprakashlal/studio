@@ -38,7 +38,7 @@ const DEVICES = [
 /** The content shown in a preview: the same, with the "Powered by" badge turned off. */
 const quiet = (c: any) => (c && typeof c === "object" ? { ...c, poweredBy: { ...(c.poweredBy || {}), show: false } } : c);
 
-export function Preview({ tpl, base, content, version, assets, editable = true, hidePages = false, onEditLink }: { /** A note such as "(Edit:story)" in the preview becomes an Edit link that calls this with the answer it belongs to. */ onEditLink?: (id: string) => void; tpl: TemplateDef; base: string; content: any; version: number; assets: Record<string, string>; editable?: boolean; /** No page list (a single-site preview). */ hidePages?: boolean }) {
+export function Preview({ tpl, base, content, version, assets, editable = true, hidePages = false, onEditLink, hints }: { /** The answers the page was made from: hovering text that shows one gets a pencil that opens that answer. */ hints?: { id: string; text: string }[];  /** A note such as "(Edit:story)" in the preview becomes an Edit link that calls this with the answer it belongs to. */ onEditLink?: (id: string) => void; tpl: TemplateDef; base: string; content: any; version: number; assets: Record<string, string>; editable?: boolean; /** No page list (a single-site preview). */ hidePages?: boolean }) {
   const frame = useRef<HTMLIFrameElement>(null);
   const box = useRef<HTMLDivElement>(null);
   const [device, setDevice] = useState<(typeof DEVICES)[number]["id"]>("desktop");
@@ -55,6 +55,7 @@ export function Preview({ tpl, base, content, version, assets, editable = true, 
   const wire = () => { if (!editable) return; try { const d = frame.current?.contentDocument; if (d) clickToEdit(d, live); } catch { /* another origin */ } };
 
   const linkRef = useRef(onEditLink); linkRef.current = onEditLink;
+  const hintRef = useRef(hints); hintRef.current = hints;
   const wireLinks = () => {
     if (!onEditLink) return;
     try {
@@ -73,6 +74,30 @@ export function Preview({ tpl, base, content, version, assets, editable = true, 
       let timer = 0; const later = () => { clearTimeout(timer); timer = window.setTimeout(run, 80); };
       new MutationObserver(later).observe(d.body, { childList: true, subtree: true, characterData: true }); run();
       d.addEventListener("click", (e) => { const el = (e.target as HTMLElement | null)?.closest?.("[data-answer]"); if (el) { e.preventDefault(); e.stopPropagation(); linkRef.current?.(el.getAttribute("data-answer") || ""); } }, true);
+
+      // A pencil beside any text that shows one of the answers, to change that answer.
+      const norm = (t: string) => t.replace(/\s+/g, " ").trim().toLowerCase();
+      const pen = d.createElement("button"); pen.type = "button"; pen.setAttribute("aria-label", "Edit this answer"); pen.textContent = "✎";
+      pen.setAttribute("style", "position:fixed;z-index:2147483000;display:none;width:28px;height:28px;border-radius:999px;border:0;background:#6d5efc;color:#fff;font:700 15px/28px system-ui;text-align:center;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.35);padding:0");
+      d.body.appendChild(pen); let cur = "", hideT = 0;
+      const find = (el: Element | null) => {
+        const hs = (hintRef.current || []).map((h) => ({ id: h.id, t: norm(h.text) })).filter((h) => h.t.length >= 3);
+        for (let n: Element | null = el, up = 0; n && n !== d.body && up < 4; n = n.parentElement, up++) {
+          const t = norm(n.textContent || ""); if (!t || t.length > 700) continue;
+          let best: { id: string; t: string } | null = null; for (const h of hs) if (t.includes(h.t) && (!best || h.t.length > best.t.length)) best = h;
+          if (best) return { id: best.id, el: n };
+        }
+        return null;
+      };
+      const show = (e: Event) => {
+        const el = e.target as Element | null; if (!el || el === pen || !(el instanceof (d.defaultView as any).Element)) return;
+        clearTimeout(hideT); const f = find(el); if (!f) { hideT = window.setTimeout(() => { pen.style.display = "none"; }, 250); return; }
+        const r = f.el.getBoundingClientRect(); cur = f.id; pen.title = "Edit this answer";
+        pen.style.left = Math.max(4, Math.min((d.defaultView!.innerWidth || 800) - 34, r.right - 30)) + "px"; pen.style.top = Math.max(4, r.top + 2) + "px"; pen.style.display = "block";
+      };
+      d.addEventListener("mouseover", show); pen.addEventListener("mouseover", () => clearTimeout(hideT));
+      d.defaultView?.addEventListener("scroll", () => { pen.style.display = "none"; }, { passive: true });
+      pen.addEventListener("click", (e) => { e.preventDefault(); e.stopPropagation(); if (cur) linkRef.current?.(cur); });
     } catch { /* another origin */ }
   };
 

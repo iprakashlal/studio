@@ -365,6 +365,7 @@ export async function buildDesign(a: Answers, copy?: Copy | null, files?: Design
     if (city) { put("hero.eyebrow", city); put("contact.address", city); } else put("hero.eyebrow", "");
     c.hero.badges = usp.slice(0, 4);
     if (items.length) c.services.items = items.slice(0, 6).map((t, i) => ({ ...c.services.items[i % c.services.items.length], title: t, body: noteOf(t) || `${t}${name ? " by " + name : ""}.`, points: [] }));
+    if (cp.services_text && items.length) c.services.lede = cp.services_text;
     const cta: Record<string, [string, string]> = { quote: ["Ask for a quote", "contact"], call: ["Call us", "contact"], book: ["Book a visit", "contact"], whatsapp: ["WhatsApp us", "contact"] };
     if (g[0] && cta[g[0]]) { put("nav.cta", cta[g[0]][0]); put("hero.ctaPrimary", cta[g[0]][0]); put("cta.button", cta[g[0]][0]); }
     if (phone) { put("contact.phone", phone); put("contact.whatsapp", digits(phone)); }
@@ -412,7 +413,7 @@ export async function buildDesign(a: Answers, copy?: Copy | null, files?: Design
   const workLines = lines(a.work);
   if (kind === "business" && workLines.length) {
     c.work.items = workLines.slice(0, 6).map((l) => { const m = /^(.{2,70}?)\s*(?::|\s[-–—]\s)\s*(.{3,})$/.exec(l), title = (m ? m[1] : l).trim(), sum = (m ? m[2] : "").trim(); return { ...base0.work, title, client: "", sector: "", summary: sum || `${name || "We"} delivered ${title.charAt(0).toLowerCase() + title.slice(1)}.`, result: "", image: null, url: "" }; });
-    c.work.lede = ""; show(c, "work");
+    c.work.lede = cp.work_text || ""; show(c, "work");
   }
   applySections(kind, c, ds, (...ids) => show(c, ...ids));
   // The sections a person gave nothing for yet show a short note with an (Edit) link that goes to the answer.
@@ -490,6 +491,8 @@ export function systemCopy(a: Answers): Copy {
   const out: Copy = {
     ...(b.brand_tagline ? { tagline: b.brand_tagline } : {}), ...(b.hero_text ? { hero_text: b.hero_text } : {}), ...(b.cta_text ? { cta_text: b.cta_text } : {}),
     about_text: ((a.story || "").trim() || b.about_text || "").slice(0, 900) || undefined,
+    ...(b.services_intro ? { services_text: String(b.services_intro) } : {}),
+    ...((a.work || "").trim() ? { work_text: `Projects delivered${name === "We" ? "" : " by " + name}: ${(a.work || "").split("\n").map((x) => x.split(/\s*(?::|\s[-–—]\s)/)[0].trim()).filter(Boolean).slice(0, 6).join(", ")}. Each one is shown below.` } : {}),
     items: topicsOf(a).map((n, i) => ({ name: n, text: topicLine(n, i, a, name, tail[kind]) })),
     ...(Array.isArray(b.faq) && b.faq.length ? { faq: b.faq.slice(0, 4).map((x: any) => ({ q: String(x.q), a: String(x.a) })) } : {}),
   };
@@ -500,7 +503,7 @@ export function systemCopy(a: Answers): Copy {
 export async function writeCopy(a: Answers, host: { api: string; studio: string } | null): Promise<{ copy: Copy; engine: string }> {
   if (host) {
     try {
-      const r = await fetch(host.api.replace(/\/+$/, "") + "/dq/write/" + encodeURIComponent(host.studio), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind: a.kind, brand: a.name, about: a.about, city: a.city, story: a.story, usp: a.usp, doc: a.doctext || "", items: topicsOf(a) }) });
+      const r = await fetch(host.api.replace(/\/+$/, "") + "/dq/write/" + encodeURIComponent(host.studio), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind: a.kind, brand: a.name, about: a.about, city: a.city, story: a.story, usp: a.usp, doc: a.doctext || "", items: topicsOf(a), work: (a.work || "").split("\n").map((x) => x.trim()).filter(Boolean) }) });
       if (r.ok) { const j = await r.json(); if (j?.copy && Object.keys(j.copy).length) return { copy: j.copy, engine: j.engine }; }
     } catch { /* the Picaffectz system writes instead */ }
   }

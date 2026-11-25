@@ -25,7 +25,7 @@ create index if not exists approvals_project on approvals (scope, project, creat
 create table if not exists approval_notes (id integer primary key autoincrement, token text not null, who text not null, body text not null, page text not null default '', kind text not null default 'comment', created_at text not null);
 create index if not exists approval_notes_token on approval_notes (token, id);
 `;
-var CFDB_VERSION = 68;
+var CFDB_VERSION = 69;
 var CFDB_WORKER_NAME = "picaffectz-db";
 
 // src/lib/lookdigest.ts
@@ -2277,7 +2277,7 @@ function dqStrings(o, keys, len) {
 function dqCopy(c) {
   const out = {};
   if (!c || typeof c !== "object") return out;
-  for (const k of ["tagline", "hero_text", "about_text", "cta_text"]) if (typeof c[k] === "string" && c[k].trim()) out[k] = c[k].trim().slice(0, 900);
+  for (const k of ["tagline", "hero_text", "about_text", "services_text", "work_text", "cta_text"]) if (typeof c[k] === "string" && c[k].trim()) out[k] = c[k].trim().slice(0, 900);
   if (Array.isArray(c.items)) out.items = c.items.slice(0, 12).filter((i) => i && typeof i.name === "string").map((i) => ({ name: clip(i.name, 120), text: clip(i.text, 260) }));
   if (Array.isArray(c.faq)) out.faq = c.faq.slice(0, 6).filter((i) => i && typeof i.q === "string" && typeof i.a === "string").map((i) => ({ q: clip(i.q, 160), a: clip(i.a, 420) }));
   return out;
@@ -2555,12 +2555,14 @@ async function dqWrite(env, id, req) {
   const items = (Array.isArray(q.items) ? q.items : []).slice(0, 8).map((x) => clip(x, 100)).filter(Boolean);
   const facts = [["About", clip(q.about, 200)], ["City", clip(q.city, 60)], ["Their story", clip(q.story, 900)], ["What makes them special", clip(q.usp, 400)], ["From their own document (use only facts found here)", clip(q.doc, 3e3)]].filter(([, v]) => v).map(([k, v]) => `${k}: ${v}`).join("\n");
   const noun = kind === "store" ? "products" : kind === "restaurant" ? "dishes" : kind === "portfolio" ? "skills" : "services";
-  const sys = `You write short, friendly website text in plain words for a small ${DQ_LABEL[kind].toLowerCase()}. Use ONLY what the owner told you. Never invent facts: no years, numbers, prices, awards, client names, addresses or claims. Keep every line short and simple. Return JSON only: {"tagline": at most 8 words, "hero_text": at most 30 words, "about_text": two short paragraphs, at most 70 words in all, built only from their About, services and what makes them special (a story they wrote is shown as it is, separately), "cta_text": at most 14 words, "items": [{"name": the ${noun.slice(0, -1)} exactly as given, "text": one sentence of at most 18 words describing it, using their About line, story and what makes them special where they fit, without inventing facts}] in the same order, "faq": [{"q": question, "a": answer}] three general questions a customer might ask, answered without inventing facts}.`;
+  const sys = `You write short, friendly website text in plain words for a small ${DQ_LABEL[kind].toLowerCase()}. Use ONLY what the owner told you. Never invent facts: no years, numbers, prices, awards, client names, addresses or claims. Keep every line short and simple. Return JSON only: {"tagline": at most 8 words, "hero_text": at most 30 words, "about_text": four to five short lines (about 60 words in all), built only from their About, services and what makes them special (a story they wrote is shown as it is, separately), "services_text": four to five short lines (about 55 words) that sum up what they offer, built only from their services, About and what makes them special, "work_text": four to five short lines (about 55 words) that sum up the projects they delivered, built only from the projects listed (empty text if none are listed), "cta_text": at most 14 words, "items": [{"name": the ${noun.slice(0, -1)} exactly as given, "text": one sentence of at most 18 words describing it, using their About line, story and what makes them special where they fit, without inventing facts}] in the same order, "faq": [{"q": question, "a": answer}] three general questions a customer might ask, answered without inventing facts}.`;
+  const work = (Array.isArray(q.work) ? q.work : []).slice(0, 6).map((x) => clip(x, 160)).filter(Boolean);
   const user = `Name: ${brand}
 ${facts}
-${noun}: ${items.join("; ") || "(none given)"}`;
+${noun}: ${items.join("; ") || "(none given)"}${work.length ? `
+Projects delivered: ${work.join("; ")}` : ""}`;
   try {
-    const r = await ai.run("@cf/meta/llama-3.3-70b-instruct-fp8-fast", { messages: [{ role: "system", content: sys }, { role: "user", content: user }], max_tokens: 1200, temperature: 0.7, response_format: { type: "json_object" } });
+    const r = await ai.run("@cf/meta/llama-3.3-70b-instruct-fp8-fast", { messages: [{ role: "system", content: sys }, { role: "user", content: user }], max_tokens: 1600, temperature: 0.7, response_format: { type: "json_object" } });
     const t = typeof r?.response === "string" ? r.response : JSON.stringify(r?.response ?? r);
     let j;
     try {

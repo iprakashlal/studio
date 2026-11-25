@@ -470,3 +470,32 @@ html[data-bands=outline] .band>.wrap{border:1px solid var(--line)}
 
 /* The page trail (Home / Page name) can be switched off: Sections & order → Pages */
 html[data-crumbs=off] :is(.crumbs,.sp-crumbs,.solo-top){display:none}
+
+/* ============ Newer hero layouts: poster, diagonal, bleed, stagger ============ */
+/* poster: a giant headline set over the foot of a wide picture; where they overlap the headline inverts (blend), so it stays readable on any picture */
+html[data-layout=poster] .hero-in{grid-template-columns:minmax(0,1fr);gap:0}
+html[data-layout=poster] .hero-media{order:-1}html[data-layout=poster] .hero-media:not(.none){aspect-ratio:21/9}
+html[data-layout=poster] .hero-text{position:relative;z-index:2}
+html[data-layout=poster] .h1{font-size:clamp(40px,8.2vw,128px);line-height:.95;max-width:15ch;margin-top:20px}
+@media (min-width:981px){
+  html[data-layout=poster] .hero-text{margin-top:calc(-1 * clamp(70px,9.4vw,160px));padding-inline:clamp(18px,3.4vw,52px)}
+  html[data-layout=poster] .h1{margin-top:0;mix-blend-mode:difference;color:#fff;-webkit-text-stroke:0}
+  html[data-layout=poster] .h1 em{color:#fff}
+  html[data-layout=poster] .hero-lede{max-width:60ch}
+  /* diagonal: the picture runs off the right edge, cut on a slant */
+  html[data-layout=diagonal] .hero-in{grid-template-columns:minmax(0,.9fr) minmax(0,1.1fr);gap:0}
+  html[data-layout=diagonal] .hero-text{position:relative;z-index:2;padding-right:clamp(16px,3vw,48px)}
+  html[data-layout=diagonal] .hero-media:not(.none){aspect-ratio:5/4.4;border-radius:0;clip-path:polygon(16% 0,100% 0,100% 100%,0 100%);margin-left:-9%;margin-right:calc(-1 * var(--gut))}
+  html[data-layout=diagonal] .hero-media.none{margin-left:-6%}
+  /* bleed: the picture touches the edge of the screen, with a block of the accent colour behind it */
+  html[data-layout=bleed] .hero-in{grid-template-columns:minmax(0,1fr) minmax(0,1.02fr);gap:clamp(28px,4vw,64px)}
+  html[data-layout=bleed] .hero-media:not(.none){aspect-ratio:1/1.02;margin-right:calc(-1 * var(--gut));border-radius:calc(var(--r) + 30px) 0 0 calc(var(--r) + 30px);box-shadow:-22px 22px 0 -2px color-mix(in srgb,var(--c1) 26%,transparent)}
+  html[data-layout=bleed] .hero-media.none{margin-right:0}
+  /* stagger: text and picture on different steps, the picture dropped lower and tilted onto a colour block */
+  html[data-layout=stagger] .hero-in{grid-template-columns:repeat(12,minmax(0,1fr));gap:0 clamp(18px,3vw,44px);align-items:start}
+  html[data-layout=stagger] .hero-text{grid-column:1/7}
+  html[data-layout=stagger] .hero-media{grid-column:7/13;margin-top:clamp(40px,6vw,96px)}
+  html[data-layout=stagger] .hero-media:not(.none){aspect-ratio:4/4.8;border-radius:var(--r);box-shadow:-18px 18px 0 var(--c1),0 34px 70px -40px rgba(0,0,0,.5)}
+  html[data-layout=stagger] .hero-media.none{margin-top:40px}
+}
+@media (max-width:980px){html[data-layout=poster] .hero-media:not(.none){aspect-ratio:16/10}html[data-layout=diagonal] .hero-media:not(.none){clip-path:polygon(0 0,100% 0,100% 100%,0 92%)}}

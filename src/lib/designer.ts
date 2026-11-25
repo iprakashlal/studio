@@ -3,6 +3,7 @@
 import { outsideLines, packSections, readSections, unpackSections, type DocSections } from "./docsections";
 import { THEMES, type Theme } from "../themes/catalog";
 import { BIZ_THEMES } from "../themes/business";
+import { BIZ_TYPES, BIZ_TYPE_WORDS } from "../themes/businessTypes";
 import { REST_THEMES } from "../themes/restaurant";
 import { TEMPLATES } from "../schema";
 import { loadStarter } from "./exporter";
@@ -242,6 +243,8 @@ export function pickTheme(a: Answers): Theme | null {
   const kind = k(a), pool = offered(kind); if (!pool.length) return null;
   const chosen = a.theme && poolOf(kind).find((t) => t.id === a.theme); if (chosen) return chosen;
   const st = STYLE_TAGS[a.style || "clean"] || STYLE_TAGS.clean, col = a.colour || "any";
+  // A business says what it does ("dental clinic", "wedding planner"): the themes made for that kind of business come first.
+  const say = `${a.about || ""} ${a.name || ""}`.toLowerCase(), mine = kind === "business" ? BIZ_TYPES.filter((ty) => say && new RegExp(BIZ_TYPE_WORDS[ty] || "(?!)", "i").test(say)) : [];
   const scored = pool.map((t) => {
     let s = st.want.reduce((n, tag, i) => n + (t.tags.includes(tag) ? 6 - Math.min(i, 4) : 0), 0);
     if (st.dark && t.dark) s += 8; if (st.dark && !t.dark) s -= 8; if (st.light && !t.dark) s += 4;
@@ -250,6 +253,7 @@ export function pickTheme(a: Answers): Theme | null {
     if (col === "mono") s += c.s < 0.15 ? 10 : -c.s * 10;
     else if (col !== "any") { const d = Math.min(Math.abs(c.h - HUE[col]), 360 - Math.abs(c.h - HUE[col])); s += c.s < 0.2 ? -6 : Math.max(-8, 10 - d / 9); }
     if (kind === "store" && t.tags.includes("Products")) s += 2;
+    for (const ty of mine) if (t.tags.includes(ty)) s += 12;
     return { t, s };
   }).sort((x, y) => y.s - x.s);
   const top = scored.filter((x) => x.s >= scored[0].s - 1.5).slice(0, 6);

@@ -82,7 +82,7 @@ export const COLOUR_DOT: Record<string, string> = { blue: "#3b82f6", green: "#22
 export const STEPS: Step[] = [
   { id: "kind", type: "choice", ask: () => "Hi! Let's design your website together. What kind of website do you want?", options: () => KIND_OPTIONS },
   {
-    id: "doc", type: "file", optional: true, accept: "application/pdf", maxKB: 4000,
+    id: "doc", type: "file", optional: true, accept: "application/pdf", maxKB: 20480,
     ask: (a) => by(a, { portfolio: "Do you already have your details somewhere? Add a PDF (resume, profile) or paste a link, and we'll fill in what we can.", store: "Do you already have your products somewhere? Add a PDF (catalogue, price list) or paste your website or Instagram link, and we'll fill in what we can.", business: "Do you already have your details somewhere? Add a PDF (brochure, profile, price list) or paste your website link, and we'll fill in what we can.", restaurant: "Do you already have your menu or details somewhere? Add a PDF or paste your website or Instagram link, and we'll fill in what we can." }),
     ph: () => "Paste a link, e.g. https://yourname.com",
     help: () => "We only use what is written there, and we won't ask again for what we find. You can skip this.",
@@ -99,7 +99,7 @@ export const STEPS: Step[] = [
     help: () => "One short line is enough. You can change it later.",
   },
   { id: "city", type: "text", optional: true, ask: () => "Which city are you in?", ph: () => "e.g. Mumbai", help: () => "Skip it if you work online or don't want to show it." },
-  { id: "logo", type: "file", optional: true, accept: "image/png,image/jpeg,image/webp", maxKB: 4000, when: (a) => k(a) !== "portfolio", ask: () => "Do you have a logo? Add it here, or skip and we'll use your name.", help: () => "A PNG or JPG picture. You can send a better one later." },
+  { id: "logo", type: "file", optional: true, accept: "image/png,image/jpeg,image/webp", maxKB: 20480, when: (a) => k(a) !== "portfolio", ask: () => "Do you have a logo? Add it here, or skip and we'll use your name.", help: () => "A PNG or JPG picture. You can send a better one later." },
   { id: "style", type: "choice", ask: () => "How should your website feel?", options: () => STYLE_OPTIONS },
   { id: "colour", type: "choice", ask: () => "Which colour do you like best?", options: () => COLOUR_OPTIONS },
   {

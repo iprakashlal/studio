@@ -160,7 +160,7 @@ export function DesignPage({ studio, index, onIndex }: { studio?: Studio; index?
   const choose = async (s: Step, f: File | undefined) => {
     if (!f) return;
     try {
-      if (f.size > (s.maxKB || 1000) * 1024) throw new Error(`That file is over ${Math.round((s.maxKB || 1000) / 1000)} MB. Please choose a smaller one.`);
+      if (f.size > (s.maxKB || 1000) * 1024) throw new Error(`That file is over ${s.maxKB === 20480 ? 20 : Math.round((s.maxKB || 1000) / 1000)} MB. Please choose a smaller one.`);
       if (s.id === "logo") { const u = await fitImage(f); setFiles((o) => ({ ...o, logo: u })); answer(s, "added"); }
       else if (s.id === "doc") {
         setReading(true);

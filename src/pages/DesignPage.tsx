@@ -263,6 +263,11 @@ export function DesignPage({ studio, index, onIndex }: { studio?: Studio; index?
         : cur.type === "long"
         ? <textarea ref={field} aria-label={cur.ask(a)} rows={4} className="input min-h-[7rem] resize-y" placeholder={cur.ph?.(a)} value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); submit(); } }} />
         : field$ ? <input ref={field} aria-label={cur.ask(a)} className="input" disabled={reading} placeholder={reading ? "Reading…" : cur.ph?.(a)} value={text} onChange={(e) => setText(e.target.value)} /> : null}
+      {cur.id === "doc" && a.kind === "portfolio" && (
+        <label className="flex flex-col gap-1 text-xs text-ink-400">Your LinkedIn profile URL (optional)
+          <input className="input" inputMode="url" autoComplete="url" placeholder="e.g. linkedin.com/in/yourname" value={a.linkedin || ""} onChange={(e) => setA((o) => ({ ...o, linkedin: e.target.value.slice(0, 200) }))} />
+        </label>
+      )}
       <div className="flex flex-wrap items-center gap-2">
         {cur.type === "long" && !cur.cols && <span className="mr-auto text-xs text-ink-500">Enter = new line · Ctrl + Enter = send</span>}
         {(cur.type !== "long" || cur.cols) && <span className="mr-auto" />}

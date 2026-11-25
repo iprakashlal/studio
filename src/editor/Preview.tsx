@@ -38,7 +38,7 @@ const DEVICES = [
 /** The content shown in a preview: the same, with the "Powered by" badge turned off. */
 const quiet = (c: any) => (c && typeof c === "object" ? { ...c, poweredBy: { ...(c.poweredBy || {}), show: false } } : c);
 
-export function Preview({ tpl, base, content, version, assets, editable = true, hidePages = false, onEditLink, hints }: { /** The answers the page was made from: hovering text that shows one gets a pencil that opens that answer. */ hints?: { id: string; text: string }[];  /** A note such as "(Edit:story)" in the preview becomes an Edit link that calls this with the answer it belongs to. */ onEditLink?: (id: string) => void; tpl: TemplateDef; base: string; content: any; version: number; assets: Record<string, string>; editable?: boolean; /** No page list (a single-site preview). */ hidePages?: boolean }) {
+export function Preview({ tpl, base, content, version, assets, editable = true, hidePages = false, onEditLink, hints }: { /** The answers the page was made from: hovering text that shows one gets a pencil that opens that answer. */ hints?: { id: string; text?: string; img?: string }[];  /** A note such as "(Edit:story)" in the preview becomes an Edit link that calls this with the answer it belongs to. */ onEditLink?: (id: string) => void; tpl: TemplateDef; base: string; content: any; version: number; assets: Record<string, string>; editable?: boolean; /** No page list (a single-site preview). */ hidePages?: boolean }) {
   const frame = useRef<HTMLIFrameElement>(null);
   const box = useRef<HTMLDivElement>(null);
   const [device, setDevice] = useState<(typeof DEVICES)[number]["id"]>("desktop");
@@ -80,11 +80,15 @@ export function Preview({ tpl, base, content, version, assets, editable = true, 
       const pen = d.createElement("button"); pen.type = "button"; pen.setAttribute("aria-label", "Edit this answer"); pen.textContent = "✎";
       pen.setAttribute("style", "position:fixed;z-index:2147483000;display:none;width:28px;height:28px;border-radius:999px;border:0;background:#6d5efc;color:#fff;font:700 15px/28px system-ui;text-align:center;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.35);padding:0");
       d.body.appendChild(pen); let cur = "", hideT = 0;
+      // Only the text that IS the answer (or an image that is the logo): the smallest element holding it, not the paragraph around it.
       const find = (el: Element | null) => {
-        const hs = (hintRef.current || []).map((h) => ({ id: h.id, t: norm(h.text) })).filter((h) => h.t.length >= 3);
-        for (let n: Element | null = el, up = 0; n && n !== d.body && up < 4; n = n.parentElement, up++) {
-          const t = norm(n.textContent || ""); if (!t || t.length > 700) continue;
-          let best: { id: string; t: string } | null = null; for (const h of hs) if (t.includes(h.t) && (!best || h.t.length > best.t.length)) best = h;
+        const hs = hintRef.current || [];
+        const im = el?.closest("img");
+        if (im) { const src = im.getAttribute("src") || ""; const h = hs.find((x) => x.img && src && x.img === src); return h ? { id: h.id, el: im as Element } : null; }
+        for (let n: Element | null = el, up = 0; n && n !== d.body && up < 3; n = n.parentElement, up++) {
+          const t = norm(n.textContent || ""); if (!t || t.length > 400) continue;
+          let best: { id: string; t: string } | null = null;
+          for (const h of hs) { const w = norm(h.text || ""); if (w.length >= 3 && t.includes(w) && w.length >= t.length * 0.55 && (!best || w.length > best.t.length)) best = { id: h.id, t: w }; }
           if (best) return { id: best.id, el: n };
         }
         return null;

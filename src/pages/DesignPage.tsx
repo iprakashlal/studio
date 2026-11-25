@@ -341,6 +341,7 @@ function AnswersReview({ rows, a, jump, open, onOpen, onRewind, onSave }: { rows
   // An (Edit) link in the preview: open that answer, ready to type.
   useEffect(() => {
     if (!jump) return; const s = rows.find((x) => x.id === jump.id); if (!s) return;
+    if (s.type === "file" || s.id === "kind") { setTimeout(() => document.getElementById("answer-" + s.id)?.scrollIntoView({ block: "center", behavior: "smooth" }), 120); return; }
     setEdit(s.id); setDraft(a[s.id] || ""); setPick((a[s.id] || "").split(",").filter(Boolean));
     setTimeout(() => document.getElementById("answer-" + s.id)?.scrollIntoView({ block: "center", behavior: "smooth" }), 120);
   }, [jump?.n]);
@@ -387,15 +388,16 @@ function AnswersReview({ rows, a, jump, open, onOpen, onRewind, onSave }: { rows
 
 /** The preview, over the whole screen. */
 /** The answers whose words show on the page, so hovering them can offer a pencil that opens the answer. */
-const answerHints = (a: Answers): { id: string; text: string }[] => {
-  const out: { id: string; text: string }[] = [];
+const answerHints = (a: Answers, logo = ""): { id: string; text?: string; img?: string }[] => {
+  const out: { id: string; text?: string; img?: string }[] = [];
+  if (logo && a.logo) out.push({ id: "logo", img: logo });
   for (const id of ["name", "about", "city", "phone", "email", "address", "hours", "social"]) if ((a[id] || "").trim()) out.push({ id, text: a[id].trim() });
   if ((a.story || "").trim()) out.push({ id: "story", text: a.story.trim().slice(0, 90) });
   for (const id of ["items", "usp", "work"]) for (const l of (a[id] || "").split("\n")) { const t = l.split(/\s*(?::|\s[-–—]\s)/)[0].trim(); if (t.length >= 3) out.push({ id, text: t }); }
   return out;
 };
 export function PreviewPopup({ design, ver, a, onClose, onEdit, onEditLink, onConnect, done, onTweak }: { design: Design; ver: number; a: Answers; onClose: () => void; onEdit?: () => void; onEditLink?: (id: string) => void; onConnect?: () => void; done: boolean; onTweak?: (p: Answers) => void }) {
-  const hints = useMemo(() => answerHints(a), [a]);
+  const hints = useMemo(() => answerHints(a, design.content?.brand?.logo?.url || ""), [a, design]);
   const [play, setPlay] = useState(false);
   useEffect(() => {
     const k = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };

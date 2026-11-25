@@ -418,11 +418,11 @@ export async function buildDesign(a: Answers, copy?: Copy | null, files?: Design
   applySections(kind, c, ds, (...ids) => show(c, ...ids));
   // The sections a person gave nothing for yet show a short note with an (Edit) link that goes to the answer.
   if (kind === "business") {
-    if (!(items.length || ds.services?.length)) { c.services.items = [{ ...base0.service, title: "Your services", body: "Tell us what you offer and we will write about each one. (Edit:items)", points: [] }]; c.services.lede = ""; show(c, "services"); }
-    if (!(workLines.length || ds.work?.length)) { c.work.items = [{ ...base0.work, title: "Your case studies", client: "", sector: "", summary: "Tell us about projects or work you have delivered. (Edit:work)", result: "", image: null, url: "" }]; c.work.lede = ""; show(c, "work"); }
+    if (!(items.length || ds.services?.length)) { c.services.items = [{ ...base0.service, title: "Your services", body: "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. (Edit:items)", points: [] }]; c.services.lede = ""; show(c, "services"); }
+    if (!(workLines.length || ds.work?.length)) { c.work.items = [{ ...base0.work, title: "Your case studies", client: "", sector: "", summary: "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. (Edit:work)", result: "", image: null, url: "" }]; c.work.lede = ""; show(c, "work"); }
   }
   if (kind === "business" || kind === "restaurant") {
-    if (!(story || cp.about_text || about || ds.mission || ds.vision)) put("about.body", "Tell us about yourself and we will write this part. (Edit:story)");
+    if (!(story || cp.about_text || about || ds.mission || ds.vision)) put("about.body", "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. (Edit:story)");
     show(c, "about");
   }
   if (files?.logo && kind !== "portfolio") put("brand.logo", { url: files.logo });

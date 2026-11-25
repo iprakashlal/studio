@@ -1,6 +1,6 @@
 import { DevtoolsGuard, LoadVeil } from "../ui/PageGuard";
 import { themeCode } from "../themes/codes";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { BrandMark, useBrand } from "../lib/brand";
 import { TEMPLATES } from "../schema";
 import { Preview } from "../editor/Preview";
@@ -9,7 +9,7 @@ import { packSections, sectionNames, unpackSections } from "../lib/docsections";
 import { COLOUR_DOT, STEPS, STEP_LABEL, buildDesign, fromDoc, isOptional, nextStep, requestText, sayAnswer, themeOf, themesFor, tweakTheme, writeCopy, type Answers, type Design, type DesignFiles, type Step } from "../lib/designer";
 import { newDesignId, readDesignSettings, readLocalDesigns, writeLocalDesigns, type Copy, type DesignRec } from "../lib/designs";
 import { COLOUR_SLOTS, GROUPS, pagesChoice, readColsAnswer, readLookAnswer, resolvedLook, visibleAxes, type Kind as LookKind } from "../lib/designlook";
-import { designHost, readPage, submitQuery, understandText, type DesignHost } from "../lib/designapi";
+import { designHost, otpCheck, otpSend, readPage, submitQuery, understandText, type DesignHost } from "../lib/designapi";
 import { pdfLines } from "../lib/pdftext";
 import { watchDevtools } from "../lib/devtools";
 import type { Studio, StudioIndex } from "../lib/studio";
@@ -59,7 +59,8 @@ export function DesignPage({ studio, index, onIndex }: { studio?: Studio; index?
   const [showPreview, setShowPreview] = useState(false);
   const [reviewOpen, setReviewOpen] = useState(false);
   const [jump, setJump] = useState<{ id: string; n: number } | null>(null);
-  const [connect, setConnect] = useState(false);
+  const [connect, setConnect] = useState(false), [connectFrom, setConnectFrom] = useState<DOMRect | null>(null);
+  const openConnect = (r?: DOMRect) => { setConnectFrom(r || null); setConnect(true); };
   const [text, setText] = useState("");
   const [many, setMany] = useState<string[]>([]);
   const [savedId, setSavedId] = useState(first.id);
@@ -302,7 +303,7 @@ export function DesignPage({ studio, index, onIndex }: { studio?: Studio; index?
                 </div>
                 <div className="grid gap-2 sm:flex sm:flex-wrap">
                   <button type="button" className="btn btn-pri justify-center" onClick={() => setShowPreview(true)}>View my preview</button>
-                  <button type="button" className="btn justify-center" onClick={() => setConnect(true)}>{sent ? "Request sent ✓" : "Connect with Picaffectz"}</button>
+                  <button type="button" className="btn justify-center" onClick={(e) => openConnect(e.currentTarget.getBoundingClientRect())}>{sent ? "Request sent ✓" : "Connect with Picaffectz"}</button>
                   <button type="button" className="btn btn-ghost justify-center" onClick={restart}>Design another</button>
                 </div>
                 <p className="text-xs text-ink-500">Preview only. Nothing is published or charged.</p>
@@ -315,7 +316,7 @@ export function DesignPage({ studio, index, onIndex }: { studio?: Studio; index?
         )}
       </main>
 
-      {showPreview && design && <PreviewPopup design={design} ver={ver} a={a} onClose={() => setShowPreview(false)} onEditLink={(id) => { setShowPreview(false); setReviewOpen(true); if (!(id in a)) setA((o) => ({ ...o, [id]: "" })); setTimeout(() => setJump({ id, n: Date.now() }), 60); }} onEdit={() => { setShowPreview(false); setReviewOpen(true); setTimeout(() => document.getElementById("design-answers")?.scrollIntoView({ block: "start", behavior: "smooth" }), 80); }} onConnect={() => setConnect(true)} done={ready} onTweak={ready ? tweak : undefined} />}
+      {showPreview && design && <PreviewPopup design={design} ver={ver} a={a} onClose={() => setShowPreview(false)} onEditLink={(id) => { setShowPreview(false); setReviewOpen(true); if (!(id in a)) setA((o) => ({ ...o, [id]: "" })); setTimeout(() => setJump({ id, n: Date.now() }), 60); }} onEdit={() => { setShowPreview(false); setReviewOpen(true); setTimeout(() => document.getElementById("design-answers")?.scrollIntoView({ block: "start", behavior: "smooth" }), 80); }} onConnect={openConnect} done={ready} onTweak={ready ? tweak : undefined} />}
       {warn && (
         <div role="alertdialog" aria-modal="true" aria-label="Developer tools detected" className="fixed inset-0 z-[100] grid place-items-center bg-black/85 p-4">
           <div className="card flex w-full max-w-md flex-col gap-3 p-6">
@@ -325,7 +326,7 @@ export function DesignPage({ studio, index, onIndex }: { studio?: Studio; index?
           </div>
         </div>
       )}
-      {connect && <ConnectPopup a={a} design={design} copy={copy} files={files} host={host} sent={sent} onSent={() => setSent(true)} onClose={() => setConnect(false)} />}
+      {connect && <ConnectPopup from={connectFrom} a={a} design={design} copy={copy} files={files} host={host} sent={sent} onSent={() => setSent(true)} onClose={() => setConnect(false)} />}
     </div>
   );
 }
@@ -396,7 +397,7 @@ const answerHints = (a: Answers, logo = ""): { id: string; text?: string; img?: 
   for (const id of ["items", "usp", "work"]) for (const l of (a[id] || "").split("\n")) { const t = l.split(/\s*(?::|\s[-–—]\s)/)[0].trim(); if (t.length >= 3) out.push({ id, text: t }); }
   return out;
 };
-export function PreviewPopup({ design, ver, a, onClose, onEdit, onEditLink, onConnect, done, onTweak }: { design: Design; ver: number; a: Answers; onClose: () => void; onEdit?: () => void; onEditLink?: (id: string) => void; onConnect?: () => void; done: boolean; onTweak?: (p: Answers) => void }) {
+export function PreviewPopup({ design, ver, a, onClose, onEdit, onEditLink, onConnect, done, onTweak }: { design: Design; ver: number; a: Answers; onClose: () => void; onEdit?: () => void; onEditLink?: (id: string) => void; onConnect?: (from?: DOMRect) => void; done: boolean; onTweak?: (p: Answers) => void }) {
   const hints = useMemo(() => answerHints(a, design.content?.brand?.logo?.url || ""), [a, design]);
   const [play, setPlay] = useState(false);
   useEffect(() => {
@@ -410,14 +411,14 @@ export function PreviewPopup({ design, ver, a, onClose, onEdit, onEditLink, onCo
         <b className="min-w-0 truncate text-sm">{a.name || "Your website"}</b>
         <span className="chip shrink-0 border-amber-400/50 text-amber-200 max-sm:hidden">{done ? "Preview · not published" : "Preview so far"}</span>
         <span className="ml-auto flex shrink-0 items-center gap-2">
-          {onTweak && <button type="button" className={`btn btn-sm play-btn ${play ? "ring-2 ring-white/70" : ""}`} aria-pressed={play} onClick={() => setPlay((v) => !v)}><span className="max-sm:hidden">Play with your design</span><span className="sm:hidden">Customise</span></button>}
+          {onTweak && <button type="button" className={`btn btn-sm play-btn !border-0 ${play ? "ring-2 ring-white/70" : ""}`} aria-pressed={play} onClick={() => setPlay((v) => !v)}><span className="max-sm:hidden">Play with your design</span><span className="sm:hidden">Customise</span></button>}
           {onEdit && <button type="button" className="btn btn-sm" onClick={onEdit}>Edit answers</button>}
           <button type="button" className="btn btn-sm" onClick={onClose} autoFocus>{done ? "Close" : "Back"}</button>
         </span>
       </div>
       <div className="relative flex min-h-0 flex-1">
         <div className="relative flex min-h-0 min-w-0 flex-1 flex-col"><Preview key={design.kind} tpl={TEMPLATES[design.kind]} base={`templates/${design.kind}/`} content={design.content} version={ver} assets={{}} editable={false} hidePages onEditLink={onEditLink} hints={hints} />
-          {onConnect && <button type="button" onClick={onConnect} className="btn btn-pri absolute bottom-5 left-1/2 z-[5] -translate-x-1/2 whitespace-nowrap rounded-full px-6 shadow-xl shadow-black/40">Connect with Picaffectz</button>}
+          {onConnect && <button type="button" onClick={(e) => onConnect(e.currentTarget.getBoundingClientRect())} className="btn btn-pri absolute bottom-6 left-1/2 z-[5] -translate-x-1/2 whitespace-nowrap rounded-full px-10 py-4 text-base font-extrabold shadow-2xl shadow-black/50 ring-4 ring-brand-400/25">Connect with Picaffectz</button>}
         </div>
         {play && onTweak && <Tweaks a={a} design={design} onTweak={onTweak} onClose={() => setPlay(false)} />}
       </div>
@@ -481,7 +482,7 @@ function Tweaks({ a, design, onTweak, onClose }: { a: Answers; design: Design; o
       </Group>
 
       {grouped.map(({ g, rows }, i) => (
-        <Group key={g} title={g === "Layout" ? "Layout" : g} open={g === "Layout"} note={g === "Intro screen" ? "Shown while the site opens, when an intro is switched on." : undefined}>
+        <Group key={g} title={g === "Layout" ? "Navigation style" : g} open={g === "Layout"} note={g === "Intro screen" ? "Shown while the site opens, when an intro is switched on." : undefined}>
           {g === "Layout" && pagesAxis && (
             <div className="flex flex-col gap-1.5"><span className={fieldLabel}>Pages</span>
               <div className="grid grid-cols-2 gap-1 rounded-xl border border-ink-600 p-1" role="radiogroup" aria-label="Pages">
@@ -515,19 +516,50 @@ function Tweaks({ a, design, onTweak, onClose }: { a: Answers; design: Design; o
 }
 
 /** Send the request: it is saved in the Studio's own database and emailed to its owners. */
-export function ConnectPopup({ a, design, copy, files, host, sent, onSent, onClose }: { a: Answers; design: Design | null; copy: Copy | null; files: DesignFiles; host: DesignHost | null; sent: boolean; onSent: () => void; onClose: () => void }) {
+export function ConnectPopup({ a, design, copy, files, host, sent, onSent, onClose, from }: { a: Answers; design: Design | null; copy: Copy | null; files: DesignFiles; host: DesignHost | null; sent: boolean; onSent: () => void; onClose: () => void; /** Where the Connect button was: the form grows out of it. */ from?: DOMRect | null }) {
   const toast = useToast();
   const [f, setF] = useState({ person: "", phone: a.phone || "", email: a.email || "", note: "" });
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(sent);
+  // Email: confirmed with a code sent to it. `pass` is what the request carries once that is done.
+  const [pass, setPass] = useState<{ email: string; otp?: string; skip?: string } | null>(null), [asked, setAsked] = useState(false), [code, setCode] = useState(""), [wait, setWait] = useState(0), [okMail, setOkMail] = useState(true);
+  const mail = f.email.trim().toLowerCase(), verified = !!pass && pass.email === mail;
+  useEffect(() => { if (wait <= 0) return; const t = setTimeout(() => setWait((w) => w - 1), 1000); return () => clearTimeout(t); }, [wait]);
   const msg = useMemo(() => requestText(a, design), [a, design]);
+  // The form grows out of the Connect button: it starts where the button is, the same size and shape, and expands to its place.
+  const card = useRef<HTMLDivElement>(null), [grown, setGrown] = useState(!from || matchMedia("(prefers-reduced-motion: reduce)").matches);
+  useLayoutEffect(() => {
+    const el = card.current; if (!el || grown || !from) return;
+    const r = el.getBoundingClientRect();
+    el.style.transformOrigin = "top left"; el.style.transition = "none"; el.style.borderRadius = "9999px"; el.style.overflow = "hidden";
+    el.style.transform = `translate(${from.left - r.left}px, ${from.top - r.top}px) scale(${Math.max(0.05, from.width / r.width)}, ${Math.max(0.05, from.height / r.height)})`;
+    el.getBoundingClientRect();
+    requestAnimationFrame(() => { el.style.transition = "transform .55s cubic-bezier(.2,.8,.2,1), border-radius .55s ease, opacity .3s"; el.style.transform = "none"; el.style.borderRadius = ""; setGrown(true); setTimeout(() => { el.style.overflow = ""; el.style.transition = ""; }, 600); });
+  }, []);
+  const askCode = async () => {
+    if (!host) return; if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(mail)) return toast("Enter a valid email address.", "bad");
+    setBusy(true);
+    try {
+      const r = await otpSend(host, mail);
+      if (r.skip) { setPass({ email: mail, skip: r.skip }); setOkMail(false); toast("We couldn't email a code from here, so your email is accepted without one."); }
+      else { setAsked(true); setWait(45); toast("Code sent. Check your email (and spam)."); }
+    } catch (e: any) { toast(e?.message || "Couldn't send the code.", "bad"); }
+    setBusy(false);
+  };
+  const checkCode = async () => {
+    if (!host || code.trim().length < 6) return; setBusy(true);
+    try { const r = await otpCheck(host, mail, code.trim()); setPass({ email: mail, otp: r.token }); setOkMail(true); }
+    catch (e: any) { toast(e?.message || "That code isn't right.", "bad"); }
+    setBusy(false);
+  };
   const send = async () => {
     if (!host) return;
     if (!f.person.trim()) return toast("Please tell us your name.", "bad");
-    if (!f.phone.trim() && !f.email.trim()) return toast("Please give a phone number or an email address.", "bad");
+    if (!mail) return toast("Please give your email address.", "bad");
+    if (!verified || !pass) return toast("Please confirm your email with the code we send you.", "bad");
     setBusy(true);
     try {
-      await submitQuery(host, { kind: a.kind, name: a.name || "Untitled", person: f.person.trim(), phone: f.phone.trim(), email: f.email.trim(), note: f.note.trim(), answers: { ...a, ...(design?.themeId ? { themeid: design.themeId } : {}), ...(a.kind ? { look: resolvedLook(a.kind as LookKind, a.look, readDesignSettings()) } : {}) }, ...(copy ? { copy } : {}), ...(files.logo ? { logo: files.logo } : {}), ...(files.menu ? { pdf: files.menu } : {}) });
+      await submitQuery(host, { ...(pass.otp ? { otp: pass.otp } : { skip: pass.skip }), kind: a.kind, name: a.name || "Untitled", person: f.person.trim(), phone: f.phone.trim(), email: f.email.trim(), note: f.note.trim(), answers: { ...a, ...(design?.themeId ? { themeid: design.themeId } : {}), ...(a.kind ? { look: resolvedLook(a.kind as LookKind, a.look, readDesignSettings()) } : {}) }, ...(copy ? { copy } : {}), ...(files.logo ? { logo: files.logo } : {}), ...(files.menu ? { pdf: files.menu } : {}) });
       setDone(true); onSent();
     } catch (e: any) { toast(e?.message || "Couldn't send. Please try again.", "bad"); }
     setBusy(false);
@@ -535,7 +567,7 @@ export function ConnectPopup({ a, design, copy, files, host, sent, onSent, onClo
   const copyIt = async () => { try { await navigator.clipboard.writeText(msg); toast("Details copied"); } catch { prompt("Copy these details:", msg); } };
   return (
     <div role="dialog" aria-modal="true" aria-label="Connect with Picaffectz" className="fixed inset-0 z-[80] grid place-items-center bg-black/70 p-4" onClick={onClose}>
-      <div className="card flex max-h-[90vh] w-full max-w-lg flex-col gap-4 overflow-y-auto p-6" onClick={(e) => e.stopPropagation()}>
+      <div ref={card} className="card flex max-h-[90vh] w-full max-w-lg flex-col gap-4 overflow-y-auto p-6" onClick={(e) => e.stopPropagation()}>
         {done ? <>
           <h2 className="font-display text-2xl font-extrabold">Thank you! Your request is sent.</h2>
           <p className="text-sm text-ink-300">We have your design and your details. We'll get in touch to finish your website together: photos, your address on the web, payment and any extras.</p>
@@ -546,11 +578,17 @@ export function ConnectPopup({ a, design, copy, files, host, sent, onSent, onClo
           {host ? <>
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="flex flex-col gap-1.5 sm:col-span-2"><span className="label">Your name</span><input className="input" autoFocus value={f.person} onChange={(e) => setF({ ...f, person: e.target.value })} /></label>
-              <label className="flex flex-col gap-1.5"><span className="label">Phone or WhatsApp</span><input className="input" inputMode="tel" value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} /></label>
-              <label className="flex flex-col gap-1.5"><span className="label">Email</span><input className="input" type="email" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} /></label>
+              <label className="flex flex-col gap-1.5"><span className="label">Phone or WhatsApp (optional)</span><input className="input" inputMode="tel" value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} /></label>
+              <div className="flex flex-col gap-1.5"><label className="label" htmlFor="cp-email">Email (required)</label>
+                <div className="flex gap-2"><input id="cp-email" className="input min-w-0 flex-1" type="email" autoComplete="email" required value={f.email} onChange={(e) => { setF({ ...f, email: e.target.value }); setAsked(false); setCode(""); }} />
+                  {verified ? <span className="chip shrink-0 self-center border-emerald-400/60 text-emerald-200">{okMail ? "Verified ✓" : "Accepted ✓"}</span> : <button type="button" className="btn btn-sm shrink-0 self-center" disabled={busy || (asked && wait > 0) || !mail} onClick={askCode}>{asked ? (wait > 0 ? `Resend (${wait})` : "Resend code") : "Send code"}</button>}</div>
+              </div>
+              {asked && !verified && <div className="flex flex-col gap-1.5 sm:col-span-2"><label className="label" htmlFor="cp-code">The 6-digit code we emailed you</label>
+                <div className="flex gap-2"><input id="cp-code" className="input max-w-[11rem] font-mono text-lg tracking-widest" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))} onKeyDown={(e) => { if (e.key === "Enter") checkCode(); }} />
+                  <button type="button" className="btn btn-pri btn-sm" disabled={busy || code.length < 6} onClick={checkCode}>Verify</button></div></div>}
               <label className="flex flex-col gap-1.5 sm:col-span-2"><span className="label">Anything else we should know? (optional)</span><textarea className="input min-h-[70px]" value={f.note} onChange={(e) => setF({ ...f, note: e.target.value })} /></label>
             </div>
-            <div className="flex flex-wrap gap-2"><button type="button" className="btn btn-pri" disabled={busy} onClick={send}>{busy ? "Sending…" : "Send to Picaffectz"}</button><button type="button" className="btn btn-ghost" onClick={onClose}>Not now</button></div>
+            <div className="flex flex-wrap gap-2"><button type="button" className="btn btn-pri" disabled={busy || !verified} onClick={send} title={verified ? "" : "Confirm your email first"}>{busy ? "Working…" : "Send to Picaffectz"}</button><button type="button" className="btn btn-ghost" onClick={onClose}>Not now</button></div>
           </> : <>
             <p className="rounded-lg border border-amber-400/40 bg-amber-400/5 px-3 py-2 text-[13px] text-amber-100">This Studio can't receive requests from this page yet. Copy your details and send them to us directly.</p>
             <pre className="max-h-48 overflow-auto whitespace-pre-wrap rounded-xl border border-ink-700 bg-ink-950 p-3 text-xs text-ink-300">{msg}</pre>

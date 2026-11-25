@@ -1339,6 +1339,33 @@ async function dqBrand(env: Env, id: string) {
   return { name: clip(b.name, 80), logo, v: +b.v || 0, tint: /^#[0-9a-f]{6}$/i.test(b.tint || "") ? b.tint : "", mode: b.mode === "light" ? "light" : "dark", anim: clip(b.anim, 20), layout: clip(b.layout, 20), design: dqDesignPub(idx?.prefs?.design) };
 }
 
+/** Design yourself: a code to confirm the visitor's email (sent from this database), and the pass that code earns. */
+async function dqOtp(env: Env, id: string, req: Request, send: boolean): Promise<Response> {
+  await ensure(env);
+  if (!(await env.DB.prepare("select 1 from members where scope = ? limit 1").bind("studio:" + id).first())) return err(404, "Not found.");
+  let b: any; try { b = JSON.parse((await req.text()).slice(0, 2000) || "{}"); } catch { return err(400, "Couldn't read the request."); }
+  const em = emailKey(b.email); if (!em) return err(400, "Enter a valid email address.");
+  const k = "dq:" + id + ":" + em, now = Date.now();
+  if (send) {
+    const ip = req.headers.get("cf-connecting-ip") || "x";
+    if (!(await dqRate(env, "dqotp:" + id, 60, 3600)) || !(await dqRate(env, "dqotpip:" + ip, 8, 3600))) return err(429, "Too many codes were asked for. Please try again later.");
+    const prev: any = await env.DB.prepare("select sent from otps where k = ?").bind(k).first();
+    if (prev && now - prev.sent < 45_000) return err(429, "A code was just sent. Wait a minute before asking for another.");
+    const code = String(100000 + (crypto.getRandomValues(new Uint32Array(1))[0] % 900000));
+    await env.DB.prepare("insert into otps (k, hash, expires, tries, sent) values (?, ?, ?, 0, ?) on conflict (k) do update set hash = excluded.hash, expires = excluded.expires, tries = 0, sent = excluded.sent").bind(k, b64u(await hmac(env.SECRET, k + ":" + code)), now + 10 * 60_000, now).run();
+    const name = oneLine(String((await studioIndex(env, id))?.brand?.name || "")).slice(0, 60) || "Picaffectz";
+    try { await sendMail(env, em, `${code} is your code for ${name}`, `<p>Your code to confirm this email address for ${hesc(name)}:</p><p style="font-size:28px;font-weight:700;letter-spacing:4px">${code}</p><p>It works for 10 minutes. If you didn't ask for it, ignore this email.</p>`); }
+    catch { const exp = now + 45 * 60_000; return json({ ok: false, skip: exp + "." + b64u(await hmac(env.SECRET, "dqskip:" + id + ":" + em + ":" + exp)) }); }
+    return json({ ok: true });
+  }
+  const c: any = await env.DB.prepare("select hash, expires, tries from otps where k = ?").bind(k).first();
+  if (!c || c.expires < now) return err(403, "The code has expired. Ask for a new one.");
+  if (c.tries >= 5) return err(429, "Too many tries. Ask for a new code.");
+  if (c.hash !== b64u(await hmac(env.SECRET, k + ":" + String(b.code || "").trim()))) { await env.DB.prepare("update otps set tries = tries + 1 where k = ?").bind(k).run(); return err(403, "That code isn't right."); }
+  await env.DB.prepare("update otps set expires = 0 where k = ?").bind(k).run();
+  const exp = now + 45 * 60_000;
+  return json({ ok: true, token: exp + "." + b64u(await hmac(env.SECRET, "dqotp:" + id + ":" + em + ":" + exp)) });
+}
 async function dqSubmit(env: Env, id: string, req: Request, ctx?: { waitUntil(p: Promise<unknown>): void }): Promise<Response> {
   await ensure(env);
   const raw = await req.text(); if (raw.length > 2_000_000) return err(413, "That is too big. Use a smaller logo or PDF.");
@@ -1350,10 +1377,15 @@ async function dqSubmit(env: Env, id: string, req: Request, ctx?: { waitUntil(p:
   const kind = DQ_KINDS.includes(q.kind) ? q.kind : "", person = clip(q.person, 80), phone = clip(q.phone, 30), email = clip(q.email, 120), note = clip(q.note, 1000), name = clip(q.name, 120);
   if (!kind || !name) return err(400, "Something is missing from the design. Please start again.");
   if (!person) return err(400, "Please tell us your name.");
-  if (!phone && !EMAIL_RE.test(email)) return err(400, "Please give a phone number or an email address so we can reach you.");
-  if (email && !EMAIL_RE.test(email)) return err(400, "That email address doesn't look right.");
+  if (!EMAIL_RE.test(email)) return err(400, email ? "That email address doesn't look right." : "Please give your email address.");
+  // The email must be confirmed with the code sent to it (or, when this database can't send mail at all, with the pass it gave instead).
+  const em = emailKey(email), [oexp, osig] = String(q.otp || "").split("."), [sexp, ssig] = String(q.skip || "").split(".");
+  const okOtp = !!em && +oexp > Date.now() && osig === b64u(await hmac(env.SECRET, "dqotp:" + id + ":" + em + ":" + oexp));
+  const okSkip = !okOtp && !!em && +sexp > Date.now() && ssig === b64u(await hmac(env.SECRET, "dqskip:" + id + ":" + em + ":" + sexp));
+  if (!okOtp && !okSkip) return err(403, "Please confirm your email address with the code we send you.");
   const answers = dqStrings(q.answers, 44, 1500), copy = dqCopy(q.copy);
   // The text read from the person's own document (kept longer than an ordinary answer) and the link they gave.
+  answers.emailverified = okOtp ? "yes" : "no";
   if (typeof q.answers?.doctext === "string" && q.answers.doctext.trim()) answers.doctext = q.answers.doctext.slice(0, 12000);
   if (typeof q.answers?.docsec === "string" && q.answers.docsec.length <= 9000) { try { if (JSON.parse(q.answers.docsec)) answers.docsec = q.answers.docsec; } catch { /* not kept */ } }
   if (answers.doclink && !/^https?:\/\//i.test(answers.doclink)) delete answers.doclink;
@@ -2000,6 +2032,7 @@ export default {
       }
       if (p.startsWith("/dq/understand/") && req.method === "POST") { const id = studioId(p.split("/")[3] || ""); if (!id) return err(404, "Not found."); return dqUnderstand(env, id, req); }
       if (p.startsWith("/dq/read/") && req.method === "POST") { const id = studioId(p.split("/")[3] || ""); if (!id) return err(404, "Not found."); return dqRead(env, id, req); }
+      if (/^\/dq\/otp\/(send|check)\/[a-z0-9-]+$/.test(p) && req.method === "POST") { const id = studioId(p.split("/")[4] || ""); if (!id) return err(404, "Not found."); return dqOtp(env, id, req, p.startsWith("/dq/otp/send/")); }
       if (p.startsWith("/dq/write/") && req.method === "POST") { const id = studioId(p.split("/")[3] || ""); if (!id) return err(404, "Not found."); return dqWrite(env, id, req); }
       if (/^\/dq\/[a-z0-9-]+$/.test(p) && !["/dq/list", "/dq/get", "/dq/status", "/dq/delete"].includes(p) && req.method === "POST") { const id = studioId(p.split("/")[2]); if (!id) return err(404, "Not found."); return dqSubmit(env, id, req, ctx); }
 

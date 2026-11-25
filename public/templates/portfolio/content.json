@@ -498,5 +498,17 @@
   },
   "poweredBy": {
     "show": true
+  },
+  "testimonials": {
+    "eyebrow": "Kind words",
+    "title": "What people *say*",
+    "items": []
+  },
+  "contactForm": {
+    "on": false,
+    "eyebrow": "Write to me",
+    "title": "Send me a *message*",
+    "submit": "Send message",
+    "askPhone": false
   }
 }

@@ -189,6 +189,16 @@ const schema: Category[] = [
     ],
   },
   {
+    id: "extras", label: "Kind words & message form", group: "Pages", sub: "Sections", desc: "Testimonials above the contact panel and a message form below it. They show in every page-style layout (not in Horizontal reel, Terminal, Drag canvas or Cinema scenes).",
+    cards: [
+      { title: "Testimonials", fields: [g2({ t: "text", path: "testimonials.eyebrow", label: "Small label", ml: true }, { t: "text", path: "testimonials.title", label: "Title", ml: true }),
+        { t: "list", path: "testimonials.items", title: (it) => it.name, add: () => ({ quote: "What they said about working with you.", name: "Name", role: "", company: "" }), max: 9,
+          item: [{ t: "textarea", path: "quote", label: "Quote" }, g2({ t: "text", path: "name", label: "Name" }, { t: "text", path: "role", label: "Role" }), { t: "text", path: "company", label: "Company" }] }] },
+      { title: "Message form", fields: [{ t: "toggle", path: "contactForm.on", label: "Show a message form" }, g2({ t: "text", path: "contactForm.eyebrow", label: "Small label", ml: true }, { t: "text", path: "contactForm.title", label: "Title", ml: true }),
+        g2({ t: "text", path: "contactForm.submit", label: "Button label", ml: true }, { t: "toggle", path: "contactForm.askPhone", label: "Ask for a phone number" })] },
+    ],
+  },
+  {
     id: "learning", label: "Learning", group: "Pages", sub: "Sections", desc: "Education, certifications and languages.",
     cards: [
       { title: "Heading", fields: [g2({ t: "text", path: "learning.eyebrow", label: "Small label", ml: true }, { t: "text", path: "learning.title", label: "Title", ml: true })] },

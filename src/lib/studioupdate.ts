@@ -13,6 +13,8 @@ const guard = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ""
 
 /** Reloads the Studio onto its Projects page (the first screen), on the new build. */
 export function reloadToProjects() {
+  // The database update follows on the new build as the second part of the same progress bar.
+  try { sessionStorage.setItem("site-studio:update-chain", "1"); } catch { /* private mode */ }
   removeEventListener("beforeunload", guard);
   try { history.replaceState(null, "", location.pathname + location.search + "#/"); } catch { location.hash = "#/"; }
   location.reload();

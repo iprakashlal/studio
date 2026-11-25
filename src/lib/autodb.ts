@@ -14,8 +14,15 @@ import { appBase, appFiles } from "./migrate";
 import { STUDIO_BUILD } from "../build-info";
 
 export type Dot = "pending" | "current" | "unknown" | "na";
-export type UpdateStatus = { studio: Dot; db: Dot; dbBusy: boolean };
-let status: UpdateStatus = { studio: "unknown", db: "unknown", dbBusy: false };
+export type UpdateStatus = { studio: Dot; db: Dot; dbBusy: boolean; /** What the database update is doing now, and how far along it is (0–100). */ dbStep: string; dbPct: number };
+let status: UpdateStatus = { studio: "unknown", db: "unknown", dbBusy: false, dbStep: "", dbPct: 0 };
+/** Set when the Studio has just updated itself: the database update follows on the new build, as the second part of one progress bar. */
+export const UPDATE_CHAIN = "site-studio:update-chain";
+export const chainOn = () => { try { return sessionStorage.getItem(UPDATE_CHAIN) === "1"; } catch { return false; } };
+export const chainSet = (on: boolean) => { try { if (on) sessionStorage.setItem(UPDATE_CHAIN, "1"); else sessionStorage.removeItem(UPDATE_CHAIN); } catch { /* private mode */ } subs.forEach((f) => f()); };
+/** How far along one database update is, from the step it reports. */
+const STEP_AT: [RegExp, number][] = [[/^Finding/, 5], [/^Creating the database/, 12], [/^Creating its tables/, 25], [/^Getting/, 40], [/^Uploading/, 55], [/^Turning on/, 70], [/^Checking/, 82], [/^Waiting/, 92]];
+const stepAt = (t: string) => STEP_AT.find(([re]) => re.test(t))?.[1] ?? 10;
 const subs = new Set<() => void>();
 const set = (p: Partial<UpdateStatus>) => { status = { ...status, ...p }; subs.forEach((f) => f()); };
 export function useUpdateStatus(): UpdateStatus {
@@ -72,23 +79,27 @@ async function clientFor(session: Session, api: string, main: boolean): Promise<
 }
 
 /** Updates every database that is older than this build, when access is at hand. "skip": nothing could be done here. */
-export async function autoUpdateDatabases(session: Session, index: StudioIndex, step: (s: string) => void = () => {}): Promise<"updated" | "current" | "skip"> {
+export async function autoUpdateDatabases(session: Session, index: StudioIndex, step: (s: string, pct: number) => void = () => {}): Promise<"updated" | "current" | "skip"> {
   const list = await targets(index); let did = false, skipped = false;
-  for (const t of list) {
-    const info = await cfDeployInfo(t.api);
-    if (!info.v || info.v >= CFDB_VERSION) continue;
-    // One try per build and database on this device, so a failing update can't loop.
+  // Every database that is behind, so the progress counts them all (one bar for the whole update).
+  const behind: { api: string; main: boolean; info: Awaited<ReturnType<typeof cfDeployInfo>> }[] = [];
+  for (const t of list) { const info = await cfDeployInfo(t.api); if (info.v && info.v < CFDB_VERSION) behind.push({ ...t, info }); }
+  let at = -1;
+  for (const { info, ...t } of behind) {
+    at++;
+    const note = (x: string) => step(behind.length > 1 ? `${x} (database ${at + 1} of ${behind.length})` : x, ((at + stepAt(x) / 100) / behind.length) * 100);
+    // Up to three tries per build and database in this browser session (a short failure is tried again), so a failing update can't loop.
     const key = `site-studio:auto-db-tried:${STUDIO_BUILD.id}:${t.api}`;
-    try { if (sessionStorage.getItem(key)) { skipped = true; continue; } sessionStorage.setItem(key, "1"); } catch { /* private mode */ }
+    try { const n = +(sessionStorage.getItem(key) || 0); if (n >= 3) { skipped = true; continue; } sessionStorage.setItem(key, String(n + 1)); } catch { /* private mode */ }
     const c = await clientFor(session, t.api, t.main).catch(() => null);
     if (!c) { skipped = true; continue; }
     const v = await cfAccountVault.load(session.token).catch(() => null);
     const old = t.main ? (v?.setup && clean(v.setup.api) === t.api ? v.setup : null) : (v?.setups || []).find((x) => clean(x.api) === t.api) || null;
     try {
-      const setup = await setupCfDb(c.relay as Relay, c.token, { account: c.account, resendKey: "", mailFrom: v?.mailFrom || "", name: "Picaffectz Studio", existing: old, requireMail: false, ...(t.main && info.deploy ? { deployToken: c.token } : {}) }, step);
+      const setup = await setupCfDb(c.relay as Relay, c.token, { account: c.account, resendKey: "", mailFrom: v?.mailFrom || "", name: "Picaffectz Studio", existing: old, requireMail: false, ...(t.main && info.deploy ? { deployToken: c.token } : {}) }, note);
       // What the manual update keeps: the new setup, on this device (never a token that only stands for the database).
       if (v && c.own) await cfAccountVault.save(t.main ? { ...v, account: c.account.id, setup } : { ...v, setups: [...(v.setups || []).filter((x) => x.account !== c.account.id), setup] }, session.token).catch(() => {});
-      did = true;
+      did = true; step("Database updated", ((at + 1) / behind.length) * 100);
     } catch (e: any) { console.warn("Database update:", e?.message || e); skipped = true; }
   }
   return did ? "updated" : skipped ? "skip" : "current";
@@ -97,12 +108,19 @@ export async function autoUpdateDatabases(session: Session, index: StudioIndex, 
 /** Runs the database update (when the Studio itself is up to date) and refreshes the icons. */
 export async function syncDatabases(session: Session, index: StudioIndex, toast: (m: string, tone?: "ok" | "bad") => void): Promise<void> {
   await refreshStatus(index);
-  if (status.db !== "pending" || status.studio === "pending") return;
-  set({ dbBusy: true });
+  if (status.db !== "pending" || status.studio === "pending") { chainSet(false); return; }
+  set({ dbBusy: true, dbStep: "Checking the database", dbPct: 0 });
   try {
-    const r = await autoUpdateDatabases(session, index);
+    const r = await autoUpdateDatabases(session, index, (t, pct) => set({ dbStep: t, dbPct: pct }));
     if (r === "updated") toast("The database was updated to match the Studio.");
+    else if (r === "skip") {
+      // Said once per build, so it is never silent when it can't be done here (no Cloudflare access on this device, or it failed).
+      const k = `site-studio:auto-db-told:${STUDIO_BUILD.id}`;
+      let told = false; try { told = !!sessionStorage.getItem(k); if (!told) sessionStorage.setItem(k, "1"); } catch { /* private mode */ }
+      if (!told) toast("The database couldn't be updated automatically from this device. Open Settings → Hostings → Update the database.", "bad");
+    }
   } catch (e: any) { console.warn("Database update:", e?.message || e); }
-  set({ dbBusy: false });
+  set({ dbBusy: false, dbStep: "", dbPct: 0 });
+  chainSet(false);
   await refreshStatus(index);
 }

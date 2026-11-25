@@ -47,9 +47,12 @@ export function App() {
   // GitHub Pages can share the moved Studio's database (studio.share.json); ?data=github opens the older GitHub data.
   useEffect(() => { loadHostConfig().then((c) => setHost(c && sharedSource(c) && githubData() ? null : c)); }, []);
   // Signed out on a Studio kept in Cloudflare: its own name, logo and colours (and whether Design yourself is on) come from its database, so the sign-in and public pages look like the Studio even on a browser that has never been signed in.
+  // Until it has answered, the plain address shows a loader, not the sign-in: on the Design yourself or theme gallery address the answer sends the visitor straight to that page, and the sign-in would flash first.
+  const [brandDone, setBrandDone] = useState(false);
   useEffect(() => {
     if (!host || host.kind !== "cloudflare" || session) return;
     let live = true;
+    const cap = setTimeout(() => { if (live) setBrandDone(true); }, 4000);
     publicBrand({ api: host.api, studio: host.studio }).then((b) => {
       if (!live || !b) return;
       setBrand({ name: b.name, logo: b.logo, v: b.v, tint: b.tint, mode: b.mode, anim: b.anim, layout: b.layout });
@@ -58,8 +61,9 @@ export function App() {
       const dom = b.design?.domain, here = location.hostname.toLowerCase().replace(/^www\./, "");
       if (dom && here === dom && !/^#\/design/.test(location.hash)) location.hash = "#/design";
       if (b.design?.gallery?.domain && here === b.design.gallery.domain && !/^#\/themes/.test(location.hash)) location.hash = "#/themes";
-    });
-    return () => { live = false; };
+      setHash(location.hash);
+    }).catch(() => {}).finally(() => { clearTimeout(cap); if (live) setBrandDone(true); });
+    return () => { live = false; clearTimeout(cap); };
   }, [host?.kind, !!session]);
   // A Studio that signs in by email reaches its GitHub sites through its database, when that keeps a GitHub token.
   useEffect(() => {
@@ -130,6 +134,7 @@ export function App() {
   if (rvw && host !== undefined) return <ReviewPage token={rvw[1]} host={host} />;
 
   if (host === undefined) return <div className="grid min-h-screen place-items-center"><StepLoader title="Starting the Studio" at={0} steps={["Finding where this Studio keeps its files", "Signing in"]} /></div>;
+  if (host?.kind === "cloudflare" && !repo && !brandDone && (hash === "" || hash === "#" || hash === "#/")) return <div className="grid min-h-screen place-items-center bg-ink-950"><StepLoader title="Starting the Studio" at={0} steps={["Finding where this Studio keeps its files", "Opening the page"]} /></div>;
   if (host && !repo) return <StudioGate links={<StudioPageLinks host={host} where="gate" />} cfg={host} brand={brandName} onIn={(email) => { const s: Session = { cfg: { owner: host.kind, repo: host.studio, branch: "main" }, token: deviceSecret(host.studio), username: email }; sess.save(NS, s); setSession(s); }} />;
   if (!repo) {
     return (

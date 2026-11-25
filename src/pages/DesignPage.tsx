@@ -377,12 +377,12 @@ export function DesignPage({ studio, index, onIndex }: { studio?: Studio; index?
       </header>
 
       <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-3 pb-4 sm:px-6">
-        <div role="log" aria-label="Conversation" className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-5 pb-6 pt-6">
+        <div role="log" aria-label="Conversation" className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-8 pb-8 pt-8">
           <ChatBot><p className="m-0 text-[15px] leading-relaxed"><b>Welcome 👋</b> I'm the {brand.name} design assistant. Answer a few quick questions and your website takes shape as we go. It's only a preview.</p></ChatBot>
           {needMail && mailChat.thread}
           {!needMail && !chatStarted && cur && <ChatBot stack><section aria-live="polite"><h2 className="m-0 text-[15px] font-semibold leading-snug">{cur.ask(a)}</h2>{cur.help && cur.help(a) && <p className="mb-0 mt-1 text-[13px] leading-relaxed text-ink-400">{cur.help(a)}</p>}</section></ChatBot>}
           {!needMail && chatStarted && shown.map((s) => (
-            <div key={s.id} id={"answer-" + s.id} className="flex flex-col gap-2">
+            <div key={s.id} id={"answer-" + s.id} className="flex flex-col gap-4">
               <ChatBot><p className="m-0 text-[14px] leading-snug text-ink-200">{s.ask(a)}</p></ChatBot>
               {editId === s.id
                 ? <div className="chat-in pl-[42px]"><AnswerEdit s={s} a={a} onSave={saveAnswer} onCancel={() => setEditId(null)} /></div>
@@ -766,7 +766,7 @@ function ChatBot({ children, typing, stack }: { children: React.ReactNode; typin
   return (
     <div className="chat-in flex items-end gap-2.5">
       {stack ? <span className="w-8 flex-none" aria-hidden /> : <span className="grid h-8 w-8 flex-none place-items-center overflow-hidden rounded-full border border-ink-700 bg-ink-900" aria-hidden><BrandMark fallback={<Logo />} size={22} /></span>}
-      <div style={st} className={`max-w-[88%] rounded-2xl rounded-bl-md border border-ink-800 bg-ink-900 px-4 py-3 text-ink-100 shadow-sm ${bot ? "[&_p]:text-[inherit]" : ""}`}>
+      <div style={st} className={`max-w-[88%] rounded-2xl rounded-bl-md border border-ink-800 bg-ink-900 px-5 py-3.5 text-ink-100 shadow-sm ${bot ? "[&_p]:text-[inherit]" : ""}`}>
         {typing && <span className="mr-2 inline-flex items-center gap-1 align-middle" aria-hidden><i className="chat-dot" /><i className="chat-dot" /><i className="chat-dot" /></span>}
         {children}
       </div>
@@ -780,7 +780,7 @@ function ChatYou({ children, onEdit, label }: { children: React.ReactNode; onEdi
     <div className="chat-in group flex justify-end">
       <div className="flex max-w-[82%] items-end gap-2">
         {onEdit && <button type="button" className="mb-1 rounded px-1.5 text-[11px] text-ink-500 opacity-0 transition hover:text-ink-200 focus:opacity-100 group-hover:opacity-100 max-sm:opacity-100" onClick={onEdit} aria-label={`Change your answer: ${label || ""}`}>Edit</button>}
-        <div style={st} className="break-words rounded-2xl rounded-br-md bg-brand-500 px-4 py-2.5 text-[14.5px] font-semibold leading-snug text-white shadow-sm">{children}</div>
+        <div style={st} className="break-words rounded-2xl rounded-br-md bg-brand-500 px-5 py-3 text-[14.5px] font-semibold leading-snug text-white shadow-sm">{children}</div>
       </div>
     </div>
   );

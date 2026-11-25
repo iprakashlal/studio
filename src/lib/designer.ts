@@ -122,7 +122,6 @@ const RAW: Step[] = [
     options: (a) => [...(R(a) ? REST_TAGS : THEME_TAGS).map((t) => ({ v: t, label: t })), { v: "Any", label: "Any genre" }],
     help: () => "Pick the closest one. We use it to choose designs of that genre.",
   },
-  { id: "themeid", group: "basics", label: "Theme ID", type: "text", optional: true, ask: () => "Do you already have a theme ID from the theme gallery?", ph: () => "e.g. B-27", help: () => "Type it to start with that exact design. Skip it and we'll pick one for you." },
   { id: "email", group: "basics", label: "Contact email", type: "text", optional: true, ask: () => "Which email address should customers see?", ph: () => "e.g. hello@yourname.com", help: () => "Skip if you'd rather not." },
   { id: "phone", group: "basics", label: "Phone / WhatsApp", type: "text", optional: true, ask: () => "What phone or WhatsApp number should customers see?", ph: () => "e.g. +91 98765 43210", help: () => "It is shown on the website. Skip if you'd rather not." },
   { id: "wabtn", group: "basics", label: "WhatsApp button", type: "choice", optional: true, when: (a) => !!a.phone?.trim(), ask: () => "Show a WhatsApp chat button on your website?", options: YN },

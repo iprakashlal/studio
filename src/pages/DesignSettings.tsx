@@ -186,6 +186,16 @@ export function DesignLookTab({ session, studio, index, onIndex }: { session: Se
       </div>
 
       <Block title={`Themes · ${KIND_NAME[kind]}`} note="Your Studio's themes. Show all of them to visitors, or only the ones you tick.">
+        <div className="flex flex-col gap-1.5">
+          <span className="text-[13px] font-semibold">Themes in the visitor's finished preview</span>
+          <div className="grid gap-1 rounded-xl border border-ink-600 p-1 sm:grid-cols-2" role="radiogroup" aria-label="Themes in the carousel">
+            {([["answers", "Match the visitor's answers", kind === "business" ? "Every theme of the business type they pick." : "Themes of the genre they pick."], ["custom", "Only the themes I tick", "The same themes for everyone (up to 30), best match first."]] as const).map(([v, l, h]) => {
+              const on = (d.carousel?.[kind] || "answers") === v;
+              return <button key={v} type="button" role="radio" aria-checked={on} onClick={() => { const c = { ...(d.carousel || {}) }; if (v === "custom") c[kind] = "custom"; else delete c[kind]; upd({ carousel: Object.keys(c).length ? c : undefined }); }} className={`rounded-lg px-3 py-2 text-left ${on ? "bg-ink-700 text-ink-100" : "text-ink-400 hover:text-ink-100"}`}><b className="block text-[13px]">{l}</b><span className="text-[12px] opacity-80">{h}</span></button>;
+            })}
+          </div>
+          {(d.carousel?.[kind] === "custom") && all && <span className="text-[12px] text-amber-300">Choose "Only some" below and tick the themes to show; with "All themes" the first 30 by match are used.</span>}
+        </div>
         <div className="flex flex-wrap items-center gap-2">
           <div className="grid grid-cols-2 gap-1 rounded-xl border border-ink-600 p-1" role="radiogroup" aria-label="Themes shown">
             <button type="button" role="radio" aria-checked={all} onClick={() => setOffered(themes.map((t) => t.id))} className={`h-8 rounded-lg px-4 text-[13px] font-semibold ${all ? "bg-ink-700 text-ink-100" : "text-ink-400 hover:text-ink-100"}`}>All themes ({themes.length})</button>

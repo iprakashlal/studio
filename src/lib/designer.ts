@@ -1,10 +1,10 @@
 // "Design yourself": a plain-language question flow that builds a preview website for any of the four types.
 // Nothing here is published: the result is a preview (kept on this device, and in the Studio when signed in).
 import { outsideLines, packSections, readSections, unpackSections, type DocSections } from "./docsections";
-import { THEMES, type Theme } from "../themes/catalog";
+import { THEMES, THEME_TAGS, type Theme } from "../themes/catalog";
 import { BIZ_THEMES } from "../themes/business";
 import { BIZ_TYPES, BIZ_TYPE_WORDS } from "../themes/businessTypes";
-import { REST_THEMES } from "../themes/restaurant";
+import { REST_THEMES, REST_TAGS } from "../themes/restaurant";
 import { TEMPLATES } from "../schema";
 import { loadStarter } from "./exporter";
 import { systemWrite } from "./syswrite";
@@ -57,7 +57,7 @@ export function tweakTheme(t: Theme, a: Answers): Theme {
 /** Whether a question may be skipped. */
 export const isOptional = (s: Step, a: Answers) => (typeof s.optional === "function" ? s.optional(a) : !!s.optional);
 /** A short name for each question (for the answers shown above the current question). */
-export const STEP_LABEL: Record<string, string> = { kind: "Type", doc: "Starting point", name: "Name", btype: "Business type", about: "About", city: "City", logo: "Logo", style: "Feel", colour: "Colour", pages: "Pages", story: "Story", items: "Offerings", usp: "Highlights", work: "Case studies", goal: "Goal", menu: "Menu", hours: "Hours", address: "Address", social: "Social", phone: "Phone", email: "Email" };
+export const STEP_LABEL: Record<string, string> = { kind: "Type", doc: "Starting point", name: "Name", btype: "Business type", genre: "Genre", about: "About", city: "City", logo: "Logo", style: "Feel", colour: "Colour", pages: "Pages", story: "Story", items: "Offerings", usp: "Highlights", work: "Case studies", goal: "Goal", menu: "Menu", hours: "Hours", address: "Address", social: "Social", phone: "Phone", email: "Email" };
 
 export const KIND_OPTIONS: Opt[] = [
   { v: "portfolio", label: "A website about me", hint: "Show my work, skills and story. Good for designers, developers, photographers, creators." },
@@ -98,6 +98,12 @@ export const STEPS: Step[] = [
     ask: () => "What type of business is it?",
     options: () => [...BIZ_TYPES.map((t) => ({ v: t, label: t.replace(/([a-z])([A-Z])/g, "$1 $2") })), { v: "Other", label: "Something else" }],
     help: () => "Pick the closest one. We use it to choose a design made for that kind of business.",
+  },
+  {
+    id: "genre", type: "choice", when: (a) => k(a) !== "business",
+    ask: () => "What genre of website?",
+    options: (a) => [...(k(a) === "restaurant" ? REST_TAGS : THEME_TAGS).map((t) => ({ v: t, label: t })), { v: "Any", label: "Any genre" }],
+    help: () => "Pick the closest one. We use it to choose designs of that genre.",
   },
   {
     id: "about", type: "text",
@@ -168,6 +174,7 @@ export function sayAnswer(s: Step, a: Answers): string {
   if (s.type === "file") return s.id === "logo" ? "Logo added" : s.id === "doc" ? (a.doclink ? `Link: ${v}` : `PDF: ${v}`) : `Menu added: ${v}`;
   if (s.id === "pages") return v === "multi" ? "Separate pages" : "One page";
   if (s.id === "kind") return KIND_OPTIONS.find((o) => o.v === v)?.label || v;
+  if (s.id === "genre") return v === "Any" ? "Any genre" : v;
   if (s.id === "btype") return s.options!(a).find((o) => o.v === v)?.label || v;
   if (s.type === "choice") return [...STYLE_OPTIONS, ...COLOUR_OPTIONS].find((o) => o.v === v)?.label || v;
   if (s.type === "many") return v.split(",").map((x) => (s.options?.(a) || []).find((o) => o.v === x)?.label || x).join(", ");
@@ -247,7 +254,7 @@ export const samplePicture = (c1: string, c2: string, bg: string) => "data:image
 
 /** The theme that best matches the feel and colour chosen; the person's name picks between near ties so two people don't get the same one. */
 function scoreThemes(a: Answers) {
-  const kind = k(a), pool = offered(kind);
+  const kind = k(a), pool = offered(kind), genre = kind !== "business" && a.genre && a.genre !== "Any" ? a.genre : "";
   const st = STYLE_TAGS[a.style || "clean"] || STYLE_TAGS.clean, col = a.colour || "any";
   // A business says what it does ("dental clinic", "wedding planner"): the themes made for that kind of business come first.
   const say = `${a.about || ""} ${a.name || ""}`.toLowerCase(), picked = kind === "business" && a.btype && BIZ_TYPES.includes(a.btype) ? [a.btype] : [], mine = kind === "business" ? picked.length ? picked : BIZ_TYPES.filter((ty) => say && new RegExp(BIZ_TYPE_WORDS[ty] || "(?!)", "i").test(say)) : [];
@@ -259,6 +266,7 @@ function scoreThemes(a: Answers) {
     if (col === "mono") s += c.s < 0.15 ? 10 : -c.s * 10;
     else if (col !== "any") { const d = Math.min(Math.abs(c.h - HUE[col]), 360 - Math.abs(c.h - HUE[col])); s += c.s < 0.2 ? -6 : Math.max(-8, 10 - d / 9); }
     if (kind === "store" && t.tags.includes("Products")) s += 2;
+    if (genre && t.tags.includes(genre)) s += 40;
     for (const ty of mine) if (t.tags.includes(ty)) s += picked.length ? 40 : 12;
     return { t, s };
   }).sort((x, y) => y.s - x.s);
@@ -267,8 +275,12 @@ function scoreThemes(a: Answers) {
 /** The themes that go with what the person told us, best first: for a business, every theme made for its type; for the other kinds, the closest matches in feel and colour. */
 export function relatedThemes(a: Answers, max = 14): Theme[] {
   const { kind, scored, mine } = scoreThemes(a);
+  // Set in Settings → Design yourself: show exactly the themes the owner ticked, instead of the ones that match the answers.
+  if (readDesignSettings().carousel?.[kind] === "custom") return scored.slice(0, 30).map((x) => x.t);
   const typed = kind === "business" && mine.length ? scored.filter((x) => mine.some((ty) => x.t.tags.includes(ty))) : [];
-  return (typed.length >= 3 ? typed : scored).slice(0, Math.max(max, typed.length >= 3 ? typed.length : 0)).map((x) => x.t);
+  const genre = kind !== "business" && a.genre && a.genre !== "Any" ? scored.filter((x) => x.t.tags.includes(a.genre!)) : [];
+  const own = typed.length >= 3 ? typed : genre.length >= 2 ? genre : null;
+  return (own || scored.slice(0, max)).map((x) => x.t);
 }
 export function pickTheme(a: Answers): Theme | null {
   const kind = k(a), pool = offered(kind); if (!pool.length) return null;

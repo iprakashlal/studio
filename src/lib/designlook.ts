@@ -40,6 +40,8 @@ export type DesignSettings = {
   gallery?: Gallery;
   /** Per type: the themes visitors are offered (none listed = all of them). */
   themes?: Partial<Record<Kind, string[]>>;
+  /** Per type: what the carousel on a visitor's finished preview shows: "answers" (default) = the themes that match what they said (business type, genre); "custom" = the themes the owner ticked above. */
+  carousel?: Partial<Record<Kind, "answers" | "custom">>;
   /** Per type, per layout / style / interaction / intro choice. */
   look?: Partial<Record<Kind, Record<string, LookRule>>>;
 };

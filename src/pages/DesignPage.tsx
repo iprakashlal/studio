@@ -365,9 +365,9 @@ export function DesignPage({ studio, index, onIndex }: { studio?: Studio; index?
       <header className="sticky top-0 z-20 flex w-full items-center gap-3 border-b border-ink-800 bg-ink-950/90 px-4 py-3 backdrop-blur sm:px-6">
         {/* The Studio's name is a link only for someone signed in: it goes to their projects. */}
         {studio
-          ? <a href="#/" className="flex min-w-0 items-center gap-2 font-extrabold"><BrandMark fallback={<Logo />} /><span className="truncate max-sm:hidden">{brand.name}</span></a>
-          : <span className="flex min-w-0 items-center gap-2 font-extrabold"><BrandMark fallback={<Logo />} /><span className="truncate max-sm:hidden">{brand.name}</span></span>}
-        <span className="text-ink-600 max-sm:hidden" aria-hidden>/</span><span className="truncate font-semibold text-ink-300 max-sm:hidden">Design your website</span>
+          ? <a href="#/" className="flex min-w-0 items-center gap-2 font-extrabold"><BrandMark fallback={<Logo />} /><span className="truncate max-sm:hidden">Picaffectz</span></a>
+          : <span className="flex min-w-0 items-center gap-2 font-extrabold"><BrandMark fallback={<Logo />} /><span className="truncate max-sm:hidden">Picaffectz</span></span>}
+        <span className="text-ink-600 max-sm:hidden" aria-hidden>|</span><span className="truncate font-semibold text-ink-300 max-sm:hidden">DIY your web</span>
         <span className="ml-auto flex shrink-0 items-center gap-2">
           {cur && chatStarted && <span className="mr-1 text-xs tabular-nums text-ink-500" aria-label={`Step ${Math.min(answered.length + 1, total)} of ${total}`}>{Math.min(answered.length + 1, total)} / {total}</span>}
           {design && a.name && <button type="button" className="btn btn-sm" onClick={() => setShowPreview(true)}>Preview</button>}

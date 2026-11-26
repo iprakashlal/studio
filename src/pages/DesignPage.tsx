@@ -181,6 +181,10 @@ function DesignPageInner({ studio, index, onIndex }: { studio?: Studio; index?: 
   const [hostDone, setHostDone] = useState(false), [fontsOk, setFontsOk] = useState(false);
   const needMail = !studio && hostDone && !!host && !passLive(pass);
   const mailChat = useEmailChat(host, (p) => { ownPass(p); setA((o) => (o.email ? o : { ...o, email: p.email })); });
+  // The "contact email" question switched off in Settings → Design yourself → Questions: the address the visitor has already given
+  // (the one they confirmed at the start) is used for it, so their website still shows an email. It is put back after "Start again" too.
+  const emailAsked = STEPS.some((s) => s.id === "email" && (s.when ? s.when(a) : true));
+  useEffect(() => { const e = pass?.email; if (!emailAsked && e && passLive(pass) && !a.email) setA((o) => (o.email ? o : { ...o, email: e })); }, [emailAsked, pass, a.email]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { designHost().then(setHost).catch(() => {}).finally(() => setHostDone(true)); const f = (document as any).fonts?.ready; (f ? Promise.race([f, new Promise((r) => setTimeout(r, 4000))]) : Promise.resolve()).finally(() => setFontsOk(true)); }, []);
   useEffect(() => { try { sessionStorage.setItem(DRAFT, JSON.stringify({ a, copy, id: savedId, sent })); } catch { /* private mode */ } }, [a, copy, savedId, sent]);
   useEffect(() => { setText(""); setMany([]); setTimeout(() => field.current?.focus(), 50); }, [cur?.id, answered.length, writing]);

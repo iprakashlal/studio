@@ -213,7 +213,7 @@ export function DesignLookTab({ session, studio, index, onIndex, part, lead }: {
         {KINDS.map((k) => <button key={k} type="button" role="tab" aria-selected={kind === k} onClick={() => setKind(k)} className={`h-10 flex-1 rounded-lg px-3 text-[13px] font-semibold ${kind === k ? "bg-ink-700 text-ink-100 shadow" : "text-ink-400 hover:text-ink-100"}`}>{KIND_NAME[k]}</button>)}
       </div>
 
-      <Block open={false} title={`Questions · ${KIND_NAME[kind]}`} note="The questions a visitor is asked: untick one to hide it, or change its wording. A question is also skipped when the visitor's PDF or link has already answered it. Press Save changes to store it in your Studio's database.">
+      <Block open={false} title={`Questions · ${KIND_NAME[kind]}`} note="The questions a visitor is asked: untick one to hide it, or change its wording. A question is also skipped when the visitor's PDF or link has already answered it. Press Save changes to store it in your Studio's database. If you hide the contact email question, the email address the visitor has already given at the start is used on their website.">
         {QUESTION_GROUPS.filter((g) => g.id === "basics" || g.id === kind).map((g) => (
           <div key={g.id} className="flex flex-col gap-2">
             <b className="text-[13px]">{g.name}</b>

@@ -49,7 +49,7 @@ var CFDB_UPGRADES = [
     "create index if not exists enquiries_ref on enquiries (site, ref)"
   ] }
 ];
-var CFDB_VERSION = 96;
+var CFDB_VERSION = 98;
 var CFDB_WORKER_NAME = "picaffectz-db";
 
 // src/lib/diylook.ts
@@ -2648,7 +2648,20 @@ function dqDesignPub(d) {
     }
     out.look = look;
   }
-  return JSON.stringify(out).length > 4e4 ? { on: out.on } : out;
+  const size = () => JSON.stringify(out).length, MAX = 6e5;
+  for (const drop of [() => {
+    if (out.bg?.slides) delete out.bg.slides;
+  }, () => {
+    if (out.bg?.image) delete out.bg.image;
+  }, () => {
+    if (out.chat?.image) delete out.chat.image;
+  }, () => {
+    if (out.ui?.logo) delete out.ui.logo;
+  }]) {
+    if (size() <= MAX) break;
+    drop();
+  }
+  return size() > MAX ? { on: out.on } : out;
 }
 async function dqBrand(env, id) {
   const idx = await studioIndex(env, id);
@@ -3023,15 +3036,22 @@ async function studioIg(env) {
   const c = r ? await getSetting(env, r.scope, "ig").catch(() => null) : null;
   return c?.on && c.token ? c : null;
 }
+async function igTries(env, site) {
+  const cur = await getSetting(env, "site:" + site, "igh").catch(() => null), now = Date.now();
+  return (Array.isArray(cur?.l) ? cur.l : []).filter((x) => Array.isArray(x) && now - +x[1] < 864e5);
+}
 async function igHandleOk(env, site, handle) {
-  const scope = "site:" + site, h = handle.toLowerCase(), day2 = 864e5, now = Date.now();
+  const scope = "site:" + site, h = handle.toLowerCase();
   if (!await env.DB.prepare("select 1 x from members where scope = ? limit 1").bind(scope).first().catch(() => null) && !await env.DB.prepare("select 1 x from files where scope = ? limit 1").bind(scope).first().catch(() => null)) return false;
-  const cur = await getSetting(env, scope, "igh").catch(() => null), list = (Array.isArray(cur?.l) ? cur.l : []).filter((x) => Array.isArray(x) && now - +x[1] < day2);
-  if (list.some((x) => x[0] === h)) return true;
-  if (list.length >= 6) return false;
-  await putSetting(env, scope, "igh", { l: [...list, [h, now]] }).catch(() => {
+  const list = await igTries(env, site);
+  if (list.some((x) => x[0] === h && x[2] === 1)) return true;
+  return list.filter((x) => x[2] === 1).length < 12 && list.filter((x) => x[2] !== 1).length < 40;
+}
+async function igHandleNote(env, site, handle, found) {
+  const h = handle.toLowerCase(), list = await igTries(env, site);
+  if (list.some((x) => x[0] === h && x[2] === 1 === found)) return;
+  await putSetting(env, "site:" + site, "igh", { l: [...list.filter((x) => x[0] !== h), [h, Date.now(), found ? 1 : 0]].slice(-60) }).catch(() => {
   });
-  return true;
 }
 async function wallFeed(env, site, src, pin, n, handle = "") {
   if (src === "pinterest") return pinMedia(pin, n);
@@ -3044,7 +3064,9 @@ async function wallFeed(env, site, src, pin, n, handle = "") {
   if (!s) return { error: "Instagram isn't connected yet: neither for this site nor for the Studio." };
   if (!handle) return { error: "Give the wall your Instagram handle (Social photo wall \u2192 Your handle)." };
   if (!await igHandleOk(env, site, handle)) return { error: "This site has asked for too many different Instagram accounts today. Try again tomorrow." };
-  return igMedia(String(s.token), n, handle, true);
+  const r = await igMedia(String(s.token), n, handle, true);
+  await igHandleNote(env, site, handle, !!r.items);
+  return r;
 }
 async function unsplashFind(key, words2, n) {
   try {

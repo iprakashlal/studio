@@ -61,6 +61,7 @@
     ".sw-e:hover{border-color:var(--sw-acc)}.sw-f{aspect-ratio:auto!important;min-height:420px;padding:0;background:#fff}.sw-f iframe{width:100%;height:100%;min-height:420px;border:0;display:block}",
     "@media (max-width:900px){.sw-g{grid-template-columns:repeat(min(var(--sw-cols,4),3),minmax(0,1fr))}.sw[data-l=masonry] .sw-g{columns:min(var(--sw-cols,4),3)}}",
     "@media (max-width:560px){.sw-g{grid-template-columns:repeat(2,minmax(0,1fr))}.sw[data-l=masonry] .sw-g{columns:2}.sw[data-l=mosaic] .sw-t:nth-child(7n+1){grid-column:span 2;grid-row:span 1;aspect-ratio:2/1}}",
+    ".sw-why{max-width:760px;margin:0 auto;padding:14px 18px;border:1.5px dashed var(--sw-line);border-radius:12px;font-size:14.5px;line-height:1.5;text-align:center}.sw-why small{opacity:.7}",
     "@media (prefers-reduced-motion:reduce){.sw-t img,.sw-c,.sw-btn{transition:none}}@media print{.sw{display:none}}"
   ].join("\n");
   function css() { if (document.getElementById("site-wall-css")) return; var s = document.createElement("style"); s.id = "site-wall-css"; s.textContent = CSS; document.head.appendChild(s); }
@@ -102,7 +103,7 @@
      (GET <api>/wall/<site>), which asks Instagram with the owner's saved token, or reads a public Pinterest profile or board
      (wall.board). The page knows that Worker from its <script id="site-host"> (a site published with a Cloudflare database); the
      Studio's preview is told it in C._wallHost. Without it, or when nothing comes back, the photos added by hand are shown. */
-  var FEED = {}, LAST = null;
+  var FEED = {}, LAST = null, feedT = 0, LAST_KEY = "", WHY = "";
   function host(C) { try { var e = document.getElementById("site-host"), h = e ? JSON.parse(e.textContent) : null; if (h && h.api && h.site) return h; } catch (x) { /* no host */ } return C && C._wallHost && C._wallHost.api && C._wallHost.site ? C._wallHost : null; }
   function feed(C, W) {
     var auto = /^(instagram|pinterest)$/.test(W.auto) ? W.auto : "", H = auto ? host(C) : null, board = String(W.board || "").trim();
@@ -111,9 +112,15 @@
     var hd = String(W.handle || "").trim().replace(/^@/, "") || ((String(W.url || "").match(/instagram\.com\/([A-Za-z0-9._]{1,30})/i) || [])[1] || ""); if (!/^[A-Za-z0-9._]{1,30}$/.test(hd)) hd = "";
     var cnt = Math.max(3, Math.min(24, +W.count || 12)), key = [H.api, H.site, auto, board, cnt, hd].join("|"), f = FEED[key];
     if (!f) { FEED[key] = "wait";
-      fetch(String(H.api).replace(/\/+$/, "") + "/wall/" + encodeURIComponent(H.site) + "?src=" + auto + "&pin=" + encodeURIComponent(auto === "pinterest" ? board : "") + "&n=" + cnt + (auto === "instagram" && hd ? "&h=" + encodeURIComponent(hd) : "")).then(function (r) { return r.json(); })
-        .then(function (j) { FEED[key] = { items: j && Array.isArray(j.items) && j.items.length ? j.items : null }; if (FEED[key].items && LAST) mount(LAST.C, LAST.o); }).catch(function () { FEED[key] = { items: null }; });
+      var ask = function () {
+        fetch(String(H.api).replace(/\/+$/, "") + "/wall/" + encodeURIComponent(H.site) + "?src=" + auto + "&pin=" + encodeURIComponent(auto === "pinterest" ? board : "") + "&n=" + cnt + (auto === "instagram" && hd ? "&h=" + encodeURIComponent(hd) : "")).then(function (r) { return r.json(); })
+          .then(function (j) { FEED[key] = { items: j && Array.isArray(j.items) && j.items.length ? j.items : null, why: (j && j.error) || "" }; if (LAST && (FEED[key].items || FEED[key].why)) mount(LAST.C, LAST.o); }).catch(function () { FEED[key] = { items: null, why: "" }; });
+      };
+      // In the Studio's preview the page is redrawn at every letter typed (a handle, a board): only what the owner stops on is
+      // asked for, a moment after the last change. A live site asks at once.
+      if (C && C._wallHost) { clearTimeout(feedT); LAST_KEY = key; feedT = setTimeout(function () { if (LAST_KEY === key) ask(); else delete FEED[key]; }, 900); for (var k in FEED) if (FEED[k] === "wait" && k !== key) delete FEED[k]; } else ask();
       return null; }
+    WHY = f !== "wait" && !f.items ? f.why || "" : "";
     return f !== "wait" && f.items ? f.items.map(function (x) { return { src: String(x.img || ""), url: x.url, caption: x.caption }; }) : null;
   }
   function mount(C, o) {
@@ -122,7 +129,7 @@
     var blank = function () { if (slot) { slot.innerHTML = ""; slot.hidden = true; slot.className = ""; } return null; };
     if (!on || (o.home === false && !slot)) return blank();
     var net = NETS[W.network] ? W.network : "other", name = NETS[net][0], prof = profile(W), tiles = "", n = 0;
-    var fed = feed(C, W);
+    WHY = ""; var fed = feed(C, W);
     (fed || (Array.isArray(W.items) ? W.items : [])).slice(0, 24).forEach(function (it, i) {
       if (!it) return; var pic = fed ? (/^https:\/\//.test(it.src) ? it.src : "") : it.image ? (o.imgUrl ? o.imgUrl(it.image) : it.image.url || "") : "", u = safe(it.url), cap = String(it.caption || "").trim(), em = !pic && u ? embedOf(u) : null;
       var c = cap ? '<span class="sw-c"' + (fed ? "" : ' data-edit="wall.items.' + i + '.caption"') + ">" + esc(cap) + "</span>" : "";
@@ -130,6 +137,8 @@
         tiles += u ? '<a class="sw-t" href="' + esc(u) + '" target="_blank" rel="noopener">' + inner + '<span class="sw-m" aria-hidden="true">' + IC.out + "</span></a>" : '<figure class="sw-t">' + inner + "</figure>"; }
       else if (em) { n++; tiles += '<button type="button" class="sw-t sw-e" data-src="' + esc(em.src) + '" data-name="' + esc(em.name + " post") + '"><span>' + em.ic + "<b>" + esc(cap || "Show this " + em.name + " post") + "</b><small>Loads from " + esc(em.name) + " when pressed</small></span></button>"; }
     });
+    // In the Studio's preview, a wall that should fill itself and has nothing says why (the live site just shows no wall).
+    if (!n && WHY && C && C._wallHost && slot) { css(); slot.hidden = false; slot.className = "sw"; slot.innerHTML = '<div class="sw-in"><p class="sw-why"><b>Social photo wall:</b> ' + esc(WHY) + " <small>(Only you see this note, here in the preview.)</small></p></div>"; return slot; }
     if (!n) return blank();
     if (!slot && o.slot === "only") return null;
     var all = slot ? [] : Array.prototype.slice.call(document.querySelectorAll(o.sections || "main > section")); if (!slot && !all.length) return null;

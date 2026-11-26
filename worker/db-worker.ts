@@ -1759,16 +1759,23 @@ async function studioIg(env: Env): Promise<any | null> {
   const r: any = await env.DB.prepare("select scope from settings where name = 'ig' and scope like 'studio:%' order by updated_at desc limit 1").first().catch(() => null);
   const c = r ? await getSetting(env, r.scope, "ig").catch(() => null) : null; return c?.on && c.token ? c : null;
 }
-/** The Studio's token is shared, so a site may spend it on a few handles only: 6 different ones a day. (The address is public;
- *  without this anyone could use it to look up any account.) The site must be one this database knows. */
+/** The Studio's token is shared and the address is public, so a site may spend it on a limited number of accounts a day:
+ *  12 different handles that were found, and 40 that weren't (a handle typed letter by letter in the Studio is many handles that
+ *  aren't found, so those are counted apart and generously). The site must be one this database knows.
+ *  igHandleOk says whether one more may be tried; igHandleNote records how it went. */
+type IgTry = [string, number, number?];
+async function igTries(env: Env, site: string): Promise<IgTry[]> { const cur = await getSetting(env, "site:" + site, "igh").catch(() => null), now = Date.now(); return (Array.isArray(cur?.l) ? cur.l : []).filter((x: any) => Array.isArray(x) && now - +x[1] < 86400000); }
 async function igHandleOk(env: Env, site: string, handle: string): Promise<boolean> {
-  const scope = "site:" + site, h = handle.toLowerCase(), day = 86400000, now = Date.now();
+  const scope = "site:" + site, h = handle.toLowerCase();
   if (!(await env.DB.prepare("select 1 x from members where scope = ? limit 1").bind(scope).first().catch(() => null)) && !(await env.DB.prepare("select 1 x from files where scope = ? limit 1").bind(scope).first().catch(() => null))) return false;
-  const cur = await getSetting(env, scope, "igh").catch(() => null), list: [string, number][] = (Array.isArray(cur?.l) ? cur.l : []).filter((x: any) => Array.isArray(x) && now - +x[1] < day);
-  if (list.some((x) => x[0] === h)) return true;
-  if (list.length >= 6) return false;
-  await putSetting(env, scope, "igh", { l: [...list, [h, now]] }).catch(() => {});
-  return true;
+  const list = await igTries(env, site);
+  if (list.some((x) => x[0] === h && x[2] === 1)) return true;
+  return list.filter((x) => x[2] === 1).length < 12 && list.filter((x) => x[2] !== 1).length < 40;
+}
+async function igHandleNote(env: Env, site: string, handle: string, found: boolean) {
+  const h = handle.toLowerCase(), list = await igTries(env, site);
+  if (list.some((x) => x[0] === h && (x[2] === 1) === found)) return;
+  await putSetting(env, "site:" + site, "igh", { l: [...list.filter((x) => x[0] !== h), [h, Date.now(), found ? 1 : 0]].slice(-60) }).catch(() => {});
 }
 async function wallFeed(env: Env, site: string, src: string, pin: string, n: number, handle = ""): Promise<{ items?: WallPic[]; error?: string }> {
   if (src === "pinterest") return pinMedia(pin, n);
@@ -1780,7 +1787,9 @@ async function wallFeed(env: Env, site: string, src: string, pin: string, n: num
   if (!s) return { error: "Instagram isn't connected yet: neither for this site nor for the Studio." };
   if (!handle) return { error: "Give the wall your Instagram handle (Social photo wall → Your handle)." };
   if (!(await igHandleOk(env, site, handle))) return { error: "This site has asked for too many different Instagram accounts today. Try again tomorrow." };
-  return igMedia(String(s.token), n, handle, true);
+  const r = await igMedia(String(s.token), n, handle, true);
+  await igHandleNote(env, site, handle, !!r.items);
+  return r;
 }
 async function unsplashFind(key: string, words: string, n: number): Promise<{ photos?: any[]; error?: string }> {
   try {

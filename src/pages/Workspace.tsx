@@ -4,7 +4,7 @@ import { prefSync, applyPrefs } from "../lib/prefs";
 import { StudioGoogleCard } from "./StudioGoogle";
 import { StudioPeopleCard } from "./StudioPeople";
 import { SitesHostingCard } from "./SitesHostingCard";
-import { AiEngineCard, StudioWhatsAppCard } from "./AiEngine";
+import { AiEngineCard, StudioInstagramCard, StudioWhatsAppCard } from "./AiEngine";
 import { setAiEngine } from "../lib/ai";
 import { hides, limitsOf, setStudioHidden, useClientStudio } from "../lib/features";
 import { setThemeAllow, setThemeLimit } from "../themes/limit";
@@ -183,7 +183,8 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
     const want = route.split("/")[1] || "general";
     const showDesign = !hid("design"), showThemes = !hid("themes");
     const tab = (want === "customize" && !showCustomize) || (want === "hostings" && !showHostings) || (want === "design" && !showDesign) || (want === "themes" && !showThemes) ? "general" : want;
-    const tabList = [["general", "General"], ["ai", "AI"], ...(showCustomize ? [["customize", "Customize"]] : []), ...(showHostings ? [["hostings", "Hostings"]] : []), ...(showDesign ? [["design", "Design yourself"]] : []), ...(showThemes ? [["themes", "Themes"]] : []), ["update", "Updates"], ...(client ? [] : [["migration", "Migration"]]), ["help", "Help"]] as [string, string][];
+    // "social" and "login" are parts of General: they are listed under it, set in a little
+    const tabList = [["general", "General"], ["social", "Social setup"], ["login", "Studio login setup"], ["ai", "AI"], ...(showCustomize ? [["customize", "Customize"]] : []), ...(showHostings ? [["hostings", "Hostings"]] : []), ...(showDesign ? [["design", "Design yourself"]] : []), ...(showThemes ? [["themes", "Themes"]] : []), ["update", "Updates"], ...(client ? [] : [["migration", "Migration"]]), ["help", "Help"]] as [string, string][];
     const here = tabList.some(([k]) => k === tab) ? tab : "general";
     /** The settings screen: its sections down the left on a wide screen (a row of tabs on a narrower one, a menu on a phone),
      *  and the chosen section using the rest of the width. */
@@ -193,12 +194,12 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
           <h1 className="font-display text-3xl font-extrabold lg:px-1 lg:text-2xl">Settings</h1>
           {/* Phones: one dropdown, so the tabs never wrap onto a second row. */}
           <label className="flex flex-col gap-1.5 sm:hidden"><span className="label">Settings section</span>
-            <select className="input" aria-label="Settings section" value={here} onChange={(e) => { location.hash = "#/settings" + (e.target.value === "general" ? "" : "/" + e.target.value); }}>{tabList.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
+            <select className="input" aria-label="Settings section" value={here} onChange={(e) => { location.hash = "#/settings" + (e.target.value === "general" ? "" : "/" + e.target.value); }}>{tabList.map(([k, l]) => <option key={k} value={k}>{SUB_TABS.includes(k) ? "General › " + l : l}</option>)}</select>
           </label>
           <nav className="hidden flex-wrap gap-1 border-b border-ink-700 sm:flex lg:flex-col lg:flex-nowrap lg:gap-0.5 lg:border-b-0" role="tablist" aria-label="Settings" aria-orientation="vertical">
             {tabList.map(([k, l]) => <a key={k} href={`#/settings${k === "general" ? "" : "/" + k}`} role="tab" aria-selected={tab === k}
               className={`-mb-px flex items-center gap-2.5 border-b-2 px-3 py-2 text-sm font-semibold transition lg:mb-0 lg:rounded-xl lg:border-b-0 lg:py-2.5 ${tab === k ? "border-brand-400 text-ink-100 lg:bg-brand-500/15" : "border-transparent text-ink-400 hover:text-ink-100 lg:hover:bg-ink-800"}`}>
-              <SetIcon k={k} on={tab === k} />{l}</a>)}
+              {SUB_TABS.includes(k) && <span aria-hidden className="hidden w-3 lg:block" />}<SetIcon k={k} on={tab === k} />{l}</a>)}
           </nav>
           <SettingsFind tab={tab} tabs={tabList} />
         </aside>
@@ -209,6 +210,18 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
     if (tab === "ai") return shell(<><FoldAll /><FoldCards scope="ai">{showDesign
       ? <DesignLookTab session={session} studio={studio} index={index} onIndex={setIndex} part="ai" lead={<AiEngineCard studio={studio} index={index} onIndex={setIndex} />} />
       : <AiEngineCard studio={studio} index={index} onIndex={setIndex} />}</FoldCards></>);
+    // General → Social setup: what connects the Studio to social networks (Instagram for the photo walls, Google for signing in).
+    if (tab === "social") return shell(<><FoldAll /><FoldCards scope="social" className="set-cols">
+      <p className="text-sm text-ink-300">How your Studio connects to social networks: Instagram for every site's photo wall, and Google for signing in.</p>
+      <StudioInstagramCard />
+      {session.cfg.owner === "cloudflare" ? <StudioGoogleCard /> : <section className="card flex flex-col gap-2 p-5" aria-label="Sign in with Google"><h3 className="text-[15px] font-extrabold">Sign in with Google</h3><p className="text-sm text-ink-300">Signing in with Google is for a Studio hosted on Cloudflare (Settings → Hostings).</p></section>}
+    </FoldCards></>);
+    // General → Studio login setup: how people sign in to this Studio, and who may.
+    if (tab === "login") return shell(<><FoldAll /><FoldCards scope="login" className="set-cols">
+      <p className="text-sm text-ink-300">How people sign in to this Studio, and who may: the email that carries the sign-in code, signing in with a PIN, and the list of people.</p>
+      <StudioEmailCard repo={repo} />
+      {session.cfg.owner === "cloudflare" ? <StudioPeopleCard /> : <section className="card flex flex-col gap-2 p-5" aria-label="People and PIN"><h3 className="text-[15px] font-extrabold">Sign in with a PIN, and who can sign in</h3><p className="text-sm text-ink-300">These are for a Studio hosted on Cloudflare (Settings → Hostings). This Studio signs in with its GitHub account.</p></section>}
+    </FoldCards></>);
     if (tab === "design") return shell(<DesignLookTab session={session} studio={studio} index={index} onIndex={setIndex} />);
     if (tab === "themes") return shell(<ThemesSettingsTab session={session} studio={studio} index={index} onIndex={setIndex} />);
     if (tab === "help") return shell(<div className="max-w-3xl"><StudioHelp /></div>);
@@ -223,9 +236,6 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
             {!hid("brand") && <BrandCard studio={studio} onIndex={setIndex} />}
             {!hid("badge") && <BadgeCard studio={studio} saved={index.badge} onIndex={setIndex} />}
             {!hid("pages") && <StudioPagesCard repo={repo} />}
-            <StudioEmailCard repo={repo} />
-            {session.cfg.owner === "cloudflare" && <StudioPeopleCard />}
-            {session.cfg.owner === "cloudflare" && <StudioGoogleCard />}
             <ExplorerCard />
             {!hid("menus") && <MenusCard studio={studio} menus={index.menus || {}} onIndex={setIndex} />}
           </> : tab === "hostings" ? <>
@@ -256,8 +266,12 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
 }
 
 /** Settings → Help: guided tours of the Studio, end to end. */
+/** Parts of General, listed under it in the settings menu. */
+const SUB_TABS = ["social", "login"];
 /** A small line icon for each settings section. */
 const SET_ICONS: Record<string, string> = {
+  social: "M7 3h10a4 4 0 014 4v10a4 4 0 01-4 4H7a4 4 0 01-4-4V7a4 4 0 014-4zM12 8.5a3.5 3.5 0 100 7 3.5 3.5 0 000-7zM17.2 6.8h.01",
+  login: "M12 3a4 4 0 00-4 4v3H6.5A1.5 1.5 0 005 11.5v8A1.5 1.5 0 006.5 21h11a1.5 1.5 0 001.5-1.5v-8a1.5 1.5 0 00-1.5-1.5H16V7a4 4 0 00-4-4zM10 10V7a2 2 0 014 0v3M12 14v3",
   ai: "M9 4h6a3 3 0 013 3v6a3 3 0 01-3 3H9a3 3 0 01-3-3V7a3 3 0 013-3zM9.5 9.5h.01M14.5 9.5h.01M9.5 12.5c.8.7 1.6 1 2.5 1s1.7-.3 2.5-1M12 4V2M8 16v3M16 16v3M6 10H4M20 10h-2",
   general: "M12 8.5a3.5 3.5 0 100 7 3.5 3.5 0 000-7zM19 12a7 7 0 00-.1-1.2l2-1.5-2-3.4-2.3.9a7 7 0 00-2-1.2L14.2 3h-4.4l-.4 2.6a7 7 0 00-2 1.2l-2.3-.9-2 3.4 2 1.5a7 7 0 000 2.4l-2 1.5 2 3.4 2.3-.9a7 7 0 002 1.2l.4 2.6h4.4l.4-2.6a7 7 0 002-1.2l2.3.9 2-3.4-2-1.5c.1-.4.1-.8.1-1.2z",
   customize: "M4 20l4-1 11-11-3-3L5 16l-1 4zM14 6l3 3",
@@ -278,7 +292,8 @@ const SET_INDEX: [tab: string, title: string, words: string, find?: string][] = 
   ["ai", "AI for Design yourself", "diy ai writes text reads pdf engine"],
   ["ai", "Pictures drawn by AI", "diy draw logo banner images picture style unsplash photos"],
   ["general", "WhatsApp", "meta messages otp business phone"],
-  ["general", "Instagram photos", "instagram token social wall handle meta feed posts"],
+  ["social", "Instagram photos", "instagram token social wall handle meta feed posts"],
+  ["social", "Sign in with Google", "google login client id oauth", "Google"],
   ["general", "SMS", "text messages codes otp"],
   ["general", "Header links", "menu navigation top links"],
   ["general", "Design yourself page", "diy show hide themes page submissions", "Design yourself"],
@@ -287,8 +302,9 @@ const SET_INDEX: [tab: string, title: string, words: string, find?: string][] = 
   ["customize", "Studio name & logo", "brand colours colors layout glass classic soft sharp dark light icon animation", "Studio name"],
   ["customize", "“Powered by” badge", "badge footer credit", "badge"],
   ["customize", "Additional pages", "studio pages public about terms privacy"],
-  ["customize", "Sign-in email", "email template code mail"],
-  ["customize", "People and Google sign-in", "owners members team google login", "Google"],
+  ["login", "Sign-in email", "email template code mail"],
+  ["login", "Sign in with a PIN", "pin code digits login"],
+  ["login", "Who can sign in to this Studio", "owners members team people access"],
   ["customize", "Picaffectz Explorer", "helper assistant search ctrl k", "Explorer"],
   ["customize", "Admin menus", "site admin menu sections rename order headings"],
   ["hostings", "Hosting accounts", "github netlify cloudflare token publishing pages"],

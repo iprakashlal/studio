@@ -70,4 +70,6 @@ export function AiEngineCard({ studio, index, onIndex }: { studio: Studio; index
 }
 
 /** Settings → General: WhatsApp for the Studio's own sign-in codes (optional). */
-export function StudioWhatsAppCard() { const where = useStudioWhere(); return <><WhatsAppForm where={where} kind="studio" /><SmsForm where={where} kind="studio" /><InstagramForm where={where} kind="studio" /></>; }
+export function StudioWhatsAppCard() { const where = useStudioWhere(); return <><WhatsAppForm where={where} kind="studio" /><SmsForm where={where} kind="studio" /></>; }
+/** Settings → General → Social setup: the one Instagram token every site's photo wall can use. */
+export function StudioInstagramCard() { const where = useStudioWhere(); return <InstagramForm where={where} kind="studio" />; }

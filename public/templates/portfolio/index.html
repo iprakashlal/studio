@@ -1278,7 +1278,7 @@ const head=(s,lede)=>`<div class="head rv"><div><p class="m">${ml(s.eyebrow)}</p
 const XTRA=/^(wall|testimonials|message)$/;
 const rowOf=(c,id)=>(c.sections||[]).find(x=>x.id===id);
 const wallOn=c=>{const r=rowOf(c,"wall");return r?!!r.visible:!!(c.wall&&c.wall.on)};
-const hasWall=c=>!!(c.wall&&Array.isArray(c.wall.items)&&c.wall.items.length);
+const hasWall=c=>!!(c.wall&&((Array.isArray(c.wall.items)&&c.wall.items.length)||/^(instagram|pinterest)$/.test(c.wall.auto)));/* photos added by hand, or a wall that fills itself */
 const kwOn=c=>{const r=rowOf(c,"testimonials");return (!r||!!r.visible)&&!!(c.testimonials&&(c.testimonials.items||[]).length)};
 const formOn=c=>{const r=rowOf(c,"message");return r?!!r.visible:!!(c.contactForm&&c.contactForm.on)};
 /* a site saved before these became rows has none for them: they take the places they had (around Contact), on if they were on */

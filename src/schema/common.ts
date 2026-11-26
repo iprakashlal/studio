@@ -197,7 +197,7 @@ export function socialCategory(group = "Pages", sub?: string, extra = ""): Categ
   };
 }
 /** The settings a new social photo wall starts with (content.wall; drawn by src/fx/wall.js). */
-export const wallDefault = () => ({ on: false, network: "instagram", handle: "", url: "", eyebrow: "", title: "", text: "", button: "", layout: "auto", cols: "", shape: "", captions: "hover", place: "bottom", items: [] as { image: any; url: string; caption: string }[] });
+export const wallDefault = () => ({ on: false, network: "instagram", handle: "", url: "", eyebrow: "", title: "", text: "", button: "", layout: "auto", cols: "", shape: "", captions: "hover", place: "bottom", auto: "", board: "", count: 12, items: [] as { image: any; url: string; caption: string }[] });
 /** Older content gets the social wall's fields (off). */
 export function prepareWall(c: any) {
   if (!c || typeof c !== "object") return;
@@ -219,7 +219,17 @@ export function wallCategory(group = "Pages", sub?: string, extra = "", ownSwitc
           { t: "text", path: "wall.handle", label: "Your handle", ph: "@yourname", hint: "Used for the follow button." }),
         { t: "text", path: "wall.url", label: "Profile or board address (optional)", ph: "https://www.pinterest.com/yourname/your-board/", hint: "Only needed when the handle alone doesn't lead to the right page: a Pinterest board, or another network." },
         ...(extra ? [{ t: "note", text: extra } as Field] : []),
-        { t: "note", text: "Add the photos below. The wall can't pull your latest posts by itself: Instagram and Pinterest only give a live feed to an app with their approval and a secret key, which a website's page can't keep safe. Uploading your best photos also keeps the wall fast and in your theme's look." },
+      ] },
+      { title: "Fill it by itself", fields: [
+        { t: "select", path: "wall.auto", label: "Where the photos come from", options: [{ value: "", label: "I add them myself (below)" }, { value: "instagram", label: "My newest Instagram posts, by themselves" }, { value: "pinterest", label: "The newest pins of a Pinterest profile or board, by themselves" }] },
+        { t: "when", path: "wall.auto", is: "instagram", fields: [{ t: "note", text: "Instagram only gives its photos to the account's owner. Paste your access token once in the “Instagram photos” box under Advanced setup (on the Connections screen; a portfolio calls it Email). The box explains how to get one: a professional Instagram account and a free Meta developer app. The token stays on the site's database, encrypted, and is renewed by itself." }] },
+        { t: "when", path: "wall.auto", is: "pinterest", fields: [{ t: "text", path: "wall.board", label: "Pinterest profile or board", ph: "yourname/your-board  or  https://www.pinterest.com/yourname/your-board/", hint: "A public profile or board. No key is needed; a secret board has no feed." }] },
+        { t: "when", path: "wall.auto", not: "", fields: [
+          { t: "range", path: "wall.count", label: "How many photos", min: 3, max: 24, step: 1 },
+          { t: "note", text: "The site's own database fetches the photos (twice an hour at most), so this needs the site to be published with a Cloudflare database (Host to External Services). A site hosted on GitHub Pages alone, or a moment when the network doesn't answer, shows the photos added by hand below instead. A new post appears within half an hour." }] },
+      ] },
+      { title: "Photos added by hand", fields: [
+        { t: "note", text: "These show when the wall isn't filling itself, and whenever the network doesn't answer. Uploading your best photos also keeps the wall fast." },
       ] },
       { title: "Heading and button", fields: [
         g2({ t: "text", path: "wall.eyebrow", label: "Small line above the heading", ph: "On Instagram" }, { t: "text", path: "wall.title", label: "Heading", ph: "Follow along" }),

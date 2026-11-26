@@ -6,11 +6,11 @@
      layout: "auto" | "grid" | "masonry" | "mosaic" | "strip",   // auto: chosen from the site's theme (see pick() below)
      cols: "" | 3 | 4 | 5 | 6, shape: "" | "square" | "portrait" | "landscape", captions: "hover" | "below" | "none",
      place: "top" | "middle" | "bottom" | "end",
+     auto: "" | "instagram" | "pinterest", board, count,   // filled by itself from the network (see feed() below)
      items: [{ image, url, caption }] }
    A photo is a picture the owner uploads, with the link of its post. An item with only a post link (Instagram or Pinterest) is
    shown as that post, embedded: it is loaded from the network only when the visitor presses it, so nothing reaches those services
-   before that. There is no automatic feed: the networks only give one to an app with their approval and a secret key, which a
-   website's page cannot hold. The wall takes its colours, corners, card look and fonts from the site's theme.
+   before that. The wall can also fill itself (wall.auto): the secret key that needs is held by the site's database Worker, never by the page. The wall takes its colours, corners, card look and fonts from the site's theme.
    A template that lists its sections (Sections & order) draws an empty <section data-wall-slot> where the wall's row stands in that
    list, and passes { on, slot: true }: the wall fills that slot, so its place, its switch and its menu link work like any section's.
    Without a slot (the shop, and layouts with no section flow of their own) it is placed by "place" among the page's sections.
@@ -98,16 +98,33 @@
     var d = document.createElement("div"); d.className = "sw-t sw-f"; d.innerHTML = '<iframe src="' + esc(src) + '" title="' + esc(b.getAttribute("data-name") || "Post") + '" loading="lazy" allowtransparency="true" referrerpolicy="strict-origin-when-cross-origin"></iframe>';
     b.parentNode.replaceChild(d, b);
   }
+  /* Filled by itself: with wall.auto ("instagram" or "pinterest") the newest posts come from the site's own database Worker
+     (GET <api>/wall/<site>), which asks Instagram with the owner's saved token, or reads a public Pinterest profile or board
+     (wall.board). The page knows that Worker from its <script id="site-host"> (a site published with a Cloudflare database); the
+     Studio's preview is told it in C._wallHost. Without it, or when nothing comes back, the photos added by hand are shown. */
+  var FEED = {}, LAST = null;
+  function host(C) { try { var e = document.getElementById("site-host"), h = e ? JSON.parse(e.textContent) : null; if (h && h.api && h.site) return h; } catch (x) { /* no host */ } return C && C._wallHost && C._wallHost.api && C._wallHost.site ? C._wallHost : null; }
+  function feed(C, W) {
+    var auto = /^(instagram|pinterest)$/.test(W.auto) ? W.auto : "", H = auto ? host(C) : null, board = String(W.board || "").trim();
+    if (!H || (auto === "pinterest" && !board)) return null;
+    var cnt = Math.max(3, Math.min(24, +W.count || 12)), key = [H.api, H.site, auto, board, cnt].join("|"), f = FEED[key];
+    if (!f) { FEED[key] = "wait";
+      fetch(String(H.api).replace(/\/+$/, "") + "/wall/" + encodeURIComponent(H.site) + "?src=" + auto + "&pin=" + encodeURIComponent(auto === "pinterest" ? board : "") + "&n=" + cnt).then(function (r) { return r.json(); })
+        .then(function (j) { FEED[key] = { items: j && Array.isArray(j.items) && j.items.length ? j.items : null }; if (FEED[key].items && LAST) mount(LAST.C, LAST.o); }).catch(function () { FEED[key] = { items: null }; });
+      return null; }
+    return f !== "wait" && f.items ? f.items.map(function (x) { return { src: String(x.img || ""), url: x.url, caption: x.caption }; }) : null;
+  }
   function mount(C, o) {
-    o = o || {}; var old = document.getElementById("site-wall"); if (old) old.remove();
+    o = o || {}; LAST = { C: C, o: o }; var old = document.getElementById("site-wall"); if (old) old.remove();
     var W = (C && C.wall) || {}, slot = document.querySelector("[data-wall-slot]"), on = o.on != null ? !!o.on : !!W.on;
     var blank = function () { if (slot) { slot.innerHTML = ""; slot.hidden = true; slot.className = ""; } return null; };
     if (!on || (o.home === false && !slot)) return blank();
     var net = NETS[W.network] ? W.network : "other", name = NETS[net][0], prof = profile(W), tiles = "", n = 0;
-    (Array.isArray(W.items) ? W.items : []).slice(0, 24).forEach(function (it, i) {
-      if (!it) return; var pic = it.image ? (o.imgUrl ? o.imgUrl(it.image) : it.image.url || "") : "", u = safe(it.url), cap = String(it.caption || "").trim(), em = !pic && u ? embedOf(u) : null;
-      var c = cap ? '<span class="sw-c" data-edit="wall.items.' + i + '.caption">' + esc(cap) + "</span>" : "";
-      if (pic) { n++; var inner = '<img src="' + esc(pic) + '" alt="' + esc(cap || (name ? name + " photo" : "Photo")) + '" loading="lazy" decoding="async">' + c;
+    var fed = feed(C, W);
+    (fed || (Array.isArray(W.items) ? W.items : [])).slice(0, 24).forEach(function (it, i) {
+      if (!it) return; var pic = fed ? (/^https:\/\//.test(it.src) ? it.src : "") : it.image ? (o.imgUrl ? o.imgUrl(it.image) : it.image.url || "") : "", u = safe(it.url), cap = String(it.caption || "").trim(), em = !pic && u ? embedOf(u) : null;
+      var c = cap ? '<span class="sw-c"' + (fed ? "" : ' data-edit="wall.items.' + i + '.caption"') + ">" + esc(cap) + "</span>" : "";
+      if (pic) { n++; var inner = '<img src="' + esc(pic) + '" alt="' + esc(cap || (name ? name + " photo" : "Photo")) + '" loading="lazy" decoding="async"' + (fed ? ' referrerpolicy="no-referrer"' : "") + ">" + c;
         tiles += u ? '<a class="sw-t" href="' + esc(u) + '" target="_blank" rel="noopener">' + inner + '<span class="sw-m" aria-hidden="true">' + IC.out + "</span></a>" : '<figure class="sw-t">' + inner + "</figure>"; }
       else if (em) { n++; tiles += '<button type="button" class="sw-t sw-e" data-src="' + esc(em.src) + '" data-name="' + esc(em.name + " post") + '"><span>' + em.ic + "<b>" + esc(cap || "Show this " + em.name + " post") + "</b><small>Loads from " + esc(em.name) + " when pressed</small></span></button>"; }
     });

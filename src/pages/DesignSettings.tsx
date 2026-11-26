@@ -6,7 +6,7 @@ import { NOTICE_TEXT, GROUPS, KINDS, LOOK_AXES, type Gallery, type Kind, type Lo
 import { QUESTION_GROUPS, QUESTION_LIST, allThemesOf } from "../lib/designer";
 import { AI_ENGINES } from "../lib/ai";
 import { useAiEngine } from "./AiEngine";
-import { AiApiForm, useStudioWhere } from "./Connections";
+import { AiApiForm, UnsplashForm, useStudioWhere } from "./Connections";
 import { Toggle, useToast } from "../ui/kit";
 import { CfDomainCard } from "./HostDialog";
 import { useCfAccount } from "./CfPicker";
@@ -278,7 +278,7 @@ export function DesignLookTab({ session, studio, index, onIndex, part, lead }: {
       </>}
 
       {onlyAi && <>
-      <Block title="Pictures drawn by AI" note="Pictures can be drawn from a few words by the free AI Horde (no key, no sign-up; volunteers' computers do the drawing, so it can queue for a short while).">
+      <Block title="Pictures drawn by AI" note="Pictures can be drawn from a few words by the free AI Horde (no key, no sign-up; volunteers' computers do the drawing, so it can queue for a short while), by the Studio's AI engine, or found as real photos on Unsplash.">
         <label className="flex items-start gap-2 text-[13px]">
           <input type="checkbox" className="mt-1" checked={d.adminAi !== false} onChange={(e) => upd({ adminAi: e.target.checked ? undefined : false })} />
           <span><b className="block">"Draw with AI" in the site editor</b><span className="text-[11.5px] text-ink-500">Adds a button next to Upload on picture fields (not on logos). Turn it off to hide it.</span></span>
@@ -290,15 +290,16 @@ export function DesignLookTab({ session, studio, index, onIndex, part, lead }: {
         {(d.adminAi !== false || d.images?.on) && <>
           <div className="flex flex-col gap-1.5" role="radiogroup" aria-label="Who draws the pictures">
             <span className="text-[13px] font-semibold">Who draws the pictures</span>
-            {([["horde", "The free AI Horde", "No key, no sign-up. Volunteers' computers draw, so a picture can queue for a minute or two."], ["engine", "The AI engine selected for this Studio", "Drawn by whichever AI engine this Studio uses: Cloudflare (fast, within its free allowance) or your own AI API. If it can't draw, you see the reason; the free AI Horde is used only for the Picaffectz system engine, which can't draw."]] as const).map(([v, l, h]) => {
+            {([["horde", "The free AI Horde", "No key, no sign-up. Volunteers' computers draw, so a picture can queue for a minute or two."], ["engine", "The AI engine selected for this Studio", "Drawn by whichever AI engine this Studio uses: Cloudflare (fast, within its free allowance) or your own AI API. If it can't draw, you see the reason; the free AI Horde is used only for the Picaffectz system engine, which can't draw."], ["unsplash", "Photos from Unsplash", "Real photos found on Unsplash for the words typed, instead of a drawn picture. Needs your own free Unsplash access key. Unsplash has no logos, so a logo is still drawn by the free AI Horde."]] as const).map(([v, l, h]) => {
               const on = (d.images?.source || "horde") === v;
               return (
                 <label key={v} className={`flex cursor-pointer items-start gap-2 rounded-xl border p-3 text-[13px] ${on ? "border-brand-400 bg-brand-500/10" : "border-ink-600"}`}>
-                  <input type="radio" name="img-source" className="mt-1" checked={on} onChange={() => upd({ images: { ...(d.images || {}), ...(v === "engine" ? { source: "engine" as const } : { source: undefined }) } })} />
+                  <input type="radio" name="img-source" className="mt-1" checked={on} onChange={() => upd({ images: { ...(d.images || {}), source: v === "horde" ? undefined : v } })} />
                   <span><b className="block">{l}</b><span className="text-[11.5px] text-ink-500">{h}</span></span>
                 </label>
               );
             })}
+            {d.images?.source === "unsplash" && <UnsplashForm where={where} />}
             {d.images?.source === "engine" && d.ai === "system" && <span className="text-[11.5px] text-amber-300" role="note">This Studio's AI engine is set to the Picaffectz system, which can't draw pictures here, so the free AI Horde will be used until it is set to Cloudflare or your own AI.</span>}
             {d.images?.source === "engine" && d.ai === "custom" && <span className="text-[11.5px] text-ink-500" role="note">Your own AI draws the pictures through its picture endpoint (ChatGPT and Gemini work; add a picture model under Settings → AI for others). If it fails you see the reason; the AI Horde is not used.</span>}
           </div>

@@ -7,7 +7,7 @@ import { cfCall, cfRole, cfSendCode, cfSession, cfSignedIn, cfVerifyCode, resend
 import { Field, Toggle, useToast } from "../ui/kit";
 import { COURIERS, TRACKERS } from "../lib/tracking";
 
-type Kind = "ai" | "wa" | "rz" | "cf" | "pe" | "st" | "pp" | "pos" | "sms" | "ship" | "mail" | `tk_${string}`;
+type Kind = "ai" | "un" | "wa" | "rz" | "cf" | "pe" | "st" | "pp" | "pos" | "sms" | "ship" | "mail" | `tk_${string}`;
 /** What the Studio lets this site use a way of messaging for (content.cms.msg). */
 export type MsgAllow = { login: boolean; checkout: boolean };
 export const msgAllow = (cms: any, way: "wa" | "sms"): MsgAllow => { const m = cms?.msg || {}, ok = (v: unknown) => v == null || v === "" || v === way || v === "both"; return { login: ok(m.login), checkout: ok(m.checkout) }; };
@@ -106,6 +106,27 @@ const WA_LINKS: [string, string, string][] = [
 ];
 /** WhatsApp through Meta's Cloud API. `kind`: the Studio's own sign-in, or a site (sign-in, alerts, a guest's code).
     Set up from the token alone: Connect asks Meta for the account, its numbers and its templates, and fills the form in. */
+/** Unsplash: the owner's own free access key, so pictures can be real photos found by words instead of drawn ones. */
+export function UnsplashForm({ where }: { where: Where | null | undefined }) {
+  const toast = useToast(), { saved, err, save } = useSaved(where || null);
+  const [key, setKey] = useState(""), [busy, setBusy] = useState("");
+  if (where === undefined) return <Missing why="Checking your database…" />;
+  if (!where) return <Missing why="The Unsplash key is kept on the Studio's Cloudflare database. Host the Studio on Cloudflare (Settings → Hostings) and sign in there as its owner to set it up." />;
+  if (err) return <Missing why={err} />;
+  const u = saved?.un;
+  const go = (label: string, fn: () => Promise<void>) => async () => { setBusy(label); try { await fn(); } catch (e: any) { toast(e?.message || "That didn't work.", "bad"); } setBusy(""); };
+  return (
+    <div className="flex flex-col gap-3 rounded-xl border border-ink-700 p-3">
+      <p className="text-[12.5px] leading-snug text-ink-300">Create a free app at <a className="underline" href="https://unsplash.com/oauth/applications" target="_blank" rel="noopener noreferrer">unsplash.com/oauth/applications</a> and paste its <b className="text-ink-100">Access Key</b> here (not the Secret key). A new app allows 50 searches an hour; Unsplash raises that when it approves the app.</p>
+      <Secret id="un-key" label="Unsplash Access Key" saved={!!u?.key} value={key} onChange={setKey} />
+      <div className="flex flex-wrap gap-2">
+        <button type="button" className="btn btn-sm btn-pri" disabled={!key.trim() || !!busy} onClick={go("Saving", async () => { await save("un", { on: true, key: key.trim() }); setKey(""); toast("Your Unsplash key is saved."); })}>{busy === "Saving" ? "Saving…" : "Save key"}</button>
+        <button type="button" className="btn btn-sm" disabled={!u?.key || !!busy} onClick={go("Testing", async () => { const r = await cfCall<any>(where.api, "/set/test?scope=" + encodeURIComponent(where.scope), { method: "POST", body: JSON.stringify({ name: "un" }) }); if (r?.error) throw new Error(r.error); toast(`Unsplash answered with ${r.said}. The key works.`); })}>{busy === "Testing" ? "Testing…" : "Test"}</button>
+        {u && <button type="button" className="btn btn-sm btn-danger ml-auto" disabled={!!busy} onClick={go("Removing", async () => { await save("un", null); setKey(""); toast("Removed."); })}>Remove</button>}
+      </div>
+    </div>
+  );
+}
 export function WhatsAppForm({ where, kind, allow }: { where: Where | null | undefined; kind: "studio" | "site"; /** What the Studio lets this site use WhatsApp codes for. */ allow?: MsgAllow }) {
   const barred = (k: string) => !!allow && ((k === "login" && !allow.login) || (k === "orderOtp" && !allow.checkout));
   const toast = useToast(), { saved, err, save, mark } = useSaved(where || null), keep = useRef(false);

@@ -26,6 +26,7 @@ function otherAccounts(env: any): { id: string; name: string }[] {
 }
 
 import { CFDB_SCHEMA, CFDB_TABLES, CFDB_UPGRADES, CFDB_VERSION, CFDB_WORKER_NAME } from "../src/lib/cfdbSchema";
+import { cleanDiyLook } from "../src/lib/diylook";
 import { digestPage, sheetLinks } from "../src/lib/lookdigest";
 import { socialFromText } from "../src/lib/social";
 import { COURIERS, TRACKERS, TRACKER_FIELDS, TRACK_STATES, TrackError, courierLink, courierName, pickTracker, trackLive, trackerReady, type Live } from "../src/lib/tracking";
@@ -1438,6 +1439,8 @@ function dqDesignPub(d: any) {
     if (Object.keys(c).length) out.chat = c;
   }
   if (d.carousel && typeof d.carousel === "object") { const c: any = {}; for (const kind of ["business", "restaurant", "portfolio", "store", "events"]) if (d.carousel[kind] === "custom") c[kind] = "custom"; if (Object.keys(c).length) out.carousel = c; }
+  // the page's own look, wording, question order and background: cleaned by the same code the Studio saves them with
+  Object.assign(out, cleanDiyLook(d));
   if (d.questions && typeof d.questions === "object") {
     const q: any = {}, tx = (v: any, n: number) => (typeof v === "string" ? v.replace(/[<>]/g, "").trim().slice(0, n) : "");
     for (const g of ["basics", "business", "restaurant", "portfolio", "store", "events"]) {

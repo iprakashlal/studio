@@ -6,7 +6,8 @@ import { useEffect, useState } from "react";
 /** The words written for a design (by the Studio's AI engine or the Picaffectz system): a summary for each topic the person gave. */
 export type Copy = { tagline?: string; hero_text?: string; about_text?: string; services_text?: string; work_text?: string; cta_text?: string; items?: { name: string; text: string }[]; faq?: { q: string; a: string }[] };
 export type DesignRec = { id: string; name: string; kind: string; themeId: string; themeName: string; answers: Record<string, string>; createdAt: string; summary?: string; copy?: Copy; /** A small logo (data URL), when one was added. */ logo?: string };
-import { DIY_FONTS, DIY_WORDS, cleanAi, cleanDomain, cleanGallery, cleanLook, cleanThemes, type DesignSettings, type DiyWord } from "./designlook";
+import { cleanAi, cleanDomain, cleanGallery, cleanLook, cleanThemes, type DesignSettings } from "./designlook";
+import { cleanDiyLook } from "./diylook";
 export type { DesignSettings };
 
 const LS = "site-studio:designs", SET = "site-studio:design-page";
@@ -47,27 +48,7 @@ export function cleanDesignSettings(x: any): DesignSettings {
     }
     if (Object.keys(q).length) o.questions = q;
   }
-  if (x.ui && typeof x.ui === "object") {
-    const u: NonNullable<DesignSettings["ui"]> = {}, tx = (v: any, n: number) => (typeof v === "string" ? v.replace(/[<>]/g, "").trim().slice(0, n) : "");
-    if (x.ui.mode === "light" || x.ui.mode === "dark") u.mode = x.ui.mode;
-    if (typeof x.ui.accent === "string" && /^#[0-9a-f]{6}$/i.test(x.ui.accent)) u.accent = x.ui.accent.toLowerCase();
-    if (DIY_FONTS.includes(x.ui.font)) u.font = x.ui.font; if (DIY_FONTS.includes(x.ui.head)) u.head = x.ui.head;
-    if (x.ui.radius === "sharp" || x.ui.radius === "round") u.radius = x.ui.radius;
-    if (x.ui.width === "narrow" || x.ui.width === "wide") u.width = x.ui.width;
-    if (typeof x.ui.logo === "string" && x.ui.logo.length <= 90_000 && /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(x.ui.logo)) u.logo = x.ui.logo;
-    if (tx(x.ui.name, 40)) u.name = tx(x.ui.name, 40); if (tx(x.ui.tag, 60)) u.tag = tx(x.ui.tag, 60);
-    if (Object.keys(u).length) o.ui = u;
-  }
-  if (x.words && typeof x.words === "object") {
-    const w: NonNullable<DesignSettings["words"]> = {};
-    for (const k of Object.keys(DIY_WORDS) as DiyWord[]) { const v = typeof x.words[k] === "string" ? x.words[k].replace(/[<>]/g, "").trim().slice(0, 400) : ""; if (v && v !== DIY_WORDS[k][1]) w[k] = v; }
-    if (Object.keys(w).length) o.words = w;
-  }
-  if (x.qorder && typeof x.qorder === "object") {
-    const q: Record<string, string[]> = {};
-    for (const g of ["basics", "portfolio", "store", "business", "restaurant", "events"]) { const l = Array.isArray(x.qorder[g]) ? [...new Set((x.qorder[g] as any[]).filter((id) => typeof id === "string" && /^[a-z]{1,20}$/.test(id)))].slice(0, 80) as string[] : []; if (l.length) q[g] = l; }
-    if (Object.keys(q).length) o.qorder = q;
-  }
+  Object.assign(o, cleanDiyLook(x));
   const look = cleanLook(x.look); if (Object.keys(look).length) o.look = look;
   return o;
 }

@@ -477,6 +477,8 @@
     name: "Cinema scenes",
     css: [
       "html.kv-snap{scroll-snap-type:y mandatory}",
+      /* The social photo wall and the video are added as scenes of their own. */
+      ".k-velvet-cinema #site-wall,.k-velvet-cinema #site-video{scroll-snap-align:start;min-height:100vh;display:grid;align-items:center}",
       ".kv-s{min-height:100vh;scroll-snap-align:start;position:relative;display:grid;place-items:center;overflow:hidden;padding:110px clamp(20px,6vw,90px) 90px;text-align:center;isolation:isolate}",
       ".kv-bg{position:absolute;inset:0;z-index:-2}.kv-bg img,.kv-bg span{width:100%;height:100%;object-fit:cover;transform:scale(1.18);transition:transform 9s ease-out,filter 1.2s;filter:brightness(.35) saturate(.9)}",
       ".kv-s.in .kv-bg img{transform:scale(1.02)}",

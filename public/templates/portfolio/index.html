@@ -1600,7 +1600,7 @@ let wallP=null;
 function wall(c){
   if(!wallOn(c)&&!window.SiteWall)return;
   (wallP||(wallP=new Promise((ok,no)=>{if(window.SiteWall)return ok();const s=document.createElement("script");s.src="assets/wall.js";s.onload=()=>ok();s.onerror=no;document.head.appendChild(s)})))
-    .then(()=>SiteWall.mount(c,{on:wallOn(c),sections:"main > section",home:!/^(kinetic-noir|decode|gallery|velvet-cinema)$/.test(KIT),imgUrl})).catch(()=>{})}
+    .then(()=>SiteWall.mount(c,{on:wallOn(c),sections:KIT==="kinetic-noir"?"#siteInner > main":"main > section",home:!/^(decode|gallery)$/.test(KIT),imgUrl})).catch(()=>{})}
 function video(c){
   const V=c.video||{};if(!V.on&&!window.SiteVideo)return;
   (svP||(svP=new Promise((ok,no)=>{if(window.SiteVideo)return ok();const s=document.createElement("script");s.src="assets/video.js";s.onload=()=>ok();s.onerror=no;document.head.appendChild(s)})))

@@ -205,4 +205,6 @@
   .set-cols { display: block; columns: 2; column-gap: 1rem; }
   .set-cols > * { break-inside: avoid; margin-bottom: 1rem; }
   .set-cols > :not(.card), .set-cols > .sticky { column-span: all; }
+  /* a block that runs across both columns keeps its distance from the cards above it */
+  .set-cols > :not(.card):not(:first-child), .set-cols > .sticky { margin-top: 1rem; }
 }

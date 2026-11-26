@@ -11,7 +11,7 @@ import { setThemeAllow, setThemeLimit } from "../themes/limit";
 import { DASH_DEFAULT, DASH_STATS } from "../lib/dashstats";
 import { TEMPLATES } from "../schema";
 import { StudioEmailCard, StudioPageLinks, StudioPagesCard } from "./StudioPage";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { isHosted } from "../lib/backend";
 import type { Session } from "../lib/auth";
 import { explain, type Repo } from "../lib/repo";
@@ -184,7 +184,7 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
     /** The settings screen: its sections down the left on a wide screen (a row of tabs on a narrower one, a menu on a phone),
      *  and the chosen section using the rest of the width. */
     const shell = (body: ReactNode) => <>{header}
-      <main className="mx-auto w-full max-w-[1680px] px-4 py-8 sm:px-6 lg:grid lg:grid-cols-[14rem_minmax(0,1fr)] lg:items-start lg:gap-8">
+      <main className="mx-auto w-full max-w-[1680px] px-4 pb-20 pt-8 sm:px-6 lg:grid lg:grid-cols-[14rem_minmax(0,1fr)] lg:items-start lg:gap-8">
         <aside className="flex flex-col gap-4 lg:card lg:sticky lg:top-20 lg:p-4">
           <h1 className="font-display text-3xl font-extrabold lg:px-1 lg:text-2xl">Settings</h1>
           {/* Phones: one dropdown, so the tabs never wrap onto a second row. */}
@@ -196,7 +196,7 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
               className={`-mb-px flex items-center gap-2.5 border-b-2 px-3 py-2 text-sm font-semibold transition lg:mb-0 lg:rounded-xl lg:border-b-0 lg:py-2.5 ${tab === k ? "border-brand-400 text-ink-100 lg:bg-brand-500/15" : "border-transparent text-ink-400 hover:text-ink-100 lg:hover:bg-ink-800"}`}>
               <SetIcon k={k} on={tab === k} />{l}</a>)}
           </nav>
-          <SettingsFind key={tab} />
+          <SettingsFind tab={tab} tabs={tabList} />
         </aside>
         <div className="mt-4 flex min-w-0 flex-col gap-4 lg:mt-0" data-settings-body>{body}</div>
       </main></>;
@@ -263,21 +263,83 @@ const SET_ICONS: Record<string, string> = {
 function SetIcon({ k, on }: { k: string; on: boolean }) {
   return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden className={`hidden shrink-0 lg:block ${on ? "text-brand-400" : "text-ink-500"}`}><path d={SET_ICONS[k] || SET_ICONS.general} /></svg>;
 }
-/** Finds a setting on the open section: cards that don't mention the words are put away while something is typed. */
-function SettingsFind() {
-  const [q, setQ] = useState(""), [n, setN] = useState<number | null>(null);
+/** Every settings section, for the find box: its tab, its title, other words people look for it by, and (when the title alone
+ *  is not what the card says) the word that picks its card out on that tab. */
+const SET_INDEX: [tab: string, title: string, words: string, find?: string][] = [
+  ["general", "AI engine", "ai openai gemini groq openrouter cloudflare api key model translate write draw pictures provider"],
+  ["general", "WhatsApp", "meta messages otp business phone"],
+  ["general", "SMS", "text messages codes otp"],
+  ["general", "Header links", "menu navigation top links"],
+  ["general", "Design yourself page", "diy show hide themes page submissions", "Design yourself"],
+  ["general", "Dashboard numbers", "stats counts projects published"],
+  ["general", "Account and sign-in", "login password username sign out session device token", "Sign"],
+  ["customize", "Studio name & logo", "brand colours colors layout glass classic soft sharp dark light icon animation", "Studio name"],
+  ["customize", "“Powered by” badge", "badge footer credit", "badge"],
+  ["customize", "Additional pages", "studio pages public about terms privacy"],
+  ["customize", "Sign-in email", "email template code mail"],
+  ["customize", "People and Google sign-in", "owners members team google login", "Google"],
+  ["customize", "Picaffectz Explorer", "helper assistant search ctrl k", "Explorer"],
+  ["customize", "Admin menus", "site admin menu sections rename order headings"],
+  ["hostings", "Hosting accounts", "github netlify cloudflare token publishing pages"],
+  ["hostings", "Sites and hosting accounts", "database domain worker sites d1 update"],
+  ["design", "Design yourself: its own web address", "diy domain address", "web address"],
+  ["design", "Design yourself: AI engine", "diy ai writes text reads pdf", "AI engine"],
+  ["design", "Design yourself: questions", "diy questions wording hide ask", "Questions"],
+  ["design", "Design yourself: chat look", "diy chat colours colors background picture bubbles", "Chat look"],
+  ["design", "Design yourself: notice bar", "diy notice strip message preview", "Notice bar"],
+  ["design", "Design yourself: pictures drawn by AI", "diy horde draw logo banner images picture style", "Pictures drawn"],
+  ["design", "Design yourself: themes", "diy themes shown preview tick", "Themes ·"],
+  ["design", "Design yourself: layout, style and interactions", "diy layout style interactions effects", "Layout, style"],
+  ["design", "Design yourself: colours", "diy colours colors palette brand", "Colours"],
+  ["themes", "Theme gallery: its own web address", "themes domain address gallery", "web address"],
+  ["themes", "Theme gallery: what it says", "themes title heading text words", "What it says"],
+  ["themes", "Theme gallery: what it shows", "themes types limit filter how many", "What it shows"],
+  ["update", "Studio updates", "update version push live sites database worker latest", "update"],
+  ["migration", "Move the Studio", "migration migrate move github cloudflare supabase files where runs", "Studio"],
+  ["help", "Guided tours", "help tour guide walkthrough how"],
+];
+/** Finds a setting. While something is typed it lists the matching sections from every tab (press one to go there), and on the
+ *  open tab it puts away the cards that don't mention the words. */
+function SettingsFind({ tab, tabs }: { tab: string; tabs: [string, string][] }) {
+  const [q, setQ] = useState(""), [note, setNote] = useState(""), jump = useRef(false);
+  const words = q.toLowerCase().split(/\s+/).filter(Boolean);
+  const label = (k: string) => tabs.find((t) => t[0] === k)?.[1] || "";
+  const hits = !words.length ? [] : SET_INDEX.filter(([t, title, extra]) => label(t) && words.every((w) => `${title} ${extra} ${label(t)}`.toLowerCase().includes(w))).slice(0, 8);
   useEffect(() => {
-    const cards = () => [...document.querySelectorAll<HTMLElement>("[data-settings-body] .card")].filter((c) => !c.parentElement?.closest(".card"));
-    const words = q.toLowerCase().split(/\s+/).filter(Boolean); let shown = 0;
-    for (const c of cards()) { const hit = !words.length || words.every((w) => (c.textContent || "").toLowerCase().includes(w)); c.toggleAttribute("data-find-hide", !hit); if (hit) shown++; }
-    setN(words.length ? shown : null);
-    return () => cards().forEach((c) => c.removeAttribute("data-find-hide"));
-  }, [q]);
+    const cards = () => [...document.querySelectorAll<HTMLElement>("[data-settings-body] .card")].filter((c) => !c.parentElement?.closest(".card") && !c.classList.contains("sticky"));
+    const clear = () => cards().forEach((c) => c.removeAttribute("data-find-hide"));
+    const w = q.toLowerCase().split(/\s+/).filter(Boolean);
+    const apply = () => {
+      const all = cards(); if (!w.length) { clear(); setNote(""); return; }
+      const on = all.filter((c) => w.every((x) => (c.textContent || "").toLowerCase().includes(x)));
+      // nothing on this tab mentions it: the tab is left whole (the list above says where it is)
+      all.forEach((c) => c.toggleAttribute("data-find-hide", !!on.length && !on.includes(c)));
+      setNote(on.length ? `Showing ${on.length} of ${all.length} sections on this tab.` : all.length ? "Not on this tab." : "");
+      if (jump.current && on.length) { jump.current = false; on.forEach((c) => { (c as any).__fold?.(false); if (c instanceof HTMLDetailsElement) c.open = true; }); on[0].scrollIntoView({ block: "start", behavior: "smooth" }); }
+    };
+    // the tab's cards can arrive a moment after the tab opens
+    const t = [0, 250, 900].map((ms) => setTimeout(apply, ms));
+    // ...and a card that is drawn again later is put away again
+    let later = 0; const body = document.querySelector("[data-settings-body]"), mo = new MutationObserver(() => { clearTimeout(later); later = window.setTimeout(apply, 120); });
+    if (body && w.length) mo.observe(body, { childList: true, subtree: true });
+    return () => { t.forEach(clearTimeout); clearTimeout(later); mo.disconnect(); clear(); };
+  }, [q, tab]);
+  const go = (t: string, find: string) => { jump.current = true; setQ(find); if (t !== tab) location.hash = "#/settings" + (t === "general" ? "" : "/" + t); };
   return (
-    <label className="hidden flex-col gap-1.5 lg:flex"><span className="label">Find a setting</span>
-      <input type="search" className="input py-2 text-sm" placeholder="e.g. WhatsApp, badge" value={q} onChange={(e) => setQ(e.target.value)} />
-      <span className="hint min-h-[1rem]" role="status">{n == null ? "" : n ? `${n} section${n === 1 ? "" : "s"} on this tab` : "Nothing on this tab. Try another tab."}</span>
-    </label>
+    <div className="hidden flex-col gap-1.5 lg:flex">
+      <label className="flex flex-col gap-1.5"><span className="label">Find a setting</span>
+        <span className="relative flex">
+          <input type="text" inputMode="search" autoComplete="off" className="input py-2 pr-8 text-sm" placeholder="e.g. WhatsApp, badge" value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === "Escape") setQ(""); if (e.key === "Enter" && hits[0]) { e.preventDefault(); go(hits[0][0], hits[0][3] || hits[0][1]); } }} />
+          {q && <button type="button" aria-label="Clear the search" className="absolute right-1.5 top-1/2 grid h-6 w-6 -translate-y-1/2 place-items-center rounded-full text-ink-400 hover:bg-ink-800 hover:text-ink-100" onClick={() => setQ("")}>×</button>}
+        </span>
+      </label>
+      {words.length > 0 && <div className="flex flex-col gap-0.5" role="list" aria-label="Matching settings">
+        {hits.map(([t, title, , find]) => <button key={t + title} type="button" role="listitem" onClick={() => go(t, find || title)} className="flex flex-col rounded-lg px-2 py-1.5 text-left transition hover:bg-ink-800">
+          <span className="text-[13px] font-semibold text-ink-100">{title}</span><span className="text-[11px] text-ink-400">{label(t)}{t === tab ? " · this tab" : ""}</span></button>)}
+        {!hits.length && <span className="hint px-2">No section is listed under those words.</span>}
+      </div>}
+      <span className="hint min-h-[1rem] px-2" role="status">{note}</span>
+    </div>
   );
 }
 function StudioHelp() {

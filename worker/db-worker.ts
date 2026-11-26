@@ -894,6 +894,8 @@ function orderItems(c: any, cart: any): { n: string; q: number; i: string; p?: n
    its own count ("<item>|<option>"), else it draws on the item's. Orders take from it as they are placed (an unpaid
    order that asks for more than is left is refused), a cancelled order gives it back, and every change is logged. */
 const invOn = (c: any) => !!c?.inventory?.on;
+/** A customer's saved items: up to 200 short ids, each once. */
+const cleanFavs = (v: unknown): string[] => [...new Set((Array.isArray(v) ? v : []).map((x) => String(x || "").trim().slice(0, 140)).filter(Boolean))].slice(0, 200);
 const stockKey = (id: unknown, opt?: unknown) => { const a = String(id || "").trim().slice(0, 130), b = oneLine(String(opt || "")).toLowerCase().slice(0, 60); return b ? a + "|" + b : a; };
 /** Every item that can be counted on this site: [key, name], options and sizes after their item. */
 function stockItems(c: any): { item: string; name: string; group: string; opt: boolean }[] {
@@ -2030,7 +2032,7 @@ export default {
         return json({ points: v.bal, worth: L.worth, min: L.min, maxPct: L.maxPct, earn: L.earn });
       }
       // ---- Customer accounts: signing in with a proved number or address, and the customer's own orders and points.
-      if (/^\/acct\/(in|me|save)\/[a-z0-9][a-z0-9-]{0,59}$/.test(p) && req.method === "POST") {
+      if (/^\/acct\/(in|me|save|favs)\/[a-z0-9][a-z0-9-]{0,59}$/.test(p) && req.method === "POST") {
         const site = p.split("/")[3], b = (await req.json()) as any, sc = await siteContent(env, site).catch(() => null), cw = await codeWays(env, site, sc), A = acctOf(env, sc, cw);
         if (!A) return err(404, "Not found.");
         if (p.startsWith("/acct/in/")) {
@@ -2045,6 +2047,13 @@ export default {
         const key = String(b.key || ""); if (!(await custOk(env, site, key, b.pass))) return err(401, "Please sign in again.");
         const byMail = key.includes("@");
         // The customer's own details: their name, the other contact (never the one they signed in with), and their addresses.
+        // The customer's saved items (favourite dishes, a wishlist): kept with their account, so they follow them to any device.
+        if (p.startsWith("/acct/favs/")) {
+          const favs = cleanFavs(b.favs);
+          let kept: any = {}; try { kept = JSON.parse(String(((await env.DB.prepare("select data from profiles where site = ? and ckey = ?").bind(site, key).first()) as any)?.data || "{}")) || {}; } catch { /* none kept */ }
+          await env.DB.prepare("insert into profiles (site, ckey, data) values (?, ?, ?) on conflict (site, ckey) do update set data = excluded.data").bind(site, key, JSON.stringify({ ...kept, favs })).run();
+          return json({ ok: true, favs });
+        }
         if (p.startsWith("/acct/save/")) {
           const name = oneLine(String(b.name || "")).replace(/\s+/g, " ").slice(0, 100), phone = byMail ? String(b.phone || "").replace(/[^\d+ ()-]/g, "").slice(0, 24) : "", email = byMail ? "" : emailKey(b.email);
           if (!byMail && String(b.email || "").trim() && !email) return err(400, "Enter a valid email address.");
@@ -2056,7 +2065,7 @@ export default {
           await env.DB.batch([
             env.DB.prepare("insert into customers (site, ckey, name, phone, email, verified, orders, spent, points, first_at, last_at) values (?, ?, ?, ?, ?, 1, 0, 0, 0, ?, ?) on conflict (site, ckey) do update set name = excluded.name, phone = case when ? = 1 then excluded.phone else phone end, email = case when ? = 1 then email else excluded.email end, verified = 1")
               .bind(site, key, name, byMail ? phone : "+" + key, byMail ? key : email, now, now, byMail ? 1 : 0, byMail ? 1 : 0),
-            env.DB.prepare("insert into profiles (site, ckey, data) values (?, ?, ?) on conflict (site, ckey) do update set data = excluded.data").bind(site, key, JSON.stringify({ addresses: addrs, dob, gender })),
+            env.DB.prepare("insert into profiles (site, ckey, data) values (?, ?, ?) on conflict (site, ckey) do update set data = excluded.data").bind(site, key, JSON.stringify({ addresses: addrs, dob, gender, favs: cleanFavs(kept.favs) })),
           ]);
           return json({ ok: true, profile: { name, phone: byMail ? phone : "+" + key, email: byMail ? key : email, addresses: addrs, dob, gender } });
         }
@@ -2072,7 +2081,7 @@ export default {
             orders.push({ no: String(d.order_no), at: r.created_at, total: String(d.total || ""), status: String(r.status || "new"), mode: String(d.mode || ""), paid: d._paid === "yes", pay: String(d.payment || d.pay || ""), address: String(d.address || ""), name: String(d.name || ""), points: String(d._points || ""), ...(d._bill ? (() => { try { return { bill: JSON.parse(String(d._bill)) }; } catch { return {}; } })() : {}), ...(trackOf(d) ? { track: trackShown(trackOf(d)) } : {}), items, text: String(d.items || d.order || d.message || "").slice(0, 2000) }); }
         }
         const L = loyOf(sc);
-        return json({ ok: true, name: row?.name || "", phone: byMail ? row?.phone || "" : "+" + key, email: byMail ? key : row?.email || "", addresses, dob: cleanDob(pf.dob), gender: cleanGender(pf.gender), count: +row?.orders || 0, points: Math.max(0, +row?.points || 0), loyalty: L.on ? { worth: L.worth, min: L.min, maxPct: L.maxPct } : null, orders });
+        return json({ ok: true, name: row?.name || "", phone: byMail ? row?.phone || "" : "+" + key, email: byMail ? key : row?.email || "", addresses, favs: cleanFavs(pf.favs), dob: cleanDob(pf.dob), gender: cleanGender(pf.gender), count: +row?.orders || 0, points: Math.max(0, +row?.points || 0), loyalty: L.on ? { worth: L.worth, min: L.min, maxPct: L.maxPct } : null, orders });
       }
       // ---- A customer proves their email address at checkout: a 6-digit code by email, then a proof only this database can make.
       if (/^\/eotp\/(send|check)\/[a-z0-9][a-z0-9-]{0,59}$/.test(p) && req.method === "POST") {

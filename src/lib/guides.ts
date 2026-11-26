@@ -25,9 +25,9 @@ export const GUIDES: Guide[] = [
   {
     id: "settings", title: "Studio settings", blurb: "General, Customize, Hostings and Updates: what each one is for.",
     steps: [
-      { go: "#/settings", sel: '[role=tablist][aria-label="Settings"]', title: "Settings tabs", text: "General, Customize, Hostings, Updates and Migration. On a phone this is the Settings section drop-down." },
-      { sel: "h:AI engine", title: "General · AI engine", text: "Connect the AI that writes and translates for you. The key is kept encrypted." },
+      { go: "#/settings", sel: '[role=tablist][aria-label="Settings"]', title: "Settings tabs", text: "General, AI, Customize, Hostings, Updates and Migration. On a phone this is the Settings section drop-down." },
       { sel: "[aria-label=\"Account\"] || h:Account", title: "General · Account", text: "Who you are signed in as, and Sign out. Your choices here (layout, toggles, tour) are saved in the Studio's database, so they follow you to any device." },
+      { go: "#/settings/ai", sel: "h:AI engine", title: "AI · AI engine", text: "Connect the AI that writes and translates for you. The key is kept encrypted. The AI choices for Design yourself and for drawing pictures are on this tab too." },
       { go: "#/settings/customize", sel: tab("customize"), title: "Customize", text: "How your Studio and every site's admin look: name and logo, the Powered by badge, extra pages, sign-in email and admin menus." },
       { sel: "h:Admin menus", title: "Customize · Admin menus", text: "Rename, regroup or hide sections of the admin menu. A custom menu you save here wins over the default layout." },
       { go: "#/settings/hostings", sel: "h:Hosting accounts", title: "Hostings · Hosting accounts", text: "Connect GitHub, Netlify and Cloudflare once. Tokens stay encrypted on this device, and one Cloudflare token can also be kept on the Studio's database so other devices need none." },

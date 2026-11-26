@@ -179,7 +179,7 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
     const want = route.split("/")[1] || "general";
     const showDesign = !hid("design"), showThemes = !hid("themes");
     const tab = (want === "customize" && !showCustomize) || (want === "hostings" && !showHostings) || (want === "design" && !showDesign) || (want === "themes" && !showThemes) ? "general" : want;
-    const tabList = [["general", "General"], ...(showCustomize ? [["customize", "Customize"]] : []), ...(showHostings ? [["hostings", "Hostings"]] : []), ...(showDesign ? [["design", "Design yourself"]] : []), ...(showThemes ? [["themes", "Themes"]] : []), ["update", "Updates"], ...(client ? [] : [["migration", "Migration"]]), ["help", "Help"]] as [string, string][];
+    const tabList = [["general", "General"], ["ai", "AI"], ...(showCustomize ? [["customize", "Customize"]] : []), ...(showHostings ? [["hostings", "Hostings"]] : []), ...(showDesign ? [["design", "Design yourself"]] : []), ...(showThemes ? [["themes", "Themes"]] : []), ["update", "Updates"], ...(client ? [] : [["migration", "Migration"]]), ["help", "Help"]] as [string, string][];
     const here = tabList.some(([k]) => k === tab) ? tab : "general";
     /** The settings screen: its sections down the left on a wide screen (a row of tabs on a narrower one, a menu on a phone),
      *  and the chosen section using the rest of the width. */
@@ -201,6 +201,10 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
         <div className="mt-4 flex min-w-0 flex-col gap-4 lg:mt-0" data-settings-body>{body}</div>
       </main></>;
     if (client === undefined && tab !== "general") return shell(<SkelRows n={3} label="Loading settings" />);
+    // AI: the Studio's engine and (when Design yourself is offered) the AI choices of Design yourself, kept in this one place.
+    if (tab === "ai") return shell(<><FoldAll /><FoldCards scope="ai">{showDesign
+      ? <DesignLookTab session={session} studio={studio} index={index} onIndex={setIndex} part="ai" lead={<AiEngineCard studio={studio} index={index} onIndex={setIndex} />} />
+      : <AiEngineCard studio={studio} index={index} onIndex={setIndex} />}</FoldCards></>);
     if (tab === "design") return shell(<DesignLookTab session={session} studio={studio} index={index} onIndex={setIndex} />);
     if (tab === "themes") return shell(<ThemesSettingsTab session={session} studio={studio} index={index} onIndex={setIndex} />);
     if (tab === "help") return shell(<div className="max-w-3xl"><StudioHelp /></div>);
@@ -231,7 +235,6 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
           <SitesHostingCard session={session} studio={studio} index={index} onIndex={setIndex} />
           </> : <>
           <p className="text-sm text-ink-300">Your Studio keeps everything as files in <b className="text-ink-100">{isHosted(session) ? `${session.cfg.owner === "cloudflare" ? "Cloudflare" : "Supabase"} (Studio “${session.cfg.repo}”)` : `${session.cfg.owner}/${session.cfg.repo}`}</b>: <code className="font-mono text-xs">studio.json</code> for the project list and <code className="font-mono text-xs">projects/</code> for each site's content, images and export snapshots.</p>
-          <AiEngineCard studio={studio} index={index} onIndex={setIndex} />
           <StudioWhatsAppCard />
           <NavLinksCard studio={studio} index={index} onIndex={setIndex} />
           {!hid("design") && <DesignPageCard />}
@@ -251,6 +254,7 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
 /** Settings → Help: guided tours of the Studio, end to end. */
 /** A small line icon for each settings section. */
 const SET_ICONS: Record<string, string> = {
+  ai: "M9 4h6a3 3 0 013 3v6a3 3 0 01-3 3H9a3 3 0 01-3-3V7a3 3 0 013-3zM9.5 9.5h.01M14.5 9.5h.01M9.5 12.5c.8.7 1.6 1 2.5 1s1.7-.3 2.5-1M12 4V2M8 16v3M16 16v3M6 10H4M20 10h-2",
   general: "M12 8.5a3.5 3.5 0 100 7 3.5 3.5 0 000-7zM19 12a7 7 0 00-.1-1.2l2-1.5-2-3.4-2.3.9a7 7 0 00-2-1.2L14.2 3h-4.4l-.4 2.6a7 7 0 00-2 1.2l-2.3-.9-2 3.4 2 1.5a7 7 0 000 2.4l-2 1.5 2 3.4 2.3-.9a7 7 0 002 1.2l.4 2.6h4.4l.4-2.6a7 7 0 002-1.2l2.3.9 2-3.4-2-1.5c.1-.4.1-.8.1-1.2z",
   customize: "M4 20l4-1 11-11-3-3L5 16l-1 4zM14 6l3 3",
   hostings: "M4 5h16v6H4zM4 13h16v6H4zM7.5 8h.01M7.5 16h.01",
@@ -266,7 +270,9 @@ function SetIcon({ k, on }: { k: string; on: boolean }) {
 /** Every settings section, for the find box: its tab, its title, other words people look for it by, and (when the title alone
  *  is not what the card says) the word that picks its card out on that tab. */
 const SET_INDEX: [tab: string, title: string, words: string, find?: string][] = [
-  ["general", "AI engine", "ai openai gemini groq openrouter cloudflare api key model translate write draw pictures provider"],
+  ["ai", "AI engine", "ai openai gemini groq openrouter cloudflare api key model translate write provider chatgpt"],
+  ["ai", "AI for Design yourself", "diy ai writes text reads pdf engine"],
+  ["ai", "Pictures drawn by AI", "diy horde draw logo banner images picture style"],
   ["general", "WhatsApp", "meta messages otp business phone"],
   ["general", "SMS", "text messages codes otp"],
   ["general", "Header links", "menu navigation top links"],
@@ -283,11 +289,9 @@ const SET_INDEX: [tab: string, title: string, words: string, find?: string][] = 
   ["hostings", "Hosting accounts", "github netlify cloudflare token publishing pages"],
   ["hostings", "Sites and hosting accounts", "database domain worker sites d1 update"],
   ["design", "Design yourself: its own web address", "diy domain address", "web address"],
-  ["design", "Design yourself: AI engine", "diy ai writes text reads pdf", "AI engine"],
   ["design", "Design yourself: questions", "diy questions wording hide ask", "Questions"],
   ["design", "Design yourself: chat look", "diy chat colours colors background picture bubbles", "Chat look"],
   ["design", "Design yourself: notice bar", "diy notice strip message preview", "Notice bar"],
-  ["design", "Design yourself: pictures drawn by AI", "diy horde draw logo banner images picture style", "Pictures drawn"],
   ["design", "Design yourself: themes", "diy themes shown preview tick", "Themes ·"],
   ["design", "Design yourself: layout, style and interactions", "diy layout style interactions effects", "Layout, style"],
   ["design", "Design yourself: colours", "diy colours colors palette brand", "Colours"],

@@ -56,7 +56,7 @@ const AI_PRESETS: { id: string; name: string; base: string; model: string; keyUr
   { id: "claude", name: "Claude (Anthropic)", base: "https://api.anthropic.com/v1", model: "claude-haiku-5-5", keyUrl: "https://console.anthropic.com/settings/keys", keyLabel: "console.anthropic.com/settings/keys", note: "Create a key in the Anthropic Console (add credit under Billing) and paste it here. Uses Anthropic's OpenAI-compatible address." },
 ];
 
-/** Settings → AI engine: the owner's own OpenAI-compatible API. */
+/** Settings → AI: the owner's own OpenAI-compatible API. */
 export function AiApiForm({ where }: { where: Where | null | undefined }) {
   const toast = useToast(), { saved, err, save } = useSaved(where || null);
   const [f, setF] = useState({ base: "", model: "", vision: "", image: "", key: "" }), [busy, setBusy] = useState(""), [prov, setProv] = useState("");

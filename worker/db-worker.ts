@@ -646,7 +646,7 @@ function customAI(c: any) {
       let r: Response; try { r = await send(true); } catch (e: any) { throw new Error(e?.name === "TimeoutError" || e?.name === "AbortError" ? "Your AI API took too long to answer (40 s). Check the model name, or try a faster model." : String(e?.message || e)); }
       // Not every API knows the JSON switch: asked again without it (the prompts already ask for JSON).
       if (r.status === 400 && o.response_format) r = await send(false);
-      if (!r.ok) { const t = (await r.text()).replace(/\s+/g, " ").slice(0, 240); throw new Error(r.status === 401 || r.status === 403 ? `Your AI API refused the key (${r.status}). Check it under Settings → AI engine.` : r.status === 429 ? "Your AI API says its limit is reached (429)." : `Your AI API answered ${r.status}: ${t}`); }
+      if (!r.ok) { const t = (await r.text()).replace(/\s+/g, " ").slice(0, 240); throw new Error(r.status === 401 || r.status === 403 ? `Your AI API refused the key (${r.status}). Check it under Settings → AI.` : r.status === 429 ? "Your AI API says its limit is reached (429)." : `Your AI API answered ${r.status}: ${t}`); }
       const j: any = await r.json().catch(() => null), m = j?.choices?.[0]?.message?.content;
       return { response: typeof m === "string" ? m : Array.isArray(m) ? m.map((x: any) => x?.text || "").join("") : "" };
     },
@@ -1616,7 +1616,7 @@ async function dqRead(env: Env, id: string, req: Request): Promise<Response> {
   return json({ title, site, description, text });
 }
 
-/** The AI that serves Design yourself: the choice made under Settings → Design yourself, else the Studio's engine (Settings → General). The Picaffectz system (or an engine that isn't ready) has no AI here: the visitor's own device does the work. */
+/** The AI that serves Design yourself: the choice made under Settings → AI for Design yourself, else the Studio's engine (also Settings → AI). The Picaffectz system (or an engine that isn't ready) has no AI here: the visitor's own device does the work. */
 async function dqEngine(env: Env, idx: any): Promise<{ choice: string; ai: any }> {
   const mine = idx?.prefs?.design?.ai, g = idx?.ai?.engine;
   const choice = mine === "custom" || mine === "system" || mine === "cloudflare" ? mine : g === "custom" ? "custom" : g === "system" ? "system" : "cloudflare";
@@ -1646,7 +1646,7 @@ function dqSections(x: any): Record<string, any> {
   return out;
 }
 
-/** A picture drawn from words by the Studio's own AI engine (Cloudflare's: the fast FLUX model). Only when the owner chose it under Settings → Design yourself → Pictures drawn by AI; other engines can't draw here, and the page then uses the free generator. */
+/** A picture drawn from words by the Studio's own AI engine (Cloudflare's: the fast FLUX model). Only when the owner chose it under Settings → AI → Pictures drawn by AI; other engines can't draw here, and the page then uses the free generator. */
 async function dqImage(env: Env, id: string, req: Request): Promise<Response> {
   const ip = req.headers.get("cf-connecting-ip") || "x";
   if (!(await dqRate(env, "dqimg:" + id, 120, 3600)) || !(await dqRate(env, "dqimgip:" + ip, 16, 3600))) return json({ engine: "system", error: "busy" });
@@ -1661,7 +1661,7 @@ async function dqImage(env: Env, id: string, req: Request): Promise<Response> {
     try {
       const c: any = await anySetting(env, "ai"), base = String(c?.base || "").trim().replace(/\/+$/, "").replace(/\/chat\/completions$/, "");
       const model = String(c?.image || "").trim() || (/api\.openai\.com/.test(base) ? "dall-e-3" : /generativelanguage\.googleapis\.com/.test(base) ? "gemini-2.5-flash-image" : "");
-      if (!model) return json({ engine: "custom", error: "No picture model is set. Add one under Settings → AI engine (for example dall-e-3 or gemini-2.5-flash-image)." });
+      if (!model) return json({ engine: "custom", error: "No picture model is set. Add one under Settings → AI (for example dall-e-3 or gemini-2.5-flash-image)." });
       // Gemini's picture models ("…-image", "nano banana") are not on its OpenAI-style address: they are asked on Google's own endpoint.
       if (/generativelanguage\.googleapis\.com/.test(base) && !/imagen/i.test(model)) {
         const g = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model.replace(/^models\//, ""))}:generateContent`, { signal: AbortSignal.timeout(60000), method: "POST", headers: { "x-goog-api-key": c.key, "Content-Type": "application/json" }, body: JSON.stringify({ contents: [{ parts: [{ text: "Draw this picture: " + prompt }] }], generationConfig: { responseModalities: ["IMAGE", "TEXT"] } }) });
@@ -1751,7 +1751,7 @@ export default {
       // The owner's own AI API in the place of Workers AI, when a request asks for it.
       if (p.startsWith("/ai/") && u.searchParams.get("engine") === "custom") {
         const c = await anySetting(env, "ai");
-        if (!c?.on || !c.key || !c.model || !publicUrl(String(c.base || "").trim())) return json({ error: "Your own AI API isn't set up yet. Fill it in under Settings → AI engine." });
+        if (!c?.on || !c.key || !c.model || !publicUrl(String(c.base || "").trim())) return json({ error: "Your own AI API isn't set up yet. Fill it in under Settings → AI." });
         env = { ...env, AI: customAI(c) };
       }
 

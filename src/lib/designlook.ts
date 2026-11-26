@@ -34,7 +34,7 @@ export type DesignSettings = {
   on?: boolean;
   /** Visitors may change each colour (default on). */
   pick?: boolean;
-  /** Which AI reads a visitor's document or link and writes their text: "" = the engine chosen in Settings → General. */
+  /** Which AI reads a visitor's document or link and writes their text: "" = the engine chosen in Settings → AI. */
   ai?: "cloudflare" | "system" | "custom";
   /** The page's own web address (a domain connected in Settings → Design yourself): it opens straight on Design yourself. */
   domain?: string;

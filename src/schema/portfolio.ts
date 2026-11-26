@@ -189,7 +189,7 @@ const schema: Category[] = [
     ],
   },
   {
-    id: "extras", label: "Kind words & message form", group: "Pages", sub: "Sections", desc: "Testimonials and a message form, in your theme's own cards, buttons and headings. Each is a row under Sections & order: switch it on and move it there. In the Motion page layouts they sit around the contact panel (they are not shown in Horizontal reel, Terminal, Drag canvas or Cinema scenes).",
+    id: "extras", label: "Query Form", group: "Pages", sub: "Sections", desc: "Testimonials and a message form, in your theme's own cards, buttons and headings. Each is a row under Sections & order: switch it on and move it there. In the Motion page layouts they sit around the contact panel (they are not shown in Horizontal reel, Terminal, Drag canvas or Cinema scenes).",
     cards: [
       { title: "Testimonials", fields: [g2({ t: "text", path: "testimonials.eyebrow", label: "Small label", ml: true }, { t: "text", path: "testimonials.title", label: "Title", ml: true }),
         { t: "list", path: "testimonials.items", title: (it) => it.name, add: () => ({ quote: "What they said about working with you.", name: "Name", role: "", company: "" }), max: 9,

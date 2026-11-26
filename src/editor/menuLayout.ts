@@ -46,10 +46,10 @@ const STORE: Row[] = [
   ["languages", "Settings"], ["seo", "Settings"], ["consent", "Settings"], ["legal", "Settings"], ["cms", "Settings"], ["people", "Settings"], ["backup", "Settings"], ["account", "Settings"], ["code", "Settings"],
 ];
 const PORTFOLIO: Row[] = [
-  // Portfolio content: what visitors came to see, in the order it is on the page
-  ["linkedin", "Portfolio content", undefined, "Import from LinkedIn"], ["hero", "Portfolio content"], ["about", "Portfolio content"], ["skills", "Portfolio content"], ["work", "Portfolio content"], ["projects", "Portfolio content"], ["learning", "Portfolio content"], ["extras", "Portfolio content"], ["video", "Portfolio content"], ["wall", "Portfolio content"],
-  // Pages & navigation
-  ["layout", "Pages & navigation", undefined, "Sections & order"], ["menu", "Pages & navigation"], ["static-pages", "Pages & navigation"],
+  // Pages & navigation: the order and the menu first, then every page (section) in the order it is on the site
+  ["layout", "Pages & navigation", undefined, "Sections & order"], ["menu", "Pages & navigation"],
+  ["linkedin", "Pages & navigation", "Pages", "Import from LinkedIn"], ["hero", "Pages & navigation", "Pages"], ["about", "Pages & navigation", "Pages"], ["skills", "Pages & navigation", "Pages"], ["work", "Pages & navigation", "Pages"], ["projects", "Pages & navigation", "Pages"], ["learning", "Pages & navigation", "Pages"], ["extras", "Pages & navigation", "Pages", "Query Form"], ["video", "Pages & navigation", "Pages"], ["wall", "Pages & navigation", "Pages"],
+  ["static-pages", "Pages & navigation"],
   // Contact & social
   ["contact", "Contact & social"], ["social", "Contact & social"],
   // Look & feel
@@ -62,7 +62,7 @@ const PORTFOLIO: Row[] = [
 export const MENU_LAYOUTS: Record<string, MenuLayout> = {
   restaurant: { groups: ["Orders & guests", "Menu & dishes", "Online ordering", "Website pages", "Hours & contact", "Look & feel", "Email & chat", "Settings"], rows: RESTAURANT },
   store: { groups: ["Orders & customers", "Products & stock", "Selling & checkout", "Website pages", "Contact & policies", "Look & feel", "Email & chat", "Settings"], rows: STORE },
-  portfolio: { groups: ["Portfolio content", "Pages & navigation", "Contact & social", "Look & feel", "Email & chat", "Settings"], rows: PORTFOLIO },
+  portfolio: { groups: ["Pages & navigation", "Contact & social", "Look & feel", "Email & chat", "Settings"], rows: PORTFOLIO },
 };
 
 /** The entries regrouped and ordered by a template's layout; anything not placed keeps its own heading after the known ones. */

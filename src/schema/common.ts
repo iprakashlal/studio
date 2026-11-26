@@ -44,6 +44,7 @@ export function emailsCategory(form: boolean, orders = false): Category {
           { t: "text", path: "contact.form.notifySubject", label: "Subject", ph: "New enquiry from {name}" },
           { t: "textarea", path: "emails.enquiry.intro", label: "Opening line", rows: 2, hint: "Standard: New enquiry from the {site} website." },
           { t: "textarea", path: "emails.enquiry.footer", label: "Closing line", rows: 2, hint: "Standard: It is also saved under Enquiries in the site's admin page." },
+          { t: "mailtpl", kind: "enquiry", subject: "contact.form.notifySubject" },
         ] as Field[] },
         { title: "Thank-you email to the visitor", fields: [
           { t: "toggle", path: "emails.reply.on", label: "Send the visitor a thank-you email when they send the form" },
@@ -52,6 +53,7 @@ export function emailsCategory(form: boolean, orders = false): Category {
             { t: "textarea", path: "emails.reply.message", label: "Message", rows: 7, hint: "Standard: Hi {name}, / Thank you for your message. We have received it and will get back to you soon. / {site}" },
             { t: "toggle", path: "emails.reply.copy", label: "Add a copy of what they sent" },
             { t: "note", text: "It goes to the email address the visitor typed, and their reply comes to your enquiry address. One address gets at most 3 of these an hour." },
+            { t: "mailtpl", kind: "reply", subject: "emails.reply.subject" },
           ] },
         ] as Field[] },
       ] : []),
@@ -68,6 +70,7 @@ export function emailsCategory(form: boolean, orders = false): Category {
             { t: "toggle", path: "emails.order.items", def: true, label: "List the items they ordered" },
             { t: "text", path: "emails.order.itemsLabel", label: "Heading above the items", ph: "Your order" },
             { t: "textarea", path: "emails.order.footer", label: "Closing line", rows: 2, hint: "Standard: Questions? Just reply to this email." },
+            { t: "mailtpl", kind: "order", subject: "emails.order.subject" },
           ] },
         ] as Field[] },
         { title: "New-order email to you", fields: [
@@ -75,6 +78,7 @@ export function emailsCategory(form: boolean, orders = false): Category {
           { t: "text", path: "emails.orderOwner.subject", label: "Subject", ph: "New order {order} ({total}) from {name}" },
           { t: "textarea", path: "emails.orderOwner.intro", label: "Opening line", rows: 2, hint: "Standard: New order {order} on the {site} website." },
           { t: "textarea", path: "emails.orderOwner.footer", label: "Closing line", rows: 2, hint: "Standard: It is also saved under Purchased orders in the site's admin page." },
+          { t: "mailtpl", kind: "orderOwner", subject: "emails.orderOwner.subject" },
         ] as Field[] },
         { title: "Shipped email", fields: [
           { t: "note", text: "Sent when you mark an order as shipped with a tracking number. Switch it off per shop in the order's courier box." },
@@ -82,6 +86,7 @@ export function emailsCategory(form: boolean, orders = false): Category {
           { t: "text", path: "emails.shipped.heading", label: "Heading", ph: "Your order is on its way" },
           { t: "textarea", path: "emails.shipped.message", label: "Message", rows: 4, hint: "Standard: Hi {name}, your order {order} from {site} has shipped with {courier}. / Tracking number: {tracking}" },
           g2({ t: "text", path: "emails.shipped.button", label: "Button text", ph: "Track your parcel" }, { t: "text", path: "emails.shipped.footer", label: "Closing line", ph: "Thank you for shopping with us." }),
+          { t: "mailtpl", kind: "shipped", subject: "emails.shipped.subject" },
         ] as Field[] },
         ...([["ready", "Order ready", "is ready"], ["out", "Out for delivery", "is out for delivery"], ["done", "Order complete", "is complete"], ["cancelled", "Order cancelled", "was cancelled"]] as const).map(([k, label, was]) => ({ title: label + " email", fields: [
           { t: "toggle", path: `emails.status.${k}.on`, label: `Email the customer when an order is marked “${k === "ready" ? "Ready" : k === "out" ? "Out for delivery" : k === "done" ? "Done" : "Cancelled"}”` },
@@ -90,6 +95,7 @@ export function emailsCategory(form: boolean, orders = false): Category {
             { t: "text", path: `emails.status.${k}.heading`, label: "Heading", ph: label },
             { t: "textarea", path: `emails.status.${k}.message`, label: "Message", rows: 3, hint: `Standard: Hi {name}, your order {order} from {site} ${was}.` },
             { t: "textarea", path: `emails.status.${k}.footer`, label: "Closing line", rows: 2 },
+            { t: "mailtpl", kind: `status.${k}`, subject: `emails.status.${k}.subject` },
           ] },
         ] as Field[] })),
       ] : []),
@@ -98,6 +104,7 @@ export function emailsCategory(form: boolean, orders = false): Category {
         { t: "text", path: "emails.signin.subject", label: "Subject and heading", ph: "Your sign-in code" },
         g2({ t: "textarea", path: "emails.signin.intro", label: "Opening line", rows: 3, hint: "Standard: Enter this code to sign in:" },
           { t: "textarea", path: "emails.signin.footer", label: "Closing line", rows: 3, hint: "Standard: It works for 10 minutes. If you didn't ask for it, ignore this email." }),
+        { t: "mailtpl", kind: "signin", subject: "emails.signin.subject" },
       ] },
       { title: "If the wording doesn't change", studio: true, fields: [
         { t: "note", text: "Templates need the database updated once after 16 November 2026: Settings → Hostings → Update the database (for a site with its own database, save its Email settings in Publish to Cloudflare). Sites without the Cloudflare database don't send these emails." },

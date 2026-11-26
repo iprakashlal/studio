@@ -36,6 +36,8 @@ export type Field =
   | { t: "note"; text: string; tone?: "info" | "warn"; studio?: boolean }
   /** A connection kept on the site's own database (keys encrypted there): Razorpay keys ("rz") or WhatsApp ("wa"). */
   | { t: "connection"; kind: "rz" | "wa" | "cf" | "pe" | "st" | "pp" }
+  /** "Edit template": the whole email written in the notepad (src/editor/MailTemplate.tsx), kept at emails.<kind>.tpl. subject: where this email's subject is kept. */
+  | { t: "mailtpl"; kind: string; subject?: string }
   /** Shows `fields` only while the value at `path` (in the whole content, or in the list item with `local`) is / isn't the given value. */
   | { t: "when"; path: string; is?: string; not?: string; fields: Field[]; /** Read `path` from the list item being edited instead of the whole content. */ local?: boolean }
   | { t: "presets"; target: string; presets: { name: string; values: Record<string, string> }[] }

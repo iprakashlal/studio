@@ -52,6 +52,6 @@ export const CFDB_UPGRADES: { name: string; probe: string; steps: string[] }[] =
     "create index if not exists enquiries_ref on enquiries (site, ref)",
   ] },
 ];
-export const CFDB_VERSION = 104;
+export const CFDB_VERSION = 105;
 /** The database Worker's name on Cloudflare. */
 export const CFDB_WORKER_NAME = "picaffectz-db";

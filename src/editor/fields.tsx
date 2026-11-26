@@ -17,6 +17,8 @@ import { getP, setP, clone, vpaOk, paypalOk, httpsOk, hostIs, emailOk, phoneOk }
 import { AiDraw, aiDrawInEditor } from "../ui/AiDraw";
 import { Field, ProgressBar, Toggle, useConfirm, useToast } from "../ui/kit";
 import { GatewayForm, SiteDbSignIn, WhatsAppForm, useSiteDbSigned } from "../pages/Connections";
+import { MAIL_KINDS } from "../lib/mailtpl";
+import { MailTemplateEditor } from "./MailTemplate";
 
 export type EditorCtx = {
   tpl: TemplateDef;
@@ -112,6 +114,8 @@ export function FieldView({ f, obj, base }: { f: F; obj: any; base: string }) {
       );
     case "translations":
       return <Translations root={root} bump={bump} />;
+    case "mailtpl":
+      return <MailTplField kind={f.kind} subject={f.subject} />;
     case "note":
       if (f.studio && ctx.site) return null;
       return <p className={`rounded-lg border px-3 py-2.5 text-[13px] ${f.tone === "warn" ? "border-amber-400/40 bg-amber-400/5 text-amber-100" : "border-ink-700 bg-ink-850 text-ink-300"}`}>{f.text}</p>;
@@ -444,6 +448,19 @@ function FontFileField({ id, label, hint, value, onChange }: { id: string; label
         </div>
       </div>
       <span className="hint">{hint || "WOFF2, WOFF, TTF or OTF, up to 20 MB. WOFF2 loads fastest."}</span>
+    </div>
+  );
+}
+/** "Edit template" under an email's wording boxes: opens the notepad; says when a template is in use. */
+function MailTplField({ kind, subject }: { kind: string; subject?: string }) {
+  const { root, bump, cf } = useCtx(), [open, setOpen] = useState(false);
+  const path = `emails.${kind}.tpl`, value = String(getP(root, path) ?? "");
+  if (!MAIL_KINDS[kind]) return null;
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+      <button type="button" className="btn btn-sm" onClick={() => setOpen(true)}>Edit template</button>
+      <span className="text-[12.5px] text-ink-400">{value.trim() ? "A template is in use: it replaces the boxes above (the subject stays)." : "Write the whole email yourself, with a preview and a test email."}</span>
+      {open && <MailTemplateEditor kind={kind} value={value} subject={String((subject && getP(root, subject)) || "")} siteName={String(getP(root, "brand.name") || getP(root, "brand.logoText") || "")} cf={cf} onClose={() => setOpen(false)} onSave={(t) => { setP(root, path, t); bump(); }} />}
     </div>
   );
 }

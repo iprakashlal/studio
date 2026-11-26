@@ -27,6 +27,7 @@ function otherAccounts(env: any): { id: string; name: string }[] {
 
 import { CFDB_SCHEMA, CFDB_TABLES, CFDB_UPGRADES, CFDB_VERSION, CFDB_WORKER_NAME } from "../src/lib/cfdbSchema";
 import { cleanDiyLook } from "../src/lib/diylook";
+import { MAIL_KINDS, MAIL_TPL_MAX, codeBlock, mailMarkup, sampleBlocks, tplOf } from "../src/lib/mailtpl";
 import { digestPage, sheetLinks } from "../src/lib/lookdigest";
 import { socialFromText } from "../src/lib/social";
 import { COURIERS, TRACKERS, TRACKER_FIELDS, TRACK_STATES, TrackError, courierLink, courierName, pickTracker, trackLive, trackerReady, type Live } from "../src/lib/tracking";
@@ -190,7 +191,9 @@ async function notifyEnquiry(env: Env, site: string, data: Record<string, string
       : oneLine(fill(String(F.notifySubject || (data.reg_no ? "New registration from {name} (" + data.reg_no + ")" : "New enquiry from {name}")), { ...vars, name: vars.name || "your website" })).slice(0, 150) || "New enquiry";
     const intro = data.order_no ? fill(String(OO.intro || "New order {order} on the {site} website."), ov) : fill(String(E.enquiry?.intro || (data.reg_no ? "New registration on the {site} website." : "New enquiry from the {site} website.")), vars);
     const foot = (data.order_no ? fill(String(OO.footer || "It is also saved under Purchased orders in the site's admin page."), ov) : fill(String(E.enquiry?.footer || "It is also saved under Enquiries in the site's admin page."), vars)) + (EMAIL_RE.test(data.email || "") ? " Reply to this email to answer the visitor." : "");
-    jobs.push(sendMail(env, owners, subject, WRAP(paras(intro) + table + paras(foot, "margin:0 0 8px;color:#667;font-size:13px")), EMAIL_RE.test(data.email || "") ? data.email : undefined)
+    // A template written in the editor (Email templates → Edit template) replaces the opening and closing lines.
+    const oTpl = tplOf(E, data.order_no ? "orderOwner" : "enquiry");
+    jobs.push(sendMail(env, owners, subject, WRAP(oTpl ? mailMarkup(oTpl, data.order_no ? ov : vars, { details: table }) : paras(intro) + table + paras(foot, "margin:0 0 8px;color:#667;font-size:13px")), EMAIL_RE.test(data.email || "") ? data.email : undefined)
       .then(() => { said = "Emailed to " + owners.join(", ") + "."; }, (e: any) => { said = "Not emailed: " + String(e?.message || e).slice(0, 300); }));
   }
   if (wantReply) {
@@ -201,7 +204,8 @@ async function notifyEnquiry(env: Env, site: string, data: Record<string, string
       const subject = oneLine(fill(String(E.reply.subject || "Thank you for contacting {site}"), v2)).slice(0, 150) || "Thank you";
       const body = fill(String(E.reply.message || "Hi {name},\n\nThank you for your message. We have received it and will get back to you soon.\n\n{site}"), v2);
       const copy = E.reply.copy === true ? `<p style="margin:14px 0 6px;color:#667;font-size:13px">${hesc(String(E.reply.copyLabel || "What you sent us"))}</p>${table}` : "";
-      jobs.push(sendMail(env, String(data.email).trim(), subject, WRAP(paras(body) + copy), owners[0] || (EMAIL_RE.test(c?.contact?.email || "") ? c.contact.email : undefined)));
+      const rTpl = tplOf(E, "reply");
+      jobs.push(sendMail(env, String(data.email).trim(), subject, WRAP(rTpl ? mailMarkup(rTpl, v2, { details: table }) : paras(body) + copy), owners[0] || (EMAIL_RE.test(c?.contact?.email || "") ? c.contact.email : undefined)));
     }
   }
   await Promise.allSettled(jobs);
@@ -615,7 +619,8 @@ async function orderMail(env: Env, site: string, kind: string, d: any, c0?: any)
   const btn = t?.link ? `<p style="margin:0 0 12px"><a href="${hesc(t.link)}" style="display:inline-block;background:#111;color:#fff;text-decoration:none;padding:10px 16px;border-radius:8px">${hesc(oneLine(String(T?.button || "Track your parcel")))}</a></p>` : "";
   const list = showItems ? `<p style="margin:0 0 6px;color:#667;font-size:13px">${hesc(String(T?.itemsLabel || "Your order"))}</p>${paras(vars.items, "margin:0 0 12px")}` : "";
   const reply = emailKey(c?.contact?.email) || undefined;
-  await sendMail(env, to, subject, WRAP(`<h2 style="margin:0 0 12px;font-size:20px">${hesc(heading)}</h2>${paras(body)}${list}${btn}${foot ? paras(foot, "margin:0 0 8px;color:#667;font-size:13px") : ""}`), reply);
+  const tpl = tplOf(E, kind === "placed" ? "order" : kind === "shipped" ? "shipped" : "status." + kind);
+  await sendMail(env, to, subject, WRAP(tpl ? mailMarkup(tpl, { ...vars, tracklink: t?.link || "" }, { items: vars.items ? paras(vars.items, "margin:0 0 12px") : "" }) : `<h2 style="margin:0 0 12px;font-size:20px">${hesc(heading)}</h2>${paras(body)}${list}${btn}${foot ? paras(foot, "margin:0 0 8px;color:#667;font-size:13px") : ""}`), reply);
   return kind === "shipped" ? "Shipping email sent to " + to : "Order email (" + kind + ") sent to " + to;
 }
 async function shippedMail(env: Env, site: string, d: any) { return orderMail(env, site, "shipped", d); }
@@ -1957,7 +1962,7 @@ export default {
         // A site's admin page names its site: that site's own wording is used when this email is one of its editors.
         // The Studio's sign-in names the Studio: its own wording (Settings → Customize) for its members.
         let subject = "Your sign-in code", intro = `Enter this code to sign in${env.NAME ? " to " + env.NAME : ""}:`, footer = "It works for 10 minutes. If you didn't ask for it, ignore this email.", heading = "Your sign-in code";
-        let mailEnv = env;
+        let mailEnv = env, custom = "";
         if (typeof forSite === "string" && /^[a-z0-9][a-z0-9-]{0,59}$/.test(forSite) && (await env.DB.prepare("select 1 from members where email = ? and scope = ? limit 1").bind(email, "site:" + forSite).first())) {
           mailEnv = await siteMail(env, forSite);
           const c = await siteContent(env, forSite).catch(() => null), T = c?.emails?.signin;
@@ -1967,6 +1972,7 @@ export default {
             if (T.subject) { subject = oneLine(fill(String(T.subject), vars)).slice(0, 150) || subject; heading = subject; }
             if (T.intro) intro = fill(String(T.intro), vars);
             if (T.footer) footer = fill(String(T.footer), vars);
+            const tp = tplOf(c.emails, "signin"); if (tp && /\{code\}/.test(tp)) custom = mailMarkup(tp, { ...vars, code }, { code: codeBlock(code) });
           }
         }
         else if (typeof forStudio === "string" && /^[a-z0-9][a-z0-9-]{0,59}$/.test(forStudio) && (await env.DB.prepare("select 1 from members where email = ? and scope = ? limit 1").bind(email, "studio:" + forStudio).first())) {
@@ -1990,7 +1996,7 @@ export default {
           const z = await getSetting(env, waScope, "sms").catch(() => null), sn = pol.sms && smsReady(z) && smsOwnCode(z) && z.login ? waNum(waPhoneOf(z.phones, email), z.cc) : "";
           if (sn) try { await smsSend(z, sn, code, env.NAME || "your account"); onSms = true; } catch { /* the email still goes */ }
         }
-        try { await sendMail(mailEnv, email, subject, WRAP(`<h2 style="margin:0 0 12px;font-size:20px">${hesc(heading)}</h2>${paras(intro)}<p style="font-size:28px;font-weight:700;letter-spacing:6px;margin:0 0 14px">${code}</p>${paras(footer, "margin:0 0 8px;color:#667;font-size:13px")}`)); }
+        try { await sendMail(mailEnv, email, subject, custom ? WRAP(custom) : WRAP(`<h2 style="margin:0 0 12px;font-size:20px">${hesc(heading)}</h2>${paras(intro)}<p style="font-size:28px;font-weight:700;letter-spacing:6px;margin:0 0 14px">${code}</p>${paras(footer, "margin:0 0 8px;color:#667;font-size:13px")}`)); }
         catch (e) { if (!onWa && !onSms) throw e; }
         return json({ ok: true, ...(onWa ? { whatsapp: true } : {}), ...(onSms ? { sms: true } : {}) });
       }
@@ -2696,6 +2702,22 @@ export default {
       if (!scopeOk(scope)) return err(400, "Unknown scope.");
       const role = await roleOf(env, scope, email);
       if (!role) return err(403, `${email} isn't a member of this ${scope.startsWith("site:") ? "site" : "Studio"}.`);
+
+      // ---- an email template tried out: the draft in the editor, with made-up details, sent only to the person signed in
+      if (p === "/mail/test" && req.method === "POST") {
+        if (!scope.startsWith("site:")) return err(400, "Test emails are for a site's templates.");
+        const b = (await req.json().catch(() => ({}))) as any, kind = String(b.kind || ""), K = MAIL_KINDS[kind];
+        if (!K) return err(400, "Unknown email.");
+        const site = scope.slice(5), c = await siteContent(env, site).catch(() => null), vars = { ...K.sample, site: siteName(c, site), ...(kind === "signin" ? { email } : {}) };
+        const tpl = String(typeof b.tpl === "string" && b.tpl.trim() ? b.tpl : K.std).slice(0, MAIL_TPL_MAX);
+        // At most 10 test emails per person in 10 minutes.
+        const tk = "mailtest:" + email, hit: any = await env.DB.prepare("select tries, sent from codes where email = ?").bind(tk).first(), fresh = !hit || Date.now() - (hit.sent || 0) > 600_000;
+        if (!fresh && hit.tries >= 10) return err(429, "That's 10 test emails in ten minutes. Wait a few minutes and try again.");
+        await env.DB.prepare("insert into codes (email, hash, expires, tries, sent) values (?, '', 0, 1, ?) on conflict (email) do update set tries = ?, sent = ?").bind(tk, Date.now(), fresh ? 1 : hit.tries + 1, fresh ? Date.now() : hit.sent).run();
+        const subject = "[Test] " + (oneLine(fill(String(b.subject || K.subject), vars)).slice(0, 140) || K.label);
+        await sendMail(await siteMail(env, site), email, subject, WRAP(mailMarkup(tpl, vars, sampleBlocks(kind))));
+        return json({ ok: true, to: email });
+      }
 
       // ---- connections (the owner's own AI API, WhatsApp, Razorpay): owners set them; the keys are never sent back
       if (p === "/set" || p === "/set/test" || p === "/set/wa" || p === "/set/sms") {

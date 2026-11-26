@@ -247,7 +247,7 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
       {session.cfg.owner === "cloudflare" ? <StudioPeopleCard /> : <section className="card flex flex-col gap-2 p-5" aria-label="People and PIN"><h3 className="text-[15px] font-extrabold">Sign in with a PIN, and who can sign in</h3><p className="text-sm text-ink-300">These are for a Studio hosted on Cloudflare (Settings → Hostings). This Studio signs in with its GitHub account.</p></section>}
     </FoldCards></>);
     // Role Management: people, their roles, and what each role can do (kept in the Studio's database).
-    if (here === "roles") return shell(<div className="flex max-w-5xl flex-col gap-4"><p className="text-sm text-ink-300">Who can sign in to this Studio, the role each person has, and what each role is allowed to do. Each person has their own projects and their own choices; Administrators see everyone's.</p><RoleManagement api={role.api} scopeName={role.scope} where="studio" /><PinCard api={role.api} /></div>);
+    if (here === "roles") return shell(<div className="flex max-w-5xl flex-col gap-4"><p className="text-sm text-ink-300">Who can sign in to this Studio, the role each person has, and what each role is allowed to do. Each person has their own projects and their own choices; Administrators see everyone's.</p><RoleManagement api={role.api} scopeName={role.scope} where="studio" onView={(email) => { lookAt(email); location.hash = "#/"; }} /><PinCard api={role.api} /></div>);
     if (tab === "design") return shell(<DesignLookTab session={session} studio={studio} index={index} onIndex={setIndex} />);
     if (tab === "themes") return shell(<ThemesSettingsTab session={session} studio={studio} index={index} onIndex={setIndex} />);
     if (tab === "help") return shell(<div className="max-w-3xl"><StudioHelp /></div>);
@@ -288,20 +288,46 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
   }
 
   const only = /^type\/([a-z]+)$/.exec(route)?.[1];
-  return <>{header}{role.managed && <WhoseProjects role={role} viewAs={viewAs} onPick={lookAt} />}<Dashboard key={(only || "all") + (route === "designs" ? "-d" : route === "design-queries" ? "-q" : "")} designsTab={hid("design") ? "" : route === "designs" ? "previews" : route === "design-queries" ? "queries" : ""} studio={studio} index={index} onIndex={setIndex} token={session.token} hid={hid} max={limits.max} only={only && TEMPLATES[only] ? only : undefined} /><footer className="py-6"><StudioPageLinks host={null} repo={repo} where="footer" /></footer></>;
+  return <>{header}<Dashboard under={role.managed ? <WhoseProjects role={role} viewAs={viewAs} onPick={lookAt} /> : undefined} key={(only || "all") + (route === "designs" ? "-d" : route === "design-queries" ? "-q" : "")} designsTab={hid("design") ? "" : route === "designs" ? "previews" : route === "design-queries" ? "queries" : ""} studio={studio} index={index} onIndex={setIndex} token={session.token} hid={hid} max={limits.max} only={only && TEMPLATES[only] ? only : undefined} /><footer className="py-6"><StudioPageLinks host={null} repo={repo} where="footer" /></footer></>;
 }
 
-/** Above the projects: whose they are. An Administrator can switch to anyone's; everyone else sees their role. */
+/** Under "New project": whose projects are shown. An Administrator can view as anyone; everyone else sees their role. */
 function WhoseProjects({ role, viewAs, onPick }: { role: ReturnType<typeof useMyRole>; viewAs: string; onPick: (email: string) => void }) {
-  const [people, setPeople] = useState<{ email: string; role: string }[]>([]);
+  const [people, setPeople] = useState<{ email: string; role: string }[]>([]), [open, setOpen] = useState(false), [at, setAt] = useState(0);
+  const box = useRef<HTMLDivElement>(null);
   useEffect(() => { if (role.admin && role.api) cfCall<any>(role.api, "/roles?scope=" + encodeURIComponent(role.scope)).then((r) => setPeople((r.members || []).filter((m: any) => m.role !== "owner" && m.role !== "partner"))).catch(() => {}); }, [role.admin, role.api, role.scope]);
-  if (!role.admin) return <div className="mx-auto mt-4 flex w-full max-w-[1680px] px-4 sm:px-6"><p className="rounded-lg border border-ink-700 bg-ink-900 px-3 py-2 text-[13px] text-ink-300">Signed in as <b className="text-ink-100">{roleLabel(role.role)}</b>. These are your own projects; nobody but you and the Administrators sees them.</p></div>;
+  useEffect(() => { if (!open) return; const out = (e: MouseEvent) => { if (!box.current?.contains(e.target as Node)) setOpen(false); }; addEventListener("mousedown", out); return () => removeEventListener("mousedown", out); }, [open]);
+  if (!role.admin) return <p className="rounded-full border border-ink-700 bg-ink-900 px-3 py-1.5 text-[12.5px] text-ink-300" title="These are your own projects; only you and the Administrators see them.">Signed in as <b className="text-ink-100">{roleLabel(role.role)}</b></p>;
   if (!people.length) return null;
+  const opts = [{ email: "", name: "Me and the Administrators", sub: "The Studio's main projects" }, ...people.map((m) => ({ email: m.email, name: m.email, sub: roleLabel(m.role) }))];
+  const cur = opts.find((o) => o.email === viewAs) || opts[0];
+  const pick = (email: string) => { setOpen(false); if (email !== viewAs) onPick(email); };
+  const Face = ({ o }: { o: (typeof opts)[number] }) => <span aria-hidden className={`grid h-7 w-7 shrink-0 place-items-center rounded-full text-[12px] font-extrabold ${o.email ? "bg-brand-500/20 text-brand-200" : "bg-emerald-500/20 text-emerald-200"}`}>{o.email ? o.email[0].toUpperCase() : "★"}</span>;
+  const onKey = (e: React.KeyboardEvent) => {
+    if (e.key === "Escape") { setOpen(false); return; }
+    if (!open && (e.key === "ArrowDown" || e.key === "Enter" || e.key === " ")) { e.preventDefault(); setAt(Math.max(0, opts.indexOf(cur))); setOpen(true); return; }
+    if (!open) return;
+    if (e.key === "ArrowDown") { e.preventDefault(); setAt((n) => (n + 1) % opts.length); } else if (e.key === "ArrowUp") { e.preventDefault(); setAt((n) => (n - 1 + opts.length) % opts.length); }
+    else if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(opts[at].email); }
+  };
   return (
-    <div className="mx-auto mt-4 flex w-full max-w-[1680px] flex-wrap items-center gap-2 px-4 text-[13px] text-ink-300 sm:px-6">
-      <label htmlFor="whose" className="font-semibold text-ink-100">Projects of</label>
-      <select id="whose" className="input w-auto py-1" value={viewAs} onChange={(e) => onPick(e.target.value)}><option value="">Me and the Administrators</option>{people.map((m) => <option key={m.email} value={m.email}>{m.email} ({roleLabel(m.role)})</option>)}</select>
-      {viewAs && <span>You can open, edit and delete these. New projects are made in your own list.</span>}
+    <div ref={box} className="relative flex items-center gap-2.5" onKeyDown={onKey}>
+      <span id="viewas-l" className="text-[12.5px] font-semibold text-ink-300">View as</span>
+      <button type="button" aria-haspopup="listbox" aria-expanded={open} aria-labelledby="viewas-l" onClick={() => { setAt(Math.max(0, opts.indexOf(cur))); setOpen((v) => !v); }}
+        className={`flex min-w-[15rem] max-w-[20rem] items-center gap-2.5 rounded-full border bg-ink-900 py-1 pl-1 pr-3 text-left text-[13px] shadow-sm transition hover:border-ink-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-400 ${open ? "border-brand-400" : viewAs ? "border-brand-500/60" : "border-ink-700"}`}>
+        <Face o={cur} /><span className="min-w-0 flex-1 truncate font-semibold text-ink-100">{cur.name}</span>
+        <svg aria-hidden width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className={`shrink-0 text-ink-400 transition ${open ? "rotate-180" : ""}`}><path d="m6 9 6 6 6-6" /></svg>
+      </button>
+      {open && <ul role="listbox" aria-labelledby="viewas-l" className="absolute right-0 top-full z-30 mt-2 max-h-80 w-[20rem] overflow-y-auto rounded-2xl border border-ink-700 bg-ink-900/95 p-1.5 shadow-2xl backdrop-blur">
+        {opts.map((o, i) => (
+          <li key={o.email || "me"} role="option" aria-selected={o.email === viewAs} onMouseEnter={() => setAt(i)} onClick={() => pick(o.email)}
+            className={`flex cursor-pointer items-center gap-2.5 rounded-xl px-2 py-2 text-[13px] ${i === at ? "bg-ink-800" : ""}`}>
+            <Face o={o} /><span className="min-w-0 flex-1"><span className="block truncate font-semibold text-ink-100">{o.name}</span><span className="block truncate text-[11.5px] text-ink-400">{o.sub}</span></span>
+            {o.email === viewAs && <svg aria-hidden width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-brand-300"><path d="M20 6 9 17l-5-5" /></svg>}
+          </li>
+        ))}
+        {viewAs && <li className="mt-1 border-t border-ink-800 px-2.5 pb-1 pt-2 text-[11.5px] text-ink-400">You can open, edit and delete these. New projects are made in your own list.</li>}
+      </ul>}
     </div>
   );
 }

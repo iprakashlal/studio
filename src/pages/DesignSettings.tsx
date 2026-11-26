@@ -98,7 +98,7 @@ export function ThemesSettingsTab({ session, studio, index, onIndex }: { session
   const dirtyText = txt.link.trim() !== (g.link || "") || txt.title.trim() !== (g.title || "") || txt.intro.trim() !== (g.intro || "");
   const base = g.domain ? `https://${g.domain}/` : location.origin + location.pathname + "#/themes";
   return (
-    <div className="flex flex-col gap-4">
+    <div className="set-cols flex flex-col gap-4">
       <p className="text-sm text-ink-300">The public theme gallery: the page visitors open to browse your themes and quote a theme ID. Each choice here is saved at once.</p>
       <Block title="Its own web address" note="Give the gallery its own address, like themes.yourname.com. Visitors who open it land straight on the gallery. Connect it in one click, the same way as the Studio's own address in Settings → Hosting accounts.">
         <DesignDomain session={session} studio={studio} index={index} onIndex={onIndex} onDomain={setDomain} field="themesDomain" noun="Theme gallery" />
@@ -181,7 +181,7 @@ export function DesignLookTab({ session, studio, index, onIndex }: { session: Se
   const generalName = AI_ENGINES.find((e) => e.id === general)?.name || "";
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="set-cols flex flex-col gap-4">
       <p className="text-sm text-ink-300">What the Design yourself page offers a visitor, and what each type starts with. Press <b className="text-ink-100">Save changes</b> to store it in your Studio's database; signed-out visitors get it with the next page load.</p>
 
       <Block title="Its own web address" note="Give Design yourself its own address, like design.yourname.com. Visitors who open it land straight on the Design yourself page. Connect it in one click, the same way as the Studio's own address in Settings → Hosting accounts.">

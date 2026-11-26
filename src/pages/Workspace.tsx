@@ -11,7 +11,7 @@ import { setThemeAllow, setThemeLimit } from "../themes/limit";
 import { DASH_DEFAULT, DASH_STATS } from "../lib/dashstats";
 import { TEMPLATES } from "../schema";
 import { StudioEmailCard, StudioPageLinks, StudioPagesCard } from "./StudioPage";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { isHosted } from "../lib/backend";
 import type { Session } from "../lib/auth";
 import { explain, type Repo } from "../lib/repo";
@@ -140,7 +140,7 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
   const gal = useDesignSettings().gallery || {};
   const header = (<>{updBanner}{!repo.demo && <UpdateDots />}
     <header className="sticky top-0 z-40 border-b border-ink-700 bg-ink-950/90 pt-[env(safe-area-inset-top)] backdrop-blur">
-      <div className="mx-auto flex max-w-[1400px] flex-wrap items-center gap-3 px-4 py-3 sm:px-6">
+      <div className={`mx-auto flex flex-wrap items-center gap-3 px-4 py-3 sm:px-6 ${route.startsWith("settings") ? "max-w-[1680px]" : "max-w-[1400px]"}`}>
         <a href="#/" className="flex items-center gap-2.5 font-extrabold"><BrandMark fallback={<Logo />} />{b.name}</a>
         {repo.demo && <span className="chip border-amber-400/50 text-amber-200">Demo · nothing is saved</span>}
         {!repo.demo && !isHosted(session) && olderData() && <a href="?data=shared" className="chip border-amber-400/50 text-amber-200" title="This tab shows the GitHub data from before the Studio moved. Press to go back to the shared projects.">Older GitHub data · switch back</a>}
@@ -180,28 +180,36 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
     const showDesign = !hid("design"), showThemes = !hid("themes");
     const tab = (want === "customize" && !showCustomize) || (want === "hostings" && !showHostings) || (want === "design" && !showDesign) || (want === "themes" && !showThemes) ? "general" : want;
     const tabList = [["general", "General"], ...(showCustomize ? [["customize", "Customize"]] : []), ...(showHostings ? [["hostings", "Hostings"]] : []), ...(showDesign ? [["design", "Design yourself"]] : []), ...(showThemes ? [["themes", "Themes"]] : []), ["update", "Updates"], ...(client ? [] : [["migration", "Migration"]]), ["help", "Help"]] as [string, string][];
-    const tabs = <>
-      {/* Phones: one dropdown, so the tabs never wrap onto a second row. */}
-      <label className="flex flex-col gap-1.5 sm:hidden"><span className="label">Settings section</span>
-        <select className="input" aria-label="Settings section" value={tabList.some(([k]) => k === tab) ? tab : "general"} onChange={(e) => { location.hash = "#/settings" + (e.target.value === "general" ? "" : "/" + e.target.value); }}>{tabList.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
-      </label>
-      <div className="hidden flex-wrap gap-1 border-b border-ink-700 sm:flex" role="tablist" aria-label="Settings">
-      {tabList.map(([k, l]) => <a key={k} href={`#/settings${k === "general" ? "" : "/" + k}`} role="tab" aria-selected={tab === k} className={`-mb-px border-b-2 px-3 py-2 text-sm font-semibold ${tab === k ? "border-brand-400 text-ink-100" : "border-transparent text-ink-400 hover:text-ink-100"}`}>{l}</a>)}
-    </div></>;
-    if (client === undefined && tab !== "general") return <>{header}<main className="mx-auto flex max-w-3xl flex-col gap-4 px-4 py-8 sm:px-6"><h1 className="font-display text-3xl font-extrabold">Settings</h1>{tabs}<SkelRows n={3} label="Loading settings" /></main></>;
-    if (tab === "design") return <>{header}<main className="mx-auto flex max-w-3xl flex-col gap-4 px-4 py-8 sm:px-6"><h1 className="font-display text-3xl font-extrabold">Settings</h1>{tabs}<DesignLookTab session={session} studio={studio} index={index} onIndex={setIndex} /></main></>;
-    if (tab === "themes") return <>{header}<main className="mx-auto flex max-w-3xl flex-col gap-4 px-4 py-8 sm:px-6"><h1 className="font-display text-3xl font-extrabold">Settings</h1>{tabs}<ThemesSettingsTab session={session} studio={studio} index={index} onIndex={setIndex} /></main></>;
-    if (tab === "help") return <>{header}<main className="mx-auto flex max-w-3xl flex-col gap-4 px-4 py-8 sm:px-6"><h1 className="font-display text-3xl font-extrabold">Settings</h1>{tabs}<StudioHelp /></main></>;
+    const here = tabList.some(([k]) => k === tab) ? tab : "general";
+    /** The settings screen: its sections down the left on a wide screen (a row of tabs on a narrower one, a menu on a phone),
+     *  and the chosen section using the rest of the width. */
+    const shell = (body: ReactNode) => <>{header}
+      <main className="mx-auto w-full max-w-[1680px] px-4 py-8 sm:px-6 lg:grid lg:grid-cols-[14rem_minmax(0,1fr)] lg:items-start lg:gap-8">
+        <aside className="flex flex-col gap-4 lg:card lg:sticky lg:top-20 lg:p-4">
+          <h1 className="font-display text-3xl font-extrabold lg:px-1 lg:text-2xl">Settings</h1>
+          {/* Phones: one dropdown, so the tabs never wrap onto a second row. */}
+          <label className="flex flex-col gap-1.5 sm:hidden"><span className="label">Settings section</span>
+            <select className="input" aria-label="Settings section" value={here} onChange={(e) => { location.hash = "#/settings" + (e.target.value === "general" ? "" : "/" + e.target.value); }}>{tabList.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
+          </label>
+          <nav className="hidden flex-wrap gap-1 border-b border-ink-700 sm:flex lg:flex-col lg:flex-nowrap lg:gap-0.5 lg:border-b-0" role="tablist" aria-label="Settings" aria-orientation="vertical">
+            {tabList.map(([k, l]) => <a key={k} href={`#/settings${k === "general" ? "" : "/" + k}`} role="tab" aria-selected={tab === k}
+              className={`-mb-px flex items-center gap-2.5 border-b-2 px-3 py-2 text-sm font-semibold transition lg:mb-0 lg:rounded-xl lg:border-b-0 lg:py-2.5 ${tab === k ? "border-brand-400 text-ink-100 lg:bg-brand-500/15" : "border-transparent text-ink-400 hover:text-ink-100 lg:hover:bg-ink-800"}`}>
+              <SetIcon k={k} on={tab === k} />{l}</a>)}
+          </nav>
+          <SettingsFind key={tab} />
+        </aside>
+        <div className="mt-4 flex min-w-0 flex-col gap-4 lg:mt-0" data-settings-body>{body}</div>
+      </main></>;
+    if (client === undefined && tab !== "general") return shell(<SkelRows n={3} label="Loading settings" />);
+    if (tab === "design") return shell(<DesignLookTab session={session} studio={studio} index={index} onIndex={setIndex} />);
+    if (tab === "themes") return shell(<ThemesSettingsTab session={session} studio={studio} index={index} onIndex={setIndex} />);
+    if (tab === "help") return shell(<div className="max-w-3xl"><StudioHelp /></div>);
     // Updates: this Studio build onto live sites, and (a hosted Studio) the Studio's own update.
-    if (tab === "update" && !(isHosted(session) && !client)) return <>{header}<main className="mx-auto flex max-w-3xl flex-col gap-4 px-4 py-8 sm:px-6"><h1 className="font-display text-3xl font-extrabold">Settings</h1>{tabs}<PushUpdatesCard index={index} demo={repo.demo} /></main></>;
-    if ((tab === "migration" && !client) || tab === "update") return <>{header}<main className="mx-auto flex max-w-3xl flex-col gap-4 px-4 py-8 sm:px-6"><h1 className="font-display text-3xl font-extrabold">Settings</h1>{tabs}{tab === "update" && <PushUpdatesCard index={index} demo={repo.demo} />}<FoldAll /><FoldCards scope={tab}><MigrationTab key={tab} studio={studio} index={index} session={session} onIndex={setIndex} mode={tab === "update" ? "update" : "move"} /></FoldCards></main></>;
-    return (
-      <>{header}
-        <main className="mx-auto flex max-w-3xl flex-col gap-4 px-4 py-8 sm:px-6">
-          <h1 className="font-display text-3xl font-extrabold">Settings</h1>
-          {tabs}
+    if (tab === "update" && !(isHosted(session) && !client)) return shell(<div className="max-w-4xl"><PushUpdatesCard index={index} demo={repo.demo} /></div>);
+    if ((tab === "migration" && !client) || tab === "update") return shell(<>{tab === "update" && <PushUpdatesCard index={index} demo={repo.demo} />}<FoldAll /><FoldCards scope={tab} className="set-cols"><MigrationTab key={tab} studio={studio} index={index} session={session} onIndex={setIndex} mode={tab === "update" ? "update" : "move"} /></FoldCards></>);
+    return shell(<>
           <FoldAll />
-          <FoldCards scope={tab === "customize" || tab === "hostings" ? tab : "general"}>
+          <FoldCards scope={tab === "customize" || tab === "hostings" ? tab : "general"} className="set-cols">
           {tab === "customize" ? <>
             <p className="text-sm text-ink-300">How your Studio and its sites' admin pages look: the Studio's name and logo, the “Powered by” badge, the Studio's own pages and the admin menus.</p>
             {!hid("brand") && <BrandCard studio={studio} onIndex={setIndex} />}
@@ -233,9 +241,7 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
             : <AccountPanel ns={NS} session={session} onUpdated={onSession} onSignOut={onSignOut} onForget={onForget} />}
           </>}
           </FoldCards>
-        </main>
-      </>
-    );
+    </>);
   }
 
   const only = /^type\/([a-z]+)$/.exec(route)?.[1];
@@ -243,6 +249,37 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
 }
 
 /** Settings → Help: guided tours of the Studio, end to end. */
+/** A small line icon for each settings section. */
+const SET_ICONS: Record<string, string> = {
+  general: "M12 8.5a3.5 3.5 0 100 7 3.5 3.5 0 000-7zM19 12a7 7 0 00-.1-1.2l2-1.5-2-3.4-2.3.9a7 7 0 00-2-1.2L14.2 3h-4.4l-.4 2.6a7 7 0 00-2 1.2l-2.3-.9-2 3.4 2 1.5a7 7 0 000 2.4l-2 1.5 2 3.4 2.3-.9a7 7 0 002 1.2l.4 2.6h4.4l.4-2.6a7 7 0 002-1.2l2.3.9 2-3.4-2-1.5c.1-.4.1-.8.1-1.2z",
+  customize: "M4 20l4-1 11-11-3-3L5 16l-1 4zM14 6l3 3",
+  hostings: "M4 5h16v6H4zM4 13h16v6H4zM7.5 8h.01M7.5 16h.01",
+  design: "M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8L12 3zM18.5 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8.8-2.2z",
+  themes: "M4 5h7v7H4zM13 5h7v4h-7zM13 11h7v8h-7zM4 14h7v5H4z",
+  update: "M20 12a8 8 0 01-14.3 4.9M4 12a8 8 0 0114.3-4.9M18.5 3.5v4h-4M5.5 20.5v-4h4",
+  migration: "M4 8h13l-3-3M20 16H7l3 3",
+  help: "M12 21a9 9 0 100-18 9 9 0 000 18zM9.6 9.3a2.5 2.5 0 114 2c-.9.6-1.6 1.2-1.6 2.3M12 17h.01",
+};
+function SetIcon({ k, on }: { k: string; on: boolean }) {
+  return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden className={`hidden shrink-0 lg:block ${on ? "text-brand-400" : "text-ink-500"}`}><path d={SET_ICONS[k] || SET_ICONS.general} /></svg>;
+}
+/** Finds a setting on the open section: cards that don't mention the words are put away while something is typed. */
+function SettingsFind() {
+  const [q, setQ] = useState(""), [n, setN] = useState<number | null>(null);
+  useEffect(() => {
+    const cards = () => [...document.querySelectorAll<HTMLElement>("[data-settings-body] .card")].filter((c) => !c.parentElement?.closest(".card"));
+    const words = q.toLowerCase().split(/\s+/).filter(Boolean); let shown = 0;
+    for (const c of cards()) { const hit = !words.length || words.every((w) => (c.textContent || "").toLowerCase().includes(w)); c.toggleAttribute("data-find-hide", !hit); if (hit) shown++; }
+    setN(words.length ? shown : null);
+    return () => cards().forEach((c) => c.removeAttribute("data-find-hide"));
+  }, [q]);
+  return (
+    <label className="hidden flex-col gap-1.5 lg:flex"><span className="label">Find a setting</span>
+      <input type="search" className="input py-2 text-sm" placeholder="e.g. WhatsApp, badge" value={q} onChange={(e) => setQ(e.target.value)} />
+      <span className="hint min-h-[1rem]" role="status">{n == null ? "" : n ? `${n} section${n === 1 ? "" : "s"} on this tab` : "Nothing on this tab. Try another tab."}</span>
+    </label>
+  );
+}
 function StudioHelp() {
   return (
     <section className="card flex flex-col gap-3 p-5" aria-label="Guided tours">

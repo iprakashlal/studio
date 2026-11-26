@@ -36,6 +36,8 @@ import { Field, Modal, SkelEditor, Toggle, useConfirm, useToast } from "../ui/ki
 
 type Modal = "" | "export" | "publish" | "host" | "live" | "history" | "details" | "inbox" | "write" | "pamphlet" | "reviews" | "kit" | "approve";
 
+/** A project's name for the Studio's database when it counts a wall's lookups: lower-case letters, digits and dashes. */
+const wallSid = (id: string) => (String(id || "").toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+/, "").slice(0, 60) || "site");
 export function ProjectView({ studio, index, project, session, onIndex }: { studio: Studio; index: StudioIndex; project: ProjectMeta; session: Session; onIndex: (i: StudioIndex) => void }) {
   const toast = useToast();
   const confirm = useConfirm();
@@ -120,6 +122,11 @@ export function ProjectView({ studio, index, project, session, onIndex }: { stud
     setSyncBusy(false);
   };
 
+  // The Studio's own database (a Studio hosted on Cloudflare), for walls that fill themselves.
+  const [studioApi, setStudioApi] = useState("");
+  useEffect(() => { let on = true; import("../lib/studiohost").then((m) => m.loadHostConfig()).then((hc: any) => { if (on && hc?.kind === "cloudflare" && /^https:\/\//.test(hc.api || "")) setStudioApi(String(hc.api).replace(/\/+$/, "")); }).catch(() => {}); return () => { on = false; }; }, []);
+  // A wall already set to fill itself, saved before the Studio's address was written into it: it is written now (an unsaved change, so Save and publish carry it to the site).
+  useEffect(() => { if (studioApi && draft?.wall?.auto && (draft.wall.api !== studioApi || draft.wall.sid !== wallSid(project.id))) { draft.wall.api = studioApi; draft.wall.sid = wallSid(project.id); setV((n) => n + 1); } }, [studioApi, draft?.wall?.auto]);
   const dirty = v !== savedV;
   // The Studio's own update never reloads over unsaved changes.
   useEffect(() => { studioDirty.on = dirty; return () => { studioDirty.on = false; }; }, [dirty]);
@@ -141,6 +148,8 @@ export function ProjectView({ studio, index, project, session, onIndex }: { stud
 
   const save = async (quiet = false): Promise<boolean> => {
     if (!draft) return false;
+    // A wall that fills itself asks the Studio's database (it holds the Instagram token): the published site is told where that is.
+    if (studioApi && draft.wall && typeof draft.wall === "object" && (draft.wall.api !== studioApi || draft.wall.sid !== wallSid(project.id))) { draft.wall.api = studioApi; draft.wall.sid = wallSid(project.id); }
     setSaving(true);
     const at = v;
     try {
@@ -248,7 +257,8 @@ export function ProjectView({ studio, index, project, session, onIndex }: { stud
   if (err) return <main className="mx-auto max-w-xl px-4 py-16"><div className="card p-6"><h1 className="text-xl font-extrabold">Couldn't open the project</h1><p className="mt-2 text-sm text-ink-300">{err}</p></div></main>;
   // The preview shows the badge with the Studio's look (sites get it from assets/badge.js when published).
   // _wallHost: where the social wall's own feed is (this project's database), so the preview can fill the wall as the live site will. It is not saved.
-  const previewContent = useMemo(() => (draft ? { ...draft, poweredBy: { ...(draft.poweredBy || {}), design: currentBadge() }, ...(project.host?.cf ? { _wallHost: { api: project.host.cf.api, site: project.host.cf.site } } : {}) } : draft), [draft, v, index.badge, project.host?.cf?.api, project.host?.cf?.site]);
+  const wallHost = studioApi ? { api: studioApi, site: wallSid(project.id) } : project.host?.cf ? { api: project.host.cf.api, site: project.host.cf.site } : null;
+  const previewContent = useMemo(() => (draft ? { ...draft, poweredBy: { ...(draft.poweredBy || {}), design: currentBadge() }, ...(wallHost ? { _wallHost: wallHost } : {}) } : draft), [draft, v, index.badge, wallHost?.api, wallHost?.site]);
   if (!draft) return <SkelEditor note={[`Loading the ${tpl.name} template`, "Reading the project's content", "Opening the editor and preview"][Math.min(2, openAt)]} />;
 
   const cat = index.categories.find((c) => c.id === project.category);

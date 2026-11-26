@@ -100,11 +100,16 @@
     b.parentNode.replaceChild(d, b);
   }
   /* Filled by itself: with wall.auto ("instagram" or "pinterest") the newest posts come from the site's own database Worker
-     (GET <api>/wall/<site>), which asks Instagram with the owner's saved token, or reads a public Pinterest profile or board
-     (wall.board). The page knows that Worker from its <script id="site-host"> (a site published with a Cloudflare database); the
-     Studio's preview is told it in C._wallHost. Without it, or when nothing comes back, the photos added by hand are shown. */
+     (GET <api>/wall/<site>), which asks Instagram with the saved token, or reads a public Pinterest profile or board (wall.board).
+     Which Worker: the Studio's own (wall.api, written when the project is saved; C._wallHost in the Studio's preview), else the
+     site's own database from its <script id="site-host">. Without it, or when nothing comes back, the photos added by hand are shown. */
   var FEED = {}, LAST = null, feedT = 0, LAST_KEY = "", WHY = "";
-  function host(C) { try { var e = document.getElementById("site-host"), h = e ? JSON.parse(e.textContent) : null; if (h && h.api && h.site) return h; } catch (x) { /* no host */ } return C && C._wallHost && C._wallHost.api && C._wallHost.site ? C._wallHost : null; }
+  function host(C) {
+    // The Studio's own database, written into the wall when the project is saved (wall.api, wall.sid): it holds the one Instagram
+    // token every site uses, so a site on a database of its own, or on GitHub Pages with none, fills its wall too.
+    if (C && C._wallHost && C._wallHost.api && C._wallHost.site) return C._wallHost;
+    var W = (C && C.wall) || {}; if (/^https:\/\/[^\s"'<>]+$/.test(W.api || "") && /^[a-z0-9][a-z0-9-]{0,59}$/.test(W.sid || "")) return { api: W.api, site: W.sid };
+    try { var e = document.getElementById("site-host"), h = e ? JSON.parse(e.textContent) : null; if (h && h.api && h.site) return h; } catch (x) { /* no host */ } return C && C._wallHost && C._wallHost.api && C._wallHost.site ? C._wallHost : null; }
   function feed(C, W) {
     var auto = /^(instagram|pinterest)$/.test(W.auto) ? W.auto : "", H = auto ? host(C) : null, board = String(W.board || "").trim();
     if (!H || (auto === "pinterest" && !board)) return null;

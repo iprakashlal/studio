@@ -285,7 +285,7 @@ export function DesignLookTab({ session, studio, index, onIndex, part, lead }: {
         </label>
         <label className="flex items-start gap-2 text-[13px]">
           <input type="checkbox" className="mt-1" checked={!!d.images?.on} onChange={(e) => upd({ images: e.target.checked ? { ...(d.images || {}), on: true } : d.images?.style ? { style: d.images.style } : undefined })} />
-          <span><b className="block">Let visitors describe a banner or logo in "Design yourself"</b><span className="text-[11.5px] text-ink-500">The banner questions are then made from their words (banners can't be uploaded), and the logo question also offers a drawn logo. Turn it off and the banner questions are not asked; the logo maker stays.</span></span>
+          <span><b className="block">Let visitors describe a banner in "Design yourself"</b><span className="text-[11.5px] text-ink-500">The banner questions are then made from their words (banners can't be uploaded). Turn it off and the banner questions are not asked. Logos are always made by the logo maker, from the business name.</span></span>
         </label>
         {(d.adminAi !== false || d.images?.on) && <>
           <div className="flex flex-col gap-1.5" role="radiogroup" aria-label="Who draws the pictures">

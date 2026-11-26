@@ -63,13 +63,37 @@ const PIC_STEPS = ["photo", "banner", "bimage", "photos"];
 const NO_UPLOAD = ["banner", "bimage"];
 const toB64 = (buf: ArrayBuffer) => { const b = new Uint8Array(buf); let s = ""; for (let i = 0; i < b.length; i += 8192) s += String.fromCharCode(...b.subarray(i, i + 8192)); return btoa(s); };
 
+/** How far a wait has got, in per cent. The work has no real measure, so it runs quickly at first and slows towards 95%, and the wait ends when the work does. */
+function WaitPct({ label, secs = 9 }: { label: string; secs?: number }) {
+  const [p, setP] = useState(3);
+  useEffect(() => { const t0 = performance.now(), id = setInterval(() => setP(Math.min(95, Math.round(3 + 92 * (1 - Math.exp(-(performance.now() - t0) / (secs * 1000)))))), 200); return () => clearInterval(id); }, [secs]);
+  return (
+    <span className="flex min-w-[15rem] flex-col gap-1.5 text-sm" role="status">
+      <span className="flex items-baseline justify-between gap-4"><span>{label}</span><b className="tabular-nums">{p}%</b></span>
+      <span className="h-1.5 overflow-hidden rounded-full bg-ink-700" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={p} aria-label={label}><span className="block h-full rounded-full bg-brand-500 transition-[width] duration-200" style={{ width: p + "%" }} /></span>
+    </span>
+  );
+}
+/** A time picked from an hour, the minutes and am / pm, so it can only be a real time. Gives "9:30 am". */
+function TimePick({ value, onChange, label }: { value: string; onChange: (v: string) => void; label: string }) {
+  const m = /^(\d{1,2}):(\d{2})\s*(am|pm)$/i.exec(value.trim()), h = m ? m[1] : "", mi = m ? m[2] : "00", ap = m ? m[3].toLowerCase() : "am";
+  const put = (H: string, M: string, A: string) => onChange(H ? `${H}:${M} ${A}` : "");
+  const sel = "input h-10 w-auto py-0";
+  return (
+    <span className="flex flex-wrap items-center gap-2 py-1" role="group" aria-label={label}>
+      <select aria-label="Hour" className={sel} value={h} onChange={(e) => put(e.target.value, mi, ap)}><option value="">Hour</option>{Array.from({ length: 12 }, (_, i) => String(i + 1)).map((x) => <option key={x}>{x}</option>)}</select>
+      <span aria-hidden>:</span>
+      <select aria-label="Minutes" className={sel} value={mi} onChange={(e) => put(h, e.target.value, ap)}>{Array.from({ length: 12 }, (_, i) => String(i * 5).padStart(2, "0")).map((x) => <option key={x}>{x}</option>)}</select>
+      <span className="inline-flex overflow-hidden rounded-xl border border-ink-600" role="radiogroup" aria-label="am or pm">{["am", "pm"].map((x) => <button key={x} type="button" role="radio" aria-checked={ap === x} className={`px-3 py-2 text-sm font-semibold ${ap === x ? "bg-brand-500 text-white" : "text-ink-300 hover:bg-ink-800"}`} onClick={() => put(h, mi, x)}>{x}</button>)}</span>
+    </span>
+  );
+}
 /** A list question asked as rows of sub-fields. Each row becomes one line of the answer (so it reads the same as typing it). */
 function RowsField({ step, value, onChange, label }: { step: Step; value: string; onChange: (v: string) => void; label: string }) {
   const cols = step.cols!, n = cols.length;
-  const [rows, setRows] = useState<string[][]>(() => {
-    const init = value.split("\n").filter(Boolean).map((l) => { const parts = l.replace(/^["“]|["”]$/g, "").split(/\s[–-]\s|,\s*|\s(?=\d)/).map((x) => x.trim()); return Array.from({ length: n }, (_, i) => parts[i] || ""); });
-    return init.length ? init : [Array(n).fill("")];
-  });
+  // A new question starts with empty fields. (The page's answer box still holds the last answer for a moment when the
+  // question changes, so the fields are never filled from it: that copied one list's answer into the next.)
+  const [rows, setRows] = useState<string[][]>(() => [Array(n).fill("")]);
   const text = (r: string[][]) => r.map((x) => rowsFmt(step, x)).filter(Boolean).join("\n");
   const set = (next: string[][]) => { setRows(next); onChange(text(next)); };
   // The page clears its answer box when a step changes or text is being written: the rows say what they hold again.
@@ -223,7 +247,7 @@ function DesignPageInner({ studio, index, onIndex }: { studio?: Studio; index?: 
     if (cur.type === "many") { if (many.length) answer(cur, many.join(",")); return; }
     if (!text.trim()) return;
     if (cur.id === "doc") { readLink(text); return; }
-    if (cur.id === "kind") { const g = guessKind(text); if (g) answer(cur, g); else toast("I'm not sure which one that is. Please tap one of the four choices.", "bad"); return; }
+    if (cur.id === "kind") { const g = guessKind(text); if (g) answer(cur, g); else toast("I'm not sure which one that is. Please tap one of the choices.", "bad"); return; }
     answer(cur, text);
   };
   /** What a document or page says fills in the answers it can (the questions it covers are then not asked). */
@@ -299,6 +323,8 @@ function DesignPageInner({ studio, index, onIndex }: { studio?: Studio; index?: 
       <div className={`flex flex-wrap items-end gap-2 rounded-3xl border bg-ink-900 p-2 pl-4 shadow-xl transition focus-within:border-brand-400 ${field$ || cur?.type === "file" ? "border-ink-600" : "border-ink-700 opacity-80"}`}>
         {cur?.type === "long"
           ? <textarea ref={field} aria-label={cur.ask(a)} rows={3} className="min-h-[3.5rem] min-w-0 flex-1 basis-[12rem] resize-none bg-transparent py-2 text-[15px] text-ink-100 outline-none placeholder:text-ink-500" placeholder={cur.ph?.(a)} value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); submit(); } }} />
+          : cur?.input === "time" ? <span className="min-w-0 flex-1 basis-[12rem]"><TimePick value={text} onChange={setText} label={cur.ask(a)} /></span>
+          : cur?.input === "date" ? <input ref={field} type="date" min="2000-01-01" max="2099-12-31" aria-label={cur.ask(a)} className="min-w-0 flex-1 basis-[12rem] bg-transparent py-2.5 text-[15px] text-ink-100 outline-none" value={/^\d{4}-\d{2}-\d{2}$/.test(text) ? text : ""} onChange={(e) => setText(e.target.value)} />
           : <input ref={field} aria-label={cur ? cur.ask(a) : "Your answer"} className="min-w-0 flex-1 basis-[12rem] bg-transparent py-2.5 text-[15px] text-ink-100 outline-none placeholder:text-ink-500" disabled={!field$ || reading} placeholder={reading ? "Reading…" : writing ? "Writing your text…" : !cur ? "All done. Your preview is ready." : cur.id === "kind" ? "Tell me what you want, e.g. an online shop for my candles" : field$ ? cur.ph?.(a) : cur.type === "many" ? "Tap what applies above, then press Done" : cur.type === "file" ? "Choose a file, or skip" : "Pick one of the choices above"} value={field$ ? text : ""} onChange={(e) => setText(e.target.value)} />}
         {cur?.type === "file" && !NO_UPLOAD.includes(cur.id) && <>
           <input ref={pick} type="file" accept={cur.accept} multiple={cur.id === "photos" || cur.id === "banner"} className="sr-only" aria-label={cur.ask(a)} onChange={(e) => choose(cur, e.target.files?.[0], Array.from(e.target.files || []).slice(1))} />
@@ -325,6 +351,8 @@ function DesignPageInner({ studio, index, onIndex }: { studio?: Studio; index?: 
         ? <RowsField key={cur.id + (a.kind || "")} step={cur} value={text} onChange={setText} label={cur.ask(a)} />
         : cur.type === "long"
         ? <textarea ref={field} aria-label={cur.ask(a)} rows={4} className="input min-h-[7rem] resize-y" placeholder={cur.ph?.(a)} value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); submit(); } }} />
+        : cur.input === "time" ? <TimePick value={text} onChange={setText} label={cur.ask(a)} />
+        : cur.input === "date" ? <input ref={field} type="date" min="2000-01-01" max="2099-12-31" aria-label={cur.ask(a)} className="input w-auto self-start" value={/^\d{4}-\d{2}-\d{2}$/.test(text) ? text : ""} onChange={(e) => setText(e.target.value)} />
         : field$ ? <input ref={field} aria-label={cur.ask(a)} className="input" disabled={reading} placeholder={reading ? "Reading…" : cur.ph?.(a)} value={text} onChange={(e) => setText(e.target.value)} /> : null}
       {cur.id === "doc" && a.kind === "portfolio" && (
         <label className="flex flex-col gap-1 text-xs text-ink-400">Your LinkedIn profile URL (optional)
@@ -420,7 +448,7 @@ function DesignPageInner({ studio, index, onIndex }: { studio?: Studio; index?: 
             </div>
           ))}
           {!needMail && chatStarted && cur && <ChatBot><section aria-live="polite"><h2 className="m-0 text-[15px] font-semibold leading-snug">{cur.ask(a)}</h2>{cur.help && cur.help(a) && <p className="mb-0 mt-1 text-[13px] leading-relaxed text-ink-400">{cur.help(a)}</p>}{reading && <p className="mb-0 mt-2 inline-flex items-center gap-2 text-sm text-ink-300"><Spinner />Reading it…</p>}</section></ChatBot>}
-          {finished && writing && <ChatBot typing><span className="text-sm">Writing a short line about each of your topics…</span></ChatBot>}
+          {finished && writing && <ChatBot><WaitPct label="Writing a short line about each of your topics…" /></ChatBot>}
           {ready && (<ChatBot>
               <section className="flex flex-col gap-4" aria-live="polite">
                 <div className="flex flex-col gap-2">
@@ -476,6 +504,8 @@ function AnswerEdit({ s, a, onSave, onCancel }: { s: Step; a: Answers; onSave: (
                     <div className="flex gap-2"><button type="button" className="btn btn-pri btn-sm" disabled={!pick.length && req(s)} onClick={() => save(s, pick.join(","))}>Save</button><button type="button" className="btn btn-sm" onClick={() => setEdit(null)}>Cancel</button></div></>}
                   {(s.type === "text" || s.type === "long") && <>
                     {s.type === "long" ? <textarea autoFocus rows={4} className="input text-[14px]" value={draft} onChange={(e) => setDraft(e.target.value)} placeholder={s.ph?.(a) || ""} />
+                      : s.input === "time" ? <TimePick value={draft} onChange={setDraft} label={s.ask(a)} />
+                      : s.input === "date" ? <input autoFocus type="date" min="2000-01-01" max="2099-12-31" className="input h-10 w-auto py-0 text-[14px]" value={/^\d{4}-\d{2}-\d{2}$/.test(draft) ? draft : ""} onChange={(e) => setDraft(e.target.value)} />
                       : <input autoFocus className="input h-10 py-0 text-[14px]" value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && (draft.trim() || !req(s))) save(s, draft); }} placeholder={s.ph?.(a) || ""} />}
                     {s.type === "long" && <p className="text-xs text-ink-500">One item per line.</p>}
                     <div className="flex gap-2"><button type="button" className="btn btn-pri btn-sm" disabled={!draft.trim() && req(s)} onClick={() => save(s, draft)}>Save</button><button type="button" className="btn btn-sm" onClick={() => setEdit(null)}>Cancel</button></div></>}

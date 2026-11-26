@@ -28,7 +28,7 @@ export type DiyWord = keyof typeof DIY_WORDS;
 export const DIY_FONTS = ["Manrope", "Inter", "DM Sans", "Plus Jakarta Sans", "Figtree", "Outfit", "Sora", "Space Grotesk", "Work Sans", "Nunito Sans", "Poppins", "IBM Plex Sans", "Bricolage Grotesque", "Syne", "Unbounded", "Fraunces", "Playfair Display", "DM Serif Display", "Lora", "Source Serif 4"];
 
 /** The shapes the chat's messages can take. */
-export const DIY_BUBBLES: [string, string][] = [["", "Soft (standard)"], ["round", "Rounded pill"], ["square", "Square"], ["tail", "Speech bubble with a tail"], ["outline", "Outlined"], ["glass", "Frosted glass"], ["minimal", "Minimal (assistant as plain text)"], ["bar", "Card with an accent bar"]];
+export const DIY_BUBBLES: [string, string][] = [["", "Soft (standard)"], ["round", "Rounded pill"], ["square", "Square"], ["tail", "Speech bubble with a tail"], ["outline", "Outlined"], ["glass", "Frosted glass"], ["minimal", "Minimal (assistant as plain text)"], ["bar", "Card with an accent bar"], ["crayon", "Crayon drawing"], ["sketch", "Pen sketch"], ["tech", "Technical drawing"]];
 export type DiyUi = {
   /** The chat sits in a framed panel; a strip of stages shows above it; soft glows of colour lie behind the page. */
   frame?: boolean; steps?: boolean; aura?: boolean;

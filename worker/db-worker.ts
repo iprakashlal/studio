@@ -1333,8 +1333,8 @@ async function writeSite(env: Env, q: any) {
    (GET /sb/<studio>) and its chosen AI engine are read from the Studio's own files here: nothing leaves this database
    except the email and, when the owner chose Cloudflare AI or their own AI API, the text-writing call.
    ============================================================ */
-const DQ_KINDS = ["portfolio", "store", "business", "restaurant"];
-const DQ_LABEL: Record<string, string> = { portfolio: "Personal website", store: "Online shop", business: "Business website", restaurant: "Restaurant or café" };
+const DQ_KINDS = ["portfolio", "store", "business", "restaurant", "events"];
+const DQ_LABEL: Record<string, string> = { portfolio: "Personal website", store: "Online shop", business: "Business website", restaurant: "Restaurant or café", events: "Event website" };
 const studioId = (x: string) => (/^[a-z0-9][a-z0-9-]{0,59}$/.test(x) ? x : "");
 async function studioIndex(env: Env, id: string): Promise<any | null> {
   const f = await readFile(env, "studio:" + id, "studio.json"); if (!f) return null;
@@ -1374,13 +1374,13 @@ function dqDesignPub(d: any) {
     if (typeof g.domain === "string" && /^(?=.{4,100}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,24}$/.test(g.domain.trim().toLowerCase())) o.domain = g.domain.trim().toLowerCase();
     if (tx(g.link, 24)) o.link = tx(g.link, 24);
     if (g.count === "total" || g.count === "off") o.count = g.count;
-    if (Array.isArray(g.types)) { const l = ["business", "restaurant", "portfolio", "store"].filter((k) => g.types.includes(k)); if (l.length && l.length < 4) o.types = l; }
+    if (Array.isArray(g.types)) { const l = ["business", "restaurant", "portfolio", "store", "events"].filter((k) => g.types.includes(k)); if (l.length && l.length < 4) o.types = l; }
     if (g.tags === false) o.tags = false;
     if (tx(g.title, 80)) o.title = tx(g.title, 80);
     if (tx(g.intro, 400)) o.intro = tx(g.intro, 400);
     if (Object.keys(o).length) out.gallery = o;
   }
-  if (d.themes && typeof d.themes === "object") { const th: any = {}; for (const kind of ["business", "restaurant", "portfolio", "store"]) if (Array.isArray(d.themes[kind])) th[kind] = d.themes[kind].filter((v: any) => typeof v === "string" && /^[A-Za-z0-9_-]{1,40}$/.test(v)).slice(0, 400); out.themes = th; }
+  if (d.themes && typeof d.themes === "object") { const th: any = {}; for (const kind of ["business", "restaurant", "portfolio", "store", "events"]) if (Array.isArray(d.themes[kind])) th[kind] = d.themes[kind].filter((v: any) => typeof v === "string" && /^[A-Za-z0-9_-]{1,40}$/.test(v)).slice(0, 400); out.themes = th; }
   if (d.images && typeof d.images === "object") { const im: any = {}; if (d.images.on === true) im.on = true; if (["photo", "illustration", "3d", "flat"].includes(d.images.style)) im.style = d.images.style; if (d.images.source === "engine") im.source = "engine"; if (Object.keys(im).length) out.images = im; }
   if (d.notice && typeof d.notice === "object") { const n: any = {}; if (d.notice.on === false) n.on = false; const t = typeof d.notice.text === "string" ? d.notice.text.replace(/[<>]/g, "").trim().slice(0, 400) : ""; if (t) n.text = t; if (Object.keys(n).length) out.notice = n; }
   if (d.chat && typeof d.chat === "object") {
@@ -1390,10 +1390,10 @@ function dqDesignPub(d: any) {
     if (Number.isFinite(+d.chat.dim) && +d.chat.dim > 0) c.dim = Math.min(80, Math.round(+d.chat.dim));
     if (Object.keys(c).length) out.chat = c;
   }
-  if (d.carousel && typeof d.carousel === "object") { const c: any = {}; for (const kind of ["business", "restaurant", "portfolio", "store"]) if (d.carousel[kind] === "custom") c[kind] = "custom"; if (Object.keys(c).length) out.carousel = c; }
+  if (d.carousel && typeof d.carousel === "object") { const c: any = {}; for (const kind of ["business", "restaurant", "portfolio", "store", "events"]) if (d.carousel[kind] === "custom") c[kind] = "custom"; if (Object.keys(c).length) out.carousel = c; }
   if (d.questions && typeof d.questions === "object") {
     const q: any = {}, tx = (v: any, n: number) => (typeof v === "string" ? v.replace(/[<>]/g, "").trim().slice(0, n) : "");
-    for (const g of ["basics", "business", "restaurant", "portfolio", "store"]) {
+    for (const g of ["basics", "business", "restaurant", "portfolio", "store", "events"]) {
       const src = d.questions[g]; if (!src || typeof src !== "object") continue;
       const rules: any = {};
       for (const id of Object.keys(src).slice(0, 80)) { if (!/^[a-z]{1,20}$/.test(id)) continue; const r = src[id] || {}, o: any = {}; if (r.h === true) o.h = true; if (tx(r.t, 300)) o.t = tx(r.t, 300); if (tx(r.p, 300)) o.p = tx(r.p, 300); if (Object.keys(o).length) rules[id] = o; }
@@ -1403,7 +1403,7 @@ function dqDesignPub(d: any) {
   }
   if (d.look && typeof d.look === "object") {
     const look: any = {};
-    for (const kind of ["business", "restaurant", "portfolio", "store"]) {
+    for (const kind of ["business", "restaurant", "portfolio", "store", "events"]) {
       const src = d.look[kind]; if (!src || typeof src !== "object") continue;
       const rules: any = {};
       for (const key of Object.keys(src).slice(0, 30)) {

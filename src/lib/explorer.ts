@@ -59,7 +59,7 @@ export const words = (s: string): string[] => String(s || "").toLowerCase().repl
 const ACT = new Set(["change", "edit", "set", "modify", "customise", "customize", "find", "go", "turn", "switch", "put", "use", "do"].map(stem));
 
 // ------------------------------------------------------------------ what it reads
-const TPL_NAME: Record<string, string> = { restaurant: "Restaurant", store: "Shop", business: "Business", portfolio: "Portfolio" };
+const TPL_NAME: Record<string, string> = { restaurant: "Restaurant", store: "Shop", business: "Business", portfolio: "Portfolio", events: "Event" };
 const tplName = (id: string) => TPL_NAME[id] || TEMPLATES[id]?.name || id;
 /** Every section, card and setting of every site type, read from the same definitions the editor shows. */
 export function readSettings(): Entry[] {

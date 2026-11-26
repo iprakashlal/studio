@@ -25,7 +25,7 @@ create index if not exists approvals_project on approvals (scope, project, creat
 create table if not exists approval_notes (id integer primary key autoincrement, token text not null, who text not null, body text not null, page text not null default '', kind text not null default 'comment', created_at text not null);
 create index if not exists approval_notes_token on approval_notes (token, id);
 `;
-var CFDB_VERSION = 81;
+var CFDB_VERSION = 82;
 var CFDB_WORKER_NAME = "picaffectz-db";
 
 // src/lib/lookdigest.ts
@@ -2351,8 +2351,8 @@ ${src.slice(0, 7e3)}`;
   }
   return { brief, flagged, words: words(src).length };
 }
-var DQ_KINDS = ["portfolio", "store", "business", "restaurant"];
-var DQ_LABEL = { portfolio: "Personal website", store: "Online shop", business: "Business website", restaurant: "Restaurant or caf\xE9" };
+var DQ_KINDS = ["portfolio", "store", "business", "restaurant", "events"];
+var DQ_LABEL = { portfolio: "Personal website", store: "Online shop", business: "Business website", restaurant: "Restaurant or caf\xE9", events: "Event website" };
 var studioId = (x) => /^[a-z0-9][a-z0-9-]{0,59}$/.test(x) ? x : "";
 async function studioIndex(env, id) {
   const f = await readFile(env, "studio:" + id, "studio.json");
@@ -2406,7 +2406,7 @@ function dqDesignPub(d) {
     if (tx(g.link, 24)) o.link = tx(g.link, 24);
     if (g.count === "total" || g.count === "off") o.count = g.count;
     if (Array.isArray(g.types)) {
-      const l = ["business", "restaurant", "portfolio", "store"].filter((k) => g.types.includes(k));
+      const l = ["business", "restaurant", "portfolio", "store", "events"].filter((k) => g.types.includes(k));
       if (l.length && l.length < 4) o.types = l;
     }
     if (g.tags === false) o.tags = false;
@@ -2416,7 +2416,7 @@ function dqDesignPub(d) {
   }
   if (d.themes && typeof d.themes === "object") {
     const th = {};
-    for (const kind of ["business", "restaurant", "portfolio", "store"]) if (Array.isArray(d.themes[kind])) th[kind] = d.themes[kind].filter((v) => typeof v === "string" && /^[A-Za-z0-9_-]{1,40}$/.test(v)).slice(0, 400);
+    for (const kind of ["business", "restaurant", "portfolio", "store", "events"]) if (Array.isArray(d.themes[kind])) th[kind] = d.themes[kind].filter((v) => typeof v === "string" && /^[A-Za-z0-9_-]{1,40}$/.test(v)).slice(0, 400);
     out.themes = th;
   }
   if (d.images && typeof d.images === "object") {
@@ -2443,12 +2443,12 @@ function dqDesignPub(d) {
   }
   if (d.carousel && typeof d.carousel === "object") {
     const c = {};
-    for (const kind of ["business", "restaurant", "portfolio", "store"]) if (d.carousel[kind] === "custom") c[kind] = "custom";
+    for (const kind of ["business", "restaurant", "portfolio", "store", "events"]) if (d.carousel[kind] === "custom") c[kind] = "custom";
     if (Object.keys(c).length) out.carousel = c;
   }
   if (d.questions && typeof d.questions === "object") {
     const q = {}, tx = (v, n) => typeof v === "string" ? v.replace(/[<>]/g, "").trim().slice(0, n) : "";
-    for (const g of ["basics", "business", "restaurant", "portfolio", "store"]) {
+    for (const g of ["basics", "business", "restaurant", "portfolio", "store", "events"]) {
       const src = d.questions[g];
       if (!src || typeof src !== "object") continue;
       const rules = {};
@@ -2466,7 +2466,7 @@ function dqDesignPub(d) {
   }
   if (d.look && typeof d.look === "object") {
     const look = {};
-    for (const kind of ["business", "restaurant", "portfolio", "store"]) {
+    for (const kind of ["business", "restaurant", "portfolio", "store", "events"]) {
       const src = d.look[kind];
       if (!src || typeof src !== "object") continue;
       const rules = {};

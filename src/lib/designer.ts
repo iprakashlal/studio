@@ -1,5 +1,7 @@
 // "Design yourself": a plain-language question flow that builds a preview website for any of the four types.
 // Nothing here is published: the result is a preview (kept on this device, and in the Studio when signed in).
+import { EVT_THEMES, EVT_TYPES, EVT_TYPE_INFO, regKindName } from "../themes/events";
+import { REG_HAS_TICKETS, eventDesign, eventTypeFor, regKindFor } from "./eventdesign";
 import { outsideLines, packSections, readSections, unpackSections, type DocSections } from "./docsections";
 import { THEMES, THEME_TAGS, type Theme } from "../themes/catalog";
 import { BIZ_THEMES } from "../themes/business";
@@ -14,7 +16,7 @@ import { readDesignSettings, type Copy } from "./designs";
 import { lookValues, pagesChoice, readColsAnswer } from "./designlook";
 import { limitThemes } from "../themes/limit";
 
-export type Kind = "portfolio" | "store" | "business" | "restaurant";
+export type Kind = "portfolio" | "store" | "business" | "restaurant" | "events";
 export type Answers = Record<string, string>;
 export type Opt = { v: string; label: string; hint?: string };
 export type Step = {
@@ -71,6 +73,7 @@ export const KIND_OPTIONS: Opt[] = [
   { v: "store", label: "An online shop", hint: "Sell products with a cart and orders on WhatsApp or by UPI." },
   { v: "business", label: "A website for my business", hint: "Explain my services and let customers get in touch." },
   { v: "restaurant", label: "A restaurant or café site", hint: "Menu, opening hours, table booking and orders." },
+  { v: "events", label: "A website for an event", hint: "A conference, concert, wedding, race, market… with the date, schedule and registration." },
 ];
 
 export const STYLE_OPTIONS: Opt[] = [
@@ -90,21 +93,21 @@ export const COLOUR_DOT: Record<string, string> = { blue: "#3b82f6", green: "#22
 
 const YN = (): Opt[] => [{ v: "yes", label: "Yes" }, { v: "no", label: "No" }];
 const doc = (a: Answers, key: keyof DocSections) => { const v: any = unpackSections(a.docsec)[key]; return !!(v && v.length); };
-const P = (a: Answers) => k(a) === "portfolio", S = (a: Answers) => k(a) === "store", B = (a: Answers) => k(a) === "business", R = (a: Answers) => k(a) === "restaurant";
+const P = (a: Answers) => k(a) === "portfolio", S = (a: Answers) => k(a) === "store", B = (a: Answers) => k(a) === "business", R = (a: Answers) => k(a) === "restaurant", E = (a: Answers) => k(a) === "events";
 
 /** Every question, in the order they are asked. `group` is where the Studio's Settings → Design yourself → Questions lists it; `soon` ones (they need a picture upload) are listed but not asked yet. */
 const RAW: Step[] = [
   { id: "kind", group: "basics", label: "Type", type: "choice", ask: () => "Hi! Let's design your website together. What kind of website do you want?", options: () => KIND_OPTIONS },
   {
     id: "doc", group: "basics", label: "Starting point", type: "file", optional: true, accept: "application/pdf", maxKB: 20480,
-    ask: (a) => by(a, { portfolio: "Do you already have your details somewhere? Add your resume (PDF) or paste your LinkedIn or website link, and we'll fill in what we can.", store: "Do you already have your products somewhere? Add a catalogue or product menu (PDF) or paste your website or Instagram link, and we'll fill in what we can.", business: "Do you already have your details somewhere? Add a company profile or brochure (PDF) or paste your website link, and we'll fill in what we can.", restaurant: "Do you already have your menu or details somewhere? Add your menu or brochure (PDF) or paste your website or Instagram link, and we'll fill in what we can." }),
+    ask: (a) => by(a, { portfolio: "Do you already have your details somewhere? Add your resume (PDF) or paste your LinkedIn or website link, and we'll fill in what we can.", store: "Do you already have your products somewhere? Add a catalogue or product menu (PDF) or paste your website or Instagram link, and we'll fill in what we can.", business: "Do you already have your details somewhere? Add a company profile or brochure (PDF) or paste your website link, and we'll fill in what we can.", restaurant: "Do you already have your menu or details somewhere? Add your menu or brochure (PDF) or paste your website or Instagram link, and we'll fill in what we can.", events: "Do you already have the details somewhere? Add the brochure or invitation (PDF) or paste the event's page link, and we'll fill in what we can." }),
     ph: () => "Paste a link, e.g. https://yourname.com",
     help: () => "We only use what is written there, and we won't ask again for what we find. You can skip this.",
   },
   {
     id: "name", group: "basics", label: "Name", type: "text",
-    ask: (a) => by(a, { portfolio: "What's your full name?", store: "What is your shop or brand called?", business: "What is your registered company name?", restaurant: "What is your restaurant or café called?" }),
-    ph: (a) => by(a, { portfolio: "e.g. Asha Verma", store: "e.g. Kala Ghar", business: "e.g. Verma & Co", restaurant: "e.g. The Tiffin Box" }),
+    ask: (a) => by(a, { portfolio: "What's your full name?", store: "What is your shop or brand called?", business: "What is your registered company name?", restaurant: "What is your restaurant or café called?", events: "What is the event called?" }),
+    ph: (a) => by(a, { portfolio: "e.g. Asha Verma", store: "e.g. Kala Ghar", business: "e.g. Verma & Co", restaurant: "e.g. The Tiffin Box", events: "e.g. Horizon Summit 2027" }),
   },
   { id: "tagline", group: "basics", label: "Tagline", type: "text", optional: true, ask: () => "Your one-line tagline?", ph: () => "e.g. Honest work, on time", help: () => "A short line that sits under your name. Skip it and we'll write one." },
   { id: "logo", group: "basics", label: "Logo", type: "file", optional: true, when: (a) => k(a) !== "portfolio" && !!readDesignSettings().images?.on, ask: () => "Describe a logo and we'll draw it.", help: () => "A free image generator draws these from your name and what you do. Tap one to use it, or skip and we'll use your name. A designer can refine your final logo later." },
@@ -116,8 +119,9 @@ const RAW: Step[] = [
     options: () => [...BIZ_TYPES.map((t) => ({ v: t, label: t.replace(/([a-z])([A-Z])/g, "$1 $2") })), { v: "Other", label: "Something else" }],
     help: () => "Pick the closest one. We use it to choose a design made for that kind of business.",
   },
+  { id: "etype", group: "events", label: "Kind of event", type: "choice", when: E, ask: () => "What kind of event is it?", options: () => EVT_TYPES.map((t) => ({ v: t, label: t })), help: () => "Pick the closest one. We use it to choose designs and a registration form made for that kind of event." },
   {
-    id: "genre", group: "basics", label: "Theme type", type: "choice", when: (a) => !B(a),
+    id: "genre", group: "basics", label: "Theme type", type: "choice", when: (a) => !B(a) && !E(a),
     ask: () => "What genre of website?",
     options: (a) => [...(R(a) ? REST_TAGS : THEME_TAGS).map((t) => ({ v: t, label: t })), { v: "Any", label: "Any genre" }],
     help: () => "Pick the closest one. We use it to choose designs of that genre.",
@@ -128,6 +132,17 @@ const RAW: Step[] = [
   { id: "city", group: "basics", label: "City", type: "text", optional: true, ask: () => "Which city are you in?", ph: () => "e.g. Mumbai", help: () => "Skip it if you work online or don't want to show it." },
   { id: "social", group: "basics", label: "Social links", type: "text", optional: true, ask: (a) => (S(a) ? "What is your Instagram page link?" : "Do you have an Instagram or another page to link? Paste the link or your @name."), ph: () => "e.g. @yourname or https://instagram.com/yourname" },
   { id: "domain", group: "basics", label: "Custom domain", type: "text", optional: true, ask: () => "Do you already have your own website address (domain)?", ph: () => "e.g. yourname.com", help: () => "Only if you have one. We'll connect it when we publish." },
+
+  // Events
+  { id: "edate", group: "events", label: "Date", type: "text", optional: true, when: E, ask: () => "When is it?", ph: () => "e.g. 12 March 2027", help: () => "The first day, if it runs for several. Skip it if the date isn't fixed yet." },
+  { id: "etime", group: "events", label: "Start time", type: "text", optional: true, when: (a) => E(a) && !!(a.edate || "").trim(), ask: () => "What time does it start?", ph: () => "e.g. 9:30 am" },
+  { id: "evenue", group: "events", label: "Venue", type: "text", optional: true, when: E, ask: () => "Where is it held?", ph: () => "e.g. Harbour Convention Centre (or Online)", help: () => "The venue's name. We ask for the city separately." },
+  { id: "eabout", group: "events", label: "About the event", type: "long", optional: true, when: E, ask: () => "Tell people about the event in a few lines.", ph: () => "What it is, who it's for and why they should come." },
+  { id: "ereg", group: "events", label: "How people sign up", type: "choice", optional: true, when: (a) => E(a) && EVT_TYPE_INFO[eventTypeFor(a)].kinds.length > 1, ask: () => "How should people sign up?", options: (a) => EVT_TYPE_INFO[eventTypeFor(a)].kinds.map((v) => ({ v, label: regKindName(v) })), help: () => "Each one asks for what it needs: tickets ask how many, an RSVP asks who is coming, a team entry asks for the team." },
+  { id: "etickets", group: "events", label: "Tickets and prices", type: "long", optional: true, when: (a) => E(a) && REG_HAS_TICKETS.includes(regKindFor(a)), ask: (a) => ({ stall: "Which stalls can people book, and what does each cost?", team: "Which categories can teams enter, and what is the fee?", entry: "Which categories can people enter, and what is the fee?", enrol: "Which batches can people join, and what does each cost?", seat: "Which seats can people reserve, and is there a price?" } as Record<string, string>)[regKindFor(a)] || "Which tickets do you sell, and what does each cost?", cols: [{ label: "Name", ph: "e.g. General entry" }, { label: "Price (0 or empty = free)", ph: "e.g. 499" }], fmt: (c) => (c[1]?.trim() ? `${c[0]} - ${c[1]}` : c[0] || ""), addLabel: "Add another", help: () => "Skip it for a free event with one kind of entry." },
+  { id: "elineup", group: "events", label: "Line-up", type: "long", optional: true, when: E, ask: (a) => `Who are the ${EVT_TYPE_INFO[eventTypeFor(a)].stage.toLowerCase().replace(/^the /, "")}?`, cols: [{ label: "Name", ph: "e.g. Ananya Rao" }, { label: "Who they are", ph: "e.g. Founder, Vertex Labs" }], fmt: (c) => (c[1]?.trim() ? `${c[0]} - ${c[1]}` : c[0] || ""), addLabel: "Add another", help: () => "Skip it and the section isn't shown." },
+  { id: "eschedule", group: "events", label: "Schedule", type: "long", optional: true, when: E, ask: () => "What's the plan? Add the main items.", cols: [{ label: "Time", ph: "e.g. 10:30 am" }, { label: "What happens", ph: "e.g. Opening keynote" }], fmt: (c) => (c[0]?.trim() ? `${c[0]} - ${c[1] || ""}` : c[1] || ""), addLabel: "Add another", help: () => "Skip it and the section isn't shown." },
+  { id: "ehigh", group: "events", label: "Highlights", type: "long", optional: true, when: E, ask: () => "What can people look forward to? One on each line.", ph: () => "Live music\nFood stalls\nLucky draw" },
 
   // Personal portfolio
   { id: "about", group: "portfolio", label: "Role / title", type: "text", when: P, ask: () => "What is your role or title?", ph: () => "e.g. Wedding photographer", help: () => "One short line is enough. You can change it later." },
@@ -169,7 +184,7 @@ const RAW: Step[] = [
   { id: "teamsize", group: "business", label: "Team size", type: "text", optional: true, when: B, ask: () => "How big is your team?", ph: () => "e.g. 25" },
   { id: "story", group: "business", label: "About the company", type: "long", optional: true, when: B, ask: () => "Tell us about your company in a few lines: how it started and who you help.", ph: () => "Write it the way you'd tell a friend.", help: () => "We'll tidy it into proper website text. Skip it and we'll write something simple from your answers." },
   { id: "mission", group: "business", label: "Mission / vision", type: "long", optional: true, when: (a) => B(a) && !doc(a, "mission") && !doc(a, "vision"), ask: () => "What is your mission or vision?", ph: () => "Mission: …\nVision: …" },
-  { id: "bimage", group: "business", label: "Main banner image", type: "file", optional: true, when: (a) => B(a) && !!readDesignSettings().images?.on, accept: "image/png,image/jpeg,image/webp", maxKB: 5120, ask: () => "Describe your main banner picture." },
+  { id: "bimage", group: "business", label: "Main banner image", type: "file", optional: true, when: (a) => (B(a) || E(a)) && !!readDesignSettings().images?.on, accept: "image/png,image/jpeg,image/webp", maxKB: 5120, ask: () => "Describe your main banner picture." },
   { id: "items", group: "business", label: "Services", type: "long", optional: true, when: (a) => B(a) && !doc(a, "services"), ask: () => "What are your main services or solutions? Write one on each line.", ph: () => "Repairs – quick fixes at your door\nAnnual service\nInstallation", help: () => "Name, then a dash and a short description (optional). Icons are chosen for you." },
   { id: "stats", group: "business", label: "Attributes", type: "long", optional: true, when: (a) => B(a) && !doc(a, "stats"), ask: () => "Which attributes would you like to show? One on each line.", ph: () => "120+ – Projects\n15 – Years\n98% – Clients return", help: () => "The number, a dash, then what it counts. Only true numbers." },
   { id: "work", group: "business", label: "Our work", type: "long", optional: true, when: (a) => B(a) && !doc(a, "work"), ask: (a) => `Which ${workWords(a).many} would you like to show?`, ph: () => "Name – a short line about it", help: (a) => `The ${workWords(a).one}, then what it is or what you did. Only things that are true.` },
@@ -205,7 +220,7 @@ const RAW: Step[] = [
 
 /** The questions as the Studio's settings list them (every one, even those not asked yet). */
 export const QUESTION_LIST = RAW;
-export const QUESTION_GROUPS: { id: QGroup; name: string }[] = [{ id: "basics", name: "Basics (asked for every type)" }, { id: "portfolio", name: "Personal portfolio" }, { id: "store", name: "Shop" }, { id: "business", name: "Business portfolio" }, { id: "restaurant", name: "Restaurant & café" }];
+export const QUESTION_GROUPS: { id: QGroup; name: string }[] = [{ id: "basics", name: "Basics (asked for every type)" }, { id: "portfolio", name: "Personal portfolio" }, { id: "store", name: "Shop" }, { id: "business", name: "Business portfolio" }, { id: "restaurant", name: "Restaurant & café" }, { id: "events", name: "Event" }];
 
 /** What a business shows as its "work", by kind of business (case studies suit only some). Singular, plural and the heading. */
 export function workWords(a: Answers): { one: string; many: string; title: string } {
@@ -337,7 +352,7 @@ const STYLE_TAGS: Record<string, { want: string[]; dark?: boolean; light?: boole
 /** "B-27", "b27" and "B-027" are the same theme ID. */
 const codeKey = (v?: string) => { const m = /^([a-z])[\s-]*0*(\d{1,4})$/i.exec((v || "").trim()); return m ? m[1].toLowerCase() + m[2] : ""; };
 const hash = (s: string) => { let h = 0; for (const c of s) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h; };
-function poolOf(kind: Kind): Theme[] { return kind === "business" ? BIZ_THEMES : kind === "restaurant" ? REST_THEMES : THEMES; }
+function poolOf(kind: Kind): Theme[] { return kind === "business" ? BIZ_THEMES : kind === "restaurant" ? REST_THEMES : kind === "events" ? EVT_THEMES : THEMES; }
 /** The Studio's own themes of a type (the ones its Themes page shows). */
 export const myThemesOf = (kind: Kind): Theme[] => limitThemes(poolOf(kind), undefined, kind);
 /** The themes the Studio's owner offers (all of them unless the owner picked some). */
@@ -348,10 +363,10 @@ export const samplePicture = (c1: string, c2: string, bg: string) => "data:image
 
 /** The theme that best matches the feel and colour chosen; the person's name picks between near ties so two people don't get the same one. */
 function scoreThemes(a: Answers) {
-  const kind = k(a), pool = offered(kind), genre = kind !== "business" && a.genre && a.genre !== "Any" ? a.genre : "";
+  const kind = k(a), pool = offered(kind), genre = kind !== "business" && kind !== "events" && a.genre && a.genre !== "Any" ? a.genre : "";
   const st = STYLE_TAGS[a.style || "clean"] || STYLE_TAGS.clean, col = a.colour || "any";
   // A business says what it does ("dental clinic", "wedding planner"): the themes made for that kind of business come first.
-  const say = `${a.about || ""} ${a.name || ""}`.toLowerCase(), picked = kind === "business" && a.btype && BIZ_TYPES.includes(a.btype) ? [a.btype] : [], mine = kind === "business" ? picked.length ? picked : BIZ_TYPES.filter((ty) => say && new RegExp(BIZ_TYPE_WORDS[ty] || "(?!)", "i").test(say)) : [];
+  const say = `${a.about || ""} ${a.name || ""}`.toLowerCase(), picked = kind === "business" && a.btype && BIZ_TYPES.includes(a.btype) ? [a.btype] : kind === "events" ? [eventTypeFor(a)] : [], mine = kind === "events" ? picked : kind === "business" ? picked.length ? picked : BIZ_TYPES.filter((ty) => say && new RegExp(BIZ_TYPE_WORDS[ty] || "(?!)", "i").test(say)) : [];
   const scored = pool.map((t) => {
     let s = st.want.reduce((n, tag, i) => n + (t.tags.includes(tag) ? 6 - Math.min(i, 4) : 0), 0);
     if (st.dark && t.dark) s += 8; if (st.dark && !t.dark) s -= 8; if (st.light && !t.dark) s += 4;
@@ -428,6 +443,8 @@ function tidy(kind: Kind, c: any, o: { name: string; about: string; city: string
     put("stats.items", []); put("hero.ctaSecondary", ""); put("hero.ctaSecondaryTarget", "");
     if (!city) put("contact.address", "");
     if (!o.phone) put("contact.hours", "");
+  } else if (kind === "events") {
+    /* laid out by eventDesign (the sample of that kind of event, with only what they said) */
   } else {
     hide("highlights", "offers", "gallery", "chef", "events", "press", "testimonials", "order", "reserve", "faq");
     if (g.includes("order")) show("order"); if (g.includes("table")) show("reserve"); if (g.includes("event")) show("events");
@@ -506,6 +523,9 @@ export async function buildDesign(a: Answers, copy?: Copy | null, files?: Design
     if (email) put("contact.email", email);
     put("footer.text", about ? `${name}. ${about}.` : name);
     seo();
+  } else if (kind === "events") {
+    const e = eventDesign(a, c, { theme: theme || undefined, name, city, phone, email, address, social });
+    for (const x of Object.keys(c)) delete c[x]; Object.assign(c, e);
   } else {
     if (name) put("brand.name", name);
     if (about) { put("brand.tagline", a.tagline?.trim() || cp.tagline || about); put("hero.eyebrow", about + (city ? " · " + city : "")); put("hero.lede", cp.hero_text || `${about}. Come hungry.`); put("about.body", aboutText || `${name || "We"} serve ${about.toLowerCase()}${city ? " in " + city : ""}.`); put("cta.body", cp.cta_text || "Book a table, or call us for takeaway."); }
@@ -540,6 +560,7 @@ export async function buildDesign(a: Answers, copy?: Copy | null, files?: Design
     if (social) c.footer.links = [{ label: /instagram/.test(social) ? "Instagram" : "Find us online", url: social }, ...(c.footer.links || [])];
     if (cp.faq?.length && items.length >= 2) { put("faq.items", cp.faq); show(c, "faq"); }
   }
+  if (kind === "events") put("site.multiPage", pagesChoice(kind, a.pages, readDesignSettings()) === "multi");
   if (kind === "business" && hours) put("contact.hours", hours);
   if (kind === "restaurant" && hours) { put("hours.note", hours); put("hours.days", []); put("hours.showStatus", false); }
   const ds = unpackSections(a.docsec); if (a.work?.trim()) delete ds.work;
@@ -634,15 +655,15 @@ export async function buildDesign(a: Answers, copy?: Copy | null, files?: Design
     const tt = tweakTheme(theme, a), lv = lookValues(kind, a.look, readDesignSettings());
     c.theme = { ...(c.theme || {}), ...tpl.themeValues(tt), ...lv };
     // Picture-side layouts and frames need a picture (otherwise that side stays empty): until they add one, a sample picture in the theme's colours stands in.
-    const pal = { c1: tt.colors.c1, c2: tt.colors.c3 || tt.colors.c2, bg: tt.colors.surface }, subject = [a.btype, a.genre, a.ptype, a.about, a.name, kind === "store" ? "shop" : kind === "restaurant" ? "restaurant" : ""].filter(Boolean).join(" ");
+    const pal = { c1: tt.colors.c1, c2: tt.colors.c3 || tt.colors.c2, bg: tt.colors.surface }, subject = kind === "events" ? `${eventTypeFor(a)} event` : [a.btype, a.genre, a.ptype, a.about, a.name, kind === "store" ? "shop" : kind === "restaurant" ? "restaurant" : ""].filter(Boolean).join(" ");
     const pic = () => defaultPicture(subject, pal);
-    if ((kind === "business" || kind === "restaurant") && !c.hero?.image?.url && !c.hero?.video) put("hero.image", { url: pic() });
+    if ((kind === "business" || kind === "restaurant" || kind === "events") && !c.hero?.image?.url && !c.hero?.video) put("hero.image", { url: pic() });
     if (kind === "store") { if (!c.home?.hero?.image) put("home.hero.image", { url: pic() }); if (c.home?.banner?.show && !c.home?.banner?.image) put("home.banner.image", { url: defaultPicture(subject + " gift", { ...pal, c1: pal.c2, c2: pal.c1 }, "scene", 2.4) }); }
     if (kind === "portfolio" && !c.hero?.photo) put("hero.photo", { url: defaultPicture("", pal, "person", 1) });
     // The pictures they chose replace the drawn ones.
     const mine = files?.pics || {};
     if (mine.photo?.[0] && kind === "portfolio") put("hero.photo", { url: mine.photo[0] });
-    if (mine.bimage?.[0] && kind === "business") put("hero.image", { url: mine.bimage[0] });
+    if (mine.bimage?.[0] && (kind === "business" || kind === "events")) put("hero.image", { url: mine.bimage[0] });
     if (mine.banner?.[0] && kind === "store") { put("home.hero.image", { url: mine.banner[0] }); if (mine.banner[1]) { put("home.banner.show", true); put("home.banner.image", { url: mine.banner[1] }); } }
     if (mine.photos?.[0] && kind === "restaurant") { put("hero.image", { url: mine.photos[0] }); if (mine.photos.length > 1) { put("gallery.items", mine.photos.slice(1).map((u, i) => ({ image: { url: u }, caption: "", alt: `Photo ${i + 1}` }))); show(c, "gallery"); } }
   }
@@ -730,8 +751,8 @@ function topicLine(n: string, i: number, a: Answers, name: string, tail: string)
 export function systemCopy(a: Answers): Copy {
   const kind = k(a), name = (a.name || "").trim() || "We", notes = [a.about, a.city ? "in " + a.city : "", a.story, (a.doctext || "").slice(0, 1200)].filter(Boolean).join(". ");
   let b: any = {};
-  try { b = systemWrite({ brand: name, notes, kind, text: [a.about, a.story, a.usp, (a.doctext || "").slice(0, 1200)].filter(Boolean).join("\n") }).brief; } catch { /* a plain fallback below */ }
-  const tail: Record<Kind, string> = { portfolio: "done with care and attention to detail.", store: "chosen and made with care.", business: "done properly and explained clearly.", restaurant: "made fresh and served warm." };
+  try { b = systemWrite({ brand: name, notes, kind: kind === "events" ? "business" : kind, text: [a.about, a.story, a.usp, (a.doctext || "").slice(0, 1200)].filter(Boolean).join("\n") }).brief; } catch { /* a plain fallback below */ }
+  const tail: Record<Kind, string> = { portfolio: "done with care and attention to detail.", store: "chosen and made with care.", business: "done properly and explained clearly.", restaurant: "made fresh and served warm.", events: "planned with care." };
   const out: Copy = {
     ...(b.brand_tagline ? { tagline: b.brand_tagline } : {}), ...(b.hero_text ? { hero_text: b.hero_text } : {}), ...(b.cta_text ? { cta_text: b.cta_text } : {}),
     about_text: ((a.story || "").trim() || b.about_text || "").slice(0, 900) || undefined,

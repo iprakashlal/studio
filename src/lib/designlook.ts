@@ -4,9 +4,10 @@
 import { AXES, FX_AXES, HERO_FX_AXIS, KIT_AXIS, LOADER_ON_AXIS, MOTIF_AXIS, PORTFOLIO_AXES, STORE_AXES, type Axis } from "../themes/catalog";
 import { BIZ_AXES } from "../themes/business";
 import { REST_AXES } from "../themes/restaurant";
+import { EVT_AXES } from "../themes/events";
 
-export type Kind = "portfolio" | "store" | "business" | "restaurant";
-export const KINDS: Kind[] = ["business", "restaurant", "portfolio", "store"];
+export type Kind = "portfolio" | "store" | "business" | "restaurant" | "events";
+export const KINDS: Kind[] = ["business", "restaurant", "portfolio", "store", "events"];
 
 /** The colours of the Brand & theme → Colours editor, in its order. */
 export const COLOUR_SLOTS: [string, string][] = [["bg", "Background"], ["surface", "Cards"], ["text", "Text"], ["soft", "Secondary text"], ["line", "Borders"], ["deep", "Dark panels & footer"], ["c1", "Primary (buttons, links)"], ["c2", "Secondary"], ["c3", "Highlight"]];
@@ -81,6 +82,11 @@ export const LOOK_AXES: Record<Kind, [Axis, string, Group][]> = {
   restaurant: [
     AX(PAGES_AXIS, "One page or separate pages"), AX(REST_AXES.layout, "Your name and what you serve"), AX(REST_AXES.heroArt, "Your logo and picture"), AX(REST_AXES.nav, "Pages and menu bar"), AX(NAV_MODE, "Pages and menu bar"), AX(REST_AXES.menuStyle, "Your food menu"), AX(REST_AXES.gallery, "Photos"), AX(REST_AXES.width, "Page width"), AX(REST_AXES.bands, "Sections"),
     ST(REST_AXES.heading, "Your name and headings"), ST(REST_AXES.shead, "Section titles"), ST(REST_AXES.cards, "Highlights"), ST(REST_AXES.buttons, "What you want visitors to do"), ST(REST_AXES.ornament, "Feel"), ST(REST_AXES.divider, "Feel"), ST(REST_AXES.pattern, "Feel"), ST(REST_AXES.motionStyle, "Feel"), ST(MOTIF_AXIS, "Feel"), ...FX(),
+  ],
+  events: [
+    AX(PAGES_AXIS, "One page or separate pages"), AX(EVT_AXES.layout, "Your event's name and date"), AX(EVT_AXES.heroArt, "Your logo and picture"), AX(EVT_AXES.dateBadge, "Date and place"), AX(EVT_AXES.count, "Date and place"), AX(EVT_AXES.nav, "Pages and menu"), AX(NAV_MODE, "Pages and menu"), AX(EVT_AXES.width, "Page width"), AX(EVT_AXES.bands, "Page width"),
+    AX(EVT_AXES.sched, "The schedule"), AX(EVT_AXES.lineup, "Who is on stage"), AX(EVT_AXES.tix, "Tickets"), AX(EVT_AXES.reg, "Registration"),
+    ST(EVT_AXES.heading, "Your name and headings"), ST(EVT_AXES.shead, "Section titles"), ST(EVT_AXES.cards, "Highlights"), ST(EVT_AXES.buttons, "What you want visitors to do"), ST(EVT_AXES.pattern, "Feel"), ST(EVT_AXES.motionStyle, "Feel"), ...FX(),
   ],
   portfolio: [
     AX({ ...AXES.layout, options: [...AXES.layout.options, ["velocity", "★ Velocity: signature layout"]] }, "Your name and what you do"), AX(KIT_AXIS, "Page layout"), AX(AXES.nav, "Pages and menu"), AX(NAV_MODE, "Pages and menu"), AX(AXES.width, "Page width"),

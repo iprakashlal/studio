@@ -45,7 +45,7 @@ async function fitBackdrop(file: File): Promise<string> {
   bmp.close?.(); if (u.length > 100_000) throw new Error("That picture is too detailed. Please use a simpler or smaller one.");
   return u;
 }
-const KIND_NAME: Record<Kind, string> = { business: "Business", restaurant: "Restaurant", portfolio: "Portfolio", store: "Shop" };
+const KIND_NAME: Record<Kind, string> = { business: "Business", restaurant: "Restaurant", portfolio: "Portfolio", store: "Shop", events: "Event" };
 const same = (x: unknown, y: unknown) => JSON.stringify(x) === JSON.stringify(y);
 
 function Block({ title, note, children, open = true }: { title: string; note?: string; children: React.ReactNode; open?: boolean }) {

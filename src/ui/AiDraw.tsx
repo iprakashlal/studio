@@ -2,10 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import { generateImages, type PhotoBlob } from "../lib/pictures";
 import { readDesignSettings } from "../lib/designs";
 
-/** Whether pictures may be drawn by the free AI generator in the site editor (on unless turned off in Settings → Design). */
+/** Whether pictures may be drawn or found from words in the site editor (on unless turned off in Settings → Design). */
 export const aiDrawInEditor = () => readDesignSettings().adminAi !== false;
 
-/** "Describe it and we'll draw it": a few words give small choices from the free AI Horde generator; tapping one hands it over as an image file. */
+/** "Describe it and we'll draw it": a few words give small choices, drawn by the Studio's AI engine or found on Unsplash (Settings → AI); tapping one hands it over as an image file. */
 export function AiDraw({ logo = false, count = 2, onUse, disabled, initial = "", placeholder, label = "Or describe it and we'll draw it" }: { logo?: boolean; count?: number; onUse: (f: File) => void | Promise<void>; disabled?: boolean; initial?: string; placeholder?: string; label?: string }) {
   const [what, setWhat] = useState(initial), [busy, setBusy] = useState(""), [err, setErr] = useState(""), [got, setGot] = useState<{ f: File; u: string; b: PhotoBlob }[]>([]);
   // Photos from Unsplash in the place of drawing (Settings → AI): the wording says "find" instead of "draw". A logo is always drawn.
@@ -38,7 +38,7 @@ export function AiDraw({ logo = false, count = 2, onUse, disabled, initial = "",
         </div>)}
       </div>}
       {stock ? <p className="m-0 text-[11px] text-ink-500">Real photos from Unsplash, free to use under the Unsplash licence. Crediting the photographer is appreciated. Don't type private details: the words are sent to Unsplash.</p> :
-      <p className="m-0 text-[11px] text-ink-500">Drawn by AI (the Studio's own engine, or the free AI Horde on volunteers' computers, which can queue for a short while). Don't type private details, and check the picture before using it on a live site; the result may not be yours exclusively.</p>}
+      <p className="m-0 text-[11px] text-ink-500">Drawn by the Studio's AI engine. Don't type private details, and check the picture before using it on a live site; the result may not be yours exclusively.</p>}
     </div>
   );
 }

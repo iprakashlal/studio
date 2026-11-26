@@ -14,6 +14,7 @@ import { COLOUR_DOT, STEPS, STEP_LABEL, buildDesign, fromDoc, isOptional, nextSt
 import { newDesignId, readDesignSettings, readLocalDesigns, writeLocalDesigns, type Copy, type DesignRec } from "../lib/designs";
 import { NOTICE_TEXT, COLOUR_SLOTS, GROUPS, pagesChoice, readColsAnswer, readLookAnswer, resolvedLook, visibleAxes, type Kind as LookKind } from "../lib/designlook";
 import { AiDraw } from "../ui/AiDraw";
+import { LogoMaker } from "../ui/LogoMaker";
 import { designHost, otpCheck, otpSend, passLive, readPage, readPass, saveDraft, submitQuery, understandText, writePass, type DesignHost, type Pass } from "../lib/designapi";
 import { pdfLines } from "../lib/pdftext";
 import { watchDevtools } from "../lib/devtools";
@@ -331,7 +332,8 @@ function DesignPageInner({ studio, index, onIndex }: { studio?: Studio; index?: 
   /** The answer controls inside the question card: a plain field and one row of buttons (nothing for a tap-one question). */
   const cardBar = !cur || cur.type === "choice" ? null : cur.id === "logo" ? (
     <div className="flex flex-col gap-3">
-            <AiDraw logo count={2} initial={[a.name, a.about].filter(Boolean).join(", ").slice(0, 120)} label="Describe your logo and we'll draw it" disabled={reading} onUse={(f) => choose(cur, f)} />
+      <LogoMaker key={a.name || ""} name={a.name || ""} color={/^#[0-9a-f]{6}$/i.test(COLOUR_DOT[a.colour || ""] || "") ? COLOUR_DOT[a.colour!] : undefined} disabled={reading} onUse={(f) => choose(cur, f)} />
+      {readDesignSettings().images?.on && <AiDraw logo count={2} initial={[a.name, a.about].filter(Boolean).join(", ").slice(0, 120)} label="Or describe a logo and the Studio's AI will draw it" disabled={reading} onUse={(f) => choose(cur, f)} />}
       <button type="button" className="btn btn-ghost self-start" onClick={() => answer(cur, "")}>Skip</button>
     </div>
   ) : (

@@ -49,7 +49,7 @@ var CFDB_UPGRADES = [
     "create index if not exists enquiries_ref on enquiries (site, ref)"
   ] }
 ];
-var CFDB_VERSION = 88;
+var CFDB_VERSION = 89;
 var CFDB_WORKER_NAME = "picaffectz-db";
 
 // src/lib/lookdigest.ts
@@ -2872,7 +2872,6 @@ async function dqImage(env, id, req) {
     if (!c?.key) return json({ engine: "unsplash", error: "No Unsplash access key is saved yet. Add it under Settings \u2192 AI \u2192 Pictures drawn by AI." });
     return json({ engine: "unsplash", ...await unsplashFind(String(c.key), words2, +b.n || 4) });
   }
-  if (d?.images?.source !== "engine") return json({ engine: "system" });
   const { choice, ai } = await dqEngine(env, idx);
   if (choice !== "cloudflare" && choice !== "custom" || !ai) return json({ engine: "system" });
   let q;

@@ -278,37 +278,37 @@ export function DesignLookTab({ session, studio, index, onIndex, part, lead }: {
       </>}
 
       {onlyAi && <>
-      <Block title="Pictures drawn by AI" note="Pictures can be drawn from a few words by the free AI Horde (no key, no sign-up; volunteers' computers do the drawing, so it can queue for a short while), by the Studio's AI engine, or found as real photos on Unsplash.">
+      <Block title="Pictures drawn by AI" note="Pictures for a site can be drawn from a few words by the Studio's AI engine, or found as real photos on Unsplash. Logos are made in-house from the business name, with no AI.">
         <label className="flex items-start gap-2 text-[13px]">
           <input type="checkbox" className="mt-1" checked={d.adminAi !== false} onChange={(e) => upd({ adminAi: e.target.checked ? undefined : false })} />
           <span><b className="block">"Draw with AI" in the site editor</b><span className="text-[11.5px] text-ink-500">Adds a button next to Upload on picture fields (not on logos). Turn it off to hide it.</span></span>
         </label>
         <label className="flex items-start gap-2 text-[13px]">
           <input type="checkbox" className="mt-1" checked={!!d.images?.on} onChange={(e) => upd({ images: e.target.checked ? { ...(d.images || {}), on: true } : d.images?.style ? { style: d.images.style } : undefined })} />
-          <span><b className="block">Let visitors describe a logo or banner in "Design yourself"</b><span className="text-[11.5px] text-ink-500">The logo and banner questions are then drawn from their words (banners can't be uploaded). Turn it off and those two questions are not asked.</span></span>
+          <span><b className="block">Let visitors describe a banner or logo in "Design yourself"</b><span className="text-[11.5px] text-ink-500">The banner questions are then made from their words (banners can't be uploaded), and the logo question also offers a drawn logo. Turn it off and the banner questions are not asked; the logo maker stays.</span></span>
         </label>
         {(d.adminAi !== false || d.images?.on) && <>
           <div className="flex flex-col gap-1.5" role="radiogroup" aria-label="Who draws the pictures">
             <span className="text-[13px] font-semibold">Who draws the pictures</span>
-            {([["horde", "The free AI Horde", "No key, no sign-up. Volunteers' computers draw, so a picture can queue for a minute or two."], ["engine", "The AI engine selected for this Studio", "Drawn by whichever AI engine this Studio uses: Cloudflare (fast, within its free allowance) or your own AI API. If it can't draw, you see the reason; the free AI Horde is used only for the Picaffectz system engine, which can't draw."], ["unsplash", "Photos from Unsplash", "Real photos found on Unsplash for the words typed, instead of a drawn picture. Needs your own free Unsplash access key. Unsplash has no logos, so a logo is still drawn by the free AI Horde."]] as const).map(([v, l, h]) => {
-              const on = (d.images?.source || "horde") === v;
+            {([["engine", "The Studio's AI engine", "Drawn by the engine chosen above: Cloudflare AI (fast, within its free allowance) or your own AI API. The Picaffectz system can't draw pictures."], ["unsplash", "Photos from Unsplash", "Real photos found on Unsplash for the words typed, instead of a drawn picture. Needs your own free Unsplash access key."]] as const).map(([v, l, h]) => {
+              const on = (d.images?.source === "unsplash" ? "unsplash" : "engine") === v;
               return (
                 <label key={v} className={`flex cursor-pointer items-start gap-2 rounded-xl border p-3 text-[13px] ${on ? "border-brand-400 bg-brand-500/10" : "border-ink-600"}`}>
-                  <input type="radio" name="img-source" className="mt-1" checked={on} onChange={() => upd({ images: { ...(d.images || {}), source: v === "horde" ? undefined : v } })} />
+                  <input type="radio" name="img-source" className="mt-1" checked={on} onChange={() => upd({ images: { ...(d.images || {}), source: v } })} />
                   <span><b className="block">{l}</b><span className="text-[11.5px] text-ink-500">{h}</span></span>
                 </label>
               );
             })}
             {d.images?.source === "unsplash" && <UnsplashForm where={where} />}
-            {d.images?.source === "engine" && d.ai === "system" && <span className="text-[11.5px] text-amber-300" role="note">This Studio's AI engine is set to the Picaffectz system, which can't draw pictures here, so the free AI Horde will be used until it is set to Cloudflare or your own AI.</span>}
-            {d.images?.source === "engine" && d.ai === "custom" && <span className="text-[11.5px] text-ink-500" role="note">Your own AI draws the pictures through its picture endpoint (ChatGPT and Gemini work; add a picture model under Settings → AI for others). If it fails you see the reason; the AI Horde is not used.</span>}
+            {d.images?.source !== "unsplash" && (d.ai || general) === "system" && <span className="text-[11.5px] text-amber-300" role="note">This Studio's AI engine is the Picaffectz system, which can't draw pictures. Choose Cloudflare AI or your own AI API above, or use photos from Unsplash.</span>}
+            {d.images?.source !== "unsplash" && (d.ai || general) === "custom" && <span className="text-[11.5px] text-ink-500" role="note">Your own AI draws the pictures through its picture endpoint (ChatGPT and Gemini work; add a picture model under AI engine for others). If it fails you see the reason.</span>}
           </div>
           <label className="flex flex-col gap-1 text-[13px] font-semibold">Picture style
             <select className="input w-auto" value={d.images?.style || "photo"} onChange={(e) => upd({ images: { ...(d.images || {}), style: e.target.value as any } })}>
               <option value="photo">Photo-like</option><option value="illustration">Illustration</option><option value="3d">Soft 3D</option><option value="flat">Flat and minimal</option>
             </select>
           </label>
-          <p className="m-0 rounded-lg border border-yellow-400 bg-yellow-200 px-3 py-2 text-[12px] leading-snug text-yellow-950">AI pictures come from a free volunteer network: they can be slow and differ each time, what is typed is visible to it, and you may not own the result exclusively. Check them before using one on a live site.</p>
+          {d.images?.source !== "unsplash" && <p className="m-0 rounded-lg border border-yellow-400 bg-yellow-200 px-3 py-2 text-[12px] leading-snug text-yellow-950">AI pictures differ each time, what is typed is sent to the AI service, and you may not own the result exclusively. Check them before using one on a live site.</p>}
         </>}
       </Block>
       </>}

@@ -44,8 +44,8 @@ export type DesignSettings = {
   themes?: Partial<Record<Kind, string[]>>;
   /** Per type: what the carousel on a visitor's finished preview shows: "answers" (default) = the themes that match what they said (business type, genre); "custom" = the themes the owner ticked above. */
   carousel?: Partial<Record<Kind, "answers" | "custom">>;
-  /** Visitors can describe a logo or banner and the free AI Horde draws it (style is added to the words). */
-  images?: { on?: boolean; style?: "photo" | "illustration" | "3d" | "flat"; /** Who draws: the free AI Horde (default) the Studio's own AI engine, or ("unsplash") real photos found on Unsplash in the place of a drawn picture. */ source?: "horde" | "engine" | "unsplash" };
+  /** Visitors can describe a banner or logo and it is drawn or found for them (style is added to the words). */
+  images?: { on?: boolean; style?: "photo" | "illustration" | "3d" | "flat"; /** Who makes the pictures: the Studio's own AI engine (the default), or ("unsplash") real photos found on Unsplash. */ source?: "engine" | "unsplash" };
   /** How the Design yourself chat looks: bubble colours, page colour, and a background picture (dimmed by `dim` %). */
   chat?: { you?: string; bot?: string; page?: string; image?: string; dim?: number };
   /** false: the site editor has no "Draw with AI" button (on unless turned off). */

@@ -25,7 +25,7 @@ create index if not exists approvals_project on approvals (scope, project, creat
 create table if not exists approval_notes (id integer primary key autoincrement, token text not null, who text not null, body text not null, page text not null default '', kind text not null default 'comment', created_at text not null);
 create index if not exists approval_notes_token on approval_notes (token, id);
 `;
-var CFDB_VERSION = 82;
+var CFDB_VERSION = 83;
 var CFDB_WORKER_NAME = "picaffectz-db";
 
 // src/lib/lookdigest.ts
@@ -1074,6 +1074,55 @@ async function translateTexts(env, q) {
   if (!done.size && failed) return { error: /neuron|quota|limit|429|capacity/i.test(failed) ? "Today's free AI allowance on this Cloudflare account is used up. Press Translate again after it resets (midnight UTC), or type translations in." : "The translator didn't answer (" + failed.slice(0, 120) + ")." };
   return { t: all.map((i) => done.get(i) ?? null) };
 }
+var VIEWS_V = "v1";
+var SITE_OF = "substr(scope, 6)";
+var STUDIO_OF = "substr(scope, 8)";
+var VIEWS = {
+  // Design yourself: every query sent in and every saved draft, newest first.
+  v_diy: `select 'query' as what, q.studio as studio, cast(q.id as text) as id, q.name as name, q.kind as kind, q.person as person, q.email as email, q.phone as phone, q.status as status, '' as theme,
+      (select count(*) from design_pics p where p.studio = q.studio and p.ref = q.id) as pictures, q.created_at as at from design_queries q
+    union all select 'draft', d.studio, d.id, d.name, d.kind, '', d.email, '', '', d.theme_name, 0, d.updated_at from design_drafts d
+    order by at desc`,
+  // Studio settings: the Studio's index file (studio.json), its saved connections (names only: the values are encrypted) and its people.
+  v_studio_settings: `select 'settings file' as what, ${STUDIO_OF} as studio, path as name, size || ' bytes' as detail, updated_at as at from files where scope like 'studio:%' and path = 'studio.json'
+    union all select 'connection', case when scope like 'studio:%' then ${STUDIO_OF} else '(this database)' end, name, 'encrypted', updated_at from settings where scope like 'studio:%' or scope = '_db'
+    union all select 'member', ${STUDIO_OF}, email, role, added_at from members where scope like 'studio:%'
+    order by studio, what, name`,
+  // The Studio's own files: projects, their pictures and exports.
+  v_studio_files: `select ${STUDIO_OF} as studio, case when path like 'projects/%' then substr(path, 10, instr(substr(path, 10), '/') - 1) else '' end as project, path, size, type, updated_at
+    from files where scope like 'studio:%' and path <> 'studio.json' and path not like 'public/%' order by studio, path`,
+  // The Studio's own public pages (its main site) and the emails it keeps.
+  v_studio_site_admin: `select ${STUDIO_OF} as studio, path, size, type, updated_at from files where scope like 'studio:%' and path like 'public/%' order by studio, path`,
+  // Each site's admin at a glance: one row per site.
+  v_site_admin: `select s.site as site,
+      (select group_concat(email, ', ') from members m where m.scope = 'site:' || s.site) as admins,
+      (select count(*) from files f where f.scope = 'site:' || s.site) as files,
+      (select coalesce(sum(size), 0) from files f where f.scope = 'site:' || s.site) as bytes,
+      (select max(updated_at) from files f where f.scope = 'site:' || s.site) as last_saved,
+      (select count(*) from settings t where t.scope = 'site:' || s.site) as connections,
+      (select count(*) from enquiries e where e.site = s.site and e.data not like '%"reg_no"%') as enquiries,
+      (select count(*) from enquiries e where e.site = s.site and e.data like '%"reg_no"%') as registrations,
+      (select count(*) from customers c where c.site = s.site) as customers,
+      (select count(*) from carts c where c.site = s.site) as carts,
+      (select count(*) from reviews r where r.site = s.site) as reviews,
+      (select count(*) from stock k where k.site = s.site) as stock_items,
+      (select count(*) from payments p where p.site = s.site) as payments
+    from (select ${SITE_OF} as site from files where scope like 'site:%' union select ${SITE_OF} from members where scope like 'site:%') s order by s.site`,
+  // Each site's files (content, draft, pictures).
+  v_site_files: `select ${SITE_OF} as site, path, size, type, updated_at from files where scope like 'site:%' order by site, path`,
+  // Each site's saved connections (names only: the values are encrypted) and its admins.
+  v_site_settings: `select 'connection' as what, ${SITE_OF} as site, name, 'encrypted' as detail, updated_at as at from settings where scope like 'site:%'
+    union all select 'admin', ${SITE_OF}, email, role, added_at from members where scope like 'site:%' order by site, what, name`
+};
+async function ensureViews(env) {
+  try {
+    const have = new Set(((await env.DB.prepare("select name from sqlite_master where type = 'view' and sql like ?").bind(`%/*${VIEWS_V}*/%`).all()).results || []).map((r) => r.name));
+    const todo = Object.keys(VIEWS).filter((n) => !have.has(n));
+    if (!todo.length) return;
+    await env.DB.batch(todo.flatMap((n) => [env.DB.prepare(`drop view if exists ${n}`), env.DB.prepare(`create view ${n} as /*${VIEWS_V}*/ ${VIEWS[n]}`)]));
+  } catch {
+  }
+}
 var ensured = false;
 async function ensure(env) {
   if (ensured) return;
@@ -1105,6 +1154,7 @@ async function ensure(env) {
     env.DB.prepare("create table if not exists payments (rz_order text primary key, site text not null, order_no text not null, amount integer not null, status text not null default 'created', created_at text not null)")
   ]);
   ensured = true;
+  await ensureViews(env);
 }
 var SETTINGS = {
   ai: { secret: ["key"], text: ["base", "model", "vision", "image"], flags: ["on"] },

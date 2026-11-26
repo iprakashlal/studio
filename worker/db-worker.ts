@@ -1657,18 +1657,35 @@ function dqSections(x: any): Record<string, any> {
 /** ---- The social photo wall's automatic photos (GET /wall/<site>): the newest posts of the owner's Instagram (with the token
  *  they saved) or the newest pins of a public Pinterest profile or board (its public feed, no key). */
 type WallPic = { img: string; url: string; caption: string };
+const igPics = (data: any): WallPic[] => (Array.isArray(data) ? data : []).map((m: any) => ({ img: String((m.media_type === "VIDEO" ? m.thumbnail_url : m.media_url) || ""), url: String(m.permalink || ""), caption: oneLine(String(m.caption || "")).slice(0, 160) })).filter((x: WallPic) => /^https:\/\//.test(x.img));
+/** A Facebook token (it starts with EAA: Meta gives this kind when the Instagram account is reached through its Facebook Page).
+ *  The Instagram account is the one linked to a Page the token can see; its posts are read through Facebook's Graph API. */
+async function igMediaFb(token: string, n: number): Promise<{ items?: WallPic[]; error?: string }> {
+  const G = "https://graph.facebook.com/v21.0/", t = "access_token=" + encodeURIComponent(token), get = async (path: string) => { const r = await fetch(G + path + (path.includes("?") ? "&" : "?") + t, { signal: AbortSignal.timeout(15000) }); return { ok: r.ok, status: r.status, j: (await r.json().catch(() => null)) as any }; };
+  const said = (x: { status: number; j: any }) => (x.j?.error?.message ? "Facebook said: " + String(x.j.error.message).slice(0, 220) : `Facebook answered ${x.status}.`);
+  try {
+    // a person's token lists their Pages; a Page's own token is asked about itself
+    let id = "", a = await get("me/accounts?fields=instagram_business_account&limit=50");
+    if (a.ok) id = String((a.j?.data || []).map((p: any) => p?.instagram_business_account?.id).find(Boolean) || "");
+    if (!id) { const b = await get("me?fields=instagram_business_account"); if (b.ok) id = String(b.j?.instagram_business_account?.id || ""); else if (!a.ok) return { error: said(a) }; }
+    if (!/^\d+$/.test(id)) return { error: "This Facebook token can't see an Instagram account. The Instagram account has to be linked to a Facebook Page you manage, and the token needs the permissions instagram_basic and pages_show_list (pages_read_engagement too, if Meta offers it)." };
+    const m = await get(id + `/media?fields=id,caption,media_type,media_url,thumbnail_url,permalink&limit=${n}`);
+    return m.ok ? { items: igPics(m.j?.data) } : { error: said(m) };
+  } catch { return { error: "Facebook didn't answer in time." }; }
+}
 async function igMedia(token: string, n: number): Promise<{ items?: WallPic[]; error?: string }> {
+  if (/^EAA/.test(token)) return igMediaFb(token, n);
   try {
     const r = await fetch(`https://graph.instagram.com/me/media?fields=id,caption,media_type,media_url,thumbnail_url,permalink&limit=${n}&access_token=${encodeURIComponent(token)}`, { signal: AbortSignal.timeout(15000) });
     const j: any = await r.json().catch(() => null);
     if (!r.ok) return { error: j?.error?.message ? "Instagram said: " + String(j.error.message).slice(0, 200) : `Instagram answered ${r.status}.` };
-    const items = (Array.isArray(j?.data) ? j.data : []).map((m: any) => ({ img: String((m.media_type === "VIDEO" ? m.thumbnail_url : m.media_url) || ""), url: String(m.permalink || ""), caption: oneLine(String(m.caption || "")).slice(0, 160) })).filter((x: WallPic) => /^https:\/\//.test(x.img));
-    return { items };
+    return { items: igPics(j?.data) };
   } catch { return { error: "Instagram didn't answer in time." }; }
 }
 /** Renews the token when it is over 30 days old (it can be renewed from one day after it was made until it runs out at 60). */
 async function igRenew(env: Env, scope: string, c: any) {
-  if (Date.now() - (+c.at || 0) < 30 * 86400000) return;
+  // a Facebook token (EAA…) can only be renewed with the app's secret, which is not kept here: the owner pastes a new one when it runs out
+  if (/^EAA/.test(String(c.token)) || Date.now() - (+c.at || 0) < 30 * 86400000) return;
   try {
     const r = await fetch(`https://graph.instagram.com/refresh_access_token?grant_type=ig_refresh_token&access_token=${encodeURIComponent(String(c.token))}`, { signal: AbortSignal.timeout(15000) });
     const j: any = await r.json().catch(() => null);

@@ -144,7 +144,8 @@ export function InstagramForm({ where }: { where: Where | null | undefined }) {
         <li>Your Instagram account must be a professional one (Business or Creator): Instagram app → Settings → Account type and tools. It's free.</li>
         <li>At <a className="underline" href="https://developers.facebook.com/apps/" target="_blank" rel="noopener noreferrer">developers.facebook.com/apps</a> create an app and add the product <b className="text-ink-100">Instagram</b> (“API setup with Instagram login”).</li>
         <li>There, under “Generate access tokens”, add your Instagram account and press <b className="text-ink-100">Generate token</b>. Copy the long token it shows.</li>
-        <li>Paste it below and save. It lasts 60 days and is renewed here by itself while the wall is in use.</li>
+        <li>Paste it below and save. A token that starts with <b className="text-ink-100">IGAA</b> lasts 60 days and is renewed here by itself while the wall is in use.</li>
+        <li>If Meta gives you a token that starts with <b className="text-ink-100">EAA</b> (a Facebook token), that works too: the Instagram account must be linked to a Facebook Page you manage, and the token needs the permissions instagram_basic and pages_show_list. This kind can't be renewed from here, so paste a new one when Test says it has run out.</li>
       </ol>
       <Secret id="ig-token" label="Instagram access token" saved={!!g?.token} value={token} onChange={setToken} />
       <div className="flex flex-wrap gap-2">

@@ -3,6 +3,7 @@
 // src/lib/cfdbSchema.ts
 var CFDB_SCHEMA = `
 create table if not exists members (scope text not null, email text not null, role text not null default 'owner', added_at text not null default (datetime('now')), primary key (scope, email));
+create index if not exists members_email on members (email, scope);
 create table if not exists files (scope text not null, path text not null, sha text not null, size integer not null default 0, parts integer not null default 1, type text not null default '', updated_at text not null, primary key (scope, path));
 create table if not exists chunks (scope text not null, path text not null, n integer not null, data blob not null, primary key (scope, path, n));
 create table if not exists codes (email text primary key, hash text not null, expires integer not null, tries integer not null default 0, sent integer not null default 0);
@@ -25,7 +26,7 @@ create index if not exists approvals_project on approvals (scope, project, creat
 create table if not exists approval_notes (id integer primary key autoincrement, token text not null, who text not null, body text not null, page text not null default '', kind text not null default 'comment', created_at text not null);
 create index if not exists approval_notes_token on approval_notes (token, id);
 `;
-var CFDB_VERSION = 83;
+var CFDB_VERSION = 84;
 var CFDB_WORKER_NAME = "picaffectz-db";
 
 // src/lib/lookdigest.ts
@@ -1151,7 +1152,10 @@ async function ensure(env) {
     env.DB.prepare("create index if not exists design_drafts_studio on design_drafts (studio, updated_at)"),
     env.DB.prepare("create table if not exists design_pics (studio text not null, ref integer not null, slot text not null, idx integer not null, data text not null, primary key (studio, ref, slot, idx))"),
     env.DB.prepare("create table if not exists dq_rate (k text primary key, n integer not null, exp integer not null)"),
-    env.DB.prepare("create table if not exists payments (rz_order text primary key, site text not null, order_no text not null, amount integer not null, status text not null default 'created', created_at text not null)")
+    env.DB.prepare("create table if not exists payments (rz_order text primary key, site text not null, order_no text not null, amount integer not null, status text not null default 'created', created_at text not null)"),
+    // people are looked up by their email alone at every sign-in, and payments by site and date
+    env.DB.prepare("create index if not exists members_email on members (email, scope)"),
+    env.DB.prepare("create index if not exists payments_site on payments (site, created_at)")
   ]);
   ensured = true;
   await ensureViews(env);

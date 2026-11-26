@@ -509,6 +509,9 @@ async function ensure(env: Env) {
     env.DB.prepare("create table if not exists design_pics (studio text not null, ref integer not null, slot text not null, idx integer not null, data text not null, primary key (studio, ref, slot, idx))"),
     env.DB.prepare("create table if not exists dq_rate (k text primary key, n integer not null, exp integer not null)"),
     env.DB.prepare("create table if not exists payments (rz_order text primary key, site text not null, order_no text not null, amount integer not null, status text not null default 'created', created_at text not null)"),
+    // people are looked up by their email alone at every sign-in, and payments by site and date
+    env.DB.prepare("create index if not exists members_email on members (email, scope)"),
+    env.DB.prepare("create index if not exists payments_site on payments (site, created_at)"),
   ]);
   ensured = true;
   await ensureViews(env);

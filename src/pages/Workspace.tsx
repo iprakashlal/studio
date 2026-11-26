@@ -7,6 +7,11 @@ import { SitesHostingCard } from "./SitesHostingCard";
 import { AiEngineCard, StudioInstagramCard, StudioWhatsAppCard } from "./AiEngine";
 import { setAiEngine } from "../lib/ai";
 import { hides, limitsOf, setStudioHidden, useClientStudio } from "../lib/features";
+import { loadMyRole, roleHides, useMyRole } from "../lib/myrole";
+import { roleLabel, userRoot } from "../lib/roles";
+import { RoleManagement } from "../ui/RoleManagement";
+import { PinCard } from "../ui/PinSignIn";
+import { cfCall } from "../lib/cfdb";
 import { setThemeAllow, setThemeLimit } from "../themes/limit";
 import { DASH_DEFAULT, DASH_STATS } from "../lib/dashstats";
 import { TEMPLATES } from "../schema";
@@ -67,7 +72,10 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
   const [index, setIndex] = useState<StudioIndex | null>(null);
   // A client Studio (set up by a Studio Partner) hides what the partner chose, and never offers Migration or Studio Partners.
   const client = useClientStudio();
-  const hid = useMemo(() => hides(client, index), [client, index]);
+  // Role Management: what this person's role hides, on top of what a client Studio hides. An Administrator can look at someone else's projects.
+  const role = useMyRole();
+  const [viewAs, setViewAs] = useState("");
+  const hid = useMemo(() => { const a = hides(client, index), b = roleHides(role, !!viewAs); return (k: string) => a(k) || b(k); }, [client, index, role, viewAs]);
   // A client Studio's limits: how many themes it offers and how many sites of each type it may have.
   const limits = useMemo(() => limitsOf(client, index), [client, index]);
   useEffect(() => { if (index) setAiEngine(index.ai?.engine); }, [index?.ai?.engine]);
@@ -79,8 +87,15 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
 
   const load = () => {
     setErr(""); setBootAt(1);
-    studio.loadIndex().then((i) => { setBootAt(2); setIndex(i); }).catch((e) => setErr(explain(e)));
+    loadMyRole(repo.demo).then((r) => {
+      // Someone who isn't an Administrator works in their own space; an Administrator in the Studio's list, or in the space of the person they chose to look at.
+      const other = r.managed && r.admin ? viewAs : "";
+      studio.space = r.managed && !r.admin ? userRoot(r.email) : other ? userRoot(other) : ""; studio.viewing = !!other;
+      return studio.loadIndex();
+    }).then((i) => { setBootAt(2); setIndex(i); }).catch((e) => setErr(explain(e)));
   };
+  const lookAt = (email: string) => { setViewAs(email); setIndex(null); };
+  useEffect(() => { if (!index && bootAt) load(); }, [viewAs]);
   // The publishing token (if any) is unlocked first, so live-site checks can read the sites' repositories.
   useEffect(() => { let on = true; (repo.demo ? Promise.resolve(null) : ghPublish.load(session.token)).finally(() => { if (on) load(); }); return () => { on = false; }; }, [studio]);
   const b = useBrand();
@@ -179,10 +194,12 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
     // Customize: the Studio's name, badge, pages and admin menus. Hostings: accounts and where each site is hosted.
     const showCustomize = ["brand", "badge", "pages", "menus"].some((k) => !hid(k)), showHostings = !hid("hosting");
     const want = route.split("/")[1] || "general";
-    const showDesign = !hid("design"), showThemes = !hid("themes");
+    const sharedOk = !role.managed || role.admin || !!role.privs.shared;
+    const showDesign = !hid("design") && sharedOk, showThemes = !hid("themes") && sharedOk;
     const tab = (want === "customize" && !showCustomize) || (want === "hostings" && !showHostings) || (want === "design" && !showDesign) || (want === "themes" && !showThemes) ? "general" : want;
     // "social" and "login" are parts of General: they are listed under it, set in a little
-    const tabList = [["general", "General"], ["social", "Social setup"], ["login", "Studio login setup"], ["ai", "AI"], ...(showCustomize ? [["customize", "Customize"]] : []), ...(showHostings ? [["hostings", "Hostings"]] : []), ...(showDesign ? [["design", "Design yourself"]] : []), ...(showThemes ? [["themes", "Themes"]] : []), ["update", "Updates"], ...(client ? [] : [["migration", "Migration"]]), ["help", "Help"]] as [string, string][];
+    const adminTab = (k: string) => !role.managed || role.admin || !["social", "login", "hostings", "update", "migration", "roles"].includes(k);
+    const tabList = ([["general", "General"], ["social", "Social setup"], ["login", "Studio login setup"], ...(role.api ? [["roles", "Role Management"]] : []), ["ai", "AI"], ...(showCustomize ? [["customize", "Customize"]] : []), ...(showHostings ? [["hostings", "Hostings"]] : []), ...(showDesign ? [["design", "Design yourself"]] : []), ...(showThemes ? [["themes", "Themes"]] : []), ["update", "Updates"], ...(client ? [] : [["migration", "Migration"]]), ["help", "Help"]] as [string, string][]).filter(([k]) => adminTab(k));
     const here = tabList.some(([k]) => k === tab) ? tab : "general";
     /** The settings screen: its sections down the left on a wide screen (a row of tabs on a narrower one, a menu on a phone),
      *  and the chosen section using the rest of the width. */
@@ -220,6 +237,8 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
       <StudioEmailCard repo={repo} />
       {session.cfg.owner === "cloudflare" ? <StudioPeopleCard /> : <section className="card flex flex-col gap-2 p-5" aria-label="People and PIN"><h3 className="text-[15px] font-extrabold">Sign in with a PIN, and who can sign in</h3><p className="text-sm text-ink-300">These are for a Studio hosted on Cloudflare (Settings → Hostings). This Studio signs in with its GitHub account.</p></section>}
     </FoldCards></>);
+    // Role Management: people, their roles, and what each role can do (kept in the Studio's database).
+    if (here === "roles") return shell(<div className="flex max-w-5xl flex-col gap-4"><p className="text-sm text-ink-300">Who can sign in to this Studio, the role each person has, and what each role is allowed to do. Each person has their own projects and their own choices; Administrators see everyone's.</p><RoleManagement api={role.api} scopeName={role.scope} where="studio" /><PinCard api={role.api} /></div>);
     if (tab === "design") return shell(<DesignLookTab session={session} studio={studio} index={index} onIndex={setIndex} />);
     if (tab === "themes") return shell(<ThemesSettingsTab session={session} studio={studio} index={index} onIndex={setIndex} />);
     if (tab === "help") return shell(<div className="max-w-3xl"><StudioHelp /></div>);
@@ -260,14 +279,29 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
   }
 
   const only = /^type\/([a-z]+)$/.exec(route)?.[1];
-  return <>{header}<Dashboard key={(only || "all") + (route === "designs" ? "-d" : route === "design-queries" ? "-q" : "")} designsTab={hid("design") ? "" : route === "designs" ? "previews" : route === "design-queries" ? "queries" : ""} studio={studio} index={index} onIndex={setIndex} token={session.token} hid={hid} max={limits.max} only={only && TEMPLATES[only] ? only : undefined} /><footer className="py-6"><StudioPageLinks host={null} repo={repo} where="footer" /></footer></>;
+  return <>{header}{role.managed && <WhoseProjects role={role} viewAs={viewAs} onPick={lookAt} />}<Dashboard key={(only || "all") + (route === "designs" ? "-d" : route === "design-queries" ? "-q" : "")} designsTab={hid("design") ? "" : route === "designs" ? "previews" : route === "design-queries" ? "queries" : ""} studio={studio} index={index} onIndex={setIndex} token={session.token} hid={hid} max={limits.max} only={only && TEMPLATES[only] ? only : undefined} /><footer className="py-6"><StudioPageLinks host={null} repo={repo} where="footer" /></footer></>;
 }
 
+/** Above the projects: whose they are. An Administrator can switch to anyone's; everyone else sees their role. */
+function WhoseProjects({ role, viewAs, onPick }: { role: ReturnType<typeof useMyRole>; viewAs: string; onPick: (email: string) => void }) {
+  const [people, setPeople] = useState<{ email: string; role: string }[]>([]);
+  useEffect(() => { if (role.admin && role.api) cfCall<any>(role.api, "/roles?scope=" + encodeURIComponent(role.scope)).then((r) => setPeople((r.members || []).filter((m: any) => m.role !== "owner" && m.role !== "partner"))).catch(() => {}); }, [role.admin, role.api, role.scope]);
+  if (!role.admin) return <div className="mx-auto mt-4 flex w-full max-w-[1680px] px-4 sm:px-6"><p className="rounded-lg border border-ink-700 bg-ink-900 px-3 py-2 text-[13px] text-ink-300">Signed in as <b className="text-ink-100">{roleLabel(role.role)}</b>. These are your own projects; nobody but you and the Administrators sees them.</p></div>;
+  if (!people.length) return null;
+  return (
+    <div className="mx-auto mt-4 flex w-full max-w-[1680px] flex-wrap items-center gap-2 px-4 text-[13px] text-ink-300 sm:px-6">
+      <label htmlFor="whose" className="font-semibold text-ink-100">Projects of</label>
+      <select id="whose" className="input w-auto py-1" value={viewAs} onChange={(e) => onPick(e.target.value)}><option value="">Me and the Administrators</option>{people.map((m) => <option key={m.email} value={m.email}>{m.email} ({roleLabel(m.role)})</option>)}</select>
+      {viewAs && <span>You can open, edit and delete these. New projects are made in your own list.</span>}
+    </div>
+  );
+}
 /** Settings → Help: guided tours of the Studio, end to end. */
 /** Parts of General, listed under it in the settings menu. */
 const SUB_TABS = ["social", "login"];
 /** A small line icon for each settings section. */
 const SET_ICONS: Record<string, string> = {
+  roles: "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75",
   social: "M7 3h10a4 4 0 014 4v10a4 4 0 01-4 4H7a4 4 0 01-4-4V7a4 4 0 014-4zM12 8.5a3.5 3.5 0 100 7 3.5 3.5 0 000-7zM17.2 6.8h.01",
   login: "M12 3a4 4 0 00-4 4v3H6.5A1.5 1.5 0 005 11.5v8A1.5 1.5 0 006.5 21h11a1.5 1.5 0 001.5-1.5v-8a1.5 1.5 0 00-1.5-1.5H16V7a4 4 0 00-4-4zM10 10V7a2 2 0 014 0v3M12 14v3",
   ai: "M9 4h6a3 3 0 013 3v6a3 3 0 01-3 3H9a3 3 0 01-3-3V7a3 3 0 013-3zM9.5 9.5h.01M14.5 9.5h.01M9.5 12.5c.8.7 1.6 1 2.5 1s1.7-.3 2.5-1M12 4V2M8 16v3M16 16v3M6 10H4M20 10h-2",

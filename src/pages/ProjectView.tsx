@@ -1,3 +1,4 @@
+import { useMyRole } from "../lib/myrole";
 import { studioDirty } from "../lib/studioupdate";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { currentBadge } from "../lib/badge";
@@ -169,7 +170,10 @@ export function ProjectView({ studio, index, project, session, onIndex }: { stud
 
   // Project tools: in Settings → Publish & tools, and in the top bar when pinned (each project's own choice).
   const demo = studio.repo.demo;
-  const tools: { id: Modal; label: string; hint: string }[] = [
+  // Role Management: a role that may not publish (or export, or share for approval) isn't offered it.
+  const myR = useMyRole();
+  const mayTool = (id: Modal) => !myR.managed || myR.admin || !({ host: "publishCf", publish: "publishGh", export: "export", approve: "approve" } as Record<string, string>)[id as string] || !!myR.privs[({ host: "publishCf", publish: "publishGh", export: "export", approve: "approve" } as Record<string, string>)[id as string]];
+  const tools: { id: Modal; label: string; hint: string }[] = ([
     ...(project.host
       ? [{ id: "host" as Modal, label: `Publish to ${project.host.kind === "cloudflare" ? "Cloudflare" : "Netlify"}`, hint: "Publish this site to its hosting, with content and photos in your own database." }]
       : [{ id: "host" as Modal, label: "Host to External Services", hint: "Move the site to Cloudflare or Netlify hosting, with content and photos in your own database, and your own domain." }]),
@@ -180,7 +184,7 @@ export function ProjectView({ studio, index, project, session, onIndex }: { stud
     { id: "history", label: `History${project.exports.length ? ` (${project.exports.length})` : ""}`, hint: "Earlier versions you published or exported: download them or load one into the editor." },
     { id: "export", label: "Export / Import ZIP", hint: "Download the whole site as a ZIP file, or load one back into this project." },
     ...(!demo ? [{ id: "write" as Modal, label: "Write text from a site", hint: "Write new, original text for your brand from a site in the same line of business." }] : []),
-  ];
+  ] as { id: Modal; label: string; hint: string }[]).filter((t) => mayTool(t.id));
   const pinned = project.pinned ?? index.pinned ?? ["host"];
   const [pinBusy, setPinBusy] = useState(false);
   const pin = async (id: string, on: boolean) => {
@@ -305,8 +309,8 @@ export function ProjectView({ studio, index, project, session, onIndex }: { stud
         draft.contact = draft.contact || {}; draft.contact.form = { ...(draft.contact.form || {}), enabled: true, saveTo: "file", fileUrl: url };
         if (await save(true)) { setV((n) => n + 1); setSavedV((n) => n + 1); } else bump();
       }} />}
-      {modal === "publish" && <PublishDialog {...{ studio, project, tpl, draft, dirty, save, onIndex, getBlob, session }} onClose={() => setModal("")} />}
-      {modal === "host" && <HostDialog {...{ studio, project, tpl, draft, dirty, save, onIndex, getBlob, session }} onClose={() => setModal("")} />}
+      {modal === "publish" && mayTool("publish") && <PublishDialog {...{ studio, project, tpl, draft, dirty, save, onIndex, getBlob, session }} onClose={() => setModal("")} />}
+      {modal === "host" && mayTool("host") && <HostDialog {...{ studio, project, tpl, draft, dirty, save, onIndex, getBlob, session }} onClose={() => setModal("")} />}
       {modal === "live" && <LiveSitesDialog {...{ studio, project, session, dirty, onIndex }} current={draft} defaults={defaults.current} onImported={(c) => { replaceDraft(c); setSavedV(v + 1); setConflict(null); }} onClose={() => setModal("")} />}
       {modal === "reviews" && <GoogleReviewsDialog {...{ session, project, draft }} onApply={(c, n) => { replaceDraft(c); toast(`${n} Google review${n === 1 ? "" : "s"} added. Check them, then Save.`); }} onClose={() => setModal("")} />}
       {modal === "approve" && draft && <ApprovalDialog project={project} draft={draft} dirty={dirty} me={session.username || ""} onClose={() => setModal("")} />}

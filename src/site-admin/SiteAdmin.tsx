@@ -382,7 +382,7 @@ function Workspace({ info, onInfo, repo, account, onSignOut, hosted, ghToken }: 
     setSaving(false);
   };
 
-  const extras = useMemo(() => [
+  const extrasAll = useMemo(() => [
     ...(tpl.id === "business" || tpl.id === "restaurant" || tpl.id === "events" ? [
       { id: "enquiries", label: tpl.id === "events" ? "Registrations & messages" : "Enquiries", group: "Forms & records", desc: tpl.id === "events" ? "Every registration for the event (with its number, what was chosen and the total), and the messages sent through the contact form." : tpl.id === "restaurant" ? "Table-booking and event requests sent through your website's form." : "Messages sent through your website's enquiry form.", render: () => <EnquiriesPanel cfg={hosted && "api" in hosted ? null : enquiriesCfg(saved, hosted)} cf={hosted && "api" in hosted ? hosted : undefined} hosted={!!hosted} email={saved?.contact?.email} form={saved?.contact?.form} ghToken={ghToken} only="enquiries" /> },
     ] : []),
@@ -404,11 +404,19 @@ function Workspace({ info, onInfo, repo, account, onSignOut, hosted, ghToken }: 
     ...(tpl.id === "store" || tpl.id === "business" ? [
       { id: "warranty-records", label: "Warranty records", group: "Forms & records", desc: "Products' numbers, warranty and service status, for the site's warranty & status check.", render: () => <WarrantyPanel repo={repo} cfg={draft?.warranty} /> },
     ] : []),
-    ...(hosted && "api" in hosted ? [{ id: "people", label: "Who can sign in", group: "Advanced setup", desc: "The emails that can open this admin page, with a code sent to them.", render: () => <PeoplePanel cf={hosted} /> }] : []),
+    ...(hosted && "api" in hosted ? [{ id: "people", label: "Role Management", group: "Settings", desc: "Who can sign in to this admin page, each person's role, and what each role may do.", render: () => <PeoplePanel cf={hosted} /> }] : []),
     { id: "backup", label: "Backup & reset", group: "Settings", desc: "Copy, restore or reset the site's content.", render: () => <BackupPanel draft={draft} onReplace={(c) => { setDraft(clone(c)); bump(); }} loadDefaults={async () => clone(saved)} hosted={!!hosted} /> },
     { id: "help", label: "Help", group: "Settings", desc: "A quick tour of the admin, and how to turn it on or off.", render: () => <HelpPanel /> },
     { id: "account", label: "Account", group: "Settings", desc: "Your login on this device.", render: () => account },
   ], [draft, saved, account, tpl.id, hosted, ghToken, repo]);
+
+  // Role Management: what this person's role may do on this site (a site on the Cloudflare database; otherwise everything, as before).
+  const [sitePrivs, setSitePrivs] = useState<Record<string, boolean> | null>(null);
+  const cfApi = hosted && "api" in hosted ? hosted.api : "", cfSite = hosted && "api" in hosted ? hosted.site : "";
+  useEffect(() => { if (!cfApi) return; cfCall<any>(cfApi, "/roles?scope=" + encodeURIComponent("site:" + cfSite)).then((r) => { if (r?.ready && r.me?.role !== "owner" && r.me?.role !== "partner") setSitePrivs(r.me.privs); }).catch(() => { /* an older database: no roles */ }); }, [cfApi, cfSite]);
+  const RECORDS = ["enquiries", "purchased", "inventory", "recovery", "reviews", "customer-data", "warranty-records"];
+  const extras = useMemo(() => !sitePrivs ? extrasAll : extrasAll.filter((x: any) => (sitePrivs.orders || !RECORDS.includes(x.id)) && (sitePrivs.settings || !["Settings", "Advanced setup"].includes(x.group) || ["help", "account", "people"].includes(x.id))), [extrasAll, sitePrivs]);
+  const mayEdit = !sitePrivs || !!sitePrivs.edit;
 
   if (err) return <div className="grid min-h-screen place-items-center px-4"><div className="card flex max-w-md flex-col gap-3 p-6"><h1 className="text-lg font-extrabold">Couldn't load the site's content</h1><p className="text-sm text-ink-300">{err}</p><div className="flex gap-2"><button className="btn btn-pri" onClick={load}>Try again</button><button className="btn" onClick={onSignOut}>Sign out</button></div></div></div>;
   if (!draft) return <SkelEditor note="Loading the content" />;
@@ -430,7 +438,7 @@ function Workspace({ info, onInfo, repo, account, onSignOut, hosted, ghToken }: 
             ? <button type="button" className="btn btn-sm" disabled={!dirty} onClick={async () => { if (await confirm("Discard unsaved changes?", draftSha ? "The editor goes back to your last saved draft." : "Your edits since the last save will be lost.", "Discard", true)) { setDraft(clone(base)); setV(0); setSavedV(0); } }}>Discard</button>
             : <button type="button" className="btn btn-sm" disabled={saving} onClick={dropDraft}>Delete draft</button>}
           <button type="button" className="btn btn-sm" data-tour="save" disabled={!dirty || saving} onClick={saveDraft} title="Saves a draft in the site's repository. The live site doesn't change.">Save</button>
-          <button type="button" className="btn btn-pri btn-sm" data-tour="publish" disabled={(!dirty && !draftSha) || saving} onClick={save} title="Makes your changes live.">Save &amp; publish</button>
+          <button type="button" className="btn btn-pri btn-sm" data-tour="publish" disabled={(!dirty && !draftSha) || saving || !mayEdit} onClick={save} title={mayEdit ? "Makes your changes live." : "Your role can't save changes to this site. Ask its Administrator (Role Management)."}>Save &amp; publish</button>
         </div>
       </header>
       {moved && (

@@ -6,11 +6,12 @@
 import JSZip from "jszip";
 import { parseCsv } from "./warranty";
 import { findProducts } from "./saliency";
+import type { LItem, LPage } from "./menulayout";
 
 const load = new Function("u", "return import(u)") as (u: string) => Promise<any>;
-export type PamphletPage = { n: number; text: string; image?: string; /** The photo as it was chosen (full size), for the on-device reader. */ full?: Blob };
+export type PamphletPage = { n: number; text: string; /** A PDF page's pieces of text with their boxes (pixels of the page drawn 1600 wide), for reading it by its layout. */ lay?: { w: number; h: number; items: LItem[] }; image?: string; /** The photo as it was chosen (full size), for the on-device reader. */ full?: Blob };
 /** A picture that may show a product: its page (or spreadsheet row) and where it sits, top to bottom. */
-export type PamphletPic = { page: number; blob: Blob; y: number; x: number; /** already cut out (see-through background) */ cut?: boolean };
+export type PamphletPic = { page: number; blob: Blob; y: number; x: number; /** its size on the page, in the same pixels */ w?: number; h?: number; /** already cut out (see-through background) */ cut?: boolean };
 export type Pamphlet = { kind: "pdf" | "sheet" | "photos"; pages: PamphletPage[]; pics: PamphletPic[]; photo(n: number): Promise<Blob | null>; close(): void };
 const MAX_PAGES = 12, MAX_ROWS = 300;
 
@@ -72,6 +73,9 @@ async function readPdf(pdf: File, pdfBase: string, o: { find?: boolean; step?: (
   for (let n = 1; n <= Math.min(doc.numPages, MAX_PAGES); n++) {
     const page = await doc.getPage(n), tc = await page.getTextContent();
     // Text runs in reading order: group by line (y), left to right.
+    // Every piece of text with its box, in the pixels of the page drawn 1600 wide (the same the pictures below are cut from).
+    const vp1 = page.getViewport({ scale: 1 }), sc = Math.min(3, 1600 / vp1.width), vpL = page.getViewport({ scale: sc });
+    const lay = { w: vpL.width, h: vpL.height, items: (tc.items as any[]).filter((it) => it.str?.trim()).map((it) => { const [vx, vy] = vpL.convertToViewportPoint(it.transform[4], it.transform[5]), h = (it.height || Math.hypot(it.transform[2], it.transform[3])) * sc; return { s: String(it.str), x: vx, y: vy - h, w: (it.width || 0) * sc, h }; }) };
     const runs = (tc.items as any[]).filter((it) => it.str?.trim()).map((it) => ({ x: it.transform[4], y: Math.round(it.transform[5]), s: it.str }));
     runs.sort((a, b) => b.y - a.y || a.x - b.x);
     const lines: string[] = []; let y: number | null = null, cur: string[] = [];
@@ -98,7 +102,7 @@ async function readPdf(pdf: File, pdfBase: string, o: { find?: boolean; step?: (
     const pictureOnly = text.split(/\s+/).length < 25;
     if (pictureOnly || boxes.length) {
       const { c, vp } = await render(n, 1600);
-      if (pictureOnly) pages.push({ n, text, image: await blobUri(await canvasJpeg(c)) }); else pages.push({ n, text });
+      if (pictureOnly) pages.push({ n, text, lay, image: await blobUri(await canvasJpeg(c)) }); else pages.push({ n, text, lay });
       const area = c.width * c.height, before = pics.length;
       for (const b of boxes) {
         const [x1, y1, x2, y2] = vp.convertToViewportRectangle(b);
@@ -107,12 +111,12 @@ async function readPdf(pdf: File, pdfBase: string, o: { find?: boolean; step?: (
         if (w < 110 || h < 110 || w * h < area * 0.015 || w * h > area * 0.92) continue;
         const cut = document.createElement("canvas"); cut.width = Math.round(w); cut.height = Math.round(h);
         cut.getContext("2d")!.drawImage(c, x, yy, w, h, 0, 0, cut.width, cut.height);
-        pics.push({ page: n, blob: await canvasJpeg(cut, 0.92), x, y: yy });
+        pics.push({ page: n, blob: await canvasJpeg(cut, 0.92), x, y: yy, w, h });
       }
       // The page draws pictures, but none is a separate product picture (a flattened design or a scan): find the
       // products in it. Pages with only text and drawn shapes have no product photos, so they're skipped.
       if (pics.length === before && o.find && boxes.length) pics.push(...(await find(c, n, Math.min(doc.numPages, MAX_PAGES), o.step)));
-    } else pages.push({ n, text });
+    } else pages.push({ n, text, lay });
   }
   pics.sort((a, b) => a.page - b.page || a.y - b.y || a.x - b.x);
   return { kind: "pdf", pages, pics, photo: async (n) => { try { return await canvasJpeg((await render(n, 1600)).c); } catch { return null; } }, close: () => { doc.destroy(); } };
@@ -198,4 +202,10 @@ export function guessPics(products: { page: number }[], pics: PamphletPic[]): nu
     const onPage = pics.map((x, i) => (x.page === p.page ? i : -1)).filter((i) => i >= 0);
     return onPage[k] ?? -1;
   });
+}
+
+/** A PDF's pages as the layout reader wants them (lib/menulayout): text boxes and picture boxes, the pictures numbered as in `doc.pics`. */
+export function pamphletLayout(doc: Pamphlet): LPage[] {
+  if (doc.kind !== "pdf") return [];
+  return doc.pages.filter((p) => p.lay).map((p) => ({ n: p.n, w: p.lay!.w, h: p.lay!.h, items: p.lay!.items, pics: doc.pics.map((x, i) => ({ x: x.x, y: x.y, w: x.w || 0, h: x.h || 0, i, page: x.page })).filter((x) => x.page === p.n && x.w > 0) }));
 }

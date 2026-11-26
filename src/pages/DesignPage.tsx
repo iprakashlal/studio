@@ -150,6 +150,8 @@ function useDiyLook(auto: "" | "light" | "dark" = "") {
       // the top bar's own colour, with text that reads on it
       !ui.header && pageCol && pageCol !== "transparent" ? `.diy-page:not(.has-sbg)>header,.diy-page.has-sbg[data-sbg=color]>header{background-color:color-mix(in srgb,var(--diy-bg) 92%,transparent)!important}` : "",
       ui.header ? `.diy-page.diy-page.diy-page>header{background:${ui.header}!important;border-color:transparent!important;--ink-100:${on(ui.header)};--ink-200:${on(ui.header)};--ink-300:${on(ui.header)};--ink-400:${on(ui.header)};--ink-500:${on(ui.header)};color:rgb(${on(ui.header)})}.diy-page>header .btn{color:rgb(${on(ui.header)});border-color:rgb(${on(ui.header)}/.35);background:transparent}` : "",
+      // the boxes a visitor types in: their own colour, with text and hints that read on it
+      ui.field ? `.diy-page .diy-field,.diy-page .input{background-color:${ui.field}!important;border-color:rgb(${on(ui.field)}/.22)!important;color:rgb(${on(ui.field)})!important}.diy-page .diy-field :is(input,textarea),.diy-page .diy-field{--ink-100:${on(ui.field)};--ink-200:${on(ui.field)};color:rgb(${on(ui.field)})}.diy-page .diy-field :is(input,textarea)::placeholder,.diy-page .input::placeholder{color:rgb(${on(ui.field)}/.5)!important}.diy-page .diy-field .btn-ghost{color:rgb(${on(ui.field)}/.75)}` : "",
       // the buttons' own colour
       ui.btn ? `.diy-page .btn-pri,[role=dialog] .btn-pri{background-color:${ui.btn}!important;border-color:${ui.btn}!important;color:rgb(${on(ui.btn)})!important}.diy-page .btn-pri:hover,[role=dialog] .btn-pri:hover{filter:brightness(.93)}` : "",
       // the shapes of the chat's messages
@@ -169,7 +171,7 @@ function useDiyLook(auto: "" | "light" | "dark" = "") {
     if (!st) { st = document.createElement("style"); st.id = id; document.head.appendChild(st); }
     if (st.textContent !== css) st.textContent = css;
     return () => { delete de.dataset.diyR; delete de.dataset.diyW; delete de.dataset.diyB; document.getElementById(id)?.remove(); document.getElementById(id + "-font")?.remove(); };
-  }, [ui.radius, ui.width, ui.font, ui.head, ui.header, ui.btn, ui.bubble, JSON.stringify([readDesignSettings().bg?.on, readDesignSettings().bg?.kind, readDesignSettings().bg?.color, readDesignSettings().chat?.page, !!readDesignSettings().chat?.image])]);
+  }, [ui.radius, ui.width, ui.font, ui.head, ui.header, ui.btn, ui.field, ui.bubble, JSON.stringify([readDesignSettings().bg?.on, readDesignSettings().bg?.kind, readDesignSettings().bg?.color, readDesignSettings().chat?.page, !!readDesignSettings().chat?.image])]);
 }
 /** The page's own background and text (Settings → Design yourself → Background and text): drawn by fx.js, the script that draws a
  *  website section's background, so every kind works the same here. It says whether light or dark text suits the background; the
@@ -188,10 +190,14 @@ function useDiyBg(on: boolean): "" | "light" | "dark" {
     };
     clear();
     if (!on || !bg?.on) { setAuto(""); return; }
+    if (bg.text === "light") setAuto("dark"); else if (bg.text === "dark") setAuto("light");
+    // A plain colour (alone, or under an animated background or pattern) says by itself whether the page is light or dark: that
+    // doesn't wait for, or depend on, what the page looked like when the background was drawn.
+    const known = !bg.text && bg.color && (!bg.kind || bg.kind === "anim" || bg.kind === "pattern") ? (() => { const n = parseInt(bg.color!.slice(1), 16), f = (v: number) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }; return 0.2126 * f(n >> 16) + 0.7152 * f((n >> 8) & 255) + 0.0722 * f(n & 255) < 0.4 ? "dark" : "light"; })() : "";
     const read = () => {
       const t = el.getAttribute("data-sbg-text");
       // light text is what the dark colours have, and the other way round; a colour of the owner's own is put on the page's text
-      setAuto(t === "light" ? "dark" : t === "dark" ? "light" : "");
+      setAuto(known ? (known as "dark" | "light") : t === "light" ? "dark" : t === "dark" ? "light" : "");
       if (t === "custom" && bg.textColor) { const n = parseInt(bg.textColor.slice(1), 16), rgb = `${n >> 16} ${(n >> 8) & 255} ${n & 255}`; INK.forEach((v) => el.style.setProperty(v, rgb)); } else INK.forEach((v) => el.style.removeProperty(v));
     };
     const mo = new MutationObserver(read); mo.observe(el, { attributes: true, attributeFilter: ["data-sbg-text"] });
@@ -402,7 +408,7 @@ function DesignPageInner({ studio, index, onIndex }: { studio?: Studio; index?: 
   const field$ = cur && (cur.type === "text" || cur.type === "long" || cur.id === "kind" || cur.id === "doc");
   const bar = (
     <form className="mx-auto flex w-full max-w-5xl flex-col gap-2" onSubmit={(e) => { e.preventDefault(); submit(); }} aria-label="Your answer">
-      <div className={`flex flex-wrap items-end gap-2 rounded-3xl border bg-ink-900 p-2 pl-4 shadow-xl transition focus-within:border-brand-400 ${field$ || cur?.type === "file" ? "border-ink-600" : "border-ink-700 opacity-80"}`}>
+      <div className={`diy-field flex flex-wrap items-end gap-2 rounded-3xl border bg-ink-900 p-2 pl-4 shadow-xl transition focus-within:border-brand-400 ${field$ || cur?.type === "file" ? "border-ink-600" : "border-ink-700 opacity-80"}`}>
         {cur?.type === "long"
           ? <textarea ref={field} aria-label={cur.ask(a)} rows={3} className="min-h-[3.5rem] min-w-0 flex-1 basis-[12rem] resize-none bg-transparent py-2 text-[15px] text-ink-100 outline-none placeholder:text-ink-500" placeholder={cur.ph?.(a)} value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); submit(); } }} />
           : cur?.input === "time" ? <span className="flex min-w-0 flex-1 basis-[12rem]"><TimeField bare value={text} onChange={setText} label={cur.ask(a)} /></span>
@@ -886,7 +892,7 @@ function useEmailChat(host: DesignHost | null, onPass: (p: Pass) => void): { thr
   );
   const composer = (
     <form className="flex flex-col gap-2" onSubmit={asked ? check : ask} aria-label={asked ? "Your code" : "Your email"}>
-      <div className="flex items-end gap-2 rounded-3xl border border-ink-600 bg-ink-900 p-2 pl-4 shadow-xl focus-within:border-brand-400">
+      <div className="diy-field flex items-end gap-2 rounded-3xl border border-ink-600 bg-ink-900 p-2 pl-4 shadow-xl focus-within:border-brand-400">
         {asked
           ? <><label className="sr-only" htmlFor="eg-code">The 6-digit code we emailed you</label><input id="eg-code" className="min-w-0 flex-1 bg-transparent py-2.5 font-mono text-lg tracking-widest text-ink-100 outline-none placeholder:text-ink-500" inputMode="numeric" autoComplete="one-time-code" maxLength={6} placeholder="6-digit code" autoFocus value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))} />
             <button type="submit" className="btn btn-pri btn-sm rounded-full" disabled={busy || code.length < 6}>{busy ? "Checking…" : "Verify and start"}</button></>

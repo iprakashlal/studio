@@ -49,7 +49,7 @@ var CFDB_UPGRADES = [
     "create index if not exists enquiries_ref on enquiries (site, ref)"
   ] }
 ];
-var CFDB_VERSION = 100;
+var CFDB_VERSION = 101;
 var CFDB_WORKER_NAME = "picaffectz-db";
 
 // src/lib/diylook.ts
@@ -82,6 +82,7 @@ function cleanDiyLook(x) {
     if (typeof s.accent === "string" && HEX.test(s.accent)) u.accent = s.accent.toLowerCase();
     if (typeof s.header === "string" && HEX.test(s.header)) u.header = s.header.toLowerCase();
     if (typeof s.btn === "string" && HEX.test(s.btn)) u.btn = s.btn.toLowerCase();
+    if (typeof s.field === "string" && HEX.test(s.field)) u.field = s.field.toLowerCase();
     if (DIY_BUBBLES.some(([k]) => k && k === s.bubble)) u.bubble = s.bubble;
     if (DIY_FONTS.includes(s.font)) u.font = s.font;
     if (DIY_FONTS.includes(s.head)) u.head = s.head;

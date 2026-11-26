@@ -703,7 +703,7 @@ function navHTML() {
   const B = C.brand, logo = imgUrl(B.logo);
   const items = multi()
     ? mpages().map((p) => ({ label: C.site.pageLabels[p] || p, url: PAGES[p], on: PAGE === p }))
-    : flowed().filter((s) => s.show !== false && s.inNav && RENDER[s.id]).map((s) => ({ label: s.label, url: AT + "#" + s.id }));
+    : flowed().filter((s) => s.show !== false && s.inNav && RENDER[s.id] && (s.id !== "wall" || wallSlot())).map((s) => ({ label: s.label, url: AT + "#" + s.id }));
   spList().filter((p) => p.inNav).forEach((p) => items.push({ label: p.navLabel || p.title, url: spHref(p), on: PAGE === "page" && spSlug(p) === spSlug({ slug: spCur() }) }));
   return `<header class="nav" id="top"><div class="wrap nav-in">
       <a class="brand" href="${multi() || PAGE !== "home" ? PAGES.home : "#top"}">${imgUrl(B.logoVideo) ? `<video class="logo" src="${esc(imgUrl(B.logoVideo))}"${logo ? ` poster="${esc(logo)}"` : ""} autoplay muted loop playsinline aria-hidden="true" style="${logoCss(36)}"></video>` : logo ? `<img class="logo" src="${esc(logo)}" alt="" style="${logoCss(36)}">` : `<span class="logo mark" style="${logoCss(36).replace(/height:(\d+)px;width:auto.*/, "width:$1px;height:$1px")}">${esc(initials(B.name))}</span>`}${B.showName !== false ? `<span class="bn">${esc(B.name)}</span>` : ""}</a>
@@ -719,7 +719,7 @@ function pageHead() {
 }
 function footerHTML() {
   const F = C.footer, B = C.brand, K = C.contact;
-  const cols = multi() ? mpages().map((p) => `<a href="${PAGES[p]}">${esc(C.site.pageLabels[p] || p)}</a>`) : C.sections.filter((s) => s.show !== false && s.inNav && RENDER[s.id]).map((s) => `<a href="${AT}#${s.id}">${esc(s.label)}</a>`);
+  const cols = multi() ? mpages().map((p) => `<a href="${PAGES[p]}">${esc(C.site.pageLabels[p] || p)}</a>`) : C.sections.filter((s) => s.show !== false && s.inNav && RENDER[s.id] && (s.id !== "wall" || wallSlot())).map((s) => `<a href="${AT}#${s.id}">${esc(s.label)}</a>`);
   spList().filter((p) => p.inFooter !== false).forEach((p) => cols.push(`<a href="${esc(spHref(p))}">${esc(p.navLabel || p.title)}</a>`));
   if (ckOn()) cols.push(`<a href="#cookie-settings">${esc(C.consent.reopenLabel || "Cookie settings")}</a>`);
   return `<footer class="foot" id="footer"><div class="wrap"><div class="foot-grid">
@@ -796,7 +796,8 @@ let wallP = null;
 function wall() {
   if (!wallOn() && !window.SiteWall) return;
   (wallP ||= new Promise((ok, no) => { if (window.SiteWall) return ok(); const s = document.createElement("script"); s.src = "assets/wall.js"; s.onload = () => ok(); s.onerror = no; document.head.appendChild(s); }))
-    .then(() => window.SiteWall.mount(C, { on: wallOn(), slot: "only", imgUrl })).catch(() => {});
+    // A site saved before the wall became a row in the list has no row for it: it keeps its old place on the home page.
+    .then(() => window.SiteWall.mount(C, C.sections.some((x) => x.id === "wall") ? { on: wallOn(), slot: "only", imgUrl } : { sections: "#main > section", home: PAGE === "home", imgUrl })).catch(() => {});
 }
 /* The video section (assets/video.js): one video on the home page, placed among its sections. */
 let svP;

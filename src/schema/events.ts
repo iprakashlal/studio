@@ -102,9 +102,11 @@ const schema: Category[] = [
       { title: "Tickets, passes or categories", fields: [{ t: "note", text: "Used by tickets, delegate passes, team categories, stalls, race categories, seats and batches. An RSVP, a volunteer sign-up, press accreditation and a donation don't use them. Price 0 is free." },
         { t: "list", path: "register.tickets", max: 20, title: (it) => `${it.name || "Ticket"} · ${+it.price > 0 ? it.price : "Free"}${it.soldOut ? " (sold out)" : ""}${it.featured ? " ★" : ""}`, add: () => ({ name: "New ticket", price: 0, blurb: "", features: [], limit: 0, featured: false, soldOut: false }),
           item: [g2({ t: "text", path: "name", label: "Name" }, { t: "number", path: "price", label: "Price (0 = free)", min: 0, step: 1 }), { t: "text", path: "blurb", label: "One-line description" }, { t: "strings", path: "features", label: "What's included", addLabel: "Add line" },
-            g2({ t: "toggle", path: "featured", label: "Highlight this one" }, { t: "toggle", path: "soldOut", label: "Sold out" })] },
+            g3({ t: "number", path: "limit", label: "Places available (0 = no limit)", min: 0, step: 1 }, { t: "toggle", path: "featured", label: "Highlight this one" }, { t: "toggle", path: "soldOut", label: "Sold out" })] },
+        { t: "note", text: "A limit is counted by the site's database: when the places are taken the ticket shows as sold out by itself (cancel a registration under Registrations & messages to give its places back). A site without a database can't count, so mark it Sold out yourself." },
         g2({ t: "number", path: "register.maxPer", label: "Most of one kind a person can book", min: 1, step: 1 }, { t: "select", path: "settings.currency", label: "Currency", options: ["INR", "USD", "EUR", "GBP", "AUD", "CAD", "SGD", "AED", "NZD", "CHF"] }),
-        g2({ t: "toggle", path: "register.payLater", label: "Tell people how they pay", def: true }, { t: "text", path: "register.payLaterLabel", label: "Payment note", ph: "Pay at the venue" })] },
+        g2({ t: "toggle", path: "register.payLater", label: "Let people register now and pay later", def: true }, { t: "text", path: "register.payLaterLabel", label: "Words for paying later", ph: "Pay at the venue" }),
+        { t: "note", text: "Switch this off to take online payment only (set it up under Online payment). With no online payment set up, people can always register and pay later." }] },
       { title: "Tickets section on the site", fields: [g2({ t: "text", path: "tickets.eyebrow", label: "Small label above" }, { t: "text", path: "tickets.title", label: "Heading", ml: true }), { t: "textarea", path: "tickets.lede", label: "Intro line", rows: 2 },
         g3({ t: "text", path: "tickets.button", label: "Button label (empty uses the kind's own)" }, { t: "text", path: "tickets.soldOut", label: "Sold-out label" }, { t: "text", path: "tickets.free", label: "Word for a free ticket" }), { t: "text", path: "tickets.note", label: "Note under the tickets" }] },
       { title: "What the form asks", fields: [{ t: "note", text: "Name and email are always asked. “The kind's own” asks what suits the kind of registration (a team entry asks for the team's name, an RSVP for the number of guests…)." },
@@ -113,7 +115,23 @@ const schema: Category[] = [
       { title: "Your own questions", fields: [{ t: "list", path: "register.extra", max: 12, title: (it) => it.label || "Question", add: () => ({ label: "New question", type: "text", options: [], required: false }),
         item: [g2({ t: "text", path: "label", label: "Question" }, { t: "select", path: "type", label: "Answer", options: [{ value: "text", label: "One line" }, { value: "area", label: "A few lines" }, { value: "select", label: "Choose from a list" }, { value: "check", label: "A tick box" }] }),
           { t: "when", path: "type", is: "select", local: true, fields: [{ t: "strings", path: "options", label: "Choices", addLabel: "Add choice" }] }, { t: "toggle", path: "required", label: "Must be answered" }] }] },
-      { title: "Where registrations go", fields: [{ t: "note", text: "Each registration is saved with the site's messages and listed under Enquiries in the admin page, with its registration number, what was chosen and the total. (A site that has no database yet opens the visitor's email app instead, addressed to your contact email: give it one with Publish to Cloudflare in the Studio.)" }] },
+      { title: "Where registrations go", fields: [{ t: "note", text: "Each registration is saved with the site's messages and listed under Registrations & messages in the admin page (press Registrations there for the totals and a CSV download), with its registration number, what was chosen, the total and whether it is paid. The person gets a confirmation email when email is set up on the site's database. (A site that has no database yet opens the visitor's email app instead, addressed to your contact email: give it one with Publish to Cloudflare in the Studio.)" }] },
+    ],
+  },
+  {
+    id: "payments", label: "Online payment", group: "Event", desc: "Take payment for tickets, entries, stalls and donations when people register. Each needs your own account with the payment company.",
+    cards: [
+      { title: "How it works", fields: [{ t: "note", text: "Switch on the ones you use and connect your keys. The registration page then offers “Pay online”; the amount is worked out by your site's database from your tickets (never by the visitor's phone), and the registration is saved as Paid only after the payment company confirms the money arrived. Needs the site's own database (Publish to Cloudflare in the Studio). The currency is set under Registration." }] },
+      { title: "Razorpay", fields: [{ t: "toggle", path: "payments.razorpay.enabled", label: "Accept Razorpay (UPI, cards, netbanking)" }, { t: "connection", kind: "rz" },
+        { t: "note", text: "Opens over the registration page. Prices in INR only. Try it with a rzp_test_ key first: test mode takes no real money." }, { t: "text", path: "payments.razorpay.label", label: "Label on the registration page" }] },
+      { title: "Cashfree", fields: [{ t: "toggle", path: "payments.cashfree.enabled", label: "Accept Cashfree (UPI, cards, netbanking)" }, { t: "connection", kind: "cf" },
+        { t: "note", text: "The visitor pays on Cashfree's page and comes back. Needs a 10-digit mobile number, so keep Phone asked on the form. Prices in INR only." }, { t: "text", path: "payments.cashfree.label", label: "Label on the registration page" }] },
+      { title: "PhonePe", fields: [{ t: "toggle", path: "payments.phonepe.enabled", label: "Accept PhonePe (UPI, cards, netbanking)" }, { t: "connection", kind: "pe" },
+        { t: "note", text: "The visitor pays on PhonePe's page and comes back. Prices in INR only. Use the Client ID, version and secret of PhonePe's Standard Checkout." }, { t: "text", path: "payments.phonepe.label", label: "Label on the registration page" }] },
+      { title: "Stripe", fields: [{ t: "toggle", path: "payments.stripe.enabled", label: "Accept Stripe (cards from any country)" }, { t: "connection", kind: "st" },
+        { t: "note", text: "The visitor pays on Stripe's page and comes back." }, { t: "text", path: "payments.stripe.label", label: "Label on the registration page" }] },
+      { title: "PayPal", fields: [{ t: "toggle", path: "payments.paypal.enabled", label: "Accept PayPal" }, { t: "connection", kind: "pp" },
+        { t: "note", text: "The visitor pays on PayPal's page and comes back. PayPal doesn't take INR: use it for an event priced in USD, EUR or GBP." }, { t: "text", path: "payments.paypal.label", label: "Label on the registration page" }] },
     ],
   },
   {
@@ -244,6 +262,8 @@ function prepareEvents(c: any) {
   c.site ||= { multiPage: false };
   c.site.pageLabels = { home: "Home", schedule: "Schedule", lineup: "Line-up", about: "About", contact: "Contact", register: "Register", ...(c.site.pageLabels && typeof c.site.pageLabels === "object" ? c.site.pageLabels : {}) };
   c.settings = { currency: "INR", ...(c.settings && typeof c.settings === "object" ? c.settings : {}) };
+  c.payments = c.payments && typeof c.payments === "object" ? c.payments : {};
+  for (const k of ["razorpay", "cashfree", "phonepe", "stripe", "paypal"]) c.payments[k] = { enabled: false, label: "", ...(c.payments[k] && typeof c.payments[k] === "object" ? c.payments[k] : {}) };
   c.event = { type: "Conference", date: "", time: "", endDate: "", endTime: "", dateText: "", venue: "", city: "", mode: "inperson", onlineUrl: "", countdown: true, countLabel: "Starts in", endedText: "This event has ended. Thank you for being part of it.", ...(c.event && typeof c.event === "object" ? c.event : {}) };
   c.hero ||= {}; prepareSlides(c.hero, c.theme?.deep || "#0E1B2C"); prepareMaintenance(c);
   c.hero.panel = { show: true, dot: true, ...(c.hero.panel && typeof c.hero.panel === "object" ? c.hero.panel : {}) };
@@ -294,6 +314,7 @@ export const eventsTemplate: TemplateDef = {
     const F = c?.contact?.form || {}, R = c?.register || {};
     if (!c?.event?.date) w.push("The event has no date yet. Add one under Event details.");
     if (c?.event?.date && new Date(c.event.endDate || c.event.date).getTime() < Date.now() - 86400000) w.push("The event's date is in the past.");
+    if (R.payLater === false && !["razorpay", "cashfree", "phonepe", "stripe", "paypal"].some((k) => c?.payments?.[k]?.enabled)) w.push("Registration is set to online payment only, but no way to pay online is switched on (Online payment). People can still register and pay later until one is.");
     if (R.enabled !== false && !c?.contact?.email) w.push("Registration has no email to fall back on. Add one under Contact details.");
     if (F.enabled && F.saveTo === "file" && !/^https:\/\//.test(F.fileUrl || "")) w.push("Messages are set to save as JSON files, but the inbox isn't set up. Press Enquiry inbox at the top of the project.");
     if (/^horizon summit$/i.test(String(c?.brand?.name || "").trim())) w.push("The event name is still the sample (Horizon Summit).");

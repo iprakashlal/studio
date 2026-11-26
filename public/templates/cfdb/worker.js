@@ -25,7 +25,7 @@ create index if not exists approvals_project on approvals (scope, project, creat
 create table if not exists approval_notes (id integer primary key autoincrement, token text not null, who text not null, body text not null, page text not null default '', kind text not null default 'comment', created_at text not null);
 create index if not exists approval_notes_token on approval_notes (token, id);
 `;
-var CFDB_VERSION = 80;
+var CFDB_VERSION = 81;
 var CFDB_WORKER_NAME = "picaffectz-db";
 
 // src/lib/lookdigest.ts
@@ -762,8 +762,8 @@ async function notifyEnquiry(env, site, data, page) {
   const jobs = [];
   if (wantOwner && owners.length) {
     const OO = E2.orderOwner && typeof E2.orderOwner === "object" ? E2.orderOwner : {}, ov = { ...vars, name: vars.name || "your website", order: oneLine(String(data.order_no || "")), total: oneLine(String(data.total || "")) };
-    const subject = data.order_no ? oneLine(fill(String(OO.subject || "New order {order}{totalbit} from {name}"), { ...ov, totalbit: data.total ? " (" + data.total + ")" : "" })).slice(0, 150) || "New order" : oneLine(fill(String(F.notifySubject || "New enquiry from {name}"), { ...vars, name: vars.name || "your website" })).slice(0, 150) || "New enquiry";
-    const intro = data.order_no ? fill(String(OO.intro || "New order {order} on the {site} website."), ov) : fill(String(E2.enquiry?.intro || "New enquiry from the {site} website."), vars);
+    const subject = data.order_no ? oneLine(fill(String(OO.subject || "New order {order}{totalbit} from {name}"), { ...ov, totalbit: data.total ? " (" + data.total + ")" : "" })).slice(0, 150) || "New order" : oneLine(fill(String(F.notifySubject || (data.reg_no ? "New registration from {name} (" + data.reg_no + ")" : "New enquiry from {name}")), { ...vars, name: vars.name || "your website" })).slice(0, 150) || "New enquiry";
+    const intro = data.order_no ? fill(String(OO.intro || "New order {order} on the {site} website."), ov) : fill(String(E2.enquiry?.intro || (data.reg_no ? "New registration on the {site} website." : "New enquiry from the {site} website.")), vars);
     const foot = (data.order_no ? fill(String(OO.footer || "It is also saved under Purchased orders in the site's admin page."), ov) : fill(String(E2.enquiry?.footer || "It is also saved under Enquiries in the site's admin page."), vars)) + (EMAIL_RE.test(data.email || "") ? " Reply to this email to answer the visitor." : "");
     jobs.push(sendMail(env, owners, subject, WRAP(paras(intro) + table + paras(foot, "margin:0 0 8px;color:#667;font-size:13px")), EMAIL_RE.test(data.email || "") ? data.email : void 0).then(() => {
       said = "Emailed to " + owners.join(", ") + ".";
@@ -2127,6 +2127,104 @@ async function pgCheck(g, z, id, amount, cur) {
   }
   return { paid: false, id };
 }
+var isEvt = (c) => !!(c?.register && typeof c.register === "object" && c?.event && typeof c.event === "object");
+var EVT_REG = {
+  tickets: { label: "Tickets", tix: true, qty: true },
+  delegate: { label: "Delegate registration", tix: true, qty: true },
+  rsvp: { label: "RSVP" },
+  team: { label: "Team registration", tix: true },
+  stall: { label: "Stall booking", tix: true, qty: true },
+  entry: { label: "Participant entry", tix: true },
+  seat: { label: "Seat reservation", tix: true, qty: true },
+  enrol: { label: "Enrolment", tix: true },
+  donate: { label: "Donation", amount: true },
+  volunteer: { label: "Volunteer sign-up" },
+  media: { label: "Press accreditation" }
+};
+var evtKind = (c) => {
+  const k = String(c?.register?.kind || "");
+  return EVT_REG[k] ? k : EVT_REG[String(c?.theme?.regKind || "")] ? String(c.theme.regKind) : "tickets";
+};
+var evtOpen = (c) => {
+  const R = c?.register || {};
+  if (R.enabled === false) return false;
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(R.closes || ""));
+  return !(m && Date.now() > Date.UTC(+m[1], +m[2] - 1, +m[3]) + 36 * 36e5);
+};
+var evtTickets = (c) => (Array.isArray(c?.register?.tickets) ? c.register.tickets : []).filter((t) => t && String(t.name || "").trim());
+function evtBill(c, q) {
+  if (!isEvt(c)) return { error: "This site doesn't take registrations." };
+  if (!evtOpen(c)) return { error: oneLine(String(c.register.closedText || "Registration is closed.")).slice(0, 200) };
+  const kind = evtKind(c), K = EVT_REG[kind], T = evtTickets(c), max = Math.max(1, Math.min(50, Math.floor(+c.register.maxPer || 10)));
+  if (K.amount) {
+    const a = Math.round((+q?.amount || 0) * 100) / 100;
+    if (!(a >= 1) || a > 1e7) return { error: "Enter an amount." };
+    return { total: a, count: 1, kind, lines: [{ name: K.label, qty: 1, price: a }] };
+  }
+  const lines = [];
+  let total = 0, count2 = 0;
+  if (K.tix && T.length) {
+    const seen = /* @__PURE__ */ new Set();
+    for (const l of Array.isArray(q?.lines) ? q.lines.slice(0, 20) : []) {
+      const i = Math.floor(+l?.i), t = T[i], qty = Math.floor(+l?.qty || 0);
+      if (!t || seen.has(i) || qty < 1) continue;
+      seen.add(i);
+      const nm = oneLine(String(t.name)).slice(0, 80);
+      if (t.soldOut) return { error: `${nm} is sold out.` };
+      if (qty > (K.qty ? max : 1)) return { error: `You can book up to ${K.qty ? max : 1} of ${nm}.` };
+      const price = Math.max(0, +t.price || 0);
+      lines.push({ name: nm, qty, price });
+      total += price * qty;
+      count2 += qty;
+    }
+    if (!lines.length || !K.qty && lines.length > 1) return { error: "Choose an option first." };
+  }
+  return { total: Math.round(total * 100) / 100, count: count2 || 1, kind, lines };
+}
+async function evtSold(env, site) {
+  const out = {};
+  const rows = (await env.DB.prepare(`select data from enquiries where site = ? and status != 'cancelled' and instr(data, '"_lines"') > 0 order by id desc limit 5000`).bind(site).all()).results || [];
+  for (const r of rows) {
+    try {
+      for (const l of JSON.parse(JSON.parse(r.data)._lines || "[]")) if (l && l.name) out[String(l.name)] = (out[String(l.name)] || 0) + Math.max(0, Math.floor(+l.qty || 0));
+    } catch {
+    }
+  }
+  return out;
+}
+async function evtLeft(env, site, c) {
+  const lim = evtTickets(c).filter((t) => Math.floor(+t.limit || 0) > 0);
+  if (!lim.length) return {};
+  const sold = await evtSold(env, site), out = {};
+  for (const t of lim) {
+    const nm = oneLine(String(t.name)).slice(0, 80);
+    out[nm] = Math.max(0, Math.floor(+t.limit) - (sold[nm] || 0));
+  }
+  return out;
+}
+async function evtFull(env, site, c, bill) {
+  const left = await evtLeft(env, site, c);
+  for (const l of bill.lines) if (l.name in left && l.qty > left[l.name]) return left[l.name] > 0 ? `Only ${left[l.name]} left of ${l.name}. Choose fewer and try again.` : `${l.name} is sold out.`;
+  return "";
+}
+var evtWhen = (c) => {
+  const E2 = c?.event || {};
+  return oneLine(String(E2.dateText || [E2.date, E2.time].filter(Boolean).join(", ")));
+};
+async function regMail(env, site, c, d) {
+  env = await siteMail(env, site);
+  if (!env.RESEND_API_KEY || !env.MAIL_FROM || !EMAIL_RE.test(d.email || "")) return "";
+  const name = siteName(c, site), where = oneLine([c?.event?.venue, c?.event?.city].filter(Boolean).join(", "));
+  const lines = [`Registration number: ${d.reg_no}`, evtWhen(c) && `When: ${evtWhen(c)}`, where && `Where: ${where}`, d.tickets && `You chose: ${d.tickets}`, d.total && `Total: ${d.total}${d._paid === "yes" ? " (paid)" : d.payment ? ` (${d.payment})` : ""}`].filter(Boolean).join("\n");
+  try {
+    await sendMail(env, d.email, `Your registration for ${name}: ${d.reg_no}`.slice(0, 150), WRAP(`<h2 style="margin:0 0 12px;font-size:20px">You're registered for ${hesc(name)}</h2>${paras(`Hello ${oneLine(d.name || "")},
+
+${oneLine(String(c?.register?.success || "Your registration is received."))}`)}${paras(lines)}${paras("Keep this email: the registration number is your reference.", "margin:0;color:#555;font-size:13px")}`), EMAIL_RE.test(String(c?.contact?.email || "")) ? String(c.contact.email) : void 0);
+    return "Confirmation emailed.";
+  } catch (e) {
+    return "Confirmation not emailed: " + String(e?.message || e).slice(0, 200);
+  }
+}
 function picturesOf(html, base) {
   const out = [], seen = /* @__PURE__ */ new Set();
   const add = (raw, alt = "") => {
@@ -3309,6 +3407,140 @@ var db_worker_default = {
         }
         await env.DB.prepare("insert into payments (rz_order, site, order_no, amount, status, created_at) values (?, ?, ?, ?, 'created', ?)").bind(made.ref, site, no, amount, (/* @__PURE__ */ new Date()).toISOString()).run();
         return json({ ...made.out, ref: made.ref, amount, currency: cur, name: siteName(c, site) });
+      }
+      if (/^\/reg\/[a-z0-9][a-z0-9-]{0,59}$/.test(p) && req.method === "GET") {
+        const site = p.split("/")[2];
+        await ensure(env);
+        const c = await siteContent(env, site).catch(() => null);
+        if (!isEvt(c)) return err(404, "Not found.");
+        const pay = [];
+        for (const g of Object.keys(PG)) if (pgOn(c, g) && pgReady(g, await getSetting(env, "site:" + site, g).catch(() => null))) pay.push(g);
+        return new Response(JSON.stringify({ open: evtOpen(c), pay, left: await evtLeft(env, site, c) }), { headers: { ...cors, "Content-Type": "application/json", "Cache-Control": "no-store" } });
+      }
+      if (/^\/reg\/pay\/(rz|cf|pe|st|pp)\/[a-z0-9][a-z0-9-]{0,59}$/.test(p) && req.method === "POST") {
+        const g = p.split("/")[3], site = p.split("/")[4], z = await getSetting(env, "site:" + site, g).catch(() => null);
+        if (!pgReady(g, z)) return err(404, "Online payment isn't set up for this site.");
+        const q = await req.json().catch(() => ({})), no = String(q.reg_no || "");
+        if (!/^REG-[A-Z0-9]{6}$/.test(no)) return err(400, "Which registration?");
+        const c = await siteContent(env, site);
+        if (!isEvt(c) || !pgOn(c, g)) return err(404, "That way to pay isn't switched on for this site.");
+        const bill = evtBill(c, q);
+        if ("error" in bill) return err(409, bill.error);
+        if (!(bill.total > 0)) return err(400, "There is nothing to pay for this registration.");
+        {
+          const full = await evtFull(env, site, c, bill);
+          if (full) return err(409, full);
+        }
+        const n = await env.DB.prepare("select count(*) n from payments where site = ? and created_at > ?").bind(site, new Date(Date.now() - 36e5).toISOString()).first();
+        if ((n?.n || 0) >= 200) return err(429, "Too many payments were started. Please try again in a while.");
+        const amount = Math.round(bill.total * 100), cur = siteCur(c);
+        if (PG[g].inr ? cur !== "INR" || amount < 100 : !PG_CUR.includes(cur) || amount < 100) return err(400, PG[g].inr ? `${PG[g].name} works for totals in rupees of \u20B91 or more.` : `${PG[g].name} can't take this site's currency here.`);
+        let back = "";
+        if (g !== "rz") {
+          let b = null;
+          try {
+            b = new URL(String(q.back || ""));
+          } catch {
+          }
+          if (!b || !/^https?:$/.test(b.protocol)) return err(400, "Where should the payment come back to?");
+          back = b.origin + b.pathname + "?paid=" + g + "&o=" + encodeURIComponent(no);
+        }
+        const cust = { name: oneLine(String(q.name || "")).slice(0, 100), email: String(q.email || "").trim().slice(0, 200), phone: String(q.phone || "").slice(0, 30) };
+        const id = no + "-" + Array.from(crypto.getRandomValues(new Uint8Array(5)), (x) => x.toString(16).padStart(2, "0")).join("");
+        let made;
+        try {
+          made = await pgStart(g, z, { no, id, amount, cur, back, name: siteName(c, site), cust });
+        } catch (e) {
+          return err(e instanceof PgError && !e.keys && /needs a/.test(e.message) ? 400 : 502, e instanceof PgError ? e.message : `${PG[g].name} couldn't start the payment just now. Please try again, or choose another way to pay.`);
+        }
+        await env.DB.prepare("insert into payments (rz_order, site, order_no, amount, status, created_at) values (?, ?, ?, ?, 'created', ?)").bind(made.ref, site, no, amount, (/* @__PURE__ */ new Date()).toISOString()).run();
+        return json({ ...made.out, ref: made.ref, amount, currency: cur, name: siteName(c, site) });
+      }
+      if (/^\/reg\/[a-z0-9][a-z0-9-]{0,59}$/.test(p) && req.method === "POST") {
+        const site = p.split("/")[2];
+        await ensure(env);
+        const raw = await req.text();
+        if (raw.length > 2e4) return err(413, "Too long.");
+        let q;
+        try {
+          q = JSON.parse(raw || "{}");
+        } catch {
+          return err(400, "Couldn't read the registration.");
+        }
+        if (q.website || q.took != null && Number(q.took) < 1500 && !q.pay) return json({ ok: true });
+        const data = {};
+        for (const [k, v] of Object.entries(q.data || {}).slice(0, 34)) if (/^[a-z0-9][\w-]{0,39}$/i.test(k) && v != null && String(v).trim()) data[k] = String(v).slice(0, 3e3);
+        const no = String(data.reg_no || "");
+        if (!/^REG-[A-Z0-9]{6}$/.test(no)) return err(400, "The registration has no number. Refresh the page and try again.");
+        if (!oneLine(data.name || "") || !EMAIL_RE.test(String(data.email || "").trim())) return err(400, "Please give your name and a valid email address.");
+        const c = await siteContent(env, site).catch(() => null);
+        if (!isEvt(c)) return err(404, "This site doesn't take registrations.");
+        if (await env.DB.prepare("select 1 x from enquiries where site = ? and instr(data, ?) > 0 limit 1").bind(site, `"reg_no":"${no}"`).first()) return json({ ok: true, again: true });
+        const bill = evtBill(c, q.cart || {});
+        if ("error" in bill) return err(409, bill.error);
+        const hour = new Date(Date.now() - 36e5).toISOString();
+        if (+((await env.DB.prepare("select count(*) n from enquiries where site = ? and created_at > ?").bind(site, hour).first())?.n || 0) >= 600) return err(429, "Too many registrations just now. Please try again in a few minutes.");
+        const amount = Math.round(bill.total * 100), cur = siteCur(c), P = q.pay && typeof q.pay === "object" ? q.pay : null;
+        for (const k of ["tickets", "count", "total", "payment", "pay_gw", "type"]) delete data[k];
+        data.type = EVT_REG[bill.kind].label;
+        if (bill.lines.length) {
+          data.tickets = bill.lines.map((l) => (EVT_REG[bill.kind].qty || l.qty > 1 ? l.qty + " \xD7 " : "") + l.name).join(", ");
+          data.count = String(bill.count);
+          data._lines = JSON.stringify(bill.lines.map((l) => ({ name: l.name, qty: l.qty })));
+        }
+        if (amount > 0) {
+          data.total = pgMoney(cur || "INR", amount);
+          if (P && P.rz_order) {
+            const z = await getSetting(env, "site:" + site, "rz").catch(() => null);
+            const row = z?.secret ? await env.DB.prepare("select order_no, amount from payments where rz_order = ? and site = ?").bind(String(P.rz_order), site).first() : null;
+            const want = row ? hex((await hmac(z.secret, P.rz_order + "|" + P.rz_payment)).buffer) : "";
+            if (!row || row.order_no !== no || row.amount !== amount || !want || want !== String(P.rz_sig || "")) return err(400, "The payment couldn't be confirmed. If money left your account, contact us with your registration number " + no + ".");
+            await env.DB.prepare("update payments set status = 'paid' where rz_order = ?").bind(String(P.rz_order)).run();
+            data._paid = "yes";
+            data._paid_by = `Razorpay, ${pgMoney(cur, amount)}, ${String(P.rz_payment).slice(0, 40)}`;
+            data.payment = "Paid online";
+            data.pay_gw = "Razorpay";
+          } else if (P && P.gw) {
+            const g = String(P.gw), ref = String(P.ref || ""), z = PG[g] && g !== "rz" && ref.startsWith(g + ":") ? await getSetting(env, "site:" + site, g).catch(() => null) : null;
+            const row = pgReady(g, z) ? await env.DB.prepare("select order_no, amount, status from payments where rz_order = ? and site = ?").bind(ref, site).first() : null;
+            if (!row || row.order_no !== no || row.amount !== amount) return err(400, "The payment couldn't be confirmed. If money left your account, contact us with your registration number " + no + ".");
+            let got;
+            try {
+              got = await pgCheck(g, z, ref.slice(3), row.amount, cur);
+            } catch {
+              return err(502, `We couldn't reach ${PG[g].name} to confirm the payment. Please try again in a moment.`);
+            }
+            if (!got.paid) return err(402, "The payment wasn't completed, so you aren't registered yet. You can try again.");
+            await env.DB.prepare("update payments set status = 'paid' where rz_order = ?").bind(ref).run();
+            data._paid = "yes";
+            data._paid_by = `${PG[g].name}, ${pgMoney(cur, amount)}, ${got.id.slice(0, 60)}`;
+            data.payment = "Paid online";
+            data.pay_gw = PG[g].name;
+          } else {
+            let online = false;
+            if (c.register.payLater === false) {
+              for (const g of Object.keys(PG)) if (pgOn(c, g) && pgReady(g, await getSetting(env, "site:" + site, g).catch(() => null))) {
+                online = true;
+                break;
+              }
+            }
+            if (online) return err(402, "Please pay online to complete your registration.");
+            data.payment = oneLine(String(c.register.payLaterLabel || "Pay at the venue")).slice(0, 120);
+          }
+        }
+        {
+          const full = await evtFull(env, site, c, bill);
+          if (full) {
+            if (data._paid !== "yes") return err(409, full);
+            data._full = "Paid after the places ran out: " + full;
+          }
+        }
+        const page = String(q.page || "").slice(0, 200), made = await env.DB.prepare("insert into enquiries (site, data, page, created_at) values (?, ?, ?, ?) returning id").bind(site, JSON.stringify(data), page, (/* @__PURE__ */ new Date()).toISOString()).first();
+        const rowId = made?.id, mail = Promise.all([notifyEnquiry(env, site, data, page).catch((e) => "Not emailed: " + String(e?.message || e).slice(0, 300)), waAlert(env, site, data).catch(() => ""), regMail(env, site, c, data).catch(() => "")]).then(([said, wa, rm]) => (said || wa || rm) && rowId ? env.DB.prepare("update enquiries set data = ? where id = ? and site = ?").bind(JSON.stringify({ ...data, ...said ? { _mail: said } : {}, ...wa ? { _wa: wa } : {}, ...rm ? { _rmail: rm } : {} }), rowId, site).run() : null).catch(() => {
+        });
+        if (ctx?.waitUntil) ctx.waitUntil(mail);
+        else await mail;
+        return json({ ok: true, paid: data._paid === "yes" });
       }
       if (p.startsWith("/order/") && req.method === "GET") {
         const [, , site, no] = p.split("/"), k = u.searchParams.get("k") || "";
@@ -4530,6 +4762,7 @@ export {
   SCHEMA,
   copiedBits,
   db_worker_default as default,
+  evtBill,
   loyOf,
   outlineOf,
   pointsFor,

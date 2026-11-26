@@ -13,6 +13,9 @@ const STATUS: [string, string][] = [["new", "New"], ["read", "Read"], ["replied"
 /** An order from the Order now page moves through its own steps; the guest's order page follows them. */
 const ORDER_STATUS: [string, string][] = [["new", "New"], ["read", "Seen"], ["accepted", "Confirmed"], ["preparing", "Being prepared"], ["ready", "Ready for pickup"], ["out", "Out for delivery"], ["done", "Completed"], ["cancelled", "Cancelled"], ["archived", "Archived"]];
 const isOrder = (d: any) => !!(d && d.order_no);
+/** A registration from an event site's registration page. */
+const isReg = (d: any) => !!(d && d.reg_no);
+const REG_CSV = ["created_at", "status", "reg_no", "type", "name", "email", "phone", "company", "role", "city", "attending", "guests", "meal", "team", "size", "age", "emergency", "tickets", "count", "total", "payment", "_paid", "_paid_by", "notes"];
 /** The next step of an order, for the one-tap button. */
 export const orderNext = (d: any, status: string): [string, string] | null => {
   const m = String(d?.mode || "").toLowerCase(), last = /pick/.test(m) ? "ready" : /deliver/.test(m) ? "out" : "";
@@ -22,7 +25,7 @@ export const orderNext = (d: any, status: string): [string, string] | null => {
   return [nx, i < 0 ? "Confirm the order" : "Mark: " + l];
 };
 const pill = (s: string) => ({ new: "border-brand-400/60 text-brand-200", read: "border-ink-500 text-ink-300", replied: "border-emerald-400/50 text-emerald-200", archived: "border-ink-600 text-ink-500", accepted: "border-emerald-400/50 text-emerald-200", preparing: "border-amber-400/50 text-amber-200", ready: "border-sky-400/50 text-sky-200", out: "border-sky-400/50 text-sky-200", done: "border-ink-500 text-ink-300", cancelled: "border-rose-400/50 text-rose-200" } as Record<string, string>)[s] || "border-ink-500 text-ink-300";
-const LABELS: Record<string, string> = { name: "Name", email: "Email", phone: "Phone", company: "Company", service: "Interested in", budget: "Budget", message: "Message", consent: "Agreed to be contacted", type: "Request", date: "Date", time: "Time", guests: "Guests", occasion: "Occasion", order_no: "Order number", mode: "Order type", when: "For", address: "Address", table: "Table", items: "Items", total: "To pay", payment: "Payment" };
+const LABELS: Record<string, string> = { name: "Name", email: "Email", phone: "Phone", company: "Company", service: "Interested in", budget: "Budget", message: "Message", consent: "Agreed to be contacted", type: "Request", date: "Date", time: "Time", guests: "Guests", occasion: "Occasion", order_no: "Order number", mode: "Order type", when: "For", address: "Address", table: "Table", items: "Items", total: "To pay", payment: "Payment", reg_no: "Registration number", event: "Event", tickets: "Chosen", count: "How many", attending: "Attending", role: "Job title", city: "City", meal: "Meal preference", team: "Team name", size: "T-shirt size", age: "Age", emergency: "Emergency contact", notes: "Notes" };
 const HIDE = new Set(["okey", "pay_state", "rz_order", "rz_payment"]);
 /** A booking request in one line: "Fri 20 Nov · 20:00 · 6 guests · Anniversary" (empty for an ordinary enquiry). */
 export const bookingLine = (d: any): string => {
@@ -210,19 +213,20 @@ function EnquiryList<R extends Row>({ rows: every, setStatus, remove, load, name
   const [filter, setFilter] = useState("open");
   const [q, setQ] = useState("");
   const [open, setOpen] = useState<string | number | null>(null);
-  const list = useMemo(() => rows.filter((r) => (filter === "open" ? r.status !== "archived" : filter === "orders" ? isOrder(r.data) && !["done", "cancelled", "archived"].includes(r.status) : filter === "all" ? true : r.status === filter) && (!q || JSON.stringify(r.data).toLowerCase().includes(q.toLowerCase()))), [rows, filter, q]);
-  const counts = useMemo(() => ({ new: rows.filter((r) => r.status === "new").length, orders: rows.filter((r) => isOrder(r.data) && !["done", "cancelled", "archived"].includes(r.status)).length, anyOrder: rows.some((r) => isOrder(r.data)) }), [rows]);
+  const list = useMemo(() => rows.filter((r) => (filter === "open" ? r.status !== "archived" : filter === "orders" ? isOrder(r.data) && !["done", "cancelled", "archived"].includes(r.status) : filter === "regs" ? isReg(r.data) && r.status !== "archived" : filter === "all" ? true : r.status === filter) && (!q || JSON.stringify(r.data).toLowerCase().includes(q.toLowerCase()))), [rows, filter, q]);
+  const counts = useMemo(() => ({ new: rows.filter((r) => r.status === "new").length, orders: rows.filter((r) => isOrder(r.data) && !["done", "cancelled", "archived"].includes(r.status)).length, anyOrder: rows.some((r) => isOrder(r.data)), regs: rows.filter((r) => isReg(r.data) && r.status !== "archived" && r.status !== "cancelled") }), [rows]);
+  const regSum = useMemo(() => { const L = counts.regs, people = L.reduce((n, r) => n + Math.max(1, parseInt(r.data.count || r.data.guests || "1", 10) || 1), 0), paid = L.filter((r) => r.data._paid).length, due = L.filter((r) => r.data.total && !r.data._paid).length; return `${L.length} registration${L.length === 1 ? "" : "s"} · ${people} ${people === 1 ? "person" : "people"}${paid ? ` · ${paid} paid online` : ""}${due ? ` · ${due} still to pay` : ""}`; }, [counts.regs]);
   const csv = () => {
-    const keys = only === "orders" ? ["created_at", "status", "order_no", "name", "phone", "email", "mode", "when", "address", "items", "total", "payment", "utr", "_paid"] : ["created_at", "status", "name", "email", "phone", "company", "service", "budget", "message"];
+    const keys = filter === "regs" ? REG_CSV : only === "orders" ? ["created_at", "status", "order_no", "name", "phone", "email", "mode", "when", "address", "items", "total", "payment", "utr", "_paid"] : ["created_at", "status", "name", "email", "phone", "company", "service", "budget", "message"];
     const cell = (v: any) => `"${String(v ?? "").replace(/"/g, '""')}"`;
     const text = [keys.join(","), ...list.map((r) => keys.map((k) => cell(k === "created_at" || k === "status" ? (r as any)[k] : r.data[k])).join(","))].join("\n");
-    const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([text], { type: "text/csv" })); a.download = `${only === "orders" ? "orders" : "enquiries"}-${name}.csv`; a.click();
+    const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([text], { type: "text/csv" })); a.download = `${filter === "regs" ? "registrations" : only === "orders" ? "orders" : "enquiries"}-${name}.csv`; a.click();
   };
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">
         <div className="flex rounded-lg border border-ink-600" role="group" aria-label="Show">
-          {[["open", "Inbox"], ["new", `New${counts.new ? ` (${counts.new})` : ""}`], ...(counts.anyOrder ? [["orders", `Orders to do${counts.orders ? ` (${counts.orders})` : ""}`]] : []), ["replied", "Replied"], ["archived", "Archived"], ["all", "All"]].map(([k, l]) => (
+          {[["open", "Inbox"], ["new", `New${counts.new ? ` (${counts.new})` : ""}`], ...(counts.anyOrder ? [["orders", `Orders to do${counts.orders ? ` (${counts.orders})` : ""}`]] : []), ...(counts.regs.length ? [["regs", `Registrations (${counts.regs.length})`]] : []), ["replied", "Replied"], ["archived", "Archived"], ["all", "All"]].map(([k, l]) => (
             <button key={k} type="button" aria-pressed={filter === k} onClick={() => setFilter(k)} className={`btn btn-sm border-0 ${filter === k ? "bg-ink-700" : "bg-transparent"}`}>{l}</button>
           ))}
         </div>
@@ -230,6 +234,7 @@ function EnquiryList<R extends Row>({ rows: every, setStatus, remove, load, name
         <span className="ml-auto flex gap-2"><button className="btn btn-sm" onClick={load}>↻ Refresh</button><button className="btn btn-sm" disabled={!list.length} onClick={csv}>Download CSV</button></span>
       </div>
       <p className="text-[13px] text-ink-400">{who}</p>
+      {filter === "regs" && <p className="rounded-lg border border-ink-700 px-3 py-2 text-[13px] text-ink-200" data-regsum>{regSum}. Download CSV gives one row per registration, with every answer.</p>}
       {!list.length && <p className="card p-5 text-sm text-ink-400">{rows.length ? "Nothing here with this filter." : only === "orders" ? "No orders yet. When a customer places an order on your site, it appears here." : "No enquiries yet. When someone sends the form on your site, it appears here."}</p>}
       {/^Not emailed/.test(String(rows[0]?.data?._mail || "")) && <p role="status" className="rounded-lg border border-amber-400/40 bg-amber-400/5 px-3 py-2 text-[13px] text-amber-100"><b>The latest enquiry wasn't emailed to you.</b> {mailSaid(rows[0].data._mail)} It is saved here all the same.</p>}
       <ul className="flex flex-col gap-2" aria-label="Enquiries">
@@ -243,10 +248,12 @@ function EnquiryList<R extends Row>({ rows: every, setStatus, remove, load, name
                 <span className="text-[13px] text-ink-400">{[d.company, d.service, d.type && bookingLine(d) ? d.type : ""].filter(Boolean).join(" · ")}</span>
                 {bookingLine(d) && <span className="chip border-brand-400/50 text-brand-200" data-booking>{bookingLine(d)}</span>}
                 {ord && (d.utr || d._paid) && <span className={`chip ${d._paid ? "border-emerald-400/50 text-emerald-200" : "border-amber-400/60 text-amber-200"}`} data-pay>{d._paid ? "Paid" : "Payment to check"}</span>}
+                {isReg(d) && (d._paid || d.total) && <span className={`chip ${d._paid ? "border-emerald-400/50 text-emerald-200" : "border-amber-400/60 text-amber-200"}`} data-pay>{d._paid ? "Paid" : "To pay"}</span>}
+                {isReg(d) && <span className="chip border-brand-400/50 text-brand-200" data-reg>{[d.reg_no, d.attending, d.tickets, d.total].filter(Boolean).join(" · ")}</span>}
                 {ord && <span className="chip border-brand-400/50 text-brand-200" data-order>{[`Order ${d.order_no}`, d.mode, d.when, d.total].filter(Boolean).join(" · ")}</span>}
                 <span className="ml-auto text-xs text-ink-500">{when(r.created_at)}</span>
                 <span className={`chip ${pill(r.status)}`}>{(ord ? ORDER_STATUS : STATUS).find(([k]) => k === r.status)?.[1] || r.status}</span>
-                <span className="w-full truncate text-[13px] text-ink-300">{ord ? String(d.items || "").replace(/\n/g, " · ") : d.message}</span>
+                <span className="w-full truncate text-[13px] text-ink-300">{ord ? String(d.items || "").replace(/\n/g, " · ") : isReg(d) ? [d.type, d.company, d.team, d.notes].filter(Boolean).join(" · ") : d.message}</span>
               </button>
               {isOpen && (
                 <div className="flex flex-col gap-3 border-t border-ink-700 px-4 py-3">
@@ -259,7 +266,7 @@ function EnquiryList<R extends Row>({ rows: every, setStatus, remove, load, name
                     {d._wa && <><dt className="text-ink-400">WhatsApp to you</dt><dd className={/^Not sent/.test(d._wa) ? "text-amber-200" : "text-ink-300"}>{d._wa}</dd></>}
                     {d._mail && <><dt className="text-ink-400">Email to you</dt><dd className={/^Not emailed/.test(d._mail) ? "text-amber-200" : "text-ink-300"}>{mailSaid(d._mail)}</dd></>}
                   </dl>
-                  {ord && d._paid && !d.utr && <p className="rounded-lg border border-emerald-400/40 px-3 py-2 text-[13px] text-emerald-100" data-payline><b>Paid online.</b> {d._paid_by || ""} Confirmed by the payment gateway; nothing to check.</p>}
+                  {(ord || isReg(d)) && d._paid && !d.utr && <p className="rounded-lg border border-emerald-400/40 px-3 py-2 text-[13px] text-emerald-100" data-payline><b>Paid online.</b> {d._paid_by || ""} Confirmed by the payment gateway; nothing to check.</p>}
                   {ord && d._stock_short && <p className="rounded-lg border border-amber-400/40 bg-amber-400/5 px-3 py-2 text-[13px] text-amber-100" data-stockline><b>Check your stock before sending this order.</b> {d._stock_short}</p>}
                   {ord && d._points && <p className="rounded-lg border border-ink-600 px-3 py-2 text-[13px] text-ink-200" data-pointsline>Points: {d._points}.</p>}
                   {ord && d._pos && <p className={`rounded-lg border px-3 py-2 text-[13px] ${/^Not sent/.test(d._pos) ? "border-amber-400/40 text-amber-100" : "border-ink-600 text-ink-200"}`} data-posline>{d._pos}{d._pos_prep ? ` Ready in about ${d._pos_prep} min.` : ""}</p>}

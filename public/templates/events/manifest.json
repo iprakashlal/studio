@@ -1,0 +1,38 @@
+{
+  "files": [
+    "index.html",
+    "schedule.html",
+    "lineup.html",
+    "about.html",
+    "contact.html",
+    "register.html",
+    "section.html",
+    "page.html",
+    "404.html",
+    "admin.html",
+    "assets/evt.css",
+    "assets/evt.js",
+    "assets/fx.js",
+    "assets/slides.js",
+    "assets/motifs.js",
+    "assets/pages.js",
+    "assets/maint.js",
+    "assets/addons.js",
+    "assets/festival.js",
+    "assets/consent.js",
+    "assets/menu.js",
+    "assets/lang.js",
+    "assets/video.js",
+    "assets/social.js",
+    "README.md",
+    "supabase/enquiries.sql"
+  ],
+  "starters": [
+    {
+      "id": "default",
+      "name": "Conference",
+      "description": "A sample two-day conference with speakers, a schedule, passes, a venue and a registration page.",
+      "file": "content.json"
+    }
+  ]
+}

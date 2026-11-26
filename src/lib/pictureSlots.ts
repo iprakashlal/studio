@@ -10,6 +10,7 @@ export function itemSlots(kind: string, c: any): Slot[] {
 }
 export function pictureSlots(kind: string): Slot[] {
   if (kind === "restaurant") return [{ id: "hero", label: "Hero picture" }, { id: "about", label: "Our story picture" }, { id: "logo", label: "Logo" }, { id: "gallery", label: "Gallery", many: true }];
+  if (kind === "events") return [{ id: "hero", label: "Hero picture" }, { id: "about", label: "About picture" }, { id: "logo", label: "Logo" }, { id: "gallery", label: "Gallery", many: true }];
   if (kind === "business") return [{ id: "hero", label: "Hero picture" }, { id: "about", label: "About picture" }, { id: "logo", label: "Logo" }];
   if (kind === "store") return [{ id: "hero", label: "Home page picture" }, { id: "banner", label: "Banner picture" }, { id: "logo", label: "Logo" }];
   return [{ id: "hero", label: "Hero picture" }, { id: "logo", label: "Logo" }];

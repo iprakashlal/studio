@@ -5,6 +5,8 @@ import { THEMES, THEME_TAGS, portfolioThemeValues, storeThemeValues, type Theme 
 import { defaultPicture } from "../lib/pictures";
 import { BIZ_STYLE_TAGS, BIZ_TYPES, BIZ_THEMES, businessThemeValues } from "../themes/business";
 import { REST_TAGS, REST_THEMES, restaurantThemeValues } from "../themes/restaurant";
+import { EVT_GROUPS, EVT_THEMES, EVT_TYPES, eventThemeValues, type EvtTheme } from "../themes/events";
+import { eventSample } from "../lib/eventcopy";
 import { limitThemes } from "../themes/limit";
 import { ThemeSwatch } from "../themes/ThemeGallery";
 import { themeCode } from "../themes/codes";
@@ -19,19 +21,21 @@ import { designPageOn, useDesignSettings } from "../lib/designs";
 // Hover a card for a live preview, click it for a bigger one, and quote the theme ID (T-07) to choose.
 // URL: #/themes?v=store&t=velocity&list=velocity,blueprint
 
-type Kind = "portfolio" | "store" | "business" | "restaurant";
+type Kind = "portfolio" | "store" | "business" | "restaurant" | "events";
+/** How many cards a long list shows at first (events have close to two thousand themes). */
+const STEP = 96;
 /** Which list of themes a type uses: business and restaurant sites have their own. */
-const family = (k: Kind) => (k === "business" || k === "restaurant" ? k : "shared");
-const familyOf = (t: Theme) => (t.id.startsWith("biz-") ? "business" : t.id.startsWith("rest-") ? "restaurant" : "shared");
-const KINDS: { id: Kind; label: string }[] = [{ id: "portfolio", label: "Personal portfolio" }, { id: "store", label: "Shop" }, { id: "business", label: "Business portfolio" }, { id: "restaurant", label: "Restaurant & café" }];
+const family = (k: Kind) => (k === "business" || k === "restaurant" || k === "events" ? k : "shared");
+const familyOf = (t: Theme) => (t.id.startsWith("biz-") ? "business" : t.id.startsWith("rest-") ? "restaurant" : t.id.startsWith("evt-") ? "events" : "shared");
+const KINDS: { id: Kind; label: string }[] = [{ id: "portfolio", label: "Personal portfolio" }, { id: "store", label: "Shop" }, { id: "business", label: "Business portfolio" }, { id: "restaurant", label: "Restaurant & café" }, { id: "events", label: "Event" }];
 /** Business sites have their own themes; personal portfolios and shops share the rest. */
-const poolOf = (k: Kind): Theme[] => limitThemes(k === "business" ? BIZ_THEMES : k === "restaurant" ? REST_THEMES : THEMES, undefined, k);
-const ALL: Theme[] = [...THEMES, ...BIZ_THEMES, ...REST_THEMES];
+const poolOf = (k: Kind): Theme[] => limitThemes(k === "business" ? BIZ_THEMES : k === "restaurant" ? REST_THEMES : k === "events" ? EVT_THEMES : THEMES, undefined, k);
+const ALL: Theme[] = [...THEMES, ...BIZ_THEMES, ...REST_THEMES, ...EVT_THEMES];
 const LS = "site-studio:theme-shortlist";
 
 function parse(): { v: Kind; t: string; list: string[] } {
   const q = new URLSearchParams(location.hash.split("?")[1] || "");
-  const v: Kind = q.get("v") === "store" ? "store" : q.get("v") === "business" ? "business" : q.get("v") === "restaurant" ? "restaurant" : "portfolio";
+  const v: Kind = q.get("v") === "store" ? "store" : q.get("v") === "business" ? "business" : q.get("v") === "restaurant" ? "restaurant" : q.get("v") === "events" ? "events" : "portfolio";
   return { v, t: q.get("t") || "", list: (q.get("list") || "").split(",").filter((id) => ALL.some((t) => t.id === id)) };
 }
 function link(p: { v: Kind; t?: string; list?: string[] }) {
@@ -42,12 +46,13 @@ function link(p: { v: Kind; t?: string; list?: string[] }) {
   const s = q.toString();
   return location.origin + location.pathname + "#/themes" + (s ? "?" + s : "");
 }
-const values = (k: Kind, t: Theme) => (k === "store" ? storeThemeValues(t) : k === "business" ? businessThemeValues(t) : k === "restaurant" ? restaurantThemeValues(t) : portfolioThemeValues(t));
+const values = (k: Kind, t: Theme) => (k === "store" ? storeThemeValues(t) : k === "business" ? businessThemeValues(t) : k === "restaurant" ? restaurantThemeValues(t) : k === "events" ? eventThemeValues(t) : portfolioThemeValues(t));
 // Business and restaurant sample pages have no photo, which leaves the picture side of many heroes empty: a sample picture in the theme's colours stands in (as in Design yourself).
 const withTheme = (sample: any, k: Kind, t: Theme) => {
   if (!sample) return sample;
+  if (k === "events") sample = eventSample(sample, (t as Partial<EvtTheme>).evt?.type || "");
   const out = { ...sample, theme: { ...(sample.theme || {}), ...values(k, t) } };
-  if ((k === "business" || k === "restaurant") && !sample.hero?.image?.url && !sample.hero?.video) out.hero = { ...(sample.hero || {}), image: { url: defaultPicture([...(t.tags || [])].join(" "), { c1: t.colors.c1, c2: t.colors.c3 || t.colors.c2, bg: t.colors.surface }) } };
+  if ((k === "business" || k === "restaurant" || k === "events") && !sample.hero?.image?.url && !sample.hero?.video) out.hero = { ...(sample.hero || {}), image: { url: defaultPicture([...(t.tags || [])].join(" "), { c1: t.colors.c1, c2: t.colors.c3 || t.colors.c2, bg: t.colors.surface }) } };
   return out;
 };
 const readList = (): string[] => { try { return JSON.parse(localStorage.getItem(LS) || "[]").filter((id: string) => ALL.some((t) => t.id === id)); } catch { return []; } };
@@ -58,7 +63,8 @@ export function ThemesPage({ signedIn }: { signedIn: boolean }) {
   const [designOn, setDesignOn] = useState(designPageOn);
   useEffect(() => { const f = () => setDesignOn(designPageOn()); addEventListener("studio:design-page", f); return () => removeEventListener("studio:design-page", f); }, []);
   const gal = useDesignSettings().gallery || {};
-  const shownKinds = KINDS.filter((k) => !gal.types || gal.types.includes(k.id));
+  const shownKinds = KINDS.filter((k) => !gal.types || (gal.types as string[]).includes(k.id));
+  const [lim, setLim] = useState(STEP);
   const [kind, setKind] = useState<Kind>(init.v);
   // The owner may show only some types: a link to another one opens the first that is shown.
   useEffect(() => { if (shownKinds.length && !shownKinds.some((k) => k.id === kind)) setKind(shownKinds[0].id); }, [gal.types?.join(",")]);
@@ -68,8 +74,9 @@ export function ThemesPage({ signedIn }: { signedIn: boolean }) {
   const [mine, setMine] = useState<string[]>(readList);
   const [shared] = useState<string[]>(init.list);
   const [only, setOnly] = useState<"" | "shared" | "mine">(init.list.length ? "shared" : "");
-  const [samples, setSamples] = useState<Record<Kind, any>>({ portfolio: null, store: null, business: null, restaurant: null });
-  const pool = poolOf(kind), tags = kind === "business" ? BIZ_STYLE_TAGS : kind === "restaurant" ? REST_TAGS : THEME_TAGS;
+  const [samples, setSamples] = useState<Record<Kind, any>>({ portfolio: null, store: null, business: null, restaurant: null, events: null });
+  const pool = poolOf(kind), tags = kind === "business" ? BIZ_STYLE_TAGS : kind === "restaurant" ? REST_TAGS : kind === "events" ? [...EVT_GROUPS, "Light", "Dark", "Bold", "Classy", "Modern", "Minimal", "Warm", "Calm", "Luxury", "Nature"] : THEME_TAGS;
+  useEffect(() => setLim(STEP), [kind, tag, q, only]);
   // Switching between business and the other types changes the theme list: clear what doesn't belong.
   // Developer tools opened (see PageGuard): the big preview and the hover preview (their frames) are removed.
   useEffect(() => { const f = () => { setOpen(""); setHover(null); }; addEventListener("studio:guard", f); return () => removeEventListener("studio:guard", f); }, []);
@@ -77,7 +84,7 @@ export function ThemesPage({ signedIn }: { signedIn: boolean }) {
 
   const [settled, setSettled] = useState(0), [fontsOk, setFontsOk] = useState(false);
   useEffect(() => {
-    for (const k of ["portfolio", "store", "business", "restaurant"] as Kind[])
+    for (const k of ["portfolio", "store", "business", "restaurant", "events"] as Kind[])
       fetch(`templates/${k}/content.json`, { cache: "no-store" }).then((r) => r.json()).then((c) => {
         TEMPLATES[k].prepare?.(c);
         setSamples((s) => ({ ...s, [k]: c }));
@@ -90,13 +97,13 @@ export function ThemesPage({ signedIn }: { signedIn: boolean }) {
   useEffect(() => { document.title = "Theme gallery · " + studioBrand.name; }, [studioBrand.name]);
 
   const list = useMemo(() => {
-    const s = q.trim().toLowerCase().replace(/^[tb]-?0*/, "");
+    const s = q.trim().toLowerCase().replace(/^[tbre]-?0*/, "");
     return pool.filter((t) => {
       if (only === "shared" && !shared.includes(t.id)) return false;
       if (only === "mine" && !mine.includes(t.id)) return false;
       if (tag && !t.tags.includes(tag)) return false;
       if (!s) return true;
-      const code = themeCode(t).toLowerCase().replace(/^[tb]-?0*/, "");
+      const code = themeCode(t).toLowerCase().replace(/^[tbre]-?0*/, "");
       return code === s || t.name.toLowerCase().includes(q.trim().toLowerCase()) || t.tags.some((g) => g.toLowerCase() === q.trim().toLowerCase());
     });
   }, [q, tag, only, mine, shared, pool]);
@@ -146,7 +153,7 @@ export function ThemesPage({ signedIn }: { signedIn: boolean }) {
         <div className="flex flex-wrap items-end justify-between gap-6">
           <div className="max-w-2xl">
             <h1 className="text-3xl font-extrabold tracking-tight sm:text-4xl">{gal.title || "Pick a look for your site"}</h1>
-            <p className="mt-2 text-ink-300">{gal.intro || <>{kind === "restaurant" ? `${REST_THEMES.length} restaurant themes for restaurants, cafés, bakeries and bars: half classic, half modern, no two alike.` : kind === "business" ? `${BIZ_THEMES.length} business themes for companies, firms, agencies and practices.` : `${THEMES.length} themes for personal portfolios and shops.`} Hover a theme to preview it, or click it to open a bigger preview. When you've chosen, send the <b className="text-ink-100">theme ID</b> (like <code className="rounded bg-ink-800 px-1.5 py-0.5 text-brand-300">{kind === "business" ? "B-07" : "T-07"}</code>), or star a few and share your shortlist.</>}</p>
+            <p className="mt-2 text-ink-300">{gal.intro || <>{kind === "events" ? `${EVT_THEMES.length} event themes: 20 for each of ${EVT_TYPES.length} kinds of event, from conferences and concerts to weddings, marathons and markets. No two alike, and each comes with the registration that suits it.` : kind === "restaurant" ? `${REST_THEMES.length} restaurant themes for restaurants, cafés, bakeries and bars: half classic, half modern, no two alike.` : kind === "business" ? `${BIZ_THEMES.length} business themes for companies, firms, agencies and practices.` : `${THEMES.length} themes for personal portfolios and shops.`} Hover a theme to preview it, or click it to open a bigger preview. When you've chosen, send the <b className="text-ink-100">theme ID</b> (like <code className="rounded bg-ink-800 px-1.5 py-0.5 text-brand-300">{kind === "events" ? "E-0007" : kind === "restaurant" ? "R-007" : kind === "business" ? "B-07" : "T-07"}</code>), or star a few and share your shortlist.</>}</p>
           </div>
           <div className="flex rounded-xl border border-ink-600 p-1" role="group" aria-label="Preview as">
             {shownKinds.map((k) => (
@@ -164,12 +171,13 @@ export function ThemesPage({ signedIn }: { signedIn: boolean }) {
         )}
 
         <div className="sticky top-[57px] z-20 -mx-4 mt-6 flex flex-wrap items-center gap-2 border-b border-ink-800 bg-ink-950/95 px-4 py-3 backdrop-blur">
-          <input className="input w-56 py-2 text-sm" placeholder={`Search name or ID, e.g. ${kind === "restaurant" ? "R-007" : kind === "business" ? "B-07" : "T-07"}`} aria-label="Search themes" value={q} onChange={(e) => setQ(e.target.value)} />
+          <input className="input w-56 py-2 text-sm" placeholder={`Search name or ID, e.g. ${kind === "events" ? "E-0007" : kind === "restaurant" ? "R-007" : kind === "business" ? "B-07" : "T-07"}`} aria-label="Search themes" value={q} onChange={(e) => setQ(e.target.value)} />
           {(gal.tags === false ? [] : ["", ...tags]).map((x) => (
             <button key={x || "all"} type="button" aria-pressed={tag === x} onClick={() => setTag(x)}
               className={`rounded-full border px-3 py-1.5 text-xs font-semibold ${tag === x ? "border-brand-500 bg-brand-500/15 text-ink-100" : "border-ink-600 text-ink-400 hover:text-ink-100"}`}>{x || "All"}</button>
           ))}
           {kind === "business" && gal.tags !== false && <select aria-label="Type of business" className={`input w-auto py-1.5 text-xs font-semibold ${BIZ_TYPES.includes(tag) ? "border-brand-500 bg-brand-500/15" : ""}`} value={BIZ_TYPES.includes(tag) ? tag : ""} onChange={(e) => setTag(e.target.value)}><option value="">Type of business…</option>{BIZ_TYPES.map((x) => <option key={x} value={x}>{x}</option>)}</select>}
+          {kind === "events" && gal.tags !== false && <select aria-label="Kind of event" className={`input w-auto py-1.5 text-xs font-semibold ${EVT_TYPES.includes(tag) ? "border-brand-500 bg-brand-500/15" : ""}`} value={EVT_TYPES.includes(tag) ? tag : ""} onChange={(e) => setTag(e.target.value)}><option value="">Kind of event…</option>{EVT_TYPES.map((x) => <option key={x} value={x}>{x}</option>)}</select>}
           <div className="ml-auto flex items-center gap-2">
             <button type="button" aria-pressed={only === "mine"} onClick={() => setOnly(only === "mine" ? "" : "mine")}
               className={`btn btn-sm ${only === "mine" ? "border-amber-400 text-amber-300" : ""}`}>★ My shortlist ({mine.length})</button>
@@ -179,7 +187,7 @@ export function ThemesPage({ signedIn }: { signedIn: boolean }) {
 
         {gal.count !== "off" && <p className="mt-4 text-sm text-ink-400">{gal.count === "total" ? `${pool.length} themes` : `${list.length} of ${pool.length} themes`}</p>}
         <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {list.map((t) => {
+          {list.slice(0, lim).map((t) => {
             const starred = mine.includes(t.id);
             return (
               <article key={t.id} className="group relative overflow-hidden rounded-2xl border border-ink-700 bg-ink-900 transition hover:-translate-y-0.5 hover:border-ink-500"
@@ -201,6 +209,7 @@ export function ThemesPage({ signedIn }: { signedIn: boolean }) {
           })}
         </div>
         {!list.length && <p className="mt-10 text-center text-ink-400">No themes match. Try another filter, or clear the search.</p>}
+        {list.length > lim && <p className="mt-8 text-center"><button type="button" className="btn" onClick={() => setLim(lim + STEP)}>Show more themes ({list.length - lim} more)</button></p>}
       </main>
       <StudioPageLinksHere where="themes" repo={undefined} />
 

@@ -97,7 +97,7 @@ export function Editor({ tpl, draft, version, onChange, upload, img, extras = []
   }
   // The usual order of the headings (a custom admin menu keeps its own order).
   if (!menu?.items?.length) {
-    const base = byOwnerDay ? byOwnerDay.groups : ["Design", "Pages", "Catalogue", "Selling", "Shop", "Forms & records", "Features", "Settings", "Project"];
+    const base = byOwnerDay ? byOwnerDay.groups : ["Design", "Event", "Pages", "Catalogue", "Selling", "Shop", "Forms & records", "Features", "Settings", "Project"];
     const ORDER = base.flatMap((g) => (g === "Settings" ? ["Advanced setup", g] : [g]));
     const at = (g: string) => { const i = ORDER.indexOf(g); return i < 0 ? ORDER.length : i; };
     groups.sort((a, b) => at(a.group) - at(b.group));

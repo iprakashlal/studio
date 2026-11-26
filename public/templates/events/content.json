@@ -1,0 +1,767 @@
+{
+  "theme": {
+    "cursor": "none",
+    "loader": "fade",
+    "textfx": "words",
+    "hoverfx": "shine",
+    "scrollfx": "smooth",
+    "overlay": "vignette",
+    "herofx": "breathe",
+    "loaderOn": "both",
+    "introTitle": "",
+    "introFont": "display",
+    "introCase": "upper",
+    "logoRadius": 22,
+    "scrollEase": "light",
+    "lineBreaks": "typed",
+    "bg": "#F1F3F8",
+    "surface": "#FFFFFF",
+    "deep": "#121B30",
+    "text": "#101728",
+    "soft": "#555C6D",
+    "line": "#D7DBE5",
+    "c1": "#1F47A3",
+    "c2": "#4C2C8C",
+    "c3": "#E2D828",
+    "fontDisplay": "Manrope",
+    "fontBody": "Inter",
+    "radius": 6,
+    "preset": "evt-conference-04",
+    "layout": "center",
+    "heroArt": "coupon",
+    "nav": "island",
+    "cards": "glass",
+    "buttons": "pill",
+    "heading": "serif",
+    "shead": "line",
+    "pattern": "lines",
+    "bands": "stripe",
+    "motionStyle": "rise",
+    "width": "xwide",
+    "motif": "studio",
+    "introBg": "#121B30",
+    "introFg": "#FFFFFF",
+    "sched": "cards",
+    "lineup": "tilt",
+    "tix": "band",
+    "count": "inline",
+    "dateBadge": "stamp",
+    "reg": "accent",
+    "regKind": "delegate"
+  },
+  "cms": {
+    "adminPage": "admin"
+  },
+  "poweredBy": {
+    "show": true
+  },
+  "settings": {
+    "currency": "INR"
+  },
+  "brand": {
+    "name": "Horizon Summit",
+    "tagline": "Two days of ideas for people who build what's next",
+    "logo": null,
+    "showName": true
+  },
+  "site": {
+    "multiPage": false,
+    "crumbs": true,
+    "pageLabels": {
+      "home": "Home",
+      "schedule": "Schedule",
+      "lineup": "Speakers",
+      "about": "About",
+      "contact": "Contact",
+      "register": "Register"
+    }
+  },
+  "nav": {
+    "cta": "Register",
+    "ctaTarget": "register",
+    "ctaTargetUrl": ""
+  },
+  "event": {
+    "type": "Conference",
+    "date": "2027-03-12",
+    "time": "09:30",
+    "endDate": "2027-03-13",
+    "endTime": "18:00",
+    "dateText": "",
+    "venue": "Harbour Convention Centre",
+    "city": "Mumbai",
+    "mode": "inperson",
+    "onlineUrl": "",
+    "countdown": true,
+    "countLabel": "Starts in",
+    "endedText": "This event has ended. Thank you for being part of it."
+  },
+  "sections": [
+    {
+      "id": "hero",
+      "label": "Home",
+      "show": true,
+      "inNav": false
+    },
+    {
+      "id": "clients",
+      "label": "Sponsors",
+      "show": true,
+      "inNav": false
+    },
+    {
+      "id": "about",
+      "label": "About",
+      "show": true,
+      "inNav": true
+    },
+    {
+      "id": "services",
+      "label": "Highlights",
+      "show": true,
+      "inNav": false
+    },
+    {
+      "id": "stats",
+      "label": "Numbers",
+      "show": true,
+      "inNav": false
+    },
+    {
+      "id": "team",
+      "label": "Speakers",
+      "show": true,
+      "inNav": true
+    },
+    {
+      "id": "schedule",
+      "label": "Schedule",
+      "show": true,
+      "inNav": true
+    },
+    {
+      "id": "tickets",
+      "label": "Tickets",
+      "show": true,
+      "inNav": true
+    },
+    {
+      "id": "gallery",
+      "label": "Gallery",
+      "show": true,
+      "inNav": false
+    },
+    {
+      "id": "venue",
+      "label": "Venue",
+      "show": true,
+      "inNav": true
+    },
+    {
+      "id": "work",
+      "label": "Past editions",
+      "show": false,
+      "inNav": false
+    },
+    {
+      "id": "process",
+      "label": "How it works",
+      "show": false,
+      "inNav": false
+    },
+    {
+      "id": "testimonials",
+      "label": "What people say",
+      "show": true,
+      "inNav": false
+    },
+    {
+      "id": "faq",
+      "label": "FAQ",
+      "show": true,
+      "inNav": false
+    },
+    {
+      "id": "cta",
+      "label": "Call to action",
+      "show": true,
+      "inNav": false
+    },
+    {
+      "id": "contact",
+      "label": "Contact",
+      "show": true,
+      "inNav": true
+    }
+  ],
+  "hero": {
+    "eyebrow": "Conference · 2027",
+    "title": "Two days of ideas for people\nwho build *what's next*.",
+    "lede": "Talks, workshops and conversations with the people shaping technology, design and business. Come for the sessions, stay for the people you meet.",
+    "ctaPrimary": "Register now",
+    "ctaPrimaryTarget": "register",
+    "ctaPrimaryTargetUrl": "",
+    "ctaSecondary": "See the schedule",
+    "ctaSecondaryTarget": "schedule",
+    "ctaSecondaryTargetUrl": "",
+    "image": null,
+    "badges": [
+      "40+ speakers",
+      "1,200 attendees",
+      "2 days, 3 stages"
+    ],
+    "showMeta": true,
+    "slides": {
+      "enabled": false,
+      "items": [],
+      "effect": "fade",
+      "interval": 6,
+      "speed": 1.2,
+      "overlay": 45,
+      "overlayColor": "#0E1B2C",
+      "overlayStyle": "left",
+      "textColor": "light",
+      "height": "tall",
+      "dots": true,
+      "arrows": false,
+      "pause": true,
+      "hideArt": true,
+      "artOpacity": 100
+    },
+    "panel": {
+      "show": true,
+      "dot": true
+    }
+  },
+  "clients": {
+    "title": "Supported by",
+    "logos": [
+      {
+        "name": "Arcadia Bank",
+        "logo": null
+      },
+      {
+        "name": "Helix Health",
+        "logo": null
+      },
+      {
+        "name": "Orbit Insurance",
+        "logo": null
+      },
+      {
+        "name": "Lumen Retail",
+        "logo": null
+      },
+      {
+        "name": "Stratus Cloud",
+        "logo": null
+      },
+      {
+        "name": "Vertex Labs",
+        "logo": null
+      }
+    ]
+  },
+  "services": {
+    "eyebrow": "What to expect",
+    "title": "Made to be useful, not just inspiring",
+    "lede": "Every session is chosen so you leave with something you can use on Monday.",
+    "items": [
+      {
+        "icon": "spark",
+        "title": "Keynotes",
+        "body": "Big-picture talks from people who have built and led at scale.",
+        "points": [
+          "Opening keynote",
+          "Founder stories",
+          "Closing fireside"
+        ]
+      },
+      {
+        "icon": "layers",
+        "title": "Hands-on workshops",
+        "body": "Small rooms, real exercises and experts on hand to help.",
+        "points": [
+          "Limited to 40 seats",
+          "Bring a laptop",
+          "Materials included"
+        ]
+      },
+      {
+        "icon": "people",
+        "title": "Networking",
+        "body": "Curated meet-ups so you find the people you came to meet.",
+        "points": [
+          "Speed networking",
+          "Evening social",
+          "Community tables"
+        ]
+      },
+      {
+        "icon": "rocket",
+        "title": "Showcase",
+        "body": "New products and demos from teams doing interesting work.",
+        "points": [
+          "Startup alley",
+          "Live demos",
+          "Partner booths"
+        ]
+      }
+    ]
+  },
+  "about": {
+    "eyebrow": "About the event",
+    "title": "A gathering built around conversations",
+    "body": "Horizon Summit brings together people who design, build and lead. Over two days you'll hear practical talks, join workshops and meet others working on the same problems as you.\n\nIt's independent, carefully curated and small enough that you can actually talk to the speakers.",
+    "image": null,
+    "mission": "",
+    "vision": "",
+    "values": [
+      {
+        "title": "Practical",
+        "body": "Talks you can apply, from people who have done the work."
+      },
+      {
+        "title": "Open",
+        "body": "Speakers stay for the whole event and join the conversations."
+      },
+      {
+        "title": "Welcoming",
+        "body": "A code of conduct, quiet spaces and an accessible venue."
+      }
+    ]
+  },
+  "stats": {
+    "items": [
+      {
+        "value": "40+",
+        "label": "Speakers"
+      },
+      {
+        "value": "1,200",
+        "label": "Attendees"
+      },
+      {
+        "value": "24",
+        "label": "Sessions"
+      },
+      {
+        "value": "2",
+        "label": "Days"
+      }
+    ]
+  },
+  "team": {
+    "eyebrow": "Speakers",
+    "title": "Who you'll hear from",
+    "lede": "Builders, designers and leaders sharing what they've learned.",
+    "members": [
+      {
+        "name": "Ananya Rao",
+        "role": "Chief Product Officer, Arcadia",
+        "topic": "Keynote: Products people keep",
+        "photo": null,
+        "bio": "",
+        "linkedin": ""
+      },
+      {
+        "name": "David Mercer",
+        "role": "Head of Design, Lumen",
+        "topic": "Design systems at scale",
+        "photo": null,
+        "bio": "",
+        "linkedin": ""
+      },
+      {
+        "name": "Karan Mehta",
+        "role": "Founder, Vertex Labs",
+        "topic": "From prototype to platform",
+        "photo": null,
+        "bio": "",
+        "linkedin": ""
+      },
+      {
+        "name": "Sara Lindqvist",
+        "role": "VP Engineering, Stratus",
+        "topic": "Teams that ship",
+        "photo": null,
+        "bio": "",
+        "linkedin": ""
+      }
+    ]
+  },
+  "schedule": {
+    "eyebrow": "Schedule",
+    "title": "What's on",
+    "lede": "Times are local. The programme may change a little before the day.",
+    "days": [
+      {
+        "label": "Day 1",
+        "date": "2027-03-12",
+        "items": [
+          {
+            "time": "09:30",
+            "title": "Doors open & registration",
+            "who": "",
+            "place": "Main foyer",
+            "body": "",
+            "tag": ""
+          },
+          {
+            "time": "10:30",
+            "title": "Opening keynote: Products people keep",
+            "who": "Ananya Rao",
+            "place": "Main stage",
+            "body": "",
+            "tag": "Keynote"
+          },
+          {
+            "time": "12:00",
+            "title": "Design systems at scale",
+            "who": "David Mercer",
+            "place": "Stage 2",
+            "body": "",
+            "tag": "Talk"
+          },
+          {
+            "time": "13:00",
+            "title": "Lunch & networking",
+            "who": "",
+            "place": "Terrace",
+            "body": "",
+            "tag": "Break"
+          },
+          {
+            "time": "14:30",
+            "title": "Workshop: From prototype to platform",
+            "who": "Karan Mehta",
+            "place": "Workshop room",
+            "body": "",
+            "tag": "Workshop"
+          },
+          {
+            "time": "18:30",
+            "title": "Evening social",
+            "who": "",
+            "place": "Rooftop",
+            "body": "",
+            "tag": "Social"
+          }
+        ]
+      },
+      {
+        "label": "Day 2",
+        "date": "2027-03-13",
+        "items": [
+          {
+            "time": "10:00",
+            "title": "Teams that ship",
+            "who": "Sara Lindqvist",
+            "place": "Main stage",
+            "body": "",
+            "tag": "Talk"
+          },
+          {
+            "time": "11:30",
+            "title": "Panel: What we'd do differently",
+            "who": "All speakers",
+            "place": "Main stage",
+            "body": "",
+            "tag": "Panel"
+          },
+          {
+            "time": "14:00",
+            "title": "Startup showcase",
+            "who": "",
+            "place": "Expo hall",
+            "body": "",
+            "tag": "Showcase"
+          },
+          {
+            "time": "16:30",
+            "title": "Closing fireside & awards",
+            "who": "",
+            "place": "Main stage",
+            "body": "",
+            "tag": "Keynote"
+          }
+        ]
+      }
+    ]
+  },
+  "tickets": {
+    "eyebrow": "Tickets",
+    "title": "Choose your pass",
+    "lede": "Prices include all sessions and lunch on both days.",
+    "note": "Group of five or more? Write to us for a group rate.",
+    "button": "Register",
+    "soldOut": "Sold out",
+    "free": "Free"
+  },
+  "register": {
+    "enabled": true,
+    "kind": "auto",
+    "title": "Register",
+    "lede": "It takes about a minute. You'll get a confirmation by email.",
+    "closes": "",
+    "closedText": "Registration is closed.",
+    "tickets": [
+      {
+        "name": "Standard pass",
+        "price": 4999,
+        "blurb": "Both days, all talks.",
+        "features": [
+          "All keynotes and talks",
+          "Lunch and refreshments",
+          "Evening social"
+        ],
+        "limit": 0,
+        "featured": false,
+        "soldOut": false
+      },
+      {
+        "name": "Workshop pass",
+        "price": 7999,
+        "blurb": "Talks plus one workshop.",
+        "features": [
+          "Everything in Standard",
+          "One hands-on workshop",
+          "Workshop materials"
+        ],
+        "limit": 0,
+        "featured": true,
+        "soldOut": false
+      },
+      {
+        "name": "Student pass",
+        "price": 1499,
+        "blurb": "For full-time students.",
+        "features": [
+          "All keynotes and talks",
+          "Student ID needed at entry"
+        ],
+        "limit": 0,
+        "featured": false,
+        "soldOut": false
+      }
+    ],
+    "maxPer": 10,
+    "ask": {
+      "phone": "auto",
+      "company": "auto",
+      "role": "auto",
+      "city": "auto",
+      "guests": "auto",
+      "meal": "auto",
+      "team": "auto",
+      "size": "auto",
+      "age": "auto",
+      "emergency": "auto",
+      "notes": "auto"
+    },
+    "meals": [
+      "Vegetarian",
+      "Non-vegetarian",
+      "Vegan",
+      "Jain"
+    ],
+    "sizes": [
+      "XS",
+      "S",
+      "M",
+      "L",
+      "XL",
+      "XXL"
+    ],
+    "amounts": [
+      500,
+      1000,
+      2500,
+      5000
+    ],
+    "extra": [],
+    "payLater": true,
+    "payLaterLabel": "Pay at the venue",
+    "submit": "",
+    "success": "You're registered. We've noted your details and will be in touch with what happens next.",
+    "consent": "",
+    "notify": false,
+    "notifyTo": ""
+  },
+  "payments": {
+    "razorpay": {
+      "enabled": false
+    },
+    "cashfree": {
+      "enabled": false
+    },
+    "phonepe": {
+      "enabled": false
+    },
+    "stripe": {
+      "enabled": false
+    },
+    "paypal": {
+      "enabled": false
+    }
+  },
+  "gallery": {
+    "eyebrow": "Gallery",
+    "title": "Moments from last time",
+    "lede": "",
+    "images": []
+  },
+  "venue": {
+    "eyebrow": "Venue",
+    "title": "Getting there",
+    "lede": "",
+    "name": "Harbour Convention Centre",
+    "address": "12 Marine Drive\nMumbai 400020",
+    "mapUrl": "",
+    "image": null,
+    "points": [
+      {
+        "title": "By metro",
+        "body": "Five minutes' walk from Churchgate station."
+      },
+      {
+        "title": "Parking",
+        "body": "Paid parking in the basement, with spaces kept for accessible vehicles."
+      },
+      {
+        "title": "Stay nearby",
+        "body": "Partner hotels within walking distance. Ask us for the event rate."
+      }
+    ]
+  },
+  "work": {
+    "eyebrow": "Past editions",
+    "title": "Where we've been",
+    "lede": "",
+    "items": []
+  },
+  "process": {
+    "eyebrow": "How it works",
+    "title": "From sign-up to the day",
+    "steps": [
+      {
+        "title": "Register",
+        "body": "Pick a pass and fill in your details."
+      },
+      {
+        "title": "Get your confirmation",
+        "body": "We email your registration number."
+      },
+      {
+        "title": "Come along",
+        "body": "Show the confirmation at the entrance."
+      }
+    ]
+  },
+  "testimonials": {
+    "eyebrow": "From last year",
+    "title": "What people said",
+    "items": [
+      {
+        "quote": "The most useful two days I spent all year. I came back with a notebook full of things to try.",
+        "name": "Priya Nair",
+        "role": "Product Lead",
+        "company": "Arcadia Bank"
+      },
+      {
+        "quote": "Small enough to meet everyone, big enough to hear from the best. Already booked for next year.",
+        "name": "James Whitfield",
+        "role": "Founder",
+        "company": "Orbit"
+      }
+    ]
+  },
+  "faq": {
+    "eyebrow": "FAQ",
+    "title": "Good to know",
+    "items": [
+      {
+        "q": "Can I get a refund?",
+        "a": "Yes, up to 14 days before the event. After that you can pass your ticket to someone else."
+      },
+      {
+        "q": "Is the venue accessible?",
+        "a": "Yes. Step-free access, accessible toilets and reserved seating. Tell us what you need when you register."
+      },
+      {
+        "q": "Will sessions be recorded?",
+        "a": "Main stage talks are recorded and sent to ticket holders after the event."
+      },
+      {
+        "q": "Is food included?",
+        "a": "Lunch and refreshments are included on both days. Tell us about dietary needs when you register."
+      }
+    ]
+  },
+  "cta": {
+    "title": "Seats are limited.",
+    "body": "Register today to be sure of your place.",
+    "button": "Register now",
+    "target": "register",
+    "targetUrl": ""
+  },
+  "contact": {
+    "eyebrow": "Contact",
+    "title": "Questions? Write to us",
+    "lede": "For sponsorship, speaking, press and group bookings.",
+    "email": "hello@horizonsummit.example",
+    "phone": "+91 22 4000 1234",
+    "whatsapp": "",
+    "address": "Harbour Convention Centre\n12 Marine Drive, Mumbai 400020",
+    "hours": "",
+    "mapUrl": "",
+    "linkedin": "",
+    "form": {
+      "enabled": true,
+      "title": "Send us a message",
+      "askPhone": true,
+      "askCompany": false,
+      "askService": false,
+      "askBudget": false,
+      "budgets": [],
+      "submit": "Send message",
+      "success": "Thank you. We've received your message and will reply soon.",
+      "consent": "I agree to be contacted about this message.",
+      "saveTo": "auto",
+      "fileUrl": "",
+      "sbUrl": "",
+      "sbKey": "",
+      "site": "",
+      "notify": false,
+      "notifyTo": "",
+      "notifySubject": ""
+    }
+  },
+  "footer": {
+    "text": "Two days of ideas for people who build what's next.",
+    "legal": "© {year} Horizon Summit. All rights reserved.",
+    "links": [
+      {
+        "label": "Privacy",
+        "url": ""
+      },
+      {
+        "label": "Terms",
+        "url": ""
+      }
+    ]
+  },
+  "seo": {
+    "title": "Horizon Summit 2027 · Mumbai",
+    "description": "Two days of talks, workshops and conversations for people who build what's next. Register now.",
+    "titlePattern": "{page} · {site}",
+    "keywords": "",
+    "author": "",
+    "image": null,
+    "siteUrl": "",
+    "themeColor": "",
+    "noindex": false,
+    "googleVerification": "",
+    "meta": []
+  }
+}

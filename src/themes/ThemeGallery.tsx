@@ -4,11 +4,15 @@ import { themeCode } from "./codes";
 import { RestSwatch, restLine } from "./RestSwatch";
 import { Logo } from "../ui/kit";
 import { BIZ_TYPES } from "./businessTypes";
+import { EVT_TYPES } from "./events";
+
+/** How many themes a long list shows at first (the events list has close to two thousand). */
+const PAGE = 240;
 
 /** A small drawing of the theme: background, a card in its card style, a button in its button style, and the hero layout. */
 export function ThemeSwatch({ t }: { t: Theme }) {
   const c = t.colors, r = Math.min(t.radius, 16) / 2;
-  if (t.id.startsWith("biz-")) return <BizSwatch t={t} />;
+  if (t.id.startsWith("biz-") || t.id.startsWith("evt-")) return <BizSwatch t={t} />;
   if (t.id.startsWith("rest-")) return <RestSwatch t={t} />;
   if (t.signature)
     return (
@@ -73,10 +77,11 @@ export function ThemeGallery({ current, onPick, compact, dense, themes = THEMES,
   const on = (t: Theme) => (chosen ? chosen.includes(t.id) : current === t.id);
   const [tag, setTag] = useState("");
   const [q, setQ] = useState("");
-  const num = (x: string) => x.trim().toUpperCase().replace(/^[TBR]-?0*/, "");
+  const num = (x: string) => x.trim().toUpperCase().replace(/^[TBRE]-?0*/, "");
+  const [more, setMore] = useState(1);
   const list = useMemo(() => themes.filter((t) => (!tag || t.tags.includes(tag)) && (!q || t.name.toLowerCase().includes(q.toLowerCase()) || num(themeCode(t)) === num(q))), [themes, tag, q]);
   // Business themes also carry the kind of business they suit (60 of them): those go in a menu, the styles stay as buttons.
-  const present = tags.filter((x) => themes.some((t) => t.tags.includes(x))), typeSet = new Set(BIZ_TYPES), typeTags = present.filter((x) => typeSet.has(x)), styleTags = typeTags.length >= 20 ? present.filter((x) => !typeSet.has(x)) : present;
+  const present = tags.filter((x) => themes.some((t) => t.tags.includes(x))), evt = themes.some((t) => t.id.startsWith("evt-")), typeSet = new Set<string>(evt ? EVT_TYPES : BIZ_TYPES), typeTags = present.filter((x) => typeSet.has(x)), styleTags = typeTags.length >= 20 ? present.filter((x) => !typeSet.has(x)) : present;
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-1.5">
@@ -85,10 +90,10 @@ export function ThemeGallery({ current, onPick, compact, dense, themes = THEMES,
           <button key={x || "all"} type="button" aria-pressed={tag === x} onClick={() => setTag(x)}
             className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${tag === x ? "border-brand-500 bg-brand-500/15 text-ink-100" : "border-ink-600 text-ink-400 hover:text-ink-100"}`}>{x || `All ${themes.length}`}</button>
         ))}
-        {typeTags.length >= 20 && <select aria-label="Type of business" className={`input w-auto py-1 text-xs ${typeSet.has(tag) ? "border-brand-500" : ""}`} value={typeSet.has(tag) ? tag : ""} onChange={(e) => setTag(e.target.value)}><option value="">Type of business…</option>{typeTags.map((x) => <option key={x} value={x}>{x}</option>)}</select>}
+        {typeTags.length >= 20 && <select aria-label={evt ? "Kind of event" : "Type of business"} className={`input w-auto py-1 text-xs ${typeSet.has(tag) ? "border-brand-500" : ""}`} value={typeSet.has(tag) ? tag : ""} onChange={(e) => { setTag(e.target.value); setMore(1); }}><option value="">{evt ? "Kind of event…" : "Type of business…"}</option>{typeTags.map((x) => <option key={x} value={x}>{x}</option>)}</select>}
       </div>
       <div className="grid gap-2.5" style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${dense ? 92 : compact ? 150 : 112}px, 1fr))` }} role={chosen ? "group" : "radiogroup"} aria-label="Themes">
-        {list.map((t) => (
+        {list.slice(0, PAGE * more).map((t) => (
           <button key={t.id} type="button" role={chosen ? "checkbox" : "radio"} aria-checked={on(t)} onClick={() => onPick(t)} title={t.blurb ? `${t.name}: ${t.blurb}` : `${t.name}: ${t.style.layout} layout, ${t.style.cards} cards, ${t.style.buttons} buttons, ${t.style.motionStyle} animation`}
             className={`flex flex-col overflow-hidden rounded-xl border text-left transition ${on(t) ? "border-brand-500 ring-2 ring-brand-500/50" : "border-ink-600 hover:border-ink-400"}`}>
             {dense ? <MiniSwatch t={t} /> : <ThemeSwatch t={t} />}
@@ -103,6 +108,7 @@ export function ThemeGallery({ current, onPick, compact, dense, themes = THEMES,
           </button>
         ))}
         {!list.length && <p className="col-span-full text-sm text-ink-400">No themes match.</p>}
+        {list.length > PAGE * more && <button type="button" className="btn btn-sm col-span-full justify-self-center" onClick={() => setMore(more + 1)}>Show more ({list.length - PAGE * more} more of {list.length})</button>}
       </div>
     </div>
   );

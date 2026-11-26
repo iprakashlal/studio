@@ -28,7 +28,7 @@ export function bizPageLabel(file: string, c: any): string {
   return k === "index" ? "" : oneLine(c?.site?.pageLabels?.[k] || "");
 }
 /** The page label a template gives a file, for its tab title. */
-export const pageLabel = (template: string, file: string, c: any) => (template === "store" ? storePageLabel(file, c) : template === "business" || template === "restaurant" ? bizPageLabel(file, c) : "");
+export const pageLabel = (template: string, file: string, c: any) => (template === "store" ? storePageLabel(file, c) : template === "business" || template === "restaurant" ? bizPageLabel(file, c) : template === "events" ? (file === "register.html" ? oneLine(c?.site?.pageLabels?.register || "Register") : bizPageLabel(file, c)) : "");
 
 /** The tab title for a page: the home page uses the title as typed, other pages follow the pattern. */
 export function pageTitle(c: any, file = "index.html", label = ""): string {

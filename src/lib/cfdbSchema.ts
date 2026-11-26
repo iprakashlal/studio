@@ -42,6 +42,16 @@ export const CFDB_TABLES: string[] = [
   "create index if not exists payments_site on payments (site, created_at)",
 ];
 export const CFDB_SCHEMA = CFDB_TABLES.join(";\n") + ";";
-export const CFDB_VERSION = 85;
+/** Changes to a table that already exists. Each is made once: the Worker first asks `probe`; only if that fails does it run `steps`
+ *  (together, all or nothing). Until one is in place the Worker keeps working the way it did before it.
+ *  - enquiries.ref: an order's or registration's number, read out of the saved JSON by the database itself (a generated column, so no
+ *    row is rewritten and nothing that saves an enquiry changes), with an index, so one is found directly instead of by searching the text. */
+export const CFDB_UPGRADES: { name: string; probe: string; steps: string[] }[] = [
+  { name: "enquiries.ref", probe: "select ref from enquiries limit 1", steps: [
+    "alter table enquiries add column ref text generated always as (case when json_valid(data) then coalesce(nullif(json_extract(data, '$.order_no'), ''), nullif(json_extract(data, '$.reg_no'), ''), '') else '' end) virtual",
+    "create index if not exists enquiries_ref on enquiries (site, ref)",
+  ] },
+];
+export const CFDB_VERSION = 86;
 /** The database Worker's name on Cloudflare. */
 export const CFDB_WORKER_NAME = "picaffectz-db";

@@ -107,9 +107,11 @@
   function feed(C, W) {
     var auto = /^(instagram|pinterest)$/.test(W.auto) ? W.auto : "", H = auto ? host(C) : null, board = String(W.board || "").trim();
     if (!H || (auto === "pinterest" && !board)) return null;
-    var cnt = Math.max(3, Math.min(24, +W.count || 12)), key = [H.api, H.site, auto, board, cnt].join("|"), f = FEED[key];
+    // whose Instagram: the handle (or the profile's address) the owner gave; the database then shows that account
+    var hd = String(W.handle || "").trim().replace(/^@/, "") || ((String(W.url || "").match(/instagram\.com\/([A-Za-z0-9._]{1,30})/i) || [])[1] || ""); if (!/^[A-Za-z0-9._]{1,30}$/.test(hd)) hd = "";
+    var cnt = Math.max(3, Math.min(24, +W.count || 12)), key = [H.api, H.site, auto, board, cnt, hd].join("|"), f = FEED[key];
     if (!f) { FEED[key] = "wait";
-      fetch(String(H.api).replace(/\/+$/, "") + "/wall/" + encodeURIComponent(H.site) + "?src=" + auto + "&pin=" + encodeURIComponent(auto === "pinterest" ? board : "") + "&n=" + cnt).then(function (r) { return r.json(); })
+      fetch(String(H.api).replace(/\/+$/, "") + "/wall/" + encodeURIComponent(H.site) + "?src=" + auto + "&pin=" + encodeURIComponent(auto === "pinterest" ? board : "") + "&n=" + cnt + (auto === "instagram" && hd ? "&h=" + encodeURIComponent(hd) : "")).then(function (r) { return r.json(); })
         .then(function (j) { FEED[key] = { items: j && Array.isArray(j.items) && j.items.length ? j.items : null }; if (FEED[key].items && LAST) mount(LAST.C, LAST.o); }).catch(function () { FEED[key] = { items: null }; });
       return null; }
     return f !== "wait" && f.items ? f.items.map(function (x) { return { src: String(x.img || ""), url: x.url, caption: x.caption }; }) : null;

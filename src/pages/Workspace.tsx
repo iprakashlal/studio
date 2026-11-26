@@ -278,6 +278,7 @@ const SET_INDEX: [tab: string, title: string, words: string, find?: string][] = 
   ["ai", "AI for Design yourself", "diy ai writes text reads pdf engine"],
   ["ai", "Pictures drawn by AI", "diy draw logo banner images picture style unsplash photos"],
   ["general", "WhatsApp", "meta messages otp business phone"],
+  ["general", "Instagram photos", "instagram token social wall handle meta feed posts"],
   ["general", "SMS", "text messages codes otp"],
   ["general", "Header links", "menu navigation top links"],
   ["general", "Design yourself page", "diy show hide themes page submissions", "Design yourself"],

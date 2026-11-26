@@ -128,12 +128,15 @@ export function UnsplashForm({ where }: { where: Where | null | undefined }) {
   );
 }
 /** Instagram for the social photo wall: the account owner's own access token, kept on the site's database. */
-export function InstagramForm({ where }: { where: Where | null | undefined }) {
+export function InstagramForm({ where, kind = "site" }: { where: Where | null | undefined; /** "studio": the one token every site on the Studio's database can use, by its handle. */ kind?: "studio" | "site" }) {
   const toast = useToast(), { saved, err, save } = useSaved(where || null);
-  const [token, setToken] = useState(""), [busy, setBusy] = useState("");
-  const lead = "Lets the social photo wall show your newest Instagram posts by itself. Instagram only gives them to the account's owner, so the wall needs an access token from you. It stays on this site's database, encrypted; the page never sees it.";
+  const [token, setToken] = useState(""), [busy, setBusy] = useState(""), [handle, setHandle] = useState("");
+  const studio = kind === "studio";
+  const lead = studio
+    ? "One Instagram token for every site: with it saved here, a site only needs its Instagram handle (Social photo wall → Your handle, and “My newest Instagram posts”) and its wall fills by itself. Instagram lets your account read the public posts of any Business or Creator account by its handle. The token stays on the Studio's database, encrypted."
+    : "Lets the social photo wall show the newest Instagram posts by itself. If the Studio has its own Instagram token, this site needs nothing here: its handle is enough. Paste a token here only to use this site's own Instagram app instead. It stays on this site's database, encrypted; the page never sees it.";
   if (where === undefined) return <Shell title="Instagram photos" lead={lead}><Missing why="Checking your database…" /></Shell>;
-  if (!where) return <Shell title="Instagram photos" lead={lead}><Missing why="The token is kept on the site's own Cloudflare database. Host this site on Cloudflare (Host to External Services), and sign in above, to set it up." /></Shell>;
+  if (!where) return <Shell title="Instagram photos" lead={lead}><Missing why={studio ? "The token is kept on the Studio's Cloudflare database. Host the Studio on Cloudflare (Settings → Hostings) and sign in there as its owner to set it up." : "The token is kept on the site's own Cloudflare database. Host this site on Cloudflare (Host to External Services), and sign in above, to set it up."} /></Shell>;
   if (err) return <Shell title="Instagram photos" lead={lead}><Missing why={err} /></Shell>;
   if (saved && !("ig" in (saved as any))) return <Shell title="Instagram photos" lead={lead}><Missing why="This site's database is an older version that doesn't know Instagram yet. Update it under Settings → Updates, then come back." /></Shell>;
   const g: any = (saved as any)?.ig;
@@ -153,7 +156,13 @@ export function InstagramForm({ where }: { where: Where | null | undefined }) {
         <button type="button" className="btn btn-sm" disabled={!g?.token || !!busy} onClick={go("Testing", async () => { const r = await cfCall<any>(where.api, "/set/test?scope=" + encodeURIComponent(where.scope), { method: "POST", body: JSON.stringify({ name: "ig" }) }); if (r?.error) throw new Error(r.error); toast(`Instagram answered with ${r.said}. The token works.`); })}>{busy === "Testing" ? "Testing…" : "Test"}</button>
         {g?.token && <button type="button" className="btn btn-sm btn-danger ml-auto" disabled={!!busy} onClick={go("Removing", async () => { await save("ig", null); toast("Instagram token removed."); })}>Remove</button>}
       </div>
-      <p className="text-[12.5px] text-ink-400">Then choose “My newest Instagram posts” under Social photo wall → Fill it by itself. Pinterest needs no key: just give the wall a public profile or board.</p>
+      {g?.token && <div className="flex flex-col gap-1.5 rounded-xl border border-ink-700 p-3">
+        <label htmlFor={"ig-try-" + kind} className="text-[13px] font-semibold">Try a handle</label>
+        <div className="flex flex-wrap gap-2"><input id={"ig-try-" + kind} className="input h-9 max-w-xs py-0 text-[13px]" placeholder="@anyaccount" value={handle} onChange={(e) => setHandle(e.target.value)} />
+          <button type="button" className="btn btn-sm" disabled={!handle.trim() || !!busy} onClick={go("Looking", async () => { const r = await cfCall<any>(where.api, "/set/test?scope=" + encodeURIComponent(where.scope), { method: "POST", body: JSON.stringify({ name: "ig", handle: handle.trim() }) }); if (r?.error) throw new Error(r.error); toast(`Instagram answered with ${r.said}.`); })}>{busy === "Looking" ? "Looking…" : "Look it up"}</button></div>
+        <span className="text-[11.5px] text-ink-500">Shows whether this token can read another account's posts. The account must be public and a Business or Creator account; a personal account can't be read (switching is free in the Instagram app).</span>
+      </div>}
+      <p className="text-[12.5px] text-ink-400">{studio ? "All sites share this token's hourly allowance from Instagram; each site asks twice an hour at most. A site on its own separate database can't see this token: give it one in its own Instagram photos box." : "Then choose “My newest Instagram posts” under Social photo wall → Fill it by itself. Pinterest needs no key: just give the wall a public profile or board."}</p>
     </Shell>
   );
 }

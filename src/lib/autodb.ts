@@ -93,25 +93,33 @@ export async function autoUpdateDatabases(session: Session, index: StudioIndex, 
   // Every database that is behind, so the progress counts them all (one bar for the whole update).
   const behind: { api: string; main: boolean; sites: string[]; info: Awaited<ReturnType<typeof cfDeployInfo>> }[] = [];
   for (const t of list) { const info = await cfDeployInfo(t.api); if (info.v && info.v < CFDB_VERSION) behind.push({ ...t, info }); }
-  let at = -1;
-  for (const { info, ...t } of behind) {
-    at++;
+  // The Studio's own database first, by itself; then every site database at the same time. One bar counts them all.
+  const done = behind.map(() => 0), n = behind.length;
+  const total = () => (done.reduce((a, b) => a + b, 0) / n) * 100;
+  const one = async ({ info, ...t }: (typeof behind)[number], at: number, together: number) => {
     const what = t.main ? "Studio database" : `${t.sites.slice(0, 2).join(", ")}${t.sites.length > 2 ? ` +${t.sites.length - 2}` : ""} database`;
-    const note = (x: string) => step(behind.length > 1 ? `${x} (${what}, ${at + 1} of ${behind.length})` : x, ((at + stepAt(x) / 100) / behind.length) * 100);
+    const note = (x: string) => { done[at] = Math.max(done[at], stepAt(x) / 100); step(n > 1 ? (together > 1 ? `${x} (${what}; ${together} site databases at once)` : `${x} (${what}, ${at + 1} of ${n})`) : x, total()); };
     // Up to three tries per build and database in this browser session (a short failure is tried again), so a failing update can't loop.
     const key = `site-studio:auto-db-tried:${STUDIO_BUILD.id}:${t.api}`;
-    try { const n = +(sessionStorage.getItem(key) || 0); if (n >= 3) { skipped = true; continue; } sessionStorage.setItem(key, String(n + 1)); } catch { /* private mode */ }
+    try { const k = +(sessionStorage.getItem(key) || 0); if (k >= 3) { skipped = true; done[at] = 1; return; } sessionStorage.setItem(key, String(k + 1)); } catch { /* private mode */ }
     const c = await clientFor(session, t.api, t.main).catch(() => null);
-    if (!c) { skipped = true; continue; }
+    if (!c) { skipped = true; done[at] = 1; return; }
     const v = await cfAccountVault.load(session.token).catch(() => null);
     const old = t.main ? (v?.setup && clean(v.setup.api) === t.api ? v.setup : null) : (v?.setups || []).find((x) => clean(x.api) === t.api) || null;
     try {
       const setup = await setupCfDb(c.relay as Relay, c.token, { account: c.account, resendKey: "", mailFrom: v?.mailFrom || "", name: "Picaffectz Studio", existing: old, requireMail: false, ...(t.main && info.deploy ? { deployToken: c.token } : {}) }, note);
       // What the manual update keeps: the new setup, on this device (never a token that only stands for the database).
-      if (v && c.own) await cfAccountVault.save(t.main ? { ...v, account: c.account.id, setup } : { ...v, setups: [...(v.setups || []).filter((x) => x.account !== c.account.id), setup] }, session.token).catch(() => {});
-      did = true; step("Database updated", ((at + 1) / behind.length) * 100);
-    } catch (e: any) { console.warn("Database update:", e?.message || e); skipped = true; }
-  }
+      // Saved one after another (see `saving`): site databases finish at the same time, and each save rewrites the whole list.
+      if (c.own) saving = saving.then(async () => { const w = await cfAccountVault.load(session.token).catch(() => null); if (w) await cfAccountVault.save(t.main ? { ...w, account: c.account.id, setup } : { ...w, setups: [...(w.setups || []).filter((x) => x.account !== c.account.id), setup] }, session.token).catch(() => {}); });
+      await saving;
+      did = true; done[at] = 1; step(n > 1 ? `Database updated (${what})` : "Database updated", total());
+    } catch (e: any) { console.warn("Database update:", e?.message || e); skipped = true; done[at] = 1; }
+  };
+  let saving: Promise<void> = Promise.resolve();
+  const mainAt = behind.findIndex((b) => b.main);
+  if (mainAt >= 0) await one(behind[mainAt], mainAt, 1);
+  const rest = behind.map((b, i) => [b, i] as const).filter(([b]) => !b.main);
+  await Promise.all(rest.map(([b, i]) => one(b, i, rest.length)));
   return did ? "updated" : skipped ? "skip" : "current";
 }
 

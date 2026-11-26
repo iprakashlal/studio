@@ -49,7 +49,7 @@ var CFDB_UPGRADES = [
     "create index if not exists enquiries_ref on enquiries (site, ref)"
   ] }
 ];
-var CFDB_VERSION = 104;
+var CFDB_VERSION = 105;
 var CFDB_WORKER_NAME = "picaffectz-db";
 
 // src/lib/diylook.ts
@@ -150,6 +150,148 @@ function cleanDiyLook(x) {
   return o;
 }
 
+// src/lib/mailtpl.ts
+var ORDER_VARS = [["name", "the customer's name"], ["order", "the order number"], ["total", "the order's total"], ["site", "your site's name"], ["when", "delivery or pickup time"]];
+var ORDER_SAMPLE = { name: "Asha Verma", order: "#1042", total: "\u20B91,480", site: "Your site", when: "Delivery, today 7:30 pm", items: "\u2022 2 \xD7 Sample item one\n\u2022 1 \xD7 Sample item two", courier: "Delhivery", tracking: "DL123456789IN", tracklink: "https://example.com/track/DL123456789IN" };
+var DETAILS_SAMPLE = "Name: Asha Verma\nEmail: asha@example.com\nPhone: 98765 43210\nMessage: Hello, I'd like to know more.";
+var status = (label, head, was, foot) => ({ label, vars: ORDER_VARS, blocks: [["items", "the list of items"]], subject: `Your order {order} ${was}`, std: `# ${head}
+
+Hi {name}, your order {order} from {site} ${was}.${foot ? `
+
+{muted:${foot}}` : ""}`, sample: ORDER_SAMPLE });
+var MAIL_KINDS = {
+  signin: {
+    label: "Sign-in code email",
+    vars: [["site", "your site's name"], ["email", "the address signing in"]],
+    blocks: [["code", "the 6-digit code, large"]],
+    subject: "Your sign-in code",
+    std: "# Your sign-in code\n\nEnter this code to sign in to {site}:\n\n{code}\n\n{muted:It works for 10 minutes. If you didn't ask for it, ignore this email.}",
+    sample: { site: "Your site", email: "you@example.com", code: "482 913" }
+  },
+  order: {
+    label: "Order confirmation to the customer",
+    vars: ORDER_VARS,
+    blocks: [["items", "the list of items"]],
+    subject: "Thanks for your order {order}",
+    std: "# We've got your order\n\nHi {name},\n\nThanks for your order {order} from {site}. We've received it and will get it ready soon.\n\nOrder total: **{total}**\n\n{muted:Your order}\n\n{items}\n\n{muted:Questions? Just reply to this email.}",
+    sample: ORDER_SAMPLE
+  },
+  orderOwner: {
+    label: "New-order email to you",
+    vars: [["name", "the customer's name"], ["order", "the order number"], ["total", "the order's total"], ["site", "your site's name"], ["email", "the customer's email"]],
+    blocks: [["details", "everything the customer filled in"]],
+    subject: "New order {order} ({total}) from {name}",
+    std: "New order **{order}** on the {site} website.\n\n{details}\n\n{muted:It is also saved under Purchased orders in the site's admin page.}",
+    sample: { ...ORDER_SAMPLE, email: "asha@example.com", details: "Name: Asha Verma\nPhone: 98765 43210\nOrder: #1042\nTotal: \u20B91,480\nItems: 2 \xD7 Sample item one, 1 \xD7 Sample item two" }
+  },
+  shipped: {
+    label: "Shipped email",
+    vars: [...ORDER_VARS, ["courier", "the courier's name"], ["tracking", "the tracking number"], ["tracklink", "the tracking page's address"]],
+    blocks: [["items", "the list of items"]],
+    subject: "Your order {order} has shipped",
+    std: "# Your order is on its way\n\nHi {name}, your order {order} from {site} has shipped with {courier}.\n\nTracking number: `{tracking}`\n\n[[Track your parcel]]({tracklink})\n\n{muted:Thank you for shopping with us.}",
+    sample: ORDER_SAMPLE
+  },
+  "status.ready": status("Order ready email", "Your order is ready", "is ready", "Thank you!"),
+  "status.out": status("Out for delivery email", "On its way to you", "is out for delivery", "Thank you!"),
+  "status.done": status("Order complete email", "Order complete", "is complete", "Thank you for choosing us."),
+  "status.cancelled": status("Order cancelled email", "Order cancelled", "was cancelled", "If you didn't ask for this, just reply to this email."),
+  enquiry: {
+    label: "Enquiry email to you",
+    vars: [["name", "the visitor's name"], ["email", "the visitor's email"], ["site", "your site's name"], ["page", "the page the form was on"]],
+    blocks: [["details", "everything the visitor filled in"]],
+    subject: "New enquiry from {name}",
+    std: "New enquiry from the {site} website.\n\n{details}\n\n{muted:It is also saved under Enquiries in the site's admin page.}",
+    sample: { name: "Asha Verma", email: "asha@example.com", site: "Your site", page: "Contact", details: DETAILS_SAMPLE }
+  },
+  reply: {
+    label: "Thank-you email to the visitor",
+    vars: [["name", "the visitor's name"], ["site", "your site's name"]],
+    blocks: [["details", "a copy of what they sent"]],
+    subject: "Thank you for contacting {site}",
+    std: "Hi {name},\n\nThank you for your message. We have received it and will get back to you soon.\n\n{site}",
+    sample: { name: "Asha Verma", email: "asha@example.com", site: "Your site", page: "Contact", details: DETAILS_SAMPLE }
+  }
+};
+var MAIL_TPL_MAX = 12e3;
+var esc = (x) => String(x).replace(/[&<>"]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[ch]);
+var URL2 = '((?:https?:\\/\\/|mailto:)[^\\s)<>"]+)';
+function inline(h) {
+  return h.replace(/`([^`\n]+)`/g, '<code style="font:13px ui-monospace,Menlo,Consolas,monospace;background:#f1f2f5;border-radius:4px;padding:1px 5px">$1</code>').replace(new RegExp("\\[\\[([^\\]\\n]+)\\]\\]\\(" + URL2 + "\\)", "g"), '<a href="$2" style="display:inline-block;background:#111;color:#fff;text-decoration:none;padding:10px 16px;border-radius:8px;font-weight:600">$1</a>').replace(new RegExp("\\[([^\\]\\n]+)\\]\\(" + URL2 + "\\)", "g"), '<a href="$2" style="color:#2456d6">$1</a>').replace(/\*\*([^*\n]+)\*\*/g, "<b>$1</b>").replace(/__([^_\n]+)__/g, "<u>$1</u>").replace(/~~([^~\n]+)~~/g, "<s>$1</s>").replace(/==([^=\n]+)==/g, '<mark style="background:#fff3a3;padding:0 2px">$1</mark>').replace(/(^|[^*])\*([^*\n]+)\*/g, "$1<i>$2</i>").replace(/\{(small|muted|big):([^{}]*)\}/g, (_m, k, t) => `<span style="${k === "big" ? "font-size:19px;font-weight:600" : k === "small" ? "font-size:13px" : "font-size:13px;color:#667"}">${t}</span>`);
+}
+function sampleBlock(text) {
+  const rows = text.split("\n").map((l) => {
+    const i = l.indexOf(": ");
+    return i > 0 ? `<tr><td style="padding:6px 14px 6px 0;color:#667;vertical-align:top;white-space:nowrap">${esc(l.slice(0, i))}</td><td style="padding:6px 0">${esc(l.slice(i + 2))}</td></tr>` : "";
+  }).join("");
+  return rows ? `<table style="border-collapse:collapse;margin:0 0 14px">${rows}</table>` : `<p style="margin:0 0 12px">${esc(text).replace(/\n/g, "<br>")}</p>`;
+}
+var codeBlock = (code) => `<p style="font-size:28px;font-weight:700;letter-spacing:6px;margin:0 0 14px">${esc(code)}</p>`;
+function sampleBlocks(kind) {
+  const K = MAIL_KINDS[kind], o = {};
+  if (!K) return o;
+  for (const [b] of K.blocks) o[b] = b === "code" ? codeBlock(K.sample.code || "000 000") : sampleBlock(K.sample[b] || "");
+  return o;
+}
+function mailMarkup(src, vars, blocks = {}) {
+  const fillLine = (s) => esc(s).replace(/\{(\w+)\}/g, (m, k) => k in vars ? esc(vars[k]).replace(/\n/g, "<br>") : m);
+  const out = [];
+  let para = [], list = [];
+  const flush = () => {
+    if (para.length) {
+      out.push(`<p style="margin:0 0 12px">${para.join("<br>")}</p>`);
+      para = [];
+    }
+    if (list.length) {
+      out.push(`<ul style="margin:0 0 12px;padding-left:20px;list-style:disc">${list.map((x) => `<li style="margin:0 0 4px">${x}</li>`).join("")}</ul>`);
+      list = [];
+    }
+  };
+  for (const raw of String(src || "").slice(0, MAIL_TPL_MAX).replace(/\r/g, "").split("\n")) {
+    const l = raw.trim();
+    let m;
+    if (!l) {
+      flush();
+      continue;
+    }
+    if ((m = /^\{(\w+)\}$/.exec(l)) && m[1] in blocks) {
+      flush();
+      out.push(blocks[m[1]]);
+      continue;
+    }
+    if (/^-{3,}$/.test(l)) {
+      flush();
+      out.push('<hr style="border:0;border-top:1px solid #dde0e6;margin:16px 0">');
+      continue;
+    }
+    if (m = /^(#{1,3})\s+(.+)$/.exec(l)) {
+      flush();
+      const n = m[1].length;
+      out.push(`<h${n + 1} style="margin:0 0 12px;font-size:${n === 1 ? 20 : n === 2 ? 17 : 15}px">${inline(fillLine(m[2]))}</h${n + 1}>`);
+      continue;
+    }
+    if (m = /^>\s?(.*)$/.exec(l)) {
+      flush();
+      out.push(`<blockquote style="margin:0 0 12px;padding:2px 0 2px 12px;border-left:3px solid #c9ced8;color:#445">${inline(fillLine(m[1]))}</blockquote>`);
+      continue;
+    }
+    if (m = /^[-•]\s+(.+)$/.exec(l)) {
+      if (para.length) flush();
+      list.push(inline(fillLine(m[1])));
+      continue;
+    }
+    if (list.length) flush();
+    para.push(inline(fillLine(l)));
+  }
+  flush();
+  return out.join("");
+}
+function tplOf(emails, kind) {
+  let o = emails;
+  for (const k of kind.split(".")) o = o && typeof o === "object" ? o[k] : void 0;
+  return o && typeof o === "object" && typeof o.tpl === "string" && o.tpl.trim() ? o.tpl.slice(0, MAIL_TPL_MAX) : "";
+}
+
 // src/lib/lookdigest.ts
 var hex2 = (n) => Math.max(0, Math.min(255, Math.round(n))).toString(16).padStart(2, "0");
 var NAMED = { white: "#ffffff", black: "#000000" };
@@ -193,9 +335,9 @@ var top = (m, n) => [...m.entries()].sort((a, b) => b[1] - a[1]).slice(0, n);
 function digestPage(html, css) {
   html = String(html || "").slice(0, 3e6);
   css = String(css || "").slice(0, 3e6);
-  const inline = [...html.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/gi)].map((m) => m[1]).join("\n");
+  const inline2 = [...html.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/gi)].map((m) => m[1]).join("\n");
   const attrs = [...html.matchAll(/\sstyle\s*=\s*"([^"]{0,600})"/gi)].map((m) => m[1]).join(";\n");
-  const all = (css + "\n" + inline).replace(/\/\*[\s\S]*?\*\//g, ""), sheet = all + "\n" + attrs;
+  const all = (css + "\n" + inline2).replace(/\/\*[\s\S]*?\*\//g, ""), sheet = all + "\n" + attrs;
   const vars = /* @__PURE__ */ new Map();
   for (const m of all.matchAll(/(--[\w-]+)\s*:\s*([^;}{]+)[;}]/g)) {
     const c = cssColor(m[2]);
@@ -730,8 +872,8 @@ function otherAccounts(env) {
 }
 var SCHEMA = CFDB_SCHEMA;
 var cors = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, content-type, x-sha", "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS", "Access-Control-Max-Age": "86400", "Access-Control-Expose-Headers": "x-sha, x-updated" };
-var json = (o, status = 200) => new Response(JSON.stringify(o), { status, headers: { ...cors, "Content-Type": "application/json" } });
-var err = (status, error) => json({ error }, status);
+var json = (o, status2 = 200) => new Response(JSON.stringify(o), { status: status2, headers: { ...cors, "Content-Type": "application/json" } });
+var err = (status2, error) => json({ error }, status2);
 var b64u = (b) => btoa(String.fromCharCode(...b)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 var unb64u = (s) => Uint8Array.from(atob(s.replace(/-/g, "+").replace(/_/g, "/")), (c) => c.charCodeAt(0));
 var hex = (b) => [...new Uint8Array(b)].map((x) => x.toString(16).padStart(2, "0")).join("");
@@ -806,12 +948,12 @@ async function gsEmail(idToken, aud, nonce) {
   }
 }
 function gsPage(title, text, finish = false) {
-  const esc = (x) => x.replace(/[&<>"]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[ch]);
+  const esc2 = (x) => x.replace(/[&<>"]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[ch]);
   const script = finish ? `<script>(function(){var q=new URLSearchParams(location.hash.slice(1)),h=document.getElementById("h"),p=document.getElementById("p");try{history.replaceState(null,"",location.pathname)}catch(e){}
 function say(a,b){h.textContent=a;p.textContent=b}
 if(q.get("error")||!q.get("id_token")){say("Not signed in",q.get("error")==="access_denied"?"You closed Google's sign-in. You can close this window.":"Google didn't finish the sign-in. Close this window and try again.");return}
 fetch("/auth/google/finish",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id_token:q.get("id_token"),state:q.get("state")})}).then(function(r){return r.json().then(function(j){return{ok:r.ok,j:j}})}).then(function(x){if(x.ok){say("Signed in","You can close this window and go back.");setTimeout(function(){try{window.close()}catch(e){}},400)}else say("Not signed in",(x.j&&x.j.error)||"Something went wrong. Close this window and try again.")}).catch(function(){say("Not signed in","Couldn't reach the sign-in. Close this window and try again.")})})();</script>` : "";
-  return new Response(`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><meta name="referrer" content="no-referrer"><title>Sign in</title><style>body{font:16px/1.6 system-ui,sans-serif;max-width:420px;margin:18vh auto;padding:0 20px;color:#1d2433;text-align:center}p{color:#5b6475}</style><h1 id="h">${esc(title)}</h1><p id="p">${esc(text)}</p>${script}`, { status: 200, headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Frame-Options": "DENY" } });
+  return new Response(`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><meta name="referrer" content="no-referrer"><title>Sign in</title><style>body{font:16px/1.6 system-ui,sans-serif;max-width:420px;margin:18vh auto;padding:0 20px;color:#1d2433;text-align:center}p{color:#5b6475}</style><h1 id="h">${esc2(title)}</h1><p id="p">${esc2(text)}</p>${script}`, { status: 200, headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Frame-Options": "DENY" } });
 }
 var roleOf = async (env, scope, email) => email ? (await env.DB.prepare("select role from members where scope = ? and email = ?").bind(scope, email).first())?.role || null : null;
 async function readFile(env, scope, path) {
@@ -887,7 +1029,8 @@ async function notifyEnquiry(env, site, data, page) {
     const subject = data.order_no ? oneLine(fill(String(OO.subject || "New order {order}{totalbit} from {name}"), { ...ov, totalbit: data.total ? " (" + data.total + ")" : "" })).slice(0, 150) || "New order" : oneLine(fill(String(F.notifySubject || (data.reg_no ? "New registration from {name} (" + data.reg_no + ")" : "New enquiry from {name}")), { ...vars, name: vars.name || "your website" })).slice(0, 150) || "New enquiry";
     const intro = data.order_no ? fill(String(OO.intro || "New order {order} on the {site} website."), ov) : fill(String(E2.enquiry?.intro || (data.reg_no ? "New registration on the {site} website." : "New enquiry from the {site} website.")), vars);
     const foot = (data.order_no ? fill(String(OO.footer || "It is also saved under Purchased orders in the site's admin page."), ov) : fill(String(E2.enquiry?.footer || "It is also saved under Enquiries in the site's admin page."), vars)) + (EMAIL_RE.test(data.email || "") ? " Reply to this email to answer the visitor." : "");
-    jobs.push(sendMail(env, owners, subject, WRAP(paras(intro) + table + paras(foot, "margin:0 0 8px;color:#667;font-size:13px")), EMAIL_RE.test(data.email || "") ? data.email : void 0).then(() => {
+    const oTpl = tplOf(E2, data.order_no ? "orderOwner" : "enquiry");
+    jobs.push(sendMail(env, owners, subject, WRAP(oTpl ? mailMarkup(oTpl, data.order_no ? ov : vars, { details: table }) : paras(intro) + table + paras(foot, "margin:0 0 8px;color:#667;font-size:13px")), EMAIL_RE.test(data.email || "") ? data.email : void 0).then(() => {
       said = "Emailed to " + owners.join(", ") + ".";
     }, (e) => {
       said = "Not emailed: " + String(e?.message || e).slice(0, 300);
@@ -900,7 +1043,8 @@ async function notifyEnquiry(env, site, data, page) {
       const subject = oneLine(fill(String(E2.reply.subject || "Thank you for contacting {site}"), v2)).slice(0, 150) || "Thank you";
       const body = fill(String(E2.reply.message || "Hi {name},\n\nThank you for your message. We have received it and will get back to you soon.\n\n{site}"), v2);
       const copy = E2.reply.copy === true ? `<p style="margin:14px 0 6px;color:#667;font-size:13px">${hesc(String(E2.reply.copyLabel || "What you sent us"))}</p>${table}` : "";
-      jobs.push(sendMail(env, String(data.email).trim(), subject, WRAP(paras(body) + copy), owners[0] || (EMAIL_RE.test(c?.contact?.email || "") ? c.contact.email : void 0)));
+      const rTpl = tplOf(E2, "reply");
+      jobs.push(sendMail(env, String(data.email).trim(), subject, WRAP(rTpl ? mailMarkup(rTpl, v2, { details: table }) : paras(body) + copy), owners[0] || (EMAIL_RE.test(c?.contact?.email || "") ? c.contact.email : void 0)));
     }
   }
   await Promise.allSettled(jobs);
@@ -1363,18 +1507,18 @@ async function shipSaved(env, site) {
   return o;
 }
 var SHIP_OPEN = ["new", "read", "accepted", "preparing", "ready"];
-async function shipLive(env, site, rowId, d, status, force = false) {
+async function shipLive(env, site, rowId, d, status2, force = false) {
   const t = trackOf(d);
-  if (!t || !t.awb) return { live: null, why: "", status };
+  if (!t || !t.awb) return { live: null, why: "", status: status2 };
   let had = null;
   try {
     had = JSON.parse(String(d._trk || ""));
   } catch {
   }
-  if (had && (had.st === "delivered" || !force && Date.now() - (+had.t || 0) < 20 * 6e4)) return { live: had, why: "", status };
-  if (!force && !had && +d._trk_bad > Date.now() - 5 * 6e4) return { live: null, why: String(d._trk_why || ""), status };
+  if (had && (had.st === "delivered" || !force && Date.now() - (+had.t || 0) < 20 * 6e4)) return { live: had, why: "", status: status2 };
+  if (!force && !had && +d._trk_bad > Date.now() - 5 * 6e4) return { live: null, why: String(d._trk_why || ""), status: status2 };
   const saved = await shipSaved(env, site), id = pickTracker(saved, String(t.c || ""));
-  if (!id) return { live: had, why: Object.keys(saved).length ? "No tracking connection covers this courier." : "", status };
+  if (!id) return { live: had, why: Object.keys(saved).length ? "No tracking connection covers this courier." : "", status: status2 };
   let live;
   try {
     live = await trackLive(id, saved[id], String(t.awb), String(t.c || ""));
@@ -1382,16 +1526,16 @@ async function shipLive(env, site, rowId, d, status, force = false) {
     const why = e instanceof TrackError ? e.message : "The tracking service couldn't be read.";
     if (!had) await env.DB.prepare("update enquiries set data = ? where id = ? and site = ?").bind(JSON.stringify({ ...d, _trk_bad: String(Date.now()), _trk_why: why }), rowId, site).run().catch(() => {
     });
-    return { live: had, why, status };
+    return { live: had, why, status: status2 };
   }
   const keep = { ...live, ev: live.ev.slice(0, 25), t: Date.now(), via: id }, nd = { ...d, _trk: JSON.stringify(keep) };
   delete nd._trk_bad;
   delete nd._trk_why;
   const opt = await getSetting(env, "site:" + site, "ship").catch(() => null);
-  let next = status;
+  let next = status2;
   if (!opt?.manual) {
-    if (live.st === "delivered" && [...SHIP_OPEN, "out"].includes(status)) next = "done";
-    else if (["picked", "transit", "out"].includes(live.st) && SHIP_OPEN.includes(status)) next = "out";
+    if (live.st === "delivered" && [...SHIP_OPEN, "out"].includes(status2)) next = "done";
+    else if (["picked", "transit", "out"].includes(live.st) && SHIP_OPEN.includes(status2)) next = "out";
   }
   await env.DB.prepare("update enquiries set data = ?, status = ? where id = ? and site = ?").bind(JSON.stringify(nd), next, rowId, site).run();
   return { live: keep, why: "", status: next };
@@ -1432,7 +1576,8 @@ async function orderMail(env, site, kind, d, c0) {
   const btn = t?.link ? `<p style="margin:0 0 12px"><a href="${hesc(t.link)}" style="display:inline-block;background:#111;color:#fff;text-decoration:none;padding:10px 16px;border-radius:8px">${hesc(oneLine(String(T?.button || "Track your parcel")))}</a></p>` : "";
   const list = showItems ? `<p style="margin:0 0 6px;color:#667;font-size:13px">${hesc(String(T?.itemsLabel || "Your order"))}</p>${paras(vars.items, "margin:0 0 12px")}` : "";
   const reply = emailKey(c?.contact?.email) || void 0;
-  await sendMail(env, to, subject, WRAP(`<h2 style="margin:0 0 12px;font-size:20px">${hesc(heading)}</h2>${paras(body)}${list}${btn}${foot ? paras(foot, "margin:0 0 8px;color:#667;font-size:13px") : ""}`), reply);
+  const tpl = tplOf(E2, kind === "placed" ? "order" : kind === "shipped" ? "shipped" : "status." + kind);
+  await sendMail(env, to, subject, WRAP(tpl ? mailMarkup(tpl, { ...vars, tracklink: t?.link || "" }, { items: vars.items ? paras(vars.items, "margin:0 0 12px") : "" }) : `<h2 style="margin:0 0 12px;font-size:20px">${hesc(heading)}</h2>${paras(body)}${list}${btn}${foot ? paras(foot, "margin:0 0 8px;color:#667;font-size:13px") : ""}`), reply);
   return kind === "shipped" ? "Shipping email sent to " + to : "Order email (" + kind + ") sent to " + to;
 }
 async function shippedMail(env, site, d) {
@@ -3313,7 +3458,7 @@ var db_worker_default = {
         const code = String(1e5 + crypto.getRandomValues(new Uint32Array(1))[0] % 9e5);
         await env.DB.prepare("insert into codes (email, hash, expires, tries, sent) values (?, ?, ?, 0, ?) on conflict (email) do update set hash = excluded.hash, expires = excluded.expires, tries = 0, sent = excluded.sent").bind(email2, b64u(await hmac(env.SECRET, "c:" + email2 + ":" + code)), Date.now() + 10 * 6e4, Date.now()).run();
         let subject = "Your sign-in code", intro = `Enter this code to sign in${env.NAME ? " to " + env.NAME : ""}:`, footer = "It works for 10 minutes. If you didn't ask for it, ignore this email.", heading = "Your sign-in code";
-        let mailEnv = env;
+        let mailEnv = env, custom = "";
         if (typeof forSite === "string" && /^[a-z0-9][a-z0-9-]{0,59}$/.test(forSite) && await env.DB.prepare("select 1 from members where email = ? and scope = ? limit 1").bind(email2, "site:" + forSite).first()) {
           mailEnv = await siteMail(env, forSite);
           const c = await siteContent(env, forSite).catch(() => null), T = c?.emails?.signin;
@@ -3326,6 +3471,8 @@ var db_worker_default = {
             }
             if (T.intro) intro = fill(String(T.intro), vars);
             if (T.footer) footer = fill(String(T.footer), vars);
+            const tp = tplOf(c.emails, "signin");
+            if (tp && /\{code\}/.test(tp)) custom = mailMarkup(tp, { ...vars, code }, { code: codeBlock(code) });
           }
         } else if (typeof forStudio === "string" && /^[a-z0-9][a-z0-9-]{0,59}$/.test(forStudio) && await env.DB.prepare("select 1 from members where email = ? and scope = ? limit 1").bind(email2, "studio:" + forStudio).first()) {
           let E2 = null;
@@ -3363,7 +3510,7 @@ var db_worker_default = {
           }
         }
         try {
-          await sendMail(mailEnv, email2, subject, WRAP(`<h2 style="margin:0 0 12px;font-size:20px">${hesc(heading)}</h2>${paras(intro)}<p style="font-size:28px;font-weight:700;letter-spacing:6px;margin:0 0 14px">${code}</p>${paras(footer, "margin:0 0 8px;color:#667;font-size:13px")}`));
+          await sendMail(mailEnv, email2, subject, custom ? WRAP(custom) : WRAP(`<h2 style="margin:0 0 12px;font-size:20px">${hesc(heading)}</h2>${paras(intro)}<p style="font-size:28px;font-weight:700;letter-spacing:6px;margin:0 0 14px">${code}</p>${paras(footer, "margin:0 0 8px;color:#667;font-size:13px")}`));
         } catch (e) {
           if (!onWa && !onSms) throw e;
         }
@@ -3553,13 +3700,13 @@ var db_worker_default = {
           const hour = new Date(Date.now() - 36e5).toISOString();
           const n = await env.DB.prepare("select count(*) n, sum(case when created_at > ? then 1 else 0 end) h from approval_notes where token = ?").bind(hour, token).first();
           if ((n?.n || 0) >= 300 || (n?.h || 0) >= 40) return err(429, "Too many notes on this link for now. Try again later.");
-          let kind = "comment", status = a.status;
+          let kind = "comment", status2 = a.status;
           if (sub === "decide") {
             if (b.decision !== "approved" && b.decision !== "changes") return err(400, "Choose approve or request changes.");
             if (b.decision === "changes" && !body) return err(400, "Say what should change.");
             kind = b.decision;
-            status = b.decision;
-            await env.DB.prepare("update approvals set status = ?, decided_by = ?, decided_at = ? where token = ?").bind(status, whoIs, now, token).run();
+            status2 = b.decision;
+            await env.DB.prepare("update approvals set status = ?, decided_by = ?, decided_at = ? where token = ?").bind(status2, whoIs, now, token).run();
           } else if (!body) return err(400, "Write your comment.");
           await env.DB.prepare("insert into approval_notes (token, who, body, page, kind, created_at) values (?, ?, ?, ?, ?, ?)").bind(token, whoIs, body, oneLine(String(b.page || "")).slice(0, 120), kind, now).run();
           const mail = (async () => {
@@ -3571,7 +3718,7 @@ var db_worker_default = {
           });
           if (ctx?.waitUntil) ctx.waitUntil(mail);
           else await mail;
-          return json({ ok: true, status, notes: await notes() });
+          return json({ ok: true, status: status2, notes: await notes() });
         }
         return err(404, "Not found.");
       }
@@ -4362,6 +4509,19 @@ ${body}`)}${paras("Approve or hide it under Reviews in your site's admin page.",
       if (!scopeOk(scope)) return err(400, "Unknown scope.");
       const role = await roleOf(env, scope, email);
       if (!role) return err(403, `${email} isn't a member of this ${scope.startsWith("site:") ? "site" : "Studio"}.`);
+      if (p === "/mail/test" && req.method === "POST") {
+        if (!scope.startsWith("site:")) return err(400, "Test emails are for a site's templates.");
+        const b = await req.json().catch(() => ({})), kind = String(b.kind || ""), K = MAIL_KINDS[kind];
+        if (!K) return err(400, "Unknown email.");
+        const site = scope.slice(5), c = await siteContent(env, site).catch(() => null), vars = { ...K.sample, site: siteName(c, site), ...kind === "signin" ? { email } : {} };
+        const tpl = String(typeof b.tpl === "string" && b.tpl.trim() ? b.tpl : K.std).slice(0, MAIL_TPL_MAX);
+        const tk = "mailtest:" + email, hit = await env.DB.prepare("select tries, sent from codes where email = ?").bind(tk).first(), fresh = !hit || Date.now() - (hit.sent || 0) > 6e5;
+        if (!fresh && hit.tries >= 10) return err(429, "That's 10 test emails in ten minutes. Wait a few minutes and try again.");
+        await env.DB.prepare("insert into codes (email, hash, expires, tries, sent) values (?, '', 0, 1, ?) on conflict (email) do update set tries = ?, sent = ?").bind(tk, Date.now(), fresh ? 1 : hit.tries + 1, fresh ? Date.now() : hit.sent).run();
+        const subject = "[Test] " + (oneLine(fill(String(b.subject || K.subject), vars)).slice(0, 140) || K.label);
+        await sendMail(await siteMail(env, site), email, subject, WRAP(mailMarkup(tpl, vars, sampleBlocks(kind))));
+        return json({ ok: true, to: email });
+      }
       if (p === "/set" || p === "/set/test" || p === "/set/wa" || p === "/set/sms") {
         if (role !== "owner") return err(403, "Only an owner can change connections.");
         if (p === "/set/sms" && req.method === "POST") {
@@ -5120,8 +5280,8 @@ ${body}`)}${paras("Approve or hide it under Reviews in your site's admin page.",
         delete d._trk_why;
         if (!awb && !url) delete d._track;
         else d._track = JSON.stringify({ c, awb, url, name: oneLine(String(b.name || "")).slice(0, 60), at: (/* @__PURE__ */ new Date()).toISOString() });
-        let status = row.status, said = "";
-        if (b.ship && d._track && SHIP_OPEN.includes(status)) status = "out";
+        let status2 = row.status, said = "";
+        if (b.ship && d._track && SHIP_OPEN.includes(status2)) status2 = "out";
         if (b.ship && d._track && !d._ship_mail) {
           const opt = await getSetting(env, scope, "ship").catch(() => null);
           if (!opt?.quiet) {
@@ -5129,8 +5289,8 @@ ${body}`)}${paras("Approve or hide it under Reviews in your site's admin page.",
             if (said) d._ship_mail = said;
           }
         }
-        await env.DB.prepare("update enquiries set data = ?, status = ? where id = ? and site = ?").bind(JSON.stringify(d), status, b.id, site).run();
-        return json({ ok: true, status, data: d, mail: said });
+        await env.DB.prepare("update enquiries set data = ?, status = ? where id = ? and site = ?").bind(JSON.stringify(d), status2, b.id, site).run();
+        return json({ ok: true, status: status2, data: d, mail: said });
       }
       if ((p === "/e/status" || p === "/e/delete") && req.method === "POST") {
         const b = await req.json();

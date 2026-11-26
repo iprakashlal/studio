@@ -30,7 +30,7 @@ export type Gallery = {
   title?: string; intro?: string;
 };
 export const NOTICE_TEXT = "Please note that this is just a preview to help you select a theme. Both the theme and the actual development can be customized to fit your specific requirements.";
-export { DIY_FONTS, DIY_WORDS, type DiyBg, type DiyUi, type DiyWord } from "./diylook";
+export { DIY_BUBBLES, DIY_FONTS, DIY_WORDS, type DiyBg, type DiyUi, type DiyWord } from "./diylook";
 import type { DiyBg, DiyUi, DiyWord } from "./diylook";
 export type DesignSettings = {
   on?: boolean;

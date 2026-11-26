@@ -2,7 +2,7 @@ import { themeCode } from "../themes/codes";
 import { useEffect, useMemo, useState } from "react";
 import { pushPref, savePrefNow } from "../lib/prefs";
 import { cleanDesignSettings, readDesignSettings, writeDesignSettings, type DesignSettings } from "../lib/designs";
-import { DIY_FONTS, DIY_WORDS, NOTICE_TEXT, GROUPS, KINDS, LOOK_AXES, type DiyWord, type Gallery, type Kind, type LookRule } from "../lib/designlook";
+import { DIY_BUBBLES, DIY_FONTS, DIY_WORDS, NOTICE_TEXT, GROUPS, KINDS, LOOK_AXES, type DiyWord, type Gallery, type Kind, type LookRule } from "../lib/designlook";
 import { shrinkImage } from "../lib/brand";
 import { ANIM_BGS, ANIM_SPEEDS, BG_PATTERNS } from "../schema/animbg";
 import type { DiyBg } from "../lib/diylook";
@@ -257,37 +257,48 @@ export function DesignLookTab({ session, studio, index, onIndex, part, lead }: {
         ))}
       </Block>
 
-      <Block title="Page look" note="How the whole Design yourself page looks. Anything left as “The Studio's own” follows Settings → Customize. Your own Studio keeps its look: this is worn only while the Design yourself page is open.">
+      <Block title="Page look" note="How the Design yourself page looks to a visitor. Anything left unset follows your Studio's own look. Your Studio itself is not changed.">
         {(() => {
-          const u = d.ui || {}, sel = "input h-10 py-0 text-[13px]";
-          return <>
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-              <label className="flex flex-col gap-1 text-[13px] font-semibold">Light or dark<select className={sel} value={u.mode || ""} onChange={(e) => setUi({ mode: (e.target.value || undefined) as any })}><option value="">The Studio's own</option><option value="dark">Dark</option><option value="light">Light</option></select></label>
-              <label className="flex flex-col gap-1 text-[13px] font-semibold">Accent colour (buttons, progress bar, links)
-                <span className="flex items-center gap-2"><input type="color" aria-label="Accent colour" className="h-10 w-12 cursor-pointer rounded border border-ink-600 bg-transparent p-0.5" value={u.accent || "#5b7cff"} onChange={(e) => setUi({ accent: e.target.value })} />
-                  <span className="font-mono text-xs font-normal text-ink-400">{u.accent || "the Studio's own"}</span>{u.accent && <button type="button" className="btn btn-ghost btn-sm" onClick={() => setUi({ accent: undefined })}>Reset</button>}</span></label>
-              <label className="flex flex-col gap-1 text-[13px] font-semibold">Corners<select className={sel} value={u.radius || ""} onChange={(e) => setUi({ radius: (e.target.value || undefined) as any })}><option value="">Standard (soft)</option><option value="sharp">Square</option><option value="round">Very round</option></select></label>
-              <label className="flex flex-col gap-1 text-[13px] font-semibold">Font for text<select className={sel} value={u.font || ""} onChange={(e) => setUi({ font: e.target.value || undefined })}><option value="">The Studio's own (Manrope)</option>{DIY_FONTS.map((f) => <option key={f} value={f}>{f}</option>)}</select></label>
-              <label className="flex flex-col gap-1 text-[13px] font-semibold">Font for headings<select className={sel} value={u.head || ""} onChange={(e) => setUi({ head: e.target.value || undefined })}><option value="">Same as the text</option>{DIY_FONTS.map((f) => <option key={f} value={f}>{f}</option>)}</select></label>
-              <label className="flex flex-col gap-1 text-[13px] font-semibold">Width of the chat<select className={sel} value={u.width || ""} onChange={(e) => setUi({ width: (e.target.value || undefined) as any })}><option value="">Standard</option><option value="narrow">Narrow column</option><option value="wide">Full width</option></select></label>
-            </div>
-            <p className="text-[11.5px] text-ink-500">The message bubbles, the page background and a background picture are under Chat look below. Fonts come from Google Fonts, like the Studio's own.</p>
-          </>;
-        })()}
-      </Block>
-
-      <Block title="Logo and name" note="What the top bar of the Design yourself page shows, and the picture beside the assistant's messages. Leave a box empty to keep the Studio's own.">
-        {(() => {
-          const u = d.ui || {};
+          const u = d.ui || {}, c = d.chat || {}, sel = "input h-10 w-full py-0 text-[13px]", lab = "flex min-w-0 flex-col gap-1.5 text-[12.5px] font-semibold";
+          const setC = (p: Partial<NonNullable<typeof d.chat>>) => { const n: any = { ...c, ...p }; for (const k of Object.keys(n)) if (n[k] === undefined || n[k] === "" || n[k] === 0) delete n[k]; upd({ chat: Object.keys(n).length ? n : undefined }); };
+          /** One colour: its name, the swatch, and a way back to the standard one. All the same size, so they line up. */
+          const col = (label: string, value: string | undefined, def: string, set: (v: string | undefined) => void) => (
+            <label key={label} className={lab}><span className="truncate">{label}</span>
+              <span className="flex h-10 items-center gap-2 rounded-lg border border-ink-700 px-2">
+                <input type="color" aria-label={label} className="h-6 w-8 flex-none cursor-pointer rounded border-0 bg-transparent p-0" value={value || def} onChange={(e) => set(e.target.value)} />
+                <span className="min-w-0 flex-1 truncate font-mono text-[11.5px] font-normal text-ink-400">{value || "standard"}</span>
+                {value && <button type="button" className="flex-none text-[11.5px] font-normal text-ink-400 underline hover:text-ink-100" onClick={(e) => { e.preventDefault(); set(undefined); }}>reset</button>}
+              </span></label>
+          );
           const pick = async (f: File | undefined) => { if (!f) return; try { setUi({ logo: await shrinkImage(f, 128) }); } catch (e: any) { alert(e?.message || "Couldn't use that picture."); } };
-          return <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            <div className="flex flex-col gap-1.5 text-[13px] font-semibold">Logo
-              <span className="flex items-center gap-2">{u.logo && <img src={u.logo} alt="" className="h-10 w-10 rounded-md border border-ink-600 object-contain" />}
-                <label className="btn btn-sm cursor-pointer">{u.logo ? "Replace" : "Choose a logo"}<input type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" onChange={(e) => { pick(e.target.files?.[0]); e.target.value = ""; }} /></label>
-                {u.logo && <button type="button" className="btn btn-ghost btn-sm" onClick={() => setUi({ logo: undefined })}>Remove</button>}</span></div>
-            <label className="flex flex-col gap-1 text-[13px] font-semibold">Name<input className="input h-10 py-0 text-[13px]" maxLength={40} placeholder="Picaffectz" value={u.name || ""} onChange={(e) => setUi({ name: e.target.value })} /></label>
-            <label className="flex flex-col gap-1 text-[13px] font-semibold">Line beside the name<input className="input h-10 py-0 text-[13px]" maxLength={60} placeholder="DIY your web" value={u.tag || ""} onChange={(e) => setUi({ tag: e.target.value })} /></label>
-          </div>;
+          return <>
+            <div className="grid gap-x-3 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
+              <label className={lab}>Light or dark<select className={sel} value={u.mode || ""} onChange={(e) => setUi({ mode: (e.target.value || undefined) as any })}><option value="">The Studio's own</option><option value="dark">Dark</option><option value="light">Light</option></select></label>
+              <label className={lab}>Corners<select className={sel} value={u.radius || ""} onChange={(e) => setUi({ radius: (e.target.value || undefined) as any })}><option value="">Soft (standard)</option><option value="sharp">Square</option><option value="round">Very round</option></select></label>
+              <label className={lab}>Chat width<select className={sel} value={u.width || ""} onChange={(e) => setUi({ width: (e.target.value || undefined) as any })}><option value="">Standard</option><option value="narrow">Narrow column</option><option value="wide">Full width</option></select></label>
+              <label className={lab}>Message shape<select className={sel} value={u.bubble || ""} onChange={(e) => setUi({ bubble: e.target.value || undefined })}>{DIY_BUBBLES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></label>
+              <label className={lab}>Text font<select className={sel} value={u.font || ""} onChange={(e) => setUi({ font: e.target.value || undefined })}><option value="">The Studio's own (Manrope)</option>{DIY_FONTS.map((f) => <option key={f} value={f}>{f}</option>)}</select></label>
+              <label className={lab}>Heading font<select className={sel} value={u.head || ""} onChange={(e) => setUi({ head: e.target.value || undefined })}><option value="">Same as the text</option>{DIY_FONTS.map((f) => <option key={f} value={f}>{f}</option>)}</select></label>
+            </div>
+            <div className="grid gap-x-3 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
+              {col("Accent (progress, links)", u.accent, "#5b7cff", (v) => setUi({ accent: v }))}
+              {col("Buttons", u.btn, u.accent || "#5b7cff", (v) => setUi({ btn: v }))}
+              {col("Top bar", u.header, "#101622", (v) => setUi({ header: v }))}
+              {col("Page background", c.page, "#150b10", (v) => setC({ page: v }))}
+              {col("Assistant's messages", c.bot, "#1f1218", (v) => setC({ bot: v }))}
+              {col("Visitor's messages", c.you, "#ff3fa4", (v) => setC({ you: v }))}
+            </div>
+            <div className="grid gap-x-3 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
+              <div className={lab}><span>Logo</span>
+                <span className="flex h-10 items-center gap-2">{u.logo && <img src={u.logo} alt="" className="h-9 w-9 flex-none rounded-md border border-ink-600 object-contain" />}
+                  <label className="btn btn-sm cursor-pointer">{u.logo ? "Replace" : "Choose"}<input type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" onChange={(e) => { pick(e.target.files?.[0]); e.target.value = ""; }} /></label>
+                  {u.logo && <button type="button" className="btn btn-ghost btn-sm" onClick={() => setUi({ logo: undefined })}>Remove</button>}</span></div>
+              <label className={lab}>Name<input className="input h-10 py-0 text-[13px] font-normal" maxLength={40} placeholder="Picaffectz" value={u.name || ""} onChange={(e) => setUi({ name: e.target.value })} /></label>
+              <label className={lab}>Line beside the name<input className="input h-10 py-0 text-[13px] font-normal" maxLength={60} placeholder="DIY your web" value={u.tag || ""} onChange={(e) => setUi({ tag: e.target.value })} /></label>
+            </div>
+            {c.image && !d.bg?.on && <p className="flex flex-wrap items-center gap-2 text-[12.5px] text-ink-400">An older background picture is still in use. <button type="button" className="underline hover:text-ink-100" onClick={() => setC({ image: undefined, dim: undefined })}>Remove it</button> (pictures are now set under Background and text).</p>}
+            {d.bg?.on && <p className="text-[12.5px] text-ink-400">Background and text is on, so it sets the page's background and whether the page is light or dark. The colours here still apply to the bar, buttons and messages.</p>}
+          </>;
         })()}
       </Block>
 
@@ -299,7 +310,7 @@ export function DesignLookTab({ session, studio, index, onIndex, part, lead }: {
         </div>
       </Block>
 
-      <Block title="Background and text" note="Give the Design yourself page its own background and text, with the same choices a website section has: a colour, a picture or GIF, a slideshow, a video, an animated background or a pattern. The text turns light or dark by itself to suit it. While this is on, it takes the place of the page colour and background picture under Chat look.">
+      <Block title="Background and text" note="A background of any kind for the page (colour, picture or GIF, slideshow, video, animated, pattern), like a website section's. The text turns light or dark by itself to suit it.">
         {(() => {
           const b = d.bg || {}, sel = "input h-10 py-0 text-[13px]", lab = "flex flex-col gap-1 text-[13px] font-semibold";
           const addPic = async (f: File | undefined, slide?: boolean) => { if (!f) return; try { const u = await fitBackdrop(f); if (slide) setBg({ slides: [...(b.slides || []), u].slice(0, 4) }); else setBg({ image: u }); } catch (e: any) { alert(e?.message || "Couldn't use that picture."); } };
@@ -339,37 +350,8 @@ export function DesignLookTab({ session, studio, index, onIndex, part, lead }: {
                 <label className={lab}>Use the font for<select className={sel} value={b.fontFor || ""} onChange={(e) => setBg({ fontFor: (e.target.value || undefined) as any })}><option value="">All the text here</option><option value="head">The headings only</option></select></label>
                 <label className={lab}>Text style<select className={sel} value={b.fontStyle || ""} onChange={(e) => setBg({ fontStyle: (e.target.value || undefined) as any })}><option value="">The page's own</option><option value="bold">Bold</option><option value="light">Light</option><option value="italic">Italic</option><option value="bolditalic">Bold italic</option><option value="upper">CAPITALS</option><option value="spaced">Spaced out</option></select></label>
               </div>
-              <span className="text-[11.5px] text-ink-500">With the text on automatic, the page wears its light or dark colours to suit the background, whatever Page look says. The message bubbles keep their own colours (Chat look).</span>
+              <span className="text-[11.5px] text-ink-500">On automatic, the page turns light or dark to suit the background, whatever Page look says.</span>
             </>}
-          </>;
-        })()}
-      </Block>
-
-      <Block title="Chat look" note="Colours and a background picture for the Design yourself chat. Leave a colour unset to keep the standard look.">
-        {(() => {
-          const c = d.chat || {}, setC = (p: Partial<NonNullable<typeof d.chat>>) => { const n: any = { ...c, ...p }; for (const k of Object.keys(n)) if (n[k] === undefined || n[k] === "" || n[k] === 0) delete n[k]; upd({ chat: Object.keys(n).length ? n : undefined }); };
-          const col = (k: "you" | "bot" | "page", label: string, def: string) => (
-            <label className="flex flex-col gap-1 text-[13px] font-semibold">{label}
-              <span className="flex items-center gap-2"><input type="color" aria-label={label} className="h-9 w-12 cursor-pointer rounded border border-ink-600 bg-transparent p-0.5" value={c[k] || def} onChange={(e) => setC({ [k]: e.target.value })} />
-                <span className="font-mono text-xs font-normal text-ink-400">{c[k] || "standard"}</span>
-                {c[k] && <button type="button" className="btn btn-ghost btn-sm" onClick={() => setC({ [k]: undefined })}>Reset</button>}</span>
-            </label>
-          );
-          const pickImg = async (f: File | undefined) => { if (!f) return; try { setC({ image: await fitBackdrop(f) }); } catch (e: any) { alert(e?.message || "Couldn't use that picture."); } };
-          return <>
-            <div className="grid gap-3 sm:grid-cols-3">{col("you", "Your visitor's messages", "#ff3fa4")}{col("bot", "The assistant's messages", "#1f1218")}{col("page", "Page background", "#150b10")}</div>
-            <div className="flex flex-col gap-2">
-              <span className="text-[13px] font-semibold">Background picture</span>
-              <div className="flex flex-wrap items-center gap-2">
-                <label className="btn btn-sm cursor-pointer">{c.image ? "Replace picture" : "Choose a picture"}<input type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" onChange={(e) => { pickImg(e.target.files?.[0]); e.target.value = ""; }} /></label>
-                {c.image && <button type="button" className="btn btn-ghost btn-sm" onClick={() => setC({ image: undefined, dim: undefined })}>Remove</button>}
-              </div>
-              {c.image && <>
-                <div className="relative h-28 max-w-sm overflow-hidden rounded-xl border border-ink-600" style={{ background: `${c.page || "#150b10"} url(${JSON.stringify(c.image)}) center/cover` }}><div className="absolute inset-0" style={{ background: `rgba(0,0,0,${(c.dim ?? 0) / 100})` }} /></div>
-                <label className="flex max-w-sm flex-col gap-1 text-[13px] font-semibold">Darken the picture ({c.dim ?? 0}%)<input type="range" min={0} max={80} step={5} value={c.dim ?? 0} onChange={(e) => setC({ dim: +e.target.value })} /></label>
-              </>}
-              <span className="text-[11.5px] text-ink-500">A wide picture works best (it is shrunk and compressed to stay small). Darken it if text is hard to read.</span>
-            </div>
           </>;
         })()}
       </Block>

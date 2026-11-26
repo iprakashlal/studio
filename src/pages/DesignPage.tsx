@@ -133,6 +133,10 @@ function useDiyLook(auto: "" | "light" | "dark" = "") {
   useEffect(() => {
     const de = document.documentElement, id = "diy-look";
     if (ui.radius) de.dataset.diyR = ui.radius; else delete de.dataset.diyR;
+    if (ui.bubble) de.dataset.diyB = ui.bubble; else delete de.dataset.diyB;
+    // text that reads on a colour, and that colour as the three numbers the interface's colours are written in
+    const on = (hex: string) => { const n = parseInt(hex.slice(1), 16); return (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255 > 0.6 ? "17 17 17" : "255 255 255"; };
+    const S = readDesignSettings(), bgk = S.bg?.on ? S.bg : null, pageCol = bgk ? (bgk.kind ? "transparent" : bgk.color || "") : S.chat?.image ? "transparent" : S.chat?.page || "";
     if (ui.width) de.dataset.diyW = ui.width; else delete de.dataset.diyW;
     let st = document.getElementById(id) as HTMLStyleElement | null, link = document.getElementById(id + "-font") as HTMLLinkElement | null;
     const fam = [...new Set([ui.font, ui.head].filter(Boolean))] as string[];
@@ -140,7 +144,21 @@ function useDiyLook(auto: "" | "light" | "dark" = "") {
     const css = [
       // the page's own background (see useDiyBg): the colours the drawn backgrounds read, a background that stays put while the chat scrolls, and see-through bars over it
       `.diy-page{--c1:rgb(var(--brand-500,91 124 255));--c2:rgb(var(--brand-300,170 190 255));--c3:rgb(var(--brand-600,63 95 224));--bg:rgb(var(--ink-950,11 15 23));--text:rgb(var(--ink-100,230 235 245));--soft:rgb(var(--ink-300,160 170 190));--surface:rgb(var(--ink-900,15 20 29));--line:rgb(var(--ink-700,34 44 59))}`,
-      `.diy-page.has-sbg>.sbg{position:fixed}.diy-page.has-sbg>header{background-color:rgb(var(--ink-950,11 15 23)/.55)!important;-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px)}.diy-page.has-sbg .sticky.bottom-0{background:linear-gradient(to top,rgb(var(--ink-950,11 15 23)/.8) 55%,transparent)!important;border-color:transparent!important;-webkit-backdrop-filter:none;backdrop-filter:none}`,
+      `.diy-page.has-sbg>.sbg{position:fixed}.diy-page.has-sbg>header{background-color:rgb(var(--ink-950,11 15 23)/.55)!important;-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px)}`,
+      // the answer bar at the bottom is no band of its own: it fades into the page's own colour (or shows the picture behind it)
+      `.diy-page{--diy-bg:${pageCol || "rgb(var(--ink-950,11 15 23))"}}.diy-page .sticky.bottom-0{background:linear-gradient(to top,var(--diy-bg) 62%,transparent)!important;border-color:transparent!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important}`,
+      // the top bar's own colour, with text that reads on it
+      !ui.header && pageCol && pageCol !== "transparent" ? `.diy-page:not(.has-sbg)>header,.diy-page.has-sbg[data-sbg=color]>header{background-color:color-mix(in srgb,var(--diy-bg) 92%,transparent)!important}` : "",
+      ui.header ? `.diy-page.diy-page.diy-page>header{background:${ui.header}!important;border-color:transparent!important;--ink-100:${on(ui.header)};--ink-200:${on(ui.header)};--ink-300:${on(ui.header)};--ink-400:${on(ui.header)};--ink-500:${on(ui.header)};color:rgb(${on(ui.header)})}.diy-page>header .btn{color:rgb(${on(ui.header)});border-color:rgb(${on(ui.header)}/.35);background:transparent}` : "",
+      // the buttons' own colour
+      ui.btn ? `.diy-page .btn-pri,[role=dialog] .btn-pri{background-color:${ui.btn}!important;border-color:${ui.btn}!important;color:rgb(${on(ui.btn)})!important}.diy-page .btn-pri:hover,[role=dialog] .btn-pri:hover{filter:brightness(.93)}` : "",
+      // the shapes of the chat's messages
+      `:root[data-diy-b=round] .diy-bub{border-radius:26px!important}:root[data-diy-b=square] .diy-bub{border-radius:6px!important}`,
+      `:root[data-diy-b=tail] .diy-bub{border-radius:18px!important;position:relative}:root[data-diy-b=tail] .diy-bot{border-bottom-left-radius:4px!important}:root[data-diy-b=tail] .diy-you{border-bottom-right-radius:4px!important}:root[data-diy-b=tail] .diy-bub::after{content:"";position:absolute;bottom:0;width:14px;height:14px;background:inherit;border:inherit;border-top:0}:root[data-diy-b=tail] .diy-bot::after{left:-7px;clip-path:polygon(100% 0,0 100%,100% 100%);border-right:0}:root[data-diy-b=tail] .diy-you::after{right:-7px;clip-path:polygon(0 0,0 100%,100% 100%);border-left:0}`,
+      `:root[data-diy-b=outline] .diy-bub{background:transparent!important;border:1.5px solid var(--bub,rgb(var(--ink-600,46 58 76)))!important;color:rgb(var(--ink-100,230 235 245))!important;box-shadow:none!important}:root[data-diy-b=outline] .diy-you{border-color:var(--bub,rgb(var(--brand-500,91 124 255)))!important}`,
+      `:root[data-diy-b=glass] .diy-bub{background:color-mix(in srgb,var(--bub,rgb(var(--ink-900,15 20 29))) 55%,transparent)!important;-webkit-backdrop-filter:blur(14px) saturate(1.3);backdrop-filter:blur(14px) saturate(1.3);border:1px solid rgb(255 255 255/.18)!important;border-radius:20px!important}:root[data-diy-b=glass] .diy-you{background:color-mix(in srgb,var(--bub,rgb(var(--brand-500,91 124 255))) 78%,transparent)!important}`,
+      `:root[data-diy-b=minimal] .diy-bot{background:transparent!important;border-color:transparent!important;box-shadow:none!important;padding-left:2px!important;padding-right:2px!important;color:rgb(var(--ink-100,230 235 245))!important}:root[data-diy-b=minimal] .diy-you{border-radius:20px!important}`,
+      `:root[data-diy-b=bar] .diy-bub{border-radius:10px!important}:root[data-diy-b=bar] .diy-bot{border-left:4px solid rgb(var(--brand-500,91 124 255))!important}:root[data-diy-b=bar] .diy-you{border-right:4px solid rgb(0 0 0/.25)!important}`,
       ui.font ? `.diy-page, .diy-page .input, .diy-page .btn, [role=dialog]{font-family:"${ui.font}",ui-sans-serif,system-ui,sans-serif}` : "",
       ui.head || ui.font ? `.diy-page :is(h1,h2,h3,.font-display), [role=dialog] :is(h1,h2,h3,.font-display){font-family:"${ui.head || ui.font}",ui-sans-serif,system-ui,sans-serif}` : "",
       `:root[data-diy-r=sharp] .diy-page :is(.rounded-md,.rounded-lg,.rounded-xl,.rounded-2xl,.rounded-3xl,.btn,.input,.card), :root[data-diy-r=sharp] [role=dialog], :root[data-diy-r=sharp] [role=dialog] :is(.btn,.input){border-radius:4px!important}`,
@@ -150,8 +168,8 @@ function useDiyLook(auto: "" | "light" | "dark" = "") {
     ].join("");
     if (!st) { st = document.createElement("style"); st.id = id; document.head.appendChild(st); }
     if (st.textContent !== css) st.textContent = css;
-    return () => { delete de.dataset.diyR; delete de.dataset.diyW; document.getElementById(id)?.remove(); document.getElementById(id + "-font")?.remove(); };
-  }, [ui.radius, ui.width, ui.font, ui.head]);
+    return () => { delete de.dataset.diyR; delete de.dataset.diyW; delete de.dataset.diyB; document.getElementById(id)?.remove(); document.getElementById(id + "-font")?.remove(); };
+  }, [ui.radius, ui.width, ui.font, ui.head, ui.header, ui.btn, ui.bubble, JSON.stringify([readDesignSettings().bg?.on, readDesignSettings().bg?.kind, readDesignSettings().bg?.color, readDesignSettings().chat?.page, !!readDesignSettings().chat?.image])]);
 }
 /** The page's own background and text (Settings → Design yourself → Background and text): drawn by fx.js, the script that draws a
  *  website section's background, so every kind works the same here. It says whether light or dark text suits the background; the
@@ -888,11 +906,11 @@ function useEmailChat(host: DesignHost | null, onPass: (p: Pass) => void): { thr
 /** Readable text on a colour: dark on light colours, white on dark ones. */
 const onColour = (hex: string) => { const n = parseInt(hex.slice(1), 16), l = (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255; return l > 0.6 ? "#111111" : "#ffffff"; };
 function ChatBot({ children, typing, stack }: { children: React.ReactNode; typing?: boolean; stack?: boolean }) {
-  const bot = readDesignSettings().chat?.bot, st = bot ? { background: bot, color: onColour(bot), borderColor: "transparent" } : undefined;
+  const bot = readDesignSettings().chat?.bot, st = bot ? ({ background: bot, color: onColour(bot), borderColor: "transparent", "--bub": bot } as React.CSSProperties) : undefined;
   return (
     <div className="chat-in flex items-end gap-2.5">
       {stack ? <span className="w-8 flex-none" aria-hidden /> : <span className="grid h-8 w-8 flex-none place-items-center overflow-hidden rounded-full border border-ink-700 bg-ink-900" aria-hidden><DiyMark size={22} /></span>}
-      <div style={st} className={`max-w-[80%] rounded-2xl rounded-bl-md border border-ink-800 bg-ink-900 px-5 py-3.5 text-ink-100 shadow-sm ${bot ? "[&_p]:text-[inherit]" : ""}`}>
+      <div style={st} className={`diy-bub diy-bot max-w-[80%] rounded-2xl rounded-bl-md border border-ink-800 bg-ink-900 px-5 py-3.5 text-ink-100 shadow-sm ${bot ? "[&_p]:text-[inherit]" : ""}`}>
         {typing && <span className="mr-2 inline-flex items-center gap-1 align-middle" aria-hidden><i className="chat-dot" /><i className="chat-dot" /><i className="chat-dot" /></span>}
         {children}
       </div>
@@ -901,12 +919,12 @@ function ChatBot({ children, typing, stack }: { children: React.ReactNode; typin
 }
 /** The person's answer (right). An answer can be changed from here. */
 function ChatYou({ children, onEdit, label }: { children: React.ReactNode; onEdit?: () => void; label?: string }) {
-  const you = readDesignSettings().chat?.you, st = you ? { background: you, color: onColour(you) } : undefined;
+  const you = readDesignSettings().chat?.you, st = you ? ({ background: you, color: onColour(you), "--bub": you } as React.CSSProperties) : undefined;
   return (
     <div className="chat-in group flex justify-end">
       <div className="flex max-w-[75%] items-end gap-2">
         {onEdit && <button type="button" className="mb-1 rounded px-1.5 text-[11px] text-ink-500 opacity-0 transition hover:text-ink-200 focus:opacity-100 group-hover:opacity-100 max-sm:opacity-100" onClick={onEdit} aria-label={`Change your answer: ${label || ""}`}>Edit</button>}
-        <div style={st} className="break-words rounded-2xl rounded-br-md bg-brand-500 px-5 py-3 text-[14.5px] font-semibold leading-snug text-white shadow-sm">{children}</div>
+        <div style={st} className="diy-bub diy-you break-words rounded-2xl rounded-br-md bg-brand-500 px-5 py-3 text-[14.5px] font-semibold leading-snug text-white shadow-sm">{children}</div>
       </div>
     </div>
   );

@@ -143,6 +143,9 @@ function useDiyLook(auto: "" | "light" | "dark" = "") {
     const de = document.documentElement, id = "diy-look";
     if (ui.radius) de.dataset.diyR = ui.radius; else delete de.dataset.diyR;
     if (ui.bubble) de.dataset.diyB = ui.bubble; else delete de.dataset.diyB;
+    const flag = (k: string, v: unknown) => { if (v) de.dataset[k] = "1"; else delete de.dataset[k]; };
+    flag("diyFrame", ui.frame); flag("diyAura", ui.aura); flag("diyGb", ui.glowBub); flag("diyGf", ui.glowField); flag("diyGn", ui.glowBtn);
+    const g2 = ui.glow2 || "", gs = ui.glowSpeed === "slow" ? 9 : ui.glowSpeed === "fast" ? 2.6 : 5;
     // text that reads on a colour, and that colour as the three numbers the interface's colours are written in
     const on = (hex: string) => { const n = parseInt(hex.slice(1), 16); return (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255 > 0.6 ? "17 17 17" : "255 255 255"; };
     const S = readDesignSettings(), bgk = S.bg?.on ? S.bg : null, pageCol = bgk ? (bgk.kind ? "transparent" : bgk.color || "") : S.chat?.image ? "transparent" : S.chat?.page || "";
@@ -165,6 +168,23 @@ function useDiyLook(auto: "" | "light" | "dark" = "") {
       ui.chip ? `.diy-page .diy-chip:not([aria-pressed=true]):not([aria-checked=true]){background-color:${ui.chip}!important;border-color:rgb(${on(ui.chip)}/.2)!important;color:rgb(${on(ui.chip)})!important;--ink-100:${on(ui.chip)};--ink-200:${on(ui.chip)};--ink-300:${on(ui.chip)};--ink-400:${on(ui.chip)}}.diy-page .diy-chip:not([aria-pressed=true]):not([aria-checked=true]):hover{border-color:rgb(var(--brand-400,128 153 255))!important}` : "",
       // the buttons' own colour
       ui.btn ? `.diy-page .btn-pri,[role=dialog] .btn-pri{background-color:${ui.btn}!important;border-color:${ui.btn}!important;color:rgb(${on(ui.btn)})!important}.diy-page .btn-pri:hover,[role=dialog] .btn-pri:hover{filter:brightness(.93)}` : "",
+      // ---- layout and effects
+      // the chat in a framed panel
+      `:root[data-diy-frame] .diy-page [role=log]{margin-top:22px;padding:26px clamp(14px,2.4vw,30px);border:1px solid rgb(var(--ink-700,34 44 59)/.9);border-radius:22px;background:rgb(var(--ink-900,15 20 29)/.5);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);box-shadow:0 24px 60px -30px rgb(0 0 0/.45)}`,
+      // soft glows of colour behind the page (under everything, over the page's own colour)
+      `:root[data-diy-aura] .diy-page{isolation:isolate}:root[data-diy-aura] .diy-page::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;background:radial-gradient(42% 36% at 86% 18%,rgb(var(--brand-500,91 124 255)/.26),transparent 70%),radial-gradient(38% 32% at 8% 88%,color-mix(in srgb,var(--g2) 22%,transparent),transparent 70%),radial-gradient(30% 26% at 70% 92%,rgb(var(--brand-600,63 95 224)/.18),transparent 70%)}`,
+      // over the glows, the answer bar is not a band: what is behind it is blurred, fading out at its edges
+      `:root[data-diy-aura] .diy-page .sticky.bottom-0{background:rgb(var(--ink-950,11 15 23)/.35)!important;-webkit-backdrop-filter:blur(14px)!important;backdrop-filter:blur(14px)!important;-webkit-mask-image:linear-gradient(to bottom,transparent,#000 26%),linear-gradient(to right,transparent,#000 6%,#000 94%,transparent);-webkit-mask-composite:source-in;mask-image:linear-gradient(to bottom,transparent,#000 26%),linear-gradient(to right,transparent,#000 6%,#000 94%,transparent);mask-composite:intersect}`,
+      // a moving, glowing border: a ring of two colours that turns, with a soft glow of the first around it
+      `@property --diy-ga{syntax:"<angle>";initial-value:0deg;inherits:false}@keyframes diyglow{to{--diy-ga:360deg}}`,
+      `.diy-page,[role=dialog]{--g1:rgb(var(--brand-500,91 124 255));--g2:${g2 || "rgb(var(--brand-300,170 190 255))"}}`,
+      `:root[data-diy-gb] .diy-bub,:root[data-diy-gf] .diy-field,:root[data-diy-gn] .diy-page .btn-pri,:root[data-diy-gn] [role=dialog] .btn-pri{position:relative;box-shadow:0 0 22px -6px var(--g1)}`,
+      `:root[data-diy-gb] .diy-bub::before,:root[data-diy-gf] .diy-field::before,:root[data-diy-gn] .diy-page .btn-pri::before,:root[data-diy-gn] [role=dialog] .btn-pri::before{content:"";position:absolute;inset:-1.5px;border-radius:inherit;padding:1.5px;background:conic-gradient(from var(--diy-ga),var(--g1),var(--g2),transparent 40%,transparent 60%,var(--g2),var(--g1));-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;animation:diyglow ${gs}s linear infinite;pointer-events:none}`,
+      `:root[data-diy-gb] .diy-bub,:root[data-diy-gf] .diy-field{border-color:transparent!important}`,
+      `@media(prefers-reduced-motion:reduce){.diy-bub::before,.diy-field::before,.btn-pri::before{animation:none!important}}`,
+      // the strip of stages above the chat
+      `.diy-steps{position:sticky;top:53px;z-index:15;display:flex;flex-wrap:wrap;justify-content:center;gap:4px 0;margin:0 auto;width:100%;padding:12px 8px 10px;background:linear-gradient(to bottom,var(--diy-bg) 70%,transparent)}:root[data-diy-aura] .diy-steps,.diy-page.has-sbg .diy-steps{background:rgb(var(--ink-950,11 15 23)/.45);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);-webkit-mask-image:linear-gradient(to bottom,#000 72%,transparent);mask-image:linear-gradient(to bottom,#000 72%,transparent)}.diy-steps li{list-style:none;position:relative;padding:7px 20px 7px 26px;font-size:12.5px;font-weight:600;line-height:1.2;color:rgb(var(--ink-400,120 132 152));background:rgb(var(--ink-800,24 32 45));clip-path:polygon(0 0,calc(100% - 11px) 0,100% 50%,calc(100% - 11px) 100%,0 100%,11px 50%);margin-left:-6px;white-space:nowrap}.diy-steps li:first-child{margin-left:0;padding-left:18px;border-radius:999px 0 0 999px;clip-path:polygon(0 0,calc(100% - 11px) 0,100% 50%,calc(100% - 11px) 100%,0 100%)}.diy-steps li:last-child{border-radius:0 999px 999px 0;clip-path:polygon(0 0,100% 0,100% 100%,0 100%,11px 50%);padding-right:18px}`,
+      `.diy-steps li[data-s=done]{background:rgb(var(--brand-600,63 95 224));color:#fff}.diy-steps li[data-s=now]{background:linear-gradient(90deg,rgb(var(--brand-500,91 124 255)),rgb(var(--brand-400,128 153 255)));color:#fff;filter:drop-shadow(0 0 8px rgb(var(--brand-500,91 124 255)/.55))}`,
       // the shapes of the chat's messages
       `:root[data-diy-b=round] .diy-bub{border-radius:26px!important}:root[data-diy-b=square] .diy-bub{border-radius:6px!important}`,
       `:root[data-diy-b=tail] .diy-bub{border-radius:18px!important;position:relative}:root[data-diy-b=tail] .diy-bot{border-bottom-left-radius:4px!important}:root[data-diy-b=tail] .diy-you{border-bottom-right-radius:4px!important}:root[data-diy-b=tail] .diy-bub::after{content:"";position:absolute;bottom:0;width:14px;height:14px;background:inherit;border:inherit;border-top:0}:root[data-diy-b=tail] .diy-bot::after{left:-7px;clip-path:polygon(100% 0,0 100%,100% 100%);border-right:0}:root[data-diy-b=tail] .diy-you::after{right:-7px;clip-path:polygon(0 0,0 100%,100% 100%);border-left:0}`,
@@ -181,8 +201,8 @@ function useDiyLook(auto: "" | "light" | "dark" = "") {
     ].join("");
     if (!st) { st = document.createElement("style"); st.id = id; document.head.appendChild(st); }
     if (st.textContent !== css) st.textContent = css;
-    return () => { delete de.dataset.diyR; delete de.dataset.diyW; delete de.dataset.diyB; document.getElementById(id)?.remove(); document.getElementById(id + "-font")?.remove(); };
-  }, [ui.radius, ui.width, ui.font, ui.head, ui.header, ui.btn, ui.field, ui.chip, ui.bubble, JSON.stringify([readDesignSettings().bg?.on, readDesignSettings().bg?.kind, readDesignSettings().bg?.color, readDesignSettings().chat?.page, !!readDesignSettings().chat?.image])]);
+    return () => { for (const k of ["diyFrame", "diyAura", "diyGb", "diyGf", "diyGn"]) delete de.dataset[k]; delete de.dataset.diyR; delete de.dataset.diyW; delete de.dataset.diyB; document.getElementById(id)?.remove(); document.getElementById(id + "-font")?.remove(); };
+  }, [ui.radius, ui.width, ui.font, ui.head, ui.header, ui.btn, ui.field, ui.chip, ui.bubble, ui.frame, ui.aura, ui.glowBub, ui.glowField, ui.glowBtn, ui.glow2, ui.glowSpeed, JSON.stringify([readDesignSettings().bg?.on, readDesignSettings().bg?.kind, readDesignSettings().bg?.color, readDesignSettings().chat?.page, !!readDesignSettings().chat?.image])]);
 }
 /** The page's own background and text (Settings → Design yourself → Background and text): drawn by fx.js, the script that draws a
  *  website section's background, so every kind works the same here. It says whether light or dark text suits the background; the
@@ -218,6 +238,15 @@ function useDiyBg(on: boolean): "" | "light" | "dark" {
     return () => { dead = true; mo.disconnect(); clear(); };
   }, [key, on]);
   return auto;
+}
+/** The strip of stages above the chat (Settings → Design yourself → Page look): the questions fall into four stages, and the
+ *  finished preview is the fifth. A stage is done when every question of it that applies has an answer. */
+const STAGES: DiyWord[] = ["stBasic", "stLook", "stDetails", "stContact", "stPreview"];
+const stageOf = (s: Step) => ((s.group || "basics") !== "basics" ? 2 : ["kind", "doc", "name", "tagline"].includes(s.id) ? 0 : ["colour", "logo", "style", "genre"].includes(s.id) ? 1 : 3);
+function DiySteps({ a, cur, finished }: { a: Answers; cur: Step | null; finished: boolean }) {
+  const live = STEPS.filter((s) => (s.when ? s.when(a) : true)), now = finished ? 4 : cur ? stageOf(cur) : 0;
+  const done = (i: number) => finished || (i < 4 && live.some((s) => stageOf(s) === i) && live.filter((s) => stageOf(s) === i).every((s) => s.id in a));
+  return <ol className="diy-steps" aria-label="Stages">{STAGES.map((k, i) => <li key={k} data-s={i === now ? "now" : done(i) ? "done" : undefined} aria-current={i === now ? "step" : undefined}>{i + 1}. {word(k)}</li>)}</ol>;
 }
 function PhoneNotice() {
   const brand = useBrand();
@@ -533,6 +562,7 @@ function DesignPageInner({ studio, index, onIndex }: { studio?: Studio; index?: 
         <div className="absolute inset-x-0 bottom-0 h-0.5 bg-ink-900" role="progressbar" aria-label="Progress" aria-valuemin={0} aria-valuemax={total} aria-valuenow={answered.length}><div className="h-full bg-brand-500 transition-all duration-500" style={{ width: `${chatStarted && !needMail ? Math.round((answered.length / total) * 100) : 0}%` }} /></div>
       </header>
 
+      {readDesignSettings().ui?.steps && !needMail && <DiySteps a={a} cur={cur} finished={finished} />}
       <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col px-3 pb-4 sm:px-6">
         <div role="log" aria-label="Conversation" className="diy-col mx-auto flex w-full max-w-5xl flex-1 flex-col gap-8 pb-8 pt-8">
           <ChatBot><p className="m-0 text-[15px] leading-relaxed">{readDesignSettings().words?.welcome ? word("welcome", brand.name) : <><b>Welcome 👋</b> I'm the {readDesignSettings().ui?.name || brand.name} design assistant. Answer a few quick questions and your website takes shape as we go. It's only a preview.</>}</p></ChatBot>

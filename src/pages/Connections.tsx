@@ -142,10 +142,10 @@ export function InstagramForm({ where }: { where: Where | null | undefined }) {
     <Shell title="Instagram photos" on={saved ? !!(g?.on && g.token) : undefined} lead={lead}>
       <ol className="ml-4 list-decimal text-[12.5px] leading-relaxed text-ink-300">
         <li>Your Instagram account must be a professional one (Business or Creator): Instagram app → Settings → Account type and tools. It's free.</li>
-        <li>At <a className="underline" href="https://developers.facebook.com/apps/" target="_blank" rel="noopener noreferrer">developers.facebook.com/apps</a> create an app and add the product <b className="text-ink-100">Instagram</b> (“API setup with Instagram login”).</li>
-        <li>There, under “Generate access tokens”, add your Instagram account and press <b className="text-ink-100">Generate token</b>. Copy the long token it shows.</li>
-        <li>Paste it below and save. A token that starts with <b className="text-ink-100">IGAA</b> lasts 60 days and is renewed here by itself while the wall is in use.</li>
-        <li>If Meta gives you a token that starts with <b className="text-ink-100">EAA</b> (a Facebook token), that works too: the Instagram account must be linked to a Facebook Page you manage, and the token needs the permissions instagram_basic and pages_show_list. This kind can't be renewed from here, so paste a new one when Test says it has run out.</li>
+        <li>At <a className="underline" href="https://developers.facebook.com/apps/" target="_blank" rel="noopener noreferrer">developers.facebook.com/apps</a> create an app (or open yours), press <b className="text-ink-100">Add use cases</b> and add the Instagram one. Then open it: <b className="text-ink-100">Instagram API → API setup with Unified login</b> (older apps: “API setup with Instagram login”).</li>
+        <li>Under App roles → Roles, add your Instagram account as an <b className="text-ink-100">Instagram Tester</b>, and accept the invite in Instagram (Settings → Apps and websites → Tester invites).</li>
+        <li>Back on that page, under <b className="text-ink-100">2. Generate access tokens</b>, add your Instagram account and press <b className="text-ink-100">Generate token</b> beside it. Copy the token.</li>
+        <li>Paste it below, save, and press Test. A token that starts with IGAA is renewed here by itself. One that starts with EAA (what newer apps get) lasts as long as Meta's page says; when Test says it has run out, generate a new one and paste it.</li>
       </ol>
       <Secret id="ig-token" label="Instagram access token" saved={!!g?.token} value={token} onChange={setToken} />
       <div className="flex flex-wrap gap-2">

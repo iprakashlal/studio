@@ -1465,7 +1465,11 @@ function dqDesignPub(d: any) {
     }
     out.look = look;
   }
-  return JSON.stringify(out).length > 40000 ? { on: out.on } : out;
+  // Pictures (the page's logo and backgrounds) make this large. If it is too large to send with every visit, the pictures are
+  // left out one by one, largest kind first, and everything else is still sent: never nothing.
+  const size = () => JSON.stringify(out).length, MAX = 600_000;
+  for (const drop of [() => { if (out.bg?.slides) delete out.bg.slides; }, () => { if (out.bg?.image) delete out.bg.image; }, () => { if (out.chat?.image) delete out.chat.image; }, () => { if (out.ui?.logo) delete out.ui.logo; }]) { if (size() <= MAX) break; drop(); }
+  return size() > MAX ? { on: out.on } : out;
 }
 
 /** The Studio's name, logo and colours, for its sign-in and public pages (no secrets, nothing about the owner). */

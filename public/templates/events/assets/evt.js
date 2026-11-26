@@ -403,7 +403,21 @@ const REG = {
 };
 const ASK = { phone: "Phone", company: "Company or organisation", role: "Job title", city: "City", guests: "Number of guests (including you)", meal: "Meal preference", team: "Team name", size: "T-shirt size", age: "Age", emergency: "Emergency contact (name and phone)", notes: "Anything we should know?" };
 const regKind = () => { const k = (C.register || {}).kind; return REG[k] ? k : REG[C.theme.regKind] ? C.theme.regKind : "tickets"; };
-const regTickets = () => ((C.register || {}).tickets || []).filter((t) => t && String(t.name || "").trim());
+const regTickets = () => ((C.register || {}).tickets || []).filter((t) => t && String(t.name || "").trim()).map((t) => (REGI && REGI.left && REGI.left[String(t.name).trim()] === 0 ? { ...t, soldOut: true } : t));
+/* What the site's database says about registration (GET /reg/<site>): the ways to pay online that are set up, and the
+   places left of tickets that have a limit. Asked once per visit; a site with no database has none of this. */
+let REGI = null, regAsked = false;
+function regInfo() {
+  const be = backend(); if (regAsked || PREVIEW || !be || !be.cf) return; regAsked = true;
+  fetch(be.cf + "/reg/" + encodeURIComponent(be.site), { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((j) => {
+    if (!j) return; REGI = j;
+    // A ticket that has run out is drawn as sold out; otherwise only the ways to pay need drawing.
+    if (Object.values(j.left || {}).some((n) => n === 0) && !$(".reg-done")) render(); else { const f = $("#regform"); if (f) f.dispatchEvent(new Event("input")); }
+  }).catch(() => {});
+}
+const GW = { rz: ["razorpay", "Pay online (UPI, card, netbanking)"], cf: ["cashfree", "Pay online with Cashfree (UPI, card, netbanking)"], pe: ["phonepe", "Pay with PhonePe (UPI, card, netbanking)"], st: ["stripe", "Pay by card (Stripe)"], pp: ["paypal", "Pay with PayPal"] };
+/** The ways to pay online: the ones the database has keys for (in the preview, the ones switched on in the content). */
+const regWays = () => (PREVIEW ? Object.keys(GW).filter((g) => ((C.payments || {})[GW[g][0]] || {}).enabled) : (REGI && REGI.pay) || []).filter((g) => GW[g]);
 const regOpen = () => { const R = C.register || {}, c = dOf(R.closes, "23:59"); return R.enabled !== false && !(c && Date.now() > c.getTime()); };
 /** What this registration asks besides name and email: the kind's own questions, switched on or off by the owner. */
 const regAsks = (k) => { const A = (C.register || {}).ask || {}; return Object.keys(ASK).filter((f) => A[f] === "yes" || (A[f] !== "no" && REG[k].ask.includes(f))); };
@@ -464,12 +478,17 @@ function bindRegister() {
   $$(".qty button", f).forEach((b) => b.addEventListener("click", () => { const el = f.elements["q" + b.dataset.i]; el.value = Math.max(0, (parseInt(el.value, 10) || 0) + +b.dataset.q); draw(); }));
   $$(".reg-amts .chip", f).forEach((b) => b.addEventListener("click", () => { f.elements.amount.value = b.dataset.amt; $$(".reg-amts .chip", f).forEach((x) => x.setAttribute("aria-pressed", String(x === b))); draw(); }));
   f.addEventListener("input", (e) => { if (e.target.name === "amount") $$(".reg-amts .chip", f).forEach((x) => x.setAttribute("aria-pressed", String(+x.dataset.amt === +e.target.value))); draw(); });
-  f.addEventListener("submit", regSubmit); draw();
+  f.addEventListener("submit", regSubmit); draw(); regInfo();
+  if (!bindRegister.back) { bindRegister.back = true; regCameBack(); }
 }
-/** How the registration is paid for (shown when it costs something). */
+/** How the registration is paid for (shown when it costs something): online where the site has it set up, or later. */
 function regPay(f, S) {
-  const box = $("#reg-pay", f); if (!box) return; const R = C.register;
-  box.innerHTML = S.total > 0 && R.payLater !== false ? `<p class="reg-payn">${icon("ticket", "ev-i")}${esc(R.payLaterLabel || "Pay at the venue")}</p>` : "";
+  const box = $("#reg-pay", f); if (!box) return; const R = C.register, ways = regWays(), later = R.payLater !== false || !ways.length;
+  const key = S.total > 0 ? ways.join() + "|" + later : ""; if (box.dataset.k === key) return; box.dataset.k = key;
+  if (!(S.total > 0)) { box.innerHTML = ""; return; }
+  if (!ways.length) { box.innerHTML = R.payLater !== false ? `<p class="reg-payn">${icon("ticket", "ev-i")}${esc(R.payLaterLabel || "Pay at the venue")}</p>` : ""; return; }
+  const opt = (v, label, on) => `<label class="reg-t pick"><input type="radio" name="payway" value="${v}"${on ? " checked" : ""}><span class="reg-tn"><b>${esc(label)}</b></span></label>`;
+  box.innerHTML = `<fieldset class="reg-tix reg-ways"><legend>Payment</legend>${ways.map((g, i) => opt(g, ((C.payments || {})[GW[g][0]] || {}).label || GW[g][1], i === 0)).join("")}${later ? opt("later", R.payLaterLabel || "Pay at the venue", false) : ""}</fieldset>`;
 }
 async function regSubmit(e) {
   e.preventDefault();
@@ -487,15 +506,66 @@ async function regSubmit(e) {
   if (S.lines.length) { data.tickets = S.lines.map((l) => (l.qty > 1 || K.qty ? l.qty + " × " : "") + l.name).join(", "); data.count = String(S.count || 1); }
   if (S.total > 0) { data.total = money(S.total); data.payment = R.payLaterLabel || "Pay at the venue"; }
   data.consent = raw.consent ? "Agreed on " + new Date().toISOString() + ": " + consentWords(R.consent) : "";
-  if (PREVIEW) { say("Preview: registration works on the live site, and each one is listed under Enquiries in the admin page.", "ok"); return; }
-  b.disabled = true; say("Sending…", "");
+  if (PREVIEW) { say("Preview: registration works on the live site, and each one is listed under Registrations & messages in the admin page." + (S.total > 0 && regWays().length ? " Online payment opens on the live site." : ""), "ok"); return; }
+  const cart = { lines: S.lines.filter((l) => l.i != null).map((l) => ({ i: l.i, qty: l.qty })), ...(K.amount ? { amount: S.total } : {}) }, way = S.total > 0 ? (f.elements.payway || {}).value || "" : "";
+  b.disabled = true; say(way && way !== "later" ? "Opening the payment…" : "Sending…", "");
+  const fail = (t) => { msg.className = "form-msg bad"; if (t) msg.textContent = t; else msg.innerHTML = C.contact.email ? `Couldn't send just now. Please email us at <a href="mailto:${esc(C.contact.email)}">${esc(C.contact.email)}</a>.` : "Couldn't send just now. Please try again in a moment."; b.disabled = false; };
   try {
-    const how = await sendData(data, "Registration: " + (data.name || "") + " (" + data.reg_no + ")");
-    const done = document.createElement("div"); done.className = "card reg-done"; done.setAttribute("role", "status");
-    done.innerHTML = how === "mail" ? `<h2 class="h2">One more step</h2><p>Your email app should have opened with your registration filled in. Press Send there to finish.</p>`
-      : `<span class="reg-ok" aria-hidden="true">✓</span><h2 class="h2">${esc(K.attend ? "Thank you" : "You're in")}</h2><p>${esc(R.success || "Your registration is received.")}</p><p class="reg-no">Registration number <b>${esc(data.reg_no)}</b></p>${data.tickets ? `<p class="reg-dl">${esc(data.tickets)}${data.total ? " · " + esc(data.total) : ""}</p>` : ""}<a class="btn sec" href="${PAGES.home}">Back to the home page</a>`;
-    f.replaceWith(done); done.scrollIntoView({ block: "center", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
-  } catch (x) { msg.className = "form-msg bad"; msg.innerHTML = C.contact.email ? `Couldn't send just now. Please email us at <a href="mailto:${esc(C.contact.email)}">${esc(C.contact.email)}</a>.` : "Couldn't send just now. Please try again in a moment."; b.disabled = false; }
+    const be = backend();
+    if (be && be.cf && C.contact.form.saveTo !== "file") {
+      if (way && way !== "later") return await regPayOnline(way, data, cart, f, fail);
+      const r = await regSave(data, cart, null); if (!r.ok) return fail(r.error);
+      return regDone(f, data, r.paid ? "paid" : "saved");
+    }
+    regDone(f, data, await sendData(data, "Registration: " + (data.name || "") + " (" + data.reg_no + ")"));
+  } catch (x) { fail(""); }
+}
+/** Saves a registration on the site's database. The database works out what was chosen and what it costs, and checks a payment with the gateway itself. */
+async function regSave(data, cart, pay) {
+  const be = backend(), guard = (C.privacy || {}).spam !== false, took = Math.max(1600, Math.round(performance.now() - FORM_T0));
+  const r = await fetch(be.cf + "/reg/" + encodeURIComponent(be.site), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ data, cart, page: location.pathname, ...(pay ? { pay } : guard ? { took } : {}) }) });
+  const j = await r.json().catch(() => null);
+  return r.ok && j && j.ok ? { ok: true, paid: !!j.paid } : { ok: false, error: (j && j.error) || "Couldn't save your registration just now. Please try again in a moment." };
+}
+function regDone(f, data, how) {
+  const R = C.register, K = REG[regKind()], done = document.createElement("div"); done.className = "card reg-done"; done.setAttribute("role", "status");
+  done.innerHTML = how === "mail" ? `<h2 class="h2">One more step</h2><p>Your email app should have opened with your registration filled in. Press Send there to finish.</p>`
+    : `<span class="reg-ok" aria-hidden="true">✓</span><h2 class="h2">${esc(K.attend ? "Thank you" : "You're in")}</h2><p>${esc(R.success || "Your registration is received.")}</p><p class="reg-no">Registration number <b>${esc(data.reg_no)}</b></p>${data.tickets ? `<p class="reg-dl">${esc(data.tickets)}${data.total ? " · " + esc(data.total) : ""}${how === "paid" ? " · Paid" : ""}</p>` : how === "paid" && data.total ? `<p class="reg-dl">${esc(data.total)} · Paid</p>` : ""}<a class="btn sec" href="${PAGES.home}">Back to the home page</a>`;
+  const at = f && f.isConnected ? f : $("#regform") || $(".reg-grid"); if (at && at.id === "regform") at.replaceWith(done); else if (at) at.prepend(done);
+  done.scrollIntoView({ block: "center", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+}
+const PEND = () => "reg-pend:" + location.pathname.replace(/[^/]*$/, "");
+const script = (src) => new Promise((ok, no) => { const s = document.createElement("script"); s.src = src; s.onload = ok; s.onerror = no; document.head.appendChild(s); });
+/** Pays for a registration online. Razorpay opens over the page; the others take the visitor to their own page and bring them back (see regCameBack). */
+async function regPayOnline(g, data, cart, f, fail) {
+  const be = backend();
+  const r = await fetch(be.cf + "/reg/pay/" + g + "/" + encodeURIComponent(be.site), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...cart, reg_no: data.reg_no, name: data.name, email: data.email, phone: data.phone || "", back: location.origin + location.pathname }) });
+  const j = await r.json().catch(() => null); if (!r.ok || !j || !(j.order_id || j.go || j.session)) return fail((j && j.error) || "Online payment couldn't start. Please try again, or choose another way to pay.");
+  if (g !== "rz") {
+    // The registration waits on this device while the visitor pays on the gateway's page; it is saved when they come back paid.
+    try { sessionStorage.setItem(PEND(), JSON.stringify({ data, cart, g, ref: j.ref, at: Date.now() })); } catch (e) {}
+    if (g === "cf") { if (!window.Cashfree) await script("https://sdk.cashfree.com/js/v3/cashfree.js"); window.Cashfree({ mode: j.mode }).checkout({ paymentSessionId: j.session, redirectTarget: "_self" }); }
+    else location.href = j.go;
+    return;
+  }
+  if (!window.Razorpay) await script("https://checkout.razorpay.com/v1/checkout.js");
+  new window.Razorpay({ key: j.key, order_id: j.order_id, amount: j.amount, currency: j.currency, name: j.name || C.brand.name, description: "Registration " + data.reg_no, prefill: { name: data.name, contact: data.phone || undefined, email: data.email }, notes: { reg_no: data.reg_no }, theme: { color: C.theme.c1 },
+    handler: async (resp) => { const s = await regSave(data, cart, { rz_order: resp.razorpay_order_id, rz_payment: resp.razorpay_payment_id, rz_sig: resp.razorpay_signature }).catch(() => ({ ok: false, error: "" })); if (s.ok) regDone(f, data, "paid"); else fail(s.error || "The payment went through but we couldn't save your registration. Please contact us with your registration number " + data.reg_no + "."); },
+    modal: { ondismiss: () => fail("The payment wasn't completed, so you aren't registered yet. You can try again.") } }).open();
+}
+/** Back from a gateway's page: the registration that was waiting is sent with the payment's reference, and the database asks the gateway whether it was paid. */
+async function regCameBack() {
+  let q; try { q = new URLSearchParams(location.search); } catch (e) { return; }
+  const g = q.get("paid"), no = q.get("o"); if (!g || !GW[g] || !no || PREVIEW) return;
+  const be = backend(); if (!be || !be.cf) return;
+  let pend = null; try { pend = JSON.parse(sessionStorage.getItem(PEND()) || "null"); } catch (e) {}
+  history.replaceState(null, "", location.pathname);
+  if (!pend || !pend.data || pend.data.reg_no !== no || pend.g !== g) return;
+  const f = $("#regform"), msg = f && $(".form-msg", f), b = f && $("button[type=submit]", f); if (b) b.disabled = true;
+  if (msg) { msg.className = "form-msg"; msg.textContent = "Confirming your payment…"; msg.scrollIntoView({ block: "center" }); }
+  const s = await regSave(pend.data, pend.cart, { gw: g, ref: pend.ref }).catch(() => ({ ok: false, error: "" }));
+  if (s.ok) { try { sessionStorage.removeItem(PEND()); } catch (e) {} regDone(f, pend.data, "paid"); }
+  else { if (msg) { msg.className = "form-msg bad"; msg.textContent = s.error || "We couldn't confirm the payment just now. Refresh this page to try again."; } if (b) b.disabled = false; }
 }
 /** Saves a form's answers where this site keeps them (the same places as the enquiry form). Gives "saved", or "mail" when the visitor's email app was opened. */
 async function sendData(data, subject) {
@@ -811,7 +881,7 @@ function bind() {
   if (C.theme.motionStyle === "none" || matchMedia("(prefers-reduced-motion: reduce)").matches || /[?&]lite=1\b/.test(location.search) || !("IntersectionObserver" in window)) rv.forEach((e) => e.classList.add("in"));
   else { const io = new IntersectionObserver((es) => es.forEach((e) => { if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); } }), { rootMargin: "0px 0px -8% 0px" }); rv.forEach((e) => io.observe(e)); }
   const f = $("#enquiry"); if (f) f.addEventListener("submit", submit);
-  bindRegister(); countdown();
+  bindRegister(); countdown(); if ($(".tickets")) regInfo();
   $$(".sch-tabs .chip").forEach((b) => b.addEventListener("click", () => { const box = b.closest("section"); $$(".sch-tabs .chip", box).forEach((x) => x.setAttribute("aria-pressed", String(x === b))); $$(".sch-day", box).forEach((d) => { d.hidden = d.dataset.day !== b.dataset.day; if (!d.hidden) $$(".rv", d).forEach((e) => e.classList.add("in")); }); }));
 }
 

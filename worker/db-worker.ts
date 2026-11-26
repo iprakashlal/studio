@@ -1658,22 +1658,27 @@ function dqSections(x: any): Record<string, any> {
  *  they saved) or the newest pins of a public Pinterest profile or board (its public feed, no key). */
 type WallPic = { img: string; url: string; caption: string };
 const igPics = (data: any): WallPic[] => (Array.isArray(data) ? data : []).map((m: any) => ({ img: String((m.media_type === "VIDEO" ? m.thumbnail_url : m.media_url) || ""), url: String(m.permalink || ""), caption: oneLine(String(m.caption || "")).slice(0, 160) })).filter((x: WallPic) => /^https:\/\//.test(x.img));
-/** A Facebook token (it starts with EAA: Meta gives this kind when the Instagram account is reached through its Facebook Page).
- *  The Instagram account is the one linked to a Page the token can see; its posts are read through Facebook's Graph API. */
+/** A token that starts with EAA is read through Facebook's Graph API. Meta gives this kind to newer apps (Instagram API with
+ *  Unified login: the Instagram accounts shared with the token are listed by me/assigned_instagram_accounts), and to apps that
+ *  reach the Instagram account through its Facebook Page (then it is the account linked to a Page the token can see). */
 async function igMediaFb(token: string, n: number): Promise<{ items?: WallPic[]; error?: string }> {
-  const G = "https://graph.facebook.com/v21.0/", t = "access_token=" + encodeURIComponent(token), get = async (path: string) => { const r = await fetch(G + path + (path.includes("?") ? "&" : "?") + t, { signal: AbortSignal.timeout(15000) }); return { ok: r.ok, status: r.status, j: (await r.json().catch(() => null)) as any }; };
+  const G = "https://graph.facebook.com/", t = "access_token=" + encodeURIComponent(token), get = async (path: string) => { const r = await fetch(G + path + (path.includes("?") ? "&" : "?") + t, { signal: AbortSignal.timeout(15000) }); return { ok: r.ok, status: r.status, j: (await r.json().catch(() => null)) as any }; };
   const said = (x: { status: number; j: any }) => (x.j?.error?.message ? "Facebook said: " + String(x.j.error.message).slice(0, 220) : `Facebook answered ${x.status}.`);
   try {
     // a person's token lists their Pages; a Page's own token is asked about itself
     const F = "fields=name,instagram_business_account,connected_instagram_account", igOf = (p: any) => String(p?.instagram_business_account?.id || p?.connected_instagram_account?.id || "");
-    let id = "", pages: any[] = []; const a = await get("me/accounts?" + F + "&limit=50");
-    if (a.ok) { pages = Array.isArray(a.j?.data) ? a.j.data : []; id = pages.map(igOf).find(Boolean) || ""; }
+    let id = "", pages: any[] = [];
+    // Unified login (what Meta gives newer apps): the token is a business one, and the Instagram accounts shared with it are listed directly
+    const u = await get("me/assigned_instagram_accounts?fields=id,username&limit=20");
+    if (u.ok) id = String((Array.isArray(u.j?.data) ? u.j.data : []).map((x: any) => x?.id).find(Boolean) || "");
+    const a = id ? { ok: true, status: 200, j: null as any } : await get("me/accounts?" + F + "&limit=50");
+    if (!id && a.ok) { pages = Array.isArray(a.j?.data) ? a.j.data : []; id = pages.map(igOf).find(Boolean) || ""; }
     if (!id) { const b = await get("me?" + F); if (b.ok) id = igOf(b.j); else if (!a.ok) return { error: said(a) }; }
     if (!/^\d+$/.test(id)) {
       // say which of the things it needs is missing: the permissions the token was given, and the Pages it can see
       const pr = await get("me/permissions"), have: string[] = pr.ok && Array.isArray(pr.j?.data) ? pr.j.data.filter((x: any) => x?.status === "granted").map((x: any) => String(x.permission)) : [];
       const lack = ["pages_show_list", "instagram_basic"].filter((x) => !have.includes(x));
-      if (pr.ok && lack.length) return { error: `This Facebook token wasn't given the permission${lack.length > 1 ? "s" : ""} ${lack.join(" and ")}${have.length ? ` (it has: ${have.slice(0, 12).join(", ")})` : ""}. Generate a new token with ${lack.length > 1 ? "them" : "it"} ticked: in Meta's Graph API Explorer choose your app, add the permissions pages_show_list, instagram_basic and pages_read_engagement, and press Generate Access Token.` };
+      if (pr.ok && lack.length) return { error: `This Facebook token wasn't given the permission${lack.length > 1 ? "s" : ""} ${lack.join(" and ")}${have.length ? ` (it has: ${have.slice(0, 12).join(", ")})` : ""}. Easiest: in your Meta app open Instagram API → “API setup with Unified login” → “2. Generate access tokens” and press Generate token beside your Instagram account, then paste that token here. (A token from Graph API Explorer needs pages_show_list, instagram_basic and pages_read_engagement ticked.)` };
       if (!pages.length) return { error: "This Facebook token can't see any Facebook Page. When Meta asks which Pages the app may use, tick the Page your Instagram account is linked to (or choose all), then generate the token again. If the Page belongs to a business portfolio, also add the permission business_management." };
       return { error: `This Facebook token can see ${pages.length === 1 ? "the Page" : "the Pages"} ${pages.slice(0, 5).map((p) => "“" + oneLine(String(p?.name || p?.id || "")).slice(0, 40) + "”").join(", ")}, but no Instagram account is linked to ${pages.length === 1 ? "it" : "any of them"}. Link your Instagram account to the Page (the Page's Settings → Linked accounts → Instagram), make sure it is a Business or Creator account, then press Test again.` };
     }

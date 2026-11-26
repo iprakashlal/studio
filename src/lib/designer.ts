@@ -267,6 +267,24 @@ export const STEPS: Step[] = RAW.filter((s) => !s.soon).map((s) => ({
   help: (a: Answers) => qrule(s)?.p ?? (ROWS[`${s.group}.${s.id}`] ? "Fill one row for each. Use the + button to add more." : s.help?.(a) ?? ""),
 }));
 
+/** The owner's own order of the questions (Settings → Design yourself → Questions): within each group the questions change
+ *  places among that group's own slots, so the basics and a type's questions stay where the conversation expects them. The
+ *  first question (the type of website) is never moved: the others depend on it. STEPS is reordered in place, at load and
+ *  whenever the settings change, so everything that reads it sees the same order. */
+const BASE_STEPS = [...STEPS];
+export function orderSteps() {
+  const ord = readDesignSettings().qorder || {}, out = [...BASE_STEPS];
+  for (const g of Object.keys(ord)) {
+    const slots: number[] = []; BASE_STEPS.forEach((s, i) => { if ((s.group || "basics") === g && s.id !== "kind") slots.push(i); });
+    const at = (s: Step) => { const i = ord[g].indexOf(s.id); return i < 0 ? 1e6 : i; };
+    const sorted = slots.map((i) => BASE_STEPS[i]).map((s, i) => ({ s, i })).sort((x, y) => at(x.s) - at(y.s) || x.i - y.i).map((x) => x.s);
+    slots.forEach((i, k) => { out[i] = sorted[k]; });
+  }
+  STEPS.splice(0, STEPS.length, ...out);
+}
+orderSteps();
+if (typeof addEventListener === "function") addEventListener("studio:design-page", orderSteps);
+
 /** A short name for each question (for the answers shown above the current question). */
 export const STEP_LABEL: Record<string, string> = { pages: "Pages", usp: "Highlights", goal: "Goal", hours: "Hours", address: "Address", ...Object.fromEntries(RAW.filter((x) => x.label).map((x) => [x.id, x.label!])), about: "About", story: "Story", items: "Offerings" };
 

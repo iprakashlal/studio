@@ -2,7 +2,8 @@ import { themeCode } from "../themes/codes";
 import { useEffect, useMemo, useState } from "react";
 import { pushPref, savePrefNow } from "../lib/prefs";
 import { cleanDesignSettings, readDesignSettings, writeDesignSettings, type DesignSettings } from "../lib/designs";
-import { NOTICE_TEXT, GROUPS, KINDS, LOOK_AXES, type Gallery, type Kind, type LookRule } from "../lib/designlook";
+import { DIY_FONTS, DIY_WORDS, NOTICE_TEXT, GROUPS, KINDS, LOOK_AXES, type DiyWord, type Gallery, type Kind, type LookRule } from "../lib/designlook";
+import { shrinkImage } from "../lib/brand";
 import { QUESTION_GROUPS, QUESTION_LIST, allThemesOf } from "../lib/designer";
 import { AI_ENGINES } from "../lib/ai";
 import { useAiEngine } from "./AiEngine";
@@ -164,6 +165,17 @@ export function DesignLookTab({ session, studio, index, onIndex, part, lead }: {
     if (Object.keys(g).length) all[group] = g; else delete all[group];
     upd({ questions: Object.keys(all).length ? all : undefined });
   };
+  /** The owner's order of a group's questions: one question moves a place up or down (the type of website stays first). */
+  const orderOf = (group: string) => { const base = QUESTION_LIST.filter((q) => q.group === group).map((q) => q.id), own = (d.qorder?.[group] || []).filter((id) => base.includes(id)); return [...own, ...base.filter((id) => !own.includes(id))]; };
+  const moveQ = (group: string, id: string, by: number) => {
+    const list = orderOf(group), i = list.indexOf(id), j = i + by; if (i < 0 || j < 0 || j >= list.length || list[j] === "kind" || id === "kind") return;
+    [list[i], list[j]] = [list[j], list[i]];
+    const base = QUESTION_LIST.filter((q) => q.group === group).map((q) => q.id), all = { ...(d.qorder || {}) };
+    if (list.join() === base.join()) delete all[group]; else all[group] = list;
+    upd({ qorder: Object.keys(all).length ? all : undefined });
+  };
+  const setUi = (p: Partial<NonNullable<DesignSettings["ui"]>>) => { const n: any = { ...(d.ui || {}), ...p }; for (const k of Object.keys(n)) if (n[k] === undefined || n[k] === "") delete n[k]; upd({ ui: Object.keys(n).length ? n : undefined }); };
+  const setWord = (k: DiyWord, v: string) => { const n: any = { ...(d.words || {}) }; if (v.trim() && v !== DIY_WORDS[k][1]) n[k] = v; else delete n[k]; upd({ words: Object.keys(n).length ? n : undefined }); };
   const themes = allThemesOf(kind), picked = d.themes?.[kind]?.length ? d.themes[kind]!.filter((id) => themes.some((t) => t.id === id)) : [];
   const all = !picked.length, offered = all ? themes.map((t) => t.id) : picked;
   const setOffered = (ids: string[]) => { const th = { ...(d.themes || {}) }; if (ids.length && ids.length < themes.length) th[kind] = ids; else delete th[kind]; upd({ themes: th }); };
@@ -213,15 +225,19 @@ export function DesignLookTab({ session, studio, index, onIndex, part, lead }: {
         {KINDS.map((k) => <button key={k} type="button" role="tab" aria-selected={kind === k} onClick={() => setKind(k)} className={`h-10 flex-1 rounded-lg px-3 text-[13px] font-semibold ${kind === k ? "bg-ink-700 text-ink-100 shadow" : "text-ink-400 hover:text-ink-100"}`}>{KIND_NAME[k]}</button>)}
       </div>
 
-      <Block open={false} title={`Questions · ${KIND_NAME[kind]}`} note="The questions a visitor is asked: untick one to hide it, or change its wording. A question is also skipped when the visitor's PDF or link has already answered it. Press Save changes to store it in your Studio's database. If you hide the contact email question, the email address the visitor has already given at the start is used on their website.">
+      <Block open={false} title={`Questions · ${KIND_NAME[kind]}`} note="The questions a visitor is asked: untick one to hide it, change its wording, or move it up or down with the arrows to change the order (the first question, the type of website, stays first). A question is also skipped when the visitor's PDF or link has already answered it. Press Save changes to store it in your Studio's database. If you hide the contact email question, the email address the visitor has already given at the start is used on their website.">
         {QUESTION_GROUPS.filter((g) => g.id === "basics" || g.id === kind).map((g) => (
           <div key={g.id} className="flex flex-col gap-2">
             <b className="text-[13px]">{g.name}</b>
             <div className="flex flex-col divide-y divide-ink-700 rounded-xl border border-ink-700">
-              {QUESTION_LIST.filter((q) => q.group === g.id).map((q) => {
+              {orderOf(g.id).map((id) => QUESTION_LIST.find((q) => q.group === g.id && q.id === id)!).filter(Boolean).map((q, qi, ql) => {
                 const r = d.questions?.[g.id]?.[q.id] || {}, hidden = !!r.h, def = q.ask({ kind }), defHelp = q.help?.({ kind }) || "";
                 return (
-                  <div key={g.id + q.id} className={`grid gap-x-4 gap-y-2 p-3 sm:grid-cols-[minmax(0,13rem)_minmax(0,1fr)] ${hidden ? "opacity-60" : ""}`}>
+                  <div key={g.id + q.id} className={`grid gap-x-3 gap-y-2 p-3 sm:grid-cols-[auto_minmax(0,13rem)_minmax(0,1fr)] ${hidden ? "opacity-60" : ""}`}>
+                    <span className="flex gap-1 sm:flex-col">
+                      <button type="button" className="icon-btn h-7 w-7 text-xs" aria-label={`Move “${q.label}” up`} disabled={q.id === "kind" || qi === 0 || ql[qi - 1]?.id === "kind"} onClick={() => moveQ(g.id, q.id, -1)}>↑</button>
+                      <button type="button" className="icon-btn h-7 w-7 text-xs" aria-label={`Move “${q.label}” down`} disabled={q.id === "kind" || qi === ql.length - 1} onClick={() => moveQ(g.id, q.id, 1)}>↓</button>
+                    </span>
                     <label className="flex items-start gap-2 text-[13px]">
                       <input type="checkbox" className="mt-0.5" checked={!hidden && !q.soon} disabled={q.soon} onChange={(e) => setQ(g.id, q.id, { h: !e.target.checked })} aria-label={`Ask: ${q.label}`} />
                       <span><b className="block">{q.label}</b><span className="text-[11px] text-ink-500">{q.soon ? "Needs picture upload: coming next" : q.type === "file" ? "File upload" : q.type === "choice" ? "Tap one" : q.type === "many" ? "Tap several" : q.type === "long" ? "One per line" : "One line"}{q.when && !q.soon ? " · only when it applies" : ""}</span></span>
@@ -236,6 +252,48 @@ export function DesignLookTab({ session, studio, index, onIndex, part, lead }: {
             </div>
           </div>
         ))}
+      </Block>
+
+      <Block title="Page look" note="How the whole Design yourself page looks. Anything left as “The Studio's own” follows Settings → Customize. Your own Studio keeps its look: this is worn only while the Design yourself page is open.">
+        {(() => {
+          const u = d.ui || {}, sel = "input h-10 py-0 text-[13px]";
+          return <>
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              <label className="flex flex-col gap-1 text-[13px] font-semibold">Light or dark<select className={sel} value={u.mode || ""} onChange={(e) => setUi({ mode: (e.target.value || undefined) as any })}><option value="">The Studio's own</option><option value="dark">Dark</option><option value="light">Light</option></select></label>
+              <label className="flex flex-col gap-1 text-[13px] font-semibold">Accent colour (buttons, progress bar, links)
+                <span className="flex items-center gap-2"><input type="color" aria-label="Accent colour" className="h-10 w-12 cursor-pointer rounded border border-ink-600 bg-transparent p-0.5" value={u.accent || "#5b7cff"} onChange={(e) => setUi({ accent: e.target.value })} />
+                  <span className="font-mono text-xs font-normal text-ink-400">{u.accent || "the Studio's own"}</span>{u.accent && <button type="button" className="btn btn-ghost btn-sm" onClick={() => setUi({ accent: undefined })}>Reset</button>}</span></label>
+              <label className="flex flex-col gap-1 text-[13px] font-semibold">Corners<select className={sel} value={u.radius || ""} onChange={(e) => setUi({ radius: (e.target.value || undefined) as any })}><option value="">Standard (soft)</option><option value="sharp">Square</option><option value="round">Very round</option></select></label>
+              <label className="flex flex-col gap-1 text-[13px] font-semibold">Font for text<select className={sel} value={u.font || ""} onChange={(e) => setUi({ font: e.target.value || undefined })}><option value="">The Studio's own (Manrope)</option>{DIY_FONTS.map((f) => <option key={f} value={f}>{f}</option>)}</select></label>
+              <label className="flex flex-col gap-1 text-[13px] font-semibold">Font for headings<select className={sel} value={u.head || ""} onChange={(e) => setUi({ head: e.target.value || undefined })}><option value="">Same as the text</option>{DIY_FONTS.map((f) => <option key={f} value={f}>{f}</option>)}</select></label>
+              <label className="flex flex-col gap-1 text-[13px] font-semibold">Width of the chat<select className={sel} value={u.width || ""} onChange={(e) => setUi({ width: (e.target.value || undefined) as any })}><option value="">Standard</option><option value="narrow">Narrow column</option><option value="wide">Full width</option></select></label>
+            </div>
+            <p className="text-[11.5px] text-ink-500">The message bubbles, the page background and a background picture are under Chat look below. Fonts come from Google Fonts, like the Studio's own.</p>
+          </>;
+        })()}
+      </Block>
+
+      <Block title="Logo and name" note="What the top bar of the Design yourself page shows, and the picture beside the assistant's messages. Leave a box empty to keep the Studio's own.">
+        {(() => {
+          const u = d.ui || {};
+          const pick = async (f: File | undefined) => { if (!f) return; try { setUi({ logo: await shrinkImage(f, 160) }); } catch (e: any) { alert(e?.message || "Couldn't use that picture."); } };
+          return <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            <div className="flex flex-col gap-1.5 text-[13px] font-semibold">Logo
+              <span className="flex items-center gap-2">{u.logo && <img src={u.logo} alt="" className="h-10 w-10 rounded-md border border-ink-600 object-contain" />}
+                <label className="btn btn-sm cursor-pointer">{u.logo ? "Replace" : "Choose a logo"}<input type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" onChange={(e) => { pick(e.target.files?.[0]); e.target.value = ""; }} /></label>
+                {u.logo && <button type="button" className="btn btn-ghost btn-sm" onClick={() => setUi({ logo: undefined })}>Remove</button>}</span></div>
+            <label className="flex flex-col gap-1 text-[13px] font-semibold">Name<input className="input h-10 py-0 text-[13px]" maxLength={40} placeholder="Picaffectz" value={u.name || ""} onChange={(e) => setUi({ name: e.target.value })} /></label>
+            <label className="flex flex-col gap-1 text-[13px] font-semibold">Line beside the name<input className="input h-10 py-0 text-[13px]" maxLength={60} placeholder="DIY your web" value={u.tag || ""} onChange={(e) => setUi({ tag: e.target.value })} /></label>
+          </div>;
+        })()}
+      </Block>
+
+      <Block open={false} title="Wording" note="The page's own words: its welcome, the finished-preview message and its buttons. Leave a box empty to keep the standard text shown in grey. Write {brand} where the name should appear. The questions themselves are worded under Questions above.">
+        <div className="grid gap-3 sm:grid-cols-2">
+          {(Object.keys(DIY_WORDS) as DiyWord[]).map((k) => { const long = DIY_WORDS[k][1].length > 60, v = d.words?.[k] || "";
+            return <label key={k} className={`flex flex-col gap-1 text-[13px] font-semibold ${long ? "sm:col-span-2" : ""}`}>{DIY_WORDS[k][0]}
+              {long ? <textarea className="input min-h-[4.5rem] text-[13px] font-normal" maxLength={400} placeholder={DIY_WORDS[k][1]} value={v} onChange={(e) => setWord(k, e.target.value)} /> : <input className="input h-10 py-0 text-[13px] font-normal" maxLength={120} placeholder={DIY_WORDS[k][1]} value={v} onChange={(e) => setWord(k, e.target.value)} />}</label>; })}
+        </div>
       </Block>
 
       <Block title="Chat look" note="Colours and a background picture for the Design yourself chat. Leave a colour unset to keep the standard look.">

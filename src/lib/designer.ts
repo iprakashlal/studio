@@ -25,6 +25,8 @@ export type Step = {
   ask: (a: Answers) => string;
   /** choice: tap one; many: tap several; text: one line; long: one item per line. */
   type: "choice" | "many" | "text" | "long" | "file";
+  /** A one-line answer picked instead of typed: a day from a calendar, or a time with am / pm. */
+  input?: "date" | "time";
   /** Asked only when this is true. */
   when?: (a: Answers) => boolean;
   /** file: what may be chosen and how big. */
@@ -134,8 +136,8 @@ const RAW: Step[] = [
   { id: "domain", group: "basics", label: "Custom domain", type: "text", optional: true, ask: () => "Do you already have your own website address (domain)?", ph: () => "e.g. yourname.com", help: () => "Only if you have one. We'll connect it when we publish." },
 
   // Events
-  { id: "edate", group: "events", label: "Date", type: "text", optional: true, when: E, ask: () => "When is it?", ph: () => "e.g. 12 March 2027", help: () => "The first day, if it runs for several. Skip it if the date isn't fixed yet." },
-  { id: "etime", group: "events", label: "Start time", type: "text", optional: true, when: (a) => E(a) && !!(a.edate || "").trim(), ask: () => "What time does it start?", ph: () => "e.g. 9:30 am" },
+  { id: "edate", group: "events", label: "Date", type: "text", input: "date", optional: true, when: E, ask: () => "When is it?", ph: () => "e.g. 12 March 2027", help: () => "The first day, if it runs for several. Skip it if the date isn't fixed yet." },
+  { id: "etime", group: "events", label: "Start time", type: "text", input: "time", optional: true, when: (a) => E(a) && !!(a.edate || "").trim(), ask: () => "What time does it start?", ph: () => "e.g. 9:30 am" },
   { id: "evenue", group: "events", label: "Venue", type: "text", optional: true, when: E, ask: () => "Where is it held?", ph: () => "e.g. Harbour Convention Centre (or Online)", help: () => "The venue's name. We ask for the city separately." },
   { id: "eabout", group: "events", label: "About the event", type: "long", optional: true, when: E, ask: () => "Tell people about the event in a few lines.", ph: () => "What it is, who it's for and why they should come." },
   { id: "ereg", group: "events", label: "How people sign up", type: "choice", optional: true, when: (a) => E(a) && EVT_TYPE_INFO[eventTypeFor(a)].kinds.length > 1, ask: () => "How should people sign up?", options: (a) => EVT_TYPE_INFO[eventTypeFor(a)].kinds.map((v) => ({ v, label: regKindName(v) })), help: () => "Each one asks for what it needs: tickets ask how many, an RSVP asks who is coming, a team entry asks for the team." },
@@ -280,6 +282,7 @@ export function sayAnswer(s: Step, a: Answers): string {
   const v = a[s.id]; if (!v) return "Skip";
   const src = (a.docfrom || "").split(",").includes(s.id) ? " (from your document)" : "";
   if (s.type === "file") return s.id === "logo" ? "Logo added" : s.id === "doc" ? (a.doclink ? `Link: ${v}` : `PDF: ${v}`) : `Menu added: ${v}`;
+  if (s.input === "date") { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v); return (m ? new Date(+m[1], +m[2] - 1, +m[3]).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "long", year: "numeric" }) : v) + src; }
   if (s.id === "pages") return v === "multi" ? "Separate pages" : "One page";
   if (s.id === "kind") return KIND_OPTIONS.find((o) => o.v === v)?.label || v;
   if (s.type === "choice") return [...(s.options?.(a) || []), ...STYLE_OPTIONS, ...OLD_STYLES, ...COLOUR_OPTIONS].find((o) => o.v === v)?.label || v;

@@ -25,7 +25,7 @@ function otherAccounts(env: any): { id: string; name: string }[] {
   return out;
 }
 
-import { CFDB_SCHEMA, CFDB_TABLES, CFDB_VERSION, CFDB_WORKER_NAME } from "../src/lib/cfdbSchema";
+import { CFDB_SCHEMA, CFDB_TABLES, CFDB_UPGRADES, CFDB_VERSION, CFDB_WORKER_NAME } from "../src/lib/cfdbSchema";
 import { digestPage, sheetLinks } from "../src/lib/lookdigest";
 import { socialFromText } from "../src/lib/social";
 import { COURIERS, TRACKERS, TRACKER_FIELDS, TRACK_STATES, TrackError, courierLink, courierName, pickTracker, trackLive, trackerReady, type Live } from "../src/lib/tracking";
@@ -480,6 +480,18 @@ async function ensureViews(env: Env) {
    Their keys are kept in this database encrypted with the Worker's own secret, are never sent back to
    a browser, and each is used only when it is switched on.
    ============================================================ */
+/** Table changes from CFDB_UPGRADES that are in place. Each is tried once per start; a failure leaves the old way of working in use. */
+const upgraded: Record<string, boolean> = {}, upgradeTried: Record<string, boolean> = {};
+async function upgradedTo(env: Env, name: string): Promise<boolean> {
+  if (upgraded[name]) return true; if (upgradeTried[name]) return false; upgradeTried[name] = true;
+  const u = CFDB_UPGRADES.find((x) => x.name === name); if (!u) return false;
+  const there = async () => { try { await env.DB.prepare(u.probe).first(); return true; } catch { return false; } };
+  if (!(await there())) { try { await env.DB.batch(u.steps.map((s) => env.DB.prepare(s))); } catch { /* left as it was */ } if (!(await there())) return false; }
+  return (upgraded[name] = true);
+}
+/** The condition and value that find an enquiry by its order or registration number: by the indexed number once the database
+ *  has it (see CFDB_UPGRADES), and until then by looking for it in the saved text, as before. */
+async function byRef(env: Env, no: string, old: [string, string]): Promise<[string, string]> { return (await upgradedTo(env, "enquiries.ref")) ? ["ref = ?", no] : old; }
 let ensured = false;
 async function ensure(env: Env) {
   if (ensured) return;
@@ -2024,7 +2036,8 @@ export default {
         const nos = (((await env.DB.prepare("select order_no, max(at) t from points where site = ? and ckey = ? and order_no <> '' group by order_no order by t desc limit 25").bind(site, key).all()).results || []) as any[]).map((r) => String(r.order_no));
         const orders: any[] = [];
         if (nos.length) {
-          const rows = ((await env.DB.prepare(`select data, status, created_at from enquiries where site = ? and (${nos.map(() => "instr(data, ?) > 0").join(" or ")}) order by created_at desc limit 40`).bind(site, ...nos.map((n) => `"order_no":${JSON.stringify(n)}`)).all()).results || []) as any[];
+          const by = await Promise.all(nos.map((n) => byRef(env, n, ["instr(data, ?) > 0", `"order_no":${JSON.stringify(n)}`])));
+          const rows = ((await env.DB.prepare(`select data, status, created_at from enquiries where site = ? and (${by.map((x) => x[0]).join(" or ")}) order by created_at desc limit 40`).bind(site, ...by.map((x) => x[1])).all()).results || []) as any[];
           for (const r of rows) { let d: any = null; try { d = JSON.parse(r.data); } catch { continue; } if (!nos.includes(String(d.order_no))) continue;
             let items: any[] = []; try { items = JSON.parse(String(d._items || "[]")).slice(0, 40); } catch { /* an older order: its text is shown */ }
             orders.push({ no: String(d.order_no), at: r.created_at, total: String(d.total || ""), status: String(r.status || "new"), mode: String(d.mode || ""), paid: d._paid === "yes", pay: String(d.payment || d.pay || ""), address: String(d.address || ""), name: String(d.name || ""), points: String(d._points || ""), ...(d._bill ? (() => { try { return { bill: JSON.parse(String(d._bill)) }; } catch { return {}; } })() : {}), ...(trackOf(d) ? { track: trackShown(trackOf(d)) } : {}), items, text: String(d.items || d.order || d.message || "").slice(0, 2000) }); }
@@ -2103,7 +2116,8 @@ export default {
         const z = await getSetting(env, "site:" + site, "pos").catch(() => null); if (!posReady(z)) return err(404, "Not set up.");
         const b = (await req.json().catch(() => ({}))) as any, no = String(b.orderID || b.clientOrderID || ""), st = POS_STATUS[String(b.status)];
         if (String(b.restID || "") !== String(z.restId) || !/^[A-Z0-9][A-Z0-9-]{3,29}$/.test(no) || !st) return json({ success: false, message: "Unknown order or status." }, 400);
-        const rows = ((await env.DB.prepare("select id, data, status from enquiries where site = ? and data like ? order by id desc limit 5").bind(site, `%"order_no":"${no}"%`).all()).results || []) as any[];
+        const by = await byRef(env, no, ["data like ?", `%"order_no":"${no}"%`]);
+        const rows = ((await env.DB.prepare(`select id, data, status from enquiries where site = ? and ${by[0]} order by id desc limit 5`).bind(site, by[1]).all()).results || []) as any[];
         const row = rows.find((r) => { try { return JSON.parse(r.data).order_no === no; } catch { return false; } });
         if (!row) return json({ success: false, message: "Order not found." }, 404);
         const d = JSON.parse(row.data); d._pos = "Petpooja: " + ({ accepted: "accepted", ready: "food ready", out: "dispatched", done: "delivered", cancelled: "cancelled" } as Record<string, string>)[st] + (b.cancel_reason ? " (" + oneLine(String(b.cancel_reason)).slice(0, 120) + ")" : "") + (b.rider_name ? `, rider ${oneLine(String(b.rider_name)).slice(0, 60)} ${String(b.rider_phone_number || "").replace(/[^\d+ ]/g, "").slice(0, 20)}` : "");
@@ -2179,7 +2193,8 @@ export default {
         if (!oneLine(data.name || "") || !EMAIL_RE.test(String(data.email || "").trim())) return err(400, "Please give your name and a valid email address.");
         const c = await siteContent(env, site).catch(() => null); if (!isEvt(c)) return err(404, "This site doesn't take registrations.");
         // The same registration sent twice (the page was opened again after paying) is kept once.
-        if (await env.DB.prepare("select 1 x from enquiries where site = ? and instr(data, ?) > 0 limit 1").bind(site, `"reg_no":"${no}"`).first()) return json({ ok: true, again: true });
+        const by = await byRef(env, no, ["instr(data, ?) > 0", `"reg_no":"${no}"`]);
+        if (await env.DB.prepare(`select 1 x from enquiries where site = ? and ${by[0]} limit 1`).bind(site, by[1]).first()) return json({ ok: true, again: true });
         const bill = evtBill(c, q.cart || {}); if ("error" in bill) return err(409, bill.error);
         const hour = new Date(Date.now() - 3600_000).toISOString();
         if (+(((await env.DB.prepare("select count(*) n from enquiries where site = ? and created_at > ?").bind(site, hour).first()) as any)?.n || 0) >= 600) return err(429, "Too many registrations just now. Please try again in a few minutes.");
@@ -2228,7 +2243,8 @@ export default {
       if (p.startsWith("/order/") && req.method === "GET") {
         const [, , site, no] = p.split("/"), k = u.searchParams.get("k") || "";
         if (!/^[a-z0-9][a-z0-9-]{0,59}$/.test(site || "") || !/^[A-Z0-9][A-Z0-9-]{3,29}$/.test(no || "") || !/^[a-f0-9]{16,64}$/.test(k)) return err(404, "Not found.");
-        const rows = ((await env.DB.prepare("select status, data from enquiries where site = ? and data like ? order by id desc limit 5").bind(site, `%"order_no":"${no}"%`).all()).results || []) as any[];
+        const by = await byRef(env, no, ["data like ?", `%"order_no":"${no}"%`]);
+        const rows = ((await env.DB.prepare(`select status, data from enquiries where site = ? and ${by[0]} order by id desc limit 5`).bind(site, by[1]).all()).results || []) as any[];
         const hit = rows.find((r) => { try { const d = JSON.parse(r.data); return d.order_no === no && d.okey === k; } catch { return false; } });
         if (!hit) return err(404, "Not found.");
         let paid = "", track: any = null; try { const hd = JSON.parse(hit.data); paid = String(hd._paid || ""); track = trackShown(trackOf(hd)); } catch { /* none */ }
@@ -2312,7 +2328,8 @@ export default {
         const byKey = /^[a-f0-9]{16,64}$/.test(String(b.k || ""));
         if (!byKey) { const now = Date.now(), k = "trk:" + site + ":" + Math.floor(now / 3600_000); const n: any = await env.DB.prepare("select tries from otps where k = ?").bind(k).first(); if ((n?.tries || 0) >= 400) return err(429, "Too many lookups just now. Please try again later.");
           await env.DB.prepare("insert into otps (k, hash, expires, tries, sent) values (?, '', ?, 1, ?) on conflict (k) do update set tries = tries + 1").bind(k, now + 2 * 3600_000, now).run(); }
-        const rows = ((await env.DB.prepare("select id, status, data, created_at from enquiries where site = ? and data like ? order by id desc limit 5").bind(site, `%"order_no":"${no}"%`).all()).results || []) as any[];
+        const by = await byRef(env, no, ["data like ?", `%"order_no":"${no}"%`]);
+        const rows = ((await env.DB.prepare(`select id, status, data, created_at from enquiries where site = ? and ${by[0]} order by id desc limit 5`).bind(site, by[1]).all()).results || []) as any[];
         let cust = ""; if (b.key && (await custOk(env, site, String(b.key), b.pass))) cust = String(b.key);
         const same = (d: any, c: string) => { const e = emailKey(c); if (e) return e === emailKey(d.email); const a = String(c || "").replace(/\D/g, ""), z = String(d.phone || "").replace(/\D/g, ""); return a.length >= 8 && z.length >= 8 && a.slice(-10) === z.slice(-10); };
         let hit: any = null, hd: any = null;

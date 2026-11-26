@@ -43,7 +43,13 @@ var CFDB_TABLES = [
   "create index if not exists payments_site on payments (site, created_at)"
 ];
 var CFDB_SCHEMA = CFDB_TABLES.join(";\n") + ";";
-var CFDB_VERSION = 85;
+var CFDB_UPGRADES = [
+  { name: "enquiries.ref", probe: "select ref from enquiries limit 1", steps: [
+    "alter table enquiries add column ref text generated always as (case when json_valid(data) then coalesce(nullif(json_extract(data, '$.order_no'), ''), nullif(json_extract(data, '$.reg_no'), ''), '') else '' end) virtual",
+    "create index if not exists enquiries_ref on enquiries (site, ref)"
+  ] }
+];
+var CFDB_VERSION = 86;
 var CFDB_WORKER_NAME = "picaffectz-db";
 
 // src/lib/lookdigest.ts
@@ -1140,6 +1146,34 @@ async function ensureViews(env) {
     await env.DB.batch(todo.flatMap((n) => [env.DB.prepare(`drop view if exists ${n}`), env.DB.prepare(`create view ${n} as /*${VIEWS_V}*/ ${VIEWS[n]}`)]));
   } catch {
   }
+}
+var upgraded = {};
+var upgradeTried = {};
+async function upgradedTo(env, name) {
+  if (upgraded[name]) return true;
+  if (upgradeTried[name]) return false;
+  upgradeTried[name] = true;
+  const u = CFDB_UPGRADES.find((x) => x.name === name);
+  if (!u) return false;
+  const there = async () => {
+    try {
+      await env.DB.prepare(u.probe).first();
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  if (!await there()) {
+    try {
+      await env.DB.batch(u.steps.map((s) => env.DB.prepare(s)));
+    } catch {
+    }
+    if (!await there()) return false;
+  }
+  return upgraded[name] = true;
+}
+async function byRef(env, no, old) {
+  return await upgradedTo(env, "enquiries.ref") ? ["ref = ?", no] : old;
 }
 var ensured = false;
 async function ensure(env) {
@@ -3294,7 +3328,8 @@ var db_worker_default = {
         const nos = ((await env.DB.prepare("select order_no, max(at) t from points where site = ? and ckey = ? and order_no <> '' group by order_no order by t desc limit 25").bind(site, key).all()).results || []).map((r) => String(r.order_no));
         const orders = [];
         if (nos.length) {
-          const rows = (await env.DB.prepare(`select data, status, created_at from enquiries where site = ? and (${nos.map(() => "instr(data, ?) > 0").join(" or ")}) order by created_at desc limit 40`).bind(site, ...nos.map((n) => `"order_no":${JSON.stringify(n)}`)).all()).results || [];
+          const by = await Promise.all(nos.map((n) => byRef(env, n, ["instr(data, ?) > 0", `"order_no":${JSON.stringify(n)}`])));
+          const rows = (await env.DB.prepare(`select data, status, created_at from enquiries where site = ? and (${by.map((x) => x[0]).join(" or ")}) order by created_at desc limit 40`).bind(site, ...by.map((x) => x[1])).all()).results || [];
           for (const r of rows) {
             let d = null;
             try {
@@ -3395,7 +3430,8 @@ var db_worker_default = {
         if (!posReady(z)) return err(404, "Not set up.");
         const b = await req.json().catch(() => ({})), no = String(b.orderID || b.clientOrderID || ""), st = POS_STATUS[String(b.status)];
         if (String(b.restID || "") !== String(z.restId) || !/^[A-Z0-9][A-Z0-9-]{3,29}$/.test(no) || !st) return json({ success: false, message: "Unknown order or status." }, 400);
-        const rows = (await env.DB.prepare("select id, data, status from enquiries where site = ? and data like ? order by id desc limit 5").bind(site, `%"order_no":"${no}"%`).all()).results || [];
+        const by = await byRef(env, no, ["data like ?", `%"order_no":"${no}"%`]);
+        const rows = (await env.DB.prepare(`select id, data, status from enquiries where site = ? and ${by[0]} order by id desc limit 5`).bind(site, by[1]).all()).results || [];
         const row = rows.find((r) => {
           try {
             return JSON.parse(r.data).order_no === no;
@@ -3517,7 +3553,8 @@ var db_worker_default = {
         if (!oneLine(data.name || "") || !EMAIL_RE.test(String(data.email || "").trim())) return err(400, "Please give your name and a valid email address.");
         const c = await siteContent(env, site).catch(() => null);
         if (!isEvt(c)) return err(404, "This site doesn't take registrations.");
-        if (await env.DB.prepare("select 1 x from enquiries where site = ? and instr(data, ?) > 0 limit 1").bind(site, `"reg_no":"${no}"`).first()) return json({ ok: true, again: true });
+        const by = await byRef(env, no, ["instr(data, ?) > 0", `"reg_no":"${no}"`]);
+        if (await env.DB.prepare(`select 1 x from enquiries where site = ? and ${by[0]} limit 1`).bind(site, by[1]).first()) return json({ ok: true, again: true });
         const bill = evtBill(c, q.cart || {});
         if ("error" in bill) return err(409, bill.error);
         const hour = new Date(Date.now() - 36e5).toISOString();
@@ -3587,7 +3624,8 @@ var db_worker_default = {
       if (p.startsWith("/order/") && req.method === "GET") {
         const [, , site, no] = p.split("/"), k = u.searchParams.get("k") || "";
         if (!/^[a-z0-9][a-z0-9-]{0,59}$/.test(site || "") || !/^[A-Z0-9][A-Z0-9-]{3,29}$/.test(no || "") || !/^[a-f0-9]{16,64}$/.test(k)) return err(404, "Not found.");
-        const rows = (await env.DB.prepare("select status, data from enquiries where site = ? and data like ? order by id desc limit 5").bind(site, `%"order_no":"${no}"%`).all()).results || [];
+        const by = await byRef(env, no, ["data like ?", `%"order_no":"${no}"%`]);
+        const rows = (await env.DB.prepare(`select status, data from enquiries where site = ? and ${by[0]} order by id desc limit 5`).bind(site, by[1]).all()).results || [];
         const hit = rows.find((r) => {
           try {
             const d = JSON.parse(r.data);
@@ -3726,7 +3764,8 @@ ${body}`)}${paras("Approve or hide it under Reviews in your site's admin page.",
           if ((n?.tries || 0) >= 400) return err(429, "Too many lookups just now. Please try again later.");
           await env.DB.prepare("insert into otps (k, hash, expires, tries, sent) values (?, '', ?, 1, ?) on conflict (k) do update set tries = tries + 1").bind(k, now + 2 * 36e5, now).run();
         }
-        const rows = (await env.DB.prepare("select id, status, data, created_at from enquiries where site = ? and data like ? order by id desc limit 5").bind(site, `%"order_no":"${no}"%`).all()).results || [];
+        const by = await byRef(env, no, ["data like ?", `%"order_no":"${no}"%`]);
+        const rows = (await env.DB.prepare(`select id, status, data, created_at from enquiries where site = ? and ${by[0]} order by id desc limit 5`).bind(site, by[1]).all()).results || [];
         let cust = "";
         if (b.key && await custOk(env, site, String(b.key), b.pass)) cust = String(b.key);
         const same = (d, c) => {

@@ -49,7 +49,7 @@ var CFDB_UPGRADES = [
     "create index if not exists enquiries_ref on enquiries (site, ref)"
   ] }
 ];
-var CFDB_VERSION = 98;
+var CFDB_VERSION = 99;
 var CFDB_WORKER_NAME = "picaffectz-db";
 
 // src/lib/diylook.ts
@@ -68,6 +68,7 @@ var DIY_WORDS = {
   skipBtn: ["Button: skip a question", "Skip"]
 };
 var DIY_FONTS = ["Manrope", "Inter", "DM Sans", "Plus Jakarta Sans", "Figtree", "Outfit", "Sora", "Space Grotesk", "Work Sans", "Nunito Sans", "Poppins", "IBM Plex Sans", "Bricolage Grotesque", "Syne", "Unbounded", "Fraunces", "Playfair Display", "DM Serif Display", "Lora", "Source Serif 4"];
+var DIY_BUBBLES = [["", "Soft (standard)"], ["round", "Rounded pill"], ["square", "Square"], ["tail", "Speech bubble with a tail"], ["outline", "Outlined"], ["glass", "Frosted glass"], ["minimal", "Minimal (assistant as plain text)"], ["bar", "Card with an accent bar"]];
 var HEX = /^#[0-9a-f]{6}$/i;
 var PIC = /^(data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+|https:\/\/[^\s<>"']{3,400})$/;
 var tx = (v, n) => typeof v === "string" ? v.replace(/[<>]/g, "").trim().slice(0, n) : "";
@@ -79,6 +80,9 @@ function cleanDiyLook(x) {
     const s = x.ui, u = {};
     if (s.mode === "light" || s.mode === "dark") u.mode = s.mode;
     if (typeof s.accent === "string" && HEX.test(s.accent)) u.accent = s.accent.toLowerCase();
+    if (typeof s.header === "string" && HEX.test(s.header)) u.header = s.header.toLowerCase();
+    if (typeof s.btn === "string" && HEX.test(s.btn)) u.btn = s.btn.toLowerCase();
+    if (DIY_BUBBLES.some(([k]) => k && k === s.bubble)) u.bubble = s.bubble;
     if (DIY_FONTS.includes(s.font)) u.font = s.font;
     if (DIY_FONTS.includes(s.head)) u.head = s.head;
     if (s.radius === "sharp" || s.radius === "round") u.radius = s.radius;

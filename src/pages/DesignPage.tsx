@@ -163,8 +163,10 @@ function DesignPageInner({ studio, index, onIndex }: { studio?: Studio; index?: 
   const resetRef = useRef<() => void>(() => {});
   const endRef = useRef<HTMLDivElement>(null);
   const lastCount = useRef(0);
-  // New messages scroll into view (the first screen stays put).
-  useEffect(() => { const n = Object.keys(a).length; if (n > lastCount.current && lastCount.current > 0) setTimeout(() => endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" }), 60); lastCount.current = n; }, [a]);
+  // The newest question is brought on screen: the page scrolls to a marker placed after the answer area, so that area rests in its
+  // own place under the conversation and the question sits just above it instead of behind it. Done again as the area settles to its new height.
+  const dockRef = useRef<HTMLDivElement>(null);
+  const toLatest = useCallback(() => { const go = (smooth: boolean) => (dockRef.current || endRef.current)?.scrollIntoView({ behavior: smooth ? "smooth" : "auto", block: "end" }); const t = [setTimeout(() => go(true), 80), setTimeout(() => go(true), 450)]; return () => t.forEach(clearTimeout); }, []);
   const field = useRef<HTMLInputElement & HTMLTextAreaElement>(null);
   const pick = useRef<HTMLInputElement>(null);
   const cur = nextStep(a);
@@ -180,7 +182,8 @@ function DesignPageInner({ studio, index, onIndex }: { studio?: Studio; index?: 
   const mailChat = useEmailChat(host, (p) => { ownPass(p); setA((o) => (o.email ? o : { ...o, email: p.email })); });
   useEffect(() => { designHost().then(setHost).catch(() => {}).finally(() => setHostDone(true)); const f = (document as any).fonts?.ready; (f ? Promise.race([f, new Promise((r) => setTimeout(r, 4000))]) : Promise.resolve()).finally(() => setFontsOk(true)); }, []);
   useEffect(() => { try { sessionStorage.setItem(DRAFT, JSON.stringify({ a, copy, id: savedId, sent })); } catch { /* private mode */ } }, [a, copy, savedId, sent]);
-  useEffect(() => { setText(""); setMany([]); setTimeout(() => field.current?.focus(), 50); window.scrollTo({ top: 0, behavior: "smooth" }); }, [cur?.id, answered.length, writing]);
+  useEffect(() => { setText(""); setMany([]); setTimeout(() => field.current?.focus(), 50); }, [cur?.id, answered.length, writing]);
+  useEffect(() => { if (!lastCount.current && !answered.length) { lastCount.current = 1; window.scrollTo({ top: 0 }); return; } lastCount.current = 1; return toLatest(); }, [cur?.id, answered.length, writing, toLatest]);
 
   // The site is rebuilt as each answer arrives.
   useEffect(() => {
@@ -460,6 +463,7 @@ function DesignPageInner({ studio, index, onIndex }: { studio?: Studio; index?: 
           </div>
         )}
         {needMail && <div className="sticky bottom-0 -mx-3 border-t border-ink-800 bg-ink-950/95 px-3 pb-4 pt-4 backdrop-blur sm:-mx-6 sm:px-6"><div className="mx-auto max-w-5xl">{mailChat.composer}</div></div>}
+        <div ref={dockRef} aria-hidden />
       </main>
       <StudioPageLinksHere where="design" />
 

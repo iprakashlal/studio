@@ -272,7 +272,7 @@ function SetIcon({ k, on }: { k: string; on: boolean }) {
 const SET_INDEX: [tab: string, title: string, words: string, find?: string][] = [
   ["ai", "AI engine", "ai openai gemini groq openrouter cloudflare api key model translate write provider chatgpt"],
   ["ai", "AI for Design yourself", "diy ai writes text reads pdf engine"],
-  ["ai", "Pictures drawn by AI", "diy horde draw logo banner images picture style"],
+  ["ai", "Pictures drawn by AI", "diy draw logo banner images picture style unsplash photos"],
   ["general", "WhatsApp", "meta messages otp business phone"],
   ["general", "SMS", "text messages codes otp"],
   ["general", "Header links", "menu navigation top links"],

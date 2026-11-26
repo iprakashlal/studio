@@ -1669,7 +1669,7 @@ async function dqPhotoUsed(env: Env, id: string, req: Request): Promise<Response
   return json({ ok: true });
 }
 
-/** A picture drawn from words by the Studio's own AI engine (Cloudflare's: the fast FLUX model). Only when the owner chose it under Settings → AI → Pictures drawn by AI; other engines can't draw here, and the page then uses the free generator. */
+/** A picture drawn from words by the Studio's own AI engine (Cloudflare's: the fast FLUX model). The Picaffectz system can't draw: the page then says so. */
 async function dqImage(env: Env, id: string, req: Request): Promise<Response> {
   const ip = req.headers.get("cf-connecting-ip") || "x";
   if (!(await dqRate(env, "dqimg:" + id, 120, 3600)) || !(await dqRate(env, "dqimgip:" + ip, 16, 3600))) return json({ engine: "system", error: "busy" });
@@ -1681,7 +1681,7 @@ async function dqImage(env: Env, id: string, req: Request): Promise<Response> {
     const c: any = await anySetting(env, "un"); if (!c?.key) return json({ engine: "unsplash", error: "No Unsplash access key is saved yet. Add it under Settings → AI → Pictures drawn by AI." });
     return json({ engine: "unsplash", ...(await unsplashFind(String(c.key), words, +b.n || 4)) });
   }
-  if (d?.images?.source !== "engine") return json({ engine: "system" });
+  // Anything but Unsplash is drawn by the Studio's engine (there is no other generator).
   const { choice, ai } = await dqEngine(env, idx); if ((choice !== "cloudflare" && choice !== "custom") || !ai) return json({ engine: "system" });
   let q: any; try { q = JSON.parse((await req.text()).slice(0, 2000) || "{}"); } catch { return err(400, "Couldn't read the request."); }
   const prompt = clip(q.prompt, 400); if (prompt.length < 3) return err(400, "Describe the picture first.");

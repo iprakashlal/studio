@@ -40,11 +40,10 @@ const STYLE: Record<string, string> = { photo: "professional photograph, natural
 
 /** A found photo: its picture, with who took it and a call to make when it is used (see lib/designapi stockPhotos). */
 export type PhotoBlob = Blob & { credit?: StockPhoto; used?: () => void };
-/** Pictures drawn from words by the free AI Horde (no key, no sign-up, no daily quota: volunteers' computers do the drawing, so anonymous
- *  requests may wait in a queue). Small sizes and few steps keep it quick; the caller fits the result to the page. */
-const sleep = (ms: number, sig?: AbortSignal) => new Promise<void>((ok, no) => { const t = setTimeout(ok, ms); sig?.addEventListener("abort", () => { clearTimeout(t); no(new Error("Stopped.")); }); });
+/** Pictures from a few words: real photos found on Unsplash, or a picture drawn by the Studio's own AI engine. A logo is always drawn
+ *  (Unsplash has none); the in-house logo maker (ui/LogoMaker) needs neither. */
 const b64Blob = (b: string, type = "image/webp") => { const bin = atob(b), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return new Blob([u], { type }); };
-export async function generateImages(prompt: string, o: { /** "engine": the Studio's own AI engine draws it (quick), with the free generator as the fallback. */ source?: "horde" | "engine" | "unsplash"; style?: string; kind?: "logo" | "photo"; n?: number; signal?: AbortSignal; status?: (t: string) => void } = {}): Promise<Blob[]> {
+export async function generateImages(prompt: string, o: { /** "unsplash": real photos found on Unsplash. Anything else: the Studio's own AI engine draws it. */ source?: "engine" | "unsplash" | "horde"; style?: string; kind?: "logo" | "photo"; n?: number; signal?: AbortSignal; status?: (t: string) => void } = {}): Promise<Blob[]> {
   const kind = o.kind || "photo", n = Math.max(1, Math.min(4, o.n || 1)), what = prompt.replace(/\s+/g, " ").trim().slice(0, 300);
   if (!what) throw new Error("Describe the picture first.");
   const full = kind === "logo" ? `minimal vector logo mark, ${what}, simple flat icon, centered, plain white background, no text` : `${what}, ${STYLE[o.style || "photo"] || STYLE.photo}, no text, no logo`;
@@ -58,45 +57,14 @@ export async function generateImages(prompt: string, o: { /** "engine": the Stud
     if (!got.length) throw new Error("The photos couldn't be fetched from Unsplash. Please try again.");
     return got;
   }
-  if (o.source === "engine") {
-    const h = await designHost().catch(() => null);
-    if (h) {
-      o.status?.("Drawing…");
-      const res = await Promise.all(Array.from({ length: n }, () => engineImage(h, full)));
-      const got = res.filter((x) => x.image).map((x) => b64Blob(x.image!, "image/jpeg"));
-      if (got.length) return got;
-      // The chosen engine tried and failed: say why, rather than quietly using another generator. Only an engine that cannot draw at all (the Picaffectz system) hands over to the free one.
-      const why = res.find((x) => x.error)?.error;
-      if (why) throw new Error("The Studio's AI engine couldn't draw this: " + why);
-    }
-    o.status?.("This Studio's AI engine can't draw pictures; using the free generator…");
-  }
-  // Anonymous users have no kudos, so a request over the free work budget is refused: it is asked again smaller (size, steps, count) until the Horde accepts it.
-  const LV: [number, number, number, number][] = kind === "logo" ? [[384, 384, 12, n], [320, 320, 8, n], [256, 256, 6, Math.min(n, 2)], [256, 256, 5, 1]] : [[512, 384, 12, n], [448, 320, 8, n], [384, 256, 6, Math.min(n, 2)], [320, 256, 5, 1]];
-  let lv = 0; const H = { "Content-Type": "application/json", apikey: "0000000000", "Client-Agent": "picaffectz-studio:1:web" };
-  const send = async (slow: boolean): Promise<string> => {
-    const [w, h, steps, cnt] = LV[lv];
-    const r = await fetch("https://aihorde.net/api/v2/generate/async", { method: "POST", headers: H, signal: o.signal, body: JSON.stringify({ prompt: full, params: { width: w, height: h, steps, n: cnt, cfg_scale: 7, sampler_name: "k_euler_a" }, nsfw: false, censor_nsfw: true, r2: false, slow_workers: slow }) });
-    const j: any = await r.json().catch(() => ({}));
-    if (!r.ok && /kudos/i.test(String(j.message || "")) && lv < LV.length - 1) { lv++; o.status?.("Making it a little smaller for the free generator…"); return send(slow); }
-    if (!r.ok || !j.id) throw new Error(j.message || "The free generator didn't accept the request. Please try again in a moment.");
-    return j.id as string;
-  };
-  o.status?.("Sending…");
-  // Quick workers first (usually a few seconds); if none picks it up soon, it is sent again to any worker.
-  let id = await send(false), t0 = Date.now(), slowSent = false;
-  const stop = (i: string) => fetch(`https://aihorde.net/api/v2/generate/status/${i}`, { method: "DELETE", headers: H }).catch(() => {});
-  for (;;) {
-    await sleep(1500, o.signal);
-    if (Date.now() - t0 > 200_000) { stop(id); throw new Error("The free generator is very busy right now. Please try again in a few minutes."); }
-    const c: any = await fetch(`https://aihorde.net/api/v2/generate/check/${id}`, { signal: o.signal }).then((x) => x.json()).catch(() => ({}));
-    if (c.faulted) throw new Error("The free generator couldn't draw that. Try other words.");
-    if (c.done) break;
-    if (!slowSent && !c.processing && Date.now() - t0 > 12_000) { slowSent = true; stop(id); id = await send(true); t0 = Date.now(); }
-    o.status?.(c.queue_position ? `In the queue (place ${c.queue_position})…` : "Drawing…");
-  }
-  const st: any = await fetch(`https://aihorde.net/api/v2/generate/status/${id}`, { signal: o.signal }).then((x) => x.json());
-  const out = (st.generations || []).filter((g: any) => g && !g.censored && typeof g.img === "string" && g.img.length > 100).map((g: any) => b64Blob(g.img));
-  if (!out.length) throw new Error("Nothing came back (the picture may have been filtered). Try other words.");
-  return out;
+  // Drawn by the Studio's own AI engine (Cloudflare AI or the owner's own AI API). There is no other generator behind it.
+  const h = await designHost().catch(() => null);
+  if (!h) throw new Error("Pictures are drawn by the Studio's AI engine, which needs the Studio's database. Please upload a picture instead.");
+  o.status?.("Drawing…");
+  const res = await Promise.all(Array.from({ length: n }, () => engineImage(h, full)));
+  if (o.signal?.aborted) throw new Error("Stopped.");
+  const got = res.filter((x) => x.image).map((x) => b64Blob(x.image!, "image/jpeg"));
+  if (got.length) return got;
+  const why = res.find((x) => x.error)?.error;
+  throw new Error(why ? "The Studio's AI engine couldn't draw this: " + why : "This Studio's AI engine can't draw pictures. Choose Cloudflare AI or your own AI API under Settings → AI, or use photos from Unsplash. You can also upload a picture.");
 }

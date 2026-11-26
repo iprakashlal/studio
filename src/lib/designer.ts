@@ -112,8 +112,8 @@ const RAW: Step[] = [
     ph: (a) => by(a, { portfolio: "e.g. Asha Verma", store: "e.g. Kala Ghar", business: "e.g. Verma & Co", restaurant: "e.g. The Tiffin Box", events: "e.g. Horizon Summit 2027" }),
   },
   { id: "tagline", group: "basics", label: "Tagline", type: "text", optional: true, ask: () => "Your one-line tagline?", ph: () => "e.g. Honest work, on time", help: () => "A short line that sits under your name. Skip it and we'll write one." },
-  { id: "logo", group: "basics", label: "Logo", type: "file", optional: true, when: (a) => k(a) !== "portfolio" && !!readDesignSettings().images?.on, ask: () => "Describe a logo and we'll draw it.", help: () => "A free image generator draws these from your name and what you do. Tap one to use it, or skip and we'll use your name. A designer can refine your final logo later." },
   { id: "colour", group: "basics", label: "Colour", type: "choice", ask: () => "Which is your main brand colour?", options: () => COLOUR_OPTIONS },
+  { id: "logo", group: "basics", label: "Logo", type: "file", optional: true, when: (a) => k(a) !== "portfolio", ask: () => "Would you like a logo? Here are some made from your name.", help: () => "Tap one to use it, change the letters, colour or lettering, or skip and we'll use your name. A designer can refine your final logo later." },
   { id: "style", group: "basics", label: "Look", type: "choice", ask: () => "Which look fits you best?", options: () => STYLE_OPTIONS },
   {
     id: "btype", group: "business", label: "Business type", type: "choice", when: B,

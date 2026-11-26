@@ -25,7 +25,7 @@ function otherAccounts(env: any): { id: string; name: string }[] {
   return out;
 }
 
-import { CFDB_SCHEMA, CFDB_VERSION, CFDB_WORKER_NAME } from "../src/lib/cfdbSchema";
+import { CFDB_SCHEMA, CFDB_TABLES, CFDB_VERSION, CFDB_WORKER_NAME } from "../src/lib/cfdbSchema";
 import { digestPage, sheetLinks } from "../src/lib/lookdigest";
 import { socialFromText } from "../src/lib/social";
 import { COURIERS, TRACKERS, TRACKER_FIELDS, TRACK_STATES, TrackError, courierLink, courierName, pickTracker, trackLive, trackerReady, type Live } from "../src/lib/tracking";
@@ -483,36 +483,7 @@ async function ensureViews(env: Env) {
 let ensured = false;
 async function ensure(env: Env) {
   if (ensured) return;
-  await env.DB.batch([
-    env.DB.prepare("create table if not exists settings (scope text not null, name text not null, value text not null, updated_at text not null, primary key (scope, name))"),
-    env.DB.prepare("create table if not exists customers (site text not null, ckey text not null, name text not null default '', phone text not null default '', email text not null default '', verified integer not null default 0, orders integer not null default 0, spent real not null default 0, points integer not null default 0, first_at text not null, last_at text not null, primary key (site, ckey))"),
-    env.DB.prepare("create table if not exists points (id integer primary key autoincrement, site text not null, ckey text not null, delta integer not null, why text not null default '', order_no text not null default '', at text not null)"),
-    env.DB.prepare("create index if not exists points_site_key on points (site, ckey, id)"),
-    // what a signed-in customer keeps about themselves beyond their name and contacts (their saved addresses)
-    env.DB.prepare("create table if not exists profiles (site text not null, ckey text not null, data text not null default '{}', primary key (site, ckey))"),
-    env.DB.prepare("create table if not exists otps (k text primary key, hash text not null, expires integer not null, tries integer not null default 0, sent integer not null default 0)"),
-    // inventory: how many of each item are left, and every change to that
-    env.DB.prepare("create table if not exists stock (site text not null, item text not null, qty integer not null default 0, low integer not null default 0, updated_at text not null, primary key (site, item))"),
-    env.DB.prepare("create table if not exists stock_log (id integer primary key autoincrement, site text not null, item text not null, delta integer not null, qty integer not null, why text not null default '', ref text not null default '', at text not null)"),
-    env.DB.prepare("create index if not exists stock_log_site on stock_log (site, id)"),
-    env.DB.prepare("create table if not exists carts (site text not null, ckey text not null, tok text not null, email text not null, name text not null default '', phone text not null default '', lines text not null default '[]', items text not null default '[]', total real not null default 0, cur text not null default '', back text not null default '', status text not null default 'open', sent integer not null default 0, sent_at text, order_no text not null default '', created_at text not null, updated_at text not null, primary key (site, ckey))"),
-    env.DB.prepare("create index if not exists carts_tok on carts (tok)"),
-    env.DB.prepare("create index if not exists carts_open on carts (status, updated_at)"),
-    env.DB.prepare("create table if not exists reviews (id integer primary key autoincrement, site text not null, item text not null, label text not null default '', name text not null, email text not null default '', rating integer not null, title text not null default '', body text not null, verified integer not null default 0, status text not null default 'pending', reply text not null default '', reply_at text, created_at text not null)"),
-    env.DB.prepare("create index if not exists reviews_item on reviews (site, item, status)"),
-    env.DB.prepare("create table if not exists pins (email text primary key, salt text not null, hash text not null, tries integer not null default 0, locked integer not null default 0, set_at text not null)"),
-    env.DB.prepare("create table if not exists pin_dev (email text not null, dev text not null, at integer not null, primary key (email, dev))"),
-    env.DB.prepare("create table if not exists design_queries (id integer primary key autoincrement, studio text not null, name text not null default '', kind text not null default '', person text not null default '', phone text not null default '', email text not null default '', note text not null default '', answers text not null default '{}', copy text not null default '{}', logo text not null default '', pdf_name text not null default '', pdf text not null default '', status text not null default 'new', mail text not null default '', created_at text not null)"),
-    env.DB.prepare("create index if not exists design_queries_studio on design_queries (studio, id)"),
-    env.DB.prepare("create table if not exists design_drafts (studio text not null, id text not null, email text not null, name text not null default '', kind text not null default '', theme_id text not null default '', theme_name text not null default '', summary text not null default '', answers text not null default '{}', copy text not null default '{}', logo text not null default '', created_at text not null, updated_at text not null, primary key (studio, id))"),
-    env.DB.prepare("create index if not exists design_drafts_studio on design_drafts (studio, updated_at)"),
-    env.DB.prepare("create table if not exists design_pics (studio text not null, ref integer not null, slot text not null, idx integer not null, data text not null, primary key (studio, ref, slot, idx))"),
-    env.DB.prepare("create table if not exists dq_rate (k text primary key, n integer not null, exp integer not null)"),
-    env.DB.prepare("create table if not exists payments (rz_order text primary key, site text not null, order_no text not null, amount integer not null, status text not null default 'created', created_at text not null)"),
-    // people are looked up by their email alone at every sign-in, and payments by site and date
-    env.DB.prepare("create index if not exists members_email on members (email, scope)"),
-    env.DB.prepare("create index if not exists payments_site on payments (site, created_at)"),
-  ]);
+  await env.DB.batch(CFDB_TABLES.map((sql) => env.DB.prepare(sql)));
   ensured = true;
   await ensureViews(env);
 }

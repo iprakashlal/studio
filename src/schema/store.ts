@@ -275,7 +275,7 @@ const schema: Category[] = [
   codeCategory(),
 ];
 { const k = schema.find((c) => c.id === "pricing"); if (k) k.cards.push(loyaltyCard("store")); }
-withSectionBg(schema, { home: [["hero", "Background & text: hero"], ["featured", "Background & text: featured products"], ["categories", "Background & text: categories"], ["banner", "Background & text: banner"], ["reviews", "Background & text: customer reviews"]], contact: [["footer", "Background & text: footer"]] }, [...FONTS_D, ...FONTS_B]);
+withSectionBg(schema, { wall: [["wall", "Background & text of the social wall"]], home: [["hero", "Background & text: hero"], ["featured", "Background & text: featured products"], ["categories", "Background & text: categories"], ["banner", "Background & text: banner"], ["reviews", "Background & text: customer reviews"]], contact: [["footer", "Background & text: footer"]] }, [...FONTS_D, ...FONTS_B]);
 
 /** Defaults for settings added after a shop was made. */
 export const STORE_LABELS = { allProducts: "All products", viewAll: "View all", help: "Help", contact: "Contact" };

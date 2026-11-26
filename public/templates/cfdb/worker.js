@@ -49,7 +49,7 @@ var CFDB_UPGRADES = [
     "create index if not exists enquiries_ref on enquiries (site, ref)"
   ] }
 ];
-var CFDB_VERSION = 86;
+var CFDB_VERSION = 87;
 var CFDB_WORKER_NAME = "picaffectz-db";
 
 // src/lib/lookdigest.ts
@@ -1376,7 +1376,7 @@ function customAI(c) {
       if (r.status === 400 && o.response_format) r = await send(false);
       if (!r.ok) {
         const t = (await r.text()).replace(/\s+/g, " ").slice(0, 240);
-        throw new Error(r.status === 401 || r.status === 403 ? `Your AI API refused the key (${r.status}). Check it under Settings \u2192 AI engine.` : r.status === 429 ? "Your AI API says its limit is reached (429)." : `Your AI API answered ${r.status}: ${t}`);
+        throw new Error(r.status === 401 || r.status === 403 ? `Your AI API refused the key (${r.status}). Check it under Settings \u2192 AI.` : r.status === 429 ? "Your AI API says its limit is reached (429)." : `Your AI API answered ${r.status}: ${t}`);
       }
       const j = await r.json().catch(() => null), m = j?.choices?.[0]?.message?.content;
       return { response: typeof m === "string" ? m : Array.isArray(m) ? m.map((x) => x?.text || "").join("") : "" };
@@ -2846,7 +2846,7 @@ async function dqImage(env, id, req) {
     try {
       const c = await anySetting(env, "ai"), base = String(c?.base || "").trim().replace(/\/+$/, "").replace(/\/chat\/completions$/, "");
       const model = String(c?.image || "").trim() || (/api\.openai\.com/.test(base) ? "dall-e-3" : /generativelanguage\.googleapis\.com/.test(base) ? "gemini-2.5-flash-image" : "");
-      if (!model) return json({ engine: "custom", error: "No picture model is set. Add one under Settings \u2192 AI engine (for example dall-e-3 or gemini-2.5-flash-image)." });
+      if (!model) return json({ engine: "custom", error: "No picture model is set. Add one under Settings \u2192 AI (for example dall-e-3 or gemini-2.5-flash-image)." });
       if (/generativelanguage\.googleapis\.com/.test(base) && !/imagen/i.test(model)) {
         const g = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model.replace(/^models\//, ""))}:generateContent`, { signal: AbortSignal.timeout(6e4), method: "POST", headers: { "x-goog-api-key": c.key, "Content-Type": "application/json" }, body: JSON.stringify({ contents: [{ parts: [{ text: "Draw this picture: " + prompt }] }], generationConfig: { responseModalities: ["IMAGE", "TEXT"] } }) });
         const gj = await g.json().catch(() => null);
@@ -2986,7 +2986,7 @@ var db_worker_default = {
       if (p === "/") return json({ ok: true, service: "site-studio-db", v: V, mail: !!(env.RESEND_API_KEY && env.MAIL_FROM), ...env.CF_TOKEN && env.CF_ACCOUNT ? { deploy: true, account: env.CF_ACCOUNT } : {}, ...env.GH_TOKEN ? { gh: true } : {}, ...env.AI ? { ai: true, pamphlet: 2 } : {}, reviews: true, dq: 1, look: 1, outline: 1, pictures: 1, connect: 2, translate: 4, approvals: 1, accounts: 2, cfx: 4, cfa: 1, google: 1, studioPages: 1, del: 1, enqMail: 3, ...otherAccounts(env).length ? { more: otherAccounts(env).length } : {} });
       if (p.startsWith("/ai/") && u.searchParams.get("engine") === "custom") {
         const c = await anySetting(env, "ai");
-        if (!c?.on || !c.key || !c.model || !publicUrl(String(c.base || "").trim())) return json({ error: "Your own AI API isn't set up yet. Fill it in under Settings \u2192 AI engine." });
+        if (!c?.on || !c.key || !c.model || !publicUrl(String(c.base || "").trim())) return json({ error: "Your own AI API isn't set up yet. Fill it in under Settings \u2192 AI." });
         env = { ...env, AI: customAI(c) };
       }
       if (p === "/auth/code" && req.method === "POST") {

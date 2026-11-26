@@ -130,7 +130,10 @@ export function ThemesSettingsTab({ session, studio, index, onIndex }: { session
   );
 }
 
-export function DesignLookTab({ session, studio, index, onIndex }: { session: Session; studio: Studio; index: StudioIndex; onIndex: (i: StudioIndex) => void }) {
+/** The Design yourself settings. They are shown in two places that save the same record: Settings → Design yourself (everything but AI),
+ *  and Settings → AI (`part="ai"`: only the AI choices, under `lead`, the Studio's own engine card). */
+export function DesignLookTab({ session, studio, index, onIndex, part, lead }: { session: Session; studio: Studio; index: StudioIndex; onIndex: (i: StudioIndex) => void; part?: "ai"; lead?: React.ReactNode }) {
+  const onlyAi = part === "ai";
   const toast = useToast(), general = useAiEngine(), where = useStudioWhere();
   const [saved, setSaved] = useState<DesignSettings>(readDesignSettings);
   const [d, setD] = useState<DesignSettings>(saved);
@@ -182,24 +185,30 @@ export function DesignLookTab({ session, studio, index, onIndex }: { session: Se
 
   return (
     <div className="set-cols flex flex-col gap-4">
-      <p className="text-sm text-ink-300">What the Design yourself page offers a visitor, and what each type starts with. Press <b className="text-ink-100">Save changes</b> to store it in your Studio's database; signed-out visitors get it with the next page load.</p>
+      {onlyAi ? <p className="text-sm text-ink-300">Everything about AI in one place: the engine the Studio uses, the one Design yourself uses, and who draws pictures. The engine is saved as soon as you choose it; for the rest press <b className="text-ink-100">Save changes</b>.</p>
+      : <p className="text-sm text-ink-300">What the Design yourself page offers a visitor, and what each type starts with. Press <b className="text-ink-100">Save changes</b> to store it in your Studio's database; signed-out visitors get it with the next page load.</p>}
+      {lead}
 
+      {!onlyAi && <>
       <Block title="Its own web address" note="Give Design yourself its own address, like design.yourname.com. Visitors who open it land straight on the Design yourself page. Connect it in one click, the same way as the Studio's own address in Settings → Hosting accounts.">
         <DesignDomain session={session} studio={studio} index={index} onIndex={onIndex} onDomain={setDomain} />
         {d.domain && <p className="text-[13px] text-ink-300">Open <a className="underline" href={`https://${d.domain}/`} target="_blank" rel="noopener noreferrer">{d.domain}</a></p>}
       </Block>
-      <Block title="AI engine" note="Which AI reads a visitor's PDF or website link and writes their text. The choices are the same as Settings → General → AI engine. With the Picaffectz system nothing is sent to an AI service: the visitor's own device reads and writes by rules.">
-        <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label="AI engine for Design yourself">
-          {[{ id: "", name: "Same as Settings → General", line: `Currently ${generalName}. Changing it there changes it here.` }, ...AI_ENGINES].map((e) => (
-            <button key={e.id || "same"} type="button" role="radio" aria-checked={ai === e.id} onClick={() => upd({ ai: (e.id || undefined) as DesignSettings["ai"] })} className={`flex flex-col gap-1 rounded-xl border p-4 text-left ${ai === e.id ? "border-brand-500 bg-brand-500/10" : "border-ink-700 hover:border-ink-500"}`}>
-              <b className="flex items-center gap-2 text-[13px] text-ink-100">{e.name}{ai === e.id && <span className="chip border-brand-400/60 text-brand-200">Chosen</span>}</b>
-              <span className="text-[12.5px] leading-snug text-ink-300">{e.line}</span>
-            </button>
-          ))}
-        </div>
-        {(ai === "custom" || (!ai && general === "custom")) && <AiApiForm where={where} />}
+      </>}
+      {onlyAi && <>
+      <Block title="AI for Design yourself" note="Which AI reads a visitor's PDF or website link and writes their text on the Design yourself page. It follows the Studio's AI engine unless you choose another here. With the Picaffectz system nothing is sent to an AI service: the visitor's own device reads and writes by rules.">
+        <label className="flex flex-col gap-1.5 text-[13px] font-semibold">Design yourself uses
+          <select className="input" aria-label="AI engine for Design yourself" value={ai} onChange={(e) => upd({ ai: (e.target.value || undefined) as DesignSettings["ai"] })}>
+            <option value="">The Studio's AI engine (now {generalName})</option>
+            {AI_ENGINES.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
+          </select>
+        </label>
+        {ai && <p className="text-[12.5px] leading-snug text-ink-300">{AI_ENGINES.find((e) => e.id === ai)?.line}</p>}
+        {ai === "custom" && general !== "custom" && <AiApiForm where={where} />}
       </Block>
+      </>}
 
+      {!onlyAi && <>
       <div className="flex flex-wrap gap-1 rounded-xl border border-ink-700 bg-ink-800/40 p-1" role="tablist" aria-label="Type of website">
         {KINDS.map((k) => <button key={k} type="button" role="tab" aria-selected={kind === k} onClick={() => setKind(k)} className={`h-10 flex-1 rounded-lg px-3 text-[13px] font-semibold ${kind === k ? "bg-ink-700 text-ink-100 shadow" : "text-ink-400 hover:text-ink-100"}`}>{KIND_NAME[k]}</button>)}
       </div>
@@ -266,7 +275,9 @@ export function DesignLookTab({ session, studio, index, onIndex }: { session: Se
         {d.notice?.on !== false && <div className="flex flex-col gap-1"><label htmlFor="ds-notice" className="text-[13px] font-semibold">Message</label><textarea id="ds-notice" className="input min-h-[5rem]" maxLength={400} value={d.notice?.text ?? NOTICE_TEXT} onChange={(e) => upd({ notice: { ...(d.notice || {}), text: e.target.value } })} />
           {d.notice?.text && d.notice.text !== NOTICE_TEXT && <button type="button" className="btn btn-ghost btn-sm mt-1" onClick={() => upd({ notice: undefined })}>Use the standard message</button>}</div>}
       </Block>
+      </>}
 
+      {onlyAi && <>
       <Block title="Pictures drawn by AI" note="Pictures can be drawn from a few words by the free AI Horde (no key, no sign-up; volunteers' computers do the drawing, so it can queue for a short while).">
         <label className="flex items-start gap-2 text-[13px]">
           <input type="checkbox" className="mt-1" checked={d.adminAi !== false} onChange={(e) => upd({ adminAi: e.target.checked ? undefined : false })} />
@@ -289,7 +300,7 @@ export function DesignLookTab({ session, studio, index, onIndex }: { session: Se
               );
             })}
             {d.images?.source === "engine" && d.ai === "system" && <span className="text-[11.5px] text-amber-300" role="note">This Studio's AI engine is set to the Picaffectz system, which can't draw pictures here, so the free AI Horde will be used until it is set to Cloudflare or your own AI.</span>}
-            {d.images?.source === "engine" && d.ai === "custom" && <span className="text-[11.5px] text-ink-500" role="note">Your own AI draws the pictures through its picture endpoint (ChatGPT and Gemini work; add a picture model under Settings → AI engine for others). If it fails you see the reason; the AI Horde is not used.</span>}
+            {d.images?.source === "engine" && d.ai === "custom" && <span className="text-[11.5px] text-ink-500" role="note">Your own AI draws the pictures through its picture endpoint (ChatGPT and Gemini work; add a picture model under Settings → AI for others). If it fails you see the reason; the AI Horde is not used.</span>}
           </div>
           <label className="flex flex-col gap-1 text-[13px] font-semibold">Picture style
             <select className="input w-auto" value={d.images?.style || "photo"} onChange={(e) => upd({ images: { ...(d.images || {}), style: e.target.value as any } })}>
@@ -299,7 +310,9 @@ export function DesignLookTab({ session, studio, index, onIndex }: { session: Se
           <p className="m-0 rounded-lg border border-yellow-400 bg-yellow-200 px-3 py-2 text-[12px] leading-snug text-yellow-950">AI pictures come from a free volunteer network: they can be slow and differ each time, what is typed is visible to it, and you may not own the result exclusively. Check them before using one on a live site.</p>
         </>}
       </Block>
+      </>}
 
+      {!onlyAi && <>
       <Block title={`Themes · ${KIND_NAME[kind]}`} note="Your Studio's themes. Show all of them to visitors, or only the ones you tick.">
         <div className="flex flex-col gap-1.5">
           <span className="text-[13px] font-semibold">Themes in the visitor's finished preview</span>
@@ -371,6 +384,7 @@ export function DesignLookTab({ session, studio, index, onIndex }: { session: Se
       <Block title="Colours" open={false}>
         <Toggle id="design-pick" label="Let visitors change each colour" checked={d.pick !== false} onChange={(v) => upd({ pick: v })} />
       </Block>
+      </>}
 
       <div className="card sticky bottom-3 z-10 flex flex-wrap items-center gap-3 border-ink-600 bg-ink-900/95 p-3 shadow-xl backdrop-blur" role="region" aria-label="Save">
         <p className={`min-w-0 flex-1 text-[13px] ${err ? "text-red-300" : "text-ink-400"}`} role="status">{err || (dirty ? "You have changes that aren't saved yet." : "All changes are saved.")}</p>

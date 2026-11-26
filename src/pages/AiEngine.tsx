@@ -23,7 +23,7 @@ export function EnginePick({ label, value, onChange, note }: { label: string; va
 }
 
 const TRY: [string, string][] = [["hi", "Hindi"], ["mr", "Marathi"], ["bn", "Bengali"], ["ta", "Tamil"], ["te", "Telugu"], ["kn", "Kannada"], ["gu", "Gujarati"], ["pa", "Punjabi"], ["ml", "Malayalam"], ["or", "Odia"], ["as", "Assamese"]];
-/** Settings → General: the Studio's engine, with what each one does and what this device can do. */
+/** Settings → AI: the Studio's engine, with what each one does and what this device can do. */
 export function AiEngineCard({ studio, index, onIndex }: { studio: Studio; index: StudioIndex; onIndex: (i: StudioIndex) => void }) {
   const toast = useToast(), cur = useAiEngine();
   const [busy, setBusy] = useState(false);

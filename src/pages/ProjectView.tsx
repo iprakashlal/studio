@@ -181,8 +181,8 @@ export function ProjectView({ studio, index, project, session, onIndex }: { stud
   };
 
   const extras = useMemo(() => [
-    ...(project.template === "business" || project.template === "restaurant" ? [{
-      id: "enquiries", label: "Enquiries", group: "Forms & records", desc: project.template === "restaurant" ? "Table-booking and event requests sent through the website's form." : "Messages sent through the website's enquiry form.",
+    ...(project.template === "business" || project.template === "restaurant" || project.template === "events" ? [{
+      id: "enquiries", label: project.template === "events" ? "Registrations & messages" : "Enquiries", group: "Forms & records", desc: project.template === "events" ? "Every registration for the event (with its number, what was chosen and the total), and the messages sent through the contact form." : project.template === "restaurant" ? "Table-booking and event requests sent through the website's form." : "Messages sent through the website's enquiry form.",
       render: () => <EnquiriesPanel cfg={project.host?.cf ? null : enquiriesCfg(draft, project.host?.sb)} cf={project.host?.cf} account={project.host?.account} hosted={!!project.host} email={draft?.contact?.email} form={draft?.contact?.form} ghToken={ghPublish.token(session.token)} inStudio only="enquiries" />,
     }] : []),
     ...(project.template === "store" || project.template === "restaurant" ? [{

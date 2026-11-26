@@ -383,8 +383,8 @@ function Workspace({ info, onInfo, repo, account, onSignOut, hosted, ghToken }: 
   };
 
   const extras = useMemo(() => [
-    ...(tpl.id === "business" || tpl.id === "restaurant" ? [
-      { id: "enquiries", label: "Enquiries", group: "Forms & records", desc: tpl.id === "restaurant" ? "Table-booking and event requests sent through your website's form." : "Messages sent through your website's enquiry form.", render: () => <EnquiriesPanel cfg={hosted && "api" in hosted ? null : enquiriesCfg(saved, hosted)} cf={hosted && "api" in hosted ? hosted : undefined} hosted={!!hosted} email={saved?.contact?.email} form={saved?.contact?.form} ghToken={ghToken} only="enquiries" /> },
+    ...(tpl.id === "business" || tpl.id === "restaurant" || tpl.id === "events" ? [
+      { id: "enquiries", label: tpl.id === "events" ? "Registrations & messages" : "Enquiries", group: "Forms & records", desc: tpl.id === "events" ? "Every registration for the event (with its number, what was chosen and the total), and the messages sent through the contact form." : tpl.id === "restaurant" ? "Table-booking and event requests sent through your website's form." : "Messages sent through your website's enquiry form.", render: () => <EnquiriesPanel cfg={hosted && "api" in hosted ? null : enquiriesCfg(saved, hosted)} cf={hosted && "api" in hosted ? hosted : undefined} hosted={!!hosted} email={saved?.contact?.email} form={saved?.contact?.form} ghToken={ghToken} only="enquiries" /> },
     ] : []),
     ...(tpl.id !== "portfolio" ? [
       { id: "connections", label: tpl.id === "restaurant" ? "Restaurant backend" : tpl.id === "store" ? "Couriers, WhatsApp & SMS" : "WhatsApp & SMS", group: "Advanced setup", desc: tpl.id === "restaurant" ? "What runs the Order now page behind the scenes, on your own Cloudflare database: Petpooja, and WhatsApp for alerts and codes. Payment gateway keys are under Payments." : "Optional: WhatsApp alerts when an enquiry or order arrives, and codes on WhatsApp or by SMS.", render: () => <SiteConnections cf={hosted && "api" in hosted ? hosted : null} template={tpl.id} cms={saved?.cms} site /> },

@@ -878,7 +878,7 @@ function A11yCheckField() {
 }
 
 /** The files that make up each template's own code. The portfolio keeps both in index.html (marked main-css, main-js). */
-const CODE_FILES: Record<string, { css: string; js: string }> = { business: { css: "assets/biz.css", js: "assets/biz.js" }, restaurant: { css: "assets/rest.css", js: "assets/rest.js" }, store: { css: "assets/store.css", js: "assets/store.js" } };
+const CODE_FILES: Record<string, { css: string; js: string }> = { business: { css: "assets/biz.css", js: "assets/biz.js" }, restaurant: { css: "assets/rest.css", js: "assets/rest.js" }, events: { css: "assets/evt.css", js: "assets/evt.js" }, store: { css: "assets/store.css", js: "assets/store.js" } };
 export async function templateCode(tplId: string, base: string): Promise<{ css: string; js: string }> {
   const get = async (f: string) => { const r = await fetch(base + f, { cache: "no-store" }); if (!r.ok) throw new Error(`Could not read ${f} (${r.status}).`); return r.text(); };
   const files = CODE_FILES[tplId];
@@ -999,7 +999,7 @@ function AdminSectionsField() {
   const hide: string[] = Array.isArray(root.cms.hide) ? root.cms.hide : [];
   const allow: string[] = Array.isArray(root.cms.allow) ? root.cms.allow : [];
   const rows: [string, string, string][] = [...tpl.schema.filter((c) => (!c.showIf || c.showIf(root)) && !c.siteIf).map((c) => [c.id, c.site?.label || c.label, c.site?.group || c.group] as [string, string, string]),
-    ...ADMIN_EXTRAS.filter(([id]) => (id === "customer-data" ? tpl.id === "store" || tpl.id === "restaurant" : id === "orders" || id === "customers" ? tpl.id === "store" : id === "enquiries" ? tpl.id === "business" || tpl.id === "restaurant" : id === "warranty-records" ? tpl.id !== "portfolio" && tpl.id !== "restaurant" : tpl.id !== "portfolio"))];
+    ...ADMIN_EXTRAS.filter(([id]) => (id === "customer-data" ? tpl.id === "store" || tpl.id === "restaurant" : id === "orders" || id === "customers" ? tpl.id === "store" : id === "enquiries" ? tpl.id === "business" || tpl.id === "restaurant" || tpl.id === "events" : id === "warranty-records" ? tpl.id !== "portfolio" && tpl.id !== "restaurant" && tpl.id !== "events" : tpl.id !== "portfolio"))];
   const groups = [...new Set(rows.map((r) => r[2]))];
   const set = (next: string[]) => { root.cms.hide = next; bump(); };
   const toggle = (id: string) => set(hide.includes(id) ? hide.filter((x) => x !== id) : [...hide, id]);

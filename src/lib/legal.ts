@@ -14,7 +14,7 @@ export function identity(c: any): Identity {
 
 /** What the site collects, by template. */
 export function collects(tplId: string, c: any): { form: boolean; checkout: boolean; accounts: boolean; maps: boolean; consent: boolean } {
-  const form = (tplId === "business" || tplId === "restaurant") && c?.contact?.form?.enabled !== false;
+  const form = (tplId === "business" || tplId === "restaurant" || tplId === "events") && c?.contact?.form?.enabled !== false;
   const checkout = tplId === "store" || (tplId === "restaurant" && !!c?.ordering?.on);
   return { form, checkout, accounts: tplId === "store", maps: tplId === "restaurant" && c?.contact?.mapEmbed !== false, consent: !!c?.consent?.on };
 }

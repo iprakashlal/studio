@@ -27,7 +27,7 @@ export type ClientFeatures = { hide: string[]; /** How many themes of each templ
 const num = (x: any) => (Number.isFinite(+x) && +x >= 0 && x !== "" && x != null ? Math.min(999, Math.floor(+x)) : undefined);
 export const cleanFeatures = (x: any): ClientFeatures => {
   const max: Record<string, number> = {};
-  for (const k of ["portfolio", "store", "business", "restaurant"]) { const n = num(x?.max?.[k]); if (n !== undefined) max[k] = n; }
+  for (const k of ["portfolio", "store", "business", "restaurant", "events"]) { const n = num(x?.max?.[k]); if (n !== undefined) max[k] = n; }
   const themes = num(x?.themes), themeList = cleanThemeList(x?.themeList);
   return { hide: [...new Set((Array.isArray(x?.hide) ? x.hide : []).filter((k: any) => CLIENT_FEATURES.some((f) => f.key === k)))] as string[], ...(themes ? { themes } : {}), ...(Object.keys(themeList).length ? { themeList } : {}), ...(Object.keys(max).length ? { max } : {}) };
 };

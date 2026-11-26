@@ -15,6 +15,7 @@ export const DASH_STATS: { key: string; label: string; count: (ps: ProjectMeta[]
   { key: "shops", label: "Online shops (e-commerce)", count: (ps) => ps.filter((p) => p.template === "store").length },
   { key: "business", label: "Business websites", count: (ps) => ps.filter((p) => p.template === "business").length },
   { key: "restaurants", label: "Restaurant & café sites", count: (ps) => ps.filter((p) => p.template === "restaurant").length },
+  { key: "events", label: "Event websites", count: (ps) => ps.filter((p) => p.template === "events").length },
   { key: "portfolios", label: "Portfolios", count: (ps) => ps.filter((p) => p.template === "portfolio").length },
   { key: "clients", label: "Clients", count: (ps) => new Set(ps.map((p) => p.client.trim().toLowerCase()).filter(Boolean)).size },
 ];

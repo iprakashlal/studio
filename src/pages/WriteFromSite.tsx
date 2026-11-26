@@ -15,7 +15,7 @@ import { Field, Modal, useToast } from "../ui/kit";
 import { useAiDb } from "./AiGate";
 
 export function WriteFromSiteDialog({ session, project, draft, upload, onApply, onClose }: { session: Session; project: ProjectMeta; draft: any; upload?: (f: File) => Promise<{ path: string }>; onApply: (c: any) => void; onClose: () => void }) {
-  const kind = project.template === "store" ? "store" : project.template === "business" ? "business" : project.template === "restaurant" ? "restaurant" : "portfolio";
+  const kind = project.template === "store" ? "store" : project.template === "business" || project.template === "events" ? "business" : project.template === "restaurant" ? "restaurant" : "portfolio";
   const db = useAiDb(session, project), api = db.api;
   const toast = useToast();
   const [url, setUrl] = useState(""), [text, setText] = useState("");

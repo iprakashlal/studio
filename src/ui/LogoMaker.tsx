@@ -49,7 +49,8 @@ const paint = (S: number, mark: (typeof MARKS)[number], o: Omit<Draw, "ctx" | "S
 
 export function LogoMaker({ name, color = "#3b82f6", disabled, onUse }: { name: string; color?: string; disabled?: boolean; onUse: (f: File) => void | Promise<void> }) {
   const [nm, setNm] = useState(name.trim().slice(0, 40)), [ini, setIni] = useState(() => initialsOf(name)), [touched, setTouched] = useState(false);
-  const [col, setCol] = useState(/^#[0-9a-f]{6}$/i.test(color) ? color : "#3b82f6"), [font, setFont] = useState("sans"), [ready, setReady] = useState(0);
+  const start = /^#[0-9a-f]{6}$/i.test(color) ? color : "#3b82f6";
+  const [col, setCol] = useState(start), [font, setFont] = useState("sans"), [ready, setReady] = useState(0);
   useEffect(() => { if (!touched) setIni(initialsOf(nm)); }, [nm, touched]);
   // drawn again once the page's fonts have arrived, so the marks use them
   useEffect(() => { let on = true; (document as any).fonts?.ready?.then(() => on && setReady((n) => n + 1)); return () => { on = false; }; }, []);
@@ -57,18 +58,34 @@ export function LogoMaker({ name, color = "#3b82f6", disabled, onUse }: { name: 
   const opts = { ini: (ini || "?").slice(0, 3), name: nm.trim() || "Your name", col, on: lum(col) > 0.5 ? "#14161a" : "#ffffff", font: F[2], weight: F[3] };
   const shots = useMemo(() => MARKS.map((m) => ({ m, u: paint(240, m, opts).toDataURL("image/png") })), [opts.ini, opts.name, col, font, ready]); // eslint-disable-line react-hooks/exhaustive-deps
   const use = (m: (typeof MARKS)[number]) => paint(1024, m, opts).toBlob((b) => { if (b) onUse(new File([b], `logo-${m[0]}.png`, { type: "image/png" })); }, "image/png");
+  // The brand colour first, then a few that suit most businesses; "Other" opens the full picker.
+  const swatches = [...new Set([start, "#2563eb", "#0f9d6b", "#dc2626", "#f59e0b", "#7c3aed", "#db2777", "#111827"].map((c) => c.toLowerCase()))].slice(0, 8);
+  const lab = "flex min-w-0 flex-col gap-1.5 text-[12px] font-semibold text-ink-300";
   return (
-    <div className="flex flex-col gap-3 rounded-2xl border border-ink-700 p-3" role="group" aria-label="Logo maker">
-      <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_6rem_auto_minmax(0,9rem)]">
-        <label className="flex min-w-0 flex-col gap-1 text-xs text-ink-400">Name on the logo<input className="input" maxLength={40} disabled={disabled} value={nm} onChange={(e) => setNm(e.target.value)} placeholder="Your business name" /></label>
-        <label className="flex flex-col gap-1 text-xs text-ink-400">Letters<input className="input" maxLength={3} disabled={disabled} value={ini} onChange={(e) => { setTouched(true); setIni(e.target.value.toUpperCase()); }} /></label>
-        <label className="flex flex-col gap-1 text-xs text-ink-400">Colour<input type="color" className="h-[46px] w-14 cursor-pointer rounded-lg border border-ink-600 bg-ink-950 p-1" disabled={disabled} value={col} onChange={(e) => setCol(e.target.value)} aria-label="Logo colour" /></label>
-        <label className="flex min-w-0 flex-col gap-1 text-xs text-ink-400">Lettering<select className="input" disabled={disabled} value={font} onChange={(e) => setFont(e.target.value)}>{FONTS.map((f) => <option key={f[0]} value={f[0]}>{f[1]}</option>)}</select></label>
+    <div className="flex flex-col gap-4 rounded-2xl border border-ink-700 bg-ink-900/60 p-4" role="group" aria-label="Logo maker">
+      <div className="grid items-start gap-3 sm:grid-cols-[minmax(0,1fr)_5.5rem_minmax(0,10rem)]">
+        <label className={lab}>Name on the logo<input className="input h-[46px]" maxLength={40} disabled={disabled} value={nm} onChange={(e) => setNm(e.target.value)} placeholder="Your business name" /></label>
+        <label className={lab}>Letters<input className="input h-[46px] text-center font-bold uppercase tracking-wide" maxLength={3} disabled={disabled} value={ini} onChange={(e) => { setTouched(true); setIni(e.target.value.toUpperCase()); }} /></label>
+        <label className={lab}>Lettering<select className="input h-[46px]" disabled={disabled} value={font} onChange={(e) => setFont(e.target.value)}>{FONTS.map((f) => <option key={f[0]} value={f[0]}>{f[1]}</option>)}</select></label>
       </div>
-      <div className="grid grid-cols-4 gap-2 sm:grid-cols-8" role="group" aria-label="Logos made from your name">
-        {shots.map(({ m, u }) => <button key={m[0]} type="button" disabled={disabled || !nm.trim()} aria-label={`Use the ${m[1].toLowerCase()} logo`} title={m[1]} onClick={() => use(m)} className="aspect-square overflow-hidden rounded-xl border border-ink-700 bg-white p-1.5 transition hover:border-brand-400 disabled:opacity-50"><img src={u} alt="" className="h-full w-full object-contain" /></button>)}
+      <div className={lab} role="group" aria-label="Logo colour"><span>Colour</span>
+        <div className="flex flex-wrap items-center gap-2">
+          {swatches.map((c) => <button key={c} type="button" disabled={disabled} aria-label={`Use the colour ${c}`} aria-pressed={col.toLowerCase() === c} onClick={() => setCol(c)}
+            className={`h-8 w-8 flex-none rounded-full border-2 transition hover:scale-110 disabled:opacity-50 ${col.toLowerCase() === c ? "border-ink-100 ring-2 ring-brand-400" : "border-white/70 shadow-sm"}`} style={{ background: c }} />)}
+          <label className={`relative inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-full border px-3 text-[12px] font-semibold transition hover:border-brand-400 ${swatches.includes(col.toLowerCase()) ? "border-ink-600 text-ink-300" : "border-brand-400 text-ink-100"}`}>
+            <span aria-hidden className="h-4 w-4 rounded-full border border-white/70" style={{ background: swatches.includes(col.toLowerCase()) ? "conic-gradient(#f43f5e,#f59e0b,#84cc16,#06b6d4,#6366f1,#d946ef,#f43f5e)" : col }} />Other
+            <input type="color" className="absolute inset-0 h-full w-full cursor-pointer opacity-0" disabled={disabled} value={col} onChange={(e) => setCol(e.target.value)} aria-label="Another logo colour" />
+          </label>
+        </div>
       </div>
-      <p className="m-0 text-[11px] text-ink-500">Made here from your name, in your colour: tap one to use it. Nothing is sent anywhere. A designer can refine your final logo later.</p>
+      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4 lg:grid-cols-8" role="group" aria-label="Logos made from your name">
+        {shots.map(({ m, u }) => <button key={m[0]} type="button" disabled={disabled || !nm.trim()} aria-label={`Use the ${m[1].toLowerCase()} logo`} onClick={() => use(m)}
+          className="group flex flex-col overflow-hidden rounded-2xl border border-ink-700 bg-white text-left shadow-sm transition hover:-translate-y-0.5 hover:border-brand-400 hover:shadow-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-400 disabled:opacity-50 disabled:hover:translate-y-0">
+          <span className="grid aspect-square place-items-center p-3" style={{ background: "radial-gradient(circle at 50% 40%,#ffffff,#f1f3f7)" }}><img src={u} alt="" className="h-full max-h-28 w-auto object-contain transition group-hover:scale-105" /></span>
+          <span className="truncate border-t border-black/10 bg-white px-2 py-1.5 text-center text-[11px] font-semibold text-[#1c2230] transition group-hover:bg-brand-500 group-hover:text-white">{m[1]}</span>
+        </button>)}
+      </div>
+      <p className="m-0 text-[11.5px] text-ink-400">Made here from your name: tap one to use it. Nothing is sent anywhere, and a designer can refine your final logo later.</p>
     </div>
   );
 }

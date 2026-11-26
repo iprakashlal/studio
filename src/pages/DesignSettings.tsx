@@ -288,6 +288,7 @@ export function DesignLookTab({ session, studio, index, onIndex, part, lead }: {
               {col("Assistant's messages", c.bot, "#1f1218", (v) => setC({ bot: v }))}
               {col("Visitor's messages", c.you, "#ff3fa4", (v) => setC({ you: v }))}
               {col("Answer boxes", u.field, "#161d2b", (v) => setUi({ field: v }))}
+              {col("Choices (pills)", u.chip, "#161d2b", (v) => setUi({ chip: v }))}
             </div>
             <div className="grid gap-x-3 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
               <div className={lab}><span>Logo</span>

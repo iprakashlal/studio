@@ -125,11 +125,20 @@ function DiyMark({ size = 26 }: { size?: number }) { const l = readDesignSetting
 /** Wears the page's own look while it is open: light or dark and the accent (the Studio's own colours come back on leaving),
  *  corners, chat width and fonts. They are set on the document, so dialogs and menus opened from the page wear them too. */
 function useDiyLook(auto: "" | "light" | "dark" = "") {
-  const ui = readDesignSettings().ui || {}, base = useBrand(), mode = auto || ui.mode;
+  // Light or dark: what the background says first (see useDiyBg), then the page's own colour when it has one (a light page colour
+  // means the light colours, whatever was chosen), then the owner's choice.
+  const ui = readDesignSettings().ui || {}, base = useBrand(), pg = readDesignSettings().bg?.on || readDesignSettings().chat?.image ? "" : readDesignSettings().chat?.page || "";
+  const byPage = pg ? ((() => { const n = parseInt(pg.slice(1), 16); return (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255 > 0.55 ? "light" : "dark"; })() as "light" | "dark") : "";
+  const mode = auto || byPage || ui.mode;
+  // The Studio puts its own colours back on the page whenever its name and logo arrive from the database (for a visitor that is
+  // just after the page opens, with the same values as last time). So the page's look is put on again each time that happens, and
+  // each time the settings arrive: not only when one of its own values changes.
+  const [again, setAgain] = useState(0);
+  useEffect(() => { const f = () => setAgain((n) => n + 1); addEventListener("studio:design-page", f); return () => removeEventListener("studio:design-page", f); }, []);
   useEffect(() => {
     if (mode || ui.accent) applyTint(ui.accent || base.tint || null, mode || base.mode);
     return () => { const b = brand(); applyTint(b.tint || null, b.mode); };
-  }, [mode, ui.accent, base.tint, base.mode]);
+  }, [mode, ui.accent, base, again]);
   useEffect(() => {
     const de = document.documentElement, id = "diy-look";
     if (ui.radius) de.dataset.diyR = ui.radius; else delete de.dataset.diyR;
@@ -152,6 +161,8 @@ function useDiyLook(auto: "" | "light" | "dark" = "") {
       ui.header ? `.diy-page.diy-page.diy-page>header{background:${ui.header}!important;border-color:transparent!important;--ink-100:${on(ui.header)};--ink-200:${on(ui.header)};--ink-300:${on(ui.header)};--ink-400:${on(ui.header)};--ink-500:${on(ui.header)};color:rgb(${on(ui.header)})}.diy-page>header .btn{color:rgb(${on(ui.header)});border-color:rgb(${on(ui.header)}/.35);background:transparent}` : "",
       // the boxes a visitor types in: their own colour, with text and hints that read on it
       ui.field ? `.diy-page .diy-field,.diy-page .input{background-color:${ui.field}!important;border-color:rgb(${on(ui.field)}/.22)!important;color:rgb(${on(ui.field)})!important}.diy-page .diy-field :is(input,textarea),.diy-page .diy-field{--ink-100:${on(ui.field)};--ink-200:${on(ui.field)};color:rgb(${on(ui.field)})}.diy-page .diy-field :is(input,textarea)::placeholder,.diy-page .input::placeholder{color:rgb(${on(ui.field)}/.5)!important}.diy-page .diy-field .btn-ghost{color:rgb(${on(ui.field)}/.75)}` : "",
+      // the choices a visitor taps: their own colour (the chosen one keeps the accent)
+      ui.chip ? `.diy-page .diy-chip:not([aria-pressed=true]):not([aria-checked=true]){background-color:${ui.chip}!important;border-color:rgb(${on(ui.chip)}/.2)!important;color:rgb(${on(ui.chip)})!important;--ink-100:${on(ui.chip)};--ink-200:${on(ui.chip)};--ink-300:${on(ui.chip)};--ink-400:${on(ui.chip)}}.diy-page .diy-chip:not([aria-pressed=true]):not([aria-checked=true]):hover{border-color:rgb(var(--brand-400,128 153 255))!important}` : "",
       // the buttons' own colour
       ui.btn ? `.diy-page .btn-pri,[role=dialog] .btn-pri{background-color:${ui.btn}!important;border-color:${ui.btn}!important;color:rgb(${on(ui.btn)})!important}.diy-page .btn-pri:hover,[role=dialog] .btn-pri:hover{filter:brightness(.93)}` : "",
       // the shapes of the chat's messages
@@ -171,7 +182,7 @@ function useDiyLook(auto: "" | "light" | "dark" = "") {
     if (!st) { st = document.createElement("style"); st.id = id; document.head.appendChild(st); }
     if (st.textContent !== css) st.textContent = css;
     return () => { delete de.dataset.diyR; delete de.dataset.diyW; delete de.dataset.diyB; document.getElementById(id)?.remove(); document.getElementById(id + "-font")?.remove(); };
-  }, [ui.radius, ui.width, ui.font, ui.head, ui.header, ui.btn, ui.field, ui.bubble, JSON.stringify([readDesignSettings().bg?.on, readDesignSettings().bg?.kind, readDesignSettings().bg?.color, readDesignSettings().chat?.page, !!readDesignSettings().chat?.image])]);
+  }, [ui.radius, ui.width, ui.font, ui.head, ui.header, ui.btn, ui.field, ui.chip, ui.bubble, JSON.stringify([readDesignSettings().bg?.on, readDesignSettings().bg?.kind, readDesignSettings().bg?.color, readDesignSettings().chat?.page, !!readDesignSettings().chat?.image])]);
 }
 /** The page's own background and text (Settings → Design yourself → Background and text): drawn by fx.js, the script that draws a
  *  website section's background, so every kind works the same here. It says whether light or dark text suits the background; the
@@ -465,17 +476,17 @@ function DesignPageInner({ studio, index, onIndex }: { studio?: Studio; index?: 
   const chips = (s: Step) => {
     const opts = s.options?.(a) || [];
     if (s.id === "kind") return (
-      <div className="grid gap-2 sm:grid-cols-2">{opts.map((o) => <button key={o.v} type="button" className="card flex flex-col items-start gap-0.5 rounded-2xl px-4 py-3 text-left transition hover:border-brand-400 hover:bg-ink-800" onClick={() => answer(s, o.v)}><b className="text-[14.5px] text-ink-100">{o.label}</b><span className="text-[12.5px] leading-snug text-ink-400">{o.hint}</span></button>)}</div>
+      <div className="grid gap-2 sm:grid-cols-2">{opts.map((o) => <button key={o.v} type="button" className="diy-chip card flex flex-col items-start gap-0.5 rounded-2xl px-4 py-3 text-left transition hover:border-brand-400 hover:bg-ink-800" onClick={() => answer(s, o.v)}><b className="text-[14.5px] text-ink-100">{o.label}</b><span className="text-[12.5px] leading-snug text-ink-400">{o.hint}</span></button>)}</div>
     );
     if (s.id === "pages") return (
-      <div className="grid gap-2 sm:grid-cols-2">{opts.map((o) => <button key={o.v} type="button" className="card flex flex-col items-start gap-0.5 rounded-2xl px-4 py-3 text-left transition hover:border-brand-400 hover:bg-ink-800" onClick={() => answer(s, o.v)}><b className="text-[14.5px] text-ink-100">{o.label}</b><span className="text-[12.5px] leading-snug text-ink-400">{o.hint}</span></button>)}</div>
+      <div className="grid gap-2 sm:grid-cols-2">{opts.map((o) => <button key={o.v} type="button" className="diy-chip card flex flex-col items-start gap-0.5 rounded-2xl px-4 py-3 text-left transition hover:border-brand-400 hover:bg-ink-800" onClick={() => answer(s, o.v)}><b className="text-[14.5px] text-ink-100">{o.label}</b><span className="text-[12.5px] leading-snug text-ink-400">{o.hint}</span></button>)}</div>
     );
     return (
       <div className="flex flex-wrap gap-2" role={s.type === "many" ? "group" : undefined}>
         {opts.map((o) => {
           const on = many.includes(o.v);
           return (
-            <button key={o.v} type="button" aria-pressed={s.type === "many" ? on : undefined} className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold transition ${on ? "border-brand-400 bg-brand-500/20 text-ink-100" : "border-ink-600 bg-ink-900 text-ink-200 hover:border-brand-400"}`}
+            <button key={o.v} type="button" aria-pressed={s.type === "many" ? on : undefined} className={`diy-chip inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold transition ${on ? "border-brand-400 bg-brand-500/20 text-ink-100" : "border-ink-600 bg-ink-900 text-ink-200 hover:border-brand-400"}`}
               onClick={() => (s.type === "many" ? setMany((m) => (m.includes(o.v) ? m.filter((x) => x !== o.v) : [...m, o.v])) : answer(s, o.v))}>
               {s.id === "colour" && <span aria-hidden className="h-4 w-4 rounded-full border border-white/20" style={{ background: COLOUR_DOT[o.v] }} />}
               {o.label}
@@ -588,7 +599,7 @@ function AnswerEdit({ s, a, onSave, onCancel }: { s: Step; a: Answers; onSave: (
   const setEdit = (_: null) => onCancel();
   return (
                 <div className="flex flex-col gap-2 rounded-2xl border border-brand-400/60 bg-ink-900 p-4 shadow-sm">
-                  {s.type === "choice" && <div className="flex flex-wrap gap-2" role="radiogroup">{opts.map((o) => <button key={o.v} type="button" role="radio" aria-checked={a[s.id] === o.v} onClick={() => save(s, o.v)} className={`rounded-full border px-3.5 py-1.5 text-sm font-semibold transition ${a[s.id] === o.v ? "border-brand-400 bg-brand-500/15 text-ink-100" : "border-ink-700 text-ink-300 hover:border-brand-400"}`}>{o.label}</button>)}</div>}
+                  {s.type === "choice" && <div className="flex flex-wrap gap-2" role="radiogroup">{opts.map((o) => <button key={o.v} type="button" role="radio" aria-checked={a[s.id] === o.v} onClick={() => save(s, o.v)} className={`diy-chip rounded-full border px-3.5 py-1.5 text-sm font-semibold transition ${a[s.id] === o.v ? "border-brand-400 bg-brand-500/15 text-ink-100" : "border-ink-700 text-ink-300 hover:border-brand-400"}`}>{o.label}</button>)}</div>}
                   {s.type === "many" && <><div className="flex flex-wrap gap-2" role="group">{opts.map((o) => { const sel = pick.includes(o.v); return <button key={o.v} type="button" aria-pressed={sel} onClick={() => setPick((m) => (sel ? m.filter((x) => x !== o.v) : [...m, o.v]))} className={`rounded-full border px-3.5 py-1.5 text-sm font-semibold transition ${sel ? "border-brand-400 bg-brand-500/15 text-ink-100" : "border-ink-700 text-ink-300 hover:border-brand-400"}`}>{o.label}</button>; })}</div>
                     <div className="flex gap-2"><button type="button" className="btn btn-pri btn-sm" disabled={!pick.length && req(s)} onClick={() => save(s, pick.join(","))}>Save</button><button type="button" className="btn btn-sm" onClick={() => setEdit(null)}>Cancel</button></div></>}
                   {(s.type === "text" || s.type === "long") && <>
@@ -910,9 +921,16 @@ function useEmailChat(host: DesignHost | null, onPass: (p: Pass) => void): { thr
 
 /** A message from the designer assistant (left), with the brand's mark as its avatar. `typing` adds animated dots. */
 /** Readable text on a colour: dark on light colours, white on dark ones. */
+/** What sits inside a message of the owner's own colour (a progress bar, small print, a line) is drawn from the interface's
+ *  neutral colours, which belong to the page's light or dark look, not the message's. Inside such a message they are set to suit it. */
+const bubVars = (hex: string): React.CSSProperties => {
+  const n = parseInt(hex.slice(1), 16), light = (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255 > 0.6;
+  const v = light ? { 100: "17 17 17", 200: "40 42 52", 300: "64 68 82", 400: "88 94 110", 500: "120 126 142", 600: "176 180 194", 700: "200 204 216", 800: "216 219 229", 900: "236 238 244" } : { 100: "255 255 255", 200: "236 238 244", 300: "214 218 228", 400: "190 196 210", 500: "160 168 186", 600: "120 128 148", 700: "86 94 114", 800: "64 70 88", 900: "44 50 66" };
+  return Object.fromEntries(Object.entries(v).map(([k, x]) => ["--ink-" + k, x])) as React.CSSProperties;
+};
 const onColour = (hex: string) => { const n = parseInt(hex.slice(1), 16), l = (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255; return l > 0.6 ? "#111111" : "#ffffff"; };
 function ChatBot({ children, typing, stack }: { children: React.ReactNode; typing?: boolean; stack?: boolean }) {
-  const bot = readDesignSettings().chat?.bot, st = bot ? ({ background: bot, color: onColour(bot), borderColor: "transparent", "--bub": bot } as React.CSSProperties) : undefined;
+  const bot = readDesignSettings().chat?.bot, st = bot ? ({ ...bubVars(bot), background: bot, color: onColour(bot), borderColor: "transparent", "--bub": bot } as React.CSSProperties) : undefined;
   return (
     <div className="chat-in flex items-end gap-2.5">
       {stack ? <span className="w-8 flex-none" aria-hidden /> : <span className="grid h-8 w-8 flex-none place-items-center overflow-hidden rounded-full border border-ink-700 bg-ink-900" aria-hidden><DiyMark size={22} /></span>}
@@ -925,7 +943,7 @@ function ChatBot({ children, typing, stack }: { children: React.ReactNode; typin
 }
 /** The person's answer (right). An answer can be changed from here. */
 function ChatYou({ children, onEdit, label }: { children: React.ReactNode; onEdit?: () => void; label?: string }) {
-  const you = readDesignSettings().chat?.you, st = you ? ({ background: you, color: onColour(you), "--bub": you } as React.CSSProperties) : undefined;
+  const you = readDesignSettings().chat?.you, st = you ? ({ ...bubVars(you), background: you, color: onColour(you), "--bub": you } as React.CSSProperties) : undefined;
   return (
     <div className="chat-in group flex justify-end">
       <div className="flex max-w-[75%] items-end gap-2">

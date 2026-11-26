@@ -1661,16 +1661,16 @@ const igPics = (data: any): WallPic[] => (Array.isArray(data) ? data : []).map((
 /** A token that starts with EAA is read through Facebook's Graph API. Meta gives this kind to newer apps (Instagram API with
  *  Unified login: the Instagram accounts shared with the token are listed by me/assigned_instagram_accounts), and to apps that
  *  reach the Instagram account through its Facebook Page (then it is the account linked to a Page the token can see). */
-async function igMediaFb(token: string, n: number): Promise<{ items?: WallPic[]; error?: string }> {
+async function igMediaFb(token: string, n: number, handle = ""): Promise<{ items?: WallPic[]; error?: string }> {
   const G = "https://graph.facebook.com/", t = "access_token=" + encodeURIComponent(token), get = async (path: string) => { const r = await fetch(G + path + (path.includes("?") ? "&" : "?") + t, { signal: AbortSignal.timeout(15000) }); return { ok: r.ok, status: r.status, j: (await r.json().catch(() => null)) as any }; };
   const said = (x: { status: number; j: any }) => (x.j?.error?.message ? "Facebook said: " + String(x.j.error.message).slice(0, 220) : `Facebook answered ${x.status}.`);
   try {
     // a person's token lists their Pages; a Page's own token is asked about itself
     const F = "fields=name,instagram_business_account,connected_instagram_account", igOf = (p: any) => String(p?.instagram_business_account?.id || p?.connected_instagram_account?.id || "");
-    let id = "", pages: any[] = [];
+    let id = "", me = "", pages: any[] = [];
     // Unified login (what Meta gives newer apps): the token is a business one, and the Instagram accounts shared with it are listed directly
     const u = await get("me/assigned_instagram_accounts?fields=id,username&limit=20");
-    if (u.ok) id = String((Array.isArray(u.j?.data) ? u.j.data : []).map((x: any) => x?.id).find(Boolean) || "");
+    if (u.ok) { const acc = (Array.isArray(u.j?.data) ? u.j.data : []).find((x: any) => x?.id); id = String(acc?.id || ""); me = String(acc?.username || "").toLowerCase(); }
     const a = id ? { ok: true, status: 200, j: null as any } : await get("me/accounts?" + F + "&limit=50");
     if (!id && a.ok) { pages = Array.isArray(a.j?.data) ? a.j.data : []; id = pages.map(igOf).find(Boolean) || ""; }
     if (!id) { const b = await get("me?" + F); if (b.ok) id = igOf(b.j); else if (!a.ok) return { error: said(a) }; }
@@ -1682,12 +1682,24 @@ async function igMediaFb(token: string, n: number): Promise<{ items?: WallPic[];
       if (!pages.length) return { error: "This Facebook token can't see any Facebook Page. When Meta asks which Pages the app may use, tick the Page your Instagram account is linked to (or choose all), then generate the token again. If the Page belongs to a business portfolio, also add the permission business_management." };
       return { error: `This Facebook token can see ${pages.length === 1 ? "the Page" : "the Pages"} ${pages.slice(0, 5).map((p) => "“" + oneLine(String(p?.name || p?.id || "")).slice(0, 40) + "”").join(", ")}, but no Instagram account is linked to ${pages.length === 1 ? "it" : "any of them"}. Link your Instagram account to the Page (the Page's Settings → Linked accounts → Instagram), make sure it is a Business or Creator account, then press Test again.` };
     }
+    // Another account's posts, by its handle (Meta's Business Discovery): any public Business or Creator account can be read
+    // through the token's own account. The token's own handle is simply its own posts.
+    if (handle && !me) { const w = await get(id + "?fields=username"); if (w.ok) me = String(w.j?.username || "").toLowerCase(); }
+    if (handle && handle.toLowerCase() !== me) {
+      const d = await get(id + `?fields=business_discovery.username(${handle}){username,media.limit(${n}){caption,media_type,media_url,thumbnail_url,permalink}}`);
+      if (d.ok) return { items: igPics(d.j?.business_discovery?.media?.data) };
+      const msg = String(d.j?.error?.message || "");
+      return { error: /username|user id|cannot find|does not exist|unsupported get/i.test(msg) || d.j?.error?.code === 110 ? `Instagram can't show @${handle}: the account has to exist, be public, and be a Business or Creator account (free to switch in the Instagram app).` : said(d) };
+    }
     const m = await get(id + `/media?fields=id,caption,media_type,media_url,thumbnail_url,permalink&limit=${n}`);
     return m.ok ? { items: igPics(m.j?.data) } : { error: said(m) };
   } catch { return { error: "Facebook didn't answer in time." }; }
 }
-async function igMedia(token: string, n: number): Promise<{ items?: WallPic[]; error?: string }> {
-  if (/^EAA/.test(token)) return igMediaFb(token, n);
+/** `handle`: whose posts (another account is looked up through the token's own account; empty = the token's own account).
+ *  `shared`: the token is the Studio's, serving a site that has none of its own, so it may only be used for that site's handle. */
+async function igMedia(token: string, n: number, handle = "", shared = false): Promise<{ items?: WallPic[]; error?: string }> {
+  if (/^EAA/.test(token)) return igMediaFb(token, n, handle);
+  if (shared) return { error: "The Studio's Instagram token is the kind that can only show its own account (it starts with IGAA). A token that starts with EAA is needed to show other accounts by their handle." };
   try {
     const r = await fetch(`https://graph.instagram.com/me/media?fields=id,caption,media_type,media_url,thumbnail_url,permalink&limit=${n}&access_token=${encodeURIComponent(token)}`, { signal: AbortSignal.timeout(15000) });
     const j: any = await r.json().catch(() => null);
@@ -1734,12 +1746,34 @@ async function pinMedia(src: string, n: number): Promise<{ items?: WallPic[]; er
     return items.length ? { items } : { error: "Pinterest's feed for that profile or board has no pins with pictures (a secret board has no feed)." };
   } catch { return { error: "Pinterest didn't answer in time." }; }
 }
-async function wallFeed(env: Env, site: string, src: string, pin: string, n: number): Promise<{ items?: WallPic[]; error?: string }> {
+const igHandle = (v: unknown) => { const h = String(v || "").trim().replace(/^@/, "").replace(/^https?:\/\/(www\.)?instagram\.com\//i, "").replace(/[/?#].*$/, ""); return /^[A-Za-z0-9._]{1,30}$/.test(h) ? h : ""; };
+/** The Studio's own Instagram token (Settings → General), which serves every site on this database that has none of its own. */
+async function studioIg(env: Env): Promise<any | null> {
+  const r: any = await env.DB.prepare("select scope from settings where name = 'ig' and scope like 'studio:%' order by updated_at desc limit 1").first().catch(() => null);
+  const c = r ? await getSetting(env, r.scope, "ig").catch(() => null) : null; return c?.on && c.token ? c : null;
+}
+/** The Studio's token is shared, so a site may spend it on a few handles only: 6 different ones a day. (The address is public;
+ *  without this anyone could use it to look up any account.) The site must be one this database knows. */
+async function igHandleOk(env: Env, site: string, handle: string): Promise<boolean> {
+  const scope = "site:" + site, h = handle.toLowerCase(), day = 86400000, now = Date.now();
+  if (!(await env.DB.prepare("select 1 x from members where scope = ? limit 1").bind(scope).first().catch(() => null)) && !(await env.DB.prepare("select 1 x from files where scope = ? limit 1").bind(scope).first().catch(() => null))) return false;
+  const cur = await getSetting(env, scope, "igh").catch(() => null), list: [string, number][] = (Array.isArray(cur?.l) ? cur.l : []).filter((x: any) => Array.isArray(x) && now - +x[1] < day);
+  if (list.some((x) => x[0] === h)) return true;
+  if (list.length >= 6) return false;
+  await putSetting(env, scope, "igh", { l: [...list, [h, now]] }).catch(() => {});
+  return true;
+}
+async function wallFeed(env: Env, site: string, src: string, pin: string, n: number, handle = ""): Promise<{ items?: WallPic[]; error?: string }> {
   if (src === "pinterest") return pinMedia(pin, n);
   const scope = "site:" + site, c = await getSetting(env, scope, "ig").catch(() => null);
-  if (!c?.on || !c.token) return { error: "Instagram isn't connected for this site yet." };
-  await igRenew(env, scope, c);
-  return igMedia(String(((await getSetting(env, scope, "ig").catch(() => null)) || c).token), n);
+  // the site's own token: its own posts, or the handle it names
+  if (c?.on && c.token) { await igRenew(env, scope, c); return igMedia(String(((await getSetting(env, scope, "ig").catch(() => null)) || c).token), n, handle); }
+  // no token of its own: the Studio's, for the handle the site gives
+  const s = await studioIg(env);
+  if (!s) return { error: "Instagram isn't connected yet: neither for this site nor for the Studio." };
+  if (!handle) return { error: "Give the wall your Instagram handle (Social photo wall → Your handle)." };
+  if (!(await igHandleOk(env, site, handle))) return { error: "This site has asked for too many different Instagram accounts today. Try again tomorrow." };
+  return igMedia(String(s.token), n, handle, true);
 }
 async function unsplashFind(key: string, words: string, n: number): Promise<{ photos?: any[]; error?: string }> {
   try {
@@ -1872,10 +1906,10 @@ export default {
       // ---- a site's social photo wall, filled by itself (public): GET /wall/<site>?src=instagram|pinterest&pin=<profile or board>&n=12
       // Answers are kept for half an hour, so a busy site asks Instagram or Pinterest twice an hour at most.
       if (/^\/wall\/[a-z0-9][a-z0-9-]{0,59}$/.test(p) && req.method === "GET") {
-        const src = u.searchParams.get("src") === "pinterest" ? "pinterest" : "instagram", pin = String(u.searchParams.get("pin") || "").slice(0, 200), n = Math.max(3, Math.min(24, +(u.searchParams.get("n") || 12) || 12));
-        const key = new Request(u.origin + p + "?src=" + src + "&pin=" + encodeURIComponent(pin) + "&n=" + n), store = (globalThis as any).caches?.default;
+        const src = u.searchParams.get("src") === "pinterest" ? "pinterest" : "instagram", pin = String(u.searchParams.get("pin") || "").slice(0, 200), n = Math.max(3, Math.min(24, +(u.searchParams.get("n") || 12) || 12)), handle = src === "instagram" ? igHandle(u.searchParams.get("h")) : "";
+        const key = new Request(u.origin + p + "?src=" + src + "&pin=" + encodeURIComponent(pin) + "&n=" + n + "&h=" + handle.toLowerCase()), store = (globalThis as any).caches?.default;
         const hit = store ? await store.match(key).catch(() => null) : null; if (hit) return hit;
-        const r = await wallFeed(env, p.split("/")[2], src, pin, n);
+        const r = await wallFeed(env, p.split("/")[2], src, pin, n, handle);
         const res = new Response(JSON.stringify(r.items ? { items: r.items } : { items: [], error: r.error }), { headers: { ...cors, "Content-Type": "application/json", "Cache-Control": "public, max-age=" + (r.items ? 1800 : 120) } });
         if (store) { const put = store.put(key, res.clone()).catch(() => {}); if (ctx?.waitUntil) ctx.waitUntil(put); else await put; }
         return res;
@@ -2691,7 +2725,7 @@ export default {
         }
         if (p === "/set/test") {
           if (name === "un") { const c = await getSetting(env, scope, "un"); if (!c?.key) return json({ error: "Save the access key first." }); const r = await unsplashFind(String(c.key), "coffee shop", 1); return r.photos ? json({ ok: true, said: `a photo by ${r.photos[0].by || "an Unsplash photographer"}` }) : json({ error: r.error }); }
-          if (name === "ig") { const c = await getSetting(env, scope, "ig"); if (!c?.token) return json({ error: "Save the access token first." }); const r = await igMedia(String(c.token), 6); return r.items ? json({ ok: true, said: r.items.length + (r.items.length === 1 ? " post" : " posts") }) : json({ error: r.error }); }
+          if (name === "ig") { const c = await getSetting(env, scope, "ig"); if (!c?.token) return json({ error: "Save the access token first." }); const h = igHandle(b.handle); if (b.handle && !h) return json({ error: "That doesn't look like an Instagram handle." }); const r = await igMedia(String(c.token), 6, h, !!h && !/^EAA/.test(String(c.token))); return r.items ? json({ ok: true, said: r.items.length + (r.items.length === 1 ? " post" : " posts") + (h ? " from @" + h : "") }) : json({ error: r.error }); }
           if (name !== "ai") return err(400, "Nothing to test.");
           const c = await getSetting(env, scope, "ai"); if (!c?.key || !c.model || !publicUrl(String(c.base || "").trim())) return json({ error: "Fill in the address, the model and the key first." });
           try { const r: any = await customAI(c).run("", { messages: [{ role: "user", content: "Reply with the single word: ready" }], max_tokens: 20, temperature: 0 }); return json({ ok: true, said: String(r.response || "").trim().slice(0, 80) }); }

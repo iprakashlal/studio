@@ -49,7 +49,7 @@ var CFDB_UPGRADES = [
     "create index if not exists enquiries_ref on enquiries (site, ref)"
   ] }
 ];
-var CFDB_VERSION = 91;
+var CFDB_VERSION = 95;
 var CFDB_WORKER_NAME = "picaffectz-db";
 
 // src/lib/lookdigest.ts
@@ -2829,19 +2829,69 @@ function dqSections(x) {
   }
   return out;
 }
-async function igMedia(token, n) {
+var igPics = (data) => (Array.isArray(data) ? data : []).map((m) => ({ img: String((m.media_type === "VIDEO" ? m.thumbnail_url : m.media_url) || ""), url: String(m.permalink || ""), caption: oneLine(String(m.caption || "")).slice(0, 160) })).filter((x) => /^https:\/\//.test(x.img));
+async function igMediaFb(token, n, handle = "") {
+  const G = "https://graph.facebook.com/", t = "access_token=" + encodeURIComponent(token), get = async (path) => {
+    const r = await fetch(G + path + (path.includes("?") ? "&" : "?") + t, { signal: AbortSignal.timeout(15e3) });
+    return { ok: r.ok, status: r.status, j: await r.json().catch(() => null) };
+  };
+  const said = (x) => x.j?.error?.message ? "Facebook said: " + String(x.j.error.message).slice(0, 220) : `Facebook answered ${x.status}.`;
+  try {
+    const F = "fields=name,instagram_business_account,connected_instagram_account", igOf = (p) => String(p?.instagram_business_account?.id || p?.connected_instagram_account?.id || "");
+    let id = "", me = "", pages = [];
+    const u = await get("me/assigned_instagram_accounts?fields=id,username&limit=20");
+    if (u.ok) {
+      const acc = (Array.isArray(u.j?.data) ? u.j.data : []).find((x) => x?.id);
+      id = String(acc?.id || "");
+      me = String(acc?.username || "").toLowerCase();
+    }
+    const a = id ? { ok: true, status: 200, j: null } : await get("me/accounts?" + F + "&limit=50");
+    if (!id && a.ok) {
+      pages = Array.isArray(a.j?.data) ? a.j.data : [];
+      id = pages.map(igOf).find(Boolean) || "";
+    }
+    if (!id) {
+      const b = await get("me?" + F);
+      if (b.ok) id = igOf(b.j);
+      else if (!a.ok) return { error: said(a) };
+    }
+    if (!/^\d+$/.test(id)) {
+      const pr = await get("me/permissions"), have = pr.ok && Array.isArray(pr.j?.data) ? pr.j.data.filter((x) => x?.status === "granted").map((x) => String(x.permission)) : [];
+      const lack = ["pages_show_list", "instagram_basic"].filter((x) => !have.includes(x));
+      if (pr.ok && lack.length) return { error: `This Facebook token wasn't given the permission${lack.length > 1 ? "s" : ""} ${lack.join(" and ")}${have.length ? ` (it has: ${have.slice(0, 12).join(", ")})` : ""}. Easiest: in your Meta app open Instagram API \u2192 \u201CAPI setup with Unified login\u201D \u2192 \u201C2. Generate access tokens\u201D and press Generate token beside your Instagram account, then paste that token here. (A token from Graph API Explorer needs pages_show_list, instagram_basic and pages_read_engagement ticked.)` };
+      if (!pages.length) return { error: "This Facebook token can't see any Facebook Page. When Meta asks which Pages the app may use, tick the Page your Instagram account is linked to (or choose all), then generate the token again. If the Page belongs to a business portfolio, also add the permission business_management." };
+      return { error: `This Facebook token can see ${pages.length === 1 ? "the Page" : "the Pages"} ${pages.slice(0, 5).map((p) => "\u201C" + oneLine(String(p?.name || p?.id || "")).slice(0, 40) + "\u201D").join(", ")}, but no Instagram account is linked to ${pages.length === 1 ? "it" : "any of them"}. Link your Instagram account to the Page (the Page's Settings \u2192 Linked accounts \u2192 Instagram), make sure it is a Business or Creator account, then press Test again.` };
+    }
+    if (handle && !me) {
+      const w = await get(id + "?fields=username");
+      if (w.ok) me = String(w.j?.username || "").toLowerCase();
+    }
+    if (handle && handle.toLowerCase() !== me) {
+      const d = await get(id + `?fields=business_discovery.username(${handle}){username,media.limit(${n}){caption,media_type,media_url,thumbnail_url,permalink}}`);
+      if (d.ok) return { items: igPics(d.j?.business_discovery?.media?.data) };
+      const msg = String(d.j?.error?.message || "");
+      return { error: /username|user id|cannot find|does not exist|unsupported get/i.test(msg) || d.j?.error?.code === 110 ? `Instagram can't show @${handle}: the account has to exist, be public, and be a Business or Creator account (free to switch in the Instagram app).` : said(d) };
+    }
+    const m = await get(id + `/media?fields=id,caption,media_type,media_url,thumbnail_url,permalink&limit=${n}`);
+    return m.ok ? { items: igPics(m.j?.data) } : { error: said(m) };
+  } catch {
+    return { error: "Facebook didn't answer in time." };
+  }
+}
+async function igMedia(token, n, handle = "", shared = false) {
+  if (/^EAA/.test(token)) return igMediaFb(token, n, handle);
+  if (shared) return { error: "The Studio's Instagram token is the kind that can only show its own account (it starts with IGAA). A token that starts with EAA is needed to show other accounts by their handle." };
   try {
     const r = await fetch(`https://graph.instagram.com/me/media?fields=id,caption,media_type,media_url,thumbnail_url,permalink&limit=${n}&access_token=${encodeURIComponent(token)}`, { signal: AbortSignal.timeout(15e3) });
     const j = await r.json().catch(() => null);
     if (!r.ok) return { error: j?.error?.message ? "Instagram said: " + String(j.error.message).slice(0, 200) : `Instagram answered ${r.status}.` };
-    const items = (Array.isArray(j?.data) ? j.data : []).map((m) => ({ img: String((m.media_type === "VIDEO" ? m.thumbnail_url : m.media_url) || ""), url: String(m.permalink || ""), caption: oneLine(String(m.caption || "")).slice(0, 160) })).filter((x) => /^https:\/\//.test(x.img));
-    return { items };
+    return { items: igPics(j?.data) };
   } catch {
     return { error: "Instagram didn't answer in time." };
   }
 }
 async function igRenew(env, scope, c) {
-  if (Date.now() - (+c.at || 0) < 30 * 864e5) return;
+  if (/^EAA/.test(String(c.token)) || Date.now() - (+c.at || 0) < 30 * 864e5) return;
   try {
     const r = await fetch(`https://graph.instagram.com/refresh_access_token?grant_type=ig_refresh_token&access_token=${encodeURIComponent(String(c.token))}`, { signal: AbortSignal.timeout(15e3) });
     const j = await r.json().catch(() => null);
@@ -2879,12 +2929,37 @@ async function pinMedia(src, n) {
     return { error: "Pinterest didn't answer in time." };
   }
 }
-async function wallFeed(env, site, src, pin, n) {
+var igHandle = (v) => {
+  const h = String(v || "").trim().replace(/^@/, "").replace(/^https?:\/\/(www\.)?instagram\.com\//i, "").replace(/[/?#].*$/, "");
+  return /^[A-Za-z0-9._]{1,30}$/.test(h) ? h : "";
+};
+async function studioIg(env) {
+  const r = await env.DB.prepare("select scope from settings where name = 'ig' and scope like 'studio:%' order by updated_at desc limit 1").first().catch(() => null);
+  const c = r ? await getSetting(env, r.scope, "ig").catch(() => null) : null;
+  return c?.on && c.token ? c : null;
+}
+async function igHandleOk(env, site, handle) {
+  const scope = "site:" + site, h = handle.toLowerCase(), day2 = 864e5, now = Date.now();
+  if (!await env.DB.prepare("select 1 x from members where scope = ? limit 1").bind(scope).first().catch(() => null) && !await env.DB.prepare("select 1 x from files where scope = ? limit 1").bind(scope).first().catch(() => null)) return false;
+  const cur = await getSetting(env, scope, "igh").catch(() => null), list = (Array.isArray(cur?.l) ? cur.l : []).filter((x) => Array.isArray(x) && now - +x[1] < day2);
+  if (list.some((x) => x[0] === h)) return true;
+  if (list.length >= 6) return false;
+  await putSetting(env, scope, "igh", { l: [...list, [h, now]] }).catch(() => {
+  });
+  return true;
+}
+async function wallFeed(env, site, src, pin, n, handle = "") {
   if (src === "pinterest") return pinMedia(pin, n);
   const scope = "site:" + site, c = await getSetting(env, scope, "ig").catch(() => null);
-  if (!c?.on || !c.token) return { error: "Instagram isn't connected for this site yet." };
-  await igRenew(env, scope, c);
-  return igMedia(String((await getSetting(env, scope, "ig").catch(() => null) || c).token), n);
+  if (c?.on && c.token) {
+    await igRenew(env, scope, c);
+    return igMedia(String((await getSetting(env, scope, "ig").catch(() => null) || c).token), n, handle);
+  }
+  const s = await studioIg(env);
+  if (!s) return { error: "Instagram isn't connected yet: neither for this site nor for the Studio." };
+  if (!handle) return { error: "Give the wall your Instagram handle (Social photo wall \u2192 Your handle)." };
+  if (!await igHandleOk(env, site, handle)) return { error: "This site has asked for too many different Instagram accounts today. Try again tomorrow." };
+  return igMedia(String(s.token), n, handle, true);
 }
 async function unsplashFind(key, words2, n) {
   try {
@@ -3084,11 +3159,11 @@ var db_worker_default = {
     try {
       if (p === "/") return json({ ok: true, service: "site-studio-db", v: V, mail: !!(env.RESEND_API_KEY && env.MAIL_FROM), ...env.CF_TOKEN && env.CF_ACCOUNT ? { deploy: true, account: env.CF_ACCOUNT } : {}, ...env.GH_TOKEN ? { gh: true } : {}, ...env.AI ? { ai: true, pamphlet: 2 } : {}, reviews: true, dq: 1, look: 1, outline: 1, pictures: 1, connect: 2, translate: 4, approvals: 1, accounts: 2, cfx: 4, cfa: 1, google: 1, studioPages: 1, del: 1, enqMail: 3, ...otherAccounts(env).length ? { more: otherAccounts(env).length } : {} });
       if (/^\/wall\/[a-z0-9][a-z0-9-]{0,59}$/.test(p) && req.method === "GET") {
-        const src = u.searchParams.get("src") === "pinterest" ? "pinterest" : "instagram", pin = String(u.searchParams.get("pin") || "").slice(0, 200), n = Math.max(3, Math.min(24, +(u.searchParams.get("n") || 12) || 12));
-        const key = new Request(u.origin + p + "?src=" + src + "&pin=" + encodeURIComponent(pin) + "&n=" + n), store = globalThis.caches?.default;
+        const src = u.searchParams.get("src") === "pinterest" ? "pinterest" : "instagram", pin = String(u.searchParams.get("pin") || "").slice(0, 200), n = Math.max(3, Math.min(24, +(u.searchParams.get("n") || 12) || 12)), handle = src === "instagram" ? igHandle(u.searchParams.get("h")) : "";
+        const key = new Request(u.origin + p + "?src=" + src + "&pin=" + encodeURIComponent(pin) + "&n=" + n + "&h=" + handle.toLowerCase()), store = globalThis.caches?.default;
         const hit = store ? await store.match(key).catch(() => null) : null;
         if (hit) return hit;
-        const r = await wallFeed(env, p.split("/")[2], src, pin, n);
+        const r = await wallFeed(env, p.split("/")[2], src, pin, n, handle);
         const res = new Response(JSON.stringify(r.items ? { items: r.items } : { items: [], error: r.error }), { headers: { ...cors, "Content-Type": "application/json", "Cache-Control": "public, max-age=" + (r.items ? 1800 : 120) } });
         if (store) {
           const put = store.put(key, res.clone()).catch(() => {
@@ -4243,8 +4318,10 @@ ${body}`)}${paras("Approve or hide it under Reviews in your site's admin page.",
           if (name === "ig") {
             const c2 = await getSetting(env, scope, "ig");
             if (!c2?.token) return json({ error: "Save the access token first." });
-            const r = await igMedia(String(c2.token), 6);
-            return r.items ? json({ ok: true, said: r.items.length + (r.items.length === 1 ? " post" : " posts") }) : json({ error: r.error });
+            const h = igHandle(b.handle);
+            if (b.handle && !h) return json({ error: "That doesn't look like an Instagram handle." });
+            const r = await igMedia(String(c2.token), 6, h, !!h && !/^EAA/.test(String(c2.token)));
+            return r.items ? json({ ok: true, said: r.items.length + (r.items.length === 1 ? " post" : " posts") + (h ? " from @" + h : "") }) : json({ error: r.error });
           }
           if (name !== "ai") return err(400, "Nothing to test.");
           const c = await getSetting(env, scope, "ai");

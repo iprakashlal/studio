@@ -5,7 +5,7 @@ import { AI_ENGINES, aiEngine, onAiEngine, setAiEngine, type AiEngine } from "..
 import type { Studio, StudioIndex } from "../lib/studio";
 import { browserCan, browserHasTranslator, PHRASES } from "../lib/systranslate";
 import { useToast } from "../ui/kit";
-import { AiApiForm, SmsForm, WhatsAppForm, useStudioWhere } from "./Connections";
+import { AiApiForm, SmsForm, WhatsAppForm, useStudioWhere, InstagramForm } from "./Connections";
 
 export const useAiEngine = () => useSyncExternalStore(onAiEngine, aiEngine);
 
@@ -70,4 +70,4 @@ export function AiEngineCard({ studio, index, onIndex }: { studio: Studio; index
 }
 
 /** Settings → General: WhatsApp for the Studio's own sign-in codes (optional). */
-export function StudioWhatsAppCard() { const where = useStudioWhere(); return <><WhatsAppForm where={where} kind="studio" /><SmsForm where={where} kind="studio" /></>; }
+export function StudioWhatsAppCard() { const where = useStudioWhere(); return <><WhatsAppForm where={where} kind="studio" /><SmsForm where={where} kind="studio" /><InstagramForm where={where} kind="studio" /></>; }

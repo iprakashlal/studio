@@ -174,7 +174,9 @@ function useDiyLook(auto: "" | "light" | "dark" = "") {
       // soft glows of colour behind the page (under everything, over the page's own colour)
       `:root[data-diy-aura] .diy-page{isolation:isolate}:root[data-diy-aura] .diy-page::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;background:radial-gradient(42% 36% at 86% 18%,rgb(var(--brand-500,91 124 255)/.26),transparent 70%),radial-gradient(38% 32% at 8% 88%,color-mix(in srgb,var(--g2) 22%,transparent),transparent 70%),radial-gradient(30% 26% at 70% 92%,rgb(var(--brand-600,63 95 224)/.18),transparent 70%)}`,
       // over the glows, the answer bar is not a band: what is behind it is blurred, fading out at its edges
-      `:root[data-diy-aura] .diy-page .sticky.bottom-0{background:rgb(var(--ink-950,11 15 23)/.35)!important;-webkit-backdrop-filter:blur(14px)!important;backdrop-filter:blur(14px)!important;-webkit-mask-image:linear-gradient(to bottom,transparent,#000 26%),linear-gradient(to right,transparent,#000 6%,#000 94%,transparent);-webkit-mask-composite:source-in;mask-image:linear-gradient(to bottom,transparent,#000 26%),linear-gradient(to right,transparent,#000 6%,#000 94%,transparent);mask-composite:intersect}`,
+      `.diy-page>footer{border-color:transparent!important}`,
+      // Over colour glows or a picture / moving background the answer bar is clear: any band of flat colour would show as a strip.
+      `:root[data-diy-aura] .diy-page .sticky.bottom-0,.diy-page.has-sbg .sticky.bottom-0{background:none!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important;border-color:transparent!important}`,
       // a moving, glowing border: a ring of two colours that turns, with a soft glow of the first around it
       `@property --diy-ga{syntax:"<angle>";initial-value:0deg;inherits:false}@keyframes diyglow{to{--diy-ga:360deg}}`,
       `.diy-page,[role=dialog]{--g1:rgb(var(--brand-500,91 124 255));--g2:${g2 || "rgb(var(--brand-300,170 190 255))"}}`,

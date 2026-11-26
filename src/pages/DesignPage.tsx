@@ -4,7 +4,8 @@ import { DevtoolsGuard, LoadVeil } from "../ui/PageGuard";
 import { themeCode } from "../themes/codes";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { Theme } from "../themes/catalog";
-import { BrandMark, useBrand } from "../lib/brand";
+import { BrandMark, brand, useBrand } from "../lib/brand";
+import { applyTint } from "../lib/tint";
 import { TEMPLATES } from "../schema";
 import { Preview } from "../editor/Preview";
 import { Logo, Spinner, useToast } from "../ui/kit";
@@ -12,7 +13,7 @@ import { packSections, sectionNames, unpackSections } from "../lib/docsections";
 import { relatedThemes } from "../lib/designer";
 import { COLOUR_DOT, STEPS, STEP_LABEL, buildDesign, fromDoc, isOptional, nextStep, rowsFmt, requestText, stepAt, sayAnswer, themeOf, themesFor, tweakTheme, writeCopy, type Answers, type Design, type DesignFiles, type Step } from "../lib/designer";
 import { newDesignId, readDesignSettings, readLocalDesigns, writeLocalDesigns, type Copy, type DesignRec } from "../lib/designs";
-import { NOTICE_TEXT, COLOUR_SLOTS, GROUPS, pagesChoice, readColsAnswer, readLookAnswer, resolvedLook, visibleAxes, type Kind as LookKind } from "../lib/designlook";
+import { DIY_WORDS, NOTICE_TEXT, COLOUR_SLOTS, GROUPS, pagesChoice, readColsAnswer, readLookAnswer, resolvedLook, visibleAxes, type DiyWord, type Kind as LookKind } from "../lib/designlook";
 import { AiDraw } from "../ui/AiDraw";
 import { LogoMaker } from "../ui/LogoMaker";
 import { designHost, otpCheck, otpSend, passLive, readPage, readPass, saveDraft, submitQuery, understandText, writePass, type DesignHost, type Pass } from "../lib/designapi";
@@ -116,11 +117,44 @@ function NoticeBar() {
   if (n?.on === false) return null;
   return <div role="note" className="w-full bg-[#b8abba] px-4 py-2 text-center text-[13px] font-medium leading-snug text-white">{n?.text || NOTICE_TEXT}</div>;
 }
+/** The page's own wording (Settings → Design yourself → Wording), or the standard text. {brand} is the page's name. */
+const diyName = () => readDesignSettings().ui?.name || "Picaffectz";
+const word = (k: DiyWord, brandName?: string) => (readDesignSettings().words?.[k] || DIY_WORDS[k][1]).replace(/\{brand\}/g, readDesignSettings().ui?.name || brandName || "Picaffectz");
+/** The page's own logo (Settings → Design yourself → Page look), or the Studio's. */
+function DiyMark({ size = 26 }: { size?: number }) { const l = readDesignSettings().ui?.logo; return l ? <img src={l} alt="" width={size} height={size} className="flex-none rounded-md object-contain" style={{ width: size, height: size }} /> : <BrandMark fallback={<Logo />} size={size} />; }
+/** Wears the page's own look while it is open: light or dark and the accent (the Studio's own colours come back on leaving),
+ *  corners, chat width and fonts. They are set on the document, so dialogs and menus opened from the page wear them too. */
+function useDiyLook() {
+  const ui = readDesignSettings().ui || {}, base = useBrand();
+  useEffect(() => {
+    if (ui.mode || ui.accent) applyTint(ui.accent || base.tint || null, ui.mode || base.mode);
+    return () => { const b = brand(); applyTint(b.tint || null, b.mode); };
+  }, [ui.mode, ui.accent, base.tint, base.mode]);
+  useEffect(() => {
+    const de = document.documentElement, id = "diy-look";
+    if (ui.radius) de.dataset.diyR = ui.radius; else delete de.dataset.diyR;
+    if (ui.width) de.dataset.diyW = ui.width; else delete de.dataset.diyW;
+    let st = document.getElementById(id) as HTMLStyleElement | null, link = document.getElementById(id + "-font") as HTMLLinkElement | null;
+    const fam = [...new Set([ui.font, ui.head].filter(Boolean))] as string[];
+    if (fam.length) { if (!link) { link = document.createElement("link"); link.id = id + "-font"; link.rel = "stylesheet"; document.head.appendChild(link); } const href = "https://fonts.googleapis.com/css2?" + fam.map((f) => "family=" + f.replace(/ /g, "+") + ":wght@400;500;600;700;800").join("&") + "&display=swap"; if (link.href !== href) link.href = href; } else link?.remove();
+    const css = [
+      ui.font ? `.diy-page, .diy-page .input, .diy-page .btn, [role=dialog]{font-family:"${ui.font}",ui-sans-serif,system-ui,sans-serif}` : "",
+      ui.head || ui.font ? `.diy-page :is(h1,h2,h3,.font-display), [role=dialog] :is(h1,h2,h3,.font-display){font-family:"${ui.head || ui.font}",ui-sans-serif,system-ui,sans-serif}` : "",
+      `:root[data-diy-r=sharp] .diy-page :is(.rounded-md,.rounded-lg,.rounded-xl,.rounded-2xl,.rounded-3xl,.btn,.input,.card), :root[data-diy-r=sharp] [role=dialog], :root[data-diy-r=sharp] [role=dialog] :is(.btn,.input){border-radius:4px!important}`,
+      `:root[data-diy-r=sharp] .diy-page .rounded-full:not(.w-8):not(.h-1\\.5){border-radius:4px!important}`,
+      `:root[data-diy-r=round] .diy-page :is(.btn,.input){border-radius:999px!important}:root[data-diy-r=round] .diy-page textarea.input{border-radius:1.4rem!important}:root[data-diy-r=round] .diy-page :is(.rounded-2xl,.rounded-3xl){border-radius:1.75rem!important}`,
+      `:root[data-diy-w=narrow] .diy-page .diy-col{max-width:44rem!important}:root[data-diy-w=wide] .diy-page .diy-col{max-width:none!important}:root[data-diy-w=wide] .diy-page main{max-width:96rem!important}`,
+    ].join("");
+    if (!st) { st = document.createElement("style"); st.id = id; document.head.appendChild(st); }
+    if (st.textContent !== css) st.textContent = css;
+    return () => { delete de.dataset.diyR; delete de.dataset.diyW; document.getElementById(id)?.remove(); document.getElementById(id + "-font")?.remove(); };
+  }, [ui.radius, ui.width, ui.font, ui.head]);
+}
 function PhoneNotice() {
   const brand = useBrand();
   return (
     <div className="flex min-h-screen flex-col bg-ink-950 text-ink-100">
-      <header className="flex items-center gap-2 border-b border-ink-800 px-4 py-3 font-extrabold"><BrandMark fallback={<Logo />} /><span>Picaffectz</span><span className="text-ink-600" aria-hidden>|</span><span className="font-semibold text-ink-300">DIY your web</span></header>
+      <header className="flex items-center gap-2 border-b border-ink-800 px-4 py-3 font-extrabold"><DiyMark /><span>{diyName()}</span><span className="text-ink-600" aria-hidden>|</span><span className="font-semibold text-ink-300">{readDesignSettings().ui?.tag || "DIY your web"}</span></header>
       <main className="flex flex-1 items-center justify-center px-5 py-10">
         <div className="card flex max-w-sm flex-col gap-3 p-6 text-center" role="alert">
           <h1 className="m-0 text-lg font-extrabold">Not available on this screen size</h1>
@@ -146,6 +180,7 @@ function DesignPageInner({ studio, index, onIndex }: { studio?: Studio; index?: 
   const [design, setDesign] = useState<Design | null>(null);
   const [ver, setVer] = useState(1);
   const [setsVer, setSetsVer] = useState(0);
+  useDiyLook();
   useEffect(() => { const f = () => setSetsVer((v) => v + 1); addEventListener("studio:design-page", f); return () => removeEventListener("studio:design-page", f); }, []);
   const [writing, setWriting] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
@@ -325,7 +360,7 @@ function DesignPageInner({ studio, index, onIndex }: { studio?: Studio; index?: 
           <input ref={pick} type="file" accept={cur.accept} multiple={cur.id === "photos" || cur.id === "banner"} className="sr-only" aria-label={cur.ask(a)} onChange={(e) => choose(cur, e.target.files?.[0], Array.from(e.target.files || []).slice(1))} />
           <button type="button" className="btn btn-pri btn-sm rounded-full" onClick={() => pick.current?.click()}>{PIC_STEPS.includes(cur.id) ? (cur.id === "photos" || cur.id === "banner" ? "Choose pictures" : "Choose a picture") : cur.id === "logo" ? "Choose logo" : cur.id === "doc" ? "Choose document (PDF)" : "Choose PDF"}</button>
         </>}
-        {cur && isOptional(cur, a) && (field$ || cur.type === "file") && <button type="button" className="btn btn-ghost btn-sm" onClick={() => answer(cur, "")}>Skip</button>}
+        {cur && isOptional(cur, a) && (field$ || cur.type === "file") && <button type="button" className="btn btn-ghost btn-sm" onClick={() => answer(cur, "")}>{word("skipBtn")}</button>}
         {cur?.type === "many" && <button type="submit" className="btn btn-pri btn-sm rounded-full" disabled={!many.length}>Done</button>}
         {field$ && <button type="submit" className="btn btn-pri btn-sm rounded-full" disabled={!text.trim()} aria-label="Send">Send ↵</button>}
       </div>
@@ -337,7 +372,7 @@ function DesignPageInner({ studio, index, onIndex }: { studio?: Studio; index?: 
   const cardBar = !cur || cur.type === "choice" ? null : cur.id === "logo" ? (
     <div className="flex flex-col gap-3">
       <LogoMaker key={a.name || ""} name={a.name || ""} color={/^#[0-9a-f]{6}$/i.test(COLOUR_DOT[a.colour || ""] || "") ? COLOUR_DOT[a.colour!] : undefined} disabled={reading} onUse={(f) => choose(cur, f)} />
-      <button type="button" className="btn btn-ghost self-start" onClick={() => answer(cur, "")}>Skip</button>
+      <button type="button" className="btn btn-ghost self-start" onClick={() => answer(cur, "")}>{word("skipBtn")}</button>
     </div>
   ) : (
     <form className="flex flex-col gap-3" onSubmit={(e) => { e.preventDefault(); submit(); }} aria-label="Your answer">
@@ -357,7 +392,7 @@ function DesignPageInner({ studio, index, onIndex }: { studio?: Studio; index?: 
       <div className="flex flex-wrap items-center gap-2">
         {cur.type === "long" && !cur.cols && <span className="mr-auto text-xs text-ink-500">Enter = new line · Ctrl + Enter = send</span>}
         {(cur.type !== "long" || cur.cols) && <span className="mr-auto" />}
-        {isOptional(cur, a) && <button type="button" className="btn btn-ghost" disabled={reading} onClick={() => answer(cur, "")}>Skip</button>}
+        {isOptional(cur, a) && <button type="button" className="btn btn-ghost" disabled={reading} onClick={() => answer(cur, "")}>{word("skipBtn")}</button>}
         {cur.type === "file" && !NO_UPLOAD.includes(cur.id) && <>
           <input ref={pick} type="file" accept={cur.accept} multiple={cur.id === "photos" || cur.id === "banner"} className="sr-only" aria-label={cur.ask(a)} onChange={(e) => choose(cur, e.target.files?.[0], Array.from(e.target.files || []).slice(1))} />
           <button type="button" className={`btn ${field$ ? "" : "btn-pri"}`} disabled={reading} onClick={() => pick.current?.click()}>{PIC_STEPS.includes(cur.id) ? (cur.id === "photos" || cur.id === "banner" ? "Choose pictures" : "Choose a picture") : cur.id === "logo" ? "Choose logo" : cur.id === "doc" ? "Add a PDF" : "Choose PDF"}</button>
@@ -389,7 +424,7 @@ function DesignPageInner({ studio, index, onIndex }: { studio?: Studio; index?: 
             </button>
           );
         })}
-        {s.type === "choice" && isOptional(s, a) && <button type="button" className="inline-flex items-center rounded-full border border-dashed border-ink-600 px-4 py-2 text-sm font-semibold text-ink-400 transition hover:border-brand-400" onClick={() => answer(s, "")}>Skip</button>}
+        {s.type === "choice" && isOptional(s, a) && <button type="button" className="inline-flex items-center rounded-full border border-dashed border-ink-600 px-4 py-2 text-sm font-semibold text-ink-400 transition hover:border-brand-400" onClick={() => answer(s, "")}>{word("skipBtn")}</button>}
       </div>
     );
   };
@@ -413,25 +448,25 @@ function DesignPageInner({ studio, index, onIndex }: { studio?: Studio; index?: 
   );
 
   return (
-    <div className="flex min-h-screen flex-col bg-ink-950 text-ink-100" style={chatBg}>
+    <div className="diy-page flex min-h-screen flex-col bg-ink-950 text-ink-100" style={chatBg}>
       <DevtoolsGuard /><LoadVeil title="Loading Design yourself" steps={["Loading the designer", "Reading the Studio's settings"]} done={(fontsOk ? 1 : 0) + (hostDone ? 1 : 0)} />
       <header className="sticky top-0 z-20 flex w-full items-center gap-3 border-b border-ink-800 bg-ink-950/90 px-4 py-3 backdrop-blur sm:px-6">
         {/* The Studio's name is a link only for someone signed in: it goes to their projects. */}
         {studio
-          ? <a href="#/" className="flex min-w-0 items-center gap-2 font-extrabold"><BrandMark fallback={<Logo />} /><span className="truncate max-sm:hidden">Picaffectz</span></a>
-          : <span className="flex min-w-0 items-center gap-2 font-extrabold"><BrandMark fallback={<Logo />} /><span className="truncate max-sm:hidden">Picaffectz</span></span>}
-        <span className="text-ink-600 max-sm:hidden" aria-hidden>|</span><span className="truncate font-semibold text-ink-300 max-sm:hidden">DIY your web</span>
+          ? <a href="#/" className="flex min-w-0 items-center gap-2 font-extrabold"><DiyMark /><span className="truncate max-sm:hidden">{diyName()}</span></a>
+          : <span className="flex min-w-0 items-center gap-2 font-extrabold"><DiyMark /><span className="truncate max-sm:hidden">{diyName()}</span></span>}
+        <span className="text-ink-600 max-sm:hidden" aria-hidden>|</span><span className="truncate font-semibold text-ink-300 max-sm:hidden">{readDesignSettings().ui?.tag || "DIY your web"}</span>
         <span className="ml-auto flex shrink-0 items-center gap-2">
           {cur && chatStarted && <span className="mr-1 text-xs tabular-nums text-ink-500" aria-label={`Step ${Math.min(answered.length + 1, total)} of ${total}`}>{Math.min(answered.length + 1, total)} / {total}</span>}
-          {design && a.name && <button type="button" className="btn btn-sm" onClick={() => setShowPreview(true)}>Preview</button>}
-          {chatStarted && <button type="button" className="btn btn-ghost btn-sm" onClick={restart}>Start again</button>}
+          {design && a.name && <button type="button" className="btn btn-sm" onClick={() => setShowPreview(true)}>{word("previewBtn")}</button>}
+          {chatStarted && <button type="button" className="btn btn-ghost btn-sm" onClick={restart}>{word("restartBtn")}</button>}
         </span>
         <div className="absolute inset-x-0 bottom-0 h-0.5 bg-ink-900" role="progressbar" aria-label="Progress" aria-valuemin={0} aria-valuemax={total} aria-valuenow={answered.length}><div className="h-full bg-brand-500 transition-all duration-500" style={{ width: `${chatStarted ? Math.round((answered.length / total) * 100) : 0}%` }} /></div>
       </header>
 
       <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col px-3 pb-4 sm:px-6">
-        <div role="log" aria-label="Conversation" className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-8 pb-8 pt-8">
-          <ChatBot><p className="m-0 text-[15px] leading-relaxed"><b>Welcome 👋</b> I'm the {brand.name} design assistant. Answer a few quick questions and your website takes shape as we go. It's only a preview.</p></ChatBot>
+        <div role="log" aria-label="Conversation" className="diy-col mx-auto flex w-full max-w-5xl flex-1 flex-col gap-8 pb-8 pt-8">
+          <ChatBot><p className="m-0 text-[15px] leading-relaxed">{readDesignSettings().words?.welcome ? word("welcome", brand.name) : <><b>Welcome 👋</b> I'm the {readDesignSettings().ui?.name || brand.name} design assistant. Answer a few quick questions and your website takes shape as we go. It's only a preview.</>}</p></ChatBot>
           {needMail && mailChat.thread}
           {!needMail && !chatStarted && cur && <ChatBot stack><section aria-live="polite"><h2 className="m-0 text-[15px] font-semibold leading-snug">{cur.ask(a)}</h2>{cur.help && cur.help(a) && <p className="mb-0 mt-1 text-[13px] leading-relaxed text-ink-400">{cur.help(a)}</p>}</section></ChatBot>}
           {!needMail && chatStarted && shown.map((s) => (
@@ -443,31 +478,31 @@ function DesignPageInner({ studio, index, onIndex }: { studio?: Studio; index?: 
             </div>
           ))}
           {!needMail && chatStarted && cur && <ChatBot><section aria-live="polite"><h2 className="m-0 text-[15px] font-semibold leading-snug">{cur.ask(a)}</h2>{cur.help && cur.help(a) && <p className="mb-0 mt-1 text-[13px] leading-relaxed text-ink-400">{cur.help(a)}</p>}{reading && <p className="mb-0 mt-2 inline-flex items-center gap-2 text-sm text-ink-300"><Spinner />Reading it…</p>}</section></ChatBot>}
-          {finished && writing && <ChatBot><WaitPct label="Writing a short line about each of your topics…" /></ChatBot>}
+          {finished && writing && <ChatBot><WaitPct label={word("writing")} /></ChatBot>}
           {ready && (<ChatBot>
               <section className="flex flex-col gap-4" aria-live="polite">
                 <div className="flex flex-col gap-2">
-                  <h2 className="font-display text-xl font-extrabold tracking-tight">Your preview is ready</h2>
-                  <p className="text-sm leading-relaxed text-ink-300">{design ? <>A <b className="text-ink-100">{TEMPLATES[design.kind].name}</b> in the <b className="text-ink-100">{design.themeName}</b> look (theme ID <b className="font-mono text-ink-100">{themeCode({ id: design.themeId })}</b>). </> : ""}It isn't published. Connect with us to finish it together: your own photos, your address on the web, payment and any extra features.</p>
+                  <h2 className="font-display text-xl font-extrabold tracking-tight">{word("readyTitle")}</h2>
+                  <p className="text-sm leading-relaxed text-ink-300">{design ? <>A <b className="text-ink-100">{TEMPLATES[design.kind].name}</b> in the <b className="text-ink-100">{design.themeName}</b> look (theme ID <b className="font-mono text-ink-100">{themeCode({ id: design.themeId })}</b>). </> : ""}{word("readyText")}</p>
                 </div>
                 <div className="grid gap-2 sm:flex sm:flex-wrap">
-                  <button type="button" className="btn btn-pri justify-center" onClick={() => setShowPreview(true)}>View my preview</button>
-                  <button type="button" className="btn justify-center" onClick={(e) => openConnect(e.currentTarget.getBoundingClientRect())}>{sent ? "Request sent ✓" : "Connect with Picaffectz"}</button>
-                  <button type="button" className="btn btn-ghost justify-center" onClick={restart}>Design another</button>
+                  <button type="button" className="btn btn-pri justify-center" onClick={() => setShowPreview(true)}>{word("viewBtn")}</button>
+                  <button type="button" className="btn justify-center" onClick={(e) => openConnect(e.currentTarget.getBoundingClientRect())}>{sent ? "Request sent ✓" : word("connectBtn")}</button>
+                  <button type="button" className="btn btn-ghost justify-center" onClick={restart}>{word("anotherBtn")}</button>
                 </div>
-                <p className="text-xs text-ink-500">Preview only. Nothing is published or charged.</p>
+                <p className="text-xs text-ink-500">{word("footnote")}</p>
               </section>
             </ChatBot>)}
           <div ref={endRef} />
         </div>
         {!needMail && cur && (
           <div className="sticky bottom-0 -mx-3 border-t border-ink-800 bg-ink-950/95 px-3 pb-4 pt-4 backdrop-blur sm:-mx-6 sm:px-6">
-            <div className="mx-auto flex max-h-[62vh] max-w-5xl flex-col gap-4 overflow-y-auto px-0.5 py-0.5">
-              {!chatStarted ? <>{chips(cur)}<div className="flex items-center gap-3 text-[11px] uppercase tracking-wide text-ink-500"><span className="h-px flex-1 bg-ink-800" />or type your own<span className="h-px flex-1 bg-ink-800" /></div>{bar}</> : <>{(cur.type === "choice" || cur.type === "many") && chips(cur)}{cardBar}</>}
+            <div className="diy-col mx-auto flex max-h-[62vh] max-w-5xl flex-col gap-4 overflow-y-auto px-0.5 py-0.5">
+              {!chatStarted ? <>{chips(cur)}<div className="flex items-center gap-3 text-[11px] uppercase tracking-wide text-ink-500"><span className="h-px flex-1 bg-ink-800" />{word("typeOwn")}<span className="h-px flex-1 bg-ink-800" /></div>{bar}</> : <>{(cur.type === "choice" || cur.type === "many") && chips(cur)}{cardBar}</>}
             </div>
           </div>
         )}
-        {needMail && <div className="sticky bottom-0 -mx-3 border-t border-ink-800 bg-ink-950/95 px-3 pb-4 pt-4 backdrop-blur sm:-mx-6 sm:px-6"><div className="mx-auto max-w-5xl">{mailChat.composer}</div></div>}
+        {needMail && <div className="sticky bottom-0 -mx-3 border-t border-ink-800 bg-ink-950/95 px-3 pb-4 pt-4 backdrop-blur sm:-mx-6 sm:px-6"><div className="diy-col mx-auto max-w-5xl">{mailChat.composer}</div></div>}
         <div ref={dockRef} aria-hidden />
       </main>
       <StudioPageLinksHere where="design" />
@@ -588,7 +623,7 @@ export function PreviewPopup({ design, ver, a, onClose, onEdit, onEditLink, onCo
                   </div>
                 );
               })}
-              {onConnect && <button type="button" onClick={(e) => onConnect(e.currentTarget.getBoundingClientRect())} className="btn btn-pri absolute bottom-6 left-1/2 z-[5] -translate-x-1/2 whitespace-nowrap rounded-full px-10 py-4 text-base font-extrabold shadow-2xl shadow-black/50 ring-4 ring-brand-400/25">Connect with Picaffectz</button>}
+              {onConnect && <button type="button" onClick={(e) => onConnect(e.currentTarget.getBoundingClientRect())} className="btn btn-pri absolute bottom-6 left-1/2 z-[5] -translate-x-1/2 whitespace-nowrap rounded-full px-10 py-4 text-base font-extrabold shadow-2xl shadow-black/50 ring-4 ring-brand-400/25">{word("connectBtn")}</button>}
             </div>
             <div className="flex flex-none items-center justify-center gap-3 border-t border-ink-700 bg-ink-900 px-3 py-2 text-[13px]">
               <button type="button" className="btn btn-sm" aria-label="Previous theme" disabled={at === 0} onClick={() => go(at - 1)}>‹</button>
@@ -597,7 +632,7 @@ export function PreviewPopup({ design, ver, a, onClose, onEdit, onEditLink, onCo
             </div>
           </>) : (
             <div className="relative flex min-h-0 flex-1 flex-col"><Preview key={design.kind} tpl={TEMPLATES[design.kind]} base={`templates/${design.kind}/`} content={design.content} version={ver} assets={{}} editable={false} hidePages onEditLink={onEditLink} hints={hints} />
-              {onConnect && <button type="button" onClick={(e) => onConnect(e.currentTarget.getBoundingClientRect())} className="btn btn-pri absolute bottom-6 left-1/2 z-[5] -translate-x-1/2 whitespace-nowrap rounded-full px-10 py-4 text-base font-extrabold shadow-2xl shadow-black/50 ring-4 ring-brand-400/25">Connect with Picaffectz</button>}
+              {onConnect && <button type="button" onClick={(e) => onConnect(e.currentTarget.getBoundingClientRect())} className="btn btn-pri absolute bottom-6 left-1/2 z-[5] -translate-x-1/2 whitespace-nowrap rounded-full px-10 py-4 text-base font-extrabold shadow-2xl shadow-black/50 ring-4 ring-brand-400/25">{word("connectBtn")}</button>}
             </div>
           )}
         </div>
@@ -822,7 +857,7 @@ function ChatBot({ children, typing, stack }: { children: React.ReactNode; typin
   const bot = readDesignSettings().chat?.bot, st = bot ? { background: bot, color: onColour(bot), borderColor: "transparent" } : undefined;
   return (
     <div className="chat-in flex items-end gap-2.5">
-      {stack ? <span className="w-8 flex-none" aria-hidden /> : <span className="grid h-8 w-8 flex-none place-items-center overflow-hidden rounded-full border border-ink-700 bg-ink-900" aria-hidden><BrandMark fallback={<Logo />} size={22} /></span>}
+      {stack ? <span className="w-8 flex-none" aria-hidden /> : <span className="grid h-8 w-8 flex-none place-items-center overflow-hidden rounded-full border border-ink-700 bg-ink-900" aria-hidden><DiyMark size={22} /></span>}
       <div style={st} className={`max-w-[80%] rounded-2xl rounded-bl-md border border-ink-800 bg-ink-900 px-5 py-3.5 text-ink-100 shadow-sm ${bot ? "[&_p]:text-[inherit]" : ""}`}>
         {typing && <span className="mr-2 inline-flex items-center gap-1 align-middle" aria-hidden><i className="chat-dot" /><i className="chat-dot" /><i className="chat-dot" /></span>}
         {children}

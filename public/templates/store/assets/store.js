@@ -352,7 +352,11 @@ function shipInto(el, body, o = {}) {
 }
 /** "Track an order" (checkout.html?track): the order number and the mobile number or email it was placed with. */
 function trackPage() {
-  const q = new URLSearchParams(location.search), no = q.get("order") || q.get("no") || "", last = store.get("orders", [])[0];
+  // The last order placed on this device fills the form in, but only for the person it belongs to: on a shop with customer accounts
+  // that is the signed-in customer (signed out, or someone else's order: the form starts empty).
+  const q = new URLSearchParams(location.search), no = q.get("order") || q.get("no") || "", lastAny = store.get("orders", [])[0], dg = (v) => String(v || "").replace(/\D/g, "");
+  const mineLast = (o) => { const m = ME(), c = (o && o.c) || {}; return !!m && (m.kind === "email" ? String(c.email || "").trim().toLowerCase() === String(m.key).toLowerCase() : dg(c.phone).length >= 8 && dg(c.phone).slice(-10) === dg(m.key).slice(-10)); };
+  const last = !(C.account && C.account.on) || mineLast(lastAny) ? lastAny : null;
   return `<section class="page-h"><div class="wrap"><h1 class="fit">Track your order</h1></div></section><div class="wrap" style="padding-bottom:80px;max-width:720px">
     <form class="form box" id="trackf" novalidate><div class="f"><label for="tr-no">Order number</label><input class="in" id="tr-no" autocomplete="off" autocapitalize="characters" placeholder="${esc(last ? last.id : "ORD-0101-1234")}" value="${esc(no || (last ? last.id : ""))}" required></div>
     <div class="f"><label for="tr-c">Mobile number or email you ordered with</label><input class="in" id="tr-c" autocomplete="tel" value="${esc(last && last.c ? last.c.phone || last.c.email || "" : "")}" required></div>

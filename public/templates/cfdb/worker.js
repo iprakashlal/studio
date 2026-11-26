@@ -49,7 +49,7 @@ var CFDB_UPGRADES = [
     "create index if not exists enquiries_ref on enquiries (site, ref)"
   ] }
 ];
-var CFDB_VERSION = 89;
+var CFDB_VERSION = 90;
 var CFDB_WORKER_NAME = "picaffectz-db";
 
 // src/lib/lookdigest.ts
@@ -1728,6 +1728,7 @@ function orderItems(c, cart) {
   return out;
 }
 var invOn = (c) => !!c?.inventory?.on;
+var cleanFavs = (v) => [...new Set((Array.isArray(v) ? v : []).map((x) => String(x || "").trim().slice(0, 140)).filter(Boolean))].slice(0, 200);
 var stockKey = (id, opt) => {
   const a = String(id || "").trim().slice(0, 130), b = oneLine(String(opt || "")).toLowerCase().slice(0, 60);
   return b ? a + "|" + b : a;
@@ -3316,7 +3317,7 @@ var db_worker_default = {
         if (!v.ok) return err(403, "Verify your mobile number first.");
         return json({ points: v.bal, worth: L.worth, min: L.min, maxPct: L.maxPct, earn: L.earn });
       }
-      if (/^\/acct\/(in|me|save)\/[a-z0-9][a-z0-9-]{0,59}$/.test(p) && req.method === "POST") {
+      if (/^\/acct\/(in|me|save|favs)\/[a-z0-9][a-z0-9-]{0,59}$/.test(p) && req.method === "POST") {
         const site = p.split("/")[3], b = await req.json(), sc = await siteContent(env, site).catch(() => null), cw = await codeWays(env, site, sc), A = acctOf(env, sc, cw);
         if (!A) return err(404, "Not found.");
         if (p.startsWith("/acct/in/")) {
@@ -3341,6 +3342,16 @@ var db_worker_default = {
         const key = String(b.key || "");
         if (!await custOk(env, site, key, b.pass)) return err(401, "Please sign in again.");
         const byMail = key.includes("@");
+        if (p.startsWith("/acct/favs/")) {
+          const favs = cleanFavs(b.favs);
+          let kept = {};
+          try {
+            kept = JSON.parse(String((await env.DB.prepare("select data from profiles where site = ? and ckey = ?").bind(site, key).first())?.data || "{}")) || {};
+          } catch {
+          }
+          await env.DB.prepare("insert into profiles (site, ckey, data) values (?, ?, ?) on conflict (site, ckey) do update set data = excluded.data").bind(site, key, JSON.stringify({ ...kept, favs })).run();
+          return json({ ok: true, favs });
+        }
         if (p.startsWith("/acct/save/")) {
           const name = oneLine(String(b.name || "")).replace(/\s+/g, " ").slice(0, 100), phone = byMail ? String(b.phone || "").replace(/[^\d+ ()-]/g, "").slice(0, 24) : "", email2 = byMail ? "" : emailKey(b.email);
           if (!byMail && String(b.email || "").trim() && !email2) return err(400, "Enter a valid email address.");
@@ -3354,7 +3365,7 @@ var db_worker_default = {
           const dob = "dob" in b ? /^(19|20)\d\d-\d\d-\d\d$/.test(String(b.dob)) && String(b.dob) <= now.slice(0, 10) ? String(b.dob) : "" : cleanDob(kept.dob), gender = "gender" in b ? cleanGender(b.gender) : cleanGender(kept.gender);
           await env.DB.batch([
             env.DB.prepare("insert into customers (site, ckey, name, phone, email, verified, orders, spent, points, first_at, last_at) values (?, ?, ?, ?, ?, 1, 0, 0, 0, ?, ?) on conflict (site, ckey) do update set name = excluded.name, phone = case when ? = 1 then excluded.phone else phone end, email = case when ? = 1 then email else excluded.email end, verified = 1").bind(site, key, name, byMail ? phone : "+" + key, byMail ? key : email2, now, now, byMail ? 1 : 0, byMail ? 1 : 0),
-            env.DB.prepare("insert into profiles (site, ckey, data) values (?, ?, ?) on conflict (site, ckey) do update set data = excluded.data").bind(site, key, JSON.stringify({ addresses: addrs, dob, gender }))
+            env.DB.prepare("insert into profiles (site, ckey, data) values (?, ?, ?) on conflict (site, ckey) do update set data = excluded.data").bind(site, key, JSON.stringify({ addresses: addrs, dob, gender, favs: cleanFavs(kept.favs) }))
           ]);
           return json({ ok: true, profile: { name, phone: byMail ? phone : "+" + key, email: byMail ? key : email2, addresses: addrs, dob, gender } });
         }
@@ -3393,7 +3404,7 @@ var db_worker_default = {
           }
         }
         const L = loyOf(sc);
-        return json({ ok: true, name: row?.name || "", phone: byMail ? row?.phone || "" : "+" + key, email: byMail ? key : row?.email || "", addresses, dob: cleanDob(pf.dob), gender: cleanGender(pf.gender), count: +row?.orders || 0, points: Math.max(0, +row?.points || 0), loyalty: L.on ? { worth: L.worth, min: L.min, maxPct: L.maxPct } : null, orders });
+        return json({ ok: true, name: row?.name || "", phone: byMail ? row?.phone || "" : "+" + key, email: byMail ? key : row?.email || "", addresses, favs: cleanFavs(pf.favs), dob: cleanDob(pf.dob), gender: cleanGender(pf.gender), count: +row?.orders || 0, points: Math.max(0, +row?.points || 0), loyalty: L.on ? { worth: L.worth, min: L.min, maxPct: L.maxPct } : null, orders });
       }
       if (/^\/eotp\/(send|check)\/[a-z0-9][a-z0-9-]{0,59}$/.test(p) && req.method === "POST") {
         const site = p.split("/")[3], b = await req.json(), sc = await siteContent(env, site).catch(() => null);

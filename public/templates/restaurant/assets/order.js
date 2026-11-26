@@ -2,7 +2,8 @@
    The menu with search and filters, a sheet to customise a dish, the cart with offers, charges and tax,
    checkout with address and time, and a confirmation the guest can track.
    rest.js draws the page around it and passes its helpers in (RestOrder.page(api) / RestOrder.bind(api)).
-   Nothing here needs a server: the cart, favourites, details and past orders stay on the guest's device.
+   The cart and the guest's details stay on the device. Past orders and favourites belong to a person: on a site with customer
+   accounts they are shown only to the signed-in customer (favourites are kept with the account); with no accounts, they are the device's.
    The order reaches the restaurant through the site's enquiry inbox when it has one, and on WhatsApp. */
 (function () {
   "use strict";
@@ -14,6 +15,7 @@
   };
   const $ = (s, c = document) => c.querySelector(s), $$ = (s, c = document) => [...c.querySelectorAll(s)];
   let cart = st.get("cart", []);
+  // Favourites: the device's on a site without customer accounts; otherwise the signed-in customer's own (see whose() below).
   const favs = new Set(st.get("favs", []));
   const ui = {
     mode: st.get("mode", ""), q: "", diet: "", fav: false, shut: {}, sheet: null, drawer: "", coupon: st.get("coupon", ""), couponMsg: "", tip: 0, err: "", busy: false, done: null, back: null,
@@ -34,6 +36,24 @@
   /* Customer accounts (assets/acct.js, content.account): the guest signs in before checkout, and "My account" shows
      their orders and points. A signed-in mobile number or email address counts as verified. */
   const ME = () => (window.SiteAcct && SiteAcct.on() ? SiteAcct.user() : null);
+  /* Whose orders and favourites this is. "off": the site has no customer accounts, so they are simply the device's. "on": accounts
+     are on, so only the signed-in customer's own are shown (nobody signed in: none). "wait": the site has accounts but it is not
+     known yet whether signing in works here: nothing is shown meanwhile, so one person's orders never flash up for another. */
+  let acctNo = false, wantFav = "";
+  /** Signing in needs the site's database (or, in the Studio's preview, its stand-in): a site without one has no accounts. */
+  const canSign = () => { if (A.PREVIEW) return true; const be = A.backend && A.backend(); return !!(be && be.cf); };
+  const whose = () => (window.SiteAcct && SiteAcct.on() ? "on" : C.account && C.account.on && !acctNo && canSign() ? "wait" : "off");
+  const digitsOf = (v) => String(v || "").replace(/\D/g, "");
+  /** An order placed on this device belongs to the signed-in customer when it was placed with their number or their email address. */
+  const mineOrder = (o) => { const m = ME(), c = (o && o.c) || {}; if (!m) return false; return m.kind === "email" ? String(c.email || "").trim().toLowerCase() === String(m.key).toLowerCase() : digitsOf(c.phone).length >= 8 && digitsOf(c.phone).slice(-10) === digitsOf(m.key).slice(-10); };
+  const myOrders = () => { const L = st.get("orders", []), w = whose(); return w === "off" ? L : w === "on" ? L.filter(mineOrder) : []; };
+  /** Fills `favs` for whoever is looking. A dish hearted just before signing in is added once they have signed in. */
+  function loadFavs() {
+    const w = whose(); favs.clear();
+    if (w === "off") st.get("favs", []).forEach((x) => favs.add(x));
+    else if (w === "on" && ME()) { SiteAcct.favs().forEach((x) => favs.add(x)); if (wantFav) { const had = favs.has(wantFav); favs.add(wantFav); wantFav = ""; if (!had) SiteAcct.setFavs([...favs]); } }
+    if (w !== "on" || !ME()) ui.fav = false;
+  }
   /** How the checkout's sections are drawn (Theme & layout → Account customization): cards, numbered steps, or plain. */
   const uiT = (k, d) => { const v = A.C().account && A.C().account.ui && String(A.C().account.ui[k] || "").trim(); return v || d; };
   const coLook = () => { const v = A.C().account && A.C().account.ui && A.C().account.ui.checkout; return ["cards", "steps", "plain"].includes(v) ? v : "cards"; };
@@ -226,7 +246,8 @@
   function page(api) {
     A = api; C = A.C(); load();
     if (A.PREVIEW && pvOf() === "invoice") return invPreview();
-    const o = O(), ms = modes(), m = mode(), diets = [...new Set(D.map((x) => x.d.diet).filter((d) => A.DIET[d]))], past = st.get("orders", []);
+    loadFavs();
+    const o = O(), ms = modes(), m = mode(), diets = [...new Set(D.map((x) => x.d.diet).filter((d) => A.DIET[d]))], past = myOrders();
     return `<section class="ord" id="order-page">${strip()}
       <div class="wrap">
         <header class="ord-head"><div><p class="crumbs"><a href="${A.PAGES.home}">${esc((C.site.pageLabels || {}).home || "Home")}</a> / ${esc(o.label || "Order now")}</p><h1 class="h1">${A.rich(o.title || "Order online")}</h1>${o.lede ? `<p class="hero-lede">${A.rich(o.lede)}</p>` : ""}</div>${A.statusChip()}</header>
@@ -238,7 +259,7 @@
             <button type="button" class="chip" data-act="cats" aria-haspopup="dialog">${SV.list} Category</button>
             ${diets.length > 1 ? ["veg", "vegan", "egg", "nonveg"].filter((d) => diets.includes(d)).map((d) => `<button type="button" class="chip" data-act="diet" data-id="${d}" aria-pressed="${ui.diet === d}"><span class="diet ${d}" aria-hidden="true"></span>${A.DIET[d]}</button>`).join("") : ""}
             <button type="button" class="chip" data-act="favs" aria-pressed="${ui.fav}">${SV.heart} Favourites</button>
-            ${past.length ? `<button type="button" class="chip" data-act="orders">Your orders (${past.length})</button>` : ""}
+            ${past.length ? `<button type="button" class="chip" data-act="orders">${whose() === "off" ? "Orders on this device" : "Your orders"} (${past.length})</button>` : ""}
             ${window.SiteAcct && SiteAcct.on() ? `<button type="button" class="chip" data-act="acct">${SiteAcct.user() ? "My account" : "Sign in"}</button>` : ""}
           </div>
         </div>
@@ -374,7 +395,7 @@
       <p class="od-live">Your order is sent to the kitchen only after this step. Nothing is charged by this page: you pay in your own UPI app.</p></div>`;
   }
   function ordersHTML() {
-    const L = st.get("orders", []);
+    const L = myOrders();
     return L.length ? `<ul class="od-past">${L.map((o) => `<li><button type="button" data-act="view" data-id="${esc(o.id)}"><b>${esc(o.id)}</b><span>${new Date(o.at).toLocaleDateString(undefined, { day: "numeric", month: "short" })} · ${o.items.reduce((n, l) => n + l.qty, 0)} items · ${fmt(o.bill.total)}</span><small>${esc(o.items.map((l) => l.name).join(", ").slice(0, 90))}</small></button><button type="button" class="btn sec" data-act="again" data-id="${esc(o.id)}">Order again</button></li>`).join("")}</ul>` : `<div class="od-empty"><p>No orders from this device yet.</p></div>`;
   }
   function catsHTML() {
@@ -420,7 +441,13 @@
     const none = $(".ord-none", root); if (none) none.hidden = any;
     const t = $(".ord-tiles", root); if (t) t.hidden = !!(q || ui.diet || ui.fav);
   }
-  function toggleFav(id) { favs.has(id) ? favs.delete(id) : favs.add(id); st.set("favs", [...favs]); }
+  /** A favourite is saved for a person: with customer accounts on, the guest is asked to sign in first (the dish is added after),
+   *  and it is kept with their account. Returns false when nothing changed yet. */
+  function toggleFav(id) {
+    const w = whose(); if (w === "wait") return false;
+    if (w === "on") { if (!ME()) { wantFav = id; SiteAcct.open(); return false; } favs.has(id) ? favs.delete(id) : favs.add(id); SiteAcct.setFavs([...favs]); return true; }
+    favs.has(id) ? favs.delete(id) : favs.add(id); st.set("favs", [...favs]); return true;
+  }
   function addLine(x, s) {
     if (x.need && !x.V[s.v]) return;
     const v = x.V.length ? x.V[s.v] || x.V[0] : null, addons = [];
@@ -636,10 +663,11 @@
     else if (a === "rvstar") { if (ui.rvf) ui.rvf.rating = +id; over(true); }
     else if (a === "rvsend") rvSend();
     else if (a === "inc" || a === "dec") { change(id, t.dataset.key, a === "inc" ? 1 : -1); menu(); over(true); }
-    else if (a === "fav") { toggleFav(id); if (ui.sheet) over(true); menu(); }
+    else if (a === "fav") { if (toggleFav(id)) { if (ui.sheet) over(true); menu(); } }
     else if (a === "more") { const p = t.previousElementSibling, on = !p.classList.contains("all"); p.classList.toggle("all", on); t.textContent = on ? "Show less" : "Show more"; t.setAttribute("aria-expanded", String(on)); }
     else if (a === "fold") { ui.shut[id] = !ui.shut[id]; const s = t.closest(".ord-sec"); s.classList.toggle("shut", !!ui.shut[id]); t.setAttribute("aria-expanded", String(!ui.shut[id])); }
     else if (a === "diet") { ui.diet = ui.diet === id ? "" : id; $$('[data-act="diet"]', root).forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.id === ui.diet))); filter(); }
+    else if (a === "favs" && whose() !== "off" && !ME()) { if (whose() === "on") SiteAcct.open(); }
     else if (a === "favs") { ui.fav = !ui.fav; t.setAttribute("aria-pressed", String(ui.fav)); filter(); }
     else if (a === "cats" || a === "orders" || a === "cart") { sync(); ui.err = ""; ui.sheet = null; ui.drawer = a; over(); }
     else if (a === "jump") { ui.sheet = null; ui.drawer = ""; over(); ui.q = ""; const q = $("#ord-q", root); if (q) q.value = ""; ui.shut[id] = false; menu(); const s = document.getElementById(id); if (s) { s.classList.remove("shut"); s.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" }); } }
@@ -717,7 +745,7 @@
     }).catch(() => {});
     if (!canAsked && !A.PREVIEW && be && be.cf) { canAsked = true; acctWait = !!(C.account && C.account.on); const fin = () => { if (acctWait) { acctWait = false; if (ui.drawer === "checkout") { sync(); over(true); } } }; fetch(be.cf + "/site/" + encodeURIComponent(be.site) + "/can", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((j) => { if (!j) fin(); if (j) { can = { otp: !!j.otp, pts: !!j.pts, em: !!j.em, via: Array.isArray(j.via) && j.via.length ? j.via.filter((v) => v === "wa" || v === "sms") : ["wa"], rz: String(j.rz || ""), pg: Array.isArray(j.pg) ? j.pg : [] }; if (ui.drawer === "checkout") { sync(); over(true); }
       // customer accounts: sign-in before checkout, and "My account" in the toolbar
-      if (!j.acct) fin(); else loadAcct().then(() => { const redo = () => { sync(); applyMe(true); if (!ME()) ui.pts = null; const host = root.parentNode, y = scrollY; host.innerHTML = page(A); bind(A); scrollTo(0, y); loadPts(); };
+      if (!j.acct) { fin(); if (C.account && C.account.on) { acctNo = true; sync(); const host = root.parentNode, y = scrollY; host.innerHTML = page(A); bind(A); scrollTo(0, y); } } else loadAcct().then(() => { const redo = () => { sync(); applyMe(true); if (!ME()) ui.pts = null; const host = root.parentNode, y = scrollY; host.innerHTML = page(A); bind(A); scrollTo(0, y); loadPts(); };
         SiteAcct.init({ api: be.cf, site: be.site, kind: "restaurant", addresses: !!(C.account || {}).addresses, ask: { dob: !!(C.account || {}).dob, gender: !!(C.account || {}).gender }, ui: (C.account && C.account.ui) || {}, acct: j.acct, money: (n) => fmt(n), img: (path) => A.imgUrl({ path }), biz: (() => { const L = C.legal || {}, K = C.contact || {}; return { name: L.name || (C.brand && C.brand.name) || "", address: L.address || K.address || "", phone: L.phone || K.phone || "", email: L.email || K.email || "", gstin: L.gstin || "", inv: C.invoice || null, logo: A.imgUrl(C.brand && C.brand.logo) }; })(), gstBill: (n) => gstOn() && openGst(n), onChange: redo }); acctWait = false; redo(); }).catch(fin); } }).catch(fin); }
   }
   window.RestOrder = { page, bind };

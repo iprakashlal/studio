@@ -2,7 +2,7 @@
    number or their email address (new or returning: it is the same step), stays signed in on this device, and opens
    "My account": a drawer with the order in progress and its tracking, the order history with a bill for every order,
    and their profile (name, the other contact, saved addresses). The site's own database sends the codes and keeps it all.
-   window.SiteAcct = { init, on, user, profile, gate, open, out, skipped } */
+   window.SiteAcct = { init, on, user, profile, favs, setFavs, gate, open, out, skipped } */
 (function () {
   "use strict";
   const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
@@ -305,7 +305,7 @@ ${B.inv && B.inv.terms ? `<h2>Terms</h2><p class="note" style="margin-top:4px">$
 
   /* The profile is kept on the device too, so a checkout can fill itself in before the account has loaded. */
   let prof = null;
-  function keepProfile() { prof = data && !data.error ? { name: data.name || "", phone: data.phone || "", email: data.email || "", addresses: data.addresses || [], dob: data.dob || "", gender: data.gender || "" } : prof; try { if (prof && !cfg.demo) localStorage.setItem(key() + ":p", JSON.stringify(prof)); } catch (e) { /* private window */ } }
+  function keepProfile() { prof = data && !data.error ? { name: data.name || "", phone: data.phone || "", email: data.email || "", addresses: data.addresses || [], dob: data.dob || "", gender: data.gender || "", favs: Array.isArray(data.favs) ? data.favs : (prof && prof.favs) || [] } : prof; try { if (prof && !cfg.demo) localStorage.setItem(key() + ":p", JSON.stringify(prof)); } catch (e) { /* private window */ } }
   async function load(quiet) {
     if (!me) return;
     try { const r = await post("acct/me", { key: me.key, pass: me.pass }), j = await r.json().catch(() => null);
@@ -337,12 +337,23 @@ ${B.inv && B.inv.terms ? `<h2>Terms</h2><p class="note" style="margin-top:4px">$
       if (me && !(+String(me.pass).split(".")[0] > Date.now() && me.key)) me = null;
       if (me && can && !kinds().includes(me.kind)) me = null;
       if (me) try { prof = JSON.parse(localStorage.getItem(key() + ":p") || "null"); } catch (e) { prof = null; }
+      // The saved items are the account's, so they are fetched again on every visit (another device may have changed them).
+      if (me && can && !o.demo) { const who = me; post("acct/me", { key: who.key, pass: who.pass }).then((r) => (r.ok ? r.json() : null)).then((j) => { if (!j || me !== who || !Array.isArray(j.favs)) return; const was = JSON.stringify((prof && prof.favs) || []); prof = { ...(prof || { name: j.name || "", phone: j.phone || "", email: j.email || "", addresses: j.addresses || [], dob: j.dob || "", gender: j.gender || "" }), favs: j.favs }; try { localStorage.setItem(key() + ":p", JSON.stringify(prof)); } catch (e) { /* private window */ } if (JSON.stringify(j.favs) !== was) changed(); }).catch(() => {}); }
       if (asked() && can && !modal) setTimeout(open, 0); },
     /** Signing in is offered here. */
     on: () => !!(cfg && can),
     user: () => me,
     /** The signed-in customer's own details (name, contacts, addresses), as last saved or loaded; null before that. */
     profile: () => (me ? prof : null),
+    /** The signed-in customer's saved items (favourite dishes, a wishlist): ids, as last loaded or saved. Empty when signed out. */
+    favs: () => (me && prof && Array.isArray(prof.favs) ? prof.favs.slice() : []),
+    /** Saves them with the account (and on this device meanwhile). Does nothing when signed out. */
+    setFavs(list) {
+      if (!me) return; const favs = [...new Set((list || []).map(String))].slice(0, 200);
+      prof = { ...(prof || { name: "", phone: "", email: "", addresses: [], dob: "", gender: "" }), favs }; if (data && !data.error) data.favs = favs;
+      try { if (!cfg.demo) localStorage.setItem(key() + ":p", JSON.stringify(prof)); } catch (e) { /* private window */ }
+      if (!cfg.demo) post("acct/favs", { key: me.key, pass: me.pass, favs }).catch(() => {});
+    },
     /** The note that no code could be emailed to this address: checkout goes ahead without an account. */
     skipped: () => skip,
     /** Draws the sign-in step into an element (the checkout, before its form). */

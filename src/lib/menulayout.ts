@@ -17,7 +17,7 @@ const AMT = "\\d{1,3}(?:,\\d{2,3})*(?:\\.\\d{1,2})?|\\d{1,6}(?:\\.\\d{1,2})?";
 const ONE = `(?:${CUR}\\s?)?(?:${AMT})(?:\\s?\\/-)?`;
 const WITH_CUR = new RegExp(`^(.*?)[\\s.·…_:\\-–—]*((?:${CUR})\\s?(?:${AMT})(?:\\s?\\/-)?(?:\\s*\\/\\s*${ONE}){0,5}|(?:${AMT})\\s?\\/-)\\s*$`);
 const BARE = new RegExp(`^(.*?)[\\s.·…_:\\-–—]*\\b(\\d{2,5}(?:\\.\\d{1,2})?)\\s*$`);
-const PAIR = new RegExp(`([^\\/]{1,40}?)\\s*[–—\\-:]\\s*(?:${CUR})\\s?(${AMT})`, "g");
+const PAIR = new RegExp(`([^\\/]{1,40}?)\\s*[–—\\-:]?\\s*(?:${CUR})\\s?(${AMT})`, "g");
 const letters = (t: string) => (t.match(/\p{L}/gu) || []).length;
 const num = (p: string) => (p.replace(/,/g, "").match(/\d+(?:\.\d{1,2})?/g) || [""]).map((x) => x.replace(/^0+(?=\d)/, "")).join(" / ");
 /** "Oil – Rs. 109 / Butter – Rs. 129 / Cheese – Rs. 139": each choice with its price, when the whole line is made of them. */
@@ -44,7 +44,8 @@ function linesOf(items: LItem[]): Line[] {
     row.forEach((r, k) => { if (k) { const d = r.x - (row[k - 1].x + row[k - 1].w); if (d > h * 0.15 || !/\s$/.test(t)) t += d > h * 0.15 ? " " : ""; if (k === row.length - 1 && d > h * 1.2) gap = true; } t += r.s; });
     const x = row[0].x, right = Math.max(...row.map((r) => r.x + r.w)), y = Math.min(...row.map((r) => r.y));
     const lead = gap ? row.slice(0, -1).map((r) => r.s).join(" ").replace(/\s+/g, " ").trim() : "";
-    out.push({ t: t.replace(/\s+/g, " ").replace(/^[•·▪■◦*\-–]\s+/, "").trim(), x, y, w: right - x, h, right, gap, h0: row[0].h, h1: row[row.length - 1].h, lead }); row = [];
+    // a bullet (or what a scan makes of one), and "ipc" for "1pc", are tidied
+    out.push({ t: t.replace(/\s+/g, " ").replace(/^[•·▪■◦*\-–¢«»©®°~]\s+/, "").replace(/([\[(])\s*[iIl|](\s?pcs?\b)/g, "$11$2").trim(), x, y, w: right - x, h, right, gap, h0: row[0].h, h1: row[row.length - 1].h, lead }); row = [];
   };
   for (const it of its) { const last = row[row.length - 1]; if (last && Math.abs(it.y + it.h - (last.y + last.h)) > Math.max(it.h, last.h) * 0.45) flush(); row.push(it); }
   flush();
@@ -94,12 +95,19 @@ export function menuFromLayout(pages: LPage[]): MenuLayout {
     // the usual text. Smaller lines beside it ("11.30 AM onwards") are its note.
     const firstPic = pics.length ? Math.min(...pics.map((p) => p.y)) : Infinity, firstPrice = Math.min(...all.filter(isPriced).map((l) => l.y));
     const hs = all.map((l) => l.h).sort((a, b) => a - b), usual = hs[Math.floor(hs.length / 2)];
-    const heads = all.filter((l) => l.y + l.h * 0.5 < Math.min(firstPic, firstPrice) && !isPriced(l));
+    const heads = all.filter((l) => l.y + l.h * 0.5 < Math.min(firstPic, firstPrice) && !isPriced(l) && letters(l.t) >= 3);
     const big = heads.length ? Math.max(...heads.map((l) => l.h)) : 0, hasTitle = big >= usual * 1.3;
     const title = hasTitle ? heads.filter((l) => l.h >= big * 0.92) : [];
     const titleEnd = title.length ? Math.max(...title.map((l) => l.y + l.h)) : -1;
     const sub = hasTitle ? heads.filter((l) => !title.includes(l) && l.y < titleEnd + big * 0.9 && l.y >= titleEnd - big * 0.3 && Math.abs(l.x + l.w / 2 - (title[0].x + title[0].w / 2)) < pg.w * 0.08) : [];
-    if (hasTitle) { category = title.map((l) => l.t).join(" ").slice(0, 60); for (const l of sub) note(`${category}: ${l.t.replace(/^[(\[]|[)\]]$/g, "")}`); }
+    // The title's own words: on a scan, scraps read from the ornaments beside it stand on the same line, a long way off.
+    const titleText = (l: Line) => {
+      const its = pg.items.filter((i) => i.s.trim() && i.y + i.h / 2 >= l.y && i.y + i.h / 2 <= l.y + l.h && i.x >= l.x - 2 && i.x + i.w <= l.right + 2).sort((a, b) => a.x - b.x), runs: LItem[][] = [];
+      for (const i of its) { const r = runs[runs.length - 1], pv = r?.[r.length - 1]; if (pv && i.x - (pv.x + pv.w) <= l.h * 1.5) r.push(i); else runs.push([i]); }
+      const best = runs.sort((a, b) => letters(b.map((i) => i.s).join("")) - letters(a.map((i) => i.s).join("")))[0];
+      return best ? best.map((i) => i.s).join(" ").replace(/\s+/g, " ").trim() : l.t;
+    };
+    if (hasTitle) { category = title.map(titleText).join(" ").slice(0, 60); for (const l of sub) note(`${category}: ${l.t.replace(/^[(\[]|[)\]]$/g, "")}`); }
     read++;
     const gone = new Set([...title, ...sub]);
     const inGone = (i: LItem) => [...gone].some((l) => i.y + i.h / 2 >= l.y && i.y + i.h / 2 <= l.y + l.h && i.x >= l.x - 2 && i.x + i.w <= l.right + 2);

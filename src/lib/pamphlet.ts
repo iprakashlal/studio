@@ -7,6 +7,7 @@ import JSZip from "jszip";
 import { parseCsv } from "./warranty";
 import { findProducts } from "./saliency";
 import type { LItem, LPage } from "./menulayout";
+import { photoBlocks } from "./photoblocks";
 
 const load = new Function("u", "return import(u)") as (u: string) => Promise<any>;
 export type PamphletPage = { n: number; text: string; /** A PDF page's pieces of text with their boxes (pixels of the page drawn 1600 wide), for reading it by its layout. */ lay?: { w: number; h: number; items: LItem[] }; image?: string; /** The photo as it was chosen (full size), for the on-device reader. */ full?: Blob };
@@ -206,6 +207,28 @@ export function guessPics(products: { page: number }[], pics: PamphletPic[]): nu
 
 /** A PDF's pages as the layout reader wants them (lib/menulayout): text boxes and picture boxes, the pictures numbered as in `doc.pics`. */
 export function pamphletLayout(doc: Pamphlet): LPage[] {
-  if (doc.kind !== "pdf") return [];
+  if (doc.kind === "sheet") return [];
   return doc.pages.filter((p) => p.lay).map((p) => ({ n: p.n, w: p.lay!.w, h: p.lay!.h, items: p.lay!.items, pics: doc.pics.map((x, i) => ({ x: x.x, y: x.y, w: x.w || 0, h: x.h || 0, i, page: x.page })).filter((x) => x.page === p.n && x.w > 0) }));
+}
+
+/** Makes the pages that are pictures (a scanned PDF, photos of a printed menu) readable by their layout too: the words are read on
+ *  this device with their boxes, and the photos on the page are found and cut out (added to `doc.pics`). Returns how sure the reading
+ *  was (0 to 100), or -1 when no page needed it. Pages that already have real text are left alone. */
+export async function scanLayout(doc: Pamphlet, step?: (s: string) => void): Promise<number> {
+  if (doc.kind === "sheet") return -1;
+  const todo = doc.pages.filter((p) => (p.full || p.image) && !(p.lay && p.lay.items.length >= 25)); if (!todo.length) return -1;
+  const { readPictureWords } = await import("./ocr"); let sure = 0;
+  for (const [k, pg] of todo.entries()) {
+    step?.(`Reading page ${k + 1} of ${todo.length} on this device`);
+    const c = await toCanvas(pg.full || (await (await fetch(pg.image!)).blob()));
+    const r = await readPictureWords(c, (t) => step?.(todo.length > 1 ? `Page ${k + 1} of ${todo.length}: ${t}` : t)); sure += r.sure;
+    const g = c.getContext("2d", { willReadFrequently: true })!, blocks = photoBlocks(g.getImageData(0, 0, c.width, c.height).data, c.width, c.height);
+    // "words" read inside a photo (a packet's label, a pattern taken for letters) are not the menu's text
+    pg.lay = { w: c.width, h: c.height, items: r.words.filter((wd) => !blocks.some((b) => wd.x + wd.w / 2 > b.x && wd.x + wd.w / 2 < b.x + b.w && wd.y + wd.h / 2 > b.y - b.h * 0.02 && wd.y + wd.h / 2 < b.y + b.h * 1.02)) };
+    for (const b of blocks) {
+      const cut = document.createElement("canvas"); cut.width = b.w; cut.height = b.h; cut.getContext("2d")!.drawImage(c, b.x, b.y, b.w, b.h, 0, 0, b.w, b.h);
+      doc.pics.push({ page: pg.n, blob: await canvasJpeg(cut, 0.9), x: b.x, y: b.y, w: b.w, h: b.h });
+    }
+  }
+  return Math.round(sure / todo.length);
 }

@@ -3,7 +3,7 @@
 // straight and sharp.
 const base = () => new URL("runtime/tess/", location.href).href;
 
-type Worker = { recognize: (img: string | Blob | HTMLCanvasElement) => Promise<{ data: { text: string; confidence: number } }>; terminate: () => Promise<unknown> };
+type Worker = { recognize: (img: string | Blob | HTMLCanvasElement, opts?: any, out?: any) => Promise<{ data: { text: string; confidence: number; blocks?: any[] } }>; terminate: () => Promise<unknown> };
 let worker: Promise<Worker> | null = null;
 
 /** Starts the reader once (about 7 MB from the Studio's own files the first time, then cached by the browser). */
@@ -75,3 +75,29 @@ export async function readPicture(img: string | Blob, step?: (s: string) => void
 }
 /** Frees the reader's memory (it starts again when next needed). */
 export async function stopReader() { const w = worker; worker = null; try { await (await w)?.terminate(); } catch { /* already gone */ } }
+
+/** A word read from a picture, with its box in the picture's own pixels. `y` and `h` are its LINE's top and height, so the words of
+ *  one line share them (the layout reader groups by that, and takes the height as the size of the letters). */
+export type ReadWord = { s: string; x: number; y: number; w: number; h: number };
+/** The words of a picture with where they are, for reading a scanned page by its layout (lib/menulayout). The picture is enlarged
+ *  first when it is small, since small print reads far better that way. */
+export async function readPictureWords(page: HTMLCanvasElement, step?: (s: string) => void): Promise<{ words: ReadWord[]; sure: number }> {
+  const w = await start(step);
+  const k = Math.max(1, Math.min(2.5, 2400 / page.width)); let src = page;
+  if (k > 1.05) { src = document.createElement("canvas"); src.width = Math.round(page.width * k); src.height = Math.round(page.height * k); const g = src.getContext("2d")!; g.imageSmoothingQuality = "high"; g.drawImage(page, 0, 0, src.width, src.height); }
+  const r = await w.recognize(src, {}, { text: true, blocks: true });
+  const sx = page.width / src.width, sy = page.height / src.height, words: ReadWord[] = [];
+  for (const b of r?.data?.blocks || []) for (const pa of b?.paragraphs || []) for (const ln of pa?.lines || []) {
+    const lb = ln?.bbox; if (!lb) continue;
+    // a "line" taller than a tenth of the page is an ornament or a picture read as letters
+    if ((lb.y1 - lb.y0) * sy > page.height * 0.1) continue;
+    for (const wd of ln.words || []) {
+      const t = String(wd?.text || "").trim(), bb = wd?.bbox, cf = wd?.confidence ?? 100; if (!t || !bb || cf < 40) continue;
+      // what borders, ornaments and photos are misread as: short scraps the reader itself is unsure of
+      if (cf < 70 && (t.replace(/[^\p{L}\p{N}]/gu, "").length <= 3 || !/[aeiouAEIOU\d]/.test(t))) continue;
+      if (!/[\p{L}\p{N}₹]/u.test(t) && !/^[\/–—\-:()\[\]&+.,]+$/.test(t)) continue;   // stray marks from borders and photos
+      words.push({ s: t, x: bb.x0 * sx, y: lb.y0 * sy, w: (bb.x1 - bb.x0) * sx, h: (lb.y1 - lb.y0) * sy });
+    }
+  }
+  return { words, sure: Math.round(r?.data?.confidence || 0) };
+}

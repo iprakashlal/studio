@@ -7,7 +7,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { Session } from "../lib/auth";
 import type { ProjectMeta } from "../lib/studio";
 import { cfProducts, type PamphletProduct } from "../lib/cfdb";
-import { guessPics, pamphletInput, pamphletLayout, readPamphlet, type Pamphlet } from "../lib/pamphlet";
+import { guessPics, pamphletInput, pamphletLayout, readPamphlet, scanLayout, type Pamphlet } from "../lib/pamphlet";
 import { menuFromLayout } from "../lib/menulayout";
 import { cutOut, shot, SHOT_STYLES, type ShotStyle } from "../lib/productShots";
 import { clone } from "../lib/util";
@@ -39,7 +39,7 @@ export function PamphletDialog({ session, project, draft, upload, onApply, onClo
   const [busy, setBusy] = useState(""), [err, setErr] = useState("");
   const [found, setFound] = useState<PamphletProduct[] | null>(null), [guessed, setGuessed] = useState(false);
   // A designed PDF menu read from where things are on its pages (lib/menulayout): what applies to the whole menu, or null when it was read another way.
-  const [laid, setLaid] = useState<{ notes: string[]; photos: number } | null>(null);
+  const [laid, setLaid] = useState<{ notes: string[]; photos: number; /** read from pictures of the pages: how sure the reading was (0 to 100) */ scan?: number } | null>(null);
   // Uploading a menu again: dishes already on the menu take the file's price and choices ("update"), or only get what they lack ("fill").
   const [again, setAgain] = useState<"update" | "fill">("fill");
   const [pick, setPick] = useState<Set<number>>(new Set());
@@ -87,16 +87,23 @@ export function PamphletDialog({ session, project, draft, upload, onApply, onClo
       setLaid(null);
       // A PDF menu with real text is read from its layout first: each photo with the name, description and price (or priced choices)
       // that stand with it. It needs no AI. When that finds too little (a scan, a plain list), the chosen reader takes over below.
-      if (menu && doc.current.kind === "pdf") {
-        setBusy("Reading the menu from its layout");
-        let lay: ReturnType<typeof menuFromLayout> | null = null; try { lay = menuFromLayout(pamphletLayout(doc.current)); } catch { /* read the usual way */ }
-        if (lay && lay.products.length >= 3) {
+      if (menu && doc.current.kind !== "sheet") {
+        const use = (lay: ReturnType<typeof menuFromLayout>, scan?: number) => {
           social.current = []; setBySystem(null); setGuessed(false);
           setFound(lay.products); setPick(new Set(lay.products.map((_, i) => i))); setPicOf(lay.products.map((p) => p.pic));
-          setAgain("update");
-          const withPic = lay.products.filter((p) => p.pic >= 0).length; setPhotos(withPic ? "asis" : "none"); setLaid({ notes: lay.notes, photos: withPic });
-          setBusy(""); return;
-        }
+          const withPic = lay.products.filter((p) => p.pic >= 0).length; setPhotos(withPic ? "asis" : "none"); setLaid({ notes: lay.notes, photos: withPic, scan });
+          // a designed PDF is read exactly, so it may update what is on the menu; a scan only fills in
+          setAgain(scan == null ? "update" : "fill"); setBusy("");
+        };
+        setBusy("Reading the menu from its layout");
+        let lay: ReturnType<typeof menuFromLayout> | null = null; try { lay = menuFromLayout(pamphletLayout(doc.current)); } catch { /* read the usual way */ }
+        if (lay && lay.products.length >= 3) { use(lay); return; }
+        // Pages that are pictures (a scan, photos of the printed menu): the words are read on this device with their places, the
+        // photos on each page are found, and the same layout rules are applied. The result is less exact than from a designed PDF.
+        try {
+          const sure = await scanLayout(doc.current, setBusy);
+          if (sure >= 0) { setBusy("Finding the dishes"); lay = menuFromLayout(pamphletLayout(doc.current)); if (lay.products.length >= 3) { use(lay, sure); return; } }
+        } catch { /* the chosen reader takes over below */ }
       }
       const pics = doc.current.pages.filter((p) => p.image).length;
       setBusy(pics ? `Reading ${pics} page picture${pics > 1 ? "s" : ""} and finding the products` : "Finding the products");
@@ -239,7 +246,8 @@ export function PamphletDialog({ session, project, draft, upload, onApply, onClo
           <p className="text-ink-300">Found {found.length} {found.length === 1 ? W.one : W.many}. Untick any you don't want. {menu ? "Dishes already on your menu" : "Products already in your catalogue"} with the same name only get what they're missing.</p>
           {bySystem && <p role="status" className="rounded-lg border border-ink-600 px-3 py-2 text-[12.5px] text-ink-300">Read on this device by the Picaffectz system{bySystem.pictures ? `, including ${bySystem.pictures} page picture${bySystem.pictures > 1 ? "s" : ""}${bySystem.sure < 70 ? " (the print was hard to read: check names and prices closely)" : ""}` : ""}. It copies what is printed and doesn't fill in what isn't there.</p>}
           {laid && <div role="status" className="flex flex-col gap-1.5 rounded-lg border border-ink-600 px-3 py-2 text-[12.5px] text-ink-300">
-            <span>Read from the menu's own layout, on this device, with no AI: each photo with the name, description and price printed with it{laid.photos ? `. ${laid.photos} of ${found.length} have a photo; use ‹ › to change one` : ""}.</span>
+            <span>{laid.scan == null ? "Read from the menu's own layout" : "Read from pictures of the pages"}, on this device, with no AI: each photo with the name, description and price printed with it{laid.photos ? `. ${laid.photos} of ${found.length} have a photo; use ‹ › to change one` : ""}.</span>
+            {laid.scan != null && <span className="text-amber-200">A scan is read less exactly than the original PDF{laid.scan < 75 ? " (this print was hard to read)" : ""}: check every name and price before adding, and untick what is wrong. If you have the menu's original PDF, use that instead.</span>}
             {!!laid.photos && <label className="flex items-center gap-2 text-ink-100"><input type="checkbox" checked={photos === "asis"} onChange={(e) => setPhotos(e.target.checked ? "asis" : "none")} /> Add each dish's photo from the menu</label>}
             {!!laid.notes.length && <span>Also printed on the menu (not added, set these yourself): {laid.notes.join(" · ")}</span>}
           </div>}

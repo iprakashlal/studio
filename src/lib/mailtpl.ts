@@ -43,7 +43,7 @@ export const MAIL_KINDS: Record<string, MailKind> = {
     std: "Hi {name},\n\nThank you for your message. We have received it and will get back to you soon.\n\n{site}", sample: { name: "Asha Verma", email: "asha@example.com", site: "Your site", page: "Contact", details: DETAILS_SAMPLE } },
 };
 /** The longest template kept or sent. */
-export const MAIL_TPL_MAX = 12000;
+export const MAIL_TPL_MAX = 60000;
 
 const esc = (x: string) => String(x).replace(/[&<>"]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[ch]!));
 const URL = "((?:https?:\\/\\/|mailto:)[^\\s)<>\"]+)";
@@ -95,4 +95,20 @@ export function mailMarkup(src: string, vars: Record<string, string>, blocks: Re
 export function tplOf(emails: any, kind: string): string {
   let o = emails; for (const k of kind.split(".")) o = o && typeof o === "object" ? o[k] : undefined;
   return o && typeof o === "object" && typeof o.tpl === "string" && o.tpl.trim() ? o.tpl.slice(0, MAIL_TPL_MAX) : "";
+}
+
+/** A template written as HTML (an email built elsewhere, pasted in) and not in the light markup: it starts with a tag. */
+export const mailIsHtml = (src: string) => /^\s*<(!doctype\b|!--|[a-z][a-z0-9]*[\s>\/])/i.test(String(src || ""));
+/** HTML template → the email's HTML. The words in curly brackets are filled in anywhere ({code} as plain text, so the
+ *  template styles it; blocks like {items} as the site draws them). Scripts and on-click code are taken out. */
+export function mailHtml(src: string, vars: Record<string, string>, blocks: Record<string, string> = {}): string {
+  return String(src || "").slice(0, MAIL_TPL_MAX)
+    .replace(/<script\b[\s\S]*?(<\/script\s*>|$)/gi, "").replace(/\son[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, "").replace(/(href|src|action)\s*=\s*(["']?)\s*javascript:[^"'\s>]*/gi, "$1=$2#")
+    .replace(/\{(\w+)\}/g, (m, k) => (k !== "code" && k in blocks ? blocks[k] : k in vars ? esc(vars[k]).replace(/\n/g, "<br>") : m));
+}
+/** The whole email for a template of either kind. A complete HTML page is sent as it is; anything else sits in the site's standard frame (`wrap`). */
+export function mailEmail(src: string, vars: Record<string, string>, blocks: Record<string, string>, wrap: (inner: string) => string): string {
+  if (!mailIsHtml(src)) return wrap(mailMarkup(src, vars, blocks));
+  const h = mailHtml(src, vars, blocks);
+  return /<(html|body)\b/i.test(h) ? h : wrap(h);
 }

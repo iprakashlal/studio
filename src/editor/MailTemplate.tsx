@@ -3,7 +3,7 @@
 // preview drawn by the same code the email is sent with, and a test email to the person signed in.
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { MAIL_KINDS, MAIL_TPL_MAX, mailMarkup, sampleBlocks } from "../lib/mailtpl";
+import { MAIL_KINDS, MAIL_TPL_MAX, mailHtml, mailIsHtml, mailMarkup, sampleBlocks } from "../lib/mailtpl";
 import { cfCall } from "../lib/cfdb";
 import { SiteDbSignIn, useSiteDbSigned } from "../pages/Connections";
 
@@ -18,7 +18,10 @@ export function MailTemplateEditor({ kind, value, subject, siteName, cf, onSave,
   const signed = useSiteDbSigned(cf);
   const dirty = text !== (value || K.std);
   const vars = useMemo(() => ({ ...K.sample, site: siteName || K.sample.site }), [K, siteName]);
-  const html = useMemo(() => mailMarkup(text, vars, sampleBlocks(kind)), [text, vars, kind]);
+  // A template that starts with a tag is HTML (an email built elsewhere and pasted in): it is drawn as HTML, and the tools write tags.
+  const isHtml = useMemo(() => mailIsHtml(text), [text]);
+  const html = useMemo(() => (isHtml ? mailHtml(text, vars, sampleBlocks(kind)) : mailMarkup(text, vars, sampleBlocks(kind))), [text, vars, kind, isHtml]);
+  const fullDoc = isHtml && /<(html|body)\b/i.test(html);
   const lines = useMemo(() => text.split("\n").length, [text]);
   const missingCode = kind === "signin" && !/\{code\}/.test(text);
   const tooLong = text.length > MAIL_TPL_MAX;
@@ -34,12 +37,21 @@ export function MailTemplateEditor({ kind, value, subject, siteName, cf, onSave,
   };
   const sel = (): [number, number, string] => { const el = ta.current!; return [el.selectionStart, el.selectionEnd, el.value]; };
   const around = (a: string, b: string, words: string) => { const [s, e, v] = sel(); const mid = v.slice(s, e) || words; edit(s, e, a + mid + b, s + a.length, s + a.length + mid.length); };
+  /** The tools: [markup before, after] and [HTML before, after], with the words used when nothing is selected. */
+  const FMT: Record<string, [string, string, string, string, string]> = {
+    b: ["**", "**", "<b>", "</b>", "bold words"], i: ["*", "*", "<i>", "</i>", "italic words"], u: ["__", "__", "<u>", "</u>", "underlined words"], s: ["~~", "~~", "<s>", "</s>", "struck words"],
+    mark: ["==", "==", '<mark style="background:#fff3a3">', "</mark>", "highlighted words"], code: ["`", "`", '<code style="font-family:monospace">', "</code>", "code"],
+    big: ["{big:", "}", '<span style="font-size:19px;font-weight:600">', "</span>", "big words"], small: ["{small:", "}", '<span style="font-size:13px">', "</span>", "small words"], muted: ["{muted:", "}", '<span style="font-size:13px;color:#667">', "</span>", "small grey words"],
+    h1: ["# ", "", '<h1 style="margin:0 0 12px;font-size:22px">', "</h1>", "Heading"], h2: ["## ", "", '<h2 style="margin:0 0 12px;font-size:18px">', "</h2>", "Smaller heading"], li: ["- ", "", "<li>", "</li>", "List item"], quote: ["> ", "", '<blockquote style="margin:0 0 12px;padding-left:12px;border-left:3px solid #c9ced8">', "</blockquote>", "Quote"],
+  };
+  const fmt = (k: string) => { const f = FMT[k]; if (isHtml) around(f[2], f[3], f[4]); else if (!f[1] && /^(h1|h2|li|quote)$/.test(k)) prefix(f[0]); else around(f[0], f[1], f[4]); };
   /** The whole lines the selection touches. */
   const span = (): [number, number, string[]] => { const [s, e, v] = sel(); const a = v.lastIndexOf("\n", s - 1) + 1; let b = v.indexOf("\n", Math.max(s, e - (e > s && v[e - 1] === "\n" ? 1 : 0))); if (b < 0) b = v.length; return [a, b, v.slice(a, b).split("\n")]; };
   const eachLine = (f: (l: string) => string) => { const [a, b, ls] = span(); const out = ls.map(f).join("\n"); edit(a, b, out, a, a + out.length); };
   const prefix = (p: string) => eachLine((l) => (l.startsWith(p) ? l.slice(p.length) : p + l.replace(/^(#{1,3} |- |> )/, "")));
   const insert = (t: string, own = false) => { const [s, e, v] = sel(); const put = own ? (s > 0 && v[s - 1] !== "\n" ? "\n\n" : "") + t + (v[e] === "\n" ? "" : "\n") : t; edit(s, e, put); };
-  const link = (button = false) => { const [s, e, v] = sel(); const w = v.slice(s, e) || (button ? "Button words" : "link words"); const out = button ? `[[${w}]](https://)` : `[${w}](https://)`; edit(s, e, out, s + out.length - 1); };
+  const link = (button = false) => { const [s, e, v] = sel(); const w = v.slice(s, e) || (button ? "Button words" : "link words"); if (isHtml) { const a = button ? '<a href="https://" style="display:inline-block;background:#111;color:#fff;text-decoration:none;padding:10px 16px;border-radius:8px;font-weight:600">' : '<a href="https://" style="color:#2456d6">'; edit(s, e, a + w + "</a>", s + 17); return; }
+    const out = button ? `[[${w}]](https://)` : `[${w}](https://)`; edit(s, e, out, s + out.length - 1); };
   const dup = () => { const [a, b, ls] = span(); edit(b, b, "\n" + ls.join("\n"), b + 1 + (sel()[0] - a)); };
   const move = (d: -1 | 1) => {
     const [a, b, ls] = span(), v = sel()[2];
@@ -57,20 +69,20 @@ export function MailTemplateEditor({ kind, value, subject, siteName, cf, onSave,
     const c = e.ctrlKey || e.metaKey, k = e.key.toLowerCase(), stop = () => { e.preventDefault(); e.stopPropagation(); };
     if (e.key === "Tab") { stop(); const [s, en] = sel(); if (s === en && !e.shiftKey) edit(s, en, "  "); else eachLine((l) => (e.shiftKey ? l.replace(/^ {1,2}/, "") : "  " + l)); return; }
     if (e.altKey && !c && (e.key === "ArrowUp" || e.key === "ArrowDown")) { stop(); move(e.key === "ArrowUp" ? -1 : 1); return; }
-    if (e.key === "Enter" && !c && !e.shiftKey) { // a list or quote carries on to the next line; an empty one ends it
+    if (e.key === "Enter" && !c && !e.shiftKey && !isHtml) { // a list or quote carries on to the next line; an empty one ends it
       const [s, en, v] = sel(); if (s !== en) return; const a = v.lastIndexOf("\n", s - 1) + 1, line = v.slice(a, s), m = /^(- |> )(.*)$/.exec(line);
       if (m) { stop(); if (!m[2].trim()) edit(a, s, ""); else edit(s, s, "\n" + m[1]); }
       return;
     }
     if (!c) return;
-    if (e.altKey && (k === "1" || k === "2")) { stop(); prefix(k === "1" ? "# " : "## "); return; }
-    if (e.shiftKey && (k === "8" || k === "*")) { stop(); prefix("- "); return; }
-    if (e.shiftKey && (k === "9" || k === "(")) { stop(); prefix("> "); return; }
-    if (e.shiftKey && k === "x") { stop(); around("~~", "~~", "struck words"); return; }
+    if (e.altKey && (k === "1" || k === "2")) { stop(); fmt(k === "1" ? "h1" : "h2"); return; }
+    if (e.shiftKey && (k === "8" || k === "*")) { stop(); fmt("li"); return; }
+    if (e.shiftKey && (k === "9" || k === "(")) { stop(); fmt("quote"); return; }
+    if (e.shiftKey && k === "x") { stop(); fmt("s"); return; }
     if (e.key === "Enter") { stop(); send(); return; }
     if (e.shiftKey || e.altKey) return;
-    if (k === "b") { stop(); around("**", "**", "bold words"); } else if (k === "i") { stop(); around("*", "*", "italic words"); } else if (k === "u") { stop(); around("__", "__", "underlined words"); }
-    else if (k === "e") { stop(); around("`", "`", "code"); } else if (k === "k") { stop(); link(); } else if (k === "d") { stop(); dup(); } else if (k === "/") { stop(); around("{muted:", "}", "small grey words"); } else if (k === "s") { stop(); save(); }
+    if (k === "b") { stop(); fmt("b"); } else if (k === "i") { stop(); fmt("i"); } else if (k === "u") { stop(); fmt("u"); }
+    else if (k === "e") { stop(); fmt("code"); } else if (k === "k") { stop(); link(); } else if (k === "d") { stop(); dup(); } else if (k === "/") { stop(); fmt("muted"); } else if (k === "s") { stop(); save(); }
   };
   useEffect(() => { const k = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopPropagation(); if (!dirty || confirm("Close without saving the template?")) onClose(); } }; addEventListener("keydown", k, true); return () => removeEventListener("keydown", k, true); }, [dirty, onClose]);
   useLayoutEffect(() => { ta.current?.focus(); }, []);
@@ -91,25 +103,25 @@ export function MailTemplateEditor({ kind, value, subject, siteName, cf, onSave,
         <div className="grid min-h-0 flex-1 lg:grid-cols-2">
           <div className="flex min-h-0 flex-col border-ink-700 lg:border-r">
             <div role="toolbar" aria-label="Text tools" className="flex flex-wrap items-center gap-1 border-b border-ink-800 bg-ink-850 px-3 py-2">
-              <B label="B" title="Bold (Ctrl B)" cls="font-extrabold" on={() => around("**", "**", "bold words")} />
-              <B label="I" title="Italic (Ctrl I)" cls="italic" on={() => around("*", "*", "italic words")} />
-              <B label="U" title="Underline (Ctrl U)" cls="underline" on={() => around("__", "__", "underlined words")} />
-              <B label="S" title="Strike through (Ctrl Shift X)" cls="line-through" on={() => around("~~", "~~", "struck words")} />
-              <B label="Mark" title="Highlight" on={() => around("==", "==", "highlighted words")} />
-              <B label="</>" title="Code (Ctrl E)" cls="font-mono" on={() => around("`", "`", "code")} />
+              <B label="B" title="Bold (Ctrl B)" cls="font-extrabold" on={() => fmt("b")} />
+              <B label="I" title="Italic (Ctrl I)" cls="italic" on={() => fmt("i")} />
+              <B label="U" title="Underline (Ctrl U)" cls="underline" on={() => fmt("u")} />
+              <B label="S" title="Strike through (Ctrl Shift X)" cls="line-through" on={() => fmt("s")} />
+              <B label="Mark" title="Highlight" on={() => fmt("mark")} />
+              <B label="</>" title="Code (Ctrl E)" cls="font-mono" on={() => fmt("code")} />
               <Sep />
-              <B label="H1" title="Heading (Ctrl Alt 1)" cls="font-bold" on={() => prefix("# ")} />
-              <B label="H2" title="Smaller heading (Ctrl Alt 2)" cls="font-bold" on={() => prefix("## ")} />
-              <B label="• List" title="List (Ctrl Shift 8)" on={() => prefix("- ")} />
-              <B label="❝ Quote" title="Quote (Ctrl Shift 9)" on={() => prefix("> ")} />
-              <B label="― Line" title="A line across" on={() => insert("---", true)} />
+              <B label="H1" title="Heading (Ctrl Alt 1)" cls="font-bold" on={() => fmt("h1")} />
+              <B label="H2" title="Smaller heading (Ctrl Alt 2)" cls="font-bold" on={() => fmt("h2")} />
+              <B label="• List" title="List (Ctrl Shift 8)" on={() => fmt("li")} />
+              <B label="❝ Quote" title="Quote (Ctrl Shift 9)" on={() => fmt("quote")} />
+              <B label="― Line" title="A line across" on={() => insert(isHtml ? '<hr style="border:0;border-top:1px solid #dde0e6;margin:16px 0">' : "---", true)} />
               <Sep />
               <B label="Link" title="Link (Ctrl K)" on={() => link()} />
               <B label="Button" title="A button that opens a link" on={() => link(true)} />
               <Sep />
-              <B label="Big" title="Bigger words" on={() => around("{big:", "}", "big words")} />
-              <B label="Small" title="Smaller words" on={() => around("{small:", "}", "small words")} />
-              <B label="Grey" title="Small grey words (Ctrl /)" on={() => around("{muted:", "}", "small grey words")} />
+              <B label="Big" title="Bigger words" on={() => fmt("big")} />
+              <B label="Small" title="Smaller words" on={() => fmt("small")} />
+              <B label="Grey" title="Small grey words (Ctrl /)" on={() => fmt("muted")} />
               <Sep />
               <B label="↶" title="Undo (Ctrl Z)" on={() => { ta.current?.focus(); document.execCommand("undo"); }} />
               <B label="↷" title="Redo (Ctrl Y)" on={() => { ta.current?.focus(); document.execCommand("redo"); }} />
@@ -132,13 +144,16 @@ export function MailTemplateEditor({ kind, value, subject, siteName, cf, onSave,
           </div>
           <div className="flex min-h-0 flex-col max-lg:border-t max-lg:border-ink-700">
             <div className="flex flex-wrap items-center gap-2 border-b border-ink-800 bg-ink-850 px-3 py-2 text-[12.5px] text-ink-300">
-              <b className="text-ink-100">Preview</b><span>with made-up details</span>
+              <b className="text-ink-100">Preview</b><span>with made-up details</span><span className="rounded-full border border-ink-700 px-2 py-0.5 text-[11.5px] text-ink-100" title={isHtml ? "The template starts with a tag, so it is read as HTML: the tools write tags." : "Written in the light markup. Paste a full HTML email instead and it is drawn as HTML."}>{isHtml ? "HTML" : "Markup"}</span>
               <label className="ml-auto flex cursor-pointer items-center gap-1.5 text-[12px]"><input type="checkbox" checked={dark} onChange={(e) => setDark(e.target.checked)} />Dark inbox</label>
             </div>
             <div className={`min-h-[220px] flex-1 overflow-auto p-4 ${dark ? "bg-[#1b1c1f]" : "bg-[#eef0f4]"}`}>
-              <div className="mx-auto max-w-[600px] rounded-lg bg-white p-5 shadow" style={dark ? { filter: "invert(1) hue-rotate(180deg)" } : undefined}>
-                <p style={{ margin: "0 0 14px", paddingBottom: 10, borderBottom: "1px solid #e3e6ec", font: "600 14px system-ui,Segoe UI,Arial,sans-serif", color: "#111" }}><span style={{ color: "#778", fontWeight: 400 }}>Subject: </span>{(subject || K.subject).replace(/\{(\w+)\}/g, (m, k) => (vars as any)[k] ?? m)}</p>
-                <div style={{ font: "15px/1.55 system-ui,Segoe UI,Arial,sans-serif", color: "#111", maxWidth: 560 }} dangerouslySetInnerHTML={{ __html: html }} />
+              <div className={`mx-auto rounded-lg bg-white shadow ${fullDoc ? "max-w-[720px] overflow-hidden" : "max-w-[600px] p-5"}`} style={dark ? { filter: "invert(1) hue-rotate(180deg)" } : undefined}>
+                <p style={{ margin: fullDoc ? 0 : "0 0 14px", padding: fullDoc ? "12px 20px" : "0 0 10px", borderBottom: "1px solid #e3e6ec", font: "600 14px system-ui,Segoe UI,Arial,sans-serif", color: "#111" }}><span style={{ color: "#778", fontWeight: 400 }}>Subject: </span>{(subject || K.subject).replace(/\{(\w+)\}/g, (m, k) => (vars as any)[k] ?? m)}</p>
+                {isHtml
+                  // HTML is drawn in a locked frame: nothing in it can run or reach the Studio.
+                  ? <iframe title="Email preview" sandbox="" srcDoc={fullDoc ? html : `<body style="margin:0;padding:${"20px"};font:15px/1.55 system-ui,Segoe UI,Arial,sans-serif;color:#111"><div style="max-width:560px">${html}</div></body>`} className="block w-full border-0 bg-white" style={{ height: 620 }} />
+                  : <div style={{ font: "15px/1.55 system-ui,Segoe UI,Arial,sans-serif", color: "#111", maxWidth: 560 }} dangerouslySetInnerHTML={{ __html: html }} />}
               </div>
             </div>
           </div>
@@ -156,7 +171,7 @@ export function MailTemplateEditor({ kind, value, subject, siteName, cf, onSave,
             {value && <button type="button" className="btn btn-ghost text-red-300" onClick={() => { if (confirm("Remove this template? The email goes back to the wording boxes.")) { onSave(""); onClose(); } }}>Remove template</button>}
             <button type="button" className="btn btn-ghost ml-auto" onClick={close}>Cancel</button>
           </div>
-          <p className="text-[12px] text-ink-400">{!cf ? "Test emails need the site hosted on the Cloudflare database, which is what sends them. " : ""}While a template is saved it replaces this email's heading, message and closing-line boxes; the subject box still sets the subject. It reaches the live site the next time the site is published.</p>
+          <p className="text-[12px] text-ink-400">{!cf ? "Test emails need the site hosted on the Cloudflare database, which is what sends them. " : ""}While a template is saved it replaces this email's heading, message and closing-line boxes; the subject box still sets the subject. Write in the light markup, or paste a complete HTML email (scripts are taken out; put {"{code}"} and the other words in curly brackets where the real values go). It reaches the live site the next time the site is published.</p>
         </div>
       </div>
     </div>, document.body);

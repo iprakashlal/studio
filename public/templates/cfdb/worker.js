@@ -49,7 +49,7 @@ var CFDB_UPGRADES = [
     "create index if not exists enquiries_ref on enquiries (site, ref)"
   ] }
 ];
-var CFDB_VERSION = 103;
+var CFDB_VERSION = 104;
 var CFDB_WORKER_NAME = "picaffectz-db";
 
 // src/lib/diylook.ts
@@ -73,7 +73,7 @@ var DIY_WORDS = {
   stPreview: ["Steps strip: last stage", "Preview"]
 };
 var DIY_FONTS = ["Manrope", "Inter", "DM Sans", "Plus Jakarta Sans", "Figtree", "Outfit", "Sora", "Space Grotesk", "Work Sans", "Nunito Sans", "Poppins", "IBM Plex Sans", "Bricolage Grotesque", "Syne", "Unbounded", "Fraunces", "Playfair Display", "DM Serif Display", "Lora", "Source Serif 4"];
-var DIY_BUBBLES = [["", "Soft (standard)"], ["round", "Rounded pill"], ["square", "Square"], ["tail", "Speech bubble with a tail"], ["outline", "Outlined"], ["glass", "Frosted glass"], ["minimal", "Minimal (assistant as plain text)"], ["bar", "Card with an accent bar"]];
+var DIY_BUBBLES = [["", "Soft (standard)"], ["round", "Rounded pill"], ["square", "Square"], ["tail", "Speech bubble with a tail"], ["outline", "Outlined"], ["glass", "Frosted glass"], ["minimal", "Minimal (assistant as plain text)"], ["bar", "Card with an accent bar"], ["crayon", "Crayon drawing"], ["sketch", "Pen sketch"], ["tech", "Technical drawing"]];
 var HEX = /^#[0-9a-f]{6}$/i;
 var PIC = /^(data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+|https:\/\/[^\s<>"']{3,400})$/;
 var tx = (v, n) => typeof v === "string" ? v.replace(/[<>]/g, "").trim().slice(0, n) : "";

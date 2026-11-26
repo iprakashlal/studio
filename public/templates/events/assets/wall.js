@@ -32,7 +32,7 @@
     ".sw-p{margin:12px 0 0;font-size:clamp(15.5px,1.5vw,18px);line-height:1.6;opacity:.82;white-space:pre-line}",
     ".sw-fw{display:flex;justify-content:center;margin-top:clamp(22px,3vw,34px)}",
     ".sw-btn{display:inline-flex;align-items:center;gap:9px;padding:13px 22px;border-radius:var(--sw-btn,99px);font-weight:700;font-size:15px;line-height:1;text-decoration:none;background:var(--sw-acc);color:var(--sw-on);transition:transform .15s,filter .15s}",
-    ".sw-btn:hover{transform:translateY(-1px);filter:brightness(1.06)}.sw-fw svg{width:18px;height:18px;flex:none}.sw-n .sw-in{max-width:none;padding:0}.sw-n .sw-fw{justify-content:flex-start;padding:0!important}.sw-n[data-l=strip] .sw-g{padding-inline:0}",
+    ".sw-btn:hover{transform:translateY(-1px);filter:brightness(1.06)}.sw-fw svg{width:18px;height:18px;flex:none}.sw-n .sw-in{max-width:none;padding:0}.sw-n .sw-fw{justify-content:flex-start;padding:0!important}.sw-n[data-l=strip] .sw-g{padding-inline:0}.sw-n.sw-ctr .sw-fw{justify-content:center}",
     // tiles: the theme's corners and card look
     ".sw-g{display:grid;gap:var(--sw-gap);grid-template-columns:repeat(var(--sw-cols,4),minmax(0,1fr))}",
     ".sw-t{position:relative;display:block;overflow:hidden;border-radius:var(--sw-rad,12px);background:var(--surface,color-mix(in srgb,currentColor 6%,transparent));color:inherit;text-decoration:none;aspect-ratio:var(--sw-ar,1/1);border:1px solid var(--sw-line);margin:0}",
@@ -117,6 +117,8 @@
     var parent = slot ? null : all[0].parentNode, list = slot ? [] : all.filter(function (s) { return s.parentNode === parent && s.id !== "site-video"; });
     css();
     var layout = /^(grid|masonry|mosaic|strip|flush)$/.test(W.layout) ? W.layout : pick(n), cols = /^[3-6]$/.test(String(W.cols)) ? +W.cols : n <= 3 ? 3 : n <= 8 ? 4 : 5;
+    // a masonry wall of a few photos: columns that the photos can fill, so none is left empty
+    if (layout === "masonry") while (cols > 2 && n < cols * 3 && n % cols) cols--;
     var ar = W.shape === "portrait" ? "4/5" : W.shape === "landscape" ? "4/3" : "1/1", cap = /^(below|none)$/.test(W.captions) ? W.captions : "hover";
     var h = String(W.handle || "").trim().replace(/^@/, ""), label = String(W.button || "").trim() || (h ? "Follow @" + h : name ? "Follow us on " + name : "See more");
     var head = W.eyebrow || W.title || W.text ? '<div class="sw-hd">' + (W.eyebrow ? '<p class="sw-eb" data-edit="wall.eyebrow">' + esc(W.eyebrow) + "</p>" : "") + (W.title ? '<h2 class="sw-h" data-edit="wall.title">' + esc(W.title) + "</h2>" : "") + (W.text ? '<p class="sw-p" data-edit="wall.text">' + esc(W.text) + "</p>" : "") + "</div>" : "";

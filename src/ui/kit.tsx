@@ -42,8 +42,9 @@ export function Modal({ title, onClose, children, wide, footer }: { title: strin
     addEventListener("keydown", k);
     return () => removeEventListener("keydown", k);
   }, [onClose]);
-  return (
-    <div className="fixed inset-0 z-[200] grid place-items-center bg-black/55 px-4 py-6 backdrop-blur-sm" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+  // Drawn on the page itself, not inside the card that opened it: a card with a glass blur would otherwise trap the dialog inside its own box.
+  return createPortal(
+    <div className="fixed inset-0 z-[200] grid place-items-center bg-black/60 px-4 py-6 backdrop-blur-sm" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div role="dialog" aria-modal="true" aria-label={title} className={`card flex max-h-[calc(100vh-48px)] w-full flex-col overflow-hidden rounded-2xl shadow-2xl ${wide ? "max-w-2xl" : "max-w-md"}`}>
         <div className="flex items-center justify-between gap-3 border-b border-ink-700 px-5 py-3.5">
           <h2 className="text-[15px] font-extrabold">{title}</h2>
@@ -52,7 +53,8 @@ export function Modal({ title, onClose, children, wide, footer }: { title: strin
         <div className="scroll-thin flex flex-col gap-4 overflow-auto px-5 py-4">{children}</div>
         {footer && <div className="flex flex-wrap justify-end gap-2 border-t border-ink-700 px-5 py-3">{footer}</div>}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

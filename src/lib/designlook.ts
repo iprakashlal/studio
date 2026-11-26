@@ -85,7 +85,7 @@ export const LOOK_AXES: Record<Kind, [Axis, string, Group][]> = {
   ],
   events: [
     AX(PAGES_AXIS, "One page or separate pages"), AX(EVT_AXES.layout, "Your event's name and date"), AX(EVT_AXES.heroArt, "Your logo and picture"), AX(EVT_AXES.dateBadge, "Date and place"), AX(EVT_AXES.count, "Date and place"), AX(EVT_AXES.nav, "Pages and menu"), AX(NAV_MODE, "Pages and menu"), AX(EVT_AXES.width, "Page width"), AX(EVT_AXES.bands, "Page width"),
-    AX(EVT_AXES.sched, "The schedule"), AX(EVT_AXES.lineup, "Who is on stage"), AX(EVT_AXES.tix, "Tickets"), AX(EVT_AXES.reg, "Registration"),
+    AX(EVT_AXES.flow, "Order of the page"), AX(EVT_AXES.high, "Highlights"), AX(EVT_AXES.about, "About"), AX(EVT_AXES.stat, "Numbers"), AX(EVT_AXES.cta, "What you want visitors to do"), AX(EVT_AXES.sched, "The schedule"), AX(EVT_AXES.lineup, "Who is on stage"), AX(EVT_AXES.tix, "Tickets"), AX(EVT_AXES.reg, "Registration"),
     ST(EVT_AXES.heading, "Your name and headings"), ST(EVT_AXES.shead, "Section titles"), ST(EVT_AXES.cards, "Highlights"), ST(EVT_AXES.buttons, "What you want visitors to do"), ST(EVT_AXES.pattern, "Feel"), ST(EVT_AXES.motionStyle, "Feel"), ...FX(),
   ],
   portfolio: [

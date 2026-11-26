@@ -517,7 +517,7 @@ html[data-date-badge=chip] .ev-when,html[data-date-badge=chip] .ev-where{padding
 html[data-date-badge=stamp] .ev-leaf{border-radius:50%;width:76px;height:76px;display:grid;place-content:center;border:2px dashed var(--c1);background:transparent;box-shadow:none;transform:rotate(-8deg)}
 html[data-date-badge=stamp] .ev-leaf i{background:none;color:var(--c1);padding:0 0 3px}html[data-date-badge=stamp] .ev-leaf b{padding:0;color:var(--c1)}
 html[data-date-badge=ribbon] .ev-meta{background:var(--deep);color:var(--on-deep);padding:12px 18px 12px 12px;border-radius:var(--r);display:inline-flex}
-html[data-date-badge=ribbon] .ev-meta .ev-i{color:var(--c3)}html[data-date-badge=ribbon] .ev-leaf{box-shadow:none;border:0}
+html[data-date-badge=ribbon] .ev-meta .ev-i{color:color-mix(in srgb,var(--c3) 62%,var(--on-deep))}html[data-date-badge=ribbon] .ev-leaf{box-shadow:none;border:0}
 html[data-date-badge=block] .ev-leaf{width:auto;display:flex;align-items:stretch;border-radius:var(--rs)}
 html[data-date-badge=block] .ev-leaf i{padding:0 10px;display:grid;place-items:center;writing-mode:vertical-rl;transform:rotate(180deg)}html[data-date-badge=block] .ev-leaf b{padding:10px 16px;font-size:34px}
 .ev-ended,.ev-live{margin-top:26px;font-weight:600;color:var(--soft)}
@@ -537,7 +537,7 @@ html[data-count=digits] .cd-u{background:none;border:0;padding:0;min-width:0;tex
 html[data-count=digits] .cd-u b{font-size:clamp(40px,6vw,68px);color:var(--c1)}html[data-count=digits] .cd-g{gap:clamp(16px,3vw,34px)}
 html[data-count=rings] .cd-u{border-radius:50%;width:78px;height:78px;min-width:0;padding:0;display:grid;place-content:center;border:2px solid var(--c1);background:transparent}
 html[data-count=rings] .cd-u b{font-size:22px}html[data-count=rings] .cd-u i{margin-top:4px;font-size:9.5px}
-html[data-count=dark] .cd-u{background:var(--deep);border-color:transparent;color:var(--on-deep)}html[data-count=dark] .cd-u i{color:color-mix(in srgb,var(--on-deep) 65%,transparent)}html[data-count=dark] .cd-u b{color:var(--c3)}
+html[data-count=dark] .cd-u{background:var(--deep);border-color:transparent;color:var(--on-deep)}html[data-count=dark] .cd-u i{color:color-mix(in srgb,var(--on-deep) 65%,transparent)}html[data-count=dark] .cd-u b{color:color-mix(in srgb,var(--c3) 62%,var(--on-deep))}
 html[data-count=accent] .cd-u{background:var(--c1);border-color:transparent;color:var(--on-c1)}html[data-count=accent] .cd-u i{color:color-mix(in srgb,var(--on-c1) 75%,transparent)}
 html[data-count=strip] .cd{padding:14px 18px;border-radius:var(--r);background:color-mix(in srgb,var(--c1) 9%,var(--surface));border:1px solid color-mix(in srgb,var(--c1) 25%,var(--line))}
 html[data-count=strip] .cd-u{background:none;border:0;padding:0 6px;min-width:56px}
@@ -567,7 +567,7 @@ html[data-sched=pills] .sch-i{grid-template-columns:auto minmax(0,1fr);gap:18px;
 html[data-sched=pills] .sch-t{background:var(--c1);color:var(--on-c1);padding:12px 16px;border-radius:999px;min-width:92px;text-align:center}
 html[data-sched=dark] .sch{background:var(--deep);color:var(--on-deep);border-radius:var(--r);padding:8px clamp(18px,3vw,36px)}
 html[data-sched=dark] .sch-i{border-top:1px solid color-mix(in srgb,var(--on-deep) 16%,transparent)}html[data-sched=dark] .sch-i:first-child{border-top:0}
-html[data-sched=dark] .sch-t{color:var(--c3)}html[data-sched=dark] :is(.sch-m,.sch-d){color:color-mix(in srgb,var(--on-deep) 70%,transparent)}
+html[data-sched=dark] .sch-t{color:color-mix(in srgb,var(--c3) 62%,var(--on-deep))}html[data-sched=dark] :is(.sch-m,.sch-d){color:color-mix(in srgb,var(--on-deep) 70%,transparent)}
 html[data-sched=side] .sch-i{grid-template-columns:minmax(0,1fr) 104px;border-left:3px solid var(--c1);padding:14px 0 14px 20px;margin-bottom:12px;background:linear-gradient(90deg,color-mix(in srgb,var(--c1) 7%,transparent),transparent 60%)}
 html[data-sched=side] .sch-t{order:2;text-align:right;color:var(--soft)}
 /* Line-up */
@@ -581,7 +581,7 @@ html[data-lineup=tall] .people{grid-template-columns:repeat(auto-fill,minmax(250
 html[data-lineup=tall] .person{border-radius:var(--r);overflow:hidden;color:#fff;min-height:360px;display:flex;align-items:flex-end;background:var(--deep)}
 html[data-lineup=tall] .pp{position:absolute;inset:0;margin:0;aspect-ratio:auto;border-radius:0}
 html[data-lineup=tall] .pb{position:relative;padding:60px 20px 20px;width:100%;background:linear-gradient(transparent,rgba(0,0,0,.82))}
-html[data-lineup=tall] :is(.role,.bio){color:rgba(255,255,255,.78)}html[data-lineup=tall] .topic{color:var(--c3)}
+html[data-lineup=tall] :is(.role,.bio){color:rgba(255,255,255,.78)}html[data-lineup=tall] .topic{color:color-mix(in srgb,var(--c3) 62%,var(--on-deep))}
 html[data-lineup=framed] .person{padding:14px 14px 20px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);box-shadow:0 18px 36px -26px rgba(16,24,40,.4)}
 html[data-lineup=mono] .pp img{filter:grayscale(1) contrast(1.05)}html[data-lineup=mono] .person:hover .pp img{filter:none}
 html[data-lineup=mono] .pp{border-radius:0;border-bottom:4px solid var(--c1)}
@@ -600,7 +600,7 @@ html[data-tix=rows] .tk .price{grid-column:2;grid-row:1/3;padding:0}html[data-ti
 html[data-tix=centre] .tk{text-align:center;align-items:center}html[data-tix=centre] .tk .price{justify-content:center}html[data-tix=centre] .tk .price b{font-size:46px}
 html[data-tix=centre] .tk .ticks{text-align:left}html[data-tix=centre] .plan-flag{left:50%;transform:translateX(-50%)}
 html[data-tix=dark] .tk.featured{background:var(--deep);color:var(--on-deep);border-color:transparent}
-html[data-tix=dark] .tk.featured :is(.plan-blurb,.price span){color:color-mix(in srgb,var(--on-deep) 70%,transparent)}html[data-tix=dark] .tk.featured .price b{color:var(--c3)}
+html[data-tix=dark] .tk.featured :is(.plan-blurb,.price span){color:color-mix(in srgb,var(--on-deep) 70%,transparent)}html[data-tix=dark] .tk.featured .price b{color:color-mix(in srgb,var(--c3) 62%,var(--on-deep))}
 html[data-tix=band] .tk{padding-top:0;overflow:hidden}html[data-tix=band] .tk .h3{margin:0 calc(-1*clamp(22px,2.4vw,32px));padding:16px clamp(22px,2.4vw,32px);background:color-mix(in srgb,var(--c1) 10%,var(--surface));border-bottom:1px solid var(--line)}
 html[data-tix=band] .tk.featured .h3{background:var(--c1);color:var(--on-c1)}html[data-tix=band] .plan-flag{top:12px;left:auto;right:14px;background:var(--surface);color:var(--c1)}
 html[data-tix=glow] .tk.featured{box-shadow:0 24px 60px -30px var(--c1);transform:translateY(-6px)}
@@ -637,7 +637,7 @@ html[data-tix=glow] .tk.featured{box-shadow:0 24px 60px -30px var(--c1);transfor
 .reg-no{font-size:15px;color:var(--soft)}.reg-no b{font:700 20px/1 var(--fd);color:var(--text);letter-spacing:.04em;margin-left:6px}.reg-dl{font-weight:600}
 html[data-reg=stack] .reg-grid{grid-template-columns:1fr;max-width:820px}html[data-reg=stack] .reg-sum{position:static;order:-1;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));align-items:center}
 html[data-reg=panel] .reg-sum{background:var(--deep);color:var(--on-deep);border-color:transparent}html[data-reg=panel] .reg-sum :is(.reg-sw,.reg-none){color:color-mix(in srgb,var(--on-deep) 72%,transparent)}
-html[data-reg=panel] .reg-sum :is(.reg-ll,.reg-total,.reg-none){border-color:color-mix(in srgb,var(--on-deep) 18%,transparent)}html[data-reg=panel] .reg-total b{color:var(--c3)}html[data-reg=panel] .reg-sum .ev-i{color:var(--c3)}
+html[data-reg=panel] .reg-sum :is(.reg-ll,.reg-total,.reg-none){border-color:color-mix(in srgb,var(--on-deep) 18%,transparent)}html[data-reg=panel] .reg-total b{color:color-mix(in srgb,var(--c3) 62%,var(--on-deep))}html[data-reg=panel] .reg-sum .ev-i{color:color-mix(in srgb,var(--c3) 62%,var(--on-deep))}
 html[data-reg=stub] .reg-sum{border:2px dashed var(--line);border-radius:calc(var(--r) + 8px);background:color-mix(in srgb,var(--c1) 5%,var(--surface))}
 html[data-reg=stub] .reg-total{border-top-style:dashed;border-top-width:2px}
 html[data-reg=plain] .reg-form{background:none;border:0;padding:0}html[data-reg=plain] .reg-sum{border-width:0 0 0 3px;border-color:var(--c1);border-radius:0;background:none}
@@ -656,3 +656,145 @@ html[data-reg=accent] .reg-sum :is(.reg-ll,.reg-total,.reg-none){border-color:co
   .cd-u{min-width:58px}.cd-u b{font-size:22px}html[data-lineup=list] .people{grid-template-columns:1fr}
   .ev-meta{align-items:flex-start}
 }
+
+/* ---------- Fixes for style mixes that clashed ---------- */
+/* A round or six-sided picture in a layout that puts it across the page would fill the screen: it keeps a sensible size. */
+html:is([data-layout=pile],[data-layout=cinema],[data-layout=editorial],[data-layout=center],[data-layout=aurora]):is([data-hero-art=arch],[data-hero-art=disc],[data-hero-art=organic],[data-hero-art=hex]) .hero-media:not(.none){aspect-ratio:16/7}
+html:is([data-layout=pile],[data-layout=cinema],[data-layout=editorial],[data-layout=center],[data-layout=aurora])[data-hero-art=disc] .hero-media:not(.none){border-radius:999px}
+/* The glass backdrop keeps sections see-through, so a "dark sections" style must not turn their words white. */
+html[data-pattern=glass][data-bands=deep] .band:not(.has-sbg){color:inherit;--soft:inherit;--line:inherit;--surface:inherit;--text:inherit}
+html[data-pattern=glass][data-bands=deep] .band:not(.has-sbg) .eyebrow{color:var(--c1)}
+/* Small coloured words stay readable on any palette: the accent is pulled towards the text colour. */
+.sch-tag{color:color-mix(in srgb,var(--c2) 45%,var(--text));background:color-mix(in srgb,var(--c2) 16%,transparent)}
+.sch-t,.topic,.hp-t{color:color-mix(in srgb,var(--c1) 62%,var(--text))}
+.ev-mode{color:color-mix(in srgb,var(--c1) 60%,var(--text))}
+html[data-sched=dark] .sch-tag{color:var(--on-deep);background:color-mix(in srgb,var(--on-deep) 16%,transparent)}
+html[data-sched=pills] .sch-t{color:var(--on-c1)}html[data-sched=big] .sch-t{color:var(--text)}html[data-sched=side] .sch-t{color:var(--soft)}
+html[data-bands=deep] .band .sch-t,html[data-bands=deep] .band .topic{color:color-mix(in srgb,var(--c3) 62%,var(--on-deep))}
+html[data-pattern=glass][data-bands=deep] .band:not(.has-sbg) :is(.sch-t,.topic){color:color-mix(in srgb,var(--c1) 62%,var(--text))}
+
+/* ---------- More looks for the shared sections, so two themes rarely build a page the same way ---------- */
+/* Highlights */
+html[data-high=list] .svc-grid{grid-template-columns:1fr;gap:0}
+html[data-high=list] .svc{display:grid;grid-template-columns:56px minmax(0,.8fr) minmax(0,1.2fr);gap:8px 24px;align-items:start;background:none;border:0;border-top:1px solid var(--line);border-radius:0;padding:26px 0;box-shadow:none;backdrop-filter:none}
+html[data-high=list] .svc:hover{transform:none}html[data-high=list] .svc-ic{margin:0;grid-row:1/3}html[data-high=list] .svc .ticks{grid-column:3}
+html[data-high=numbered] .svc-grid{counter-reset:hl;gap:36px 28px}
+html[data-high=numbered] .svc{counter-increment:hl;background:none;border:0;border-top:2px solid var(--text);border-radius:0;padding:20px 0 0;box-shadow:none;backdrop-filter:none}
+html[data-high=numbered] .svc-ic{display:none}html[data-high=numbered] .svc::before{content:counter(hl,decimal-leading-zero);font:700 46px/1 var(--fd);letter-spacing:-.03em;color:color-mix(in srgb,var(--c1) 70%,var(--text))}
+html[data-high=bento] .svc-grid{grid-template-columns:repeat(6,minmax(0,1fr))}
+html[data-high=bento] .svc{grid-column:span 2;justify-content:flex-end;min-height:220px}
+html[data-high=bento] .svc:nth-child(4n+1),html[data-high=bento] .svc:nth-child(4n+4){grid-column:span 4}
+html[data-high=bento] .svc:nth-child(4n+1){background:var(--deep);color:var(--on-deep);border-color:transparent;--soft:color-mix(in srgb,var(--on-deep) 72%,transparent)}
+html[data-high=bento] .svc:nth-child(4n+1) .svc-ic{background:color-mix(in srgb,var(--on-deep) 12%,transparent);color:color-mix(in srgb,var(--c3) 62%,var(--on-deep))}
+html[data-high=bento] .svc:nth-child(4n+1) .ticks li{color:inherit}
+html[data-high=icons] .svc{background:none;border:0;box-shadow:none;backdrop-filter:none;text-align:center;align-items:center;padding:8px 10px}
+html[data-high=icons] .svc-ic{width:76px;height:76px;border-radius:50%}html[data-high=icons] .svc-ic .ic{width:32px;height:32px}html[data-high=icons] .svc .ticks{text-align:left}
+html[data-high=tiles] .svc{border-width:0;border-top:4px solid var(--c1);border-radius:0 0 var(--r) var(--r);background:color-mix(in srgb,var(--c1) 6%,var(--surface))}
+html[data-high=tiles] .svc:nth-child(even){border-top-color:var(--c2);background:color-mix(in srgb,var(--c2) 6%,var(--surface))}
+html[data-high=side] .services>.wrap{display:grid;grid-template-columns:minmax(0,.72fr) minmax(0,1.28fr);gap:clamp(28px,5vw,72px);align-items:start}
+html[data-high=side] .services .sh{position:sticky;top:110px;margin-bottom:0}html[data-high=side] .svc-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+/* Numbers */
+html[data-stat=big] .stat-row{border:0}html[data-stat=big] .stat{padding:8px 20px;align-items:center;text-align:center}html[data-stat=big] .stat+.stat{border:0}
+html[data-stat=big] .stat dd{font-size:clamp(50px,7vw,92px);color:color-mix(in srgb,var(--c1) 75%,var(--text))}
+html[data-stat=cards] .stat-row{border:0;gap:16px}html[data-stat=cards] .stat,html[data-stat=cards] .stat+.stat{background:var(--surface);border:1px solid var(--line);border-radius:var(--r)}
+html[data-stat=dark] .stat-row{background:var(--deep);border:0;border-radius:calc(var(--r) + 6px);overflow:hidden}html[data-stat=dark] .stat dd{color:color-mix(in srgb,var(--c3) 62%,var(--on-deep))}
+html[data-stat=dark] .stat dt{color:color-mix(in srgb,var(--on-deep) 72%,transparent)}html[data-stat=dark] .stat+.stat{border-color:color-mix(in srgb,var(--on-deep) 16%,transparent)}
+html[data-stat=accent] .stat-row{background:var(--c1);border:0;border-radius:calc(var(--r) + 6px);overflow:hidden}html[data-stat=accent] .stat dd{color:var(--on-c1)}
+html[data-stat=accent] .stat dt{color:color-mix(in srgb,var(--on-c1) 80%,transparent)}html[data-stat=accent] .stat+.stat{border-color:color-mix(in srgb,var(--on-c1) 22%,transparent)}
+html[data-stat=pills] .stat-row{border:0;display:flex;flex-wrap:wrap;gap:12px;justify-content:center}
+html[data-stat=pills] .stat,html[data-stat=pills] .stat+.stat{flex-direction:row-reverse;align-items:baseline;gap:10px;padding:14px 26px;border:1px solid var(--line);border-radius:999px;background:var(--surface)}
+html[data-stat=pills] .stat dd{font-size:28px}
+html[data-stat=top] .stat-row{border-bottom:0;border-top:0;gap:24px}html[data-stat=top] .stat,html[data-stat=top] .stat+.stat{border:0;border-top:3px solid var(--c1);padding:20px 0 0}
+/* About */
+html[data-about=flip] .about-text{order:2}
+html[data-about=card] .about-grid{background:var(--surface);border:1px solid var(--line);border-radius:calc(var(--r) + 14px);padding:clamp(24px,4vw,56px);box-shadow:0 30px 70px -54px rgba(16,24,40,.5)}
+html[data-about=rule] .about-grid{border-top:2px solid var(--text);padding-top:38px}
+html[data-about=stack] .about-grid{grid-template-columns:1fr;max-width:860px}html[data-about=stack] .about .values{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:24px}
+html[data-about=centre] .about-grid{grid-template-columns:1fr;max-width:820px;margin-inline:auto;text-align:center}html[data-about=centre] .about .sh{margin-inline:auto}
+html[data-about=centre] .about .values{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:24px;text-align:left}
+html[data-about=tint] .about{background:color-mix(in srgb,var(--c1) 7%,var(--bg))}html[data-about=tint] .about .value{border-color:color-mix(in srgb,var(--c1) 30%,var(--line))}
+/* FAQ */
+html[data-faq=stack] .faq-grid{grid-template-columns:1fr;max-width:860px;margin-inline:auto}
+html[data-faq=cards] .qa-list{border:0;display:grid;gap:12px}html[data-faq=cards] .qa-i{border:1px solid var(--line);border-radius:var(--r);background:var(--surface);padding:0 22px}
+html[data-faq=two] .faq-grid{grid-template-columns:1fr}html[data-faq=two] .qa-list{columns:2;column-gap:44px;border:0}html[data-faq=two] .qa-i{break-inside:avoid;border-top:1px solid var(--line);border-bottom:0}
+html[data-faq=numbered] .qa-list{counter-reset:fq}html[data-faq=numbered] .qa-i summary{justify-content:flex-start;gap:16px}html[data-faq=numbered] .qa-i summary .pm{margin-left:auto}
+html[data-faq=numbered] .qa-i summary::before{counter-increment:fq;content:counter(fq,decimal-leading-zero);font:700 14px/1 var(--fb);color:color-mix(in srgb,var(--c1) 70%,var(--text));min-width:26px}
+html[data-faq=tint] .qa-list{border:0;display:grid;gap:10px}html[data-faq=tint] .qa-i{border:0;border-radius:var(--r);background:color-mix(in srgb,var(--c1) 7%,var(--surface));padding:0 22px}
+/* Call to action */
+html[data-cta=accent] .cta-box{background:var(--c1);color:var(--on-c1)}html[data-cta=accent] .cta-box p{color:color-mix(in srgb,var(--on-c1) 82%,transparent)}
+html[data-cta=accent] .cta-box::after{background:radial-gradient(circle,color-mix(in srgb,var(--on-c1) 26%,transparent),transparent 70%)}
+html[data-cta=accent] .cta-box .btn{background:var(--on-c1);color:var(--c1);border-color:transparent}html[data-cta=accent] .cta-box .h2 em{color:inherit}
+html[data-cta=centre] .cta-box{flex-direction:column;text-align:center;justify-content:center}html[data-cta=centre] .cta-box>div{max-width:720px}
+html[data-cta=outline] .cta-box{background:transparent;color:var(--text);border:2px solid var(--text)}html[data-cta=outline] .cta-box p{color:var(--soft)}
+html[data-cta=outline] .cta-box::after{display:none}html[data-cta=outline] .cta-box .h2 em{color:color-mix(in srgb,var(--c1) 70%,var(--text))}
+html[data-cta=gradient] .cta-box{background:linear-gradient(120deg,var(--deep),color-mix(in srgb,var(--c1) 58%,var(--deep)))}
+html[data-cta=wide] .cta{padding-block:0}html[data-cta=wide] .cta>.wrap{max-width:none;padding-inline:0}
+html[data-cta=wide] .cta-box{border-radius:0;justify-content:center;gap:40px;padding:clamp(48px,8vw,110px) var(--gut)}
+html[data-cta=soft] .cta-box{background:color-mix(in srgb,var(--c1) 10%,var(--surface));color:var(--text);border:1px solid color-mix(in srgb,var(--c1) 26%,var(--line))}
+html[data-cta=soft] .cta-box p{color:var(--soft)}html[data-cta=soft] .cta-box .h2 em{color:color-mix(in srgb,var(--c1) 70%,var(--text))}html[data-cta=soft] .cta-box::after{opacity:.5}
+/* What people say */
+html[data-quote=big] .quotes{grid-template-columns:1fr;max-width:880px;margin-inline:auto;gap:44px}
+html[data-quote=big] .quote{background:none;border:0;box-shadow:none;backdrop-filter:none;text-align:center;align-items:center;padding:0}html[data-quote=big] .quote blockquote{font-size:clamp(22px,2.6vw,32px)}html[data-quote=big] .quote figcaption{margin-top:6px}
+html[data-quote=rule] .quote{background:none;border:0;border-left:3px solid var(--c1);border-radius:0;padding:4px 0 4px 26px;box-shadow:none;backdrop-filter:none}
+html[data-quote=bubble] .quote{border-radius:calc(var(--r) + 14px) calc(var(--r) + 14px) calc(var(--r) + 14px) 4px}
+html[data-quote=dark] .quote{background:var(--deep);color:var(--on-deep);border-color:transparent}html[data-quote=dark] .quote small{color:color-mix(in srgb,var(--on-deep) 70%,transparent)}
+html[data-quote=dark] .qa{background:color-mix(in srgb,var(--on-deep) 14%,transparent);color:color-mix(in srgb,var(--c3) 62%,var(--on-deep))}
+html[data-quote=tint] .quote{background:color-mix(in srgb,var(--c2) 8%,var(--surface));border-color:transparent}
+@media (max-width:980px){
+  html[data-high=side] .services>.wrap{display:block}html[data-high=side] .services .sh{position:static;margin-bottom:clamp(28px,4vw,48px)}
+  html[data-high=bento] .svc-grid{grid-template-columns:1fr 1fr}html[data-high=bento] .svc,html[data-high=bento] .svc:nth-child(4n+1),html[data-high=bento] .svc:nth-child(4n+4){grid-column:auto;min-height:0}
+  html[data-faq=two] .qa-list{columns:1}
+}
+@media (max-width:640px){
+  html[data-high=list] .svc{grid-template-columns:48px minmax(0,1fr)}html[data-high=list] .svc p,html[data-high=list] .svc .ticks{grid-column:2}
+  html[data-high=bento] .svc-grid,html[data-high=side] .svc-grid{grid-template-columns:1fr}
+  html[data-stat=big] .stat-row{grid-template-columns:1fr 1fr;gap:24px 0}
+}
+
+/* ---------- Dark and accent panels carry their own text colours, so whatever sits inside them (buttons, small print) follows ---------- */
+html[data-high=bento] .svc:nth-child(4n+1),html[data-tix=dark] .tk.featured,html[data-quote=dark] .quote,html[data-reg=panel] .reg-sum,html[data-stat=dark] .stat-row,html[data-sched=dark] .sch,html[data-lineup=tall] .person,.cta-box{--text:var(--on-deep);--soft:color-mix(in srgb,var(--on-deep) 72%,transparent);--line:color-mix(in srgb,var(--on-deep) 18%,transparent)}
+html[data-reg=accent] .reg-sum,html[data-stat=accent] .stat-row,html[data-cta=accent] .cta-box{--text:var(--on-c1);--soft:color-mix(in srgb,var(--on-c1) 80%,transparent);--line:color-mix(in srgb,var(--on-c1) 26%,transparent)}
+html:is([data-cta=outline],[data-cta=soft]) .cta-box{--text:inherit;--soft:inherit;--line:inherit}
+html[data-sched=dark] .sch-t,html[data-tix=dark] .tk.featured .price b{color:color-mix(in srgb,var(--c3) 70%,var(--on-deep))}
+/* Underlined and outlined buttons take their colour from where they sit. */
+html[data-buttons=outline] .btn.pri{color:color-mix(in srgb,var(--c1) 55%,var(--text));border-color:color-mix(in srgb,var(--c1) 55%,var(--text))}
+html[data-buttons=underline] .cta-box .btn{color:var(--text)!important}
+html[data-buttons=underline][data-nav=dark] .nav .btn{color:var(--on-deep)!important}
+html[data-buttons=underline][data-nav=accent] .nav .btn{color:var(--on-c1)!important;border-bottom-color:var(--on-c1)!important}
+html[data-buttons=underline][data-cta=accent] .cta-box .btn{border-bottom-color:var(--on-c1)!important}
+html[data-buttons=underline] :is(.reg-sum,.tk.featured,.svc) .btn{color:var(--text)!important}
+/* The glass backdrop makes surfaces see-through; a dark or accent panel stays solid so its light text can be read. */
+html[data-pattern=glass][data-nav=dark] .nav,html[data-pattern=glass][data-high=bento] .svc:nth-child(4n+1),html[data-pattern=glass][data-tix=dark] .tk.featured,html[data-pattern=glass][data-quote=dark] .quote,html[data-pattern=glass][data-reg=panel] .reg-sum,html[data-pattern=glass][data-stat=dark] .stat-row,html[data-pattern=glass][data-stat=dark] .stat{background:var(--deep)!important}
+html[data-pattern=glass][data-nav=accent] .nav,html[data-pattern=glass][data-reg=accent] .reg-sum,html[data-pattern=glass][data-stat=accent] .stat-row,html[data-pattern=glass][data-stat=accent] .stat{background:var(--c1)!important}
+.cta-box .btn.inv{background:#fff;color:#10141C}
+html:is([data-cta=outline],[data-cta=soft]) .cta-box .btn{background:var(--c1);color:var(--on-c1)}
+html[data-buttons=underline]:is([data-cta=outline],[data-cta=soft]) .cta-box .btn{color:var(--text)!important}
+/* The phone menu of an accent-coloured header is the same colour, so its light links can be read. */
+html[data-nav=accent] .mnav{background:var(--c1)}html[data-nav=accent] .mnav a{color:var(--on-c1)}
+html[data-bands=deep] .band .eyebrow{color:color-mix(in srgb,var(--c3) 62%,var(--on-deep))}
+/* On a hero that is itself a colour or a picture, the date and countdown take the hero's own text colour (boxes keep theirs). */
+.cd-u,.ev-leaf{color:var(--text)}
+.cd-l{color:inherit;opacity:.72}
+html:is([data-count=inline],[data-count=digits],[data-count=rings],[data-count=strip]) .cd-u{color:inherit}html:is([data-count=inline],[data-count=digits],[data-count=rings],[data-count=strip]) .cd-u i{color:inherit;opacity:.7}
+html[data-count=digits] .cd-u b{color:inherit}html[data-count=digits] .cd-g{padding-bottom:10px;border-bottom:3px solid color-mix(in srgb,currentColor 30%,transparent)}
+html[data-count=rings] .cd-u{border-color:color-mix(in srgb,currentColor 60%,transparent)}
+html[data-count=dark] .cd-u{color:var(--on-deep)}html[data-count=accent] .cd-u{color:var(--on-c1)}html[data-count=accent] .cd-u{box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--on-c1) 30%,transparent)}
+.hero .ev-i{color:color-mix(in srgb,var(--c1) 45%,currentColor)}
+html[data-date-badge=stamp] .ev-leaf{border-color:currentColor;color:inherit}html[data-date-badge=stamp] .ev-leaf :is(i,b){color:inherit}
+html[data-date-badge=ribbon] .ev-meta{color:var(--on-deep)}
+/* Found by checking every theme: small coloured words that lost against their background. */
+.eyebrow{color:color-mix(in srgb,var(--c1) 70%,var(--text))}
+html[data-bands=deep] .band :is(.sch-t,.topic){color:color-mix(in srgb,var(--c3) 62%,var(--on-deep))}
+html[data-sched=pills] .sch .sch-t{color:var(--on-c1)}
+html[data-nav=dark] .mnav a.btn.pri{color:var(--on-c1)}html[data-nav=accent] .mnav a.btn.pri{background:var(--on-c1);color:var(--c1)}
+html[data-buttons=outline]:is([data-nav=dark],[data-nav=accent]) :is(.nav,.mnav) .btn.pri{background:transparent;color:inherit;border-color:currentColor}
+html[data-reg=panel] .reg-total b{color:color-mix(in srgb,var(--c3) 62%,var(--on-deep))}
+html[data-tix=band] .plan-flag{color:color-mix(in srgb,var(--c1) 60%,var(--text))}
+/* Found by looking at whole pages */
+.about-grid:not(:has(.about-img,.mv)){grid-template-columns:minmax(0,1fr)}.about-grid:not(:has(.about-img,.mv)) .prose{max-width:74ch}
+html[data-about=centre] .about-grid .prose{margin-inline:auto}
+html[data-cta=wide] .cta>.wrap{width:100%;max-width:none;padding-inline:0;margin-inline:0}
+html[data-bands=deep] .band :is(input,select,textarea){background:color-mix(in srgb,var(--on-deep) 8%,transparent);color:var(--on-deep);border-color:color-mix(in srgb,var(--on-deep) 24%,transparent)}
+html[data-bands=deep] .band :is(input,textarea)::placeholder{color:color-mix(in srgb,var(--on-deep) 50%,transparent)}
+html[data-bands=deep] .band select option{color:#10141C}
+html[data-pattern=glass][data-bands=deep] .band:not(.has-sbg) :is(input,select,textarea){background:var(--bg);color:var(--text);border-color:var(--line)}

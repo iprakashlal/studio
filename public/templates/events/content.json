@@ -47,6 +47,13 @@
     "count": "inline",
     "dateBadge": "stamp",
     "reg": "accent",
+    "flow": "programme",
+    "high": "list",
+    "stat": "top",
+    "about": "centre",
+    "faq": "two",
+    "cta": "centre",
+    "quote": "bubble",
     "regKind": "delegate"
   },
   "cms": {

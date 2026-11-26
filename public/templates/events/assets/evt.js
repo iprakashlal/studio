@@ -14,7 +14,7 @@ if (SC) SC.track();
    DEFAULT CONTENT (also exported as content.json)
    ============================================================ */
 const DEFAULT = {
-  theme: {"cursor": "none", "loader": "fade", "textfx": "words", "hoverfx": "shine", "scrollfx": "smooth", "overlay": "vignette", "herofx": "breathe", "loaderOn": "both", "introTitle": "", "introFont": "display", "introCase": "upper", "logoRadius": 22, "scrollEase": "light", "lineBreaks": "typed", "bg": "#F1F3F8", "surface": "#FFFFFF", "deep": "#121B30", "text": "#101728", "soft": "#555C6D", "line": "#D7DBE5", "c1": "#1F47A3", "c2": "#4C2C8C", "c3": "#E2D828", "fontDisplay": "Manrope", "fontBody": "Inter", "radius": 6, "preset": "evt-conference-04", "layout": "center", "heroArt": "coupon", "nav": "island", "cards": "glass", "buttons": "pill", "heading": "serif", "shead": "line", "pattern": "lines", "bands": "stripe", "motionStyle": "rise", "width": "xwide", "motif": "studio", "introBg": "#121B30", "introFg": "#FFFFFF", "sched": "cards", "lineup": "tilt", "tix": "band", "count": "inline", "dateBadge": "stamp", "reg": "accent", "regKind": "delegate"},
+  theme: {"cursor": "none", "loader": "fade", "textfx": "words", "hoverfx": "shine", "scrollfx": "smooth", "overlay": "vignette", "herofx": "breathe", "loaderOn": "both", "introTitle": "", "introFont": "display", "introCase": "upper", "logoRadius": 22, "scrollEase": "light", "lineBreaks": "typed", "bg": "#F1F3F8", "surface": "#FFFFFF", "deep": "#121B30", "text": "#101728", "soft": "#555C6D", "line": "#D7DBE5", "c1": "#1F47A3", "c2": "#4C2C8C", "c3": "#E2D828", "fontDisplay": "Manrope", "fontBody": "Inter", "radius": 6, "preset": "evt-conference-04", "layout": "center", "heroArt": "coupon", "nav": "island", "cards": "glass", "buttons": "pill", "heading": "serif", "shead": "line", "pattern": "lines", "bands": "stripe", "motionStyle": "rise", "width": "xwide", "motif": "studio", "introBg": "#121B30", "introFg": "#FFFFFF", "sched": "cards", "lineup": "tilt", "tix": "band", "count": "inline", "dateBadge": "stamp", "reg": "accent", "flow": "programme", "high": "list", "stat": "top", "about": "centre", "faq": "two", "cta": "centre", "quote": "bubble", "regKind": "delegate"},
   cms: { adminPage: "admin" },
   poweredBy: { show: true },
   settings: { currency: "INR" },
@@ -209,7 +209,8 @@ function merge(def, val) {
 }
 function hexRgb(h) { h = String(h || "#000").replace("#", ""); if (h.length === 3) h = h.split("").map((c) => c + c).join(""); const n = parseInt(h, 16) || 0; return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
 function lum(h) { const [r, g, b] = hexRgb(h).map((v) => { v /= 255; return v <= .03928 ? v / 12.92 : Math.pow((v + .055) / 1.055, 2.4); }); return .2126 * r + .7152 * g + .0722 * b; }
-const onColor = (h) => (lum(h) > .45 ? "#10141C" : "#FFFFFF");
+// White or near-black on a colour, whichever reads better (white is kept for mid-tones while it still reads clearly).
+const onColor = (h) => (lum(h) > .3 ? "#10141C" : "#FFFFFF");
 const initials = (s) => String(s || "").split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join("").toUpperCase() || "•";
 let ASSETS = {};
 const HOST = (() => { try { const e = document.getElementById("site-host"); return e ? JSON.parse(e.textContent) : null; } catch (e) { return null; } })();
@@ -237,6 +238,20 @@ const HOME_OF = { schedule: "schedule", venue: "schedule", faq: "schedule", team
 const multi = () => !!C.site.multiPage;
 /** On one-page sites, section links from the other pages go back to the home page. */
 const AT = PAGE === "home" ? "" : PAGES.home;
+/* A theme can ask for its own running order ("flow"): the sections it names come first, in that order, and the rest
+   follow as the owner arranged them. "own" (or none) keeps the owner's order as it is. */
+const FLOW = {
+  programme: ["hero", "schedule", "team", "about", "services", "stats", "tickets"], people: ["hero", "team", "about", "services", "schedule", "tickets"],
+  tickets: ["hero", "about", "tickets", "services", "team", "schedule"], story: ["hero", "about", "stats", "services", "gallery", "team", "schedule", "tickets"],
+  proof: ["hero", "stats", "about", "testimonials", "services", "team", "schedule", "tickets"], spotlight: ["hero", "services", "about", "team", "schedule", "tickets"],
+  venue: ["hero", "about", "venue", "schedule", "team", "services", "tickets"],
+};
+function flowed() {
+  const f = FLOW[C.theme.flow], L = C.sections; if (!f) return L;
+  const at = (s) => { const i = f.indexOf(s.id); return i < 0 ? 100 + L.indexOf(s) : i; };
+  // Sponsors stay where they were relative to the hero, and the closing sections stay last.
+  return L.slice().sort((a, b) => at(a) - at(b));
+}
 const shown = (id) => { const s = C.sections.find((x) => x.id === id); return !s || s.show !== false; };
 /** A link to a section: an anchor on one page, or its page when the site has several. */
 /** On a one-page site, a section whose link in the owner's own menu has "Open in a new tab" on gets a page of its own
@@ -277,7 +292,7 @@ function applyTheme(t) {
   r.setProperty("--fd", `"${t.fontDisplay}",Georgia,serif`); r.setProperty("--fb", `"${t.fontBody}","Helvetica Neue",Arial,sans-serif`);
   if (window.SiteFonts) { const cd = SiteFonts.use(t, "display", imgUrl), cb = SiteFonts.use(t, "body", imgUrl); if (cd) r.setProperty("--fd", `"${cd}","${t.fontDisplay}",Georgia,serif`); if (cb) r.setProperty("--fb", `"${cb}","${t.fontBody}","Helvetica Neue",Arial,sans-serif`); }
   const d = document.documentElement.dataset;
-  for (const k of ["layout", "heroArt", "nav", "cards", "buttons", "motionStyle", "pattern", "heading", "shead", "width", "bands", "cursor", "loader", "textfx", "hoverfx", "scrollfx", "overlay", "herofx", "loaderOn", "sched", "lineup", "tix", "count", "dateBadge", "reg"]) d[k] = String(t[k] || "");
+  for (const k of ["layout", "heroArt", "nav", "cards", "buttons", "motionStyle", "pattern", "heading", "shead", "width", "bands", "cursor", "loader", "textfx", "hoverfx", "scrollfx", "overlay", "herofx", "loaderOn", "sched", "lineup", "tix", "count", "dateBadge", "reg", "high", "stat", "about", "faq", "cta", "quote"]) d[k] = String(t[k] || "");
   d.scrollease = t.scrollEase || "light"; d.linebreaks = t.lineBreaks || "typed"; d.menu = String(t.navMode || ""); d.menumob = String(t.navModeMob || "");
   d.crumbs = (C.site || {}).crumbs === false ? "off" : "on"; d.introfont = t.introFont || "display"; d.introcase = t.introCase || "upper"; d.dark = String(onColor(t.bg) === "#FFFFFF");
   const FOK = !(window.SiteFX && window.SiteFX.fontsOk) || window.SiteFX.fontsOk(C); // Google Fonts wait for consent when the site says so
@@ -687,7 +702,7 @@ function navHTML() {
   const B = C.brand, logo = imgUrl(B.logo);
   const items = multi()
     ? mpages().map((p) => ({ label: C.site.pageLabels[p] || p, url: PAGES[p], on: PAGE === p }))
-    : C.sections.filter((s) => s.show !== false && s.inNav && RENDER[s.id]).map((s) => ({ label: s.label, url: AT + "#" + s.id }));
+    : flowed().filter((s) => s.show !== false && s.inNav && RENDER[s.id]).map((s) => ({ label: s.label, url: AT + "#" + s.id }));
   spList().filter((p) => p.inNav).forEach((p) => items.push({ label: p.navLabel || p.title, url: spHref(p), on: PAGE === "page" && spSlug(p) === spSlug({ slug: spCur() }) }));
   return `<header class="nav" id="top"><div class="wrap nav-in">
       <a class="brand" href="${multi() || PAGE !== "home" ? PAGES.home : "#top"}">${imgUrl(B.logoVideo) ? `<video class="logo" src="${esc(imgUrl(B.logoVideo))}"${logo ? ` poster="${esc(logo)}"` : ""} autoplay muted loop playsinline aria-hidden="true" style="${logoCss(36)}"></video>` : logo ? `<img class="logo" src="${esc(logo)}" alt="" style="${logoCss(36)}">` : `<span class="logo mark" style="${logoCss(36).replace(/height:(\d+)px;width:auto.*/, "width:$1px;height:$1px")}">${esc(initials(B.name))}</span>`}${B.showName !== false ? `<span class="bn">${esc(B.name)}</span>` : ""}</a>
@@ -853,7 +868,7 @@ function render() {
   if (maintGate(render)) return;
   const special = { register: registerPage, page: staticPage, section: sectionPage }[PAGE];
   const solo = soloSections();
-  const ids = special ? [] : multi() ? (PAGE === "home" ? C.sections.map((s) => s.id).filter((id) => PAGE_SECTIONS.home.includes(id)) : PAGE_SECTIONS[PAGE]) : C.sections.map((s) => s.id).filter((id) => !solo.has(id));
+  const ids = special ? [] : multi() ? (PAGE === "home" ? flowed().map((s) => s.id).filter((id) => PAGE_SECTIONS.home.includes(id)) : PAGE_SECTIONS[PAGE]) : flowed().map((s) => s.id).filter((id) => !solo.has(id));
   const body = special ? special() : ids.filter((id) => RENDER[id] && shown(id)).map((id) => RENDER[id]()).join("");
   const html = `<a class="skip" href="#main">Skip to content</a>${navHTML()}<main id="main">${multi() && !special && PAGE !== "home" ? pageHead() : ""}${body}</main>${footerHTML()}`;
   /* A redraw that gives what is already on screen is skipped, and one that lands while the entrance is still running carries on from where it was: both used to make the page blink. */

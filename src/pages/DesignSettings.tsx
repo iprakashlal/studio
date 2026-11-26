@@ -259,12 +259,12 @@ export function DesignLookTab({ session, studio, index, onIndex, part, lead }: {
 
       <Block title="Page look" note="How the Design yourself page looks to a visitor. Anything left unset follows your Studio's own look. Your Studio itself is not changed.">
         {(() => {
-          const u = d.ui || {}, c = d.chat || {}, sel = "input h-10 w-full py-0 text-[13px]", lab = "flex min-w-0 flex-col gap-1.5 text-[12.5px] font-semibold";
+          const u = d.ui || {}, c = d.chat || {}, sel = "input w-full text-[13px]", lab = "flex min-w-0 flex-col gap-1.5 text-[12.5px] font-semibold";
           const setC = (p: Partial<NonNullable<typeof d.chat>>) => { const n: any = { ...c, ...p }; for (const k of Object.keys(n)) if (n[k] === undefined || n[k] === "" || n[k] === 0) delete n[k]; upd({ chat: Object.keys(n).length ? n : undefined }); };
           /** One colour: its name, the swatch, and a way back to the standard one. All the same size, so they line up. */
           const col = (label: string, value: string | undefined, def: string, set: (v: string | undefined) => void) => (
             <label key={label} className={lab}><span className="truncate">{label}</span>
-              <span className="flex h-10 items-center gap-2 rounded-lg border border-ink-700 px-2">
+              <span className="input flex h-[46px] items-center gap-2 py-0">
                 <input type="color" aria-label={label} className="h-6 w-8 flex-none cursor-pointer rounded border-0 bg-transparent p-0" value={value || def} onChange={(e) => set(e.target.value)} />
                 <span className="min-w-0 flex-1 truncate font-mono text-[11.5px] font-normal text-ink-400">{value || "standard"}</span>
                 {value && <button type="button" className="flex-none text-[11.5px] font-normal text-ink-400 underline hover:text-ink-100" onClick={(e) => { e.preventDefault(); set(undefined); }}>reset</button>}
@@ -287,14 +287,15 @@ export function DesignLookTab({ session, studio, index, onIndex, part, lead }: {
               {col("Page background", c.page, "#150b10", (v) => setC({ page: v }))}
               {col("Assistant's messages", c.bot, "#1f1218", (v) => setC({ bot: v }))}
               {col("Visitor's messages", c.you, "#ff3fa4", (v) => setC({ you: v }))}
+              {col("Answer boxes", u.field, "#161d2b", (v) => setUi({ field: v }))}
             </div>
             <div className="grid gap-x-3 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
               <div className={lab}><span>Logo</span>
-                <span className="flex h-10 items-center gap-2">{u.logo && <img src={u.logo} alt="" className="h-9 w-9 flex-none rounded-md border border-ink-600 object-contain" />}
+                <span className="flex h-[46px] items-center gap-2">{u.logo && <img src={u.logo} alt="" className="h-9 w-9 flex-none rounded-md border border-ink-600 object-contain" />}
                   <label className="btn btn-sm cursor-pointer">{u.logo ? "Replace" : "Choose"}<input type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" onChange={(e) => { pick(e.target.files?.[0]); e.target.value = ""; }} /></label>
                   {u.logo && <button type="button" className="btn btn-ghost btn-sm" onClick={() => setUi({ logo: undefined })}>Remove</button>}</span></div>
-              <label className={lab}>Name<input className="input h-10 py-0 text-[13px] font-normal" maxLength={40} placeholder="Picaffectz" value={u.name || ""} onChange={(e) => setUi({ name: e.target.value })} /></label>
-              <label className={lab}>Line beside the name<input className="input h-10 py-0 text-[13px] font-normal" maxLength={60} placeholder="DIY your web" value={u.tag || ""} onChange={(e) => setUi({ tag: e.target.value })} /></label>
+              <label className={lab}>Name<input className="input text-[13px] font-normal" maxLength={40} placeholder="Picaffectz" value={u.name || ""} onChange={(e) => setUi({ name: e.target.value })} /></label>
+              <label className={lab}>Line beside the name<input className="input text-[13px] font-normal" maxLength={60} placeholder="DIY your web" value={u.tag || ""} onChange={(e) => setUi({ tag: e.target.value })} /></label>
             </div>
             {c.image && !d.bg?.on && <p className="flex flex-wrap items-center gap-2 text-[12.5px] text-ink-400">An older background picture is still in use. <button type="button" className="underline hover:text-ink-100" onClick={() => setC({ image: undefined, dim: undefined })}>Remove it</button> (pictures are now set under Background and text).</p>}
             {d.bg?.on && <p className="text-[12.5px] text-ink-400">Background and text is on, so it sets the page's background and whether the page is light or dark. The colours here still apply to the bar, buttons and messages.</p>}
@@ -306,13 +307,13 @@ export function DesignLookTab({ session, studio, index, onIndex, part, lead }: {
         <div className="grid gap-3 sm:grid-cols-2">
           {(Object.keys(DIY_WORDS) as DiyWord[]).map((k) => { const long = DIY_WORDS[k][1].length > 60, v = d.words?.[k] || "";
             return <label key={k} className={`flex flex-col gap-1 text-[13px] font-semibold ${long ? "sm:col-span-2" : ""}`}>{DIY_WORDS[k][0]}
-              {long ? <textarea className="input min-h-[4.5rem] text-[13px] font-normal" maxLength={400} placeholder={DIY_WORDS[k][1]} value={v} onChange={(e) => setWord(k, e.target.value)} /> : <input className="input h-10 py-0 text-[13px] font-normal" maxLength={120} placeholder={DIY_WORDS[k][1]} value={v} onChange={(e) => setWord(k, e.target.value)} />}</label>; })}
+              {long ? <textarea className="input min-h-[4.5rem] text-[13px] font-normal" maxLength={400} placeholder={DIY_WORDS[k][1]} value={v} onChange={(e) => setWord(k, e.target.value)} /> : <input className="input text-[13px] font-normal" maxLength={120} placeholder={DIY_WORDS[k][1]} value={v} onChange={(e) => setWord(k, e.target.value)} />}</label>; })}
         </div>
       </Block>
 
       <Block title="Background and text" note="A background of any kind for the page (colour, picture or GIF, slideshow, video, animated, pattern), like a website section's. The text turns light or dark by itself to suit it.">
         {(() => {
-          const b = d.bg || {}, sel = "input h-10 py-0 text-[13px]", lab = "flex flex-col gap-1 text-[13px] font-semibold";
+          const b = d.bg || {}, sel = "input w-full text-[13px]", lab = "flex flex-col gap-1 text-[13px] font-semibold";
           const addPic = async (f: File | undefined, slide?: boolean) => { if (!f) return; try { const u = await fitBackdrop(f); if (slide) setBg({ slides: [...(b.slides || []), u].slice(0, 4) }); else setBg({ image: u }); } catch (e: any) { alert(e?.message || "Couldn't use that picture."); } };
           const media = b.kind === "image" || b.kind === "slides" || b.kind === "video";
           return <>
@@ -321,7 +322,7 @@ export function DesignLookTab({ session, studio, index, onIndex, part, lead }: {
               <div className="grid gap-3 sm:grid-cols-2">
                 <label className={lab}>Background<select className={sel} value={b.kind || ""} onChange={(e) => setBg({ kind: e.target.value as any })}><option value="">A colour</option><option value="image">A picture or GIF</option><option value="slides">A slideshow of pictures</option><option value="video">A video</option><option value="anim">An animated background</option><option value="pattern">A pattern</option></select></label>
                 <label className={lab}>Colour{b.kind ? " (shows behind it, and while it loads)" : ""}
-                  <span className="flex items-center gap-2"><input type="color" aria-label="Background colour" className="h-10 w-12 cursor-pointer rounded border border-ink-600 bg-transparent p-0.5" value={b.color || "#101622"} onChange={(e) => setBg({ color: e.target.value })} /><span className="font-mono text-xs font-normal text-ink-400">{b.color || "the page's own"}</span>{b.color && <button type="button" className="btn btn-ghost btn-sm" onClick={() => setBg({ color: undefined })}>Reset</button>}</span></label>
+                  <span className="flex items-center gap-2"><input type="color" aria-label="Background colour" className="h-[46px] w-14 cursor-pointer rounded-lg border border-ink-600 bg-transparent p-1" value={b.color || "#101622"} onChange={(e) => setBg({ color: e.target.value })} /><span className="font-mono text-xs font-normal text-ink-400">{b.color || "the page's own"}</span>{b.color && <button type="button" className="btn btn-ghost btn-sm" onClick={() => setBg({ color: undefined })}>Reset</button>}</span></label>
               </div>
               {b.kind === "image" && <div className="flex flex-col gap-2"><span className="text-[13px] font-semibold">Picture or GIF</span>
                 <div className="flex flex-wrap items-center gap-2">{b.image && <img src={b.image} alt="" className="h-14 w-24 rounded-md border border-ink-600 object-cover" />}<label className="btn btn-sm cursor-pointer">{b.image ? "Replace" : "Choose a picture"}<input type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" onChange={(e) => { addPic(e.target.files?.[0]); e.target.value = ""; }} /></label>{b.image && <button type="button" className="btn btn-ghost btn-sm" onClick={() => setBg({ image: undefined })}>Remove</button>}</div>
@@ -332,7 +333,7 @@ export function DesignLookTab({ session, studio, index, onIndex, part, lead }: {
                   {(b.slides || []).length < 4 && <label className="btn btn-sm cursor-pointer">Add a picture<input type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" onChange={(e) => { addPic(e.target.files?.[0], true); e.target.value = ""; }} /></label>}</div>
                 <div className="grid gap-3 sm:grid-cols-2"><label className={lab}>Seconds per picture ({b.slideSecs || 5})<input type="range" min={2} max={12} step={1} value={b.slideSecs || 5} onChange={(e) => setBg({ slideSecs: +e.target.value })} /></label>
                   <label className={lab}>Change of picture<select className={sel} value={b.slideFx || ""} onChange={(e) => setBg({ slideFx: (e.target.value || undefined) as any })}><option value="">Fade</option><option value="zoom">Fade with a slow zoom</option><option value="slide">Slide</option></select></label></div></div>}
-              {b.kind === "video" && <div className="flex flex-col gap-2"><label className={lab}>Video link<input className="input h-10 py-0 text-[13px] font-normal" placeholder="https://youtu.be/…  or  https://vimeo.com/…  or  https://…/film.mp4" value={b.videoUrl || ""} onChange={(e) => setBg({ videoUrl: e.target.value })} /></label>
+              {b.kind === "video" && <div className="flex flex-col gap-2"><label className={lab}>Video link<input className="input text-[13px] font-normal" placeholder="https://youtu.be/…  or  https://vimeo.com/…  or  https://…/film.mp4" value={b.videoUrl || ""} onChange={(e) => setBg({ videoUrl: e.target.value })} /></label>
                 <div className="grid gap-2 sm:grid-cols-2"><label className="flex items-center gap-2 text-[13px]"><input type="checkbox" checked={!!b.videoOnce} onChange={(e) => setBg({ videoOnce: e.target.checked })} />Play once (do not loop)</label><label className="flex items-center gap-2 text-[13px]"><input type="checkbox" checked={!!b.videoControls} onChange={(e) => setBg({ videoControls: e.target.checked })} />Show pause and sound buttons</label></div>
                 <span className="text-[11.5px] text-ink-500">A YouTube or Vimeo link, or the address of a video file. It starts by itself, without sound, and loops unless you turn that off. A video can't be uploaded here: the page's settings are kept small so every visitor gets them at once.</span></div>}
               {b.kind === "anim" && <div className="grid gap-3 sm:grid-cols-3"><label className={lab}>Animated background<select className={sel} value={b.anim || ""} onChange={(e) => setBg({ anim: e.target.value })}><option value="">Choose one</option>{ANIM_BGS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></label>
@@ -345,7 +346,7 @@ export function DesignLookTab({ session, studio, index, onIndex, part, lead }: {
                 <label className={lab}>Strength of the backdrop ({b.dim || 0}%)<input type="range" min={0} max={90} step={5} value={b.dim || 0} onChange={(e) => setBg({ dim: +e.target.value })} /></label></div>}
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 <label className={lab}>Text colour<select className={sel} value={b.text || ""} onChange={(e) => setBg({ text: (e.target.value || undefined) as any })}><option value="">Automatic (light or dark, to suit the background)</option><option value="light">Light text (for a dark background)</option><option value="dark">Dark text (for a light background)</option><option value="custom">A colour of my own</option></select></label>
-                {b.text === "custom" && <label className={lab}>Colour of the text<input type="color" aria-label="Colour of the text" className="h-10 w-12 cursor-pointer rounded border border-ink-600 bg-transparent p-0.5" value={b.textColor || "#ffffff"} onChange={(e) => setBg({ textColor: e.target.value })} /></label>}
+                {b.text === "custom" && <label className={lab}>Colour of the text<input type="color" aria-label="Colour of the text" className="h-[46px] w-14 cursor-pointer rounded-lg border border-ink-600 bg-transparent p-1" value={b.textColor || "#ffffff"} onChange={(e) => setBg({ textColor: e.target.value })} /></label>}
                 <label className={lab}>Font<select className={sel} value={b.font || ""} onChange={(e) => setBg({ font: e.target.value || undefined })}><option value="">The page's fonts</option>{DIY_FONTS.map((f) => <option key={f} value={f}>{f}</option>)}</select></label>
                 <label className={lab}>Use the font for<select className={sel} value={b.fontFor || ""} onChange={(e) => setBg({ fontFor: (e.target.value || undefined) as any })}><option value="">All the text here</option><option value="head">The headings only</option></select></label>
                 <label className={lab}>Text style<select className={sel} value={b.fontStyle || ""} onChange={(e) => setBg({ fontStyle: (e.target.value || undefined) as any })}><option value="">The page's own</option><option value="bold">Bold</option><option value="light">Light</option><option value="italic">Italic</option><option value="bolditalic">Bold italic</option><option value="upper">CAPITALS</option><option value="spaced">Spaced out</option></select></label>

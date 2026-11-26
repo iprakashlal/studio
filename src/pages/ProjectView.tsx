@@ -247,7 +247,8 @@ export function ProjectView({ studio, index, project, session, onIndex }: { stud
   if (!tpl) return <main className="p-10 text-center text-ink-300">This project uses a template this Studio doesn't have ({project.template}).</main>;
   if (err) return <main className="mx-auto max-w-xl px-4 py-16"><div className="card p-6"><h1 className="text-xl font-extrabold">Couldn't open the project</h1><p className="mt-2 text-sm text-ink-300">{err}</p></div></main>;
   // The preview shows the badge with the Studio's look (sites get it from assets/badge.js when published).
-  const previewContent = useMemo(() => (draft ? { ...draft, poweredBy: { ...(draft.poweredBy || {}), design: currentBadge() } } : draft), [draft, v, index.badge]);
+  // _wallHost: where the social wall's own feed is (this project's database), so the preview can fill the wall as the live site will. It is not saved.
+  const previewContent = useMemo(() => (draft ? { ...draft, poweredBy: { ...(draft.poweredBy || {}), design: currentBadge() }, ...(project.host?.cf ? { _wallHost: { api: project.host.cf.api, site: project.host.cf.site } } : {}) } : draft), [draft, v, index.badge, project.host?.cf?.api, project.host?.cf?.site]);
   if (!draft) return <SkelEditor note={[`Loading the ${tpl.name} template`, "Reading the project's content", "Opening the editor and preview"][Math.min(2, openAt)]} />;
 
   const cat = index.categories.find((c) => c.id === project.category);

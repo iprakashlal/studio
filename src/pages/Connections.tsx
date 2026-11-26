@@ -7,7 +7,7 @@ import { cfCall, cfRole, cfSendCode, cfSession, cfSignedIn, cfVerifyCode, resend
 import { Field, Toggle, useToast } from "../ui/kit";
 import { COURIERS, TRACKERS } from "../lib/tracking";
 
-type Kind = "ai" | "un" | "wa" | "rz" | "cf" | "pe" | "st" | "pp" | "pos" | "sms" | "ship" | "mail" | `tk_${string}`;
+type Kind = "ai" | "un" | "ig" | "wa" | "rz" | "cf" | "pe" | "st" | "pp" | "pos" | "sms" | "ship" | "mail" | `tk_${string}`;
 /** What the Studio lets this site use a way of messaging for (content.cms.msg). */
 export type MsgAllow = { login: boolean; checkout: boolean };
 export const msgAllow = (cms: any, way: "wa" | "sms"): MsgAllow => { const m = cms?.msg || {}, ok = (v: unknown) => v == null || v === "" || v === way || v === "both"; return { login: ok(m.login), checkout: ok(m.checkout) }; };
@@ -125,6 +125,35 @@ export function UnsplashForm({ where }: { where: Where | null | undefined }) {
         {u && <button type="button" className="btn btn-sm btn-danger ml-auto" disabled={!!busy} onClick={go("Removing", async () => { await save("un", null); setKey(""); toast("Removed."); })}>Remove</button>}
       </div>
     </div>
+  );
+}
+/** Instagram for the social photo wall: the account owner's own access token, kept on the site's database. */
+export function InstagramForm({ where }: { where: Where | null | undefined }) {
+  const toast = useToast(), { saved, err, save } = useSaved(where || null);
+  const [token, setToken] = useState(""), [busy, setBusy] = useState("");
+  const lead = "Lets the social photo wall show your newest Instagram posts by itself. Instagram only gives them to the account's owner, so the wall needs an access token from you. It stays on this site's database, encrypted; the page never sees it.";
+  if (where === undefined) return <Shell title="Instagram photos" lead={lead}><Missing why="Checking your database…" /></Shell>;
+  if (!where) return <Shell title="Instagram photos" lead={lead}><Missing why="The token is kept on the site's own Cloudflare database. Host this site on Cloudflare (Host to External Services), and sign in above, to set it up." /></Shell>;
+  if (err) return <Shell title="Instagram photos" lead={lead}><Missing why={err} /></Shell>;
+  if (saved && !("ig" in (saved as any))) return <Shell title="Instagram photos" lead={lead}><Missing why="This site's database is an older version that doesn't know Instagram yet. Update it under Settings → Updates, then come back." /></Shell>;
+  const g: any = (saved as any)?.ig;
+  const go = (label: string, fn: () => Promise<void>) => async () => { setBusy(label); try { await fn(); } catch (e: any) { toast(e?.message || "That didn't work.", "bad"); } setBusy(""); };
+  return (
+    <Shell title="Instagram photos" on={saved ? !!(g?.on && g.token) : undefined} lead={lead}>
+      <ol className="ml-4 list-decimal text-[12.5px] leading-relaxed text-ink-300">
+        <li>Your Instagram account must be a professional one (Business or Creator): Instagram app → Settings → Account type and tools. It's free.</li>
+        <li>At <a className="underline" href="https://developers.facebook.com/apps/" target="_blank" rel="noopener noreferrer">developers.facebook.com/apps</a> create an app and add the product <b className="text-ink-100">Instagram</b> (“API setup with Instagram login”).</li>
+        <li>There, under “Generate access tokens”, add your Instagram account and press <b className="text-ink-100">Generate token</b>. Copy the long token it shows.</li>
+        <li>Paste it below and save. It lasts 60 days and is renewed here by itself while the wall is in use.</li>
+      </ol>
+      <Secret id="ig-token" label="Instagram access token" saved={!!g?.token} value={token} onChange={setToken} />
+      <div className="flex flex-wrap gap-2">
+        <button type="button" className="btn btn-sm btn-pri" disabled={!token.trim() || !!busy} onClick={go("Saving", async () => { await save("ig", { on: true, token: token.trim(), at: String(Date.now()) }); setToken(""); toast("Your Instagram token is saved."); })}>{busy === "Saving" ? "Saving…" : "Save token"}</button>
+        <button type="button" className="btn btn-sm" disabled={!g?.token || !!busy} onClick={go("Testing", async () => { const r = await cfCall<any>(where.api, "/set/test?scope=" + encodeURIComponent(where.scope), { method: "POST", body: JSON.stringify({ name: "ig" }) }); if (r?.error) throw new Error(r.error); toast(`Instagram answered with ${r.said}. The token works.`); })}>{busy === "Testing" ? "Testing…" : "Test"}</button>
+        {g?.token && <button type="button" className="btn btn-sm btn-danger ml-auto" disabled={!!busy} onClick={go("Removing", async () => { await save("ig", null); toast("Instagram token removed."); })}>Remove</button>}
+      </div>
+      <p className="text-[12.5px] text-ink-400">Then choose “My newest Instagram posts” under Social photo wall → Fill it by itself. Pinterest needs no key: just give the wall a public profile or board.</p>
+    </Shell>
   );
 }
 export function WhatsAppForm({ where, kind, allow }: { where: Where | null | undefined; kind: "studio" | "site"; /** What the Studio lets this site use WhatsApp codes for. */ allow?: MsgAllow }) {
@@ -544,11 +573,11 @@ export function CourierTrackingForm({ where }: { where: Where | null | undefined
 export function SiteConnections({ cf, template, cms, site, only, account }: { account?: string; cf?: { api: string; site: string } | null; template: string; /** "mail": just the Email (Resend) card (portfolio sites have no WhatsApp or SMS). */ only?: "mail"; /** The site's content.cms (what the Studio allows it). */ cms?: any; /** True in the site's own admin page. */ site?: boolean }) {
   const aw = msgAllow(cms, "wa"), as = msgAllow(cms, "sms");
   const signed = useSiteDbSigned(cf), where = cf && signed ? { api: cf.api, scope: "site:" + cf.site } : null, mailBridge = useMailBridge(cf, account, signed);
-  if (only === "mail") return <div className="flex max-w-3xl flex-col gap-4">{cf && !signed && <SiteDbSignIn cf={cf} what="show this project's email settings" />}<MailForm bare where={where} studio={!site} bridge={mailBridge} /></div>;
+  if (only === "mail") return <div className="flex max-w-3xl flex-col gap-4">{cf && !signed && <SiteDbSignIn cf={cf} what="show this project's email settings" />}<MailForm bare where={where} studio={!site} bridge={mailBridge} /><InstagramForm where={where} /></div>;
   return <div className="flex max-w-3xl flex-col gap-4">
     {cf && !signed && <SiteDbSignIn cf={cf} what={template === "restaurant" ? "show the boxes for Petpooja's and WhatsApp's keys" : "show the boxes for WhatsApp's keys"} />}
     {template === "restaurant" && <section className="card flex flex-col gap-2 p-5"><h3 className="text-[15px] font-extrabold">Restaurant backend</h3><p className="text-sm text-ink-300">Orders, payments and messages run on the site's own Cloudflare database: it saves each order under Purchased orders, works out what an order costs from your menu, confirms online payments with your payment gateway, passes orders to Petpooja, and sends WhatsApp messages. Keys you enter here stay on that database, encrypted. The payment gateways (Razorpay, Cashfree, PhonePe, Stripe, PayPal) and their keys are under Payments.</p></section>}
-    <MailForm where={where} studio={!site} bridge={mailBridge} />{template === "restaurant" && <PetpoojaForm where={where} />}{template === "store" && <CourierTrackingForm where={where} />}<WhatsAppForm where={where} kind="site" allow={aw} />
+    <MailForm where={where} studio={!site} bridge={mailBridge} />{template === "restaurant" && <PetpoojaForm where={where} />}{template === "store" && <CourierTrackingForm where={where} />}<WhatsAppForm where={where} kind="site" allow={aw} /><InstagramForm where={where} />
     {/* In the site's own admin page SMS shows only when the Studio lets the site use it for something. */}
     {!(site && !as.login && !as.checkout) && <SmsForm where={where} kind="site" allow={as} />}
     {cf && signed && <GoogleSignInCard api={cf.api} what="this site's admin page (and anything else that signs in to the same database)" />}</div>;

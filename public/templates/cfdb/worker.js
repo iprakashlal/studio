@@ -49,7 +49,7 @@ var CFDB_UPGRADES = [
     "create index if not exists enquiries_ref on enquiries (site, ref)"
   ] }
 ];
-var CFDB_VERSION = 90;
+var CFDB_VERSION = 91;
 var CFDB_WORKER_NAME = "picaffectz-db";
 
 // src/lib/lookdigest.ts
@@ -1201,6 +1201,7 @@ for (const id of Object.keys(TRACKERS)) SETTINGS["tk_" + id] = TRACKER_FIELDS;
 SETTINGS.ship = { secret: [], text: [], flags: ["manual", "quiet"] };
 SETTINGS.mail = { secret: ["key"], text: ["from"], flags: ["on"] };
 SETTINGS.prefs = { secret: [], text: ["json"], flags: [] };
+SETTINGS.ig = { secret: ["token"], text: ["at"], flags: ["on"] };
 async function aesKey(env) {
   return crypto.subtle.importKey("raw", await crypto.subtle.digest("SHA-256", enc.encode("settings:" + env.SECRET)), "AES-GCM", false, ["encrypt", "decrypt"]);
 }
@@ -2828,6 +2829,63 @@ function dqSections(x) {
   }
   return out;
 }
+async function igMedia(token, n) {
+  try {
+    const r = await fetch(`https://graph.instagram.com/me/media?fields=id,caption,media_type,media_url,thumbnail_url,permalink&limit=${n}&access_token=${encodeURIComponent(token)}`, { signal: AbortSignal.timeout(15e3) });
+    const j = await r.json().catch(() => null);
+    if (!r.ok) return { error: j?.error?.message ? "Instagram said: " + String(j.error.message).slice(0, 200) : `Instagram answered ${r.status}.` };
+    const items = (Array.isArray(j?.data) ? j.data : []).map((m) => ({ img: String((m.media_type === "VIDEO" ? m.thumbnail_url : m.media_url) || ""), url: String(m.permalink || ""), caption: oneLine(String(m.caption || "")).slice(0, 160) })).filter((x) => /^https:\/\//.test(x.img));
+    return { items };
+  } catch {
+    return { error: "Instagram didn't answer in time." };
+  }
+}
+async function igRenew(env, scope, c) {
+  if (Date.now() - (+c.at || 0) < 30 * 864e5) return;
+  try {
+    const r = await fetch(`https://graph.instagram.com/refresh_access_token?grant_type=ig_refresh_token&access_token=${encodeURIComponent(String(c.token))}`, { signal: AbortSignal.timeout(15e3) });
+    const j = await r.json().catch(() => null);
+    await putSetting(env, scope, "ig", r.ok && j?.access_token ? { ...c, token: String(j.access_token), at: String(Date.now()) } : { ...c, at: String(Date.now() - 29 * 864e5) });
+  } catch {
+  }
+}
+function pinFeed(src) {
+  const m = String(src || "").trim().replace(/^@/, "").replace(/^https?:\/\/(?:[a-z]{2,3}\.)?pinterest\.[a-z.]{2,6}\//i, "").replace(/[?#].*$/, "").split("/").filter(Boolean);
+  if (!m.length || m.length > 2 || m.some((x) => !/^[\w.%-]{1,80}$/.test(x))) return null;
+  return "https://www.pinterest.com/" + m[0] + (m[1] ? "/" + m[1] + ".rss" : "/feed.rss");
+}
+var unXml = (t) => t.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#0?39;|&apos;/g, "'").replace(/&amp;/g, "&");
+function pinParse(xml, n) {
+  const out = [];
+  for (const it of xml.match(/<item\b[\s\S]*?<\/item>/g) || []) {
+    const tag = (k) => unXml((it.match(new RegExp("<" + k + "\\b[^>]*>([\\s\\S]*?)</" + k + ">")) || [])[1] || "").trim();
+    const img = (tag("description").match(/<img[^>]+src=["']([^"']+)["']/i) || [])[1] || "", url = tag("link");
+    if (!/^https:\/\/i\.pinimg\.com\//.test(img) || !/^https:\/\/([a-z]{2,3}\.)?pinterest\.[a-z.]{2,6}\//.test(url)) continue;
+    out.push({ img: img.replace(/\/\d{2,4}x\//, "/564x/"), url, caption: oneLine(tag("title").replace(/<[^>]+>/g, "")).slice(0, 160) });
+    if (out.length >= n) break;
+  }
+  return out;
+}
+async function pinMedia(src, n) {
+  const feed = pinFeed(src);
+  if (!feed) return { error: "That doesn't look like a Pinterest profile or board. Write it as name or name/board, or paste its address." };
+  try {
+    const r = await fetch(feed, { signal: AbortSignal.timeout(15e3), headers: { "User-Agent": "Mozilla/5.0 (compatible; PicaffectzStudio/1.0; +https://picaffectz.com)", Accept: "application/rss+xml, application/xml;q=0.9, text/xml;q=0.8" } });
+    if (r.status === 404) return { error: "Pinterest has no public profile or board at that address." };
+    if (!r.ok) return { error: `Pinterest answered ${r.status}.` };
+    const items = pinParse(await r.text(), n);
+    return items.length ? { items } : { error: "Pinterest's feed for that profile or board has no pins with pictures (a secret board has no feed)." };
+  } catch {
+    return { error: "Pinterest didn't answer in time." };
+  }
+}
+async function wallFeed(env, site, src, pin, n) {
+  if (src === "pinterest") return pinMedia(pin, n);
+  const scope = "site:" + site, c = await getSetting(env, scope, "ig").catch(() => null);
+  if (!c?.on || !c.token) return { error: "Instagram isn't connected for this site yet." };
+  await igRenew(env, scope, c);
+  return igMedia(String((await getSetting(env, scope, "ig").catch(() => null) || c).token), n);
+}
 async function unsplashFind(key, words2, n) {
   try {
     const r = await fetch(`https://api.unsplash.com/search/photos?query=${encodeURIComponent(words2)}&per_page=${Math.max(1, Math.min(8, n))}&orientation=landscape&content_filter=high`, { signal: AbortSignal.timeout(15e3), headers: { Authorization: "Client-ID " + key, "Accept-Version": "v1" } });
@@ -3025,6 +3083,21 @@ var db_worker_default = {
     const u = new URL(req.url), p = u.pathname.replace(/\/+$/, "") || "/";
     try {
       if (p === "/") return json({ ok: true, service: "site-studio-db", v: V, mail: !!(env.RESEND_API_KEY && env.MAIL_FROM), ...env.CF_TOKEN && env.CF_ACCOUNT ? { deploy: true, account: env.CF_ACCOUNT } : {}, ...env.GH_TOKEN ? { gh: true } : {}, ...env.AI ? { ai: true, pamphlet: 2 } : {}, reviews: true, dq: 1, look: 1, outline: 1, pictures: 1, connect: 2, translate: 4, approvals: 1, accounts: 2, cfx: 4, cfa: 1, google: 1, studioPages: 1, del: 1, enqMail: 3, ...otherAccounts(env).length ? { more: otherAccounts(env).length } : {} });
+      if (/^\/wall\/[a-z0-9][a-z0-9-]{0,59}$/.test(p) && req.method === "GET") {
+        const src = u.searchParams.get("src") === "pinterest" ? "pinterest" : "instagram", pin = String(u.searchParams.get("pin") || "").slice(0, 200), n = Math.max(3, Math.min(24, +(u.searchParams.get("n") || 12) || 12));
+        const key = new Request(u.origin + p + "?src=" + src + "&pin=" + encodeURIComponent(pin) + "&n=" + n), store = globalThis.caches?.default;
+        const hit = store ? await store.match(key).catch(() => null) : null;
+        if (hit) return hit;
+        const r = await wallFeed(env, p.split("/")[2], src, pin, n);
+        const res = new Response(JSON.stringify(r.items ? { items: r.items } : { items: [], error: r.error }), { headers: { ...cors, "Content-Type": "application/json", "Cache-Control": "public, max-age=" + (r.items ? 1800 : 120) } });
+        if (store) {
+          const put = store.put(key, res.clone()).catch(() => {
+          });
+          if (ctx?.waitUntil) ctx.waitUntil(put);
+          else await put;
+        }
+        return res;
+      }
       if (p.startsWith("/ai/") && u.searchParams.get("engine") === "custom") {
         const c = await anySetting(env, "ai");
         if (!c?.on || !c.key || !c.model || !publicUrl(String(c.base || "").trim())) return json({ error: "Your own AI API isn't set up yet. Fill it in under Settings \u2192 AI." });
@@ -4145,6 +4218,10 @@ ${body}`)}${paras("Approve or hide it under Reviews in your site's admin page.",
           return json(o);
         }
         const b = await req.json(), name = String(b.name || ""), S2 = SETTINGS[name];
+        if (p === "/set/test" && name === "pin") {
+          const r = await pinMedia(String(b.pin || ""), 6);
+          return r.items ? json({ ok: true, said: r.items.length + (r.items.length === 1 ? " pin" : " pins") }) : json({ error: r.error });
+        }
         if (!S2) return err(400, "Unknown connection.");
         if (p === "/set/test" && name.startsWith("tk_")) {
           const id = name.slice(3), z = await getSetting(env, scope, name);
@@ -4162,6 +4239,12 @@ ${body}`)}${paras("Approve or hide it under Reviews in your site's admin page.",
             if (!c2?.key) return json({ error: "Save the access key first." });
             const r = await unsplashFind(String(c2.key), "coffee shop", 1);
             return r.photos ? json({ ok: true, said: `a photo by ${r.photos[0].by || "an Unsplash photographer"}` }) : json({ error: r.error });
+          }
+          if (name === "ig") {
+            const c2 = await getSetting(env, scope, "ig");
+            if (!c2?.token) return json({ error: "Save the access token first." });
+            const r = await igMedia(String(c2.token), 6);
+            return r.items ? json({ ok: true, said: r.items.length + (r.items.length === 1 ? " post" : " posts") }) : json({ error: r.error });
           }
           if (name !== "ai") return err(400, "Nothing to test.");
           const c = await getSetting(env, scope, "ai");

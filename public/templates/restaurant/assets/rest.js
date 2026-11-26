@@ -791,7 +791,7 @@ function setIcon() {
    Sections & order switches it on and sets where it stands; the script fills the empty slot drawn there, with this page's own
    section heading, wrapper and button, so it wears the theme like the other sections. */
 const wallOn = () => { const s = C.sections.find((x) => x.id === "wall"); return s ? s.show !== false : !!(C.wall && C.wall.on); };
-function wallSlot() { return wallOn() && C.wall && Array.isArray(C.wall.items) && C.wall.items.length ? `<section id="wall" data-wall-slot hidden></section>` : ""; }
+function wallSlot() { return wallOn() && C.wall && ((Array.isArray(C.wall.items) && C.wall.items.length) || /^(instagram|pinterest)$/.test(C.wall.auto)) ? `<section id="wall" data-wall-slot hidden></section>` : ""; }
 let wallP = null;
 function wall() {
   if (!wallOn() && !window.SiteWall) return;

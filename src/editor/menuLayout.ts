@@ -47,7 +47,7 @@ const STORE: Row[] = [
 ];
 const PORTFOLIO: Row[] = [
   // Portfolio content: what visitors came to see, in the order it is on the page
-  ["linkedin", "Portfolio content", undefined, "Import from LinkedIn"], ["hero", "Portfolio content"], ["about", "Portfolio content"], ["skills", "Portfolio content"], ["work", "Portfolio content"], ["projects", "Portfolio content"], ["learning", "Portfolio content"], ["video", "Portfolio content"], ["wall", "Portfolio content"],
+  ["linkedin", "Portfolio content", undefined, "Import from LinkedIn"], ["hero", "Portfolio content"], ["about", "Portfolio content"], ["skills", "Portfolio content"], ["work", "Portfolio content"], ["projects", "Portfolio content"], ["learning", "Portfolio content"], ["extras", "Portfolio content"], ["video", "Portfolio content"], ["wall", "Portfolio content"],
   // Pages & navigation
   ["layout", "Pages & navigation", undefined, "Sections & order"], ["menu", "Pages & navigation"], ["static-pages", "Pages & navigation"],
   // Contact & social

@@ -5,7 +5,7 @@ import { adminCategory, legalCategory, codeCategory, withSectionBg, videoCategor
 import VELOCITY_DEFAULTS from "./velocity-defaults.json";
 import { NAV_MODE_FIELD, NAV_MODE_MOB_FIELD, NAV_MODE_NOTE, themeCards } from "../themes/fields";
 
-const SECTION_NAMES: Record<string, string> = { about: "About", skills: "Skills cube", work: "Work deck", projects: "Projects", learning: "Learning", wall: "Social photo wall", contact: "Contact" };
+const SECTION_NAMES: Record<string, string> = { about: "About", skills: "Skills cube", work: "Work deck", projects: "Projects", learning: "Learning", testimonials: "Kind words", wall: "Social photo wall", contact: "Contact", message: "Message form" };
 /** Hero graphics: alternatives to the floating elements, drawn in the theme's colours. */
 export const HERO_GRAPHICS: [string, string][] = [
   ["elements", "Floating elements (theme pack / 3D)"], ["orb", "Glossy orb with ring"], ["rings", "Orbit rings with initials"],
@@ -189,12 +189,12 @@ const schema: Category[] = [
     ],
   },
   {
-    id: "extras", label: "Kind words & message form", group: "Pages", sub: "Sections", desc: "Testimonials above the contact panel and a message form below it. They show in every page-style layout (not in Horizontal reel, Terminal, Drag canvas or Cinema scenes).",
+    id: "extras", label: "Kind words & message form", group: "Pages", sub: "Sections", desc: "Testimonials and a message form, in your theme's own cards, buttons and headings. Each is a row under Sections & order: switch it on and move it there. In the Motion page layouts they sit around the contact panel (they are not shown in Horizontal reel, Terminal, Drag canvas or Cinema scenes).",
     cards: [
       { title: "Testimonials", fields: [g2({ t: "text", path: "testimonials.eyebrow", label: "Small label", ml: true }, { t: "text", path: "testimonials.title", label: "Title", ml: true }),
         { t: "list", path: "testimonials.items", title: (it) => it.name, add: () => ({ quote: "What they said about working with you.", name: "Name", role: "", company: "" }), max: 9,
           item: [{ t: "textarea", path: "quote", label: "Quote" }, g2({ t: "text", path: "name", label: "Name" }, { t: "text", path: "role", label: "Role" }), { t: "text", path: "company", label: "Company" }] }] },
-      { title: "Message form", fields: [{ t: "toggle", path: "contactForm.on", label: "Show a message form" }, g2({ t: "text", path: "contactForm.eyebrow", label: "Small label", ml: true }, { t: "text", path: "contactForm.title", label: "Title", ml: true }),
+      { title: "Message form", fields: [{ t: "note", text: "Switch the form on under Sections & order, in the row “Message form”." }, g2({ t: "text", path: "contactForm.eyebrow", label: "Small label", ml: true }, { t: "text", path: "contactForm.title", label: "Title", ml: true }),
         g2({ t: "text", path: "contactForm.submit", label: "Button label", ml: true }, { t: "toggle", path: "contactForm.askPhone", label: "Ask for a phone number" })] },
     ],
   },
@@ -230,7 +230,7 @@ const schema: Category[] = [
   adminCategory(),
   codeCategory(),
 ];
-withSectionBg(schema, { contact: [["contact"]] }, [...FONTS_D, ...FONTS_B]);
+withSectionBg(schema, { contact: [["contact"]], extras: [["testimonials", "Background & text: kind words"], ["message", "Background & text: message form"]] }, [...FONTS_D, ...FONTS_B]);
 
 /** Words the Motion layouts show (src/fx/layouts.js reads content.labels with these as fallbacks). */
 export const PORTFOLIO_LABELS = {
@@ -257,8 +257,11 @@ export const portfolioTemplate: TemplateDef = {
     prepareMaintenance(c);
     prepareI18n(c, () => schema);
     // The social photo wall is one of the sections (older content gets its row, before Contact; on if the wall was switched on).
+    // Kind words and the message form are rows too: before and after Contact, as they were placed before; the form is on if it was on.
+    if (Array.isArray(c.sections) && !c.sections.some((x: any) => x?.id === "testimonials")) { const at = c.sections.findIndex((x: any) => x?.id === "contact"); c.sections.splice(at < 0 ? c.sections.length : at, 0, { id: "testimonials", visible: true, navLabel: "" }); }
+    if (Array.isArray(c.sections) && !c.sections.some((x: any) => x?.id === "message")) { const at = c.sections.findIndex((x: any) => x?.id === "contact"); c.sections.splice(at < 0 ? c.sections.length : at + 1, 0, { id: "message", visible: !!c.contactForm?.on, navLabel: "" }); }
     if (Array.isArray(c.sections) && !c.sections.some((x: any) => x?.id === "wall")) { const at = c.sections.findIndex((x: any) => x?.id === "contact"); c.sections.splice(at < 0 ? c.sections.length : at, 0, { id: "wall", visible: !!c.wall?.on, navLabel: "" }); }
-    prepareMenu(c, () => (Array.isArray(c.sections) ? c.sections : []).filter((x: any) => x && x.visible && x.id !== "contact" && x.id !== "wall").map((x: any) => menuItem(x.navLabel || x.id, x.id)));
+    prepareMenu(c, () => (Array.isArray(c.sections) ? c.sections : []).filter((x: any) => x && x.visible && x.id !== "contact" && !["wall", "testimonials", "message"].includes(x.id)).map((x: any) => menuItem(x.navLabel || x.id, x.id)));
     // Hero → Photo was replaced by the logo icon / disc image (Brand & theme): an existing photo moves to the disc.
     if (c.hero && c.hero.photo) {
       if (!c.hero.discImage) c.hero.discImage = c.hero.photo;

@@ -14,7 +14,9 @@
    A template that lists its sections (Sections & order) draws an empty <section data-wall-slot> where the wall's row stands in that
    list, and passes { on, slot: true }: the wall fills that slot, so its place, its switch and its menu link work like any section's.
    Without a slot (the shop, and layouts with no section flow of their own) it is placed by "place" among the page's sections.
-   window.SiteWall.mount(C, { sections: css, home, imgUrl, on, slot }): safe to call again after every render. */
+   So the wall reads as part of the page, a template can hand it its own pieces: head (its section heading, as HTML), wrap (the class of
+   its content wrapper), cls (its section classes) and btn (its button classes). The tiles follow the theme's card style.
+   window.SiteWall.mount(C, { sections: css, home, imgUrl, on, slot, head, wrap, cls, btn }): safe to call again after every render. */
 (function () {
   "use strict";
   var esc = function (s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); };
@@ -22,7 +24,7 @@
   var NETS = { instagram: ["Instagram", "https://www.instagram.com/{h}"], pinterest: ["Pinterest", "https://www.pinterest.com/{h}"], facebook: ["Facebook", "https://www.facebook.com/{h}"], tiktok: ["TikTok", "https://www.tiktok.com/@{h}"],
     youtube: ["YouTube", "https://www.youtube.com/@{h}"], x: ["X", "https://x.com/{h}"], behance: ["Behance", "https://www.behance.net/{h}"], dribbble: ["Dribbble", "https://dribbble.com/{h}"], other: ["", ""] };
   var CSS = [
-    ".sw{--sw-acc:var(--c1,var(--accent,currentColor));--sw-on:var(--on-c1,var(--on-accent,#fff));--sw-line:var(--line,color-mix(in srgb,currentColor 16%,transparent));--sw-gap:clamp(8px,1.2vw,16px);padding:clamp(44px,7vw,88px) 0;position:relative}",
+    ".sw{--sw-acc:var(--c1,var(--accent,currentColor));--sw-on:var(--on-c1,var(--on-accent,#fff));--sw-line:var(--line,color-mix(in srgb,currentColor 16%,transparent));--sw-gap:clamp(8px,1.2vw,16px);position:relative}.sw:not(.sw-n){padding:clamp(44px,7vw,88px) 0}",
     ".sw-in{max-width:1240px;margin:0 auto;padding:0 clamp(18px,4vw,32px)}",
     ".sw-hd{text-align:center;max-width:760px;margin:0 auto clamp(22px,3vw,38px)}",
     ".sw-eb{margin:0 0 10px;font-size:13px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--sw-acc)}",
@@ -30,7 +32,7 @@
     ".sw-p{margin:12px 0 0;font-size:clamp(15.5px,1.5vw,18px);line-height:1.6;opacity:.82;white-space:pre-line}",
     ".sw-fw{display:flex;justify-content:center;margin-top:clamp(22px,3vw,34px)}",
     ".sw-btn{display:inline-flex;align-items:center;gap:9px;padding:13px 22px;border-radius:var(--sw-btn,99px);font-weight:700;font-size:15px;line-height:1;text-decoration:none;background:var(--sw-acc);color:var(--sw-on);transition:transform .15s,filter .15s}",
-    ".sw-btn:hover{transform:translateY(-1px);filter:brightness(1.06)}.sw-btn svg{width:18px;height:18px}",
+    ".sw-btn:hover{transform:translateY(-1px);filter:brightness(1.06)}.sw-fw svg{width:18px;height:18px;flex:none}.sw-n .sw-in{max-width:none;padding:0}.sw-n .sw-fw{justify-content:flex-start;padding:0!important}.sw-n[data-l=strip] .sw-g{padding-inline:0}",
     // tiles: the theme's corners and card look
     ".sw-g{display:grid;gap:var(--sw-gap);grid-template-columns:repeat(var(--sw-cols,4),minmax(0,1fr))}",
     ".sw-t{position:relative;display:block;overflow:hidden;border-radius:var(--sw-rad,12px);background:var(--surface,color-mix(in srgb,currentColor 6%,transparent));color:inherit;text-decoration:none;aspect-ratio:var(--sw-ar,1/1);border:1px solid var(--sw-line);margin:0}",
@@ -44,6 +46,8 @@
     ".sw[data-cap=below] .sw-c{position:static;opacity:1;transform:none;background:none;color:inherit;padding:10px 12px 12px}",
     // the theme's card looks, where the theme has them
     "html[data-cards=flat] .sw-t{border-color:transparent}html[data-cards=elevated] .sw-t{border-color:transparent;box-shadow:0 1px 2px rgba(16,24,40,.05),0 12px 32px -14px rgba(16,24,40,.22)}",
+    "html[data-cards=outline] .sw-t{background:transparent;border:1.5px solid var(--sw-line)}html[data-cards=brutal] .sw-t{border:2px solid var(--text,currentColor);box-shadow:5px 5px 0 var(--text,currentColor)}html[data-cards=brutal] .sw-g{padding:0 6px 6px 0}",
+    "html[data-cards=gradient] .sw-t{border:2px solid transparent;background:linear-gradient(var(--surface,#fff),var(--surface,#fff)) padding-box,linear-gradient(135deg,var(--sw-acc),var(--c2,var(--sw-acc))) border-box}html[data-cards=inset] .sw-t{border-color:transparent;box-shadow:0 0 0 1px color-mix(in srgb,currentColor 12%,transparent)}html[data-cards=soft] .sw-t{border-color:transparent}",
     "html[data-cards=lined] .sw-t{border:0;border-radius:0}html[data-cards=accent] .sw-t{border-top:3px solid var(--sw-acc)}html[data-cards=glass] .sw-t{border-color:color-mix(in srgb,var(--sw-line) 60%,transparent);box-shadow:0 8px 30px -12px rgba(0,0,0,.25)}",
     // layouts
     ".sw[data-l=masonry] .sw-g{display:block;columns:var(--sw-cols,4);column-gap:var(--sw-gap)}.sw[data-l=masonry] .sw-t{aspect-ratio:auto;break-inside:avoid;margin:0 0 var(--sw-gap)}.sw[data-l=masonry] .sw-t img{height:auto}",
@@ -116,13 +120,17 @@
     var ar = W.shape === "portrait" ? "4/5" : W.shape === "landscape" ? "4/3" : "1/1", cap = /^(below|none)$/.test(W.captions) ? W.captions : "hover";
     var h = String(W.handle || "").trim().replace(/^@/, ""), label = String(W.button || "").trim() || (h ? "Follow @" + h : name ? "Follow us on " + name : "See more");
     var head = W.eyebrow || W.title || W.text ? '<div class="sw-hd">' + (W.eyebrow ? '<p class="sw-eb" data-edit="wall.eyebrow">' + esc(W.eyebrow) + "</p>" : "") + (W.title ? '<h2 class="sw-h" data-edit="wall.title">' + esc(W.title) + "</h2>" : "") + (W.text ? '<p class="sw-p" data-edit="wall.text">' + esc(W.text) + "</p>" : "") + "</div>" : "";
-    var s = slot || document.createElement("section"); if (slot) { s.hidden = false; s.removeEventListener("click", onOpen); } else s.id = "site-wall"; s.className = "sw"; s.setAttribute("data-l", layout); s.setAttribute("data-cap", cap); s.setAttribute("aria-label", W.title || (name ? name + " photos" : "Photo wall"));
+    var s = slot || document.createElement("section"); if (slot) { s.hidden = false; s.removeEventListener("click", onOpen); } else { s.id = "site-wall"; s.setAttribute("data-sec", "wall"); } s.className = "sw" + (o.cls ? " sw-n " + o.cls : ""); s.setAttribute("data-l", layout); s.setAttribute("data-cap", cap); s.setAttribute("aria-label", W.title || (name ? name + " photos" : "Photo wall"));
     s.style.setProperty("--sw-cols", String(cols)); s.style.setProperty("--sw-ar", ar); var rad = corner(); if (rad) s.style.setProperty("--sw-rad", rad);
-    s.innerHTML = '<div class="sw-in">' + head + '<div class="sw-g">' + tiles + "</div>" + (prof ? '<div class="sw-fw"><a class="sw-btn" href="' + esc(prof) + '" target="_blank" rel="noopener me">' + (net === "pinterest" ? IC.pin : IC.cam) + '<span data-edit="wall.button">' + esc(label) + "</span></a></div>" : "") + "</div>";
+    s.innerHTML = '<div class="' + esc(o.wrap || "sw-in") + '">' + (o.head != null ? o.head : head) + '<div class="sw-g">' + tiles + "</div>" + (prof ? '<div class="sw-fw"><a class="' + esc(o.btn || "sw-btn") + '" href="' + esc(prof) + '" target="_blank" rel="noopener me">' + (net === "pinterest" ? IC.pin : IC.cam) + '<span data-edit="wall.button">' + esc(label) + "</span></a></div>" : "") + "</div>";
     s.addEventListener("click", onOpen);
-    if (slot) return s;
+    // the section's own background and text (Background & text of this section), drawn by fx.js: the wall is filled after the
+    // page's effects ran, so they are asked again for this one section once it stands in the page
+    var bg = function () { var B = C && C.sectionBg && C.sectionBg.wall; if (B && (B.on || B.align) && window.SiteFX && window.SiteFX.bgs && s.parentNode) window.SiteFX.bgs({ bgs: { wall: B }, asset: o.imgUrl }, s.parentNode); };
+    if (slot) { bg(); return s; }
     var place = W.place || "bottom", m = list.length, before = place === "end" ? null : place === "bottom" ? list[m - 1] : place === "middle" ? list[Math.max(1, Math.ceil(m / 2))] || null : list[1] || null;
     if (before && m > 1) parent.insertBefore(s, before); else if (list[m - 1].nextSibling) parent.insertBefore(s, list[m - 1].nextSibling); else parent.appendChild(s);
+    bg();
     return s;
   }
   window.SiteWall = { mount: mount, NETS: NETS };

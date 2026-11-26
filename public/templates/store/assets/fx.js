@@ -1793,5 +1793,5 @@
     if (!stickOn) { stickOn = true; var tick = false, go = function () { if (tick) return; tick = true; requestAnimationFrame(function () { tick = false; stickMeasure(); }); }; addEventListener("scroll", go, { passive: true }); addEventListener("resize", go); addEventListener("load", go); }
     stickMeasure(); setTimeout(stickMeasure, 400);
   }
-  window.SiteFX = { init: init, version: 1, fontsOk: fontsOk, allowed: allowed, stick: stick };
+  window.SiteFX = { init: init, bgs: function (opts, root) { try { sectionBgs(opts || {}, root || document.body); } catch (e) { /* never worth a broken page */ } }, version: 1, fontsOk: fontsOk, allowed: allowed, stick: stick };
 })();

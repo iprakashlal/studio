@@ -1,11 +1,11 @@
 import { legalChecks } from "../lib/legal";
 import type { Category, Field, TemplateDef } from "./types";
 import { AXES, BODY_FONTS, DISPLAY_FONTS, KIT_AXIS, LINE_BREAKS_AXIS, PORTFOLIO_AXES, THEMES, onColor, portfolioThemeValues } from "../themes/catalog";
-import { adminCategory, legalCategory, codeCategory, withSectionBg, videoCategory, wallCategory, WALL_SWITCH, socialCategory, logoFields, consentCategory, emailsCategory, i18nCategory, prepareI18n, featuresCategory, festivalCategory, menuCategory, menuItem, prepareMenu, staticPagesCategory, heroSlidesCard, prepareSlides, prepareMaintenance, seoCategory, customFontsCard, customFontFields } from "./common";
+import { adminCategory, legalCategory, codeCategory, withSectionBg, videoCategory, wallCategory, socialCategory, logoFields, consentCategory, emailsCategory, i18nCategory, prepareI18n, featuresCategory, festivalCategory, menuCategory, menuItem, prepareMenu, staticPagesCategory, heroSlidesCard, prepareSlides, prepareMaintenance, seoCategory, customFontsCard, customFontFields } from "./common";
 import VELOCITY_DEFAULTS from "./velocity-defaults.json";
 import { NAV_MODE_FIELD, NAV_MODE_MOB_FIELD, NAV_MODE_NOTE, themeCards } from "../themes/fields";
 
-const SECTION_NAMES: Record<string, string> = { about: "About", skills: "Skills cube", work: "Work deck", projects: "Projects", learning: "Learning", contact: "Contact" };
+const SECTION_NAMES: Record<string, string> = { about: "About", skills: "Skills cube", work: "Work deck", projects: "Projects", learning: "Learning", wall: "Social photo wall", contact: "Contact" };
 /** Hero graphics: alternatives to the floating elements, drawn in the theme's colours. */
 export const HERO_GRAPHICS: [string, string][] = [
   ["elements", "Floating elements (theme pack / 3D)"], ["orb", "Glossy orb with ring"], ["rings", "Orbit rings with initials"],
@@ -105,7 +105,7 @@ const schema: Category[] = [
     cards: [
       { title: "Menu when scrolling", fields: [NAV_MODE_FIELD, NAV_MODE_MOB_FIELD, { t: "note", text: NAV_MODE_NOTE + " The same setting is under Theme & layout → Layout & elements." }] },
       { title: "Header", fields: [g2({ t: "text", path: "brand.logoText", label: "Logo text" }, { t: "text", path: "brand.contactLabel", label: "Header button label" })] },
-      { title: "Sections & menu titles", fields: [{ t: "note", text: "Open a section to rename its menu title or hide it." }, { t: "list", path: "sections", fixed: true, add: () => ({}), title: (it) => `${SECTION_NAMES[it.id]} · menu: “${it.navLabel || ""}”` + (it.visible ? "" : "  (hidden)"), item: [g2({ t: "toggle", path: "visible", label: "Show on page" }, { t: "text", path: "navLabel", label: "Menu title" })] }, ...WALL_SWITCH] },
+      { title: "Sections & menu titles", fields: [{ t: "note", text: "Open a section to rename its menu title or hide it." }, { t: "list", path: "sections", fixed: true, add: () => ({}), title: (it) => `${SECTION_NAMES[it.id]} · menu: “${it.navLabel || ""}”` + (it.visible ? "" : "  (hidden)"), item: [g2({ t: "toggle", path: "visible", label: "Show on page" }, { t: "text", path: "navLabel", label: "Menu title" })] }] },
       { title: "Page layout labels", fields: [
         { t: "note", text: "Words the Motion page layouts show around your content: menu buttons, hints and small headings. They only appear in the layout that uses them." },
         g2({ t: "text", path: "labels.scrollHint", label: "Scroll hint (Type specimen)" }, { t: "text", path: "labels.project", label: "“Project” tag" },
@@ -256,7 +256,9 @@ export const portfolioTemplate: TemplateDef = {
     if (c.hero && typeof c.hero === "object") prepareSlides(c.hero, "#000000");
     prepareMaintenance(c);
     prepareI18n(c, () => schema);
-    prepareMenu(c, () => (Array.isArray(c.sections) ? c.sections : []).filter((x: any) => x && x.visible && x.id !== "contact").map((x: any) => menuItem(x.navLabel || x.id, x.id)));
+    // The social photo wall is one of the sections (older content gets its row, before Contact; on if the wall was switched on).
+    if (Array.isArray(c.sections) && !c.sections.some((x: any) => x?.id === "wall")) { const at = c.sections.findIndex((x: any) => x?.id === "contact"); c.sections.splice(at < 0 ? c.sections.length : at, 0, { id: "wall", visible: !!c.wall?.on, navLabel: "" }); }
+    prepareMenu(c, () => (Array.isArray(c.sections) ? c.sections : []).filter((x: any) => x && x.visible && x.id !== "contact" && x.id !== "wall").map((x: any) => menuItem(x.navLabel || x.id, x.id)));
     // Hero → Photo was replaced by the logo icon / disc image (Brand & theme): an existing photo moves to the disc.
     if (c.hero && c.hero.photo) {
       if (!c.hero.discImage) c.hero.discImage = c.hero.photo;

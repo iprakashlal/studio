@@ -42,6 +42,7 @@ const DEFAULT = {
     { id: "testimonials", label: "Reviews", show: true, inNav: false },
     { id: "order", label: "Order online", show: true, inNav: false },
     { id: "reserve", label: "Book a table", show: true, inNav: false },
+    { id: "wall", label: "Social wall", show: false, inNav: false },
     { id: "contact", label: "Visit us", show: true, inNav: true },
     { id: "faq", label: "FAQ", show: true, inNav: false },
     { id: "cta", label: "Call to action", show: true, inNav: false },
@@ -302,7 +303,7 @@ const spHref = (p) => PAGES.page + "?p=" + encodeURIComponent(spSlug(p));
 const spCur = () => { try { return new URLSearchParams(location.search).get("p") || ""; } catch (e) { return ""; } };
 /** Which sections each page shows when the site has several pages (home follows the section order). */
 const PAGE_SECTIONS = {
-  home: ["hero", "highlights", "about", "specials", "food", "offers", "gallery", "testimonials", "press", "order", "cta"],
+  home: ["hero", "highlights", "about", "specials", "food", "offers", "gallery", "testimonials", "press", "order", "cta", "wall"],
   menu: ["food", "offers", "order", "cta"],
   about: ["about", "highlights", "chef", "events", "press", "testimonials", "cta"],
   gallery: ["gallery", "cta"],
@@ -674,7 +675,7 @@ function ctaHTML() {
   if (!X.title) return "";
   return `<section class="cta" id="cta"><div class="wrap"><div class="cta-box"><div>${orn("orn cta-o")}<h2 class="h2">${rich(X.title)}</h2>${X.body ? `<p>${rich(X.body)}</p>` : ""}</div>${btn(X.button, X.target || "reserve", "inv")}</div></div></section>`;
 }
-const RENDER = { hero: heroHTML, highlights: highlightsHTML, about: aboutHTML, specials: specialsHTML, food: foodHTML, offers: offersHTML, gallery: galleryHTML, chef: chefHTML, events: eventsHTML, press: pressHTML, testimonials: testimonialsHTML, order: orderHTML, reserve: reserveHTML, contact: contactHTML, faq: faqHTML, cta: ctaHTML };
+const RENDER = { wall: wallSlot, hero: heroHTML, highlights: highlightsHTML, about: aboutHTML, specials: specialsHTML, food: foodHTML, offers: offersHTML, gallery: galleryHTML, chef: chefHTML, events: eventsHTML, press: pressHTML, testimonials: testimonialsHTML, order: orderHTML, reserve: reserveHTML, contact: contactHTML, faq: faqHTML, cta: ctaHTML };
 
 /* ============================================================
    PAGE
@@ -700,7 +701,7 @@ function navHTML() {
   const B = C.brand, logo = imgUrl(B.logo);
   const items = multi()
     ? mpages().map((p) => ({ label: C.site.pageLabels[p] || p, url: PAGES[p], on: PAGE === p }))
-    : C.sections.filter((s) => s.show !== false && s.inNav && RENDER[s.id]).map((s) => ({ label: s.label, url: AT + "#" + s.id }));
+    : C.sections.filter((s) => s.show !== false && s.inNav && RENDER[s.id] && (s.id !== "wall" || wallSlot())).map((s) => ({ label: s.label, url: AT + "#" + s.id }));
   if (orderOn() && C.ordering.inNav !== false) items.push({ label: C.ordering.label || "Order now", url: PAGES.order, on: PAGE === "order" });
   // Customer accounts: a link to sign in / "My account" (it opens on the Order now page).
   if (orderOn() && C.account && C.account.on && C.account.inNav !== false) items.push({ label: C.account.label || "My account", url: PAGES.order + "#account" });
@@ -720,7 +721,7 @@ function pageHead() {
 }
 function footerHTML() {
   const F = C.footer, B = C.brand, K = C.contact, D = weekDays().filter((d) => d && d.day);
-  const cols = multi() ? mpages().map((p) => `<a href="${PAGES[p]}">${esc(C.site.pageLabels[p] || p)}</a>`) : C.sections.filter((s) => s.show !== false && s.inNav && RENDER[s.id]).map((s) => `<a href="${AT}#${s.id}">${esc(s.label)}</a>`);
+  const cols = multi() ? mpages().map((p) => `<a href="${PAGES[p]}">${esc(C.site.pageLabels[p] || p)}</a>`) : C.sections.filter((s) => s.show !== false && s.inNav && RENDER[s.id] && (s.id !== "wall" || wallSlot())).map((s) => `<a href="${AT}#${s.id}">${esc(s.label)}</a>`);
   spList().filter((p) => p.inFooter !== false).forEach((p) => cols.push(`<a href="${esc(spHref(p))}">${esc(p.navLabel || p.title)}</a>`));
   if (ckOn()) cols.push(`<a href="#cookie-settings">${esc(C.consent.reopenLabel || "Cookie settings")}</a>`);
   // The week in short: neighbouring days with the same hours share a line.
@@ -786,13 +787,16 @@ function setIcon() {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="${(rad * 0.64).toFixed(1)}" fill="${esc(acc)}"/><text x="32" y="34" dominant-baseline="middle" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-weight="800" font-size="${ini.length > 1 ? 26 : 34}" fill="${onColor(acc)}">${esc(ini)}</text></svg>`;
   l.type = "image/svg+xml"; l.href = "data:image/svg+xml," + encodeURIComponent(svg);
 }
-/* The social photo wall (assets/wall.js): the owner's Instagram or Pinterest photos on the home page, among its sections. */
+/* The social photo wall (assets/wall.js): the owner's Instagram or Pinterest photos. It is one of the page's sections: its row under
+   Sections & order switches it on and sets where it stands; the script fills the empty slot drawn there. */
+const wallOn = () => { const s = C.sections.find((x) => x.id === "wall"); return s ? s.show !== false : !!(C.wall && C.wall.on); };
+function wallSlot() { return wallOn() && C.wall && Array.isArray(C.wall.items) && C.wall.items.length ? `<section id="wall" data-wall-slot hidden></section>` : ""; }
 let wallP = null;
 function wall() {
-  const W = C.wall || {};
-  if (!W.on && !window.SiteWall) return;
+  if (!wallOn() && !window.SiteWall) return;
   (wallP ||= new Promise((ok, no) => { if (window.SiteWall) return ok(); const s = document.createElement("script"); s.src = "assets/wall.js"; s.onload = () => ok(); s.onerror = no; document.head.appendChild(s); }))
-    .then(() => window.SiteWall.mount(C, { sections: "#main > section", home: PAGE === "home", imgUrl })).catch(() => {});
+    // A site saved before the wall became a row in the list has no row for it: it keeps its old place on the home page.
+    .then(() => window.SiteWall.mount(C, C.sections.some((x) => x.id === "wall") ? { on: wallOn(), slot: "only", imgUrl } : { sections: "#main > section", home: PAGE === "home", imgUrl })).catch(() => {});
 }
 /** What search engines read about the place: name, address, phone, hours, cuisine and the menu's address. */
 function jsonLd() {

@@ -3,13 +3,13 @@ import type { Category, Field, TemplateDef } from "./types";
 import { BODY_FONTS, DISPLAY_FONTS, FX_AXES, HERO_FX_AXIS, LOADER_ON_AXIS, LINE_BREAKS_AXIS, type Axis } from "../themes/catalog";
 import { EVT_AXES as BIZ_AXES, EVT_TAGS, EVT_THEMES, EVT_TYPES, REG_KINDS, eventThemeValues } from "../themes/events";
 import { INTRO_CARD, NAV_MODE_FIELD, NAV_MODE_MOB_FIELD } from "../themes/fields";
-import { ANIM_BG_FIELDS, adminCategory, legalCategory, codeCategory, withSectionBg, videoCategory, wallCategory, WALL_SWITCH, socialCategory, logoFields, consentCategory, emailsCategory, i18nCategory, prepareI18n, featuresCategory, festivalCategory, menuCategory, menuItem, prepareMenu, staticPagesCategory, heroSlidesCard, prepareSlides, prepareMaintenance, seoCategory, customFontsCard } from "./common";
+import { ANIM_BG_FIELDS, adminCategory, legalCategory, codeCategory, withSectionBg, videoCategory, wallCategory, socialCategory, logoFields, consentCategory, emailsCategory, i18nCategory, prepareI18n, featuresCategory, festivalCategory, menuCategory, menuItem, prepareMenu, staticPagesCategory, heroSlidesCard, prepareSlides, prepareMaintenance, seoCategory, customFontsCard } from "./common";
 
 const g2 = (...fields: Field[]): Field => ({ t: "grid", cols: 2, fields });
 const g3 = (...fields: Field[]): Field => ({ t: "grid", cols: 3, fields });
 const sel = (a: Axis): Field => ({ t: "select", path: "theme." + a.key, label: a.label, options: a.options.map(([value, label]) => ({ value, label })) });
 
-const SECTIONS: [string, string][] = [["hero", "Hero"], ["clients", "Sponsors"], ["about", "About"], ["services", "Highlights"], ["stats", "Numbers"], ["team", "Line-up"], ["schedule", "Schedule"], ["tickets", "Tickets"], ["gallery", "Gallery"], ["venue", "Venue"], ["work", "Past editions"], ["process", "How it works"], ["testimonials", "What people say"], ["faq", "FAQ"], ["cta", "Call to action"], ["contact", "Contact"]];
+const SECTIONS: [string, string][] = [["hero", "Hero"], ["clients", "Sponsors"], ["about", "About"], ["services", "Highlights"], ["stats", "Numbers"], ["team", "Line-up"], ["schedule", "Schedule"], ["tickets", "Tickets"], ["gallery", "Gallery"], ["venue", "Venue"], ["work", "Past editions"], ["process", "How it works"], ["testimonials", "What people say"], ["faq", "FAQ"], ["cta", "Call to action"], ["wall", "Social wall"], ["contact", "Contact"]];
 /** Sections that start hidden when a newer version adds them to an older site. */
 const HIDDEN = ["work", "process"];
 const TARGETS = SECTIONS.filter(([id]) => id !== "hero").map(([value, label]) => ({ value, label }));
@@ -63,7 +63,7 @@ const schema: Category[] = [
         { t: "text", path: "site.pageLabels.register", label: "Registration page name" }] },
       { title: "Sections", fields: [{ t: "note", text: "Reorder with the arrows. Hidden sections stay in your content. On one page, sections with “In the menu” get a menu link." },
         { t: "list", path: "sections", fixed: true, add: () => ({}), title: (it) => `${it.label || it.id}${it.show === false ? " (hidden)" : ""}`,
-          item: [g2({ t: "text", path: "label", label: "Menu name" }, { t: "toggle", path: "show", label: "Show this section" }), { t: "toggle", path: "inNav", label: "In the menu (one-page mode)" }] }, ...WALL_SWITCH] },
+          item: [g2({ t: "text", path: "label", label: "Menu name" }, { t: "toggle", path: "show", label: "Show this section" }), { t: "toggle", path: "inNav", label: "In the menu (one-page mode)" }] }] },
       { title: "Menu button", fields: [g2({ t: "text", path: "nav.cta", label: "Button label (empty hides it)" }, { t: "select", path: "nav.ctaTarget", label: "Goes to", options: GOES }), linkWhen("nav.ctaTarget", "Custom link for the menu button")] },
     ],
   },
@@ -287,7 +287,7 @@ function prepareEvents(c: any) {
   SECTIONS.forEach(([id, label], k) => {
     if (c.sections.some((s: any) => s.id === id)) return;
     const after = k ? c.sections.findIndex((s: any) => s.id === SECTIONS[k - 1][0]) : -1;
-    c.sections.splice(after + 1, 0, { id, label, show: !HIDDEN.includes(id), inNav: ["about", "team", "schedule", "tickets", "venue", "contact"].includes(id) });
+    c.sections.splice(after + 1, 0, { id, label, show: id === "wall" ? !!c.wall?.on : !HIDDEN.includes(id), inNav: ["about", "team", "schedule", "tickets", "venue", "contact"].includes(id) });
   });
 }
 export const eventsTemplate: TemplateDef = {

@@ -49,7 +49,7 @@ var CFDB_UPGRADES = [
     "create index if not exists enquiries_ref on enquiries (site, ref)"
   ] }
 ];
-var CFDB_VERSION = 87;
+var CFDB_VERSION = 88;
 var CFDB_WORKER_NAME = "picaffectz-db";
 
 // src/lib/lookdigest.ts
@@ -1184,6 +1184,8 @@ async function ensure(env) {
 }
 var SETTINGS = {
   ai: { secret: ["key"], text: ["base", "model", "vision", "image"], flags: ["on"] },
+  // Unsplash: real photos found by words, in the place of a drawn picture (the owner's own free access key).
+  un: { secret: ["key"], text: [], flags: ["on"] },
   wa: { secret: ["token"], text: ["phoneId", "waba", "cc", "lang", "to", "phones", "tplOtp", "tplOrder", "tplEnquiry"], flags: ["on", "login", "orderOtp", "orderAlert", "enquiryAlert"] },
   rz: { secret: ["secret"], text: ["keyId"], flags: ["on"] },
   cf: { secret: ["secret"], text: ["appId"], flags: ["test"] },
@@ -2499,7 +2501,7 @@ function dqDesignPub(d) {
     const im = {};
     if (d.images.on === true) im.on = true;
     if (["photo", "illustration", "3d", "flat"].includes(d.images.style)) im.style = d.images.style;
-    if (d.images.source === "engine") im.source = "engine";
+    if (d.images.source === "engine" || d.images.source === "unsplash") im.source = d.images.source;
     if (Object.keys(im).length) out.images = im;
   }
   if (d.notice && typeof d.notice === "object") {
@@ -2825,12 +2827,51 @@ function dqSections(x) {
   }
   return out;
 }
+async function unsplashFind(key, words2, n) {
+  try {
+    const r = await fetch(`https://api.unsplash.com/search/photos?query=${encodeURIComponent(words2)}&per_page=${Math.max(1, Math.min(8, n))}&orientation=landscape&content_filter=high`, { signal: AbortSignal.timeout(15e3), headers: { Authorization: "Client-ID " + key, "Accept-Version": "v1" } });
+    if (r.status === 401) return { error: "Unsplash didn't accept the access key. Check it under Settings \u2192 AI \u2192 Pictures drawn by AI." };
+    if (r.status === 403 || r.status === 429) return { error: "Unsplash's hourly limit for this key is used up (50 searches an hour until Unsplash approves the app). Please try again later." };
+    const j = await r.json().catch(() => null);
+    if (!r.ok) return { error: `Unsplash answered ${r.status}${j?.errors?.[0] ? ": " + String(j.errors[0]).slice(0, 140) : ""}` };
+    const photos = (j?.results || []).filter((x) => x?.urls?.regular).map((x) => ({ url: String(x.urls.regular), thumb: String(x.urls.small || x.urls.regular), by: String(x.user?.name || "").slice(0, 80), link: String(x.user?.links?.html || ""), page: String(x.links?.html || ""), dl: String(x.links?.download_location || "") }));
+    return photos.length ? { photos } : { error: "Unsplash has no photo for those words. Try simpler words." };
+  } catch {
+    return { error: "Unsplash didn't answer in time. Please try again." };
+  }
+}
+async function dqPhotoUsed(env, id, req) {
+  if (!await dqRate(env, "dqun2:" + id, 400, 3600)) return json({ ok: true });
+  let q;
+  try {
+    q = JSON.parse((await req.text()).slice(0, 2e3) || "{}");
+  } catch {
+    return json({ ok: true });
+  }
+  const dl = String(q.dl || ""), c = await anySetting(env, "un");
+  if (c?.key && /^https:\/\/api\.unsplash\.com\/photos\/[\w-]{3,40}\/download(\?[\w=&%.-]{0,400})?$/.test(dl)) await fetch(dl, { signal: AbortSignal.timeout(8e3), headers: { Authorization: "Client-ID " + c.key, "Accept-Version": "v1" } }).catch(() => {
+  });
+  return json({ ok: true });
+}
 async function dqImage(env, id, req) {
   const ip = req.headers.get("cf-connecting-ip") || "x";
   if (!await dqRate(env, "dqimg:" + id, 120, 3600) || !await dqRate(env, "dqimgip:" + ip, 16, 3600)) return json({ engine: "system", error: "busy" });
   const idx = await studioIndex(env, id);
   if (!idx) return err(404, "Not found.");
   const d = idx?.prefs?.design;
+  if (d?.images?.source === "unsplash") {
+    let b;
+    try {
+      b = JSON.parse((await req.text()).slice(0, 2e3) || "{}");
+    } catch {
+      return err(400, "Couldn't read the request.");
+    }
+    const words2 = clip(b.words || b.prompt, 120);
+    if (words2.length < 2) return err(400, "Describe the picture first.");
+    const c = await anySetting(env, "un");
+    if (!c?.key) return json({ engine: "unsplash", error: "No Unsplash access key is saved yet. Add it under Settings \u2192 AI \u2192 Pictures drawn by AI." });
+    return json({ engine: "unsplash", ...await unsplashFind(String(c.key), words2, +b.n || 4) });
+  }
   if (d?.images?.source !== "engine") return json({ engine: "system" });
   const { choice, ai } = await dqEngine(env, idx);
   if (choice !== "cloudflare" && choice !== "custom" || !ai) return json({ engine: "system" });
@@ -3800,6 +3841,11 @@ ${body}`)}${paras("Approve or hide it under Reviews in your site's admin page.",
         if (!b) return err(404, "Not found.");
         return new Response(JSON.stringify(b), { headers: { ...cors, "Content-Type": "application/json", "Cache-Control": "public, max-age=60" } });
       }
+      if (p.startsWith("/dq/photo-used/") && req.method === "POST") {
+        const id = studioId(p.split("/")[3] || "");
+        if (!id) return err(404, "Not found.");
+        return dqPhotoUsed(env, id, req);
+      }
       if (p.startsWith("/dq/image/") && req.method === "POST") {
         const id = studioId(p.split("/")[3] || "");
         if (!id) return err(404, "Not found.");
@@ -4101,6 +4147,12 @@ ${body}`)}${paras("Approve or hide it under Reviews in your site's admin page.",
           }
         }
         if (p === "/set/test") {
+          if (name === "un") {
+            const c2 = await getSetting(env, scope, "un");
+            if (!c2?.key) return json({ error: "Save the access key first." });
+            const r = await unsplashFind(String(c2.key), "coffee shop", 1);
+            return r.photos ? json({ ok: true, said: `a photo by ${r.photos[0].by || "an Unsplash photographer"}` }) : json({ error: r.error });
+          }
           if (name !== "ai") return err(400, "Nothing to test.");
           const c = await getSetting(env, scope, "ai");
           if (!c?.key || !c.model || !publicUrl(String(c.base || "").trim())) return json({ error: "Fill in the address, the model and the key first." });

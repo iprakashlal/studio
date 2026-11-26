@@ -1,4 +1,4 @@
-import { designHost, engineImage } from "./designapi";
+import { designHost, engineImage, stockPhotos, stockPhotoUsed, type StockPhoto } from "./designapi";
 // Default pictures for a website made in "Design yourself": drawn here (no photos, nothing downloaded) in the theme's own
 // colours, with a simple symbol that suits the kind of business or the theme type. They stand in until the person adds their own.
 
@@ -38,14 +38,26 @@ export function defaultPicture(subject: string, c: { c1: string; c2: string; bg:
 
 const STYLE: Record<string, string> = { photo: "professional photograph, natural light, high quality", illustration: "clean modern illustration, vector style", "3d": "soft 3D render, pastel lighting", flat: "flat minimal graphic, simple shapes" };
 
+/** A found photo: its picture, with who took it and a call to make when it is used (see lib/designapi stockPhotos). */
+export type PhotoBlob = Blob & { credit?: StockPhoto; used?: () => void };
 /** Pictures drawn from words by the free AI Horde (no key, no sign-up, no daily quota: volunteers' computers do the drawing, so anonymous
  *  requests may wait in a queue). Small sizes and few steps keep it quick; the caller fits the result to the page. */
 const sleep = (ms: number, sig?: AbortSignal) => new Promise<void>((ok, no) => { const t = setTimeout(ok, ms); sig?.addEventListener("abort", () => { clearTimeout(t); no(new Error("Stopped.")); }); });
 const b64Blob = (b: string, type = "image/webp") => { const bin = atob(b), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return new Blob([u], { type }); };
-export async function generateImages(prompt: string, o: { /** "engine": the Studio's own AI engine draws it (quick), with the free generator as the fallback. */ source?: "horde" | "engine"; style?: string; kind?: "logo" | "photo"; n?: number; signal?: AbortSignal; status?: (t: string) => void } = {}): Promise<Blob[]> {
+export async function generateImages(prompt: string, o: { /** "engine": the Studio's own AI engine draws it (quick), with the free generator as the fallback. */ source?: "horde" | "engine" | "unsplash"; style?: string; kind?: "logo" | "photo"; n?: number; signal?: AbortSignal; status?: (t: string) => void } = {}): Promise<Blob[]> {
   const kind = o.kind || "photo", n = Math.max(1, Math.min(4, o.n || 1)), what = prompt.replace(/\s+/g, " ").trim().slice(0, 300);
   if (!what) throw new Error("Describe the picture first.");
   const full = kind === "logo" ? `minimal vector logo mark, ${what}, simple flat icon, centered, plain white background, no text` : `${what}, ${STYLE[o.style || "photo"] || STYLE.photo}, no text, no logo`;
+  // Unsplash: real photos for the words as typed (no style words). It has no logos, so a logo is still drawn.
+  if (o.source === "unsplash" && kind !== "logo") {
+    const h = await designHost().catch(() => null); if (!h) throw new Error("Photos from Unsplash need the Studio's database. Open this from your Studio.");
+    o.status?.("Looking on Unsplash…");
+    const r = await stockPhotos(h, what, Math.max(n, 4)); if (!r.photos) throw new Error(r.error || "Unsplash found nothing.");
+    o.status?.("Fetching the photos…");
+    const got = (await Promise.all(r.photos.slice(0, 4).map(async (ph) => { try { const x = await fetch(ph.url, { signal: o.signal }); if (!x.ok) return null; return Object.assign(await x.blob(), { credit: ph, used: () => stockPhotoUsed(h, ph.dl) }) as PhotoBlob; } catch { return null; } }))).filter(Boolean) as PhotoBlob[];
+    if (!got.length) throw new Error("The photos couldn't be fetched from Unsplash. Please try again.");
+    return got;
+  }
   if (o.source === "engine") {
     const h = await designHost().catch(() => null);
     if (h) {

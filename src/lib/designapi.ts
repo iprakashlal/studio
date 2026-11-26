@@ -62,3 +62,13 @@ export const deleteDraft = (h: DesignHost, id: string) => cfCall(h.api, `/dq/dra
 export async function engineImage(h: DesignHost, prompt: string): Promise<{ image?: string; error?: string }> {
   try { const r = await cfCall<{ engine?: string; image?: string; error?: string }>(h.api, "/dq/image/" + encodeURIComponent(h.studio), { method: "POST", auth: false, body: JSON.stringify({ prompt: prompt.slice(0, 400) }) }); return r.image ? { image: r.image } : r.error && r.engine !== "system" ? { error: r.error } : {}; } catch (e: any) { return { error: String(e?.message || "The Studio's AI didn't answer.") }; }
 }
+
+/** A photo found on Unsplash: where to load it, who took it (shown with it, as Unsplash asks), and the address Unsplash wants called when it is used. */
+export type StockPhoto = { url: string; thumb: string; by: string; link: string; page: string; dl: string };
+/** Photos for a few words from Unsplash, through the Studio's database (which holds the owner's access key). */
+export async function stockPhotos(h: DesignHost, words: string, n: number): Promise<{ photos?: StockPhoto[]; error?: string }> {
+  try { const r = await cfCall<{ photos?: StockPhoto[]; error?: string }>(h.api, "/dq/image/" + encodeURIComponent(h.studio), { method: "POST", auth: false, body: JSON.stringify({ words: words.slice(0, 120), n }) }); return r.photos?.length ? { photos: r.photos } : { error: r.error === "busy" ? "Too many picture searches just now. Please try again in a little while." : r.error || "Unsplash isn't switched on for this Studio." }; }
+  catch (e: any) { return { error: String(e?.message || "The Studio didn't answer.") }; }
+}
+/** Tells Unsplash (through the Studio's database) that one of its photos was used. Never stops anything. */
+export const stockPhotoUsed = (h: DesignHost, dl: string) => { if (dl) cfCall(h.api, "/dq/photo-used/" + encodeURIComponent(h.studio), { method: "POST", auth: false, body: JSON.stringify({ dl }) }).catch(() => {}); };

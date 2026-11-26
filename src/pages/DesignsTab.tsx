@@ -10,7 +10,7 @@ import { Empty, useConfirm, useToast } from "../ui/kit";
 import { Pager, usePage } from "../ui/Pager";
 import { PreviewPopup } from "./DesignPage";
 
-const KIND_ACC: Record<string, string> = { portfolio: "#8b5cf6", store: "#f08a24", business: "#3b82f6", restaurant: "#e5484d" };
+const KIND_ACC: Record<string, string> = { portfolio: "#8b5cf6", store: "#f08a24", business: "#3b82f6", restaurant: "#e5484d", events: "#22a06b" };
 const ago = (iso: string) => { const m = Math.max(0, Math.round((Date.now() - +new Date(iso)) / 60000)); return m < 1 ? "just now" : m < 60 ? `${m} min ago` : m < 1440 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} d ago`; };
 
 /** Progress kept in the Studio's database by people whose email is confirmed and who have not sent it yet. */

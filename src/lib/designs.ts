@@ -36,10 +36,10 @@ export function cleanDesignSettings(x: any): DesignSettings {
     if (Number.isFinite(+x.chat.dim) && +x.chat.dim > 0) c.dim = Math.min(80, Math.round(+x.chat.dim));
     if (Object.keys(c).length) o.chat = c;
   }
-  if (x.carousel && typeof x.carousel === "object") { const c: NonNullable<DesignSettings["carousel"]> = {}; for (const k of ["portfolio", "store", "business", "restaurant"] as const) if (x.carousel[k] === "custom") c[k] = "custom"; if (Object.keys(c).length) o.carousel = c; }
+  if (x.carousel && typeof x.carousel === "object") { const c: NonNullable<DesignSettings["carousel"]> = {}; for (const k of ["portfolio", "store", "business", "restaurant", "events"] as const) if (x.carousel[k] === "custom") c[k] = "custom"; if (Object.keys(c).length) o.carousel = c; }
   if (x.questions && typeof x.questions === "object") {
     const q: NonNullable<DesignSettings["questions"]> = {}, tx = (v: any, n: number) => (typeof v === "string" ? v.replace(/[<>]/g, "").trim().slice(0, n) : "");
-    for (const g of ["basics", "portfolio", "store", "business", "restaurant"]) {
+    for (const g of ["basics", "portfolio", "store", "business", "restaurant", "events"]) {
       const src = x.questions[g]; if (!src || typeof src !== "object") continue;
       const rules: Record<string, { h?: boolean; t?: string; p?: string }> = {};
       for (const id of Object.keys(src).slice(0, 80)) { if (!/^[a-z]{1,20}$/.test(id)) continue; const r = src[id] || {}, o: { h?: boolean; t?: string; p?: string } = {}; if (r.h === true) o.h = true; if (tx(r.t, 300)) o.t = tx(r.t, 300); if (tx(r.p, 300)) o.p = tx(r.p, 300); if (Object.keys(o).length) rules[id] = o; }

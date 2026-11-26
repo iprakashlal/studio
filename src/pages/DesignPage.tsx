@@ -29,6 +29,8 @@ const readDraft = (): Draft => { try { const d = JSON.parse(sessionStorage.getIt
 /** What kind of website a few free words describe (null when unclear). */
 function guessKind(t: string): string | null {
   const x = t.toLowerCase();
+  // An event itself (not a business that serves events, such as a wedding photographer or an event planner).
+  if (/\bevents?\b|conference|summit|wedding|concert|festival|marathon|hackathon|workshop|webinar|seminar|party|meet-?up|tournament|expo\b|exhibition|fundrais|rsvp|tickets?/.test(x) && !/photograph|planner|planning|cater|decorat|management|agency|company/.test(x)) return "events";
   if (/restaurant|caf[eé]|cafe|food|menu|kitchen|bakery|dhaba|hotel|tiffin|bar\b|biryani|coffee/.test(x)) return "restaurant";
   if (/shop|store|sell|selling|products?|ecommerce|e-commerce|boutique|cart|candles?|gifts?/.test(x)) return "store";
   if (/portfolio|about me|myself|personal|photograph|designer|developer|freelanc|artist|resume|cv\b|creator|writer|model/.test(x)) return "portfolio";

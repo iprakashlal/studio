@@ -22,7 +22,7 @@ import { NetlifyAccount } from "./HostDialog";
 import { GitHubPublishAccount } from "./GitHubAccount";
 import { HostFold, SetupAccounts } from "./SetupAccounts";
 import { ghPublish } from "../lib/ghpublish";
-import { partOf, Field, Logo, Skel, SkelDashboard, SkelRows, useToast, Dock } from "../ui/kit";
+import { Field, Logo, Skel, SkelDashboard, SkelRows, useToast, Dock } from "../ui/kit";
 import { accentFromImage, SCHEMES, tintPalette } from "../lib/tint";
 import { setCurrentMenus } from "../lib/menus";
 import { MenusCard } from "./MenusCard";
@@ -36,7 +36,7 @@ import { PushUpdatesCard, PushUpdatesHost, UpdateAllCard, openPushUpdates } from
 import { Dashboard } from "./Dashboard";
 import { DesignPage } from "./DesignPage";
 import { UpdateDots } from "../ui/UpdateDots";
-import { allOn, allSet, chainOn, chainSet, refreshStatus, syncDatabases, updateStatusNow, useUpdateStatus } from "../lib/autodb";
+import { allOn, allSet, chainSet, refreshStatus, syncDatabases, updateStatusNow } from "../lib/autodb";
 import { DesignLookTab, DesignPageCard, ThemesSettingsTab } from "./DesignSettings";
 import { NavLinksCard } from "./NavLinksCard";
 import { useDesignSettings } from "../lib/designs";
@@ -89,7 +89,7 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
   useEffect(() => { setCurrentBadge(index?.badge); }, [index?.badge]);
   useEffect(() => { setCurrentMenus(index?.menus); }, [index?.menus]);
   // A moved Studio updates itself to the latest build when it opens (projects aren't touched).
-  const upd = useStudioUpdate(), dbs = useUpdateStatus();
+  const upd = useStudioUpdate();
   const hostedId = index?.hosted?.siteId;
   useEffect(() => {
     if (!index || repo.demo || !isHosted(session)) return;
@@ -135,10 +135,8 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
   const project = projectId && index ? index.projects.find((p) => p.id === projectId) : null;
 
   // Shown on every Studio screen while the Studio updates itself (it carries on whichever screen or browser tab is open).
-  const updStep = upd.step && upd.step !== "Checking" ? upd.step : "";
   const updNote = upd.ready ? <div role="status" aria-label="Studio update" className="flex w-full flex-col gap-2 rounded-lg border border-brand-500/40 bg-ink-900 px-4 py-3 text-[13px] text-ink-100 shadow-xl"><span><b>The Studio is updated.</b> You have unsaved changes open, so it hasn't reloaded. Save them, then reload to use the new version.</span><button type="button" className="btn btn-pri btn-sm self-start" onClick={reloadToProjects}>Reload to Projects</button></div>
-    : upd.running && updStep ? <div role="status" aria-label="Studio update" className="flex w-full flex-col gap-2 rounded-lg border border-brand-500/40 bg-ink-900 px-4 py-3 text-[13px] text-ink-100 shadow-xl"><span><b>Updating the Studio</b> (part 1 of 2): {updStep}…</span><span className="h-1.5 overflow-hidden rounded-full bg-ink-700"><i className="block h-full rounded-full bg-brand-500 transition-[width] duration-300" style={{ width: `${(/^Reading the Studio/.test(updStep) ? 8 : /^Creating the Studio/.test(updStep) ? 15 : /^Uploading the Studio/.test(updStep) ? partOf(updStep, 20, 98) : /^Updated/.test(updStep) ? 100 : 5) * 0.6}%` }} /></span><span className="text-ink-400">The database is updated right after, in this same bar. It carries on if you move to another screen or browser tab. Your projects aren't touched.</span></div>
-    : dbs.dbBusy || chainOn() ? <div role="status" aria-label="Database update" className="flex w-full flex-col gap-2 rounded-lg border border-brand-500/40 bg-ink-900 px-4 py-3 text-[13px] text-ink-100 shadow-xl"><span><b>Updating the database</b> (part 2 of 2): {dbs.dbStep || "Checking the database"}…</span><span className="h-1.5 overflow-hidden rounded-full bg-ink-700"><i className="block h-full rounded-full bg-brand-500 transition-[width] duration-300" style={{ width: `${60 + (dbs.dbBusy ? dbs.dbPct : 0) * 0.4}%` }} /></span><span className="text-ink-400">Your Studio and its sites keep working while this runs.</span></div> : null;
+    : null;   // while an update runs, its progress is on the S and D icons (a ring with the percentage; hover for the details)
   // The live-sites update is mounted once here, so it carries on (minimised) on every Studio screen.
   const updBanner = <><Dock>{updNote}</Dock><PushUpdatesHost studio={studio} index={index} token={session.token} />{!repo.demo && <Explorer studio={studio} index={index} route={route} hosted={isHosted(session)} />}</>;
   const gal = useDesignSettings().gallery || {};

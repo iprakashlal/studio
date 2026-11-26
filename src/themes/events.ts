@@ -13,6 +13,13 @@ export const EVT_AXES: Record<string, Axis> = {
   tix: { key: "tix", label: "Tickets style", options: [["cards", "Cards"], ["stubs", "Ticket stubs"], ["rows", "Rows"], ["centre", "Centred, big price"], ["dark", "Dark highlight"], ["band", "Colour band on top"], ["glow", "Raised highlight"]] },
   count: { key: "count", label: "Countdown style", options: [["boxes", "Boxes"], ["inline", "In a line"], ["digits", "Big digits"], ["rings", "Rings"], ["dark", "Dark boxes"], ["accent", "Accent boxes"], ["strip", "Tinted strip"]] },
   dateBadge: { key: "dateBadge", label: "Date in the hero", options: [["leaf", "Calendar leaf"], ["line", "Plain line"], ["chip", "Pills"], ["stamp", "Round stamp"], ["ribbon", "Dark ribbon"], ["block", "Wide block"]] },
+  flow: { key: "flow", label: "Order of sections", options: [["own", "As arranged under Sections & order"], ["programme", "Schedule first"], ["people", "Line-up first"], ["tickets", "Tickets early"], ["story", "Story first: about, numbers, highlights"], ["proof", "Numbers and quotes first"], ["spotlight", "Highlights first"], ["venue", "Venue early"]] },
+  high: { key: "high", label: "Highlights layout", options: [["cards", "Cards"], ["list", "Ruled list"], ["numbered", "Big numbers"], ["bento", "Bento grid"], ["icons", "Round icons, no boxes"], ["tiles", "Colour-topped tiles"], ["side", "Heading at the side"]] },
+  stat: { key: "stat", label: "Numbers style", options: [["rule", "Ruled row"], ["big", "Huge digits"], ["cards", "Cards"], ["dark", "Dark strip"], ["accent", "Accent strip"], ["pills", "Pills"], ["top", "Accent line on top"]] },
+  about: { key: "about", label: "About layout", options: [["split", "Story left, values right"], ["flip", "Values left, story right"], ["card", "In a card"], ["rule", "Under a rule"], ["stack", "Stacked, values in a row"], ["centre", "Centred"], ["tint", "Tinted band"]] },
+  faq: { key: "faq", label: "FAQ layout", options: [["side", "Heading at the side"], ["stack", "Centred column"], ["cards", "Cards"], ["two", "Two columns"], ["numbered", "Numbered"], ["tint", "Tinted rows"]] },
+  cta: { key: "cta", label: "Call-to-action style", options: [["dark", "Dark box"], ["accent", "Accent box"], ["centre", "Centred"], ["outline", "Outlined"], ["gradient", "Gradient"], ["wide", "Edge to edge"], ["soft", "Soft tint"]] },
+  quote: { key: "quote", label: "Quotes style", options: [["cards", "Cards"], ["big", "One large quote per row"], ["rule", "Accent rule"], ["bubble", "Speech bubbles"], ["dark", "Dark cards"], ["tint", "Tinted cards"]] },
   reg: { key: "reg", label: "Registration page layout", options: [["split", "Form left, summary right"], ["flip", "Summary left, form right"], ["stack", "Summary on top"], ["panel", "Dark summary"], ["accent", "Accent summary"], ["stub", "Summary as a ticket stub"], ["plain", "No boxes"]] },
 };
 /** The kinds of registration (see REG in assets/evt.js): what the form asks and how it is priced. */
@@ -151,6 +158,8 @@ const FX: Record<string, string> = {
 };
 const LOOKS = ["Aurora", "Marquee", "Spotlight", "Velvet", "Neon", "Paper", "Atlas", "Ember", "Tide", "Prism", "Monarch", "Canvas", "Pulse", "Meadow", "Onyx", "Sunrise", "Lagoon", "Copper", "Orchid", "Zenith"];
 const WIDTHS = ["normal", "wide", "normal", "xwide", "normal", "wide", "full", "normal", "narrow", "wide"], HEADS = ["normal", "upper", "normal", "serif", "normal", "light", "normal", "upper"];
+// The frosted-glass backdrop makes every surface see-through, which fights the dark and accent panels these themes use, so it is left for the owner to choose.
+const PATTERNS = ["none", "grid", "dots", "lines", "mesh"];
 const STYLE_TAGS = ["Bold", "Classy", "Modern", "Minimal", "Warm", "Calm", "Luxury", "Nature"];
 export const EVT_VARIANTS = 20;
 
@@ -158,13 +167,13 @@ const hash = (s: string) => { let h = 2166136261; for (let i = 0; i < s.length; 
 const opt = (k: string) => EVT_AXES[k].options.map(([v]) => v);
 const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
 
-export type EvtTheme = Theme & { biz: { bands: string }; evt: { type: string; group: Group; sched: string; lineup: string; tix: string; count: string; dateBadge: string; reg: string; regKind: string } };
+export type EvtTheme = Theme & { biz: { bands: string }; evt: { type: string; group: Group; sched: string; lineup: string; tix: string; count: string; dateBadge: string; reg: string; regKind: string; flow: string; high: string; stat: string; about: string; faq: string; cta: string; quote: string } };
 
 function build(): EvtTheme[] {
   // One entry per palette (the business themes repeat a few).
   const seenCols = new Set<string>(), pool = BIZ_THEMES.filter((b) => { const k = Object.values(b.colors).join(); if (seenCols.has(k)) return false; seenCols.add(k); return true; });
-  const A = Object.fromEntries(["layout", "heroArt", "nav", "cards", "buttons", "shead", "pattern", "bands", "sched", "lineup", "tix", "count", "dateBadge", "reg"].map((k) => [k, opt(k)])) as Record<string, string[]>;
-  const out: EvtTheme[] = [], sigs = new Set<string>();
+  const A = Object.fromEntries(["layout", "heroArt", "nav", "cards", "buttons", "shead", "pattern", "bands", "sched", "lineup", "tix", "count", "dateBadge", "reg", "flow", "high", "stat", "about", "faq", "cta", "quote"].map((k) => [k, opt(k)])) as Record<string, string[]>;
+  const out: EvtTheme[] = [], sigs = new Set<string>(), builds = new Set<string>(), heroes = new Set<string>();
   T.forEach(([type, group, kindsS], ti) => {
     const g = G[group], kinds = kindsS.split(" ");
     // The 20 palettes that suit this kind of event best, a set share of them dark.
@@ -177,13 +186,21 @@ function build(): EvtTheme[] {
     for (let v = 0; v < EVT_VARIANTS; v++) {
       const b = pick[v], at = (k: string, mul: number, add: number) => A[k][(v * mul + ti * add) % A[k].length];
       const s = {
-        layout: at("layout", 7, 3), nav: at("nav", 4, 1), cards: at("cards", 1, 1), buttons: at("buttons", 2, 1), heading: HEADS[(v + ti) % HEADS.length], shead: at("shead", 2, 3), pattern: at("pattern", 5, 1),
+        layout: at("layout", 7, 3), nav: at("nav", 4, 1), cards: at("cards", 1, 1), buttons: at("buttons", 2, 1), heading: HEADS[(v + ti) % HEADS.length], shead: at("shead", 2, 3), pattern: PATTERNS[(v * 3 + ti) % PATTERNS.length],
         bands: at("bands", 3, 5), motionStyle: v % 7 === 6 ? "fade" : "rise", width: WIDTHS[(v + ti) % WIDTHS.length],
         sched: at("sched", 3, 1), lineup: at("lineup", 2, 3), tix: at("tix", 4, 2), count: at("count", 5, 1), dateBadge: at("dateBadge", 1, 5), reg: at("reg", 6, 4),
+        flow: at("flow", 3, 5), high: at("high", 5, 2), stat: at("stat", 2, 5), about: at("about", 4, 3), faq: at("faq", 5, 1), cta: at("cta", 3, 4), quote: at("quote", 1, 3),
       };
-      let ha = (v * 5 + ti * 2 + 1) % A.heroArt.length, sig = "";
-      for (let n = 0; n < A.heroArt.length; n++, ha = (ha + 1) % A.heroArt.length) { sig = [b.id, A.heroArt[ha], ...Object.values(s)].join(" "); if (!sigs.has(sig)) break; }
-      sigs.add(sig);
+      // No two themes are built the same way: the structure (everything but the colours and fonts) is unique in the whole catalogue,
+      // so a page never repeats another's layout in different colours. A clash moves the hero art, then the menu.
+      let ha = (v * 5 + ti * 2 + 1) % A.heroArt.length, sig = "", build = "", hero = "";
+      for (let n = 0; n < A.heroArt.length * A.nav.length; n++) {
+        build = [A.heroArt[ha], ...Object.values(s)].join(" "); sig = b.id + " " + build; hero = [s.layout, A.heroArt[ha], s.nav].join(" ");
+        if (!sigs.has(sig) && !builds.has(build) && !heroes.has(hero)) break;
+        // The first screen (layout, picture shape and menu together) is not shared with any other theme either.
+        ha = (ha + 1) % A.heroArt.length; if (n % A.heroArt.length === A.heroArt.length - 1) s.nav = A.nav[(A.nav.indexOf(s.nav) + 1) % A.nav.length];
+      }
+      sigs.add(sig); builds.add(build); heroes.add(hero);
       const x = FX[g.fx[v % g.fx.length]].split(" "), regKind = kinds[v % kinds.length], look = LOOKS[(v + ti * 7) % LOOKS.length];
       out.push({
         id: `evt-${slug(type)}-${String(v + 1).padStart(2, "0")}`, name: `${type} · ${look}`,
@@ -194,7 +211,7 @@ function build(): EvtTheme[] {
         portfolio: { about: "bento", skills: "cube", work: "deck", glow: false, network: false, three: false, ticker: false }, store: { grid: "auto", product: "classic" },
         fx: { cursor: x[0], loader: x[1], textfx: x[2], hoverfx: x[3], scrollfx: x[4], overlay: x[5] }, ...(x[6] !== "none" ? { herofx: x[6] } : {}),
         motif: g.motif[(v + ti) % g.motif.length], kit: "classic", biz: { bands: s.bands },
-        evt: { type, group, sched: s.sched, lineup: s.lineup, tix: s.tix, count: s.count, dateBadge: s.dateBadge, reg: s.reg, regKind },
+        evt: { type, group, sched: s.sched, lineup: s.lineup, tix: s.tix, count: s.count, dateBadge: s.dateBadge, reg: s.reg, regKind, flow: s.flow, high: s.high, stat: s.stat, about: s.about, faq: s.faq, cta: s.cta, quote: s.quote },
       } as EvtTheme);
     }
   });
@@ -211,5 +228,5 @@ export const evtThemesOf = (type: string) => EVT_THEMES.filter((t) => t.evt.type
 /** Events content.theme values for a theme. */
 export function eventThemeValues(t: Theme): Record<string, unknown> {
   const e = (t as Partial<EvtTheme>).evt, ok = (k: string, v: string | undefined, d: string) => (EVT_AXES[k].options.some(([o]) => o === v) ? (v as string) : d);
-  return { ...businessThemeValues(t), sched: ok("sched", e?.sched, "timeline"), lineup: ok("lineup", e?.lineup, "grid"), tix: ok("tix", e?.tix, "cards"), count: ok("count", e?.count, "boxes"), dateBadge: ok("dateBadge", e?.dateBadge, "leaf"), reg: ok("reg", e?.reg, "split"), regKind: REG_KINDS.some(([k]) => k === e?.regKind) ? e!.regKind : "tickets" };
+  return { ...businessThemeValues(t), sched: ok("sched", e?.sched, "timeline"), lineup: ok("lineup", e?.lineup, "grid"), tix: ok("tix", e?.tix, "cards"), count: ok("count", e?.count, "boxes"), dateBadge: ok("dateBadge", e?.dateBadge, "leaf"), reg: ok("reg", e?.reg, "split"), flow: ok("flow", e?.flow, "own"), high: ok("high", e?.high, "cards"), stat: ok("stat", e?.stat, "rule"), about: ok("about", e?.about, "split"), faq: ok("faq", e?.faq, "side"), cta: ok("cta", e?.cta, "dark"), quote: ok("quote", e?.quote, "cards"), regKind: REG_KINDS.some(([k]) => k === e?.regKind) ? e!.regKind : "tickets" };
 }

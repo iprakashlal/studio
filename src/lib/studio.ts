@@ -74,7 +74,25 @@ export class Studio {
   siteRepo: ((p: ProjectMeta) => Repo | null) | null = null;
   private lastIndex: StudioIndex | null = null;
 
+  /** Role Management: the folder of one person's own space ("users/<them>/"), or "" for the Studio's shared list (Administrators).
+   *  With a space set, the projects, categories and personal choices are that person's own; everything else is the Studio's. */
+  space = "";
+  /** The shared parts as last read, to notice a change only an Administrator may make. */
+  private sharedWas = "";
+  private static readonly OWN = ["projects", "categories", "prefs", "ai", "designs", "dash"] as const;
+  /** An Administrator looking at someone else's projects (space is that person's). */
+  viewing = false;
+
   async loadIndex(): Promise<StudioIndex> {
+    if (this.space) {
+      const base = normalise((await this.repo.getJSON<StudioIndex>(INDEX))?.data || {});
+      const own = (await this.repo.getJSON<any>(this.space + INDEX))?.data;
+      const mine = normalise(own || { categories: [{ id: "personal", name: "Personal", color: CATEGORY_COLORS[0] }, { id: "clients", name: "Clients", color: CATEGORY_COLORS[1] }, { id: "shops", name: "Shops", color: CATEGORY_COLORS[2] }], projects: [] });
+      const idx: any = { ...base }; for (const k of Studio.OWN) { if ((mine as any)[k] !== undefined) idx[k] = (mine as any)[k]; else if (k !== "ai") delete idx[k]; }
+      if (!idx.projects) idx.projects = []; if (!idx.categories) idx.categories = [];
+      this.sharedWas = JSON.stringify(this.sharedOf(idx));
+      return (this.lastIndex = idx);
+    }
     const f = await this.repo.getJSON<StudioIndex>(INDEX);
     if (f) return (this.lastIndex = normalise(f.data));
     const fresh: StudioIndex = {
@@ -94,9 +112,17 @@ export class Studio {
   async updateIndex(fn: (i: StudioIndex) => void, message: string, files: { path: string; base64: string }[] = [], remove: string[] = []): Promise<StudioIndex> {
     const idx = await this.loadIndex();
     fn(idx);
+    if (this.space) {
+      // A person's own list is saved in their own space. A change to the Studio's shared parts is not theirs to make: said, never dropped quietly.
+      if (JSON.stringify(this.sharedOf(idx)) !== this.sharedWas) throw new Error(this.viewing ? "You are looking at someone else's projects. Switch back to your own projects (on the Projects page) to change a Studio-wide setting." : "Only an Administrator can change this Studio-wide setting.");
+      const own: any = { version: 1 }; for (const k of Studio.OWN) if ((idx as any)[k] !== undefined) own[k] = (idx as any)[k];
+      await this.repo.pushFiles([{ path: this.space + INDEX, base64: jsonB64(own) }, ...files], message, remove);
+      return (this.lastIndex = idx);
+    }
     await this.repo.pushFiles([{ path: INDEX, base64: jsonB64(idx) }, ...files], message, remove);
     return (this.lastIndex = idx);
   }
+  private sharedOf(idx: StudioIndex) { const o: any = { ...idx }; for (const k of Studio.OWN) delete o[k]; return o; }
 
   async createProject(p: { name: string; template: string; category: string; client: string; content: any; summary?: string }): Promise<{ index: StudioIndex; id: string }> {
     const id = uid();

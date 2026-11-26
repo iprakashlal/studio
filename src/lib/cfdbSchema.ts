@@ -40,6 +40,11 @@ export const CFDB_TABLES: string[] = [
   "create table if not exists dq_rate (k text primary key, n integer not null, exp integer not null)",
   "create table if not exists payments (rz_order text primary key, site text not null, order_no text not null, amount integer not null, status text not null default 'created', created_at text not null)",
   "create index if not exists payments_site on payments (site, created_at)",
+  // Role Management: what each role may do in a Studio or on a site's admin page (privs: JSON of switches; a role with no row has its standard privileges),
+  // and whose each project is (a project with no row belongs to the Studio's Administrators).
+  "create table if not exists role_mgmt (scope text not null, role text not null, privs text not null default '{}', updated_at text not null, updated_by text not null default '', primary key (scope, role))",
+  "create table if not exists project_owners (scope text not null, project text not null, email text not null, at text not null, primary key (scope, project))",
+  "create index if not exists project_owners_email on project_owners (scope, email)",
 ];
 export const CFDB_SCHEMA = CFDB_TABLES.join(";\n") + ";";
 /** Changes to a table that already exists. Each is made once: the Worker first asks `probe`; only if that fails does it run `steps`
@@ -52,6 +57,6 @@ export const CFDB_UPGRADES: { name: string; probe: string; steps: string[] }[] =
     "create index if not exists enquiries_ref on enquiries (site, ref)",
   ] },
 ];
-export const CFDB_VERSION = 106;
+export const CFDB_VERSION = 107;
 /** The database Worker's name on Cloudflare. */
 export const CFDB_WORKER_NAME = "picaffectz-db";

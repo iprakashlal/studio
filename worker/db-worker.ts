@@ -27,6 +27,7 @@ function otherAccounts(env: any): { id: string; name: string }[] {
 
 import { CFDB_SCHEMA, CFDB_TABLES, CFDB_UPGRADES, CFDB_VERSION, CFDB_WORKER_NAME } from "../src/lib/cfdbSchema";
 import { cleanDiyLook } from "../src/lib/diylook";
+import { ROLE_IDS, cleanPrivs, fileRule, isAdminRole, privsOf, userKey } from "../src/lib/roles";
 import { MAIL_KINDS, MAIL_TPL_MAX, codeBlock, mailEmail, sampleBlocks, tplOf } from "../src/lib/mailtpl";
 import { digestPage, sheetLinks } from "../src/lib/lookdigest";
 import { socialFromText } from "../src/lib/social";
@@ -115,6 +116,27 @@ fetch("/auth/google/finish",{method:"POST",headers:{"Content-Type":"application/
   return new Response(`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><meta name="referrer" content="no-referrer"><title>Sign in</title><style>body{font:16px/1.6 system-ui,sans-serif;max-width:420px;margin:18vh auto;padding:0 20px;color:#1d2433;text-align:center}p{color:#5b6475}</style><h1 id="h">${esc(title)}</h1><p id="p">${esc(text)}</p>${script}`, { status: 200, headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Frame-Options": "DENY" } });
 }
 const roleOf = async (env: Env, scope: string, email: string | null) => (email ? ((await env.DB.prepare("select role from members where scope = ? and email = ?").bind(scope, email).first()) as any)?.role || null : null);
+/** What a role may do in a scope (Role Management): the Administrator's saved choices over the standard ones. A database not yet updated has no table: the standard ones. */
+async function privsFor(env: Env, scope: string, role: string | null): Promise<Record<string, boolean>> {
+  if (isAdminRole(role)) return privsOf(role);
+  let saved: any = null;
+  try { const r: any = await env.DB.prepare("select privs from role_mgmt where scope = ? and role = ?").bind(scope, String(role)).first(); if (r) saved = JSON.parse(r.privs); } catch { /* the standard ones */ }
+  return privsOf(role, saved);
+}
+/** May this person (not an Administrator) read or write a file of the Studio? A project is theirs when it is registered to them;
+ *  writing into a project nobody has files in yet makes it theirs. Everything unregistered belongs to the Administrators. */
+async function fileMay(env: Env, scope: string, email: string, path: string, shared: boolean, write: boolean): Promise<boolean | "strip"> {
+  const r = fileRule(path, userKey(email), shared);
+  if (!r.project) return write ? r.write : r.read;
+  const own: any = await env.DB.prepare("select email from project_owners where scope = ? and project = ?").bind(scope, r.project).first().catch(() => null);
+  if (own) return own.email === email;
+  if (!write) return false;
+  const pre = "projects/" + r.project + "/";
+  if (await env.DB.prepare("select 1 from files where scope = ? and substr(path, 1, ?) = ? limit 1").bind(scope, pre.length, pre).first()) return false;
+  await env.DB.prepare("insert into project_owners (scope, project, email, at) values (?, ?, ?, ?) on conflict (scope, project) do nothing").bind(scope, r.project, email, new Date().toISOString()).run();
+  const now: any = await env.DB.prepare("select email from project_owners where scope = ? and project = ?").bind(scope, r.project).first();
+  return now?.email === email;
+}
 
 async function readFile(env: Env, scope: string, path: string) {
   const f: any = await env.DB.prepare("select sha, size, parts, type, updated_at from files where scope = ? and path = ?").bind(scope, path).first();
@@ -2702,6 +2724,35 @@ export default {
       if (!scopeOk(scope)) return err(400, "Unknown scope.");
       const role = await roleOf(env, scope, email);
       if (!role) return err(403, `${email} isn't a member of this ${scope.startsWith("site:") ? "site" : "Studio"}.`);
+      // Role Management: Administrators (and a Studio Partner) may do everything; the other roles what their privileges say.
+      const admin = isAdminRole(role), inStudio = scope.startsWith("studio:");
+      let privCache: Record<string, boolean> | null = null;
+      const can = async (k: string) => admin || !!(privCache ||= await privsFor(env, scope, role))[k];
+      if (p === "/roles" && req.method === "GET") {
+        const rows = admin ? ((await env.DB.prepare("select role, privs, updated_at, updated_by from role_mgmt where scope = ?").bind(scope).all().catch(() => ({ results: [] as any[] }))).results || []) : [];
+        const saved: any = {}; for (const r of rows as any[]) { try { saved[r.role] = JSON.parse(r.privs); } catch { /* standard */ } }
+        const roles: any = {}; for (const r of ROLE_IDS) roles[r] = privsOf(r, saved[r]);
+        const ready = !!(await env.DB.prepare("select 1 from sqlite_master where type = 'table' and name = 'role_mgmt'").first().catch(() => null));
+        return json({ me: { email, role, key: userKey(email), privs: await privsFor(env, scope, role) }, ready, ...(admin ? { roles, members: (await env.DB.prepare("select email, role, added_at from members where scope = ? order by email").bind(scope).all()).results || [], owners: inStudio ? ((await env.DB.prepare("select project, email from project_owners where scope = ?").bind(scope).all().catch(() => ({ results: [] as any[] }))).results || []) : [] } : {}) });
+      }
+      if (p === "/roles" && req.method === "POST") {
+        if (role !== "owner") return err(403, "Only an Administrator can change Role Management.");
+        const b = (await req.json().catch(() => ({}))) as any, r = String(b.role || "");
+        if (!ROLE_IDS.includes(r) || r === "owner") return err(400, "Choose a role other than Administrator: Administrators can always do everything.");
+        await env.DB.prepare("insert into role_mgmt (scope, role, privs, updated_at, updated_by) values (?, ?, ?, ?, ?) on conflict (scope, role) do update set privs = excluded.privs, updated_at = excluded.updated_at, updated_by = excluded.updated_by")
+          .bind(scope, r, JSON.stringify(cleanPrivs(r, b.privs)), new Date().toISOString(), email).run();
+        return json({ ok: true, privs: privsOf(r, cleanPrivs(r, b.privs)) });
+      }
+      // Whose a project is, set by an Administrator (handing a project to someone, or taking it back with email "").
+      if (p === "/roles/project" && req.method === "POST") {
+        if (role !== "owner" || !inStudio) return err(403, "Only an Administrator can hand a project to someone.");
+        const b = (await req.json().catch(() => ({}))) as any, pr = String(b.project || ""), to = String(b.email || "").trim().toLowerCase();
+        if (!/^[\w-]{1,80}$/.test(pr)) return err(400, "Which project?");
+        if (!to) await env.DB.prepare("delete from project_owners where scope = ? and project = ?").bind(scope, pr).run();
+        else { if (!(await roleOf(env, scope, to))) return err(400, to + " can't sign in to this Studio yet. Add them first.");
+          await env.DB.prepare("insert into project_owners (scope, project, email, at) values (?, ?, ?, ?) on conflict (scope, project) do update set email = excluded.email, at = excluded.at").bind(scope, pr, to, new Date().toISOString()).run(); }
+        return json({ ok: true });
+      }
 
       // ---- an email template tried out: the draft in the editor, with made-up details, sent only to the person signed in
       if (p === "/mail/test" && req.method === "POST") {
@@ -2795,12 +2846,34 @@ export default {
         await putSetting(env, scope, name, v);
         return json({ ok: true, value: maskSetting(name, v) });
       }
+      // In a Studio, someone who is not an Administrator has their own space (users/<them>/) and their own projects;
+      // the rest is read-only for them, and other people's spaces and projects are closed.
+      const limited = inStudio && !admin, sharedOk = limited ? await can("shared") : true;
+      const siteEdit = scope.startsWith("site:") && !admin ? await can("edit") : true;
       if (p === "/f/list") {
         const pre = u.searchParams.get("prefix") || "";
         const rows = (await env.DB.prepare("select path from files where scope = ? and substr(path, 1, ?) = ? order by path").bind(scope, pre.length, pre).all()).results || [];
-        return json(rows.map((r: any) => r.path));
+        let paths = rows.map((r: any) => r.path as string);
+        if (limited) {
+          const mine = new Set((((await env.DB.prepare("select project from project_owners where scope = ? and email = ?").bind(scope, email).all().catch(() => ({ results: [] as any[] }))).results || []) as any[]).map((r) => r.project));
+          paths = paths.filter((x) => { const r = fileRule(x, userKey(email), sharedOk); return r.project ? mine.has(r.project) : !!r.read; });
+        }
+        return json(paths);
       }
       const path = u.searchParams.get("path") || "";
+      if (limited && (p === "/f/meta" || p === "/f/get")) {
+        const ok = await fileMay(env, scope, email, path, sharedOk, false);
+        if (!ok) return p === "/f/meta" ? json(null) : err(404, "Not found.");
+        if (ok === "strip" && p === "/f/get") {
+          // The shared list, without anyone's projects (each person's own are in their own space).
+          const f = await readFile(env, scope, path); if (!f) return err(404, "Not found.");
+          let o: any = {}; try { o = JSON.parse(new TextDecoder().decode(f.bytes)); } catch { /* empty */ }
+          o.projects = []; delete o.prefs;
+          return new Response(JSON.stringify(o), { headers: { ...cors, "Content-Type": "application/json", "x-sha": f.sha, "x-updated": f.updated_at } });
+        }
+      }
+      if (limited && p === "/f/put" && !(await fileMay(env, scope, email, path, sharedOk, true))) return err(403, path === "studio.json" ? "Only an Administrator can change this Studio-wide setting." : "Your role can't change this. Ask an Administrator (Settings → Role Management).");
+      if (!siteEdit && (p === "/f/put" || p === "/f/delete")) return err(403, "Your role can't change this site's content. Ask its Administrator (Role Management).");
       if (p === "/f/meta") { const f: any = await env.DB.prepare("select sha, size, updated_at from files where scope = ? and path = ?").bind(scope, path).first(); return json(f || null); }
       if (p === "/f/get") {
         const f = await readFile(env, scope, path); if (!f) return err(404, "Not found.");
@@ -2814,7 +2887,13 @@ export default {
         return json({ sha });
       }
       if (p === "/f/delete" && req.method === "POST") {
-        const { paths } = (await req.json()) as any; const list = (Array.isArray(paths) ? paths : []).filter(pathOk).slice(0, 500);
+        const { paths } = (await req.json()) as any; let list = (Array.isArray(paths) ? paths : []).filter(pathOk).slice(0, 500) as string[];
+        if (limited) {
+          const okd: string[] = []; const seen: Record<string, boolean> = {};
+          for (const x of list) { const r = fileRule(x, userKey(email), sharedOk); const k = r.project ? "p:" + r.project : x; if (!(k in seen)) seen[k] = r.project ? !!(await env.DB.prepare("select 1 from project_owners where scope = ? and project = ? and email = ?").bind(scope, r.project, email).first().catch(() => null)) : r.write; if (seen[k]) okd.push(x); }
+          if (okd.length !== list.length) return err(403, "Your role can't delete some of these files.");
+          list = okd;
+        }
         await env.DB.batch(list.flatMap((x: string) => [env.DB.prepare("delete from chunks where scope = ? and path = ?").bind(scope, x), env.DB.prepare("delete from files where scope = ? and path = ?").bind(scope, x)]));
         return json({ ok: true, n: list.length });
       }
@@ -3052,7 +3131,7 @@ export default {
       // Only Workers registered to this scope (the `workers` table, written by the Studio with the token), only by
       // its owners and partners, and only with no bindings but its own files, so nobody gets more than the pages.
       if (p === "/cf" && req.method === "POST") {
-        if (role !== "owner" && role !== "partner") return err(403, "Only the owners of this site can publish it.");
+        if (!(await can("publishCf"))) return err(403, "Your role can't publish to Cloudflare. Ask an Administrator (Role Management).");
         const q = (await req.json()) as any, method = String(q.method || "GET").toUpperCase(), path = String(q.path || "");
         // Which account: the main one (CF_TOKEN) or another account kept here (CFX_<account id>), from the call's path.
         const A = (/^\/accounts\/([\w-]+)\//.exec(path) || [])[1] || env.CF_ACCOUNT || "";
@@ -3081,7 +3160,7 @@ export default {
       // ---- GitHub Pages sites from any device: calls on repositories registered to this scope, with the kept token.
       if (p === "/gh" && req.method === "POST") {
         if (!env.GH_TOKEN) return err(501, "This database can't reach GitHub: no GitHub token is kept here.");
-        if (role !== "owner" && role !== "partner") return err(403, "Only this Studio's owners can publish its GitHub sites.");
+        if (!(await can("publishGh"))) return err(403, "Your role can't publish to GitHub. Ask an Administrator (Role Management).");
         const q = (await req.json()) as any, repo = String(q.repo || "").toLowerCase(), path = String(q.path || ""), method = String(q.method || "GET").toUpperCase();
         if (!/^[\w.-]+\/[\w.-]+$/.test(repo) || (path && !/^\/[\w\-./%?=&,~]*$/.test(path)) || path.includes("..") || !["GET", "PUT", "POST", "PATCH", "DELETE"].includes(method)) return err(400, "Not a GitHub call publishing needs.");
         if (!(await env.DB.prepare("select 1 from repos where repo = ? and scope = ?").bind(repo, scope).first())) return err(403, `The repository ${repo} isn't registered to ${scope}. Turn on Publish from any device again from a Studio that has the GitHub token.`);
@@ -3092,14 +3171,16 @@ export default {
       }
       if (p === "/m") return json((await env.DB.prepare("select email, role, added_at from members where scope = ? order by email").bind(scope).all()).results || []);
       if (p === "/m/add" && req.method === "POST") {
-        if (role !== "owner" && role !== "partner") return err(403, "Only owners can add people.");
-        const b = (await req.json()) as any; const e = String(b.email || "").trim().toLowerCase(), r = ["owner", "member", "partner"].includes(b.role) ? b.role : "member";
+        if (role !== "owner" && role !== "partner") return err(403, "Only an Administrator can add people or change their role.");
+        const b = (await req.json()) as any; const e = String(b.email || "").trim().toLowerCase(), r = [...ROLE_IDS, "partner"].includes(b.role) ? b.role : "member";
+        // The last Administrator can't be made something else: nobody could manage roles any more.
+        if (r !== "owner" && (await roleOf(env, scope, e)) === "owner" && ((await env.DB.prepare("select count(*) n from members where scope = ? and role = 'owner'").bind(scope).first()) as any)?.n <= 1) return err(400, "This is the only Administrator. Make someone else an Administrator first.");
         if (!emailOk(e)) return err(400, "Enter a valid email.");
         await env.DB.prepare("insert into members (scope, email, role) values (?, ?, ?) on conflict (scope, email) do update set role = excluded.role").bind(scope, e, r).run();
         return json({ ok: true });
       }
       if (p === "/m/remove" && req.method === "POST") {
-        if (role !== "owner" && role !== "partner") return err(403, "Only owners can remove people.");
+        if (role !== "owner" && role !== "partner") return err(403, "Only an Administrator can remove people.");
         const b = (await req.json()) as any; await env.DB.prepare("delete from members where scope = ? and email = ?").bind(scope, String(b.email || "").toLowerCase()).run();
         return json({ ok: true });
       }

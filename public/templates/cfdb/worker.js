@@ -40,7 +40,12 @@ var CFDB_TABLES = [
   "create table if not exists design_pics (studio text not null, ref integer not null, slot text not null, idx integer not null, data text not null, primary key (studio, ref, slot, idx))",
   "create table if not exists dq_rate (k text primary key, n integer not null, exp integer not null)",
   "create table if not exists payments (rz_order text primary key, site text not null, order_no text not null, amount integer not null, status text not null default 'created', created_at text not null)",
-  "create index if not exists payments_site on payments (site, created_at)"
+  "create index if not exists payments_site on payments (site, created_at)",
+  // Role Management: what each role may do in a Studio or on a site's admin page (privs: JSON of switches; a role with no row has its standard privileges),
+  // and whose each project is (a project with no row belongs to the Studio's Administrators).
+  "create table if not exists role_mgmt (scope text not null, role text not null, privs text not null default '{}', updated_at text not null, updated_by text not null default '', primary key (scope, role))",
+  "create table if not exists project_owners (scope text not null, project text not null, email text not null, at text not null, primary key (scope, project))",
+  "create index if not exists project_owners_email on project_owners (scope, email)"
 ];
 var CFDB_SCHEMA = CFDB_TABLES.join(";\n") + ";";
 var CFDB_UPGRADES = [
@@ -49,7 +54,7 @@ var CFDB_UPGRADES = [
     "create index if not exists enquiries_ref on enquiries (site, ref)"
   ] }
 ];
-var CFDB_VERSION = 106;
+var CFDB_VERSION = 107;
 var CFDB_WORKER_NAME = "picaffectz-db";
 
 // src/lib/diylook.ts
@@ -148,6 +153,70 @@ function cleanDiyLook(x) {
     if (Object.keys(b).length) o.bg = b;
   }
   return o;
+}
+
+// src/lib/roles.ts
+var ROLES = [
+  { id: "owner", label: "Administrator", hint: "Everything, including Role Management. Sees everyone's projects." },
+  { id: "member", label: "Manager", hint: "Runs their own projects and publishes them." },
+  { id: "developer", label: "Developer", hint: "Builds and publishes their own projects, including to GitHub." },
+  { id: "tester", label: "Tester (QA)", hint: "Works on their own projects to try things; doesn't publish." },
+  { id: "demo", label: "Demo", hint: "A saved sandbox of their own that can never be published." }
+];
+var isAdminRole = (r) => r === "owner" || r === "partner";
+var ROLE_IDS = ROLES.map((r) => r.id);
+var PRIVS = [
+  { key: "publishCf", label: "Publish to Cloudflare or another host", group: "Publishing", where: "both", hint: "Every way of publishing except GitHub." },
+  { key: "publishGh", label: "Publish to GitHub", group: "Publishing", where: "both" },
+  { key: "export", label: "Export or import a ZIP", group: "Publishing", where: "studio" },
+  { key: "new", label: "Create projects", group: "Projects", where: "studio" },
+  { key: "duplicate", label: "Duplicate projects", group: "Projects", where: "studio" },
+  { key: "delete", label: "Delete projects", group: "Projects", where: "studio" },
+  { key: "themes", label: "Themes gallery", group: "Features", where: "studio" },
+  { key: "design", label: "Design yourself and its submissions", group: "Features", where: "studio" },
+  { key: "approve", label: "Share for approval", group: "Features", where: "studio" },
+  { key: "festival", label: "Festival overlay", group: "Features", where: "studio" },
+  { key: "shared", label: "Change shared Studio settings", group: "Settings", where: "studio", hint: "Customize, Design yourself settings, Themes and Menus. Hostings, sign-in, updates and Role Management stay with Administrators." },
+  { key: "edit", label: "Edit and save the site's content", group: "This site", where: "site" },
+  { key: "orders", label: "Orders, enquiries and customers", group: "This site", where: "site" },
+  { key: "settings", label: "Backup and advanced setup panels", group: "This site", where: "site" }
+];
+var ALL = () => Object.fromEntries(PRIVS.map((p) => [p.key, true]));
+var only = (...on) => Object.fromEntries(PRIVS.map((p) => [p.key, on.includes(p.key)]));
+var DEFAULT_PRIVS = {
+  owner: ALL(),
+  partner: ALL(),
+  member: only("publishCf", "publishGh", "export", "new", "duplicate", "delete", "themes", "design", "approve", "festival", "edit", "orders", "settings"),
+  developer: only("publishCf", "publishGh", "export", "new", "duplicate", "delete", "themes", "design", "festival", "edit", "settings"),
+  tester: only("export", "new", "duplicate", "themes", "design", "festival", "edit", "orders"),
+  demo: only("new", "themes", "edit")
+};
+var NEVER = { demo: ["publishCf", "publishGh", "export", "shared", "approve"] };
+function privsOf(role, saved) {
+  if (isAdminRole(role)) return ALL();
+  const base = DEFAULT_PRIVS[String(role)] || only(), out = { ...base };
+  if (saved && typeof saved === "object") {
+    for (const p of PRIVS) if (typeof saved[p.key] === "boolean") out[p.key] = saved[p.key];
+  }
+  for (const k of NEVER[String(role)] || []) out[k] = false;
+  return out;
+}
+function cleanPrivs(role, x) {
+  const o = {};
+  for (const p of PRIVS) if (typeof x?.[p.key] === "boolean") o[p.key] = (NEVER[role] || []).includes(p.key) ? false : x[p.key];
+  return o;
+}
+var userKey = (email) => String(email || "").trim().toLowerCase().replace(/@/g, "_at_").replace(/[^a-z0-9._-]/g, "_").slice(0, 120);
+function fileRule(path, myKey, shared) {
+  const p = String(path || "");
+  if (p === "studio.json") return { read: "strip", write: false };
+  if (p.startsWith("users/")) {
+    const mine = p.startsWith("users/" + myKey + "/");
+    return { read: mine, write: mine };
+  }
+  const m = /^projects\/([^/]+)\//.exec(p);
+  if (m) return { read: false, write: false, project: m[1] };
+  return { read: true, write: shared };
 }
 
 // src/lib/mailtpl.ts
@@ -965,6 +1034,28 @@ fetch("/auth/google/finish",{method:"POST",headers:{"Content-Type":"application/
   return new Response(`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><meta name="referrer" content="no-referrer"><title>Sign in</title><style>body{font:16px/1.6 system-ui,sans-serif;max-width:420px;margin:18vh auto;padding:0 20px;color:#1d2433;text-align:center}p{color:#5b6475}</style><h1 id="h">${esc2(title)}</h1><p id="p">${esc2(text)}</p>${script}`, { status: 200, headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Frame-Options": "DENY" } });
 }
 var roleOf = async (env, scope, email) => email ? (await env.DB.prepare("select role from members where scope = ? and email = ?").bind(scope, email).first())?.role || null : null;
+async function privsFor(env, scope, role) {
+  if (isAdminRole(role)) return privsOf(role);
+  let saved = null;
+  try {
+    const r = await env.DB.prepare("select privs from role_mgmt where scope = ? and role = ?").bind(scope, String(role)).first();
+    if (r) saved = JSON.parse(r.privs);
+  } catch {
+  }
+  return privsOf(role, saved);
+}
+async function fileMay(env, scope, email, path, shared, write) {
+  const r = fileRule(path, userKey(email), shared);
+  if (!r.project) return write ? r.write : r.read;
+  const own = await env.DB.prepare("select email from project_owners where scope = ? and project = ?").bind(scope, r.project).first().catch(() => null);
+  if (own) return own.email === email;
+  if (!write) return false;
+  const pre = "projects/" + r.project + "/";
+  if (await env.DB.prepare("select 1 from files where scope = ? and substr(path, 1, ?) = ? limit 1").bind(scope, pre.length, pre).first()) return false;
+  await env.DB.prepare("insert into project_owners (scope, project, email, at) values (?, ?, ?, ?) on conflict (scope, project) do nothing").bind(scope, r.project, email, (/* @__PURE__ */ new Date()).toISOString()).run();
+  const now = await env.DB.prepare("select email from project_owners where scope = ? and project = ?").bind(scope, r.project).first();
+  return now?.email === email;
+}
 async function readFile(env, scope, path) {
   const f = await env.DB.prepare("select sha, size, parts, type, updated_at from files where scope = ? and path = ?").bind(scope, path).first();
   if (!f) return null;
@@ -4518,6 +4609,41 @@ ${body}`)}${paras("Approve or hide it under Reviews in your site's admin page.",
       if (!scopeOk(scope)) return err(400, "Unknown scope.");
       const role = await roleOf(env, scope, email);
       if (!role) return err(403, `${email} isn't a member of this ${scope.startsWith("site:") ? "site" : "Studio"}.`);
+      const admin = isAdminRole(role), inStudio = scope.startsWith("studio:");
+      let privCache = null;
+      const can = async (k) => admin || !!(privCache ||= await privsFor(env, scope, role))[k];
+      if (p === "/roles" && req.method === "GET") {
+        const rows = admin ? (await env.DB.prepare("select role, privs, updated_at, updated_by from role_mgmt where scope = ?").bind(scope).all().catch(() => ({ results: [] }))).results || [] : [];
+        const saved = {};
+        for (const r of rows) {
+          try {
+            saved[r.role] = JSON.parse(r.privs);
+          } catch {
+          }
+        }
+        const roles = {};
+        for (const r of ROLE_IDS) roles[r] = privsOf(r, saved[r]);
+        const ready = !!await env.DB.prepare("select 1 from sqlite_master where type = 'table' and name = 'role_mgmt'").first().catch(() => null);
+        return json({ me: { email, role, key: userKey(email), privs: await privsFor(env, scope, role) }, ready, ...admin ? { roles, members: (await env.DB.prepare("select email, role, added_at from members where scope = ? order by email").bind(scope).all()).results || [], owners: inStudio ? (await env.DB.prepare("select project, email from project_owners where scope = ?").bind(scope).all().catch(() => ({ results: [] }))).results || [] : [] } : {} });
+      }
+      if (p === "/roles" && req.method === "POST") {
+        if (role !== "owner") return err(403, "Only an Administrator can change Role Management.");
+        const b = await req.json().catch(() => ({})), r = String(b.role || "");
+        if (!ROLE_IDS.includes(r) || r === "owner") return err(400, "Choose a role other than Administrator: Administrators can always do everything.");
+        await env.DB.prepare("insert into role_mgmt (scope, role, privs, updated_at, updated_by) values (?, ?, ?, ?, ?) on conflict (scope, role) do update set privs = excluded.privs, updated_at = excluded.updated_at, updated_by = excluded.updated_by").bind(scope, r, JSON.stringify(cleanPrivs(r, b.privs)), (/* @__PURE__ */ new Date()).toISOString(), email).run();
+        return json({ ok: true, privs: privsOf(r, cleanPrivs(r, b.privs)) });
+      }
+      if (p === "/roles/project" && req.method === "POST") {
+        if (role !== "owner" || !inStudio) return err(403, "Only an Administrator can hand a project to someone.");
+        const b = await req.json().catch(() => ({})), pr = String(b.project || ""), to = String(b.email || "").trim().toLowerCase();
+        if (!/^[\w-]{1,80}$/.test(pr)) return err(400, "Which project?");
+        if (!to) await env.DB.prepare("delete from project_owners where scope = ? and project = ?").bind(scope, pr).run();
+        else {
+          if (!await roleOf(env, scope, to)) return err(400, to + " can't sign in to this Studio yet. Add them first.");
+          await env.DB.prepare("insert into project_owners (scope, project, email, at) values (?, ?, ?, ?) on conflict (scope, project) do update set email = excluded.email, at = excluded.at").bind(scope, pr, to, (/* @__PURE__ */ new Date()).toISOString()).run();
+        }
+        return json({ ok: true });
+      }
       if (p === "/mail/test" && req.method === "POST") {
         if (!scope.startsWith("site:")) return err(400, "Test emails are for a site's templates.");
         const b = await req.json().catch(() => ({})), kind = String(b.kind || ""), K = MAIL_KINDS[kind];
@@ -4647,12 +4773,40 @@ ${body}`)}${paras("Approve or hide it under Reviews in your site's admin page.",
         await putSetting(env, scope, name, v);
         return json({ ok: true, value: maskSetting(name, v) });
       }
+      const limited = inStudio && !admin, sharedOk = limited ? await can("shared") : true;
+      const siteEdit = scope.startsWith("site:") && !admin ? await can("edit") : true;
       if (p === "/f/list") {
         const pre = u.searchParams.get("prefix") || "";
         const rows = (await env.DB.prepare("select path from files where scope = ? and substr(path, 1, ?) = ? order by path").bind(scope, pre.length, pre).all()).results || [];
-        return json(rows.map((r) => r.path));
+        let paths = rows.map((r) => r.path);
+        if (limited) {
+          const mine = new Set(((await env.DB.prepare("select project from project_owners where scope = ? and email = ?").bind(scope, email).all().catch(() => ({ results: [] }))).results || []).map((r) => r.project));
+          paths = paths.filter((x) => {
+            const r = fileRule(x, userKey(email), sharedOk);
+            return r.project ? mine.has(r.project) : !!r.read;
+          });
+        }
+        return json(paths);
       }
       const path = u.searchParams.get("path") || "";
+      if (limited && (p === "/f/meta" || p === "/f/get")) {
+        const ok = await fileMay(env, scope, email, path, sharedOk, false);
+        if (!ok) return p === "/f/meta" ? json(null) : err(404, "Not found.");
+        if (ok === "strip" && p === "/f/get") {
+          const f = await readFile(env, scope, path);
+          if (!f) return err(404, "Not found.");
+          let o = {};
+          try {
+            o = JSON.parse(new TextDecoder().decode(f.bytes));
+          } catch {
+          }
+          o.projects = [];
+          delete o.prefs;
+          return new Response(JSON.stringify(o), { headers: { ...cors, "Content-Type": "application/json", "x-sha": f.sha, "x-updated": f.updated_at } });
+        }
+      }
+      if (limited && p === "/f/put" && !await fileMay(env, scope, email, path, sharedOk, true)) return err(403, path === "studio.json" ? "Only an Administrator can change this Studio-wide setting." : "Your role can't change this. Ask an Administrator (Settings \u2192 Role Management).");
+      if (!siteEdit && (p === "/f/put" || p === "/f/delete")) return err(403, "Your role can't change this site's content. Ask its Administrator (Role Management).");
       if (p === "/f/meta") {
         const f = await env.DB.prepare("select sha, size, updated_at from files where scope = ? and path = ?").bind(scope, path).first();
         return json(f || null);
@@ -4674,7 +4828,19 @@ ${body}`)}${paras("Approve or hide it under Reviews in your site's admin page.",
       }
       if (p === "/f/delete" && req.method === "POST") {
         const { paths } = await req.json();
-        const list = (Array.isArray(paths) ? paths : []).filter(pathOk).slice(0, 500);
+        let list = (Array.isArray(paths) ? paths : []).filter(pathOk).slice(0, 500);
+        if (limited) {
+          const okd = [];
+          const seen = {};
+          for (const x of list) {
+            const r = fileRule(x, userKey(email), sharedOk);
+            const k = r.project ? "p:" + r.project : x;
+            if (!(k in seen)) seen[k] = r.project ? !!await env.DB.prepare("select 1 from project_owners where scope = ? and project = ? and email = ?").bind(scope, r.project, email).first().catch(() => null) : r.write;
+            if (seen[k]) okd.push(x);
+          }
+          if (okd.length !== list.length) return err(403, "Your role can't delete some of these files.");
+          list = okd;
+        }
         await env.DB.batch(list.flatMap((x) => [env.DB.prepare("delete from chunks where scope = ? and path = ?").bind(scope, x), env.DB.prepare("delete from files where scope = ? and path = ?").bind(scope, x)]));
         return json({ ok: true, n: list.length });
       }
@@ -4963,7 +5129,7 @@ ${body}`)}${paras("Approve or hide it under Reviews in your site's admin page.",
         return err(404, "Not found.");
       }
       if (p === "/cf" && req.method === "POST") {
-        if (role !== "owner" && role !== "partner") return err(403, "Only the owners of this site can publish it.");
+        if (!await can("publishCf")) return err(403, "Your role can't publish to Cloudflare. Ask an Administrator (Role Management).");
         const q = await req.json(), method = String(q.method || "GET").toUpperCase(), path2 = String(q.path || "");
         const A = (/^\/accounts\/([\w-]+)\//.exec(path2) || [])[1] || env.CF_ACCOUNT || "";
         const tokenOf = otherToken(env, A) || (A === env.CF_ACCOUNT ? env.CF_TOKEN : "");
@@ -4994,7 +5160,7 @@ ${body}`)}${paras("Approve or hide it under Reviews in your site's admin page.",
       }
       if (p === "/gh" && req.method === "POST") {
         if (!env.GH_TOKEN) return err(501, "This database can't reach GitHub: no GitHub token is kept here.");
-        if (role !== "owner" && role !== "partner") return err(403, "Only this Studio's owners can publish its GitHub sites.");
+        if (!await can("publishGh")) return err(403, "Your role can't publish to GitHub. Ask an Administrator (Role Management).");
         const q = await req.json(), repo = String(q.repo || "").toLowerCase(), path2 = String(q.path || ""), method = String(q.method || "GET").toUpperCase();
         if (!/^[\w.-]+\/[\w.-]+$/.test(repo) || path2 && !/^\/[\w\-./%?=&,~]*$/.test(path2) || path2.includes("..") || !["GET", "PUT", "POST", "PATCH", "DELETE"].includes(method)) return err(400, "Not a GitHub call publishing needs.");
         if (!await env.DB.prepare("select 1 from repos where repo = ? and scope = ?").bind(repo, scope).first()) return err(403, `The repository ${repo} isn't registered to ${scope}. Turn on Publish from any device again from a Studio that has the GitHub token.`);
@@ -5006,15 +5172,16 @@ ${body}`)}${paras("Approve or hide it under Reviews in your site's admin page.",
       }
       if (p === "/m") return json((await env.DB.prepare("select email, role, added_at from members where scope = ? order by email").bind(scope).all()).results || []);
       if (p === "/m/add" && req.method === "POST") {
-        if (role !== "owner" && role !== "partner") return err(403, "Only owners can add people.");
+        if (role !== "owner" && role !== "partner") return err(403, "Only an Administrator can add people or change their role.");
         const b = await req.json();
-        const e = String(b.email || "").trim().toLowerCase(), r = ["owner", "member", "partner"].includes(b.role) ? b.role : "member";
+        const e = String(b.email || "").trim().toLowerCase(), r = [...ROLE_IDS, "partner"].includes(b.role) ? b.role : "member";
+        if (r !== "owner" && await roleOf(env, scope, e) === "owner" && (await env.DB.prepare("select count(*) n from members where scope = ? and role = 'owner'").bind(scope).first())?.n <= 1) return err(400, "This is the only Administrator. Make someone else an Administrator first.");
         if (!emailOk(e)) return err(400, "Enter a valid email.");
         await env.DB.prepare("insert into members (scope, email, role) values (?, ?, ?) on conflict (scope, email) do update set role = excluded.role").bind(scope, e, r).run();
         return json({ ok: true });
       }
       if (p === "/m/remove" && req.method === "POST") {
-        if (role !== "owner" && role !== "partner") return err(403, "Only owners can remove people.");
+        if (role !== "owner" && role !== "partner") return err(403, "Only an Administrator can remove people.");
         const b = await req.json();
         await env.DB.prepare("delete from members where scope = ? and email = ?").bind(scope, String(b.email || "").toLowerCase()).run();
         return json({ ok: true });

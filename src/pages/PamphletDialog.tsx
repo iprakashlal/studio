@@ -40,12 +40,29 @@ export function PamphletDialog({ session, project, draft, upload, onApply, onClo
   const [found, setFound] = useState<PamphletProduct[] | null>(null), [guessed, setGuessed] = useState(false);
   // A designed PDF menu read from where things are on its pages (lib/menulayout): what applies to the whole menu, or null when it was read another way.
   const [laid, setLaid] = useState<{ notes: string[]; photos: number } | null>(null);
+  // Uploading a menu again: dishes already on the menu take the file's price and choices ("update"), or only get what they lack ("fill").
+  const [again, setAgain] = useState<"update" | "fill">("fill");
   const [pick, setPick] = useState<Set<number>>(new Set());
   const doc = useRef<Pamphlet | null>(null);
   const [drag, setDrag] = useState(false);
   const social = useRef<SocialItem[]>([]); // links the database read from the pamphlet's page pictures
   const existing: any[] = menu ? (draft?.food?.categories || []).flatMap((k: any) => k?.items || []) : draft?.products?.items || [];
   const W = menu ? { one: "dish", many: "dishes", doc: "menu", where: "menu" } : { one: "product", many: "products", doc: "pamphlet", where: "catalogue" };
+  // ---- a menu uploaded again: what would change for each dish already on the menu, and what the file no longer has
+  const mPrice = (x: string) => { const t = String(x || "").trim(), m = t.replace(/,/g, "").match(/^\D{0,4}(\d+(?:\.\d+)?)\s*(?:\/-|only)?$/i); return m ? m[1] : t; };
+  const mSizes = (p: PamphletProduct) => (/\//.test(p.price || "") && (p.specs || []).length >= 2 && p.specs.every((x) => /\d/.test(x.value)) ? p.specs.map((x) => ({ label: x.label, price: mPrice(x.value) })) : []);
+  const sayPrice = (d: any) => ((d?.variants || []).length ? (d.variants as any[]).map((v) => `${v.label} ${v.price}`).join(", ") : String(d?.price || "").trim() || "no price");
+  /** What the file would change on a dish that is already on the menu: "" when nothing. */
+  const changeOf = (p: PamphletProduct): string => {
+    if (!menu) return ""; const old = existing.find((x) => same(String(x?.name || ""), p.name)); if (!old) return "";
+    const sz = mSizes(p), now = sz.length ? sz.map((v) => `${v.label} ${v.price}`).join(", ") : mPrice(p.price) || "no price", was = sayPrice(old);
+    return now !== was && now !== "no price" ? `${was} → ${now}` : "";
+  };
+  const reup = useMemo(() => {
+    if (!menu || !found) return { known: 0, changed: 0, gone: [] as string[] };
+    const names = new Set(found.map((p) => p.name.trim().toLowerCase())), known = found.filter((p) => existing.some((x) => same(String(x?.name || ""), p.name)));
+    return { known: known.length, changed: known.filter((p) => changeOf(p)).length, gone: existing.map((x) => String(x?.name || "").trim()).filter((n) => n && !names.has(n.toLowerCase())) };
+  }, [found, draft]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (menu) setPhotos("none"); }, [menu]);
   // Thumbnails of the pictures found (revoked when they change or the dialog closes).
   const picUrls = useMemo(() => (found && doc.current ? doc.current.pics.map((x) => URL.createObjectURL(x.blob)) : []), [found]);
@@ -76,6 +93,7 @@ export function PamphletDialog({ session, project, draft, upload, onApply, onClo
         if (lay && lay.products.length >= 3) {
           social.current = []; setBySystem(null); setGuessed(false);
           setFound(lay.products); setPick(new Set(lay.products.map((_, i) => i))); setPicOf(lay.products.map((p) => p.pic));
+          setAgain("update");
           const withPic = lay.products.filter((p) => p.pic >= 0).length; setPhotos(withPic ? "asis" : "none"); setLaid({ notes: lay.notes, photos: withPic });
           setBusy(""); return;
         }
@@ -86,6 +104,7 @@ export function PamphletDialog({ session, project, draft, upload, onApply, onClo
       const list: Awaited<ReturnType<typeof cfProducts>> = sys ? await systemProducts(doc.current, { menu, step: setBusy }) : await cfProducts(db.api!, { ...inp, engine: eng, hint: [inp.hint, menu ? "This is a restaurant's menu. List every dish and drink as one entry: name = the dish, category = the menu section it is printed under (Starters, Mains, Desserts…), price = its price as printed, summary = its description if one is printed. Do not invent descriptions." : "", hint.trim()].filter(Boolean).join("\n") });
       social.current = list.social || [];
       setBySystem(sys ? { pictures: (list as any).pictures || 0, sure: (list as any).sure || 0 } : null);
+      setAgain("fill");
       setFound(list); setGuessed(!!list.guessed); setPick(new Set(list.map((_, i) => i))); setPicOf(guessPics(list, doc.current.pics));
       if (!doc.current.pics.length && photos === "styled") setPhotos(doc.current.kind === "pdf" ? "page" : "none");
     } catch (e: any) { setErr(e?.message || "Couldn't read the pamphlet."); }
@@ -112,7 +131,9 @@ export function PamphletDialog({ session, project, draft, upload, onApply, onClo
           const old = cats.flatMap((k) => k.items || []).find((d: any) => same(String(d?.name || ""), p.name));
           if (old) {
             const sz = sizesOf(p);
-            if (!String(old.price || "").trim() && !(old.variants || []).length) { if (sz.length) old.variants = sz; else if (p.price) old.price = price(p.price); }
+            // "update": the file's price and choices replace the dish's (its section, photo, description, marks and "sold out" stay,
+            // and so does its stock count, which is kept under the dish's section and name). "fill": only what is missing.
+            if (again === "update" ? !!changeOf(p) : !String(old.price || "").trim() && !(old.variants || []).length) { if (sz.length) { old.variants = sz; old.price = ""; } else if (p.price) { old.price = price(p.price); old.variants = []; } }
             if (!String(old.desc || "").trim() && p.summary) old.desc = p.summary;
             if (!old.image) { const im = await photoOf(i, p); if (im) old.image = im; }
             n++; continue;
@@ -222,6 +243,14 @@ export function PamphletDialog({ session, project, draft, upload, onApply, onClo
             {!!laid.photos && <label className="flex items-center gap-2 text-ink-100"><input type="checkbox" checked={photos === "asis"} onChange={(e) => setPhotos(e.target.checked ? "asis" : "none")} /> Add each dish's photo from the menu</label>}
             {!!laid.notes.length && <span>Also printed on the menu (not added, set these yourself): {laid.notes.join(" · ")}</span>}
           </div>}
+          {menu && reup.known > 0 && <fieldset className="flex flex-col gap-1.5 rounded-lg border border-ink-600 px-3 py-2 text-[12.5px] text-ink-300">
+            <legend className="label px-1">Dishes already on your menu</legend>
+            <span>{reup.known} of these {reup.known === 1 ? "is" : "are"} already on your menu{reup.changed ? `, and ${reup.changed} ${reup.changed === 1 ? "has" : "have"} a different price or choices in this file` : ", with the same prices"}.</span>
+            <label className="flex items-center gap-2 text-ink-100"><input type="radio" name="pm-again" checked={again === "update"} onChange={() => setAgain("update")} /> Update their price and choices from this file</label>
+            <label className="flex items-center gap-2 text-ink-100"><input type="radio" name="pm-again" checked={again === "fill"} onChange={() => setAgain("fill")} /> Keep them as they are (only fill in what is missing)</label>
+            <span>Nothing is removed, and stock counts are kept. A dish keeps its section, photo, description and “sold out” mark.{again === "update" && reup.changed ? " A choice that is renamed starts with no stock count." : ""}</span>
+            {reup.gone.length > 0 && <span>Not in this file, and left on your menu: {reup.gone.slice(0, 8).join(", ")}{reup.gone.length > 8 ? ` and ${reup.gone.length - 8} more` : ""}. Remove or mark them sold out yourself if they are no longer served.</span>}
+          </fieldset>}
           {guessed && <p role="status" className="rounded-lg border border-amber-400/30 bg-amber-400/5 px-3 py-2 text-[12.5px] text-amber-100">The AI didn't return the products this time, so they were read straight from the pamphlet's text. Check the name, type and details before adding.</p>}
           {!menu && <PhotoChoice photos={photos} setPhotos={setPhotos} styles={styles} setStyles={setStyles} hasPics={!!doc.current?.pics.length} />}
           <div className="flex flex-col gap-2" aria-label={menu ? "Dishes found" : "Products found"}>
@@ -238,7 +267,7 @@ export function PamphletDialog({ session, project, draft, upload, onApply, onClo
                     </div>
                   )}
                   <span className="min-w-0 flex-1">
-                    <b className="text-ink-100">{p.name}</b>{p.price && <span className="ml-2 text-ink-200">{p.price}</span>}{dup && <span className="ml-2 rounded bg-amber-400/15 px-1.5 py-0.5 text-[11.5px] text-amber-200">already listed</span>}
+                    <b className="text-ink-100">{p.name}</b>{p.price && <span className="ml-2 text-ink-200">{p.price}</span>}{dup && (() => { const ch = changeOf(p); return <span className="ml-2 rounded bg-amber-400/15 px-1.5 py-0.5 text-[11.5px] text-amber-200">{ch ? (again === "update" ? `will change: ${ch}` : `already listed (file says ${ch.split(" → ")[1]})`) : "already listed, same price"}</span>; })()}
                     <span className="block text-[12.5px] text-ink-400">{[p.category, `${doc.current?.kind === "sheet" ? "row" : "page"} ${p.page}`, p.features.length && `${p.features.length} features`, p.specs.length && (menu ? `${p.specs.length} choices` : `${p.specs.length} specs`)].filter(Boolean).join(" · ")}</span>
                     {menu && p.specs.length > 0 && <span className="mt-1 flex flex-wrap gap-1.5" aria-label={`Choices of ${p.name}`}>{p.specs.map((x, k) => <span key={k} className="chip">{x.label} · {x.value}</span>)}</span>}
                     {p.summary && <span className="mt-1 block text-[12.5px] text-ink-300">{p.summary}</span>}

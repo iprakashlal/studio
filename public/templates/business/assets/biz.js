@@ -39,6 +39,7 @@ const DEFAULT = {
     { id: "pricing", label: "Pricing", show: true, inNav: false },
     { id: "faq", label: "FAQ", show: true, inNav: false },
     { id: "cta", label: "Call to action", show: true, inNav: false },
+    { id: "wall", label: "Social wall", show: false, inNav: false },
     { id: "contact", label: "Contact", show: true, inNav: true },
   ],
   hero: {
@@ -216,7 +217,7 @@ const spHref = (p) => PAGES.page + "?p=" + encodeURIComponent(spSlug(p));
 const spCur = () => { try { return new URLSearchParams(location.search).get("p") || ""; } catch (e) { return ""; } };
 /** Which sections each page shows when the site has several pages (home follows the section order). */
 const PAGE_SECTIONS = {
-  home: ["hero", "clients", "services", "products", "stats", "work", "testimonials", "cta"],
+  home: ["hero", "clients", "services", "products", "stats", "work", "testimonials", "cta", "wall"],
   products: ["products", "cta"],
   services: ["services", "process", "pricing", "faq", "cta"],
   work: ["work", "clients", "testimonials", "cta"],
@@ -465,7 +466,7 @@ function productPage() {
     </div></section>
     ${rel.length ? `<section class="products band" id="related"><div class="wrap"><header class="sh"><h2 class="h2">More ${p.category ? esc(p.category.toLowerCase()) : "products"}</h2></header><div class="pgrid">${rel.map(prodCard).join("")}</div></div></section>` : ""}`;
 }
-const RENDER = { products: productsHTML, hero: heroHTML, clients: clientsHTML, services: () => servicesHTML(PAGE === "services"), stats: statsHTML, work: () => workHTML(PAGE === "work"), about: aboutHTML, process: processHTML, team: teamHTML, testimonials: testimonialsHTML, pricing: pricingHTML, faq: faqHTML, cta: ctaHTML, contact: contactHTML };
+const RENDER = { wall: wallSlot, products: productsHTML, hero: heroHTML, clients: clientsHTML, services: () => servicesHTML(PAGE === "services"), stats: statsHTML, work: () => workHTML(PAGE === "work"), about: aboutHTML, process: processHTML, team: teamHTML, testimonials: testimonialsHTML, pricing: pricingHTML, faq: faqHTML, cta: ctaHTML, contact: contactHTML };
 
 /* ============================================================
    PAGE
@@ -586,13 +587,15 @@ function social() {
   (ssP ||= new Promise((ok, no) => { if (window.SiteSocial) return ok(); const s = document.createElement("script"); s.src = "assets/social.js"; s.onload = () => ok(); s.onerror = no; document.head.appendChild(s); }))
     .then(() => window.SiteSocial.mount(C, { footer: "footer.foot", before: ".foot-legal", imgUrl })).catch(() => {});
 }
-/* The social photo wall (assets/wall.js): the owner's Instagram or Pinterest photos on the home page, among its sections. */
+/* The social photo wall (assets/wall.js): the owner's Instagram or Pinterest photos. It is one of the page's sections: its row under
+   Sections & order switches it on and sets where it stands; the script fills the empty slot drawn there. */
+const wallOn = () => { const s = C.sections.find((x) => x.id === "wall"); return s ? s.show !== false : !!(C.wall && C.wall.on); };
+function wallSlot() { return wallOn() && C.wall && Array.isArray(C.wall.items) && C.wall.items.length ? `<section id="wall" data-wall-slot hidden></section>` : ""; }
 let wallP = null;
 function wall() {
-  const W = C.wall || {};
-  if (!W.on && !window.SiteWall) return;
+  if (!wallOn() && !window.SiteWall) return;
   (wallP ||= new Promise((ok, no) => { if (window.SiteWall) return ok(); const s = document.createElement("script"); s.src = "assets/wall.js"; s.onload = () => ok(); s.onerror = no; document.head.appendChild(s); }))
-    .then(() => window.SiteWall.mount(C, { sections: "#main > section", home: PAGE === "home", imgUrl })).catch(() => {});
+    .then(() => window.SiteWall.mount(C, { on: wallOn(), slot: "only", imgUrl })).catch(() => {});
 }
 /* The video section (assets/video.js): one video on the home page, placed among its sections. */
 let svP;

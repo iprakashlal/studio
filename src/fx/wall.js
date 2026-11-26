@@ -11,7 +11,10 @@
    shown as that post, embedded: it is loaded from the network only when the visitor presses it, so nothing reaches those services
    before that. There is no automatic feed: the networks only give one to an app with their approval and a secret key, which a
    website's page cannot hold. The wall takes its colours, corners, card look and fonts from the site's theme.
-   window.SiteWall.mount(C, { sections: css, home, imgUrl }): safe to call again after every render. */
+   A template that lists its sections (Sections & order) draws an empty <section data-wall-slot> where the wall's row stands in that
+   list, and passes { on, slot: true }: the wall fills that slot, so its place, its switch and its menu link work like any section's.
+   Without a slot (the shop, and layouts with no section flow of their own) it is placed by "place" among the page's sections.
+   window.SiteWall.mount(C, { sections: css, home, imgUrl, on, slot }): safe to call again after every render. */
 (function () {
   "use strict";
   var esc = function (s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); };
@@ -93,7 +96,9 @@
   }
   function mount(C, o) {
     o = o || {}; var old = document.getElementById("site-wall"); if (old) old.remove();
-    var W = (C && C.wall) || {}; if (!W.on || o.home === false) return null;
+    var W = (C && C.wall) || {}, slot = document.querySelector("[data-wall-slot]"), on = o.on != null ? !!o.on : !!W.on;
+    var blank = function () { if (slot) { slot.innerHTML = ""; slot.hidden = true; slot.className = ""; } return null; };
+    if (!on || (o.home === false && !slot)) return blank();
     var net = NETS[W.network] ? W.network : "other", name = NETS[net][0], prof = profile(W), tiles = "", n = 0;
     (Array.isArray(W.items) ? W.items : []).slice(0, 24).forEach(function (it, i) {
       if (!it) return; var pic = it.image ? (o.imgUrl ? o.imgUrl(it.image) : it.image.url || "") : "", u = safe(it.url), cap = String(it.caption || "").trim(), em = !pic && u ? embedOf(u) : null;
@@ -102,18 +107,20 @@
         tiles += u ? '<a class="sw-t" href="' + esc(u) + '" target="_blank" rel="noopener">' + inner + '<span class="sw-m" aria-hidden="true">' + IC.out + "</span></a>" : '<figure class="sw-t">' + inner + "</figure>"; }
       else if (em) { n++; tiles += '<button type="button" class="sw-t sw-e" data-src="' + esc(em.src) + '" data-name="' + esc(em.name + " post") + '"><span>' + em.ic + "<b>" + esc(cap || "Show this " + em.name + " post") + "</b><small>Loads from " + esc(em.name) + " when pressed</small></span></button>"; }
     });
-    if (!n) return null;
-    var all = Array.prototype.slice.call(document.querySelectorAll(o.sections || "main > section")); if (!all.length) return null;
-    var parent = all[0].parentNode, list = all.filter(function (s) { return s.parentNode === parent && s.id !== "site-video"; });
+    if (!n) return blank();
+    if (!slot && o.slot === "only") return null;
+    var all = slot ? [] : Array.prototype.slice.call(document.querySelectorAll(o.sections || "main > section")); if (!slot && !all.length) return null;
+    var parent = slot ? null : all[0].parentNode, list = slot ? [] : all.filter(function (s) { return s.parentNode === parent && s.id !== "site-video"; });
     css();
     var layout = /^(grid|masonry|mosaic|strip|flush)$/.test(W.layout) ? W.layout : pick(n), cols = /^[3-6]$/.test(String(W.cols)) ? +W.cols : n <= 3 ? 3 : n <= 8 ? 4 : 5;
     var ar = W.shape === "portrait" ? "4/5" : W.shape === "landscape" ? "4/3" : "1/1", cap = /^(below|none)$/.test(W.captions) ? W.captions : "hover";
     var h = String(W.handle || "").trim().replace(/^@/, ""), label = String(W.button || "").trim() || (h ? "Follow @" + h : name ? "Follow us on " + name : "See more");
     var head = W.eyebrow || W.title || W.text ? '<div class="sw-hd">' + (W.eyebrow ? '<p class="sw-eb" data-edit="wall.eyebrow">' + esc(W.eyebrow) + "</p>" : "") + (W.title ? '<h2 class="sw-h" data-edit="wall.title">' + esc(W.title) + "</h2>" : "") + (W.text ? '<p class="sw-p" data-edit="wall.text">' + esc(W.text) + "</p>" : "") + "</div>" : "";
-    var s = document.createElement("section"); s.id = "site-wall"; s.className = "sw"; s.setAttribute("data-l", layout); s.setAttribute("data-cap", cap); s.setAttribute("aria-label", W.title || (name ? name + " photos" : "Photo wall"));
+    var s = slot || document.createElement("section"); if (slot) { s.hidden = false; s.removeEventListener("click", onOpen); } else s.id = "site-wall"; s.className = "sw"; s.setAttribute("data-l", layout); s.setAttribute("data-cap", cap); s.setAttribute("aria-label", W.title || (name ? name + " photos" : "Photo wall"));
     s.style.setProperty("--sw-cols", String(cols)); s.style.setProperty("--sw-ar", ar); var rad = corner(); if (rad) s.style.setProperty("--sw-rad", rad);
     s.innerHTML = '<div class="sw-in">' + head + '<div class="sw-g">' + tiles + "</div>" + (prof ? '<div class="sw-fw"><a class="sw-btn" href="' + esc(prof) + '" target="_blank" rel="noopener me">' + (net === "pinterest" ? IC.pin : IC.cam) + '<span data-edit="wall.button">' + esc(label) + "</span></a></div>" : "") + "</div>";
     s.addEventListener("click", onOpen);
+    if (slot) return s;
     var place = W.place || "bottom", m = list.length, before = place === "end" ? null : place === "bottom" ? list[m - 1] : place === "middle" ? list[Math.max(1, Math.ceil(m / 2))] || null : list[1] || null;
     if (before && m > 1) parent.insertBefore(s, before); else if (list[m - 1].nextSibling) parent.insertBefore(s, list[m - 1].nextSibling); else parent.appendChild(s);
     return s;

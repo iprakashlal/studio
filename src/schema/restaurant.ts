@@ -3,7 +3,7 @@ import type { Category, Field, TemplateDef } from "./types";
 import { FX_AXES, HERO_FX_AXIS, LOADER_ON_AXIS, LINE_BREAKS_AXIS, type Axis } from "../themes/catalog";
 import { REST_AXES, REST_BODY_FONTS, REST_DISPLAY_FONTS, REST_TAGS, REST_THEMES, restaurantThemeValues } from "../themes/restaurant";
 import { INTRO_CARD, NAV_MODE_FIELD, NAV_MODE_MOB_FIELD } from "../themes/fields";
-import { ANIM_BG_FIELDS, gstCategory, adminCategory, loyaltyCard, accountsCategory, accountLookCard, legalCategory, codeCategory, withSectionBg, videoCategory, wallCategory, WALL_SWITCH, socialCategory, logoFields, consentCategory, emailsCategory, i18nCategory, prepareI18n, featuresCategory, festivalCategory, menuCategory, menuItem, prepareMenu, staticPagesCategory, heroSlidesCard, prepareSlides, prepareMaintenance, seoCategory, customFontsCard } from "./common";
+import { ANIM_BG_FIELDS, gstCategory, adminCategory, loyaltyCard, accountsCategory, accountLookCard, legalCategory, codeCategory, withSectionBg, videoCategory, wallCategory, socialCategory, logoFields, consentCategory, emailsCategory, i18nCategory, prepareI18n, featuresCategory, festivalCategory, menuCategory, menuItem, prepareMenu, staticPagesCategory, heroSlidesCard, prepareSlides, prepareMaintenance, seoCategory, customFontsCard } from "./common";
 
 const g2 = (...fields: Field[]): Field => ({ t: "grid", cols: 2, fields });
 const g3 = (...fields: Field[]): Field => ({ t: "grid", cols: 3, fields });
@@ -11,7 +11,7 @@ const sel = (a: Axis): Field => ({ t: "select", path: "theme." + a.key, label: a
 type Card = Category["cards"][number];
 
 export const REST_SECTIONS: [string, string][] = [["hero", "Home"], ["highlights", "Highlights"], ["about", "Our story"], ["specials", "Signature dishes"], ["food", "Menu"], ["offers", "Offers"], ["gallery", "Gallery"], ["chef", "Our team"], ["events", "Events & catering"],
-  ["press", "Featured in"], ["testimonials", "Reviews"], ["order", "Order online"], ["reserve", "Book a table"], ["contact", "Visit us"], ["faq", "FAQ"], ["cta", "Call to action"]];
+  ["press", "Featured in"], ["testimonials", "Reviews"], ["order", "Order online"], ["reserve", "Book a table"], ["wall", "Social wall"], ["contact", "Visit us"], ["faq", "FAQ"], ["cta", "Call to action"]];
 const IN_NAV = ["about", "food", "gallery", "events", "contact"];
 const TARGETS = [...REST_SECTIONS.filter(([id]) => id !== "hero").map(([value, label]) => ({ value, label })), { value: "ordering", label: "Order now page (when online ordering is on)" }];
 /** Where a button can go: a section, or a link the person types. */
@@ -71,7 +71,7 @@ const schema: Category[] = [
           { t: "text", path: "site.pageLabels.gallery", label: "Gallery page name" }, { t: "text", path: "site.pageLabels.contact", label: "Visit & book page name" })] }] },
       { title: "Sections", fields: [{ t: "note", text: "Reorder with the arrows. Hidden sections stay in your content. On one page, sections with “In the menu bar” get a link at the top." },
         { t: "list", path: "sections", fixed: true, add: () => ({}), title: (it) => `${it.label || it.id}${it.show === false ? " (hidden)" : ""}`,
-          item: [g2({ t: "text", path: "label", label: "Name in the menu bar" }, { t: "toggle", path: "show", label: "Show this section" }), { t: "toggle", path: "inNav", label: "In the menu bar (one-page mode)" }] }, ...WALL_SWITCH] },
+          item: [g2({ t: "text", path: "label", label: "Name in the menu bar" }, { t: "toggle", path: "show", label: "Show this section" }), { t: "toggle", path: "inNav", label: "In the menu bar (one-page mode)" }] }] },
       { title: "Button in the menu bar", fields: [g2({ t: "text", path: "nav.cta", label: "Button label (empty hides it)" }, { t: "select", path: "nav.ctaTarget", label: "Goes to", options: GOES }), linkWhen("nav.ctaTarget", "Custom link for the menu button")] },
       { title: "Announcement bar", fields: [{ t: "toggle", path: "notice.on", label: "Show a line above the menu bar" },
         { t: "when", path: "notice.on", is: "true", fields: [{ t: "text", path: "notice.text", label: "Announcement", ph: "Closed on 26 January. Open as usual from the 27th." },
@@ -463,7 +463,7 @@ function prepareRestaurant(c: any) {
   REST_SECTIONS.forEach(([id, label], k) => {
     if (c.sections.some((s: any) => s.id === id)) return;
     const after = k ? c.sections.findIndex((s: any) => s.id === REST_SECTIONS[k - 1][0]) : -1;
-    c.sections.splice(after + 1, 0, { id, label, show: true, inNav: IN_NAV.includes(id) });
+    c.sections.splice(after + 1, 0, { id, label, show: id === "wall" ? !!c.wall?.on : true, inNav: IN_NAV.includes(id) });
   });
 }
 

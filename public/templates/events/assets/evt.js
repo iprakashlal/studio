@@ -38,6 +38,7 @@ const DEFAULT = {
     { id: "testimonials", label: "What people say", show: true, inNav: false },
     { id: "faq", label: "FAQ", show: true, inNav: false },
     { id: "cta", label: "Call to action", show: true, inNav: false },
+    { id: "wall", label: "Social wall", show: false, inNav: false },
     { id: "contact", label: "Contact", show: true, inNav: true },
   ],
   hero: {
@@ -227,7 +228,7 @@ const spHref = (p) => PAGES.page + "?p=" + encodeURIComponent(spSlug(p));
 const spCur = () => { try { return new URLSearchParams(location.search).get("p") || ""; } catch (e) { return ""; } };
 /** Which sections each page shows when the site has several pages (home follows the section order). */
 const PAGE_SECTIONS = {
-  home: ["hero", "clients", "about", "services", "stats", "team", "schedule", "tickets", "testimonials", "cta"],
+  home: ["hero", "clients", "about", "services", "stats", "team", "schedule", "tickets", "testimonials", "cta", "wall"],
   schedule: ["schedule", "venue", "faq", "cta"],
   lineup: ["team", "clients", "cta"],
   about: ["about", "stats", "gallery", "work", "process", "testimonials", "cta"],
@@ -681,7 +682,7 @@ function contactHTML() {
         ${K.whatsapp || K.linkedin ? `<div class="cta-row">${K.whatsapp ? `<a class="btn sec" href="https://wa.me/${esc(String(K.whatsapp).replace(/\D/g, ""))}" target="_blank" rel="noopener">WhatsApp</a>` : ""}${safeUrl(K.linkedin) ? `<a class="btn sec" href="${esc(safeUrl(K.linkedin))}" target="_blank" rel="noopener">LinkedIn</a>` : ""}</div>` : ""}</aside>
       ${form}</div></div></section>`;
 }
-const RENDER = { hero: heroHTML, clients: clientsHTML, services: () => servicesHTML(true), stats: statsHTML, schedule: () => scheduleHTML(PAGE === "schedule"), team: () => teamHTML(PAGE === "lineup"), tickets: ticketsHTML, gallery: galleryHTML, venue: venueHTML, work: () => workHTML(true), about: aboutHTML, process: processHTML, testimonials: testimonialsHTML, faq: faqHTML, cta: ctaHTML, contact: contactHTML };
+const RENDER = { wall: wallSlot, hero: heroHTML, clients: clientsHTML, services: () => servicesHTML(true), stats: statsHTML, schedule: () => scheduleHTML(PAGE === "schedule"), team: () => teamHTML(PAGE === "lineup"), tickets: ticketsHTML, gallery: galleryHTML, venue: venueHTML, work: () => workHTML(true), about: aboutHTML, process: processHTML, testimonials: testimonialsHTML, faq: faqHTML, cta: ctaHTML, contact: contactHTML };
 
 /* ============================================================
    PAGE
@@ -787,13 +788,15 @@ function social() {
   (ssP ||= new Promise((ok, no) => { if (window.SiteSocial) return ok(); const s = document.createElement("script"); s.src = "assets/social.js"; s.onload = () => ok(); s.onerror = no; document.head.appendChild(s); }))
     .then(() => window.SiteSocial.mount(C, { footer: "footer.foot", before: ".foot-legal", imgUrl })).catch(() => {});
 }
-/* The social photo wall (assets/wall.js): the owner's Instagram or Pinterest photos on the home page, among its sections. */
+/* The social photo wall (assets/wall.js): the owner's Instagram or Pinterest photos. It is one of the page's sections: its row under
+   Sections & order switches it on and sets where it stands; the script fills the empty slot drawn there. */
+const wallOn = () => { const s = C.sections.find((x) => x.id === "wall"); return s ? s.show !== false : !!(C.wall && C.wall.on); };
+function wallSlot() { return wallOn() && C.wall && Array.isArray(C.wall.items) && C.wall.items.length ? `<section id="wall" data-wall-slot hidden></section>` : ""; }
 let wallP = null;
 function wall() {
-  const W = C.wall || {};
-  if (!W.on && !window.SiteWall) return;
+  if (!wallOn() && !window.SiteWall) return;
   (wallP ||= new Promise((ok, no) => { if (window.SiteWall) return ok(); const s = document.createElement("script"); s.src = "assets/wall.js"; s.onload = () => ok(); s.onerror = no; document.head.appendChild(s); }))
-    .then(() => window.SiteWall.mount(C, { sections: "#main > section", home: PAGE === "home", imgUrl })).catch(() => {});
+    .then(() => window.SiteWall.mount(C, { on: wallOn(), slot: "only", imgUrl })).catch(() => {});
 }
 /* The video section (assets/video.js): one video on the home page, placed among its sections. */
 let svP;

@@ -205,9 +205,8 @@ export function prepareWall(c: any) {
   c.wall = { ...d, ...w, items: Array.isArray(w.items) ? w.items.filter((x: any) => x && typeof x === "object") : [] };
 }
 /** The social photo wall, for every template: Instagram, Pinterest or another network's photos on the home page, with a follow button. */
-/** The wall's on / off switch, shown with the other sections' switches (Sections & order). */
-export const WALL_SWITCH: Field[] = [{ t: "toggle", path: "wall.on", label: "Show the social photo wall" }, { t: "note", text: "Its photos, layout and place on the page are under Social photo wall." }];
-/** `ownSwitch`: the template has no Sections & order list, so the switch stays on this screen. */
+/** `ownSwitch`: the template has no Sections & order list (the shop), so the switch and the place on the page are set on this screen.
+ *  Everywhere else the wall is a row in that list: switched on, named and moved there like any section. */
 export function wallCategory(group = "Pages", sub?: string, extra = "", ownSwitch = false): Category {
   const g2 = (...fields: Field[]): Field => ({ t: "grid", cols: 2, fields });
   return {
@@ -215,7 +214,7 @@ export function wallCategory(group = "Pages", sub?: string, extra = "", ownSwitc
     desc: "A wall of your Instagram, Pinterest or other social media photos on the home page, with a button to follow you. It takes its look from the site's theme.",
     cards: [
       { title: "The wall", fields: [
-        ownSwitch ? { t: "toggle", path: "wall.on", label: "Show the social photo wall" } : { t: "note", text: "Switch the wall on or off under Sections & order, with the other sections." },
+        ownSwitch ? { t: "toggle", path: "wall.on", label: "Show the social photo wall" } : { t: "note", text: "The wall is one of your sections: switch it on and move it up or down under Sections & order (Menu & order for a portfolio), in the row “Social wall”. It shows once it has at least one photo." },
         g2({ t: "select", path: "wall.network", label: "Network", options: [{ value: "instagram", label: "Instagram" }, { value: "pinterest", label: "Pinterest" }, { value: "facebook", label: "Facebook" }, { value: "tiktok", label: "TikTok" }, { value: "youtube", label: "YouTube" }, { value: "x", label: "X" }, { value: "behance", label: "Behance" }, { value: "dribbble", label: "Dribbble" }, { value: "other", label: "Another one" }] },
           { t: "text", path: "wall.handle", label: "Your handle", ph: "@yourname", hint: "Used for the follow button." }),
         { t: "text", path: "wall.url", label: "Profile or board address (optional)", ph: "https://www.pinterest.com/yourname/your-board/", hint: "Only needed when the handle alone doesn't lead to the right page: a Pinterest board, or another network." },
@@ -229,7 +228,7 @@ export function wallCategory(group = "Pages", sub?: string, extra = "", ownSwitc
       ] },
       { title: "Layout", fields: [
         g2({ t: "select", path: "wall.layout", label: "Layout", options: [{ value: "auto", label: "Automatic (to suit your theme)" }, { value: "grid", label: "Even grid" }, { value: "masonry", label: "Masonry (photos keep their own height)" }, { value: "mosaic", label: "Mosaic (some photos larger)" }, { value: "strip", label: "One row that scrolls sideways" }, { value: "flush", label: "Edge to edge, no gaps" }] },
-          { t: "select", path: "wall.place", label: "Where on the home page", options: [{ value: "top", label: "After the first screen" }, { value: "middle", label: "In the middle of the page" }, { value: "bottom", label: "Before the last section" }, { value: "end", label: "At the end of the page" }] }),
+          ...(ownSwitch ? [{ t: "select", path: "wall.place", label: "Where on the home page", options: [{ value: "top", label: "After the first screen" }, { value: "middle", label: "In the middle of the page" }, { value: "bottom", label: "Before the last section" }, { value: "end", label: "At the end of the page" }] } as Field] : [])),
         g2({ t: "select", path: "wall.cols", label: "Photos in a row", options: [{ value: "", label: "Automatic" }, { value: "3", label: "3" }, { value: "4", label: "4" }, { value: "5", label: "5" }, { value: "6", label: "6" }] },
           { t: "select", path: "wall.shape", label: "Photo shape", options: [{ value: "", label: "Square" }, { value: "portrait", label: "Upright (4:5)" }, { value: "landscape", label: "Wide (4:3)" }] }),
         { t: "select", path: "wall.captions", label: "Captions", options: [{ value: "hover", label: "Over the photo, when pointed at" }, { value: "below", label: "Under the photo" }, { value: "none", label: "No captions" }] },

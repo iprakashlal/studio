@@ -3,13 +3,13 @@ import type { Category, Field, TemplateDef } from "./types";
 import { BODY_FONTS, DISPLAY_FONTS, FX_AXES, HERO_FX_AXIS, LOADER_ON_AXIS, LINE_BREAKS_AXIS, type Axis } from "../themes/catalog";
 import { BIZ_AXES, BIZ_TAGS, BIZ_THEMES, businessThemeValues } from "../themes/business";
 import { INTRO_CARD, NAV_MODE_FIELD, NAV_MODE_MOB_FIELD } from "../themes/fields";
-import { ANIM_BG_FIELDS, adminCategory, legalCategory, codeCategory, withSectionBg, videoCategory, wallCategory, WALL_SWITCH, socialCategory, logoFields, consentCategory, emailsCategory, i18nCategory, prepareI18n, featuresCategory, festivalCategory, menuCategory, menuItem, prepareMenu, staticPagesCategory, heroSlidesCard, prepareSlides, prepareMaintenance, seoCategory, warrantyCategory, customFontsCard } from "./common";
+import { ANIM_BG_FIELDS, adminCategory, legalCategory, codeCategory, withSectionBg, videoCategory, wallCategory, socialCategory, logoFields, consentCategory, emailsCategory, i18nCategory, prepareI18n, featuresCategory, festivalCategory, menuCategory, menuItem, prepareMenu, staticPagesCategory, heroSlidesCard, prepareSlides, prepareMaintenance, seoCategory, warrantyCategory, customFontsCard } from "./common";
 
 const g2 = (...fields: Field[]): Field => ({ t: "grid", cols: 2, fields });
 const g3 = (...fields: Field[]): Field => ({ t: "grid", cols: 3, fields });
 const sel = (a: Axis): Field => ({ t: "select", path: "theme." + a.key, label: a.label, options: a.options.map(([value, label]) => ({ value, label })) });
 
-const SECTIONS: [string, string][] = [["hero", "Hero"], ["clients", "Clients"], ["services", "Services"], ["products", "Products"], ["stats", "Numbers"], ["work", "Case studies"], ["about", "About"], ["process", "Process"], ["team", "Team"], ["testimonials", "Testimonials"], ["pricing", "Pricing"], ["faq", "FAQ"], ["cta", "Call to action"], ["contact", "Contact"]];
+const SECTIONS: [string, string][] = [["hero", "Hero"], ["clients", "Clients"], ["services", "Services"], ["products", "Products"], ["stats", "Numbers"], ["work", "Case studies"], ["about", "About"], ["process", "Process"], ["team", "Team"], ["testimonials", "Testimonials"], ["pricing", "Pricing"], ["faq", "FAQ"], ["cta", "Call to action"], ["wall", "Social wall"], ["contact", "Contact"]];
 const TARGETS = SECTIONS.filter(([id]) => id !== "hero").map(([value, label]) => ({ value, label }));
 /** Where a button can go: a section, or a link the person types. */
 const GOES = [...TARGETS, { value: "url", label: "A custom link…" }];
@@ -59,7 +59,7 @@ const schema: Category[] = [
           { t: "text", path: "site.pageLabels.about", label: "About page name" }, { t: "text", path: "site.pageLabels.contact", label: "Contact page name" })] }] },
       { title: "Sections", fields: [{ t: "note", text: "Reorder with the arrows. Hidden sections stay in your content. On one page, sections with “In the menu” get a menu link." },
         { t: "list", path: "sections", fixed: true, add: () => ({}), title: (it) => `${it.label || it.id}${it.show === false ? " (hidden)" : ""}`,
-          item: [g2({ t: "text", path: "label", label: "Menu name" }, { t: "toggle", path: "show", label: "Show this section" }), { t: "toggle", path: "inNav", label: "In the menu (one-page mode)" }] }, ...WALL_SWITCH] },
+          item: [g2({ t: "text", path: "label", label: "Menu name" }, { t: "toggle", path: "show", label: "Show this section" }), { t: "toggle", path: "inNav", label: "In the menu (one-page mode)" }] }] },
       { title: "Menu button", fields: [g2({ t: "text", path: "nav.cta", label: "Button label (empty hides it)" }, { t: "select", path: "nav.ctaTarget", label: "Goes to", options: GOES }), linkWhen("nav.ctaTarget", "Custom link for the menu button")] },
     ],
   },
@@ -248,7 +248,7 @@ function prepareBusiness(c: any) {
   SECTIONS.forEach(([id, label], k) => {
     if (c.sections.some((s: any) => s.id === id)) return;
     const after = k ? c.sections.findIndex((s: any) => s.id === SECTIONS[k - 1][0]) : -1;
-    c.sections.splice(after + 1, 0, { id, label, show: true, inNav: ["services", "products", "work", "about", "team", "contact"].includes(id) });
+    c.sections.splice(after + 1, 0, { id, label, show: id === "wall" ? !!c.wall?.on : true, inNav: ["services", "products", "work", "about", "team", "contact"].includes(id) });
   });
   c.contact ||= {}; c.contact.form ||= { enabled: true };
 }

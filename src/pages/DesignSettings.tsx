@@ -4,6 +4,8 @@ import { pushPref, savePrefNow } from "../lib/prefs";
 import { cleanDesignSettings, readDesignSettings, writeDesignSettings, type DesignSettings } from "../lib/designs";
 import { DIY_FONTS, DIY_WORDS, NOTICE_TEXT, GROUPS, KINDS, LOOK_AXES, type DiyWord, type Gallery, type Kind, type LookRule } from "../lib/designlook";
 import { shrinkImage } from "../lib/brand";
+import { ANIM_BGS, ANIM_SPEEDS, BG_PATTERNS } from "../schema/animbg";
+import type { DiyBg } from "../lib/diylook";
 import { QUESTION_GROUPS, QUESTION_LIST, allThemesOf } from "../lib/designer";
 import { AI_ENGINES } from "../lib/ai";
 import { useAiEngine } from "./AiEngine";
@@ -175,6 +177,7 @@ export function DesignLookTab({ session, studio, index, onIndex, part, lead }: {
     upd({ qorder: Object.keys(all).length ? all : undefined });
   };
   const setUi = (p: Partial<NonNullable<DesignSettings["ui"]>>) => { const n: any = { ...(d.ui || {}), ...p }; for (const k of Object.keys(n)) if (n[k] === undefined || n[k] === "") delete n[k]; upd({ ui: Object.keys(n).length ? n : undefined }); };
+  const setBg = (p: Partial<DiyBg>) => { const n: any = { ...(d.bg || {}), ...p }; for (const k of Object.keys(n)) if (n[k] === undefined || n[k] === "" || n[k] === false || n[k] === 0 || (Array.isArray(n[k]) && !n[k].length)) delete n[k]; upd({ bg: Object.keys(n).length ? n : undefined }); };
   const setWord = (k: DiyWord, v: string) => { const n: any = { ...(d.words || {}) }; if (v.trim() && v !== DIY_WORDS[k][1]) n[k] = v; else delete n[k]; upd({ words: Object.keys(n).length ? n : undefined }); };
   const themes = allThemesOf(kind), picked = d.themes?.[kind]?.length ? d.themes[kind]!.filter((id) => themes.some((t) => t.id === id)) : [];
   const all = !picked.length, offered = all ? themes.map((t) => t.id) : picked;
@@ -276,7 +279,7 @@ export function DesignLookTab({ session, studio, index, onIndex, part, lead }: {
       <Block title="Logo and name" note="What the top bar of the Design yourself page shows, and the picture beside the assistant's messages. Leave a box empty to keep the Studio's own.">
         {(() => {
           const u = d.ui || {};
-          const pick = async (f: File | undefined) => { if (!f) return; try { setUi({ logo: await shrinkImage(f, 160) }); } catch (e: any) { alert(e?.message || "Couldn't use that picture."); } };
+          const pick = async (f: File | undefined) => { if (!f) return; try { setUi({ logo: await shrinkImage(f, 128) }); } catch (e: any) { alert(e?.message || "Couldn't use that picture."); } };
           return <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             <div className="flex flex-col gap-1.5 text-[13px] font-semibold">Logo
               <span className="flex items-center gap-2">{u.logo && <img src={u.logo} alt="" className="h-10 w-10 rounded-md border border-ink-600 object-contain" />}
@@ -294,6 +297,52 @@ export function DesignLookTab({ session, studio, index, onIndex, part, lead }: {
             return <label key={k} className={`flex flex-col gap-1 text-[13px] font-semibold ${long ? "sm:col-span-2" : ""}`}>{DIY_WORDS[k][0]}
               {long ? <textarea className="input min-h-[4.5rem] text-[13px] font-normal" maxLength={400} placeholder={DIY_WORDS[k][1]} value={v} onChange={(e) => setWord(k, e.target.value)} /> : <input className="input h-10 py-0 text-[13px] font-normal" maxLength={120} placeholder={DIY_WORDS[k][1]} value={v} onChange={(e) => setWord(k, e.target.value)} />}</label>; })}
         </div>
+      </Block>
+
+      <Block title="Background and text" note="Give the Design yourself page its own background and text, with the same choices a website section has: a colour, a picture or GIF, a slideshow, a video, an animated background or a pattern. The text turns light or dark by itself to suit it. While this is on, it takes the place of the page colour and background picture under Chat look.">
+        {(() => {
+          const b = d.bg || {}, sel = "input h-10 py-0 text-[13px]", lab = "flex flex-col gap-1 text-[13px] font-semibold";
+          const addPic = async (f: File | undefined, slide?: boolean) => { if (!f) return; try { const u = await fitBackdrop(f); if (slide) setBg({ slides: [...(b.slides || []), u].slice(0, 4) }); else setBg({ image: u }); } catch (e: any) { alert(e?.message || "Couldn't use that picture."); } };
+          const media = b.kind === "image" || b.kind === "slides" || b.kind === "video";
+          return <>
+            <label className="flex items-start gap-2 text-[13px]"><input type="checkbox" className="mt-1" checked={!!b.on} onChange={(e) => setBg({ on: e.target.checked })} /><span><b className="block">Give this page its own background and text</b></span></label>
+            {b.on && <>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className={lab}>Background<select className={sel} value={b.kind || ""} onChange={(e) => setBg({ kind: e.target.value as any })}><option value="">A colour</option><option value="image">A picture or GIF</option><option value="slides">A slideshow of pictures</option><option value="video">A video</option><option value="anim">An animated background</option><option value="pattern">A pattern</option></select></label>
+                <label className={lab}>Colour{b.kind ? " (shows behind it, and while it loads)" : ""}
+                  <span className="flex items-center gap-2"><input type="color" aria-label="Background colour" className="h-10 w-12 cursor-pointer rounded border border-ink-600 bg-transparent p-0.5" value={b.color || "#101622"} onChange={(e) => setBg({ color: e.target.value })} /><span className="font-mono text-xs font-normal text-ink-400">{b.color || "the page's own"}</span>{b.color && <button type="button" className="btn btn-ghost btn-sm" onClick={() => setBg({ color: undefined })}>Reset</button>}</span></label>
+              </div>
+              {b.kind === "image" && <div className="flex flex-col gap-2"><span className="text-[13px] font-semibold">Picture or GIF</span>
+                <div className="flex flex-wrap items-center gap-2">{b.image && <img src={b.image} alt="" className="h-14 w-24 rounded-md border border-ink-600 object-cover" />}<label className="btn btn-sm cursor-pointer">{b.image ? "Replace" : "Choose a picture"}<input type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" onChange={(e) => { addPic(e.target.files?.[0]); e.target.value = ""; }} /></label>{b.image && <button type="button" className="btn btn-ghost btn-sm" onClick={() => setBg({ image: undefined })}>Remove</button>}</div>
+                <input className="input h-9 py-0 text-[13px]" aria-label="Or a picture's address" placeholder="Or a picture's or GIF's address: https://…" value={b.image && b.image.startsWith("https://") ? b.image : ""} onChange={(e) => setBg({ image: e.target.value.trim() || undefined })} />
+                <span className="text-[11.5px] text-ink-500">An uploaded picture is shrunk to stay small. For a GIF, or a large sharp picture, give its https address instead.</span></div>}
+              {b.kind === "slides" && <div className="flex flex-col gap-2"><span className="text-[13px] font-semibold">Pictures of the slideshow (2 to 4)</span>
+                <div className="flex flex-wrap items-center gap-2">{(b.slides || []).map((u, i) => <span key={i} className="relative"><img src={u} alt="" className="h-14 w-24 rounded-md border border-ink-600 object-cover" /><button type="button" className="absolute -right-1.5 -top-1.5 grid h-5 w-5 place-items-center rounded-full bg-ink-700 text-[11px]" aria-label={`Remove picture ${i + 1}`} onClick={() => setBg({ slides: (b.slides || []).filter((_, j) => j !== i) })}>×</button></span>)}
+                  {(b.slides || []).length < 4 && <label className="btn btn-sm cursor-pointer">Add a picture<input type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" onChange={(e) => { addPic(e.target.files?.[0], true); e.target.value = ""; }} /></label>}</div>
+                <div className="grid gap-3 sm:grid-cols-2"><label className={lab}>Seconds per picture ({b.slideSecs || 5})<input type="range" min={2} max={12} step={1} value={b.slideSecs || 5} onChange={(e) => setBg({ slideSecs: +e.target.value })} /></label>
+                  <label className={lab}>Change of picture<select className={sel} value={b.slideFx || ""} onChange={(e) => setBg({ slideFx: (e.target.value || undefined) as any })}><option value="">Fade</option><option value="zoom">Fade with a slow zoom</option><option value="slide">Slide</option></select></label></div></div>}
+              {b.kind === "video" && <div className="flex flex-col gap-2"><label className={lab}>Video link<input className="input h-10 py-0 text-[13px] font-normal" placeholder="https://youtu.be/…  or  https://vimeo.com/…  or  https://…/film.mp4" value={b.videoUrl || ""} onChange={(e) => setBg({ videoUrl: e.target.value })} /></label>
+                <div className="grid gap-2 sm:grid-cols-2"><label className="flex items-center gap-2 text-[13px]"><input type="checkbox" checked={!!b.videoOnce} onChange={(e) => setBg({ videoOnce: e.target.checked })} />Play once (do not loop)</label><label className="flex items-center gap-2 text-[13px]"><input type="checkbox" checked={!!b.videoControls} onChange={(e) => setBg({ videoControls: e.target.checked })} />Show pause and sound buttons</label></div>
+                <span className="text-[11.5px] text-ink-500">A YouTube or Vimeo link, or the address of a video file. It starts by itself, without sound, and loops unless you turn that off. A video can't be uploaded here: the page's settings are kept small so every visitor gets them at once.</span></div>}
+              {b.kind === "anim" && <div className="grid gap-3 sm:grid-cols-3"><label className={lab}>Animated background<select className={sel} value={b.anim || ""} onChange={(e) => setBg({ anim: e.target.value })}><option value="">Choose one</option>{ANIM_BGS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></label>
+                <label className={lab}>Speed<select className={sel} value={b.animSpeed || ""} onChange={(e) => setBg({ animSpeed: (e.target.value || undefined) as any })}>{ANIM_SPEEDS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select></label>
+                <label className={lab}>Strength ({b.animStrength || 60}%)<input type="range" min={20} max={100} step={5} value={b.animStrength || 60} onChange={(e) => setBg({ animStrength: +e.target.value })} /></label></div>}
+              {b.kind === "pattern" && <label className={lab + " max-w-sm"}>Pattern<select className={sel} value={b.pattern || ""} onChange={(e) => setBg({ pattern: e.target.value })}><option value="">Choose one</option>{BG_PATTERNS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></label>}
+              {media && <div className="grid gap-3 sm:grid-cols-3">
+                <label className={lab}>Blur the picture or video ({b.blur || 0}px)<input type="range" min={0} max={30} step={1} value={b.blur || 0} onChange={(e) => setBg({ blur: +e.target.value })} /></label>
+                <label className={lab}>Backdrop over it<select className={sel} value={b.shade || ""} onChange={(e) => setBg({ shade: (e.target.value || undefined) as any })}><option value="">Automatic (as much as the text needs)</option><option value="dark">Dark backdrop</option><option value="light">Light backdrop</option></select></label>
+                <label className={lab}>Strength of the backdrop ({b.dim || 0}%)<input type="range" min={0} max={90} step={5} value={b.dim || 0} onChange={(e) => setBg({ dim: +e.target.value })} /></label></div>}
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <label className={lab}>Text colour<select className={sel} value={b.text || ""} onChange={(e) => setBg({ text: (e.target.value || undefined) as any })}><option value="">Automatic (light or dark, to suit the background)</option><option value="light">Light text (for a dark background)</option><option value="dark">Dark text (for a light background)</option><option value="custom">A colour of my own</option></select></label>
+                {b.text === "custom" && <label className={lab}>Colour of the text<input type="color" aria-label="Colour of the text" className="h-10 w-12 cursor-pointer rounded border border-ink-600 bg-transparent p-0.5" value={b.textColor || "#ffffff"} onChange={(e) => setBg({ textColor: e.target.value })} /></label>}
+                <label className={lab}>Font<select className={sel} value={b.font || ""} onChange={(e) => setBg({ font: e.target.value || undefined })}><option value="">The page's fonts</option>{DIY_FONTS.map((f) => <option key={f} value={f}>{f}</option>)}</select></label>
+                <label className={lab}>Use the font for<select className={sel} value={b.fontFor || ""} onChange={(e) => setBg({ fontFor: (e.target.value || undefined) as any })}><option value="">All the text here</option><option value="head">The headings only</option></select></label>
+                <label className={lab}>Text style<select className={sel} value={b.fontStyle || ""} onChange={(e) => setBg({ fontStyle: (e.target.value || undefined) as any })}><option value="">The page's own</option><option value="bold">Bold</option><option value="light">Light</option><option value="italic">Italic</option><option value="bolditalic">Bold italic</option><option value="upper">CAPITALS</option><option value="spaced">Spaced out</option></select></label>
+              </div>
+              <span className="text-[11.5px] text-ink-500">With the text on automatic, the page wears its light or dark colours to suit the background, whatever Page look says. The message bubbles keep their own colours (Chat look).</span>
+            </>}
+          </>;
+        })()}
       </Block>
 
       <Block title="Chat look" note="Colours and a background picture for the Design yourself chat. Leave a colour unset to keep the standard look.">

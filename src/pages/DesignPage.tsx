@@ -124,12 +124,12 @@ const word = (k: DiyWord, brandName?: string) => (readDesignSettings().words?.[k
 function DiyMark({ size = 26 }: { size?: number }) { const l = readDesignSettings().ui?.logo; return l ? <img src={l} alt="" width={size} height={size} className="flex-none rounded-md object-contain" style={{ width: size, height: size }} /> : <BrandMark fallback={<Logo />} size={size} />; }
 /** Wears the page's own look while it is open: light or dark and the accent (the Studio's own colours come back on leaving),
  *  corners, chat width and fonts. They are set on the document, so dialogs and menus opened from the page wear them too. */
-function useDiyLook() {
-  const ui = readDesignSettings().ui || {}, base = useBrand();
+function useDiyLook(auto: "" | "light" | "dark" = "") {
+  const ui = readDesignSettings().ui || {}, base = useBrand(), mode = auto || ui.mode;
   useEffect(() => {
-    if (ui.mode || ui.accent) applyTint(ui.accent || base.tint || null, ui.mode || base.mode);
+    if (mode || ui.accent) applyTint(ui.accent || base.tint || null, mode || base.mode);
     return () => { const b = brand(); applyTint(b.tint || null, b.mode); };
-  }, [ui.mode, ui.accent, base.tint, base.mode]);
+  }, [mode, ui.accent, base.tint, base.mode]);
   useEffect(() => {
     const de = document.documentElement, id = "diy-look";
     if (ui.radius) de.dataset.diyR = ui.radius; else delete de.dataset.diyR;
@@ -138,6 +138,9 @@ function useDiyLook() {
     const fam = [...new Set([ui.font, ui.head].filter(Boolean))] as string[];
     if (fam.length) { if (!link) { link = document.createElement("link"); link.id = id + "-font"; link.rel = "stylesheet"; document.head.appendChild(link); } const href = "https://fonts.googleapis.com/css2?" + fam.map((f) => "family=" + f.replace(/ /g, "+") + ":wght@400;500;600;700;800").join("&") + "&display=swap"; if (link.href !== href) link.href = href; } else link?.remove();
     const css = [
+      // the page's own background (see useDiyBg): the colours the drawn backgrounds read, a background that stays put while the chat scrolls, and see-through bars over it
+      `.diy-page{--c1:rgb(var(--brand-500,91 124 255));--c2:rgb(var(--brand-300,170 190 255));--c3:rgb(var(--brand-600,63 95 224));--bg:rgb(var(--ink-950,11 15 23));--text:rgb(var(--ink-100,230 235 245));--soft:rgb(var(--ink-300,160 170 190));--surface:rgb(var(--ink-900,15 20 29));--line:rgb(var(--ink-700,34 44 59))}`,
+      `.diy-page.has-sbg>.sbg{position:fixed}.diy-page.has-sbg>header{background-color:rgb(var(--ink-950,11 15 23)/.55)!important;-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px)}.diy-page.has-sbg .sticky.bottom-0{background:linear-gradient(to top,rgb(var(--ink-950,11 15 23)/.8) 55%,transparent)!important;border-color:transparent!important;-webkit-backdrop-filter:none;backdrop-filter:none}`,
       ui.font ? `.diy-page, .diy-page .input, .diy-page .btn, [role=dialog]{font-family:"${ui.font}",ui-sans-serif,system-ui,sans-serif}` : "",
       ui.head || ui.font ? `.diy-page :is(h1,h2,h3,.font-display), [role=dialog] :is(h1,h2,h3,.font-display){font-family:"${ui.head || ui.font}",ui-sans-serif,system-ui,sans-serif}` : "",
       `:root[data-diy-r=sharp] .diy-page :is(.rounded-md,.rounded-lg,.rounded-xl,.rounded-2xl,.rounded-3xl,.btn,.input,.card), :root[data-diy-r=sharp] [role=dialog], :root[data-diy-r=sharp] [role=dialog] :is(.btn,.input){border-radius:4px!important}`,
@@ -149,6 +152,37 @@ function useDiyLook() {
     if (st.textContent !== css) st.textContent = css;
     return () => { delete de.dataset.diyR; delete de.dataset.diyW; document.getElementById(id)?.remove(); document.getElementById(id + "-font")?.remove(); };
   }, [ui.radius, ui.width, ui.font, ui.head]);
+}
+/** The page's own background and text (Settings → Design yourself → Background and text): drawn by fx.js, the script that draws a
+ *  website section's background, so every kind works the same here. It says whether light or dark text suits the background; the
+ *  page then wears its dark or light colours to match (returned here), unless the owner chose a text colour. */
+function useDiyBg(on: boolean): "" | "light" | "dark" {
+  const bg = readDesignSettings().bg, key = JSON.stringify(bg || null);
+  const [auto, setAuto] = useState<"" | "light" | "dark">("");
+  useEffect(() => {
+    const el = document.querySelector<HTMLElement>(".diy-page"); if (!el) return;
+    const INK = ["--ink-100", "--ink-200", "--ink-300", "--ink-400"];
+    const clear = () => {
+      el.querySelectorAll(":scope > .sbg, :scope > .sbg-ctl").forEach((n) => { try { (n as any).__ab?.stop?.(); } catch { /* not a drawn one */ } n.remove(); });
+      el.classList.remove("has-sbg"); for (const a of [...el.attributes]) if (/^data-(sbg|sfont|sfs|salign)/.test(a.name)) el.removeAttribute(a.name);
+      for (const v of ["--sbg", "--sfont", "--scol", ...INK]) el.style.removeProperty(v);
+      el.querySelectorAll<HTMLElement>("[data-sbg-fix]").forEach((x) => { x.style.removeProperty("color"); x.removeAttribute("data-sbg-fix"); });
+    };
+    clear();
+    if (!on || !bg?.on) { setAuto(""); return; }
+    const read = () => {
+      const t = el.getAttribute("data-sbg-text");
+      // light text is what the dark colours have, and the other way round; a colour of the owner's own is put on the page's text
+      setAuto(t === "light" ? "dark" : t === "dark" ? "light" : "");
+      if (t === "custom" && bg.textColor) { const n = parseInt(bg.textColor.slice(1), 16), rgb = `${n >> 16} ${(n >> 8) & 255} ${n & 255}`; INK.forEach((v) => el.style.setProperty(v, rgb)); } else INK.forEach((v) => el.style.removeProperty(v));
+    };
+    const mo = new MutationObserver(read); mo.observe(el, { attributes: true, attributeFilter: ["data-sbg-text"] });
+    let dead = false;
+    // @ts-ignore: a plain script that sets window.SiteFX
+    import("../fx/fx.js").then(() => { if (dead) return; (window as any).SiteFX?.bgs({ bgs: { diy: { ...bg, on: true } }, asset: (v: unknown) => (typeof v === "string" ? v : "") }, document.body); read(); }).catch(() => {});
+    return () => { dead = true; mo.disconnect(); clear(); };
+  }, [key, on]);
+  return auto;
 }
 function PhoneNotice() {
   const brand = useBrand();
@@ -180,7 +214,7 @@ function DesignPageInner({ studio, index, onIndex }: { studio?: Studio; index?: 
   const [design, setDesign] = useState<Design | null>(null);
   const [ver, setVer] = useState(1);
   const [setsVer, setSetsVer] = useState(0);
-  useDiyLook();
+  useDiyLook(useDiyBg(!(phone && !studio)));
   useEffect(() => { const f = () => setSetsVer((v) => v + 1); addEventListener("studio:design-page", f); return () => removeEventListener("studio:design-page", f); }, []);
   const [writing, setWriting] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
@@ -448,7 +482,7 @@ function DesignPageInner({ studio, index, onIndex }: { studio?: Studio; index?: 
   );
 
   return (
-    <div className="diy-page flex min-h-screen flex-col bg-ink-950 text-ink-100" style={chatBg}>
+    <div data-sec="diy" className="diy-page flex min-h-screen flex-col bg-ink-950 text-ink-100" style={readDesignSettings().bg?.on ? undefined : chatBg}>
       <DevtoolsGuard /><LoadVeil title="Loading Design yourself" steps={["Loading the designer", "Reading the Studio's settings"]} done={(fontsOk ? 1 : 0) + (hostDone ? 1 : 0)} />
       <header className="sticky top-0 z-20 flex w-full items-center gap-3 border-b border-ink-800 bg-ink-950/90 px-4 py-3 backdrop-blur sm:px-6">
         {/* The Studio's name is a link only for someone signed in: it goes to their projects. */}

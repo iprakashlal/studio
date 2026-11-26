@@ -49,8 +49,92 @@ var CFDB_UPGRADES = [
     "create index if not exists enquiries_ref on enquiries (site, ref)"
   ] }
 ];
-var CFDB_VERSION = 95;
+var CFDB_VERSION = 96;
 var CFDB_WORKER_NAME = "picaffectz-db";
+
+// src/lib/diylook.ts
+var DIY_WORDS = {
+  welcome: ["Welcome message", "Welcome \u{1F44B} I'm the {brand} design assistant. Answer a few quick questions and your website takes shape as we go. It's only a preview."],
+  typeOwn: ["Line above the first answer box", "or type your own"],
+  writing: ["While the text is being written", "Writing a short line about each of your topics\u2026"],
+  readyTitle: ["Heading when the preview is ready", "Your preview is ready"],
+  readyText: ["Text under that heading", "It isn't published. Connect with us to finish it together: your own photos, your address on the web, payment and any extra features."],
+  viewBtn: ["Button: open the preview", "View my preview"],
+  connectBtn: ["Button: get in touch", "Connect with Picaffectz"],
+  anotherBtn: ["Button: start a new design", "Design another"],
+  footnote: ["Small line under the buttons", "Preview only. Nothing is published or charged."],
+  previewBtn: ["Header button: preview", "Preview"],
+  restartBtn: ["Header button: start again", "Start again"],
+  skipBtn: ["Button: skip a question", "Skip"]
+};
+var DIY_FONTS = ["Manrope", "Inter", "DM Sans", "Plus Jakarta Sans", "Figtree", "Outfit", "Sora", "Space Grotesk", "Work Sans", "Nunito Sans", "Poppins", "IBM Plex Sans", "Bricolage Grotesque", "Syne", "Unbounded", "Fraunces", "Playfair Display", "DM Serif Display", "Lora", "Source Serif 4"];
+var HEX = /^#[0-9a-f]{6}$/i;
+var PIC = /^(data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+|https:\/\/[^\s<>"']{3,400})$/;
+var tx = (v, n) => typeof v === "string" ? v.replace(/[<>]/g, "").trim().slice(0, n) : "";
+var num = (v, lo, hi) => Number.isFinite(+v) && v !== "" && v != null && +v >= lo ? Math.min(hi, Math.round(+v)) : void 0;
+function cleanDiyLook(x) {
+  const o = {};
+  if (!x || typeof x !== "object") return o;
+  if (x.ui && typeof x.ui === "object") {
+    const s = x.ui, u = {};
+    if (s.mode === "light" || s.mode === "dark") u.mode = s.mode;
+    if (typeof s.accent === "string" && HEX.test(s.accent)) u.accent = s.accent.toLowerCase();
+    if (DIY_FONTS.includes(s.font)) u.font = s.font;
+    if (DIY_FONTS.includes(s.head)) u.head = s.head;
+    if (s.radius === "sharp" || s.radius === "round") u.radius = s.radius;
+    if (s.width === "narrow" || s.width === "wide") u.width = s.width;
+    if (typeof s.logo === "string" && s.logo.length <= 14e4 && /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(s.logo)) u.logo = s.logo;
+    if (tx(s.name, 40)) u.name = tx(s.name, 40);
+    if (tx(s.tag, 60)) u.tag = tx(s.tag, 60);
+    if (Object.keys(u).length) o.ui = u;
+  }
+  if (x.words && typeof x.words === "object") {
+    const w = {};
+    for (const k of Object.keys(DIY_WORDS)) {
+      const v = tx(x.words[k], 400);
+      if (v && v !== DIY_WORDS[k][1]) w[k] = v;
+    }
+    if (Object.keys(w).length) o.words = w;
+  }
+  if (x.qorder && typeof x.qorder === "object") {
+    const q = {};
+    for (const g of ["basics", "portfolio", "store", "business", "restaurant", "events"]) {
+      const l = Array.isArray(x.qorder[g]) ? [...new Set(x.qorder[g].filter((id) => typeof id === "string" && /^[a-z]{1,20}$/.test(id)))].slice(0, 80) : [];
+      if (l.length) q[g] = l;
+    }
+    if (Object.keys(q).length) o.qorder = q;
+  }
+  if (x.bg && typeof x.bg === "object") {
+    const s = x.bg, b = {}, pic = (v) => typeof v === "string" && v.length <= 14e4 && PIC.test(v) ? v : "";
+    if (s.on === true) b.on = true;
+    if (["image", "slides", "video", "anim", "pattern"].includes(s.kind)) b.kind = s.kind;
+    if (typeof s.color === "string" && HEX.test(s.color)) b.color = s.color.toLowerCase();
+    if (pic(s.image)) b.image = pic(s.image);
+    if (Array.isArray(s.slides)) {
+      const l = s.slides.map(pic).filter(Boolean).slice(0, 4);
+      if (l.length) b.slides = l;
+    }
+    if (num(s.slideSecs, 2, 12)) b.slideSecs = num(s.slideSecs, 2, 12);
+    if (s.slideFx === "zoom" || s.slideFx === "slide") b.slideFx = s.slideFx;
+    if (typeof s.videoUrl === "string" && /^https:\/\/[^\s<>"']{6,300}$/.test(s.videoUrl.trim())) b.videoUrl = s.videoUrl.trim();
+    if (s.videoOnce === true) b.videoOnce = true;
+    if (s.videoControls === true) b.videoControls = true;
+    if (typeof s.anim === "string" && /^[a-z0-9-]{1,24}$/.test(s.anim)) b.anim = s.anim;
+    if (s.animSpeed === "slow" || s.animSpeed === "lively") b.animSpeed = s.animSpeed;
+    if (num(s.animStrength, 20, 100)) b.animStrength = num(s.animStrength, 20, 100);
+    if (typeof s.pattern === "string" && /^[a-z0-9-]{1,24}$/.test(s.pattern)) b.pattern = s.pattern;
+    if (num(s.blur, 1, 30)) b.blur = num(s.blur, 1, 30);
+    if (s.shade === "dark" || s.shade === "light") b.shade = s.shade;
+    if (num(s.dim, 5, 90)) b.dim = num(s.dim, 5, 90);
+    if (s.text === "light" || s.text === "dark" || s.text === "custom") b.text = s.text;
+    if (typeof s.textColor === "string" && HEX.test(s.textColor)) b.textColor = s.textColor.toLowerCase();
+    if (DIY_FONTS.includes(s.font)) b.font = s.font;
+    if (s.fontFor === "head") b.fontFor = "head";
+    if (["bold", "light", "italic", "bolditalic", "upper", "spaced"].includes(s.fontStyle)) b.fontStyle = s.fontStyle;
+    if (Object.keys(b).length) o.bg = b;
+  }
+  return o;
+}
 
 // src/lib/lookdigest.ts
 var hex2 = (n) => Math.max(0, Math.min(255, Math.round(n))).toString(16).padStart(2, "0");
@@ -1948,10 +2032,10 @@ async function pointsBal(env, site, phone, token, more) {
       return { key: who2.key, bal: Math.max(0, +r2?.points || 0), ok: true };
     }
   }
-  const cc = (await getSetting(env, "site:" + site, "wa").catch(() => null))?.cc || (await getSetting(env, "site:" + site, "sms").catch(() => null))?.cc, num = waNum(phone, cc), [exp, sig] = String(token || "").split(".");
-  if (!num || !(+exp > Date.now()) || sig !== b64u(await hmac(env.SECRET, "otp:" + site + ":" + num + ":" + exp))) return { key: num, bal: 0, ok: false };
-  const r = await env.DB.prepare("select points from customers where site = ? and ckey = ?").bind(site, num).first();
-  return { key: num, bal: Math.max(0, +r?.points || 0), ok: true };
+  const cc = (await getSetting(env, "site:" + site, "wa").catch(() => null))?.cc || (await getSetting(env, "site:" + site, "sms").catch(() => null))?.cc, num2 = waNum(phone, cc), [exp, sig] = String(token || "").split(".");
+  if (!num2 || !(+exp > Date.now()) || sig !== b64u(await hmac(env.SECRET, "otp:" + site + ":" + num2 + ":" + exp))) return { key: num2, bal: 0, ok: false };
+  const r = await env.DB.prepare("select points from customers where site = ? and ckey = ?").bind(site, num2).first();
+  return { key: num2, bal: Math.max(0, +r?.points || 0), ok: true };
 }
 async function custOrder(env, site, c, data, cart, who2 = "") {
   const w = { cc: (await getSetting(env, "site:" + site, "wa").catch(() => null))?.cc || (await getSetting(env, "site:" + site, "sms").catch(() => null))?.cc };
@@ -2076,7 +2160,7 @@ function shopBill(c, q) {
     if (!p || p.stock === "out" || !isFinite(price) || price < 0) return { error: "Something in the cart is no longer sold. Refresh the page." };
     sub += price * Math.max(1, Math.min(max, Math.floor(+l.qty || 0)));
   }
-  const H = c?.shipping || {}, num = (v) => v === "" || v == null || isNaN(Number(v)) ? null : Math.max(0, Number(v));
+  const H = c?.shipping || {}, num2 = (v) => v === "" || v == null || isNaN(Number(v)) ? null : Math.max(0, Number(v));
   const pin = String(q?.pin || "").replace(/\D/g, "");
   let fee = null, freeOver = null;
   if (H.on && pin.length >= 4) {
@@ -2087,10 +2171,10 @@ function shopBill(c, q) {
     });
     const z = (Array.isArray(H.zones) ? H.zones : []).find((x) => x && x.on !== false && hit(x.pins));
     if (z) {
-      fee = num(z.fee);
-      freeOver = num(z.freeOver);
+      fee = num2(z.fee);
+      freeOver = num2(z.freeOver);
     } else if (H.rest === "no") return { error: "We don't deliver to that PIN code." };
-    else fee = num(H.restFee);
+    else fee = num2(H.restFee);
   }
   const over = freeOver != null ? freeOver : Number(S2.freeShippingOver), free = over > 0 && sub >= over;
   const pt = pointsFor(c, q.points, +q._bal || 0, sub);
@@ -2477,21 +2561,21 @@ var b64Of = (bytes) => {
 function dqDesignPub(d) {
   const out = { on: d?.on !== false };
   if (!d || typeof d !== "object") return out;
-  const HEX = /^#[0-9a-f]{6}$/i, KEY = /^[A-Za-z]{1,20}$/;
+  const HEX2 = /^#[0-9a-f]{6}$/i, KEY = /^[A-Za-z]{1,20}$/;
   if (typeof d.pick === "boolean") out.pick = d.pick;
   if (typeof d.domain === "string" && /^(?=.{4,100}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,24}$/.test(d.domain.trim().toLowerCase())) out.domain = d.domain.trim().toLowerCase();
   if (d.gallery && typeof d.gallery === "object") {
-    const g = d.gallery, o = {}, tx = (v, n) => typeof v === "string" ? v.replace(/[<>]/g, "").trim().slice(0, n) : "";
+    const g = d.gallery, o = {}, tx2 = (v, n) => typeof v === "string" ? v.replace(/[<>]/g, "").trim().slice(0, n) : "";
     if (typeof g.domain === "string" && /^(?=.{4,100}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,24}$/.test(g.domain.trim().toLowerCase())) o.domain = g.domain.trim().toLowerCase();
-    if (tx(g.link, 24)) o.link = tx(g.link, 24);
+    if (tx2(g.link, 24)) o.link = tx2(g.link, 24);
     if (g.count === "total" || g.count === "off") o.count = g.count;
     if (Array.isArray(g.types)) {
       const l = ["business", "restaurant", "portfolio", "store", "events"].filter((k) => g.types.includes(k));
       if (l.length && l.length < 4) o.types = l;
     }
     if (g.tags === false) o.tags = false;
-    if (tx(g.title, 80)) o.title = tx(g.title, 80);
-    if (tx(g.intro, 400)) o.intro = tx(g.intro, 400);
+    if (tx2(g.title, 80)) o.title = tx2(g.title, 80);
+    if (tx2(g.intro, 400)) o.intro = tx2(g.intro, 400);
     if (Object.keys(o).length) out.gallery = o;
   }
   if (d.themes && typeof d.themes === "object") {
@@ -2526,8 +2610,9 @@ function dqDesignPub(d) {
     for (const kind of ["business", "restaurant", "portfolio", "store", "events"]) if (d.carousel[kind] === "custom") c[kind] = "custom";
     if (Object.keys(c).length) out.carousel = c;
   }
+  Object.assign(out, cleanDiyLook(d));
   if (d.questions && typeof d.questions === "object") {
-    const q = {}, tx = (v, n) => typeof v === "string" ? v.replace(/[<>]/g, "").trim().slice(0, n) : "";
+    const q = {}, tx2 = (v, n) => typeof v === "string" ? v.replace(/[<>]/g, "").trim().slice(0, n) : "";
     for (const g of ["basics", "business", "restaurant", "portfolio", "store", "events"]) {
       const src = d.questions[g];
       if (!src || typeof src !== "object") continue;
@@ -2536,8 +2621,8 @@ function dqDesignPub(d) {
         if (!/^[a-z]{1,20}$/.test(id)) continue;
         const r = src[id] || {}, o = {};
         if (r.h === true) o.h = true;
-        if (tx(r.t, 300)) o.t = tx(r.t, 300);
-        if (tx(r.p, 300)) o.p = tx(r.p, 300);
+        if (tx2(r.t, 300)) o.t = tx2(r.t, 300);
+        if (tx2(r.p, 300)) o.p = tx2(r.p, 300);
         if (Object.keys(o).length) rules[id] = o;
       }
       if (Object.keys(rules).length) q[g] = rules;
@@ -3224,10 +3309,10 @@ var db_worker_default = {
         let onWa = false, onSms = false;
         const waScope = typeof forSite === "string" && /^[a-z0-9][a-z0-9-]{0,59}$/.test(forSite) ? "site:" + forSite : typeof forStudio === "string" && /^[a-z0-9][a-z0-9-]{0,59}$/.test(forStudio) ? "studio:" + forStudio : "";
         if (waScope && await env.DB.prepare("select 1 from members where email = ? and scope = ? limit 1").bind(email2, waScope).first()) {
-          const w = await getSetting(env, waScope, "wa").catch(() => null), num = waReady(w) && w.login && String(w.tplOtp || "").trim() ? waNum(waPhoneOf(w.phones, email2), w.cc) : "";
+          const w = await getSetting(env, waScope, "wa").catch(() => null), num2 = waReady(w) && w.login && String(w.tplOtp || "").trim() ? waNum(waPhoneOf(w.phones, email2), w.cc) : "";
           const pol = waScope.startsWith("site:") ? msgPolicy(await siteContent(env, waScope.slice(5)).catch(() => null)).login : { wa: true, sms: true };
-          if (num && pol.wa) try {
-            await waSend(w, num, w.tplOtp, [code], code);
+          if (num2 && pol.wa) try {
+            await waSend(w, num2, w.tplOtp, [code], code);
             onWa = true;
           } catch {
           }
@@ -3471,9 +3556,9 @@ var db_worker_default = {
         if (p.startsWith("/acct/in/")) {
           let key2 = "", kind = "";
           if (A.phone.length && b.phone) {
-            const num = waNum(b.phone, cw.cc), [exp2, sig] = String(b.otp || "").split(".");
-            if (num && +exp2 > Date.now() && sig === b64u(await hmac(env.SECRET, "otp:" + site + ":" + num + ":" + exp2))) {
-              key2 = num;
+            const num2 = waNum(b.phone, cw.cc), [exp2, sig] = String(b.otp || "").split(".");
+            if (num2 && +exp2 > Date.now() && sig === b64u(await hmac(env.SECRET, "otp:" + site + ":" + num2 + ":" + exp2))) {
+              key2 = num2;
               kind = "phone";
             }
           } else if (A.email && b.email) {
@@ -3590,9 +3675,9 @@ var db_worker_default = {
         const site = p.split("/")[3], b = await req.json(), sc = await siteContent(env, site).catch(() => null), cw = await codeWays(env, site, sc), w = cw.w;
         if (!(cw.any && (cw.need || loyOf(sc).on || acctOf(env, sc, cw)?.phone.length))) return err(404, "Not found.");
         const via = b.via === "sms" && cw.sms ? "sms" : b.via === "wa" && cw.wa ? "wa" : cw.wa ? "wa" : "sms";
-        const num = waNum(b.phone, cw.cc);
-        if (!num) return err(400, "Enter your mobile number with its country code.");
-        const k = "o:" + site + ":" + num, now = Date.now();
+        const num2 = waNum(b.phone, cw.cc);
+        if (!num2) return err(400, "Enter your mobile number with its country code.");
+        const k = "o:" + site + ":" + num2, now = Date.now();
         if (p.startsWith("/otp/send/")) {
           const prev = await env.DB.prepare("select sent from otps where k = ?").bind(k).first();
           if (prev && now - prev.sent < 45e3) return err(429, "A code was just sent. Wait a minute before asking for another.");
@@ -3602,9 +3687,9 @@ var db_worker_default = {
           await env.DB.prepare("insert into otps (k, hash, expires, tries, sent) values (?, ?, ?, 0, ?) on conflict (k) do update set hash = excluded.hash, expires = excluded.expires, tries = 0, sent = excluded.sent").bind(k, b64u(await hmac(env.SECRET, k + ":" + code)), now + 10 * 6e4, now).run();
           try {
             if (via === "sms") {
-              const ref = await smsSend(cw.z, num, code, siteName(sc, site));
+              const ref = await smsSend(cw.z, num2, code, siteName(sc, site));
               if (ref) await env.DB.prepare("update otps set hash = ? where k = ?").bind("ref:" + ref, k).run();
-            } else await waSend(w, num, w.tplOtp, [code], code);
+            } else await waSend(w, num2, w.tplOtp, [code], code);
           } catch {
             return err(502, `We couldn't send the code ${via === "sms" ? "by SMS" : "on WhatsApp"} just now. Check the number${cw.wa && cw.sms ? ", try the other way" : ""}, or call us to order.`);
           }
@@ -3613,14 +3698,14 @@ var db_worker_default = {
         const c = await env.DB.prepare("select hash, expires, tries from otps where k = ?").bind(k).first();
         if (!c || c.expires < now) return err(403, "The code has expired. Ask for a new one.");
         if (c.tries >= 5) return err(429, "Too many tries. Ask for a new code.");
-        const typed = String(b.code || "").trim(), right = String(c.hash).startsWith("ref:") ? /^\d{4,8}$/.test(typed) && !!cw.z && await mcCheck(cw.z, num, String(c.hash).slice(4), typed).catch(() => false) : c.hash === b64u(await hmac(env.SECRET, k + ":" + typed));
+        const typed = String(b.code || "").trim(), right = String(c.hash).startsWith("ref:") ? /^\d{4,8}$/.test(typed) && !!cw.z && await mcCheck(cw.z, num2, String(c.hash).slice(4), typed).catch(() => false) : c.hash === b64u(await hmac(env.SECRET, k + ":" + typed));
         if (!right) {
           await env.DB.prepare("update otps set tries = tries + 1 where k = ?").bind(k).run();
           return err(403, "That code isn't right.");
         }
         await env.DB.prepare("update otps set expires = 0 where k = ?").bind(k).run();
         const exp = now + 45 * 6e4;
-        return json({ ok: true, token: exp + "." + b64u(await hmac(env.SECRET, "otp:" + site + ":" + num + ":" + exp)) + (via === "sms" ? ".s" : "") });
+        return json({ ok: true, token: exp + "." + b64u(await hmac(env.SECRET, "otp:" + site + ":" + num2 + ":" + exp)) + (via === "sms" ? ".s" : "") });
       }
       if (/^\/hook\/pos\/[a-z0-9][a-z0-9-]{0,59}$/.test(p) && req.method === "POST") {
         const site = p.split("/")[3], key = b64u(await hmac(env.SECRET, "pos:" + site)).slice(0, 32);
@@ -4058,8 +4143,8 @@ ${body}`)}${paras("Approve or hide it under Reviews in your site's admin page.",
           if (me.kind === "phone") data._phone = "Verified (signed in)";
           if (me.kind === "email") data._email = "Verified (signed in)";
           if (cw.any && me.kind !== "phone") {
-            const num = waNum(data.phone, cw.cc), [exp, sig, how] = String(data.otp_token || "").split(".");
-            const proved = !!num && +exp > Date.now() && sig === b64u(await hmac(env.SECRET, "otp:" + site + ":" + num + ":" + exp));
+            const num2 = waNum(data.phone, cw.cc), [exp, sig, how] = String(data.otp_token || "").split(".");
+            const proved = !!num2 && +exp > Date.now() && sig === b64u(await hmac(env.SECRET, "otp:" + site + ":" + num2 + ":" + exp));
             if (proved) data._phone = how === "s" ? "Verified by SMS" : "Verified on WhatsApp";
             else if (cw.need) return err(403, "Please verify your mobile number first.");
           }

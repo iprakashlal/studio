@@ -30,24 +30,8 @@ export type Gallery = {
   title?: string; intro?: string;
 };
 export const NOTICE_TEXT = "Please note that this is just a preview to help you select a theme. Both the theme and the actual development can be customized to fit your specific requirements.";
-/** The Design yourself page's own wording: key → [what it is, the standard text]. {brand} is the page's name. */
-export const DIY_WORDS = {
-  welcome: ["Welcome message", "Welcome 👋 I'm the {brand} design assistant. Answer a few quick questions and your website takes shape as we go. It's only a preview."],
-  typeOwn: ["Line above the first answer box", "or type your own"],
-  writing: ["While the text is being written", "Writing a short line about each of your topics…"],
-  readyTitle: ["Heading when the preview is ready", "Your preview is ready"],
-  readyText: ["Text under that heading", "It isn't published. Connect with us to finish it together: your own photos, your address on the web, payment and any extra features."],
-  viewBtn: ["Button: open the preview", "View my preview"],
-  connectBtn: ["Button: get in touch", "Connect with Picaffectz"],
-  anotherBtn: ["Button: start a new design", "Design another"],
-  footnote: ["Small line under the buttons", "Preview only. Nothing is published or charged."],
-  previewBtn: ["Header button: preview", "Preview"],
-  restartBtn: ["Header button: start again", "Start again"],
-  skipBtn: ["Button: skip a question", "Skip"],
-} as const;
-export type DiyWord = keyof typeof DIY_WORDS;
-/** Fonts the page can use (all served by Google Fonts, like the Studio's own). */
-export const DIY_FONTS = ["Manrope", "Inter", "DM Sans", "Plus Jakarta Sans", "Figtree", "Outfit", "Sora", "Space Grotesk", "Work Sans", "Nunito Sans", "Poppins", "IBM Plex Sans", "Bricolage Grotesque", "Syne", "Unbounded", "Fraunces", "Playfair Display", "DM Serif Display", "Lora", "Source Serif 4"];
+export { DIY_FONTS, DIY_WORDS, type DiyBg, type DiyUi, type DiyWord } from "./diylook";
+import type { DiyBg, DiyUi, DiyWord } from "./diylook";
 export type DesignSettings = {
   on?: boolean;
   /** Visitors may change each colour (default on). */
@@ -68,7 +52,10 @@ export type DesignSettings = {
   chat?: { you?: string; bot?: string; page?: string; image?: string; dim?: number };
   /** How the whole Design yourself page looks, beyond the chat colours above: light or dark, the accent (buttons, progress, links),
    *  fonts, corners, how wide the chat is, and its own logo, name and tagline in the header. Anything left out keeps the Studio's own. */
-  ui?: { mode?: "light" | "dark"; accent?: string; font?: string; head?: string; radius?: "sharp" | "round"; width?: "narrow" | "wide"; logo?: string; name?: string; tag?: string };
+  ui?: DiyUi;
+  /** The page's own background and text (a colour, picture, slideshow, video, animated background or pattern, with blur, backdrop,
+   *  text colour, font and text style): the same choices as a website section's "Background & text". It replaces the chat's page colour and picture. */
+  bg?: DiyBg;
   /** The page's own wording, by key (see DIY_WORDS): anything left out keeps the standard text. */
   words?: Partial<Record<DiyWord, string>>;
   /** The order questions are asked in, per group ("basics" or a type): the ids in the owner's order. The first question (the type) stays first. */

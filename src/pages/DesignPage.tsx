@@ -526,11 +526,11 @@ function DesignPageInner({ studio, index, onIndex }: { studio?: Studio; index?: 
           : <span className="flex min-w-0 items-center gap-2 font-extrabold"><DiyMark /><span className="truncate max-sm:hidden">{diyName()}</span></span>}
         <span className="text-ink-600 max-sm:hidden" aria-hidden>|</span><span className="truncate font-semibold text-ink-300 max-sm:hidden">{readDesignSettings().ui?.tag || "DIY your web"}</span>
         <span className="ml-auto flex shrink-0 items-center gap-2">
-          {cur && chatStarted && <span className="mr-1 text-xs tabular-nums text-ink-500" aria-label={`Step ${Math.min(answered.length + 1, total)} of ${total}`}>{Math.min(answered.length + 1, total)} / {total}</span>}
+          {cur && chatStarted && !needMail && <span className="mr-1 text-xs tabular-nums text-ink-500" aria-label={`Step ${Math.min(answered.length + 1, total)} of ${total}`}>{Math.min(answered.length + 1, total)} / {total}</span>}
           {design && a.name && <button type="button" className="btn btn-sm" onClick={() => setShowPreview(true)}>{word("previewBtn")}</button>}
           {chatStarted && <button type="button" className="btn btn-ghost btn-sm" onClick={restart}>{word("restartBtn")}</button>}
         </span>
-        <div className="absolute inset-x-0 bottom-0 h-0.5 bg-ink-900" role="progressbar" aria-label="Progress" aria-valuemin={0} aria-valuemax={total} aria-valuenow={answered.length}><div className="h-full bg-brand-500 transition-all duration-500" style={{ width: `${chatStarted ? Math.round((answered.length / total) * 100) : 0}%` }} /></div>
+        <div className="absolute inset-x-0 bottom-0 h-0.5 bg-ink-900" role="progressbar" aria-label="Progress" aria-valuemin={0} aria-valuemax={total} aria-valuenow={answered.length}><div className="h-full bg-brand-500 transition-all duration-500" style={{ width: `${chatStarted && !needMail ? Math.round((answered.length / total) * 100) : 0}%` }} /></div>
       </header>
 
       <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col px-3 pb-4 sm:px-6">

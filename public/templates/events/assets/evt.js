@@ -787,6 +787,14 @@ function social() {
   (ssP ||= new Promise((ok, no) => { if (window.SiteSocial) return ok(); const s = document.createElement("script"); s.src = "assets/social.js"; s.onload = () => ok(); s.onerror = no; document.head.appendChild(s); }))
     .then(() => window.SiteSocial.mount(C, { footer: "footer.foot", before: ".foot-legal", imgUrl })).catch(() => {});
 }
+/* The social photo wall (assets/wall.js): the owner's Instagram or Pinterest photos on the home page, among its sections. */
+let wallP = null;
+function wall() {
+  const W = C.wall || {};
+  if (!W.on && !window.SiteWall) return;
+  (wallP ||= new Promise((ok, no) => { if (window.SiteWall) return ok(); const s = document.createElement("script"); s.src = "assets/wall.js"; s.onload = () => ok(); s.onerror = no; document.head.appendChild(s); }))
+    .then(() => window.SiteWall.mount(C, { sections: "#main > section", home: PAGE === "home", imgUrl })).catch(() => {});
+}
 /* The video section (assets/video.js): one video on the home page, placed among its sections. */
 let svP;
 function video() {
@@ -879,7 +887,7 @@ function render() {
   if (SC && SC.drawn) SC.drawn($("#app"), C);
   bind();
   if (PAGE === "page" && window.SitePages) window.SitePages.after(window.SitePages.find(C, spCur(), PREVIEW));
-  slides(); heroLogo(); video(); social(); menu(); lang(); consent(); addons(); festival();
+  slides(); heroLogo(); video(); social(); wall(); menu(); lang(); consent(); addons(); festival();
   if (window.SiteFX) try { window.SiteFX.init({ root: $("#app"), brand: C.theme.introTitle || C.brand.name, badge: C.poweredBy, bgs: C.sectionBg, asset: imgUrl, fonts: FONTS, c: C, policy: policyUrl(), again: render }); } catch (e) {}
 }
 

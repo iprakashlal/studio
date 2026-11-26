@@ -1222,7 +1222,7 @@
       var cs = getComputedStyle(el);
       if (cs.position === "static") el.style.position = "relative";
       // Left on automatic: when the theme's text would be hard to read on the chosen colour, light or dark text is picked.
-      if (!k.text && kind === "color") {
+      if (!k.text && (kind === "color" || ((kind === "anim" || kind === "pattern") && col))) {
         var lum = function (c) { var m = /rgba?\(([^)]+)\)/.exec(c || ""); if (!m) return null; var v = m[1].split(",").slice(0, 3).map(function (x) { x = parseFloat(x) / 255; return x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4); }); return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2]; };
         var lb = lum(cs.backgroundColor), lt = lum(cs.color);
         if (lb !== null && lt !== null && (Math.max(lb, lt) + 0.05) / (Math.min(lb, lt) + 0.05) < 3.5) el.setAttribute("data-sbg-text", lb < 0.4 ? "light" : "dark");
@@ -1260,7 +1260,58 @@
         }
       }
       var dim = Math.max(0, Math.min(95, Number(k.dim) || 0));
-      if (dim) { var ov = document.createElement("i"); ov.style.background = ((k.shade ? k.shade === "light" : k.text === "dark") ? "rgba(255,255,255," : "rgba(0,0,0,") + dim / 100 + ")"; box.appendChild(ov); }
+      var ov = null, veil = function (white, a) { if (a <= 0) { if (ov) { ov.remove(); ov = null; } return; } if (!ov) { ov = document.createElement("i"); box.appendChild(ov); } ov.style.background = (white ? "rgba(255,255,255," : "rgba(0,0,0,") + Math.round(a * 100) / 100 + ")"; };
+      veil(k.shade ? k.shade === "light" : k.text === "dark", dim / 100);
+      // Text left on automatic over a picture, slideshow or video: the picture decides. A dark or mid-toned one gets light text, a bright
+      // one dark text, and (with the backdrop on automatic too) just enough backdrop is laid over it for the text to read well. Until the
+      // picture has been looked at, or when it can't be (a video, a picture from another site), it is treated as mid-toned.
+      if (!k.text && (kind === "image" || kind === "slides" || kind === "video")) {
+        var decide = function (L, sd) {
+          if (k.shade === "light" || k.shade === "dark") { var a0 = dim / 100, Ld = k.shade === "light" ? L + (1 - L) * a0 : L * (1 - a0); el.setAttribute("data-sbg-text", Ld < 0.4 ? "light" : "dark"); tidy(Ld >= 0.4, Ld); return; }
+          var dark = L >= 0.6, hi = Math.min(1, L + sd / 2), lo = Math.max(0, L - sd / 2);
+          var need = dark ? (lo >= 0.3 ? 0 : (0.3 - lo) / (1 - lo)) : (hi <= 0.16 ? 0 : 1 - 0.16 / hi);
+          var a1 = Math.min(0.72, Math.max(dim / 100, need)); veil(dark, a1);
+          el.setAttribute("data-sbg-text", dark ? "dark" : "light");
+          tidy(dark, dark ? lo + (1 - lo) * a1 : hi * (1 - a1));
+        };
+        // Small labels in the theme's accent colour (an eyebrow, a number) don't follow the text colour: any that would now be hard to
+        // read on the picture is given the text's own soft tone. Text on its own card or button is left alone.
+        var tidy = function (dark, Lbg) {
+          requestAnimationFrame(function () {
+            try {
+              // a computed colour as [r, g, b, alpha]: "rgb(…)", "rgba(…)" or (from a mix of colours) "color(srgb …)"
+              var rgbOf = function (c) { var m = /rgba?\(([^)]+)\)/.exec(c || ""), q; if (m) { q = m[1].split(/[,\/ ]+/).filter(Boolean).map(parseFloat); return [q[0], q[1], q[2], q.length > 3 ? q[3] : 1]; } m = /color\(srgb ([^)]+)\)/.exec(c || ""); if (!m) return null; q = m[1].split(/[\/ ]+/).filter(Boolean).map(parseFloat); return [q[0] * 255, q[1] * 255, q[2] * 255, q.length > 3 ? q[3] : 1]; };
+              var lumOf = function (c) { var q = rgbOf(c); if (!q) return null; var al = q[3], g = 255 * (Lbg <= 0.0031308 ? 12.92 * Lbg : 1.055 * Math.pow(Lbg, 1 / 2.4) - 0.055), v = q.slice(0, 3).map(function (x) { x = (x * al + g * (1 - al)) / 255; return x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4); }); return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2]; };
+              [].forEach.call(el.querySelectorAll("[data-sbg-fix]"), function (x) { x.style.removeProperty("color"); x.removeAttribute("data-sbg-fix"); });
+              var all = el.querySelectorAll("h1,h2,h3,h4,h5,h6,p,li,span,small,b,strong,em,a,dt,dd,figcaption,blockquote,label,div"), n = 0;
+              for (var i = 0; i < all.length && n < 300; i++) {
+                var x = all[i]; if (x.closest(".sbg,.sbg-ctl")) continue;
+                var own = false; for (var c = x.firstChild; c; c = c.nextSibling) if (c.nodeType === 3 && c.nodeValue.trim()) { own = true; break; }
+                if (!own) continue; n++;
+                var onCard = false; for (var u = x; u && u !== el; u = u.parentElement) { var ba = rgbOf(getComputedStyle(u).backgroundColor); if (ba && ba[3] > 0.5) { onCard = true; break; } }
+                if (onCard) continue;
+                var lt = lumOf(getComputedStyle(x).color); if (lt === null) continue;
+                if ((Math.max(lt, Lbg) + 0.05) / (Math.min(lt, Lbg) + 0.05) < 3) { x.style.setProperty("color", dark ? "rgba(20,22,26,.78)" : "rgba(255,255,255,.86)", "important"); x.setAttribute("data-sbg-fix", ""); }
+              }
+            } catch (e) { /* the labels keep the theme's colour */ }
+          });
+        };
+        decide(0.35, 0.2);
+        var look = kind === "video" ? url(k.image) : src;
+        if (look && !/youtu\.?be|vimeo\.com/i.test(look)) {
+          var pr = new Image(); pr.crossOrigin = "anonymous";
+          pr.onload = function () {
+            try {
+              if (!box.isConnected) return;
+              var cv = document.createElement("canvas"), N = 32; cv.width = cv.height = N; var cx = cv.getContext("2d", { willReadFrequently: true }); cx.drawImage(pr, 0, 0, N, N);
+              var d = cx.getImageData(0, 0, N, N).data, sum = 0, sq = 0, cnt = 0, lin = function (v) { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+              for (var i = 0; i < d.length; i += 4) { if (d[i + 3] < 32) continue; var l = 0.2126 * lin(d[i]) + 0.7152 * lin(d[i + 1]) + 0.0722 * lin(d[i + 2]); sum += l; sq += l * l; cnt++; }
+              if (cnt) { var mean = sum / cnt; decide(mean, Math.sqrt(Math.max(0, sq / cnt - mean * mean))); }
+            } catch (e) { /* the picture can't be read from here: it stays treated as mid-toned */ }
+          };
+          pr.src = look;
+        }
+      }
       el.insertBefore(box, el.firstChild); if (box.__ctl) el.appendChild(box.__ctl);
       if (kind === "anim") box.__ab = animMount(box, k.anim, { speed: k.animSpeed, strength: k.animStrength, bg: col });
       else if (kind === "pattern") { var pt = document.createElement("i"); pt.setAttribute("data-pattern", k.pattern); pt.style.background = patternCss(k.pattern, animCols(box, col)); box.insertBefore(pt, box.firstChild); }

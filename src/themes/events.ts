@@ -105,7 +105,7 @@ const T: TypeRow[] = [
   ["Club Gathering", "Community", "rsvp", "Committee", "club|society meet|chapter meet"],
   ["Volunteer Drive", "Community", "volunteer", "Organisers", "volunteer|clean-?up|plantation drive"],
   ["Blood Donation Camp", "Community", "volunteer", "Organisers", "blood donation|health camp|medical camp"],
-  ["Farmers Market", "Market", "stall rsvp", "Growers & makers", "farmers?'? market|organic market"],
+  ["Farmers Market", "Market", "stall volunteer", "Growers & makers", "farmers?'? market|organic market"],
   ["Pop-Up Market", "Market", "stall tickets", "Makers", "pop-?up (market|shop|store)|makers market|bazaar"],
   ["Flea Market", "Market", "stall", "Sellers", "flea|thrift|garage sale|swap meet"],
   ["Parade", "Community", "entry volunteer", "Groups", "parade|procession|rally|yatra"],

@@ -5,6 +5,13 @@ import { designHost, engineImage } from "./designapi";
 type Glyph = { re: RegExp; d: string };
 // Each symbol is drawn in a 200 x 200 box (stroke-free shapes, white at 90%).
 const G: Glyph[] = [
+  // Events come first: their words ("conference", "wedding", "marathon") say more than the trade words below.
+  { re: /wedding|engagement|anniversary|bridal|baby shower|reception event/i, d: "M100 165s-62-38-62-84a34 34 0 0 1 62-20 34 34 0 0 1 62 20c0 46-62 84-62 84Z" },
+  { re: /concert|gig|music|opera|musical|dance|festival event/i, d: "M80 150a22 22 0 1 1-12-20V50l80-16v90a22 22 0 1 1-12-20V62l-56 11v77Z" },
+  { re: /tournament|championship|league|award|competition|hackathon|ideathon/i, d: "M60 40h80v30a40 40 0 0 1-80 0Zm-25 6h25v14H49c1 12 6 20 15 24l-6 12c-16-8-23-24-23-50Zm130 0c0 26-7 42-23 50l-6-12c9-4 14-12 15-24h-11V46ZM92 112h16v24h22v16H70v-16h22Z" },
+  { re: /marathon|fun run|cycling race|parade/i, d: "M50 30h12v140H50Zm20 6c30-12 44 12 80 0v62c-36 12-50-12-80 0Z" },
+  { re: /conference|summit|seminar|symposium|keynote|lecture|panel|fireside|webinar|town hall|meeting|comedy|open mic|press|briefing|reading|hearing/i, d: "M100 30a22 22 0 0 1 22 22v40a22 22 0 0 1-44 0V52a22 22 0 0 1 22-22Zm-40 60h12a28 28 0 0 0 56 0h12a40 40 0 0 1-34 39.500V152h22v14H72v-14h22v-22.500A40 40 0 0 1 60 90Z" },
+  { re: /market|expo|trade show|exhibition|job fair|food fair/i, d: "M100 34 30 96h16v70h108V96h16Zm-18 132v-44h36v44Z" },
   { re: /dent|tooth|orthodon/i, d: "M60 60c0-22 28-26 40-12 12-14 40-10 40 12 0 30-14 40-16 78-1 12-12 12-14 0l-10-30-10 30c-2 12-13 12-14 0-2-38-16-48-16-78Z" },
   { re: /clinic|hospital|health|pharmac|doctor|medic|physio/i, d: "M80 40h40v40h40v40h-40v40H80v-40H40V80h40Z" },
   { re: /cafe|café|coffee|tea|bistro|brew/i, d: "M50 80h90v50a40 40 0 0 1-40 40H90a40 40 0 0 1-40-40Zm90 12h14a20 20 0 0 1 0 40h-14v-10h14a10 10 0 0 0 0-20h-14ZM75 30c-8 10 8 14 0 24m25-24c-8 10 8 14 0 24m25-24c-8 10 8 14 0 24" },

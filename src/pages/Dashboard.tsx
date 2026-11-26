@@ -1,3 +1,4 @@
+import { eventSample } from "../lib/eventcopy";
 import { DesignsTab, useDrafts } from "./DesignsTab";
 import { QueriesTab, useNewQueries } from "./QueriesTab";
 import { useEffect, useMemo, useState } from "react";
@@ -332,9 +333,11 @@ function NewProject({ studio, index, onClose, onCreated, templates }: { studio: 
     if (!f.name.trim()) return toast("Give the project a name.", "bad");
     setBusy(true);
     try {
-      const content = await loadStarter(f.template, f.starter);
+      let content = await loadStarter(f.template, f.starter);
       const tpl = TEMPLATES[f.template];
       const th = f.theme ? themeById(f.theme) : undefined;
+      // An event theme belongs to a kind of event: the project starts with that kind's sample page (a wedding, a marathon…) instead of the conference.
+      { const ev = (th as any)?.evt; if (f.template === "events" && ev?.type) { tpl.prepare?.(content); content = eventSample(content, ev.type, ev.regKind); } }
       if (th) content.theme = { ...(content.theme || {}), ...tpl.themeValues(th) };
       const { index: i, id } = await studio.createProject({ name: f.name.trim(), template: f.template, category: f.category, client: f.client.trim(), content, summary: tpl.summary(content) });
       onCreated(i, id);

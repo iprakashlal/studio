@@ -50,9 +50,9 @@ const values = (k: Kind, t: Theme) => (k === "store" ? storeThemeValues(t) : k =
 // Business and restaurant sample pages have no photo, which leaves the picture side of many heroes empty: a sample picture in the theme's colours stands in (as in Design yourself).
 const withTheme = (sample: any, k: Kind, t: Theme) => {
   if (!sample) return sample;
-  if (k === "events") sample = eventSample(sample, (t as Partial<EvtTheme>).evt?.type || "");
+  if (k === "events") sample = eventSample(sample, (t as Partial<EvtTheme>).evt?.type || "", (t as Partial<EvtTheme>).evt?.regKind);
   const out = { ...sample, theme: { ...(sample.theme || {}), ...values(k, t) } };
-  if ((k === "business" || k === "restaurant" || k === "events") && !sample.hero?.image?.url && !sample.hero?.video) out.hero = { ...(sample.hero || {}), image: { url: defaultPicture([...(t.tags || [])].join(" "), { c1: t.colors.c1, c2: t.colors.c3 || t.colors.c2, bg: t.colors.surface }) } };
+  if ((k === "business" || k === "restaurant" || k === "events") && !sample.hero?.image?.url && !sample.hero?.video) out.hero = { ...(sample.hero || {}), image: { url: defaultPicture(k === "events" ? `${(t as Partial<EvtTheme>).evt?.type || ""} event` : [...(t.tags || [])].join(" "), { c1: t.colors.c1, c2: t.colors.c3 || t.colors.c2, bg: t.colors.surface }) } };
   return out;
 };
 const readList = (): string[] => { try { return JSON.parse(localStorage.getItem(LS) || "[]").filter((id: string) => ALL.some((t) => t.id === id)); } catch { return []; } };

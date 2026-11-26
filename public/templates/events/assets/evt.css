@@ -520,7 +520,6 @@ html[data-date-badge=ribbon] .ev-meta{background:var(--deep);color:var(--on-deep
 html[data-date-badge=ribbon] .ev-meta .ev-i{color:var(--c3)}html[data-date-badge=ribbon] .ev-leaf{box-shadow:none;border:0}
 html[data-date-badge=block] .ev-leaf{width:auto;display:flex;align-items:stretch;border-radius:var(--rs)}
 html[data-date-badge=block] .ev-leaf i{padding:0 10px;display:grid;place-items:center;writing-mode:vertical-rl;transform:rotate(180deg)}html[data-date-badge=block] .ev-leaf b{padding:10px 16px;font-size:34px}
-.hero.has-img .ev-meta,html[data-layout=full] .hero.has-img .ev-meta{color:inherit}
 .ev-ended,.ev-live{margin-top:26px;font-weight:600;color:var(--soft)}
 .ev-live{display:inline-flex;align-items:center;gap:10px;color:var(--c1)}.ev-live span{width:10px;height:10px;border-radius:50%;background:var(--c1);animation:evpulse 1.6s infinite}
 @keyframes evpulse{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--c1) 60%,transparent)}100%{box-shadow:0 0 0 12px transparent}}

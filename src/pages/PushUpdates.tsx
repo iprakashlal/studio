@@ -1,11 +1,15 @@
 // Settings → Updates → "Push Studio updates to live sites": one place to put this Studio build (template, theme and CMS code)
 // on every published site, without touching any site's content.
-import { useEffect, useMemo, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { pagesForHost, type Pages } from "../lib/pages";
 import { explain } from "../lib/repo";
 import { checkTarget, liveTargets, pushTarget, type LiveTarget, type TargetState } from "../lib/pushupdates";
 import type { Studio, StudioIndex } from "../lib/studio";
 import { fmtDate, timeAgo } from "../lib/util";
+import { allOn, allSet, dbTriesReset, syncDatabases, updateStatusNow, useUpdateStatus } from "../lib/autodb";
+import { autoUpdateStudio } from "../lib/autoupdate";
+import { studioUpdate, useStudioUpdate } from "../lib/studioupdate";
+import type { Session } from "../lib/auth";
 import { STUDIO_BUILD } from "../build-info";
 import { Dock, Modal, ProgressBar, partOf, useToast } from "../ui/kit";
 
@@ -36,13 +40,13 @@ const BADGE: Record<TargetState["s"], [string, string]> = {
 };
 
 /* ---- The job lives outside the screens: it carries on while you work elsewhere in the Studio, with the window minimised. ---- */
-type Job = { open: boolean; min: boolean; st: Record<string, TargetState>; pick: Record<string, boolean>; have: Record<string, boolean>; running: boolean; finished: boolean; page: number; order: LiveTarget[] };
+type Job = { /** started by "Update everything": every site with an update is updated without a press, the window minimised */ auto?: boolean; open: boolean; min: boolean; st: Record<string, TargetState>; pick: Record<string, boolean>; have: Record<string, boolean>; running: boolean; finished: boolean; page: number; order: LiveTarget[] };
 let job: Job = { open: false, min: false, st: {}, pick: {}, have: {}, running: false, finished: false, page: 0, order: [] };
 const subs = new Set<() => void>();
 const put = (f: (j: Job) => Partial<Job>) => { job = { ...job, ...f(job) }; subs.forEach((x) => x()); };
 const useJob = () => useSyncExternalStore((f) => { subs.add(f); return () => subs.delete(f); }, () => job);
 /** Opens the window (Settings → Updates). A run in hand, or one just finished, is shown as it is. */
-export function openPushUpdates() { put((j) => (j.running || (j.finished && j.open) ? { open: true, min: false } : { open: true, min: false, st: {}, pick: {}, have: {}, finished: false, page: 0, order: [] })); }
+export function openPushUpdates(auto = false) { put((j) => (j.running || (j.finished && j.open) ? { open: true, min: auto ? j.min : false } : { open: true, min: auto, auto, st: {}, pick: {}, have: {}, finished: false, page: 0, order: [] })); }
 /** How many sites a page of the list shows. */
 export const PUSH_PAGE = 5;
 
@@ -65,6 +69,16 @@ export function PushUpdatesHost({ studio, index, token }: { studio: Studio; inde
   }, [fresh, targets]); // eslint-disable-line react-hooks/exhaustive-deps
   // Leaving the Studio itself would stop the run: the browser asks first.
   useEffect(() => { if (!j.running) return; const f = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ""; }; addEventListener("beforeunload", f); return () => removeEventListener("beforeunload", f); }, [j.running]);
+  // "Update everything": once every site has been checked, those with an update start by themselves (or the window goes away when none has).
+  const runRef = useRef<(() => void) | null>(null), closeRef = useRef<(() => void) | null>(null);
+  const autoReady = !!j.auto && j.open && !j.running && !j.finished && j.order.length > 0 && j.order.every((t) => j.st[t.key] && j.st[t.key].s !== "checking") && j.order.filter((t) => t.kind === "hosted").every((t) => t.key in j.have);
+  useEffect(() => {
+    if (!j.auto || !j.open) return;
+    if (index && !targets.length && !j.order.length) { put(() => ({ open: false, auto: false })); toast("No site is published yet, so there was no live site to update."); return; }
+    if (!autoReady) return;
+    put(() => ({ auto: false }));
+    if (j.order.some((t) => j.pick[t.key])) runRef.current?.(); else { closeRef.current?.(); toast("Every live site is already on this Studio build."); }
+  }, [autoReady, j.auto, j.open, targets.length, !!index]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!j.open) return null;
 
   const st = j.st, pick = j.pick, have = j.have, running = j.running, finished = j.finished;
@@ -93,6 +107,7 @@ export function PushUpdatesHost({ studio, index, token }: { studio: Studio; inde
     toast(bad ? `${ok} site(s) updated, ${bad} failed` : `${ok} site(s) updated`, bad ? "bad" : "ok");
   };
 
+  runRef.current = run; closeRef.current = close;
   // The whole run: finished sites count in full, the one in hand by how far it is.
   const ran = chosen.filter((t) => ["done", "failed", "skipped"].includes(st[t.key]?.s)), now = chosen.find((t) => st[t.key]?.s === "pushing"), nowV = now && st[now.key];
   const overall = chosen.length ? ((ran.length + (nowV && nowV.s === "pushing" ? (nowV.pct || 0) / 100 : 0)) / chosen.length) * 100 : 0;
@@ -151,6 +166,52 @@ export function PushUpdatesHost({ studio, index, token }: { studio: Studio; inde
   );
 }
 
+/** Settings → Updates: one press for everything. The Studio updates itself (when it is hosted and a newer build is out) and reloads onto
+ *  the new build; its database and each site's own database follow; then every published site gets the new build. Each part still has
+ *  its own button below for doing one alone. */
+export function UpdateAllCard({ session, index, demo }: { session: Session; index: StudioIndex; demo?: boolean }) {
+  const toast = useToast(), su = useStudioUpdate(), dbs = useUpdateStatus(), j = useJob();
+  const [busy, setBusy] = useState(false);
+  const n = index.projects.filter((p) => p.publish || p.host).length, dbN = index.projects.filter((p) => p.host?.cf?.api).length;
+  const hosted = !!index.hosted?.siteId;
+  /** After the Studio itself is on the new build: the databases, then the live sites. */
+  const rest = async () => {
+    try { await syncDatabases(session, index, toast); } catch { /* said by its own message */ }
+    // a database update already running (started when the Studio opened) is waited for, so the sites come last
+    for (let i = 0; i < 600 && updateStatusNow().dbBusy; i++) await new Promise((r) => setTimeout(r, 1000));
+    setBusy(false); if (allOn()) { allSet(false); openPushUpdates(true); }
+  };
+  const go = () => {
+    if (demo || busy) return;
+    setBusy(true); allSet(true); dbTriesReset(); studioUpdate.clearError();
+    if (!hosted) { rest(); return; }
+    // An update of the Studio is already under way: it reloads onto the new build, and the rest carries on from there (Workspace).
+    if (studioUpdate.get().running || studioUpdate.get().ready) { setBusy(false); return; }
+    // The Studio first. When it does update, the page reloads onto the new build and the rest carries on from there.
+    studioUpdate.start(async (step) => { const moved = (await autoUpdateStudio(session, index, step, { force: true })) === "updated"; if (!moved) setTimeout(rest, 0); return moved; });
+  };
+  // A failed Studio update stops here: the old build is not pushed to the sites.
+  useEffect(() => { if (busy && su.err) { allSet(false); setBusy(false); } }, [su.err]); // eslint-disable-line react-hooks/exhaustive-deps
+  const dot = (d: string) => (d === "current" ? "Up to date" : d === "pending" ? "Update available" : d === "na" ? "Not used" : "Not known yet");
+  const working = busy || su.running || dbs.dbBusy || (j.running && !j.finished);
+  return (
+    <section className="card flex flex-col gap-3 border-brand-500/40 p-5" aria-label="Update everything">
+      <h2 className="text-lg font-extrabold">Update everything</h2>
+      <p className="text-sm text-ink-300">One press updates, in order: {hosted ? "the Studio itself, " : ""}the Studio's database, each site's own database, and every published site (templates, themes, effects and each site's admin page). Sites keep their own content and photos. You can keep working while it runs; keep this tab open.</p>
+      <ul className="grid gap-1.5 text-[13px] text-ink-300 sm:grid-cols-3">
+        <li className="rounded-lg border border-ink-700 px-3 py-2"><b className="block text-ink-100">Studio</b>{hosted ? dot(dbs.studio) : "Updates with its source"}</li>
+        <li className="rounded-lg border border-ink-700 px-3 py-2"><b className="block text-ink-100">Databases</b>{dot(dbs.db)}{dbN ? ` · ${dbN} site${dbN === 1 ? "" : "s"} with a database` : ""}</li>
+        <li className="rounded-lg border border-ink-700 px-3 py-2"><b className="block text-ink-100">Live sites</b>{n ? `${n} published` : "None published yet"}</li>
+      </ul>
+      <div><button type="button" className="btn btn-pri" disabled={demo || working} onClick={go}>{working ? "Updating…" : "↻ Update everything"}</button></div>
+      {su.running && <p className="hint" role="status">{su.step}… The Studio reloads when this part is done, and the rest carries on by itself.</p>}
+      {dbs.dbBusy && <p className="hint" role="status">{dbs.dbStep || "Updating the database"}…</p>}
+      {su.err && <p role="alert" className="text-sm text-red-300">{su.err}</p>}
+      <p className="text-[12.5px] text-ink-400">A database on a Cloudflare account that isn't connected on this device can't be updated from here: you are told, and it can be done under Settings → Hostings. A site whose hosting account isn't connected here is skipped and listed.</p>
+    </section>
+  );
+}
+
 /** Settings → Updates: where pushing this Studio build to live sites starts. */
 export function PushUpdatesCard({ index, demo }: { index: StudioIndex; demo?: boolean }) {
   const j = useJob(), n = index.projects.filter((p) => p.publish || p.host).length;
@@ -159,7 +220,7 @@ export function PushUpdatesCard({ index, demo }: { index: StudioIndex; demo?: bo
       <h2 className="text-lg font-extrabold">Live sites</h2>
       <p className="text-sm text-ink-300">Put this Studio build (templates, themes, effects and each site's admin page) on your published sites. Each site keeps its own content and photos. You can minimise the window and keep working while it runs.</p>
       <p className="text-[13px] text-ink-400">This Studio: build <code className="font-mono text-xs">{STUDIO_BUILD.id}</code>{STUDIO_BUILD.at && <> from {fmtDate(STUDIO_BUILD.at)}</>}. {n ? `${n} published project${n === 1 ? "" : "s"}.` : "No project is published yet."}</p>
-      <div><button type="button" className="btn btn-pri" disabled={!n || demo} onClick={openPushUpdates}>{j.running ? "↻ Show the update in progress" : "↻ Push Studio updates to live sites"}</button></div>
+      <div><button type="button" className="btn btn-pri" disabled={!n || demo} onClick={() => openPushUpdates()}>{j.running ? "↻ Show the update in progress" : "↻ Push Studio updates to live sites"}</button></div>
     </section>
   );
 }

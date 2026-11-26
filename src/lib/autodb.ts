@@ -20,6 +20,15 @@ let status: UpdateStatus = { studio: "unknown", db: "unknown", dbBusy: false, db
 export const UPDATE_CHAIN = "site-studio:update-chain";
 export const chainOn = () => { try { return sessionStorage.getItem(UPDATE_CHAIN) === "1"; } catch { return false; } };
 export const chainSet = (on: boolean) => { try { if (on) sessionStorage.setItem(UPDATE_CHAIN, "1"); else sessionStorage.removeItem(UPDATE_CHAIN); } catch { /* private mode */ } subs.forEach((f) => f()); };
+/** "Update everything" was pressed (Settings → Updates): after the Studio has updated itself and its databases, the live sites follow.
+ *  Kept across the reload onto the new build, and forgotten after half an hour so it can never fire on a later visit. */
+const UPDATE_ALL = "site-studio:update-all";
+export const allOn = () => { try { const t = +(localStorage.getItem(UPDATE_ALL) || 0); return t > 0 && Date.now() - t < 30 * 60_000; } catch { return false; } };
+export const allSet = (on: boolean) => { try { if (on) localStorage.setItem(UPDATE_ALL, String(Date.now())); else localStorage.removeItem(UPDATE_ALL); } catch { /* private mode */ } };
+/** A press asks again: the "tried already in this session" marks of the automatic database update are cleared. */
+export const dbTriesReset = () => { try { for (let i = sessionStorage.length - 1; i >= 0; i--) { const k = sessionStorage.key(i) || ""; if (k.startsWith("site-studio:auto-db-tried:") || k.startsWith("site-studio:auto-db-told:")) sessionStorage.removeItem(k); } } catch { /* private mode */ } };
+/** The status as it stands now (for code that is not a component). */
+export const updateStatusNow = () => status;
 /** How far along one database update is, from the step it reports. */
 const STEP_AT: [RegExp, number][] = [[/^Finding/, 5], [/^Creating the database/, 12], [/^Creating its tables/, 25], [/^Getting/, 40], [/^Uploading/, 55], [/^Turning on/, 70], [/^Checking/, 82], [/^Waiting/, 92]];
 const stepAt = (t: string) => STEP_AT.find(([re]) => re.test(t))?.[1] ?? 10;
@@ -108,6 +117,7 @@ export async function autoUpdateDatabases(session: Session, index: StudioIndex, 
 
 /** Runs the database update (when the Studio itself is up to date) and refreshes the icons. */
 export async function syncDatabases(session: Session, index: StudioIndex, toast: (m: string, tone?: "ok" | "bad") => void): Promise<void> {
+  if (status.dbBusy) return;   // one at a time (it is started when the Studio opens, and again by "Update everything")
   await refreshStatus(index);
   if (status.db !== "pending" || status.studio === "pending") { chainSet(false); return; }
   set({ dbBusy: true, dbStep: "Checking the database", dbPct: 0 });

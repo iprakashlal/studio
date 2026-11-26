@@ -17,8 +17,10 @@ export const autoUpdatePref = {
 };
 
 /** "updated" (reload to use it), "current", or "skip" (not a moved Studio, turned off, no way to deploy, or tried). */
-export async function autoUpdateStudio(session: Session, index: StudioIndex, step: (s: string) => void = () => {}): Promise<"updated" | "current" | "skip"> {
-  if (!autoUpdatePref.on() || !index.hosted?.siteId) return "skip";
+/** `force`: asked for by a press ("Update everything"), so it runs even with automatic updates turned off or after an earlier try, and
+ *  says why when it can't deploy instead of skipping quietly. */
+export async function autoUpdateStudio(session: Session, index: StudioIndex, step: (s: string) => void = () => {}, o: { force?: boolean } = {}): Promise<"updated" | "current" | "skip"> {
+  if ((!o.force && !autoUpdatePref.on()) || !index.hosted?.siteId) return "skip";
   const cfg = await loadHostConfig().catch(() => null);
   // The source itself (GitHub Pages, even when it shares the database) never deploys anything.
   if (!cfg?.source || appBase() === cfg.source.replace(/\/?$/, "/")) return "skip";
@@ -26,10 +28,11 @@ export async function autoUpdateStudio(session: Session, index: StudioIndex, ste
   if (!latest || latest === STUDIO_BUILD.id) return "current";
   // One try per build on this device, so a failing update can't loop.
   const key = "site-studio:auto-update-tried:" + latest;
-  try { if (sessionStorage.getItem(key)) return "skip"; sessionStorage.setItem(key, "1"); } catch { /* private mode */ }
+  try { if (!o.force && sessionStorage.getItem(key)) return "skip"; sessionStorage.setItem(key, "1"); } catch { /* private mode */ }
   const where = index.hosted.pages || "netlify";
   const pages = (await loadPages(where, session.token, index.hosted.account).catch(() => null))
     || (where === "cloudflare" && cfg.kind === "cloudflare" ? await pagesViaDb(cfg.api, "studio:" + cfg.studio).catch(() => null) : null);
+  if (!pages && o.force) throw new Error("The Studio itself can't be updated from this device: its Cloudflare (or Netlify) account isn't connected here, and “Publish from any device” is off. Connect it under Settings → Hostings, then press Update everything again.");
   if (!pages) { console.info("Studio update: no way to deploy from this device (no Cloudflare token here, and Publish from any device is off)."); return "skip"; }
   await deployStudioApp(pages, { siteId: index.hosted.siteId, siteName: "", source: cfg.source, config: cfg }, step);
   return "updated";

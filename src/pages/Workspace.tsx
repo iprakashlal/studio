@@ -32,11 +32,11 @@ import { BADGE_DEFAULT, cleanBadge, resolveBadge, setCurrentBadge, studioLook, t
 import { MARK_URI } from "../ui/logo";
 import { FoldAll, FoldCards } from "../ui/fold";
 import { LOGO_ANIMS, UI_LAYOUTS, BrandMark, DEFAULT_NAME, brand as currentBrand, setBrand, shrinkImage, useBrand } from "../lib/brand";
-import { PushUpdatesCard, PushUpdatesHost } from "./PushUpdates";
+import { PushUpdatesCard, PushUpdatesHost, UpdateAllCard, openPushUpdates } from "./PushUpdates";
 import { Dashboard } from "./Dashboard";
 import { DesignPage } from "./DesignPage";
 import { UpdateDots } from "../ui/UpdateDots";
-import { chainOn, chainSet, refreshStatus, syncDatabases, useUpdateStatus } from "../lib/autodb";
+import { allOn, allSet, chainOn, chainSet, refreshStatus, syncDatabases, updateStatusNow, useUpdateStatus } from "../lib/autodb";
 import { DesignLookTab, DesignPageCard, ThemesSettingsTab } from "./DesignSettings";
 import { NavLinksCard } from "./NavLinksCard";
 import { useDesignSettings } from "../lib/designs";
@@ -100,7 +100,11 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
   useEffect(() => {
     if (!index || repo.demo || !isHosted(session)) { chainSet(false); return; }
     const stuck = setTimeout(() => chainSet(false), 120_000); // never leaves the bar up if the check can't run
-    syncDatabases(session, index, toast).catch(() => {}).finally(() => clearTimeout(stuck));
+    syncDatabases(session, index, toast).catch(() => {}).finally(() => {
+      clearTimeout(stuck);
+      // "Update everything" was pressed before the Studio updated itself and reloaded: with the Studio and its databases done, the live sites follow.
+      if (allOn() && !updateStatusNow().dbBusy && updateStatusNow().studio !== "pending" && !studioUpdate.get().running) { allSet(false); openPushUpdates(true); }
+    });
     const again = () => refreshStatus(index).catch(() => {});
     addEventListener("focus", again); const t = setInterval(again, 10 * 60_000);
     return () => { removeEventListener("focus", again); clearInterval(t); };
@@ -209,8 +213,8 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
     if (tab === "themes") return shell(<ThemesSettingsTab session={session} studio={studio} index={index} onIndex={setIndex} />);
     if (tab === "help") return shell(<div className="max-w-3xl"><StudioHelp /></div>);
     // Updates: this Studio build onto live sites, and (a hosted Studio) the Studio's own update.
-    if (tab === "update" && !(isHosted(session) && !client)) return shell(<div className="max-w-4xl"><PushUpdatesCard index={index} demo={repo.demo} /></div>);
-    if ((tab === "migration" && !client) || tab === "update") return shell(<>{tab === "update" && <PushUpdatesCard index={index} demo={repo.demo} />}<FoldAll /><FoldCards scope={tab} className="set-cols"><MigrationTab key={tab} studio={studio} index={index} session={session} onIndex={setIndex} mode={tab === "update" ? "update" : "move"} /></FoldCards></>);
+    if (tab === "update" && !(isHosted(session) && !client)) return shell(<div className="flex max-w-4xl flex-col gap-4"><UpdateAllCard session={session} index={index} demo={repo.demo} /><PushUpdatesCard index={index} demo={repo.demo} /></div>);
+    if ((tab === "migration" && !client) || tab === "update") return shell(<>{tab === "update" && <UpdateAllCard session={session} index={index} demo={repo.demo} />}{tab === "update" && <PushUpdatesCard index={index} demo={repo.demo} />}<FoldAll /><FoldCards scope={tab} className="set-cols"><MigrationTab key={tab} studio={studio} index={index} session={session} onIndex={setIndex} mode={tab === "update" ? "update" : "move"} /></FoldCards></>);
     return shell(<>
           <FoldAll />
           <FoldCards scope={tab === "customize" || tab === "hostings" ? tab : "general"} className="set-cols">
@@ -298,6 +302,7 @@ const SET_INDEX: [tab: string, title: string, words: string, find?: string][] = 
   ["themes", "Theme gallery: its own web address", "themes domain address gallery", "web address"],
   ["themes", "Theme gallery: what it says", "themes title heading text words", "What it says"],
   ["themes", "Theme gallery: what it shows", "themes types limit filter how many", "What it shows"],
+  ["update", "Update everything", "update all one press studio database sites live code worker latest", "Update everything"],
   ["update", "Studio updates", "update version push live sites database worker latest", "update"],
   ["migration", "Move the Studio", "migration migrate move github cloudflare supabase files where runs", "Studio"],
   ["help", "Guided tours", "help tour guide walkthrough how"],

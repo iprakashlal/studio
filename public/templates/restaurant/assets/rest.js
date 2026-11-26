@@ -786,6 +786,14 @@ function setIcon() {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="${(rad * 0.64).toFixed(1)}" fill="${esc(acc)}"/><text x="32" y="34" dominant-baseline="middle" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-weight="800" font-size="${ini.length > 1 ? 26 : 34}" fill="${onColor(acc)}">${esc(ini)}</text></svg>`;
   l.type = "image/svg+xml"; l.href = "data:image/svg+xml," + encodeURIComponent(svg);
 }
+/* The social photo wall (assets/wall.js): the owner's Instagram or Pinterest photos on the home page, among its sections. */
+let wallP = null;
+function wall() {
+  const W = C.wall || {};
+  if (!W.on && !window.SiteWall) return;
+  (wallP ||= new Promise((ok, no) => { if (window.SiteWall) return ok(); const s = document.createElement("script"); s.src = "assets/wall.js"; s.onload = () => ok(); s.onerror = no; document.head.appendChild(s); }))
+    .then(() => window.SiteWall.mount(C, { sections: "#main > section", home: PAGE === "home", imgUrl })).catch(() => {});
+}
 /** What search engines read about the place: name, address, phone, hours, cuisine and the menu's address. */
 function jsonLd() {
   let s = document.getElementById("ld-restaurant");
@@ -920,7 +928,7 @@ function render() {
   bind();
   if (PAGE === "order" && window.RestOrder && orderOn()) window.RestOrder.bind(ORDER_API);
   if (PAGE === "page" && window.SitePages) window.SitePages.after(window.SitePages.find(C, spCur(), PREVIEW));
-  jsonLd(); slides(); heroLogo(); video(); social(); menu(); lang(); consent(); addons(); festival();
+  jsonLd(); slides(); heroLogo(); video(); social(); wall(); menu(); lang(); consent(); addons(); festival();
   if (window.SiteFX) try { window.SiteFX.init({ root: $("#app"), brand: C.theme.introTitle || C.brand.name, badge: C.poweredBy, bgs: C.sectionBg, asset: imgUrl, fonts: FONTS, c: C, policy: policyUrl(), again: render }); } catch (e) {}
 }
 

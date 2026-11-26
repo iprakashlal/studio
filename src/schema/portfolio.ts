@@ -1,7 +1,7 @@
 import { legalChecks } from "../lib/legal";
 import type { Category, Field, TemplateDef } from "./types";
 import { AXES, BODY_FONTS, DISPLAY_FONTS, KIT_AXIS, LINE_BREAKS_AXIS, PORTFOLIO_AXES, THEMES, onColor, portfolioThemeValues } from "../themes/catalog";
-import { adminCategory, legalCategory, codeCategory, withSectionBg, videoCategory, socialCategory, logoFields, consentCategory, emailsCategory, i18nCategory, prepareI18n, featuresCategory, festivalCategory, menuCategory, menuItem, prepareMenu, staticPagesCategory, heroSlidesCard, prepareSlides, prepareMaintenance, seoCategory, customFontsCard, customFontFields } from "./common";
+import { adminCategory, legalCategory, codeCategory, withSectionBg, videoCategory, wallCategory, socialCategory, logoFields, consentCategory, emailsCategory, i18nCategory, prepareI18n, featuresCategory, festivalCategory, menuCategory, menuItem, prepareMenu, staticPagesCategory, heroSlidesCard, prepareSlides, prepareMaintenance, seoCategory, customFontsCard, customFontFields } from "./common";
 import VELOCITY_DEFAULTS from "./velocity-defaults.json";
 import { NAV_MODE_FIELD, NAV_MODE_MOB_FIELD, NAV_MODE_NOTE, themeCards } from "../themes/fields";
 
@@ -208,6 +208,7 @@ const schema: Category[] = [
     ],
   },
   videoCategory("Pages", "Sections", "The Horizontal reel, Terminal, Drag canvas and Cinema scenes layouts have no ordinary page to place a section in, so the video does not show with them."),
+  wallCategory("Pages", "Sections"),
   socialCategory("Pages", undefined, "The Horizontal reel, Drag canvas and Cinema scenes layouts have no page end to put the row at, so it does not show with them."),
   {
     id: "contact", label: "Contact & footer", group: "Pages", desc: "The closing panel, links and the footer.",

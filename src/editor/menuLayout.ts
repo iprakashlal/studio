@@ -15,7 +15,7 @@ const RESTAURANT: Row[] = [
   ["ordering", "Online ordering"], ["delivery", "Online ordering"], ["checkout", "Online ordering"], ["payments", "Online ordering"], ["coupons", "Online ordering"], ["users", "Online ordering"], ["orderdelivery", "Online ordering"],
   // Website pages: the home page and its sections
   ["pages", "Website pages"], ["menu", "Website pages"],
-  ["hero", "Website pages", "Sections"], ["highlights", "Website pages", "Sections"], ["about", "Website pages", "Sections"], ["gallery", "Website pages", "Sections"], ["chef", "Website pages", "Sections"], ["events", "Website pages", "Sections"], ["press", "Website pages", "Sections"], ["testimonials", "Website pages", "Sections", "Guest quotes & dish reviews"], ["video", "Website pages", "Sections"], ["order", "Website pages", "Sections", "Order links"], ["faq", "Website pages", "Sections"], ["cta", "Website pages", "Sections"],
+  ["hero", "Website pages", "Sections"], ["highlights", "Website pages", "Sections"], ["about", "Website pages", "Sections"], ["gallery", "Website pages", "Sections"], ["chef", "Website pages", "Sections"], ["events", "Website pages", "Sections"], ["press", "Website pages", "Sections"], ["testimonials", "Website pages", "Sections", "Guest quotes & dish reviews"], ["video", "Website pages", "Sections"], ["wall", "Website pages", "Sections"], ["order", "Website pages", "Sections", "Order links"], ["faq", "Website pages", "Sections"], ["cta", "Website pages", "Sections"],
   ["static-pages", "Website pages"],
   // Hours & contact: what guests look for first
   ["hours", "Hours & contact"], ["contact", "Hours & contact"], ["forms", "Hours & contact"], ["social", "Hours & contact"], ["footer", "Hours & contact"],
@@ -35,7 +35,7 @@ const STORE: Row[] = [
   // Selling & checkout: how a shopper pays and gets it
   ["pricing", "Selling & checkout"], ["delivery", "Selling & checkout"], ["checkout", "Selling & checkout"], ["payments", "Selling & checkout"], ["gst", "Selling & checkout"], ["users", "Selling & checkout"], ["orders", "Selling & checkout"], ["connections", "Selling & checkout"],
   // Website pages
-  ["home", "Website pages"], ["shop", "Website pages"], ["portfolio", "Website pages"], ["video", "Website pages"], ["nav", "Website pages"], ["menu", "Website pages"], ["static-pages", "Website pages"],
+  ["home", "Website pages"], ["shop", "Website pages"], ["portfolio", "Website pages"], ["video", "Website pages"], ["wall", "Website pages"], ["nav", "Website pages"], ["menu", "Website pages"], ["static-pages", "Website pages"],
   // Contact & policies
   ["contact", "Contact & policies"], ["social", "Contact & policies"],
   // Look & feel
@@ -47,7 +47,7 @@ const STORE: Row[] = [
 ];
 const PORTFOLIO: Row[] = [
   // Portfolio content: what visitors came to see, in the order it is on the page
-  ["linkedin", "Portfolio content", undefined, "Import from LinkedIn"], ["hero", "Portfolio content"], ["about", "Portfolio content"], ["skills", "Portfolio content"], ["work", "Portfolio content"], ["projects", "Portfolio content"], ["learning", "Portfolio content"], ["video", "Portfolio content"],
+  ["linkedin", "Portfolio content", undefined, "Import from LinkedIn"], ["hero", "Portfolio content"], ["about", "Portfolio content"], ["skills", "Portfolio content"], ["work", "Portfolio content"], ["projects", "Portfolio content"], ["learning", "Portfolio content"], ["video", "Portfolio content"], ["wall", "Portfolio content"],
   // Pages & navigation
   ["layout", "Pages & navigation", undefined, "Sections & order"], ["menu", "Pages & navigation"], ["static-pages", "Pages & navigation"],
   // Contact & social

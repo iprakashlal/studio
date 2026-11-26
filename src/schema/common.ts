@@ -196,6 +196,50 @@ export function socialCategory(group = "Pages", sub?: string, extra = ""): Categ
     ],
   };
 }
+/** The settings a new social photo wall starts with (content.wall; drawn by src/fx/wall.js). */
+export const wallDefault = () => ({ on: false, network: "instagram", handle: "", url: "", eyebrow: "", title: "", text: "", button: "", layout: "auto", cols: "", shape: "", captions: "hover", place: "bottom", items: [] as { image: any; url: string; caption: string }[] });
+/** Older content gets the social wall's fields (off). */
+export function prepareWall(c: any) {
+  if (!c || typeof c !== "object") return;
+  const d = wallDefault(), w = c.wall && typeof c.wall === "object" ? c.wall : {};
+  c.wall = { ...d, ...w, items: Array.isArray(w.items) ? w.items.filter((x: any) => x && typeof x === "object") : [] };
+}
+/** The social photo wall, for every template: Instagram, Pinterest or another network's photos on the home page, with a follow button. */
+export function wallCategory(group = "Pages", sub?: string, extra = ""): Category {
+  const g2 = (...fields: Field[]): Field => ({ t: "grid", cols: 2, fields });
+  return {
+    id: "wall", label: "Social photo wall", group, ...(sub ? { sub } : {}),
+    desc: "A wall of your Instagram, Pinterest or other social media photos on the home page, with a button to follow you. It takes its look from the site's theme.",
+    cards: [
+      { title: "The wall", fields: [
+        { t: "toggle", path: "wall.on", label: "Show the social photo wall" },
+        g2({ t: "select", path: "wall.network", label: "Network", options: [{ value: "instagram", label: "Instagram" }, { value: "pinterest", label: "Pinterest" }, { value: "facebook", label: "Facebook" }, { value: "tiktok", label: "TikTok" }, { value: "youtube", label: "YouTube" }, { value: "x", label: "X" }, { value: "behance", label: "Behance" }, { value: "dribbble", label: "Dribbble" }, { value: "other", label: "Another one" }] },
+          { t: "text", path: "wall.handle", label: "Your handle", ph: "@yourname", hint: "Used for the follow button." }),
+        { t: "text", path: "wall.url", label: "Profile or board address (optional)", ph: "https://www.pinterest.com/yourname/your-board/", hint: "Only needed when the handle alone doesn't lead to the right page: a Pinterest board, or another network." },
+        ...(extra ? [{ t: "note", text: extra } as Field] : []),
+        { t: "note", text: "Add the photos below. The wall can't pull your latest posts by itself: Instagram and Pinterest only give a live feed to an app with their approval and a secret key, which a website's page can't keep safe. Uploading your best photos also keeps the wall fast and in your theme's look." },
+      ] },
+      { title: "Heading and button", fields: [
+        g2({ t: "text", path: "wall.eyebrow", label: "Small line above the heading", ph: "On Instagram" }, { t: "text", path: "wall.title", label: "Heading", ph: "Follow along" }),
+        { t: "textarea", path: "wall.text", label: "Text under the heading (optional)" },
+        { t: "text", path: "wall.button", label: "Follow button", ph: "Follow @yourname", hint: "Empty uses “Follow @yourhandle”. The button shows when a handle or a profile address is given." },
+      ] },
+      { title: "Layout", fields: [
+        g2({ t: "select", path: "wall.layout", label: "Layout", options: [{ value: "auto", label: "Automatic (to suit your theme)" }, { value: "grid", label: "Even grid" }, { value: "masonry", label: "Masonry (photos keep their own height)" }, { value: "mosaic", label: "Mosaic (some photos larger)" }, { value: "strip", label: "One row that scrolls sideways" }, { value: "flush", label: "Edge to edge, no gaps" }] },
+          { t: "select", path: "wall.place", label: "Where on the home page", options: [{ value: "top", label: "After the first screen" }, { value: "middle", label: "In the middle of the page" }, { value: "bottom", label: "Before the last section" }, { value: "end", label: "At the end of the page" }] }),
+        g2({ t: "select", path: "wall.cols", label: "Photos in a row", options: [{ value: "", label: "Automatic" }, { value: "3", label: "3" }, { value: "4", label: "4" }, { value: "5", label: "5" }, { value: "6", label: "6" }] },
+          { t: "select", path: "wall.shape", label: "Photo shape", options: [{ value: "", label: "Square" }, { value: "portrait", label: "Upright (4:5)" }, { value: "landscape", label: "Wide (4:3)" }] }),
+        { t: "select", path: "wall.captions", label: "Captions", options: [{ value: "hover", label: "Over the photo, when pointed at" }, { value: "below", label: "Under the photo" }, { value: "none", label: "No captions" }] },
+        { t: "note", text: "Automatic picks the wall that goes with your theme: its card look decides between an even grid, masonry, a mosaic, a scrolling row or an edge-to-edge wall. The photos' corners, borders, shadows, colours and fonts always follow the theme. On a phone the wall shows two photos in a row." },
+      ] },
+      { title: "The photos", fields: [
+        { t: "note", text: "Upload a photo and paste the link of its post, so a tap opens it on the network. Or paste only an Instagram post or reel link, or a Pinterest pin link: it is shown as that post, loaded from the network when the visitor presses it. Up to 24." },
+        { t: "list", path: "wall.items", label: "Photos", max: 24, add: () => ({ image: null, url: "", caption: "" }), title: (it: any, i: number) => `${it?.caption || `Photo ${i + 1}`}${it?.image ? "" : it?.url ? " · post link only" : " · no photo yet"}`,
+          item: [{ t: "image", path: "image", label: "Photo" }, g2({ t: "text", path: "url", label: "Link of the post (optional)", ph: "https://www.instagram.com/p/…" }, { t: "text", path: "caption", label: "Caption (optional)" })] },
+      ] },
+    ],
+  };
+}
 /** The settings a new video section starts with (content.video; drawn by src/fx/video.js). */
 export const videoDefault = () => ({ on: false, url: "", file: null as any, poster: null as any, layout: "center", place: "top", ratio: "16:9", eyebrow: "", title: "", text: "", links: [] as { label: string; url: string }[], auto: false, controls: true, round: true });
 /** Older content gets the video section's fields (off). */
@@ -978,7 +1022,7 @@ export const maintenanceDefault = () => ({ on: false, title: "We'll be back soon
 export function prepareMaintenance(c: any) {
   if (!c || typeof c !== "object") return;
   const d = maintenanceDefault(), m = c.maintenance && typeof c.maintenance === "object" ? c.maintenance : {};
-  prepareAddons(c); prepareEmails(c); prepareFestival(c); prepareConsent(c); prepareVideo(c); prepareSocial(c); prepareLogo(c);
+  prepareAddons(c); prepareEmails(c); prepareFestival(c); prepareConsent(c); prepareVideo(c); prepareWall(c); prepareSocial(c); prepareLogo(c);
   c.maintenance = { ...d, ...m, button: { ...d.button, ...(m.button && typeof m.button === "object" ? m.button : {}) } };
 }
 export function prepareSlides(hero: any, overlayColor?: string) {

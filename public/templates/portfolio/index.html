@@ -1508,7 +1508,7 @@ function renderSite(c){
   siteRoot.innerHTML=`<div id="siteInner">${siteHTML(c)}</div>`;
   if(SC&&SC.drawn)SC.drawn(siteRoot,c);
   initSite(c);}
-  heroSlides(c);heroLogo(c);video(c);social(c);spLinks(c);menu(c);lang(c);consent(c);addons(c);extras(c);festival(c);
+  heroSlides(c);heroLogo(c);video(c);wall(c);social(c);spLinks(c);menu(c);lang(c);consent(c);addons(c);extras(c);festival(c);
   if(window.SiteFX)try{window.SiteFX.init({root:$("#siteInner"),brand:c.theme.introTitle||c.brand.logoText,badge:c.poweredBy,bgs:c.sectionBg,asset:imgUrl,fonts:FONTS,c:c,policy:"",again:()=>renderSite(saved)})}catch(e){}
   setIcon(c);fitLines();
   // Links inside the page follow the sections: to a section's own page, or back to the main page from one.
@@ -1591,6 +1591,12 @@ function social(c){
 /* the video section (assets/video.js): one video placed among the page's sections (not in the four layouts that
    have no ordinary page: Horizontal reel, Terminal, Drag canvas, Cinema scenes) */
 let svP;
+/* The social photo wall (assets/wall.js): Instagram or Pinterest photos on the page, among its sections. */
+let wallP=null;
+function wall(c){
+  const W=c.wall||{};if(!W.on&&!window.SiteWall)return;
+  (wallP||(wallP=new Promise((ok,no)=>{if(window.SiteWall)return ok();const s=document.createElement("script");s.src="assets/wall.js";s.onload=()=>ok();s.onerror=no;document.head.appendChild(s)})))
+    .then(()=>SiteWall.mount(c,{sections:"main > section",home:!/^(kinetic-noir|decode|gallery|velvet-cinema)$/.test(KIT),imgUrl})).catch(()=>{})}
 function video(c){
   const V=c.video||{};if(!V.on&&!window.SiteVideo)return;
   (svP||(svP=new Promise((ok,no)=>{if(window.SiteVideo)return ok();const s=document.createElement("script");s.src="assets/video.js";s.onload=()=>ok();s.onerror=no;document.head.appendChild(s)})))

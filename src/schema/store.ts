@@ -121,7 +121,7 @@ const schema: Category[] = [
     ],
   },
   videoCategory("Pages"),
-  wallCategory("Pages"),
+  wallCategory("Pages", undefined, "", true),
   socialCategory("Pages"),
   {
     id: "shop", label: "Shop page", group: "Pages", desc: "The product listing page.",

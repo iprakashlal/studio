@@ -588,7 +588,8 @@ function social() {
     .then(() => window.SiteSocial.mount(C, { footer: "footer.foot", before: ".foot-legal", imgUrl })).catch(() => {});
 }
 /* The social photo wall (assets/wall.js): the owner's Instagram or Pinterest photos. It is one of the page's sections: its row under
-   Sections & order switches it on and sets where it stands; the script fills the empty slot drawn there. */
+   Sections & order switches it on and sets where it stands; the script fills the empty slot drawn there, with this page's own
+   section heading, wrapper and button, so it wears the theme like the other sections. */
 const wallOn = () => { const s = C.sections.find((x) => x.id === "wall"); return s ? s.show !== false : !!(C.wall && C.wall.on); };
 function wallSlot() { return wallOn() && C.wall && Array.isArray(C.wall.items) && C.wall.items.length ? `<section id="wall" data-wall-slot hidden></section>` : ""; }
 let wallP = null;
@@ -596,7 +597,7 @@ function wall() {
   if (!wallOn() && !window.SiteWall) return;
   (wallP ||= new Promise((ok, no) => { if (window.SiteWall) return ok(); const s = document.createElement("script"); s.src = "assets/wall.js"; s.onload = () => ok(); s.onerror = no; document.head.appendChild(s); }))
     // A site saved before the wall became a row in the list has no row for it: it keeps its old place on the home page.
-    .then(() => window.SiteWall.mount(C, C.sections.some((x) => x.id === "wall") ? { on: wallOn(), slot: "only", imgUrl } : { sections: "#main > section", home: PAGE === "home", imgUrl })).catch(() => {});
+    .then(() => window.SiteWall.mount(C, C.sections.some((x) => x.id === "wall") ? { on: wallOn(), slot: "only", imgUrl, head: head({ eyebrow: C.wall.eyebrow, title: C.wall.title, lede: C.wall.text }), wrap: "wrap", cls: "sw-ctr", btn: "btn pri" } : { sections: "#main > section", home: PAGE === "home", imgUrl })).catch(() => {});
 }
 /* The video section (assets/video.js): one video on the home page, placed among its sections. */
 let svP;

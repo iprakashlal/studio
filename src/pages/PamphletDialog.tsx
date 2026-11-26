@@ -7,7 +7,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { Session } from "../lib/auth";
 import type { ProjectMeta } from "../lib/studio";
 import { cfProducts, type PamphletProduct } from "../lib/cfdb";
-import { guessPics, pamphletInput, readPamphlet, type Pamphlet } from "../lib/pamphlet";
+import { guessPics, pamphletInput, pamphletLayout, readPamphlet, type Pamphlet } from "../lib/pamphlet";
+import { menuFromLayout } from "../lib/menulayout";
 import { cutOut, shot, SHOT_STYLES, type ShotStyle } from "../lib/productShots";
 import { clone } from "../lib/util";
 import { Modal } from "../ui/kit";
@@ -37,6 +38,8 @@ export function PamphletDialog({ session, project, draft, upload, onApply, onClo
   const menu = project.template === "restaurant"; // a restaurant's menu: each product is a dish, its category the menu section
   const [busy, setBusy] = useState(""), [err, setErr] = useState("");
   const [found, setFound] = useState<PamphletProduct[] | null>(null), [guessed, setGuessed] = useState(false);
+  // A designed PDF menu read from where things are on its pages (lib/menulayout): what applies to the whole menu, or null when it was read another way.
+  const [laid, setLaid] = useState<{ notes: string[]; photos: number } | null>(null);
   const [pick, setPick] = useState<Set<number>>(new Set());
   const doc = useRef<Pamphlet | null>(null);
   const [drag, setDrag] = useState(false);
@@ -64,6 +67,19 @@ export function PamphletDialog({ session, project, draft, upload, onApply, onClo
     setErr(""); setBusy("Reading the pamphlet");
     try {
       doc.current?.close(); doc.current = await readPamphlet(files, pdfBase(), { find: true, step: setBusy });
+      setLaid(null);
+      // A PDF menu with real text is read from its layout first: each photo with the name, description and price (or priced choices)
+      // that stand with it. It needs no AI. When that finds too little (a scan, a plain list), the chosen reader takes over below.
+      if (menu && doc.current.kind === "pdf") {
+        setBusy("Reading the menu from its layout");
+        let lay: ReturnType<typeof menuFromLayout> | null = null; try { lay = menuFromLayout(pamphletLayout(doc.current)); } catch { /* read the usual way */ }
+        if (lay && lay.products.length >= 3) {
+          social.current = []; setBySystem(null); setGuessed(false);
+          setFound(lay.products); setPick(new Set(lay.products.map((_, i) => i))); setPicOf(lay.products.map((p) => p.pic));
+          const withPic = lay.products.filter((p) => p.pic >= 0).length; setPhotos(withPic ? "asis" : "none"); setLaid({ notes: lay.notes, photos: withPic });
+          setBusy(""); return;
+        }
+      }
       const pics = doc.current.pages.filter((p) => p.image).length;
       setBusy(pics ? `Reading ${pics} page picture${pics > 1 ? "s" : ""} and finding the products` : "Finding the products");
       const inp = pamphletInput(doc.current);
@@ -84,15 +100,28 @@ export function PamphletDialog({ session, project, draft, upload, onApply, onClo
         c.food ||= {}; const cats: any[] = Array.isArray(c.food.categories) ? c.food.categories : (c.food.categories = []);
         const price = (x: string) => { const t = String(x || "").trim(), m = t.replace(/,/g, "").match(/^\D{0,4}(\d+(?:\.\d+)?)\s*(?:\/-|only)?$/i); return m ? m[1] : t; };
         let n = 0;
+        // The dish's own photo, as it is in the menu (only for a menu read from its layout, where each photo is known to be its dish's).
+        const photoOf = async (i: number, p: PamphletProduct): Promise<{ path: string } | null> => {
+          const pic = laid && photos === "asis" ? doc.current?.pics[picOf[i]] : null; if (!pic) return null;
+          setBusy(`Adding the photo of ${p.name}`);
+          try { return await upload(new File([pic.blob], `${p.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40) || "dish"}.jpg`, { type: "image/jpeg" })); } catch { return null; }
+        };
+        const sizesOf = (p: PamphletProduct) => (/\//.test(p.price || "") && (p.specs || []).length >= 2 && p.specs.every((x) => /\d/.test(x.value)) ? p.specs.map((x) => ({ label: x.label, price: price(x.value) })) : []);
         for (const [i, p] of (found || []).entries()) {
           if (!pick.has(i) || !p.name.trim()) continue;
           const old = cats.flatMap((k) => k.items || []).find((d: any) => same(String(d?.name || ""), p.name));
-          if (old) { if (!String(old.price || "").trim() && p.price) old.price = price(p.price); if (!String(old.desc || "").trim() && p.summary) old.desc = p.summary; n++; continue; }
+          if (old) {
+            const sz = sizesOf(p);
+            if (!String(old.price || "").trim() && !(old.variants || []).length) { if (sz.length) old.variants = sz; else if (p.price) old.price = price(p.price); }
+            if (!String(old.desc || "").trim() && p.summary) old.desc = p.summary;
+            if (!old.image) { const im = await photoOf(i, p); if (im) old.image = im; }
+            n++; continue;
+          }
           const name = (p.category || "").trim() || "Menu";
           let k = cats.find((x) => same(String(x?.name || ""), name)); if (!k) { k = { name, note: "", image: null, items: [] }; cats.push(k); }
           // "89 / 109 / 119" with a name for each (Oil, Butter, Cheese) becomes the dish's sizes.
-          const sizes = /\//.test(p.price || "") && (p.specs || []).length >= 2 && p.specs.every((x) => /\d/.test(x.value)) ? p.specs.map((x) => ({ label: x.label, price: price(x.value) })) : [];
-          (k.items ||= []).push({ name: p.name.trim(), desc: p.summary || "", price: sizes.length ? "" : price(p.price), diet: "", spice: "0", tag: "", allergens: "", image: null, variants: sizes, addons: [], soldOut: false }); n++;
+          const sizes = sizesOf(p);
+          (k.items ||= []).push({ name: p.name.trim(), desc: p.summary || "", price: sizes.length ? "" : price(p.price), diet: "", spice: "0", tag: "", allergens: "", image: await photoOf(i, p), variants: sizes, addons: [], soldOut: false }); n++;
         }
         const sec = (c.sections || []).find((s: any) => s.id === "food"); if (sec) sec.show = true;
         mergeSocial(c, [...socialFromText((doc.current?.pages || []).map((x) => x.text).join("\n")), ...social.current]);
@@ -188,6 +217,11 @@ export function PamphletDialog({ session, project, draft, upload, onApply, onClo
         {found && <>
           <p className="text-ink-300">Found {found.length} {found.length === 1 ? W.one : W.many}. Untick any you don't want. {menu ? "Dishes already on your menu" : "Products already in your catalogue"} with the same name only get what they're missing.</p>
           {bySystem && <p role="status" className="rounded-lg border border-ink-600 px-3 py-2 text-[12.5px] text-ink-300">Read on this device by the Picaffectz system{bySystem.pictures ? `, including ${bySystem.pictures} page picture${bySystem.pictures > 1 ? "s" : ""}${bySystem.sure < 70 ? " (the print was hard to read: check names and prices closely)" : ""}` : ""}. It copies what is printed and doesn't fill in what isn't there.</p>}
+          {laid && <div role="status" className="flex flex-col gap-1.5 rounded-lg border border-ink-600 px-3 py-2 text-[12.5px] text-ink-300">
+            <span>Read from the menu's own layout, on this device, with no AI: each photo with the name, description and price printed with it{laid.photos ? `. ${laid.photos} of ${found.length} have a photo; use ‹ › to change one` : ""}.</span>
+            {!!laid.photos && <label className="flex items-center gap-2 text-ink-100"><input type="checkbox" checked={photos === "asis"} onChange={(e) => setPhotos(e.target.checked ? "asis" : "none")} /> Add each dish's photo from the menu</label>}
+            {!!laid.notes.length && <span>Also printed on the menu (not added, set these yourself): {laid.notes.join(" · ")}</span>}
+          </div>}
           {guessed && <p role="status" className="rounded-lg border border-amber-400/30 bg-amber-400/5 px-3 py-2 text-[12.5px] text-amber-100">The AI didn't return the products this time, so they were read straight from the pamphlet's text. Check the name, type and details before adding.</p>}
           {!menu && <PhotoChoice photos={photos} setPhotos={setPhotos} styles={styles} setStyles={setStyles} hasPics={!!doc.current?.pics.length} />}
           <div className="flex flex-col gap-2" aria-label={menu ? "Dishes found" : "Products found"}>
@@ -205,7 +239,8 @@ export function PamphletDialog({ session, project, draft, upload, onApply, onClo
                   )}
                   <span className="min-w-0 flex-1">
                     <b className="text-ink-100">{p.name}</b>{p.price && <span className="ml-2 text-ink-200">{p.price}</span>}{dup && <span className="ml-2 rounded bg-amber-400/15 px-1.5 py-0.5 text-[11.5px] text-amber-200">already listed</span>}
-                    <span className="block text-[12.5px] text-ink-400">{[p.category, `${doc.current?.kind === "sheet" ? "row" : "page"} ${p.page}`, p.features.length && `${p.features.length} features`, p.specs.length && `${p.specs.length} specs`].filter(Boolean).join(" · ")}</span>
+                    <span className="block text-[12.5px] text-ink-400">{[p.category, `${doc.current?.kind === "sheet" ? "row" : "page"} ${p.page}`, p.features.length && `${p.features.length} features`, p.specs.length && (menu ? `${p.specs.length} choices` : `${p.specs.length} specs`)].filter(Boolean).join(" · ")}</span>
+                    {menu && p.specs.length > 0 && <span className="mt-1 flex flex-wrap gap-1.5" aria-label={`Choices of ${p.name}`}>{p.specs.map((x, k) => <span key={k} className="chip">{x.label} · {x.value}</span>)}</span>}
                     {p.summary && <span className="mt-1 block text-[12.5px] text-ink-300">{p.summary}</span>}
                     {photos === "styled" && picOf[i] >= 0 && <button type="button" className="mt-1.5 text-[12.5px] text-brand-300 underline" onClick={() => showPreview(i)}>{preview?.i === i ? "Hide the photos" : "See the photos"}</button>}
                     {preview?.i === i && <span className="mt-2 flex flex-wrap gap-2" aria-label={`Photos of ${p.name}`}>{preview.urls.map((u, k) => <img key={k} src={u} alt="" className="h-28 w-28 rounded-md border border-ink-700 object-cover" />)}</span>}

@@ -1665,10 +1665,18 @@ async function igMediaFb(token: string, n: number): Promise<{ items?: WallPic[];
   const said = (x: { status: number; j: any }) => (x.j?.error?.message ? "Facebook said: " + String(x.j.error.message).slice(0, 220) : `Facebook answered ${x.status}.`);
   try {
     // a person's token lists their Pages; a Page's own token is asked about itself
-    let id = "", a = await get("me/accounts?fields=instagram_business_account&limit=50");
-    if (a.ok) id = String((a.j?.data || []).map((p: any) => p?.instagram_business_account?.id).find(Boolean) || "");
-    if (!id) { const b = await get("me?fields=instagram_business_account"); if (b.ok) id = String(b.j?.instagram_business_account?.id || ""); else if (!a.ok) return { error: said(a) }; }
-    if (!/^\d+$/.test(id)) return { error: "This Facebook token can't see an Instagram account. The Instagram account has to be linked to a Facebook Page you manage, and the token needs the permissions instagram_basic and pages_show_list (pages_read_engagement too, if Meta offers it)." };
+    const F = "fields=name,instagram_business_account,connected_instagram_account", igOf = (p: any) => String(p?.instagram_business_account?.id || p?.connected_instagram_account?.id || "");
+    let id = "", pages: any[] = []; const a = await get("me/accounts?" + F + "&limit=50");
+    if (a.ok) { pages = Array.isArray(a.j?.data) ? a.j.data : []; id = pages.map(igOf).find(Boolean) || ""; }
+    if (!id) { const b = await get("me?" + F); if (b.ok) id = igOf(b.j); else if (!a.ok) return { error: said(a) }; }
+    if (!/^\d+$/.test(id)) {
+      // say which of the things it needs is missing: the permissions the token was given, and the Pages it can see
+      const pr = await get("me/permissions"), have: string[] = pr.ok && Array.isArray(pr.j?.data) ? pr.j.data.filter((x: any) => x?.status === "granted").map((x: any) => String(x.permission)) : [];
+      const lack = ["pages_show_list", "instagram_basic"].filter((x) => !have.includes(x));
+      if (pr.ok && lack.length) return { error: `This Facebook token wasn't given the permission${lack.length > 1 ? "s" : ""} ${lack.join(" and ")}${have.length ? ` (it has: ${have.slice(0, 12).join(", ")})` : ""}. Generate a new token with ${lack.length > 1 ? "them" : "it"} ticked: in Meta's Graph API Explorer choose your app, add the permissions pages_show_list, instagram_basic and pages_read_engagement, and press Generate Access Token.` };
+      if (!pages.length) return { error: "This Facebook token can't see any Facebook Page. When Meta asks which Pages the app may use, tick the Page your Instagram account is linked to (or choose all), then generate the token again. If the Page belongs to a business portfolio, also add the permission business_management." };
+      return { error: `This Facebook token can see ${pages.length === 1 ? "the Page" : "the Pages"} ${pages.slice(0, 5).map((p) => "“" + oneLine(String(p?.name || p?.id || "")).slice(0, 40) + "”").join(", ")}, but no Instagram account is linked to ${pages.length === 1 ? "it" : "any of them"}. Link your Instagram account to the Page (the Page's Settings → Linked accounts → Instagram), make sure it is a Business or Creator account, then press Test again.` };
+    }
     const m = await get(id + `/media?fields=id,caption,media_type,media_url,thumbnail_url,permalink&limit=${n}`);
     return m.ok ? { items: igPics(m.j?.data) } : { error: said(m) };
   } catch { return { error: "Facebook didn't answer in time." }; }

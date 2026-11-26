@@ -7,7 +7,7 @@ import { SitesHostingCard } from "./SitesHostingCard";
 import { AiEngineCard, StudioInstagramCard, StudioWhatsAppCard } from "./AiEngine";
 import { setAiEngine } from "../lib/ai";
 import { hides, limitsOf, setStudioHidden, useClientStudio } from "../lib/features";
-import { loadMyRole, roleHides, useMyRole } from "../lib/myrole";
+import { loadMyRole, myRole, roleHides, useMyRole } from "../lib/myrole";
 import { roleLabel, userRoot } from "../lib/roles";
 import { RoleManagement } from "../ui/RoleManagement";
 import { PinCard } from "../ui/PinSignIn";
@@ -95,6 +95,15 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
     }).then((i) => { setBootAt(2); setIndex(i); }).catch((e) => setErr(explain(e)));
   };
   const lookAt = (email: string) => { setViewAs(email); setIndex(null); };
+  // The sign-in is shared by every tab of this browser. If another tab signed in as someone else (or an Administrator changed this
+  // person's role), this tab would still show the earlier person's screen: on coming back to the tab the role is asked again, and the
+  // page starts afresh when it is no longer the same person or role.
+  useEffect(() => {
+    if (repo.demo) return;
+    const check = () => { if (document.visibilityState !== "visible") return; const was = myRole(); if (!was.managed) return; loadMyRole().then((now) => { if (now.email !== was.email || now.role !== was.role) location.reload(); }).catch(() => {}); };
+    document.addEventListener("visibilitychange", check); addEventListener("focus", check);
+    return () => { document.removeEventListener("visibilitychange", check); removeEventListener("focus", check); };
+  }, [repo.demo]);
   useEffect(() => { if (!index && bootAt) load(); }, [viewAs]);
   // The publishing token (if any) is unlocked first, so live-site checks can read the sites' repositories.
   useEffect(() => { let on = true; (repo.demo ? Promise.resolve(null) : ghPublish.load(session.token)).finally(() => { if (on) load(); }); return () => { on = false; }; }, [studio]);

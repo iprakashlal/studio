@@ -3,7 +3,7 @@ import type { Category, Field, TemplateDef } from "./types";
 import { FX_AXES, HERO_FX_AXIS, LOADER_ON_AXIS, LINE_BREAKS_AXIS, type Axis } from "../themes/catalog";
 import { REST_AXES, REST_BODY_FONTS, REST_DISPLAY_FONTS, REST_TAGS, REST_THEMES, restaurantThemeValues } from "../themes/restaurant";
 import { INTRO_CARD, NAV_MODE_FIELD, NAV_MODE_MOB_FIELD } from "../themes/fields";
-import { ANIM_BG_FIELDS, gstCategory, adminCategory, loyaltyCard, accountsCategory, accountLookCard, legalCategory, codeCategory, withSectionBg, videoCategory, wallCategory, socialCategory, logoFields, consentCategory, emailsCategory, i18nCategory, prepareI18n, featuresCategory, festivalCategory, menuCategory, menuItem, prepareMenu, staticPagesCategory, heroSlidesCard, prepareSlides, prepareMaintenance, seoCategory, customFontsCard } from "./common";
+import { ANIM_BG_FIELDS, gstCategory, adminCategory, loyaltyCard, accountsCategory, accountLookCard, legalCategory, codeCategory, withSectionBg, videoCategory, wallCategory, WALL_SWITCH, socialCategory, logoFields, consentCategory, emailsCategory, i18nCategory, prepareI18n, featuresCategory, festivalCategory, menuCategory, menuItem, prepareMenu, staticPagesCategory, heroSlidesCard, prepareSlides, prepareMaintenance, seoCategory, customFontsCard } from "./common";
 
 const g2 = (...fields: Field[]): Field => ({ t: "grid", cols: 2, fields });
 const g3 = (...fields: Field[]): Field => ({ t: "grid", cols: 3, fields });
@@ -71,7 +71,7 @@ const schema: Category[] = [
           { t: "text", path: "site.pageLabels.gallery", label: "Gallery page name" }, { t: "text", path: "site.pageLabels.contact", label: "Visit & book page name" })] }] },
       { title: "Sections", fields: [{ t: "note", text: "Reorder with the arrows. Hidden sections stay in your content. On one page, sections with “In the menu bar” get a link at the top." },
         { t: "list", path: "sections", fixed: true, add: () => ({}), title: (it) => `${it.label || it.id}${it.show === false ? " (hidden)" : ""}`,
-          item: [g2({ t: "text", path: "label", label: "Name in the menu bar" }, { t: "toggle", path: "show", label: "Show this section" }), { t: "toggle", path: "inNav", label: "In the menu bar (one-page mode)" }] }] },
+          item: [g2({ t: "text", path: "label", label: "Name in the menu bar" }, { t: "toggle", path: "show", label: "Show this section" }), { t: "toggle", path: "inNav", label: "In the menu bar (one-page mode)" }] }, ...WALL_SWITCH] },
       { title: "Button in the menu bar", fields: [g2({ t: "text", path: "nav.cta", label: "Button label (empty hides it)" }, { t: "select", path: "nav.ctaTarget", label: "Goes to", options: GOES }), linkWhen("nav.ctaTarget", "Custom link for the menu button")] },
       { title: "Announcement bar", fields: [{ t: "toggle", path: "notice.on", label: "Show a line above the menu bar" },
         { t: "when", path: "notice.on", is: "true", fields: [{ t: "text", path: "notice.text", label: "Announcement", ph: "Closed on 26 January. Open as usual from the 27th." },

@@ -205,14 +205,17 @@ export function prepareWall(c: any) {
   c.wall = { ...d, ...w, items: Array.isArray(w.items) ? w.items.filter((x: any) => x && typeof x === "object") : [] };
 }
 /** The social photo wall, for every template: Instagram, Pinterest or another network's photos on the home page, with a follow button. */
-export function wallCategory(group = "Pages", sub?: string, extra = ""): Category {
+/** The wall's on / off switch, shown with the other sections' switches (Sections & order). */
+export const WALL_SWITCH: Field[] = [{ t: "toggle", path: "wall.on", label: "Show the social photo wall" }, { t: "note", text: "Its photos, layout and place on the page are under Social photo wall." }];
+/** `ownSwitch`: the template has no Sections & order list, so the switch stays on this screen. */
+export function wallCategory(group = "Pages", sub?: string, extra = "", ownSwitch = false): Category {
   const g2 = (...fields: Field[]): Field => ({ t: "grid", cols: 2, fields });
   return {
     id: "wall", label: "Social photo wall", group, ...(sub ? { sub } : {}),
     desc: "A wall of your Instagram, Pinterest or other social media photos on the home page, with a button to follow you. It takes its look from the site's theme.",
     cards: [
       { title: "The wall", fields: [
-        { t: "toggle", path: "wall.on", label: "Show the social photo wall" },
+        ownSwitch ? { t: "toggle", path: "wall.on", label: "Show the social photo wall" } : { t: "note", text: "Switch the wall on or off under Sections & order, with the other sections." },
         g2({ t: "select", path: "wall.network", label: "Network", options: [{ value: "instagram", label: "Instagram" }, { value: "pinterest", label: "Pinterest" }, { value: "facebook", label: "Facebook" }, { value: "tiktok", label: "TikTok" }, { value: "youtube", label: "YouTube" }, { value: "x", label: "X" }, { value: "behance", label: "Behance" }, { value: "dribbble", label: "Dribbble" }, { value: "other", label: "Another one" }] },
           { t: "text", path: "wall.handle", label: "Your handle", ph: "@yourname", hint: "Used for the follow button." }),
         { t: "text", path: "wall.url", label: "Profile or board address (optional)", ph: "https://www.pinterest.com/yourname/your-board/", hint: "Only needed when the handle alone doesn't lead to the right page: a Pinterest board, or another network." },

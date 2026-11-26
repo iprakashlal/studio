@@ -91,7 +91,7 @@ function Feedback({ s, id }: { s: RvSummary; id: string }) {
 /** Last live-site check per project, so going back and forth doesn't re-check every time. */
 const checked = new Map<string, number>();
 
-export function Dashboard({ studio, index, onIndex, token, hid = () => false, max = {}, only, designsTab = "" }: { designsTab?: "" | "previews" | "queries"; studio: Studio; index: StudioIndex; onIndex: (i: StudioIndex) => void; token: string; /** Features a partner hid in this client Studio. */ hid?: (key: string) => boolean; /** The most sites of each template this client Studio may have. */ max?: Record<string, number>; /** One template's own page (#/type/<id>): every card of that type. */ only?: string }) {
+export function Dashboard({ studio, index, onIndex, token, hid = () => false, max = {}, only, designsTab = "", under }: { /** Shown under the page's buttons, at the right (Role Management's "View as"). */ under?: React.ReactNode; designsTab?: "" | "previews" | "queries"; studio: Studio; index: StudioIndex; onIndex: (i: StudioIndex) => void; token: string; /** Features a partner hid in this client Studio. */ hid?: (key: string) => boolean; /** The most sites of each template this client Studio may have. */ max?: Record<string, number>; /** One template's own page (#/type/<id>): every card of that type. */ only?: string }) {
   // A template is on offer when it isn't hidden and the Studio hasn't reached its limit for that type.
   const countOf = (t: string) => index.projects.filter((p) => p.template === t).length;
   const room = (t: string) => max[t] === undefined || countOf(t) < max[t];
@@ -232,13 +232,16 @@ export function Dashboard({ studio, index, onIndex, token, hid = () => false, ma
           <h1 className="flex items-center gap-3 font-display text-3xl font-extrabold sm:text-4xl"><BrandMark size={36} fallback={<Logo size={16} />} />Projects</h1>
           <p className="mt-1 text-sm text-ink-400">Create, preview, export and re-edit websites. Every site ships with its own CMS.</p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-col items-end gap-2.5">
+        <div className="flex flex-wrap justify-end gap-2">
           {!only && !hid("design") && (
             <a href="#/design-queries" aria-current={designsTab === "queries" ? "page" : undefined} className={`btn rounded-full ${designsTab === "queries" ? "border-brand-400 bg-brand-500/15" : ""}`}>
               DIY Submissions{newQ ? <span className="ml-1 rounded-full bg-emerald-500/20 px-2 py-0.5 text-xs text-emerald-200">{newQ} new</span> : null}
             </a>
           )}
           {canNew && <button className="btn btn-pri" data-tour="new-project" onClick={() => setCreating(true)}>+ New project</button>}
+        </div>
+        {under}
         </div>
       </div>
       {full.length > 0 && !hid("new") && <p className="rounded-lg border border-amber-400/40 bg-amber-400/5 px-3 py-2 text-[13px] text-amber-100" role="status">This Studio has reached its limit for {full.map((t) => `${t.name.toLowerCase()} sites (${max[t.id]})`).join(" and ")}. Ask your Studio Partner for more.</p>}

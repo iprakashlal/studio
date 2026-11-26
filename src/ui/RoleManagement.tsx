@@ -8,7 +8,7 @@ import { Field, Skel, useConfirm, useToast } from "./kit";
 type Member = { email: string; role: string };
 type Data = { me: { email: string; role: string; privs: Privs }; ready: boolean; roles?: Record<string, Privs>; members?: Member[]; owners?: { project: string; email: string }[] };
 
-export function RoleManagement({ api, scopeName, where }: { api: string; scopeName: string; where: "studio" | "site" }) {
+export function RoleManagement({ api, scopeName, where, onView }: { api: string; scopeName: string; where: "studio" | "site"; /** Studio: open a person's projects (Administrators). */ onView?: (email: string) => void }) {
   const toast = useToast(), confirm = useConfirm();
   const [d, setD] = useState<Data | null>(null), [err, setErr] = useState(""), [busy, setBusy] = useState(false);
   const [add, setAdd] = useState(""), [addRole, setAddRole] = useState("member");
@@ -61,6 +61,7 @@ export function RoleManagement({ api, scopeName, where }: { api: string; scopeNa
               <span className="min-w-0 flex-1 truncate">{m.email}{m.email === d.me.email && <span className="ml-2 text-xs text-ink-400">you</span>}{where === "studio" && count(m.email) > 0 && <span className="ml-2 text-xs text-ink-400">{count(m.email)} {count(m.email) === 1 ? "project" : "projects"}</span>}</span>
               {m.role === "partner" || !admin ? <span className="chip border-ink-600 text-ink-300">{roleLabel(m.role)}</span>
                 : <select className="input w-auto py-1" aria-label={`Role of ${m.email}`} disabled={busy} value={ROLES.some((r) => r.id === m.role) ? m.role : "member"} onChange={(e) => setRole(m, e.target.value)}>{ROLES.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}</select>}
+              {admin && onView && m.role !== "owner" && m.role !== "partner" && <button type="button" className="btn btn-sm" onClick={() => onView(m.email)} title={`Open the Projects page showing ${m.email}'s projects`}>View projects</button>}
               {admin && m.role !== "partner" && <button type="button" className="btn btn-ghost btn-sm" disabled={busy} onClick={() => remove(m)} aria-label={`Remove ${m.email}`}>Remove</button>}
             </li>
           ))}

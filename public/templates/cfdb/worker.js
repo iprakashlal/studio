@@ -49,7 +49,7 @@ var CFDB_UPGRADES = [
     "create index if not exists enquiries_ref on enquiries (site, ref)"
   ] }
 ];
-var CFDB_VERSION = 102;
+var CFDB_VERSION = 103;
 var CFDB_WORKER_NAME = "picaffectz-db";
 
 // src/lib/diylook.ts
@@ -65,7 +65,12 @@ var DIY_WORDS = {
   footnote: ["Small line under the buttons", "Preview only. Nothing is published or charged."],
   previewBtn: ["Header button: preview", "Preview"],
   restartBtn: ["Header button: start again", "Start again"],
-  skipBtn: ["Button: skip a question", "Skip"]
+  skipBtn: ["Button: skip a question", "Skip"],
+  stBasic: ["Steps strip: 1st stage", "Basic info"],
+  stLook: ["Steps strip: 2nd stage", "Look"],
+  stDetails: ["Steps strip: 3rd stage", "Details"],
+  stContact: ["Steps strip: 4th stage", "Contact"],
+  stPreview: ["Steps strip: last stage", "Preview"]
 };
 var DIY_FONTS = ["Manrope", "Inter", "DM Sans", "Plus Jakarta Sans", "Figtree", "Outfit", "Sora", "Space Grotesk", "Work Sans", "Nunito Sans", "Poppins", "IBM Plex Sans", "Bricolage Grotesque", "Syne", "Unbounded", "Fraunces", "Playfair Display", "DM Serif Display", "Lora", "Source Serif 4"];
 var DIY_BUBBLES = [["", "Soft (standard)"], ["round", "Rounded pill"], ["square", "Square"], ["tail", "Speech bubble with a tail"], ["outline", "Outlined"], ["glass", "Frosted glass"], ["minimal", "Minimal (assistant as plain text)"], ["bar", "Card with an accent bar"]];
@@ -85,6 +90,9 @@ function cleanDiyLook(x) {
     if (typeof s.field === "string" && HEX.test(s.field)) u.field = s.field.toLowerCase();
     if (typeof s.chip === "string" && HEX.test(s.chip)) u.chip = s.chip.toLowerCase();
     if (DIY_BUBBLES.some(([k]) => k && k === s.bubble)) u.bubble = s.bubble;
+    for (const k of ["frame", "steps", "aura", "glowBub", "glowField", "glowBtn"]) if (s[k] === true) u[k] = true;
+    if (typeof s.glow2 === "string" && HEX.test(s.glow2)) u.glow2 = s.glow2.toLowerCase();
+    if (s.glowSpeed === "slow" || s.glowSpeed === "fast") u.glowSpeed = s.glowSpeed;
     if (DIY_FONTS.includes(s.font)) u.font = s.font;
     if (DIY_FONTS.includes(s.head)) u.head = s.head;
     if (s.radius === "sharp" || s.radius === "round") u.radius = s.radius;

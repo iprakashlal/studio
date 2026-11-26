@@ -290,6 +290,20 @@ export function DesignLookTab({ session, studio, index, onIndex, part, lead }: {
               {col("Answer boxes", u.field, "#161d2b", (v) => setUi({ field: v }))}
               {col("Choices (pills)", u.chip, "#161d2b", (v) => setUi({ chip: v }))}
             </div>
+            <div className="flex flex-col gap-2">
+              <span className="text-[12.5px] font-semibold">Layout and effects</span>
+              <div className="grid gap-x-3 gap-y-2 sm:grid-cols-2 lg:grid-cols-3">
+                {([["frame", "Chat in a framed panel"], ["steps", "Strip of stages above the chat"], ["aura", "Soft glows of colour behind the page"], ["glowBub", "Glowing border on messages"], ["glowField", "Glowing border on the answer box"], ["glowBtn", "Glowing border on main buttons"]] as const).map(([k, l]) => (
+                  <label key={k} className="input flex h-[46px] cursor-pointer items-center gap-2.5 py-0 text-[13px] font-normal"><input type="checkbox" className="flex-none" checked={!!u[k]} onChange={(e) => setUi({ [k]: e.target.checked || undefined })} /><span className="truncate">{l}</span></label>
+                ))}
+              </div>
+              {(u.glowBub || u.glowField || u.glowBtn || u.aura) && <div className="grid gap-x-3 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
+                {col("Glow: second colour", u.glow2, u.accent || "#80a0ff", (v) => setUi({ glow2: v }))}
+                <label className={lab}>Glow speed<select className={sel} value={u.glowSpeed || ""} onChange={(e) => setUi({ glowSpeed: (e.target.value || undefined) as any })}><option value="">Calm</option><option value="slow">Slow</option><option value="fast">Fast</option></select></label>
+                <span className="self-end pb-3 text-[11.5px] text-ink-500">The glow's first colour is the accent. It stays still for visitors who ask for less motion.</span>
+              </div>}
+              {u.steps && <span className="text-[11.5px] text-ink-500">The stages' names are under Wording (Steps strip).</span>}
+            </div>
             <div className="grid gap-x-3 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
               <div className={lab}><span>Logo</span>
                 <span className="flex h-[46px] items-center gap-2">{u.logo && <img src={u.logo} alt="" className="h-9 w-9 flex-none rounded-md border border-ink-600 object-contain" />}

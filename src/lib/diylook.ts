@@ -17,6 +17,11 @@ export const DIY_WORDS = {
   previewBtn: ["Header button: preview", "Preview"],
   restartBtn: ["Header button: start again", "Start again"],
   skipBtn: ["Button: skip a question", "Skip"],
+  stBasic: ["Steps strip: 1st stage", "Basic info"],
+  stLook: ["Steps strip: 2nd stage", "Look"],
+  stDetails: ["Steps strip: 3rd stage", "Details"],
+  stContact: ["Steps strip: 4th stage", "Contact"],
+  stPreview: ["Steps strip: last stage", "Preview"],
 } as const;
 export type DiyWord = keyof typeof DIY_WORDS;
 /** Fonts the page can use (all served by Google Fonts, like the Studio's own). */
@@ -24,7 +29,11 @@ export const DIY_FONTS = ["Manrope", "Inter", "DM Sans", "Plus Jakarta Sans", "F
 
 /** The shapes the chat's messages can take. */
 export const DIY_BUBBLES: [string, string][] = [["", "Soft (standard)"], ["round", "Rounded pill"], ["square", "Square"], ["tail", "Speech bubble with a tail"], ["outline", "Outlined"], ["glass", "Frosted glass"], ["minimal", "Minimal (assistant as plain text)"], ["bar", "Card with an accent bar"]];
-export type DiyUi = { /** The top bar's colour and the buttons' colour (each its own; left out, they follow the page and the accent). */ header?: string; btn?: string; /** The colour of the boxes a visitor types in. */ field?: string; /** The colour of the choices a visitor taps (the pills). */ chip?: string; /** The shape of the chat's messages (see DIY_BUBBLES). */ bubble?: string; mode?: "light" | "dark"; accent?: string; font?: string; head?: string; radius?: "sharp" | "round"; width?: "narrow" | "wide"; logo?: string; name?: string; tag?: string };
+export type DiyUi = {
+  /** The chat sits in a framed panel; a strip of stages shows above it; soft glows of colour lie behind the page. */
+  frame?: boolean; steps?: boolean; aura?: boolean;
+  /** A moving, glowing border on the messages, the answer box and the main buttons; its second colour (the first is the accent) and its speed. */
+  glowBub?: boolean; glowField?: boolean; glowBtn?: boolean; glow2?: string; glowSpeed?: "slow" | "fast"; /** The top bar's colour and the buttons' colour (each its own; left out, they follow the page and the accent). */ header?: string; btn?: string; /** The colour of the boxes a visitor types in. */ field?: string; /** The colour of the choices a visitor taps (the pills). */ chip?: string; /** The shape of the chat's messages (see DIY_BUBBLES). */ bubble?: string; mode?: "light" | "dark"; accent?: string; font?: string; head?: string; radius?: "sharp" | "round"; width?: "narrow" | "wide"; logo?: string; name?: string; tag?: string };
 /** The page's own background and text: the same choices a website's section has (drawn by the same script, fx.js). Pictures are
  *  small data: URLs or https addresses; a video is a link (YouTube, Vimeo or a video file's address). */
 export type DiyBg = {
@@ -48,6 +57,8 @@ export function cleanDiyLook(x: any): DiyLook {
     if (typeof s.accent === "string" && HEX.test(s.accent)) u.accent = s.accent.toLowerCase();
     if (typeof s.header === "string" && HEX.test(s.header)) u.header = s.header.toLowerCase(); if (typeof s.btn === "string" && HEX.test(s.btn)) u.btn = s.btn.toLowerCase(); if (typeof s.field === "string" && HEX.test(s.field)) u.field = s.field.toLowerCase(); if (typeof s.chip === "string" && HEX.test(s.chip)) u.chip = s.chip.toLowerCase();
     if (DIY_BUBBLES.some(([k]) => k && k === s.bubble)) u.bubble = s.bubble;
+    for (const k of ["frame", "steps", "aura", "glowBub", "glowField", "glowBtn"] as const) if (s[k] === true) u[k] = true;
+    if (typeof s.glow2 === "string" && HEX.test(s.glow2)) u.glow2 = s.glow2.toLowerCase(); if (s.glowSpeed === "slow" || s.glowSpeed === "fast") u.glowSpeed = s.glowSpeed;
     if (DIY_FONTS.includes(s.font)) u.font = s.font; if (DIY_FONTS.includes(s.head)) u.head = s.head;
     if (s.radius === "sharp" || s.radius === "round") u.radius = s.radius;
     if (s.width === "narrow" || s.width === "wide") u.width = s.width;

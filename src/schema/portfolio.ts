@@ -208,7 +208,7 @@ const schema: Category[] = [
     ],
   },
   videoCategory("Pages", "Sections", "The Horizontal reel, Terminal, Drag canvas and Cinema scenes layouts have no ordinary page to place a section in, so the video does not show with them."),
-  wallCategory("Pages", "Sections"),
+  wallCategory("Pages", "Sections", "With the Terminal and Drag canvas layouts there is no ordinary page to place a section in, so the wall does not show with them. With Horizontal reel it comes after the reel, and with Cinema scenes it is a scene of its own."),
   socialCategory("Pages", undefined, "The Horizontal reel, Drag canvas and Cinema scenes layouts have no page end to put the row at, so it does not show with them."),
   {
     id: "contact", label: "Contact & footer", group: "Pages", desc: "The closing panel, links and the footer.",

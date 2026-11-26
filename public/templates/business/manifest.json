@@ -27,6 +27,7 @@
     "assets/lang.js",
     "assets/video.js",
     "assets/social.js",
+    "assets/wall.js",
     "README.md",
     "supabase/enquiries.sql"
   ],

@@ -1,4 +1,5 @@
 import { StudioPageLinksHere } from "./StudioPage";
+import { DateField, TimeField } from "../ui/DateTime";
 import { DevtoolsGuard, LoadVeil } from "../ui/PageGuard";
 import { themeCode } from "../themes/codes";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -71,20 +72,6 @@ function WaitPct({ label, secs = 9 }: { label: string; secs?: number }) {
     <span className="flex min-w-[15rem] flex-col gap-1.5 text-sm" role="status">
       <span className="flex items-baseline justify-between gap-4"><span>{label}</span><b className="tabular-nums">{p}%</b></span>
       <span className="h-1.5 overflow-hidden rounded-full bg-ink-700" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={p} aria-label={label}><span className="block h-full rounded-full bg-brand-500 transition-[width] duration-200" style={{ width: p + "%" }} /></span>
-    </span>
-  );
-}
-/** A time picked from an hour, the minutes and am / pm, so it can only be a real time. Gives "9:30 am". */
-function TimePick({ value, onChange, label }: { value: string; onChange: (v: string) => void; label: string }) {
-  const m = /^(\d{1,2}):(\d{2})\s*(am|pm)$/i.exec(value.trim()), h = m ? m[1] : "", mi = m ? m[2] : "00", ap = m ? m[3].toLowerCase() : "am";
-  const put = (H: string, M: string, A: string) => onChange(H ? `${H}:${M} ${A}` : "");
-  const sel = "input h-10 w-auto py-0";
-  return (
-    <span className="flex flex-wrap items-center gap-2 py-1" role="group" aria-label={label}>
-      <select aria-label="Hour" className={sel} value={h} onChange={(e) => put(e.target.value, mi, ap)}><option value="">Hour</option>{Array.from({ length: 12 }, (_, i) => String(i + 1)).map((x) => <option key={x}>{x}</option>)}</select>
-      <span aria-hidden>:</span>
-      <select aria-label="Minutes" className={sel} value={mi} onChange={(e) => put(h, e.target.value, ap)}>{Array.from({ length: 12 }, (_, i) => String(i * 5).padStart(2, "0")).map((x) => <option key={x}>{x}</option>)}</select>
-      <span className="inline-flex overflow-hidden rounded-xl border border-ink-600" role="radiogroup" aria-label="am or pm">{["am", "pm"].map((x) => <button key={x} type="button" role="radio" aria-checked={ap === x} className={`px-3 py-2 text-sm font-semibold ${ap === x ? "bg-brand-500 text-white" : "text-ink-300 hover:bg-ink-800"}`} onClick={() => put(h, mi, x)}>{x}</button>)}</span>
     </span>
   );
 }
@@ -323,8 +310,8 @@ function DesignPageInner({ studio, index, onIndex }: { studio?: Studio; index?: 
       <div className={`flex flex-wrap items-end gap-2 rounded-3xl border bg-ink-900 p-2 pl-4 shadow-xl transition focus-within:border-brand-400 ${field$ || cur?.type === "file" ? "border-ink-600" : "border-ink-700 opacity-80"}`}>
         {cur?.type === "long"
           ? <textarea ref={field} aria-label={cur.ask(a)} rows={3} className="min-h-[3.5rem] min-w-0 flex-1 basis-[12rem] resize-none bg-transparent py-2 text-[15px] text-ink-100 outline-none placeholder:text-ink-500" placeholder={cur.ph?.(a)} value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); submit(); } }} />
-          : cur?.input === "time" ? <span className="min-w-0 flex-1 basis-[12rem]"><TimePick value={text} onChange={setText} label={cur.ask(a)} /></span>
-          : cur?.input === "date" ? <input ref={field} type="date" min="2000-01-01" max="2099-12-31" aria-label={cur.ask(a)} className="min-w-0 flex-1 basis-[12rem] bg-transparent py-2.5 text-[15px] text-ink-100 outline-none" value={/^\d{4}-\d{2}-\d{2}$/.test(text) ? text : ""} onChange={(e) => setText(e.target.value)} />
+          : cur?.input === "time" ? <span className="flex min-w-0 flex-1 basis-[12rem]"><TimeField bare value={text} onChange={setText} label={cur.ask(a)} /></span>
+          : cur?.input === "date" ? <span className="flex min-w-0 flex-1 basis-[12rem]"><DateField bare value={text} onChange={setText} label={cur.ask(a)} /></span>
           : <input ref={field} aria-label={cur ? cur.ask(a) : "Your answer"} className="min-w-0 flex-1 basis-[12rem] bg-transparent py-2.5 text-[15px] text-ink-100 outline-none placeholder:text-ink-500" disabled={!field$ || reading} placeholder={reading ? "Reading…" : writing ? "Writing your text…" : !cur ? "All done. Your preview is ready." : cur.id === "kind" ? "Tell me what you want, e.g. an online shop for my candles" : field$ ? cur.ph?.(a) : cur.type === "many" ? "Tap what applies above, then press Done" : cur.type === "file" ? "Choose a file, or skip" : "Pick one of the choices above"} value={field$ ? text : ""} onChange={(e) => setText(e.target.value)} />}
         {cur?.type === "file" && !NO_UPLOAD.includes(cur.id) && <>
           <input ref={pick} type="file" accept={cur.accept} multiple={cur.id === "photos" || cur.id === "banner"} className="sr-only" aria-label={cur.ask(a)} onChange={(e) => choose(cur, e.target.files?.[0], Array.from(e.target.files || []).slice(1))} />
@@ -351,8 +338,8 @@ function DesignPageInner({ studio, index, onIndex }: { studio?: Studio; index?: 
         ? <RowsField key={cur.id + (a.kind || "")} step={cur} value={text} onChange={setText} label={cur.ask(a)} />
         : cur.type === "long"
         ? <textarea ref={field} aria-label={cur.ask(a)} rows={4} className="input min-h-[7rem] resize-y" placeholder={cur.ph?.(a)} value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); submit(); } }} />
-        : cur.input === "time" ? <TimePick value={text} onChange={setText} label={cur.ask(a)} />
-        : cur.input === "date" ? <input ref={field} type="date" min="2000-01-01" max="2099-12-31" aria-label={cur.ask(a)} className="input w-auto self-start" value={/^\d{4}-\d{2}-\d{2}$/.test(text) ? text : ""} onChange={(e) => setText(e.target.value)} />
+        : cur.input === "time" ? <TimeField key={cur.id} autoFocus value={text} onChange={setText} label={cur.ask(a)} />
+        : cur.input === "date" ? <DateField key={cur.id} autoFocus value={text} onChange={setText} label={cur.ask(a)} />
         : field$ ? <input ref={field} aria-label={cur.ask(a)} className="input" disabled={reading} placeholder={reading ? "Reading…" : cur.ph?.(a)} value={text} onChange={(e) => setText(e.target.value)} /> : null}
       {cur.id === "doc" && a.kind === "portfolio" && (
         <label className="flex flex-col gap-1 text-xs text-ink-400">Your LinkedIn profile URL (optional)
@@ -504,8 +491,8 @@ function AnswerEdit({ s, a, onSave, onCancel }: { s: Step; a: Answers; onSave: (
                     <div className="flex gap-2"><button type="button" className="btn btn-pri btn-sm" disabled={!pick.length && req(s)} onClick={() => save(s, pick.join(","))}>Save</button><button type="button" className="btn btn-sm" onClick={() => setEdit(null)}>Cancel</button></div></>}
                   {(s.type === "text" || s.type === "long") && <>
                     {s.type === "long" ? <textarea autoFocus rows={4} className="input text-[14px]" value={draft} onChange={(e) => setDraft(e.target.value)} placeholder={s.ph?.(a) || ""} />
-                      : s.input === "time" ? <TimePick value={draft} onChange={setDraft} label={s.ask(a)} />
-                      : s.input === "date" ? <input autoFocus type="date" min="2000-01-01" max="2099-12-31" className="input h-10 w-auto py-0 text-[14px]" value={/^\d{4}-\d{2}-\d{2}$/.test(draft) ? draft : ""} onChange={(e) => setDraft(e.target.value)} />
+                      : s.input === "time" ? <TimeField small autoFocus value={draft} onChange={setDraft} label={s.ask(a)} />
+                      : s.input === "date" ? <DateField small autoFocus value={draft} onChange={setDraft} label={s.ask(a)} />
                       : <input autoFocus className="input h-10 py-0 text-[14px]" value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && (draft.trim() || !req(s))) save(s, draft); }} placeholder={s.ph?.(a) || ""} />}
                     {s.type === "long" && <p className="text-xs text-ink-500">One item per line.</p>}
                     <div className="flex gap-2"><button type="button" className="btn btn-pri btn-sm" disabled={!draft.trim() && req(s)} onClick={() => save(s, draft)}>Save</button><button type="button" className="btn btn-sm" onClick={() => setEdit(null)}>Cancel</button></div></>}

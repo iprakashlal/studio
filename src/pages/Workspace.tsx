@@ -197,7 +197,7 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
           <nav className="hidden flex-wrap gap-1 border-b border-ink-700 sm:flex lg:flex-col lg:flex-nowrap lg:gap-0.5 lg:border-b-0" role="tablist" aria-label="Settings" aria-orientation="vertical">
             {tabList.map(([k, l]) => <a key={k} href={`#/settings${k === "general" ? "" : "/" + k}`} role="tab" aria-selected={tab === k}
               className={`-mb-px flex items-center gap-2.5 border-b-2 px-3 py-2 text-sm font-semibold transition lg:mb-0 lg:rounded-xl lg:border-b-0 lg:py-2.5 ${tab === k ? "border-brand-400 text-ink-100 lg:bg-brand-500/15" : "border-transparent text-ink-400 hover:text-ink-100 lg:hover:bg-ink-800"}`}>
-              {SUB_TABS.includes(k) && <span aria-hidden className="hidden w-3 lg:block" />}<SetIcon k={k} on={tab === k} />{l}</a>)}
+              <SetIcon k={k} on={tab === k} />{l}</a>)}
           </nav>
           <SettingsFind tab={tab} tabs={tabList} />
         </aside>

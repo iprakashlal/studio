@@ -17,8 +17,8 @@ import { DIY_WORDS, NOTICE_TEXT, COLOUR_SLOTS, GROUPS, pagesChoice, readColsAnsw
 import { AiDraw } from "../ui/AiDraw";
 import { LogoMaker } from "../ui/LogoMaker";
 import { designHost, otpCheck, otpSend, passLive, readPage, readPass, saveDraft, submitQuery, understandText, writePass, type DesignHost, type Pass } from "../lib/designapi";
-import { pdfLines } from "../lib/pdftext";
-import { DOC_ACCEPT, DOC_KINDS, DOC_MAX_MB, fileText } from "../lib/doctext";
+import { DOC_ACCEPT, DOC_KINDS, DOC_MAX_MB, fileDoc, type DocPic } from "../lib/doctext";
+import { oneLine, readDoc, rowsOf, textOf, type DocRead } from "../lib/docread";
 import { watchDevtools } from "../lib/devtools";
 import type { Studio, StudioIndex } from "../lib/studio";
 
@@ -359,7 +359,8 @@ function DesignPageInner({ studio, index, onIndex }: { studio?: Studio; index?: 
       else if (s.type === "choice") {
         // The pick: "Surprise me" where it is offered; else the choice the document itself names (its kind of business, say); else "Something else"; else the first.
         const o = s.options?.(n) || [], said = ` ${n.name || ""} ${n.about || ""} ${n.doctext || ""} `.toLowerCase();
-        const named = o.filter((x) => { const l = x.label.toLowerCase().replace(/s$/, ""); return l.length >= 4 && said.includes(l); }).sort((x, y) => y.label.length - x.label.length)[0];
+        const times = (x: { label: string }) => { const l = x.label.toLowerCase().replace(/s$/, "").replace(/é/g, "e"); return l.length >= 4 ? said.replace(/é/g, "e").split(l).length - 1 : 0; };
+        const named = o.filter((x) => times(x) > 0).sort((x, y) => times(y) - times(x) || y.label.length - x.label.length)[0];
         const pick = o.find((x) => /surprise/i.test(x.label)) || named || o.find((x) => /something else|^other|^any\b/i.test(x.label)) || o[0];
         if (!pick) break; n[s.id] = pick.v;
       }
@@ -443,10 +444,34 @@ function DesignPageInner({ studio, index, onIndex }: { studio?: Studio; index?: 
   };
   /** What a document or page says fills in the answers it can (the questions it covers are then not asked). */
   /** kind: set when the file or link is the very first thing given (the quick start): the kind of website it reads as. */
-  const applyDoc = (label: string, text: string, link: string, meta?: { name?: string; about?: string }, kind?: string) => {
+  /** rd: what the document's own labels, tables and price lists say (more exact than a guess from its running text); pics: its pictures. */
+  const applyDoc = (label: string, text: string, link: string, meta?: { name?: string; about?: string }, kind?: string, rd?: DocRead, pics: DocPic[] = []) => {
     const a0 = kind ? { ...a, kind } : a;
-    const fill = fromDoc(text, a0, meta), got = Object.keys(fill).filter((x) => x !== "docsec"), secs = sectionNames(unpackSections(fill.docsec));
-    setA((o) => { const o2 = kind ? { ...o, kind } : o; const n = { ...o2, doc: label, ...(link ? { doclink: link } : {}), ...(text ? { doctext: text } : {}), ...fromDoc(text, o2, meta), ...(got.length ? { docfrom: got.join(",") } : {}) }; return kind ? fastForward(n) : n; });
+    // What the document states outright (a labelled name, a priced list) takes the place of the guesses; never of what the person typed.
+    const stated = (o: Answers): Answers => {
+      if (!rd) return {}; const n: Answers = {}, K = o.kind || "";
+      for (const [k0, v] of Object.entries(rd.fields)) { if (o[k0] || (k0 === "address" && K === "portfolio")) continue; n[k0] = k0 === "about" ? oneLine(v) : v; }
+      if (rd.fields.about && rd.fields.about.length > 80 && !o.story && !rd.fields.story) n.story = rd.fields.about;
+      if (rd.items.length >= 2 && !o.items) {
+        const list = rd.items.slice(0, 40);
+        n.items = list.map((i) => (i.price ? `${i.name} - ${i.price}` : i.name)).join("\n");
+        n.docitems = JSON.stringify(list.map((i) => ({ n: i.name, d: i.desc.length > 260 ? i.desc.slice(0, 260).replace(/\s+\S*$/, "") + "…" : i.desc, c: i.cat, v: i.diet || "" })));
+        if (rd.money) { n.docmoney = rd.money; if (K === "store" && !o.currency) { const cur = ({ "₹": "INR", "$": "USD", "€": "EUR", "£": "GBP", AED: "AED" } as Record<string, string>)[rd.money]; if (cur) n.currency = cur; } }
+        const groups = [...new Set(list.map((i) => i.cat).filter(Boolean))]; if (K === "store" && groups.length >= 2 && !o.cats) n.cats = groups.join("\n");
+      }
+      return n;
+    };
+    const fill = { ...fromDoc(text, a0, meta), ...stated(a0) }, got = Object.keys(fill).filter((x) => !/^doc/.test(x)), secs = sectionNames(unpackSections(fill.docsec));
+    setA((o) => { const o2 = kind ? { ...o, kind } : o; const n = { ...o2, doc: label, ...(link ? { doclink: link } : {}), ...(text ? { doctext: text } : {}), ...fromDoc(text, o2, meta), ...stated(o2), ...(got.length ? { docfrom: got.join(",") } : {}) }; return kind ? fastForward(n) : n; });
+    // Its pictures: the one beside each item goes with that item; the others become the site's own pictures (top picture, gallery).
+    if (pics.length) {
+      const K = a0.kind || "", list = (rd?.items || []).slice(0, 40), used = new Set<number>(), per: string[] = list.map(() => "");
+      const placed = pics.some((x) => x.y !== undefined) && list.some((i) => i.y !== undefined);
+      if (placed) list.forEach((it, i) => { let best = -1, d = 110; pics.forEach((x, j) => { if (used.has(j) || x.page !== it.page || x.y === undefined || it.y === undefined) return; const dy = Math.abs(x.y - (it.y + 18)); if (dy < d) { d = dy; best = j; } }); if (best >= 0) { used.add(best); per[i] = pics[best].url; } });
+      else if (list.length && pics.length >= list.length) { const skip = pics.length - list.length; list.forEach((_it, i) => { per[i] = pics[skip + i].url; used.add(skip + i); }); }
+      const rest = pics.filter((_x, j) => !used.has(j)).map((x) => x.url), top = rest.length ? rest : per.filter(Boolean).slice(0, 1);
+      setFiles((o) => ({ ...o, pics: { ...(o.pics || {}), ...(per.some(Boolean) ? { items: per } : {}), ...(K === "restaurant" && top.length ? { photos: top.slice(0, 5) } : K === "store" && top.length ? { banner: top.slice(0, 2) } : (K === "business" || K === "events") && top.length ? { bimage: top.slice(0, 1) } : K === "portfolio" && rest.length ? { photo: rest.slice(0, 1) } : {}) } }));
+    }
     const found = [...got.map((x) => (STEP_LABEL[x] || x).toLowerCase()), ...secs.filter((x) => !got.includes(x))];
     toast(kind ? `Read it${found.length ? `: found ${found.join(", ")}` : ""}. Making ${KIND_SAY[kind] || "a website"}; you can change any answer.` : found.length ? `Found ${found.join(", ")}. You can change any answer.` : "Read it. It will help us write your text.");
     // The Studio's AI (when it is the chosen engine) reads it more closely: what it finds replaces the rule-based guesses, never what the person typed.
@@ -455,7 +480,7 @@ function DesignPageInner({ studio, index, onIndex }: { studio?: Studio; index?: 
       setA((o) => {
         const typed = new Set((o.docfrom || "").split(",").filter(Boolean)), n: Answers = {}, put = (k: string, v: any) => { if (k === curRef.current?.id) return; /* (the question they are answering now is theirs: it never fills in under their hands) */ if (typeof v === "string" && v.trim() && (!o[k] || typed.has(k))) n[k] = v.trim(); };
         for (const k of ["name", "about", "city", "story", "usp", "phone", "email", "hours", "address", "social"]) { if (k === "address" || k === "hours" || k === "social") { if (!o[k]) put(k, f[k]); } else put(k, f[k]); }
-        if (Array.isArray(f.items) && f.items.length && curRef.current?.id !== "items" && (!o.items || typed.has("items"))) n.items = f.items.filter((x: any) => typeof x === "string" && x.trim()).join("\n");
+        if (Array.isArray(f.items) && f.items.length && curRef.current?.id !== "items" && !o.docitems && (!o.items || typed.has("items"))) n.items = f.items.filter((x: any) => typeof x === "string" && x.trim()).join("\n");
         if (f.sections && typeof f.sections === "object") { const pk = packSections({ ...unpackSections(o.docsec), ...f.sections }); if (pk) n.docsec = pk; }
         const keys = Object.keys(n).filter((x) => x !== "docsec"); if (!keys.length && !n.docsec) return o;
         return { ...o, ...n, docfrom: [...new Set([...typed, ...keys])].join(",") };
@@ -470,17 +495,17 @@ function DesignPageInner({ studio, index, onIndex }: { studio?: Studio; index?: 
     setReading(true);
     try {
       if (f) {
-        const text = (await fileText(f)).slice(0, 12000);
+        const doc = await fileDoc(f), full = textOf(doc.rows), text = full.slice(0, 12000);
         if (text.length < 30) throw new Error("We couldn't find any text in that file (a scanned PDF has none). Try another file, or answer the questions.");
-        const m = labelled(text);
-        setExpress(true); applyDoc(f.name.slice(0, 100), text, "", m.name || m.about ? m : undefined, guessDocKind(text));
+        const rd = readDoc(doc.rows), m = labelled(text);
+        setExpress(true); applyDoc(f.name.slice(0, 100), text, "", rd.fields.name || m.name || m.about ? { name: rd.fields.name || m.name, about: rd.fields.about ? oneLine(rd.fields.about) : m.about } : undefined, guessDocKind(full), rd, doc.pics);
       } else {
         let url = (link || "").trim(); if (!url) return; if (!/^https?:\/\//i.test(url)) url = "https://" + url.replace(/^\/+/, "");
         let h$ = ""; try { h$ = new URL(url).hostname.replace(/^www\./, ""); if (!h$.includes(".")) throw 0; } catch { throw new Error("That doesn't look like a web address."); }
         const r = host ? await readPage(host, url) : { error: "Reading a link needs the Studio's database." } as any;
         if (!(r.text || r.title)) throw new Error((r.error ? r.error + " " : "") + "Try a file instead, or answer the questions.");
         const text = [r.site || r.title || "", r.description || "", r.text || ""].filter(Boolean).join("\n");
-        setExpress(true); applyDoc(h$, text, url, { name: (r.site || (r.title || "").split(/\s+[-–|·:]\s+/)[0] || "").trim(), about: r.description }, guessDocKind(text));
+        setExpress(true); applyDoc(h$, text, url, { name: (r.site || (r.title || "").split(/\s+[-–|·:]\s+/)[0] || "").trim(), about: r.description }, guessDocKind(text), readDoc(rowsOf(text)));
       }
       setQlink("");
     } catch (e: any) { toast(e?.message || "Couldn't read that.", "bad"); }
@@ -510,9 +535,10 @@ function DesignPageInner({ studio, index, onIndex }: { studio?: Studio; index?: 
       } else if (s.id === "logo") { const u = await fitImage(f); setFiles((o) => ({ ...o, logo: u })); answer(s, "added"); }
       else if (s.id === "doc") {
         setReading(true);
-        const text = (await pdfLines(f)).join("\n").slice(0, 12000);
+        const doc = await fileDoc(f), text = textOf(doc.rows).slice(0, 12000);
         if (text.length < 30) throw new Error("We couldn't find any text in that PDF (it may be a scan). Try another one, or skip.");
-        applyDoc(f.name.slice(0, 100), text, "");
+        const rd = readDoc(doc.rows);
+        applyDoc(f.name.slice(0, 100), text, "", rd.fields.name ? { name: rd.fields.name, about: rd.fields.about ? oneLine(rd.fields.about) : undefined } : undefined, undefined, rd, doc.pics);
       }
       else { const buf = await f.arrayBuffer(); if (new TextDecoder().decode(new Uint8Array(buf).slice(0, 4)) !== "%PDF") throw new Error("That doesn't look like a PDF."); setFiles((o) => ({ ...o, menu: { name: f.name.slice(0, 100), b64: toB64(buf) } })); answer(s, f.name.slice(0, 100)); }
     } catch (e: any) { toast(e?.message || "Couldn't read that file.", "bad"); }
@@ -704,7 +730,7 @@ function DesignPageInner({ studio, index, onIndex }: { studio?: Studio; index?: 
                   onDragOver={(e) => { e.preventDefault(); }} onDrop={(e) => { e.preventDefault(); const f = e.dataTransfer.files?.[0]; if (f) quick(f); }}>
                   <div>
                     <p className="text-[15px] font-bold text-ink-100">Already have your details? Upload them and skip the questions.</p>
-                    <p className="mt-0.5 text-[13px] text-ink-400">Choose a {DOC_KINDS} file (up to {DOC_MAX_MB} MB), or paste your current website's link. We read it, fill in what it says and show your preview straight away. The file is read on your device.</p>
+                    <p className="mt-0.5 text-[13px] text-ink-400">Choose a {DOC_KINDS} file (up to {DOC_MAX_MB} MB), or paste your current website's link. We read it in whatever order it is written (your details, hours, and your products, dishes or services with their descriptions, prices and pictures), fill it all in and show your preview straight away. The file is read on your device.</p>
                   </div>
                   <div className="flex flex-wrap items-stretch gap-2">
                     <input ref={qpick} type="file" accept={DOC_ACCEPT} className="sr-only" aria-label="Upload a file with your details" onChange={(e) => quick(e.target.files?.[0])} />

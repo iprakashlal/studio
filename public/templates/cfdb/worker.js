@@ -56,7 +56,7 @@ var CFDB_UPGRADES = [
     "create index if not exists enquiries_ref on enquiries (site, ref)"
   ] }
 ];
-var CFDB_VERSION = 111;
+var CFDB_VERSION = 112;
 var CFDB_WORKER_NAME = "picaffectz-db";
 
 // src/lib/diylook.ts
@@ -2837,6 +2837,10 @@ function dqDesignPub(d) {
     if (g.tags === false) o.tags = false;
     if (tx2(g.title, 80)) o.title = tx2(g.title, 80);
     if (tx2(g.intro, 400)) o.intro = tx2(g.intro, 400);
+    if (Array.isArray(g.reserved)) {
+      const l = [...new Set(g.reserved.filter((v) => typeof v === "string" && /^[\w-]{1,60}$/.test(v)))].slice(0, 3e3);
+      if (l.length) o.reserved = l;
+    }
     if (Object.keys(o).length) out.gallery = o;
   }
   if (d.themes && typeof d.themes === "object") {

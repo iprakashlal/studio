@@ -386,7 +386,12 @@ const codeKey = (v?: string) => { const m = /^([a-z])[\s-]*0*(\d{1,4})$/i.exec((
 const hash = (s: string) => { let h = 0; for (const c of s) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h; };
 function poolOf(kind: Kind): Theme[] { return kind === "business" ? BIZ_THEMES : kind === "restaurant" ? REST_THEMES : kind === "events" ? EVT_THEMES : THEMES; }
 /** The Studio's own themes of a type (the ones its Themes page shows). */
-export const myThemesOf = (kind: Kind): Theme[] => limitThemes(poolOf(kind), undefined, kind);
+export const myThemesOf = (kind: Kind): Theme[] => withoutReserved(limitThemes(poolOf(kind), undefined, kind));
+/** Leaves out the themes the owner reserved (Settings → Themes), unless that would leave none. */
+export function withoutReserved<T extends { id: string }>(list: T[]): T[] {
+  const r = readDesignSettings().gallery?.reserved; if (!r?.length) return list;
+  const set = new Set(r), l = list.filter((t) => !set.has(t.id)); return l.length ? l : list;
+}
 /** The themes the Studio's owner offers (all of them unless the owner picked some). */
 function offered(kind: Kind): Theme[] { const al = readDesignSettings().themes?.[kind], all = myThemesOf(kind), l = al?.length ? all.filter((t) => al.includes(t.id)) : all; return l.length ? l : all; }
 

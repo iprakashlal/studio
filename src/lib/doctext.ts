@@ -150,3 +150,13 @@ export async function fileDoc(f: File): Promise<DocFile> {
   if (sig.startsWith("PK")) try { const zip = await JSZip.loadAsync(await f.arrayBuffer()); pics = await zipPics(zip, zip.file("word/document.xml") ? "word/media/" : "xl/media/"); } catch { /* the words are enough */ }
   return { rows: rowsOf(text), pics };
 }
+
+/** Which picture goes with which item: in a PDF the one beside it on the page; otherwise in order, when there is one for each.
+ *  per: a picture for each item ("" where none); rest: the pictures that belong to no item. */
+export function pairPics(items: { page?: number; y?: number; img?: string }[], pics: DocPic[]): { per: string[]; rest: string[] } {
+  const used = new Set<number>(), per = items.map(() => "");
+  const placed = pics.some((x) => x.y !== undefined) && items.some((i) => i.y !== undefined);
+  if (placed) items.forEach((it, i) => { let best = -1, d = 110; pics.forEach((x, j) => { if (used.has(j) || x.page !== it.page || x.y === undefined || it.y === undefined) return; const dy = Math.abs(x.y - (it.y + 18)); if (dy < d) { d = dy; best = j; } }); if (best >= 0) { used.add(best); per[i] = pics[best].url; } });
+  else if (items.length && pics.length >= items.length) { const skip = pics.length - items.length; items.forEach((_it, i) => { per[i] = pics[skip + i].url; used.add(skip + i); }); }
+  return { per, rest: pics.filter((_x, j) => !used.has(j)).map((x) => x.url) };
+}

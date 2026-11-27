@@ -186,7 +186,7 @@ export function ProjectView({ studio, index, project, session, onIndex }: { stud
     ...((project.publish || project.host) && !demo ? [{ id: "live" as Modal, label: "Live sites", hint: "When each live site last changed, and pull its content." }] : []),
     { id: "history", label: `History${project.exports.length ? ` (${project.exports.length})` : ""}`, hint: "Earlier versions you published or exported: download them or load one into the editor." },
     { id: "export", label: "Export / Import ZIP", hint: "Download the whole site as a ZIP file, or load one back into this project." },
-    ...(!demo ? [{ id: "write" as Modal, label: "Write text from a site", hint: "Write new, original text for your brand from a site in the same line of business." }] : []),
+    ...(!demo ? [{ id: "write" as Modal, label: "Write text from a site", hint: "Write new, original text for your brand from a site in the same line of business. Or fill the site from your own document: details, hours, and items with descriptions, prices and pictures." }] : []),
   ] as { id: Modal; label: string; hint: string }[]).filter((t) => mayTool(t.id));
   const pinned = project.pinned ?? index.pinned ?? ["host"];
   const [pinBusy, setPinBusy] = useState(false);

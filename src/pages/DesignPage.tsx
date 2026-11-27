@@ -703,7 +703,7 @@ function DesignPageInner({ studio, index, onIndex }: { studio?: Studio; index?: 
               <ChatBot><p className="m-0 text-[14px] leading-snug text-ink-200">{s.ask(a)}</p></ChatBot>
               {editId === s.id
                 ? <div className="chat-in pl-[42px]"><AnswerEdit s={s} a={a} onSave={saveAnswer} onCancel={() => setEditId(null)} /></div>
-                : <ChatYou onEdit={() => startEdit(s)} label={STEP_LABEL[s.id] || s.id}>{a[s.id] ? sayAnswer(s, a).replace(/\s*\(from your document\)$/, "") : <i className="opacity-80">Skipped</i>}</ChatYou>}
+                : <ChatYou {...(s.id === "kind" && a.how === "file" && a.doc ? { locked: "Set by the file you uploaded. To make another kind of website, press Start again." } : { onEdit: () => startEdit(s) })} label={STEP_LABEL[s.id] || s.id}>{a[s.id] ? sayAnswer(s, a).replace(/\s*\(from your document\)$/, "") : <i className="opacity-80">Skipped</i>}</ChatYou>}
             </div>
           ))}
           {!needMail && chatStarted && cur && <ChatBot><section aria-live="polite"><h2 className="m-0 text-[15px] font-semibold leading-snug">{cur.ask(a)}</h2>{cur.help && cur.help(a) && <p className="mb-0 mt-1 text-[13px] leading-relaxed text-ink-400">{cur.help(a)}</p>}{reading && <p className="mb-0 mt-2 inline-flex items-center gap-2 text-sm text-ink-300"><Spinner />Reading it…</p>}</section></ChatBot>}
@@ -1125,12 +1125,15 @@ function ChatBot({ children, typing, stack }: { children: React.ReactNode; typin
   );
 }
 /** The person's answer (right). An answer can be changed from here. */
-function ChatYou({ children, onEdit, label }: { children: React.ReactNode; onEdit?: () => void; label?: string }) {
+function ChatYou({ children, onEdit, label, locked }: { children: React.ReactNode; onEdit?: () => void; label?: string; /** Can't be changed: why (shown with a lock). */ locked?: string }) {
   const you = readDesignSettings().chat?.you, st = you ? ({ ...bubVars(you), background: you, color: onColour(you), "--bub": you } as React.CSSProperties) : undefined;
   return (
     <div className="chat-in group flex justify-end">
       <div className="flex max-w-[75%] items-end gap-2">
-        {onEdit && <button type="button" className="mb-1 rounded px-1.5 text-[11px] text-ink-500 opacity-0 transition hover:text-ink-200 focus:opacity-100 group-hover:opacity-100 max-sm:opacity-100" onClick={onEdit} aria-label={`Change your answer: ${label || ""}`}>Edit</button>}
+        {onEdit && <button type="button" className="mb-1 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[12px] font-medium text-ink-400 transition hover:bg-ink-800/60 hover:text-ink-100" onClick={onEdit} aria-label={`Change your answer: ${label || ""}`}>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>Edit</button>}
+        {locked && <span className="mb-1 inline-flex cursor-help items-center gap-1 px-1.5 py-0.5 text-[12px] text-ink-400" title={locked}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><rect x="4" y="11" width="16" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></svg><span className="sr-only">{locked}</span></span>}
         <div style={st} className="diy-bub diy-you break-words rounded-2xl rounded-br-md bg-brand-500 px-5 py-3 text-[14.5px] font-semibold leading-snug text-white shadow-sm">{children}</div>
       </div>
     </div>

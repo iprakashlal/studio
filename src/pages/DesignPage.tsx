@@ -695,7 +695,7 @@ function DesignPageInner({ studio, index, onIndex }: { studio?: Studio; index?: 
         {!needMail && cur && (
           <div className="sticky bottom-0 -mx-3 border-t border-ink-800 bg-ink-950/95 px-3 pb-4 pt-4 backdrop-blur sm:-mx-6 sm:px-6">
             <div className="diy-col mx-auto flex max-h-[62vh] max-w-5xl flex-col gap-4 overflow-y-auto px-0.5 py-0.5">
-              {!chatStarted ? <>{chips(cur)}<div className="flex items-center gap-3 text-[11px] uppercase tracking-wide text-ink-500"><span className="h-px flex-1 bg-ink-800" />{word("typeOwn")}<span className="h-px flex-1 bg-ink-800" /></div>{bar}
+              {!chatStarted ? <>{chips(cur)}
                 {/* The quick start: a document or a website link fills the answers and goes straight to the preview. */}
                 <div className="flex items-center gap-3 text-[11px] uppercase tracking-wide text-ink-500"><span className="h-px flex-1 bg-ink-800" />or<span className="h-px flex-1 bg-ink-800" /></div>
                 <section aria-label="Start from a file or a link" className="mx-auto flex w-full max-w-5xl flex-col gap-3 rounded-2xl border border-dashed border-ink-700 bg-ink-900/40 p-4"
@@ -706,13 +706,15 @@ function DesignPageInner({ studio, index, onIndex }: { studio?: Studio; index?: 
                   </div>
                   <div className="flex flex-wrap items-stretch gap-2">
                     <input ref={qpick} type="file" accept={DOC_ACCEPT} className="sr-only" aria-label="Upload a file with your details" onChange={(e) => quick(e.target.files?.[0])} />
-                    <button type="button" className="btn btn-pri" disabled={reading} onClick={() => qpick.current?.click()}>{reading ? "Reading…" : "Upload a file"}</button>
-                    <div className="diy-field diy-join flex min-w-[16rem] flex-1 items-stretch rounded-xl border border-ink-700 bg-ink-900 focus-within:border-brand-400">
-                      <input className="input min-w-0 flex-1" inputMode="url" aria-label="Your website link" placeholder="or paste your website link, e.g. www.mybusiness.com" disabled={reading} value={qlink} onChange={(e) => setQlink(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); quick(undefined, qlink); } }} />
-                      <button type="button" className="btn btn-pri shrink-0 px-5" disabled={reading || !qlink.trim()} onClick={() => quick(undefined, qlink)}>Read my site</button>
+                    <div className="diy-field flex min-w-[16rem] flex-1 flex-wrap items-center gap-2 rounded-3xl border border-ink-600 bg-ink-900 p-2 pl-4 transition focus-within:border-brand-400">
+                      <input className="min-w-0 flex-1 basis-[12rem] bg-transparent py-2 text-[15px] text-ink-100 outline-none placeholder:text-ink-500" inputMode="url" aria-label="Your website link" placeholder="Paste your website link, e.g. www.mybusiness.com" disabled={reading} value={qlink} onChange={(e) => setQlink(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); quick(undefined, qlink); } }} />
+                      <button type="button" className="btn btn-pri btn-sm rounded-full" disabled={reading || !qlink.trim()} onClick={() => quick(undefined, qlink)}>Read my site</button>
+                      <span className="text-[12px] text-ink-500" aria-hidden>or</span>
+                      <button type="button" className="btn btn-pri btn-sm rounded-full" disabled={reading} onClick={() => qpick.current?.click()}>{reading ? "Reading…" : "Upload a file"}</button>
                     </div>
                   </div>
-                </section></> : <>{(cur.type === "choice" || cur.type === "many") && chips(cur)}{cardBar}</>}
+                </section>
+                <div className="flex items-center gap-3 text-[11px] uppercase tracking-wide text-ink-500"><span className="h-px flex-1 bg-ink-800" />{word("typeOwn")}<span className="h-px flex-1 bg-ink-800" /></div>{bar}</> : <>{(cur.type === "choice" || cur.type === "many") && chips(cur)}{cardBar}</>}
             </div>
           </div>
         )}

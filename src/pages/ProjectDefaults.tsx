@@ -63,13 +63,19 @@ export function ProjectDefaultsTab({ studio, index, onIndex, demo }: { studio: S
   return (
     <div className="flex flex-col gap-4 pb-6">
       <p className="max-w-4xl text-sm text-ink-300">What every project of a website type starts with and keeps, set once here: email wording and accounts, the privacy policy and terms, shop policies, the cookie banner's wording, form consent and spam protection, the footer credit, GST invoices and tax, checkout rules and the ways to pay. A section switched on here goes into each site at its next publish or <b className="text-ink-100">Push updates</b>; the site's own admin page shows it locked, with a switch to use its own instead.</p>
-      <div className="flex flex-wrap gap-1 self-start rounded-xl border border-ink-700 bg-ink-900 p-1" role="tablist" aria-label="Website type">
+      {/* The website types on the left and Save on the right, in one row that stays under the header while scrolling. */}
+      <div className="sticky top-14 z-20 -mx-1 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl bg-ink-950/90 px-1 py-1.5 backdrop-blur">
+      <div className="flex flex-wrap gap-1 rounded-xl border border-ink-700 bg-ink-900 p-1" role="tablist" aria-label="Website type">
         {PD_KINDS.map((k) => <button key={k} type="button" role="tab" aria-selected={kind === k} onClick={() => setKind(k)}
           className={`flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-semibold transition ${kind === k ? "bg-brand-500/20 text-ink-100" : "text-ink-400 hover:bg-ink-800 hover:text-ink-100"}`}>
           {TYPE_NAME[k] || TEMPLATES[k]?.name || k}{onCount(k) > 0 && <span className="rounded-full bg-brand-500/30 px-1.5 text-[11px] font-bold text-brand-200">{onCount(k)}</span>}</button>)}
       </div>
+        <span className="flex-1" />
+        <span className="text-[12.5px] text-ink-400" aria-live="polite">{demo ? "Not saved in the demo." : dirty ? "Unsaved changes" : "All changes saved"}</span>
+        <button type="button" className="btn btn-pri" disabled={!dirty || busy || demo} onClick={save}>{busy ? "Saving…" : "Save project defaults"}</button>
+      </div>
       <div className="grid gap-4 lg:grid-cols-[15rem_minmax(0,1fr)] lg:items-start">
-        <nav className="card flex flex-row gap-1 overflow-x-auto p-2 lg:sticky lg:top-20 lg:flex-col" aria-label="Sections">
+        <nav className="card flex flex-row gap-1 overflow-x-auto p-2 lg:sticky lg:top-32 lg:flex-col" aria-label="Sections">
           {secs.map((id) => { const on = secOn(pd[kind]?.[id]), m = PD_SECTIONS.find((s) => s.id === id)!; return (
             <button key={id} type="button" aria-current={sec === id ? "true" : undefined} onClick={() => setSec(id)}
               className={`flex flex-none items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[13.5px] font-semibold transition ${sec === id ? "bg-ink-800 text-ink-100" : "text-ink-300 hover:bg-ink-800/60"}`}>
@@ -88,10 +94,6 @@ export function ProjectDefaultsTab({ studio, index, onIndex, demo }: { studio: S
           {!secOn(S) ? <p className="rounded-lg border border-dashed border-ink-600 px-3 py-3 text-sm text-ink-400">Switched off: each site keeps its own {meta.label.toLowerCase()}.</p>
             : S.v == null && !(PD_CONN[sec] && sec !== "pay") ? <p className="text-sm text-ink-400">{seeding ? "Loading the standard wording…" : "The standard wording could not be loaded. Reload the page to try again."}</p> : <Body kind={kind} sec={sec} S={S} where={where} bump={bump} demo={demo} />}
         </section>
-      </div>
-      <div className="sticky bottom-3 z-10 flex items-center gap-3 self-start rounded-xl border border-ink-600 bg-ink-900/95 px-3 py-2 shadow-xl backdrop-blur">
-        <button type="button" className="btn btn-pri" disabled={!dirty || busy || demo} onClick={save}>{busy ? "Saving…" : "Save project defaults"}</button>
-        <span className="text-[12.5px] text-ink-400">{demo ? "Not saved in the demo." : dirty ? "Unsaved changes." : "Saved."} Connections are saved by their own buttons.</span>
       </div>
     </div>
   );

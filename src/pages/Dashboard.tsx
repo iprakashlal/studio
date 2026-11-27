@@ -350,47 +350,59 @@ function NewProject({ studio, index, onClose, onCreated, templates }: { studio: 
     }
   };
   return (
-    <Modal title="New project" wide onClose={onClose} footer={<><button className="btn" onClick={onClose}>Cancel</button><button className="btn btn-pri" disabled={busy} onClick={create}>{busy ? "Creating…" : "Create project"}</button></>}>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <Field label="Project name" htmlFor="np-name"><input id="np-name" autoFocus className="input" value={f.name} placeholder="e.g. Asha's portfolio" onChange={(e) => setF({ ...f, name: e.target.value })} /></Field>
-        <Field label="Client (optional)" htmlFor="np-client"><input id="np-client" className="input" value={f.client} onChange={(e) => setF({ ...f, client: e.target.value })} /></Field>
-      </div>
-      <div className="flex flex-col gap-2">
-        <span className="label">Template</span>
-        <div className="grid gap-3 sm:grid-cols-2" role="radiogroup" aria-label="Template">
-          {templates.map((t) => (
-            <button key={t.id} type="button" role="radio" aria-checked={f.template === t.id} onClick={() => pick(t.id)}
-              className={`flex flex-col gap-1.5 rounded-xl border p-4 text-left ${f.template === t.id ? "border-brand-500 bg-brand-500/10" : "border-ink-600 bg-ink-950 hover:border-ink-400"}`}>
-              <span className="font-extrabold leading-snug">{t.name}</span>
-              <span className="chip self-start">{t.kind}</span>
-              <span className="text-[13px] text-ink-300">{t.description}</span>
-              <span className="text-xs text-ink-500">{t.pages.length} page{t.pages.length > 1 ? "s" : ""}: {t.pages.map((p) => p.label).join(", ")}</span>
-            </button>
-          ))}
+    <Modal title="New project" xl onClose={onClose} footer={<><span className="mr-auto self-center text-[12.5px] text-ink-400 max-sm:hidden">{TEMPLATES[f.template].name}{f.theme ? ` · ${themeById(f.theme)?.name || ""}` : " · its own look"}</span><button className="btn" onClick={onClose}>Cancel</button><button className="btn btn-pri" disabled={busy} onClick={create}>{busy ? "Creating…" : "Create project"}</button></>}>
+      {/* Wide screens: the details and the template on the left, the themes filling the right (each side scrolls by itself, if at all). */}
+      <div className="grid min-h-0 flex-1 lg:grid-cols-[minmax(360px,5fr)_7fr]">
+        <div className="scroll-thin flex min-h-0 flex-col gap-4 overflow-y-auto border-ink-700 px-5 py-4 lg:border-r">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="Project name" htmlFor="np-name"><input id="np-name" autoFocus className="input" value={f.name} placeholder="e.g. Asha's portfolio" onChange={(e) => setF({ ...f, name: e.target.value })} /></Field>
+            <Field label="Client (optional)" htmlFor="np-client"><input id="np-client" className="input" value={f.client} onChange={(e) => setF({ ...f, client: e.target.value })} /></Field>
+          </div>
+          <div className="flex flex-col gap-2">
+            <span className="label">Template</span>
+            <div className="grid gap-2" role="radiogroup" aria-label="Template">
+              {templates.map((t) => {
+                const on = f.template === t.id;
+                return (
+                  <button key={t.id} type="button" role="radio" aria-checked={on} onClick={() => pick(t.id)} title={`${t.description}\n${t.pages.length} page${t.pages.length > 1 ? "s" : ""}: ${t.pages.map((p) => p.label).join(", ")}`}
+                    className={`group flex items-start gap-3 rounded-xl border px-3.5 py-2.5 text-left transition ${on ? "border-brand-500 bg-brand-500/10 shadow-[0_0_0_3px_rgb(var(--brand-500,91_124_255)/.15)]" : "border-ink-700 bg-ink-950/60 hover:border-ink-500 hover:bg-ink-900"}`}>
+                    <span aria-hidden className={`mt-1 grid h-4 w-4 flex-none place-items-center rounded-full border-2 ${on ? "border-brand-400" : "border-ink-500"}`}>{on && <span className="h-1.5 w-1.5 rounded-full bg-brand-400" />}</span>
+                    <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                      <span className="flex flex-wrap items-center gap-x-2 gap-y-1"><b className="text-[14.5px] leading-snug">{t.name}</b><span className="chip py-0 text-[11px]">{t.kind}</span><span className="ml-auto text-[11px] text-ink-500">{t.pages.length} page{t.pages.length > 1 ? "s" : ""}</span></span>
+                      <span className={`text-[12.5px] leading-snug text-ink-300 ${on ? "" : "line-clamp-1"}`}>{t.description}</span>
+                      {on && <span className="text-[11.5px] text-ink-500">{t.pages.map((p) => p.label).join(" · ")}</span>}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {man[f.template] && man[f.template].starters.length > 1 && (
+              <Field label="Start from" htmlFor="np-starter">
+                <select id="np-starter" className="input" value={f.starter} onChange={(e) => setF({ ...f, starter: e.target.value })}>
+                  {man[f.template].starters.map((s) => <option key={s.id} value={s.id}>{s.name}: {s.description}</option>)}
+                </select>
+              </Field>
+            )}
+            <Field label="Category" htmlFor="np-cat">
+              <select id="np-cat" className="input" value={f.category} onChange={(e) => setF({ ...f, category: e.target.value })}>
+                <option value="">No category</option>
+                {index.categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </Field>
+          </div>
+        </div>
+        <div className="flex min-h-0 flex-col gap-2 px-5 py-4 max-lg:border-t max-lg:border-ink-700">
+          <span className="label flex flex-wrap items-center justify-between gap-2">Theme · {offered.length}
+            <button type="button" className={`rounded-full border px-2.5 py-1 text-xs font-semibold normal-case tracking-normal ${!f.theme ? "border-brand-500 bg-brand-500/15 text-ink-100" : "border-ink-600 text-ink-400"}`} aria-pressed={!f.theme} onClick={() => setF({ ...f, theme: "" })}>Template's own look</button>
+          </span>
+          <div className="scroll-thin min-h-[320px] flex-1 overflow-y-auto pr-1 lg:min-h-0">
+            <ThemeGallery compact current={f.theme || (TEMPLATES[f.template].themes ? offered[0]?.id : "")} themes={offered} tags={TEMPLATES[f.template].themeTags} onPick={(t) => setF({ ...f, theme: t.id })} />
+          </div>
+          <p className="text-xs text-ink-500">You can change the theme any time in Design → Theme &amp; layout.</p>
         </div>
       </div>
-      {man[f.template] && man[f.template].starters.length > 1 && (
-        <Field label="Start from" htmlFor="np-starter">
-          <select id="np-starter" className="input" value={f.starter} onChange={(e) => setF({ ...f, starter: e.target.value })}>
-            {man[f.template].starters.map((s) => <option key={s.id} value={s.id}>{s.name}: {s.description}</option>)}
-          </select>
-        </Field>
-      )}
-      <div className="flex flex-col gap-2">
-        <span className="label flex flex-wrap items-center justify-between gap-2">Theme
-          <button type="button" className={`rounded-full border px-2.5 py-1 text-xs font-semibold normal-case tracking-normal ${!f.theme ? "border-brand-500 bg-brand-500/15 text-ink-100" : "border-ink-600 text-ink-400"}`} aria-pressed={!f.theme} onClick={() => setF({ ...f, theme: "" })}>Template's own look</button>
-        </span>
-        <div className="max-h-[340px] overflow-y-auto pr-1 scroll-thin">
-          <ThemeGallery compact current={f.theme || (TEMPLATES[f.template].themes ? offered[0]?.id : "")} themes={offered} tags={TEMPLATES[f.template].themeTags} onPick={(t) => setF({ ...f, theme: t.id })} />
-        </div>
-        <p className="text-xs text-ink-500">You can change the theme any time in Design → Theme &amp; layout.</p>
-      </div>
-      <Field label="Category" htmlFor="np-cat">
-        <select id="np-cat" className="input" value={f.category} onChange={(e) => setF({ ...f, category: e.target.value })}>
-          <option value="">No category</option>
-          {index.categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </select>
-      </Field>
     </Modal>
   );
 }

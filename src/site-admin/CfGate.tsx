@@ -8,7 +8,7 @@ import { GoogleButton } from "../ui/GoogleSignIn";
 import { PinLogin, PinSetup, pinNeedsSetup } from "../ui/PinSignIn";
 import { cfPinDev, cfPinInfo } from "../lib/cfdb";
 
-export function CfGate({ cf, brand, onIn }: { cf: CfSiteCfg; brand: string; onIn: () => void }) {
+export function CfGate({ cf, brand, onIn, footer }: { cf: CfSiteCfg; brand: string; onIn: () => void; footer?: React.ReactNode }) {
   const [email, setEmail] = useState(""), [code, setCode] = useState(""), [sent, setSent] = useState(false), [busy, setBusy] = useState(true), [err, setErr] = useState("");
   const [pinMode, setPinMode] = useState(false), [after, setAfter] = useState<null | (() => void)>(null);
   useEffect(() => { if (cfPinDev.last(cf.api)) cfPinInfo(cf.api).then((i) => { if (i.on) setPinMode(true); }); }, []);
@@ -53,6 +53,7 @@ export function CfGate({ cf, brand, onIn }: { cf: CfSiteCfg; brand: string; onIn
         {err && <p role="alert" className="rounded-lg border border-amber-400/40 bg-amber-400/5 px-3 py-2 text-[13px] text-amber-100">{err}</p>}
         {own && !sent && <button type="button" className="btn btn-sm self-start" disabled={busy} onClick={() => send(undefined, own)}>Send the code to {own}</button>}
         <a href="./" className="text-sm text-ink-400 hover:text-ink-100">← Back to the website</a>
+        {footer}
       </div>
     </div>
   );

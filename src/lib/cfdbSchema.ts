@@ -45,6 +45,8 @@ export const CFDB_TABLES: string[] = [
   "create table if not exists role_mgmt (scope text not null, role text not null, privs text not null default '{}', updated_at text not null, updated_by text not null default '', primary key (scope, role))",
   "create table if not exists project_owners (scope text not null, project text not null, email text not null, at text not null, primary key (scope, project))",
   "create index if not exists project_owners_email on project_owners (scope, email)",
+  // A GitHub Pages site whose admin page signs in by email through this database: which repository the site's people may change (with the kept GitHub token).
+  "create table if not exists site_repos (site text primary key, repo text not null, studio text not null default '', at text not null)",
 ];
 export const CFDB_SCHEMA = CFDB_TABLES.join(";\n") + ";";
 /** Changes to a table that already exists. Each is made once: the Worker first asks `probe`; only if that fails does it run `steps`
@@ -57,6 +59,6 @@ export const CFDB_UPGRADES: { name: string; probe: string; steps: string[] }[] =
     "create index if not exists enquiries_ref on enquiries (site, ref)",
   ] },
 ];
-export const CFDB_VERSION = 107;
+export const CFDB_VERSION = 108;
 /** The database Worker's name on Cloudflare. */
 export const CFDB_WORKER_NAME = "picaffectz-db";

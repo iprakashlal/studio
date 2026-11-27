@@ -79,7 +79,11 @@ export function siteFiles(template: TemplateDef, c: any, base: string, admin: st
   return out;
 }
 
+/** Email sign-in for a GitHub Pages site: the database to sign in at, the site's name there, and its repository. */
+export type SiteSignin = { api: string; site: string; owner: string; repo: string; branch: string };
 export async function buildSite(opts: {
+  /** A GitHub Pages site whose admin page signs in by email through the Studio's database (which then saves to the repository). */
+  signin?: SiteSignin;
   template: TemplateDef;
   content: any;
   name: string;
@@ -138,7 +142,7 @@ export async function buildSite(opts: {
   if (!opts.host) files.push({ path: ".nojekyll", data: new Uint8Array() });
   files.push({
     path: "cms/site.json",
-    data: textToBytes(JSON.stringify({ template: template.id, name: opts.name, version: opts.version, admin, exportedAt: new Date().toISOString(), generator: "Site Studio", studioBuild: STUDIO_BUILD, badge: badgeVersion(opts.badge), ...(currentMenus()[template.id] ? { menu: currentMenus()[template.id] } : {}), menuV: menuVersion(currentMenus()[template.id]), ...(opts.host ? { host: "api" in opts.host ? { kind: "cloudflare", api: opts.host.api, site: opts.host.site } : { kind: "supabase", url: cleanUrl(opts.host.url), key: opts.host.key, site: opts.host.site } } : {}) }, null, 2)),
+    data: textToBytes(JSON.stringify({ template: template.id, name: opts.name, version: opts.version, admin, exportedAt: new Date().toISOString(), generator: "Site Studio", studioBuild: STUDIO_BUILD, badge: badgeVersion(opts.badge), ...(currentMenus()[template.id] ? { menu: currentMenus()[template.id] } : {}), menuV: menuVersion(currentMenus()[template.id]), ...(opts.signin && !opts.host ? { signin: opts.signin } : {}), ...(opts.host ? { host: "api" in opts.host ? { kind: "cloudflare", api: opts.host.api, site: opts.host.site } : { kind: "supabase", url: cleanUrl(opts.host.url), key: opts.host.key, site: opts.host.site } } : {}) }, null, 2)),
   });
   // robots.txt and sitemap.xml, for search engines. The sitemap needs the site's address (SEO → Site address, or the
   // address it is being published to); without one only robots.txt is written.

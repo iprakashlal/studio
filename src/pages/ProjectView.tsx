@@ -1,3 +1,6 @@
+import { cfCall as cfCallDb, cfDeployInfo as cfInfoDb, cfSession as cfSess } from "../lib/cfdb";
+import { loadHostConfig as loadStudioHost } from "../lib/studiohost";
+import type { SiteSignin } from "../lib/exporter";
 import { useMyRole } from "../lib/myrole";
 import { studioDirty } from "../lib/studioupdate";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -423,6 +426,9 @@ function PublishDialog({ studio, project, tpl, draft, dirty, save, onIndex, getB
   const [step, setStep] = useState("");
   const [result, setResult] = useState<{ created: boolean; pages: { url: string | null; turnedOn: boolean; error?: string } } | null>(null);
   const demo = studio.repo.demo;
+  // Email sign-in for the site's admin page: possible when the Studio's database keeps a GitHub token (Publish from any device). On unless switched off.
+  const [way, setWay] = useState<{ api: string; scope: string } | null>(null), [mailIn, setMailIn] = useState(true), [people, setPeople] = useState(""), [linked, setLinked] = useState<string[] | null>(null);
+  useEffect(() => { if (demo || project.host) return; (async () => { const hc = await loadStudioHost().catch(() => null); if (!hc || hc.kind !== "cloudflare" || !cfSess.load(hc.api)) return; const i = await cfInfoDb(hc.api); if (i.gh && (i.v || 0) >= 108) setWay({ api: hc.api, scope: "studio:" + hc.studio }); })(); }, []);
   // A new project publishes under the publishing account once it's connected.
   useEffect(() => { if (login && !project.publish && t.owner === session.cfg.owner) setT((x) => ({ ...x, owner: login })); }, [login]);
   const checks = tpl.checks?.(draft) || [];
@@ -443,7 +449,17 @@ function PublishDialog({ studio, project, tpl, draft, dirty, save, onIndex, getB
       const live = withContent ? null : await repo.getJSON("content.json").catch(() => null);
       // Photos already in the repository stay put: only new ones are uploaded, so publishing a shop full of photos is quick.
       const keep = withContent ? new Set(await repo.list("assets/").catch(() => [] as string[])) : undefined;
-      const { files, warnings, admin } = await buildSite({ template: tpl, content: draft, name: project.name, version: next, includeContent: withContent, getAsset: getBlob, admin: live ? adminFile(live.data) : undefined, headContent: live?.data, base: `https://${target.owner}.github.io/${target.repo === `${target.owner}.github.io` ? "" : target.repo + "/"}`, keep });
+      // Email sign-in: the database is told which repository this site is and who may sign in; the admin page then asks for an email, not a token.
+      let signin: SiteSignin | undefined;
+      if (way && mailIn) {
+        setStep("Setting up email sign-in for the admin page…");
+        try {
+          const r = await cfCallDb<any>(way.api, "/site/link?scope=" + encodeURIComponent(way.scope), { method: "POST", body: JSON.stringify({ site: project.id, repo: `${target.owner}/${target.repo}`, emails: people.split(/[,;\s]+/).filter(Boolean) }) });
+          signin = { api: way.api, site: project.id, ...target }; setLinked(r.people || []);
+        } catch (e: any) { toast(`Email sign-in wasn't set up (${e?.message || e}). The admin page will ask for a GitHub token on each device.`, "bad"); }
+        setStep("Uploading the site…");
+      }
+      const { files, warnings, admin } = await buildSite({ signin, template: tpl, content: draft, name: project.name, version: next, includeContent: withContent, getAsset: getBlob, admin: live ? adminFile(live.data) : undefined, headContent: live?.data, base: `https://${target.owner}.github.io/${target.repo === `${target.owner}.github.io` ? "" : target.repo + "/"}`, keep });
       await publishSite(repo, files, `Publish v${next} from Site Studio${note.trim() ? `: ${note.trim()}` : ""}`, admin);
       setAdmin(admin);
       setStep("Turning on GitHub Pages…");
@@ -467,6 +483,7 @@ function PublishDialog({ studio, project, tpl, draft, dirty, save, onIndex, getB
     return (
       <Modal title="Published" onClose={onClose} footer={<button className="btn btn-pri" onClick={onClose}>Done</button>}>
         <p className="text-sm text-ink-300">v{project.version} is committed to <b className="text-ink-100">{done.owner}/{done.repo}</b>{result?.created ? " (a new repository the Studio just created)" : ""}.</p>
+        {linked && <p className="rounded-lg border border-emerald-400/30 bg-emerald-400/5 px-3 py-2.5 text-[13px] text-emerald-100">The admin page signs in with an email code on any device. Who can sign in: {linked.join(", ")}.</p>}
         <ol className="list-decimal space-y-2 pl-5 text-sm text-ink-200">
           {result?.pages.error || (!result?.pages.url && !result?.pages.turnedOn)
             ? <li>Turn on GitHub Pages once{result?.pages.error ? ` (the Studio couldn't: ${result.pages.error})` : ""}: in <a className="text-brand-300 underline" href={`https://github.com/${done.owner}/${done.repo}/settings/pages`} target="_blank" rel="noopener">{done.owner}/{done.repo} → Settings → Pages ↗</a>, choose <b>Deploy from a branch → {done.branch} / (root)</b> and save.</li>
@@ -492,6 +509,11 @@ function PublishDialog({ studio, project, tpl, draft, dirty, save, onIndex, getB
       </div>
       <Toggle id="pb-content" label="Replace the site's content with this version" checked={withContent} onChange={setWithContent} />
       <p className="hint">{withContent ? "Overwrites content.json and images on the site, including any edits made in the site's own CMS." : "Updates pages, design code and the CMS only. Content edited in the site's own CMS is kept. Use Details → Import from site to bring those edits here."}</p>
+      {way && <section className="flex flex-col gap-2 rounded-xl border border-ink-700 bg-ink-950 p-4" aria-label="Admin page sign-in">
+        <Toggle id="pb-mailin" label="Sign in to the admin page with an email code" checked={mailIn} onChange={setMailIn} />
+        <p className="hint">{mailIn ? "The site's admin page asks for an email and a 6-digit code, on any device. No GitHub token or password to set up there: this Studio's database saves the changes to the repository." : "The admin page asks each device for a GitHub token, a username and a password."}</p>
+        {mailIn && <Field label="Who else can sign in (emails, optional)" htmlFor="pb-people" hint="You are added by yourself. More people can be added later in the admin page: Settings → Role Management."><input id="pb-people" className="input" placeholder="client@example.com, editor@example.com" value={people} onChange={(e) => setPeople(e.target.value)} /></Field>}
+      </section>}
       <Field label="Version note (optional)" htmlFor="pb-note"><input id="pb-note" className="input" value={note} onChange={(e) => setNote(e.target.value)} /></Field>
       {step && <p className="text-[13px] text-brand-300" aria-live="polite">{step}</p>}
     </Modal>

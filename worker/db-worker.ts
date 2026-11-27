@@ -3157,13 +3157,36 @@ export default {
         const r = await fetch("https://api.cloudflare.com/client/v4" + path, { method, headers: { Authorization: "Bearer " + (useJwt ? q.jwt : tokenOf), ...(q.contentType ? { "Content-Type": String(q.contentType) } : {}) }, body: method === "GET" ? undefined : body });
         return json({ status: r.status, body: await r.text() });
       }
+      // ---- Email sign-in for a GitHub Pages site's admin page: the Studio links the site to its repository and names who may sign in.
+      // After this the site's people sign in here with an emailed code and save through /gh (the kept token), with no GitHub token on their devices.
+      if (p === "/site/link" && req.method === "POST") {
+        if (!inStudio || !(await can("publishGh"))) return err(403, "Your role can't publish to GitHub. Ask an Administrator (Role Management).");
+        if (!env.GH_TOKEN) return err(501, "This database keeps no GitHub token, so it can't save for the site's people. Turn on Publish from any device (Settings → Hostings).");
+        const b = (await req.json().catch(() => ({}))) as any, site = String(b.site || ""), repo = String(b.repo || "").toLowerCase();
+        if (!/^[\w-]{3,80}$/.test(site) || !/^[\w.-]+\/[\w.-]+$/.test(repo)) return err(400, "Which site and repository?");
+        const studio = scope.slice(7), had: any = await env.DB.prepare("select studio from site_repos where site = ?").bind(site).first();
+        if (had && had.studio !== studio) return err(403, "This site is linked to another Studio.");
+        // The site must be this Studio's to link: one of its repositories, or a site nobody has people in yet.
+        const registered = !!(await env.DB.prepare("select 1 from repos where repo = ? and scope = ?").bind(repo, scope).first());
+        // Someone who isn't an Administrator links only repositories this Studio already publishes: the kept token may reach others.
+        if (!admin && !registered) return err(403, "Only an Administrator can set up email sign-in for a repository this Studio hasn't published through its database yet.");
+        const mine = !!had || registered || !(await env.DB.prepare("select 1 from members where scope = ? limit 1").bind("site:" + site).first());
+        if (!mine) return err(403, "This site already has its own people. An Administrator of the site can link it.");
+        await env.DB.prepare("insert into site_repos (site, repo, studio, at) values (?, ?, ?, ?) on conflict (site) do update set repo = excluded.repo, at = excluded.at").bind(site, repo, studio, new Date().toISOString()).run();
+        const mails = [...new Set([email, ...(Array.isArray(b.emails) ? b.emails : [])].map((x: any) => String(x || "").trim().toLowerCase()).filter(emailOk))].slice(0, 20);
+        for (const m of mails) await env.DB.prepare("insert into members (scope, email, role) values (?, ?, 'owner') on conflict (scope, email) do nothing").bind("site:" + site, m).run();
+        return json({ ok: true, people: mails });
+      }
       // ---- GitHub Pages sites from any device: calls on repositories registered to this scope, with the kept token.
       if (p === "/gh" && req.method === "POST") {
         if (!env.GH_TOKEN) return err(501, "This database can't reach GitHub: no GitHub token is kept here.");
-        if (!(await can("publishGh"))) return err(403, "Your role can't publish to GitHub. Ask an Administrator (Role Management).");
+        // A site's own people (its GitHub Pages admin page, signed in by email) change that site's repository; a Studio's people publish its sites.
+        const forSite = scope.startsWith("site:");
+        if (forSite ? !(await can("edit")) : !(await can("publishGh"))) return err(403, forSite ? "Your role can't change this site. Ask its Administrator (Role Management)." : "Your role can't publish to GitHub. Ask an Administrator (Role Management).");
         const q = (await req.json()) as any, repo = String(q.repo || "").toLowerCase(), path = String(q.path || ""), method = String(q.method || "GET").toUpperCase();
         if (!/^[\w.-]+\/[\w.-]+$/.test(repo) || (path && !/^\/[\w\-./%?=&,~]*$/.test(path)) || path.includes("..") || !["GET", "PUT", "POST", "PATCH", "DELETE"].includes(method)) return err(400, "Not a GitHub call publishing needs.");
-        if (!(await env.DB.prepare("select 1 from repos where repo = ? and scope = ?").bind(repo, scope).first())) return err(403, `The repository ${repo} isn't registered to ${scope}. Turn on Publish from any device again from a Studio that has the GitHub token.`);
+        if (forSite) { if (!(await env.DB.prepare("select 1 from site_repos where site = ? and repo = ?").bind(scope.slice(5), repo).first().catch(() => null))) return err(403, "This site's repository isn't linked to its email sign-in. Publish the site again from the Studio."); }
+        else if (!(await env.DB.prepare("select 1 from repos where repo = ? and scope = ?").bind(repo, scope).first())) return err(403, `The repository ${repo} isn't registered to ${scope}. Turn on Publish from any device again from a Studio that has the GitHub token.`);
         const r = await fetch("https://api.github.com/repos/" + repo + path, { method, headers: { Authorization: "Bearer " + env.GH_TOKEN, Accept: q.raw ? "application/vnd.github.raw+json" : "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28", "User-Agent": "site-studio-db", ...(q.body != null ? { "Content-Type": "application/json" } : {}) }, body: method === "GET" ? undefined : q.body != null ? String(q.body) : undefined });
         const bytes = new Uint8Array(await r.arrayBuffer());
         let bin = ""; for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));

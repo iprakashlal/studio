@@ -77,7 +77,9 @@ export async function pushTarget(t: LiveTarget, o: { studio: Studio; pages: (h: 
   const live = await repo.getJSON<any>("content.json").catch(() => null);
   if (!live) throw new Error("The repository has no content.json. Publish it once from the project first.");
   o.step("Building pages");
-  const { files, admin } = await buildSite({ template: tpl, content: draft, name: p.name, version: p.version, includeContent: false, getAsset: getBlob, admin: adminFile(live.data), headContent: live.data, base: t.url });
+  // A site whose admin page signs in by email keeps doing so.
+  const was = await repo.getJSON<any>("cms/site.json").catch(() => null);
+  const { files, admin } = await buildSite({ signin: was?.data?.signin && typeof was.data.signin.api === "string" ? was.data.signin : undefined, template: tpl, content: draft, name: p.name, version: p.version, includeContent: false, getAsset: getBlob, admin: adminFile(live.data), headContent: live.data, base: t.url });
   o.step(`Uploading ${files.length} files`);
   await publishSite(repo, files, note, admin);
 }

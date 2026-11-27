@@ -202,6 +202,8 @@ function useDiyLook(auto: "" | "light" | "dark" = "") {
       `.diy-page>footer{border-color:transparent!important}`,
       // The answer box with its button built in: the box is the frame; the button takes its top, bottom and right edge.
       `.diy-page .diy-join>.input{border:0!important;background:transparent!important;box-shadow:none!important;border-radius:0!important;outline:0!important}:root:root .diy-page .diy-join>.btn{align-self:stretch;height:auto;margin:-1px -1px -1px 0;border-top-left-radius:0!important;border-bottom-left-radius:0!important;border-top-right-radius:inherit!important;border-bottom-right-radius:inherit!important}:root:root .diy-page .diy-join>.btn:disabled{opacity:1;filter:saturate(.55) brightness(1.25) opacity(.55)}`,
+      // The same for the Send button of the main answer box (the box has 8px of padding and a 1px frame to reach across).
+      `:root:root .diy-page .diy-field>.btn.diy-edge{align-self:stretch;height:auto;margin:-9px -9px -9px 4px;border-top-left-radius:0!important;border-bottom-left-radius:0!important;border-top-right-radius:inherit!important;border-bottom-right-radius:inherit!important}:root:root .diy-page .diy-field>.btn.diy-edge:disabled{opacity:1;filter:saturate(.55) brightness(1.25) opacity(.55)}`,
       // Over colour glows or a picture / moving background the answer bar is clear: any band of flat colour would show as a strip.
       `:root[data-diy-aura] .diy-page .sticky.bottom-0,.diy-page.has-sbg .sticky.bottom-0{background:none!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important;border-color:transparent!important}`,
       // a moving, glowing border: a ring of two colours that turns, with a soft glow of the first around it
@@ -549,7 +551,7 @@ function DesignPageInner({ studio, index, onIndex }: { studio?: Studio; index?: 
         </>}
         {cur && isOptional(cur, a) && (field$ || cur.type === "file") && <button type="button" className="btn btn-ghost btn-sm" onClick={() => answer(cur, "")}>{word("skipBtn")}</button>}
         {cur?.type === "many" && <button type="submit" className="btn btn-pri btn-sm rounded-full" disabled={!many.length}>Done</button>}
-        {field$ && <button type="submit" className="btn btn-pri btn-sm rounded-full" disabled={!text.trim()} aria-label="Send">Send ↵</button>}
+        {field$ && <button type="submit" className="btn btn-pri diy-edge px-5" disabled={!text.trim()} aria-label="Send">Send ↵</button>}
       </div>
       {cur?.type === "long" && <p className="px-3 text-xs text-ink-500">Press Enter for a new line. Ctrl + Enter sends.</p>}
     </form>
@@ -706,11 +708,10 @@ function DesignPageInner({ studio, index, onIndex }: { studio?: Studio; index?: 
                   </div>
                   <div className="flex flex-wrap items-stretch gap-2">
                     <input ref={qpick} type="file" accept={DOC_ACCEPT} className="sr-only" aria-label="Upload a file with your details" onChange={(e) => quick(e.target.files?.[0])} />
-                    <div className="diy-field flex min-w-[16rem] flex-1 flex-wrap items-center gap-2 rounded-3xl border border-ink-600 bg-ink-900 p-2 pl-4 transition focus-within:border-brand-400">
-                      <input className="min-w-0 flex-1 basis-[12rem] bg-transparent py-2 text-[15px] text-ink-100 outline-none placeholder:text-ink-500" inputMode="url" aria-label="Your website link" placeholder="Paste your website link, e.g. www.mybusiness.com" disabled={reading} value={qlink} onChange={(e) => setQlink(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); quick(undefined, qlink); } }} />
-                      <button type="button" className="btn btn-pri btn-sm rounded-full" disabled={reading || !qlink.trim()} onClick={() => quick(undefined, qlink)}>Read my site</button>
-                      <span className="text-[12px] text-ink-500" aria-hidden>or</span>
-                      <button type="button" className="btn btn-pri btn-sm rounded-full" disabled={reading} onClick={() => qpick.current?.click()}>{reading ? "Reading…" : "Upload a file"}</button>
+                    <button type="button" className="btn btn-pri" disabled={reading} onClick={() => qpick.current?.click()}>{reading ? "Reading…" : "Upload a file"}</button>
+                    <div className="diy-field diy-join flex min-w-[16rem] flex-1 items-stretch rounded-xl border border-ink-700 bg-ink-900 focus-within:border-brand-400">
+                      <input className="input min-w-0 flex-1" inputMode="url" aria-label="Your website link" placeholder="or paste your website link, e.g. www.mybusiness.com" disabled={reading} value={qlink} onChange={(e) => setQlink(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); quick(undefined, qlink); } }} />
+                      <button type="button" className="btn btn-pri shrink-0 px-5" disabled={reading || !qlink.trim()} onClick={() => quick(undefined, qlink)}>Read my site</button>
                     </div>
                   </div>
                 </section>

@@ -175,6 +175,8 @@ function useDiyLook(auto: "" | "light" | "dark" = "") {
       `:root[data-diy-aura] .diy-page{isolation:isolate}:root[data-diy-aura] .diy-page::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;background:radial-gradient(42% 36% at 86% 18%,rgb(var(--brand-500,91 124 255)/.26),transparent 70%),radial-gradient(38% 32% at 8% 88%,color-mix(in srgb,var(--g2) 22%,transparent),transparent 70%),radial-gradient(30% 26% at 70% 92%,rgb(var(--brand-600,63 95 224)/.18),transparent 70%)}`,
       // over the glows, the answer bar is not a band: what is behind it is blurred, fading out at its edges
       `.diy-page>footer{border-color:transparent!important}`,
+      // The answer box with its button built in: the box is the frame; the button takes its top, bottom and right edge.
+      `.diy-page .diy-join>.input{border:0!important;background:transparent!important;box-shadow:none!important;border-radius:0!important;outline:0!important}:root:root .diy-page .diy-join>.btn{align-self:stretch;height:auto;margin:-1px -1px -1px 0;border-top-left-radius:0!important;border-bottom-left-radius:0!important;border-top-right-radius:inherit!important;border-bottom-right-radius:inherit!important}:root:root .diy-page .diy-join>.btn:disabled{opacity:1;filter:saturate(.55) brightness(1.25) opacity(.55)}`,
       // Over colour glows or a picture / moving background the answer bar is clear: any band of flat colour would show as a strip.
       `:root[data-diy-aura] .diy-page .sticky.bottom-0,.diy-page.has-sbg .sticky.bottom-0{background:none!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important;border-color:transparent!important}`,
       // a moving, glowing border: a ring of two colours that turns, with a soft glow of the first around it
@@ -494,7 +496,13 @@ function DesignPageInner({ studio, index, onIndex }: { studio?: Studio; index?: 
         ? <textarea ref={field} aria-label={cur.ask(a)} rows={4} className="input min-h-[7rem] resize-y" placeholder={cur.ph?.(a)} value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); submit(); } }} />
         : cur.input === "time" ? <TimeField key={cur.id} autoFocus value={text} onChange={setText} label={cur.ask(a)} />
         : cur.input === "date" ? <DateField key={cur.id} autoFocus value={text} onChange={setText} label={cur.ask(a)} />
-        : field$ ? <input ref={field} aria-label={cur.ask(a)} className="input" disabled={reading} placeholder={reading ? "Reading…" : cur.ph?.(a)} value={text} onChange={(e) => setText(e.target.value)} /> : null}
+        : field$ ? (
+          // One control: the answer box with its button built into the right end (the button fills the top, bottom and right edge).
+          <div className="diy-field diy-join flex items-stretch rounded-xl border border-ink-700 bg-ink-900 focus-within:border-brand-400">
+            <input ref={field} aria-label={cur.ask(a)} className="input min-w-0 flex-1" disabled={reading} placeholder={reading ? "Reading…" : cur.ph?.(a)} value={text} onChange={(e) => setText(e.target.value)} />
+            <button type="submit" className="btn btn-pri shrink-0 px-5" disabled={!text.trim() || reading}>{cur.id === "doc" ? "Read my link" : "Next"}</button>
+          </div>
+        ) : null}
       {cur.id === "doc" && a.kind === "portfolio" && (
         <label className="flex flex-col gap-1 text-xs text-ink-400">Your LinkedIn profile URL (optional)
           <input className="input" inputMode="url" autoComplete="url" placeholder="e.g. linkedin.com/in/yourname" value={a.linkedin || ""} onChange={(e) => setA((o) => ({ ...o, linkedin: e.target.value.slice(0, 200) }))} />
@@ -509,7 +517,7 @@ function DesignPageInner({ studio, index, onIndex }: { studio?: Studio; index?: 
           <button type="button" className={`btn ${field$ ? "" : "btn-pri"}`} disabled={reading} onClick={() => pick.current?.click()}>{PIC_STEPS.includes(cur.id) ? (cur.id === "photos" || cur.id === "banner" ? "Choose pictures" : "Choose a picture") : cur.id === "logo" ? "Choose logo" : cur.id === "doc" ? "Add a PDF" : "Choose PDF"}</button>
         </>}
         {cur.type === "many" && <button type="submit" className="btn btn-pri" disabled={!many.length}>Done</button>}
-        {field$ && <button type="submit" className="btn btn-pri" disabled={!text.trim() || reading}>{cur.id === "doc" ? "Read my link" : "Next"}</button>}
+        {field$ && (cur.type === "long" || cur.input === "time" || cur.input === "date") && <button type="submit" className="btn btn-pri" disabled={!text.trim() || reading}>{cur.id === "doc" ? "Read my link" : "Next"}</button>}
       </div>
       {answered.length >= 6 && isOptional(cur, a) && !reading && <button type="button" className="self-start text-xs text-ink-400 underline underline-offset-2 hover:text-ink-200" onClick={skipRest}>Skip the remaining optional questions and see my preview</button>}
     </form>

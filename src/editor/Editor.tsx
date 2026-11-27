@@ -6,8 +6,8 @@ import type { TemplateDef } from "../schema/types";
 import { Ctx, FieldView, openListItem, type EditorCtx } from "./fields";
 import { locateField } from "./locate";
 import { NavDrawer } from "./NavDrawer";
-import { DefaultsLock } from "./DefaultsLock";
-import { cardSections } from "../lib/projdefaults";
+import { DefaultsLock, Locked } from "./DefaultsLock";
+import { cardSections, following, ownsOf, splitFields } from "../lib/projdefaults";
 import { studioHidden } from "../lib/features";
 import { applyMenu, type MenuCfg } from "../lib/menus";
 
@@ -220,7 +220,12 @@ export function Editor({ tpl, draft, version, onChange, upload, img, extras = []
             {!entry?.extra && (() => { const shownPd = new Set<string>(); return entry?.cards.filter(({ card }) => !(site && card.studio)).map(({ card, cat: from }) => { const secs = cardSections(draft, from, card), quiet = secs.length > 0 && secs.every((x) => shownPd.has(x)); secs.forEach((x) => shownPd.add(x)); return (
               <section key={from + ":" + card.title} className="card flex flex-col gap-4 p-4 sm:p-5">
                 <h3 className="text-[15px] font-extrabold">{card.title}</h3>
-                <DefaultsLock root={draft} secs={secs} quiet={quiet} onChange={onChange} site={site}>{card.fields.map((f, i) => <FieldView key={i} f={f} obj={draft} base={from} />)}</DefaultsLock>
+                <DefaultsLock root={draft} secs={secs} quiet={quiet} onChange={onChange} site={site}>{(use) => {
+                  if (!use) return card.fields.map((f, i) => <FieldView key={i} f={f} obj={draft} base={from} />);
+                  // The fields the Studio's default sets are shown locked; the rest of the card stays this site's own.
+                  const owns = ownsOf(draft.studioDefaults.kind, following(draft).filter((x) => secs.includes(x)), from);
+                  return splitFields(card.fields, owns).map(({ f, own }, i) => own ? <Locked key={i}><FieldView f={f} obj={draft} base={from} /></Locked> : <FieldView key={i} f={f} obj={draft} base={from} />);
+                }}</DefaultsLock>
               </section>
             ); }); })()}
             {extra?.render()}

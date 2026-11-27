@@ -14,7 +14,7 @@ import { LEGAL_PAGES, identity, privacyText, termsText, type LegalKind } from ".
 import { staticPageDefault } from "../schema/common";
 import { clone, getP, setP } from "./util";
 
-export type PdId = "emails" | "mail" | "msg" | "privacy" | "terms" | "consent" | "pay";
+export type PdId = "emails" | "mail" | "msg" | "privacy" | "terms" | "consent" | "pay" | "policies" | "formprivacy" | "footer" | "gst" | "checkout";
 export type PdSec = { on?: boolean; /** Content sections: the values (a part of a site's content; privacy/terms: { text }). */ v?: any };
 export type PdKind = Partial<Record<PdId, PdSec>>;
 export type ProjectDefaults = Record<string, PdKind>;
@@ -28,30 +28,46 @@ export const PD_SECTIONS: { id: PdId; label: string; desc: string; conn?: boolea
   { id: "terms", label: "Terms of use", desc: "The text of the Terms of use page." },
   { id: "consent", label: "Cookie consent", desc: "What the cookie banner says to visitors in India and to international visitors." },
   { id: "pay", label: "Payment config", desc: "Which ways to pay are on, their labels, the UPI ID, and the gateway keys." },
+  { id: "policies", label: "Shop policies", desc: "Shipping, returns, refunds and cancellation pages, linked at the bottom of the shop." },
+  { id: "formprivacy", label: "Form consent & spam", desc: "The tick box on forms and checkout, what waits for consent (Google Fonts and Maps), and spam protection." },
+  { id: "footer", label: "Footer credit", desc: "The legal or credit line at the bottom of every page, and whether the “Powered by” badge shows. {name} becomes the site's name; {year} the current year." },
+  { id: "gst", label: "GST invoices & tax", desc: "Tax on prices, GST invoice settings, and the invoice's look and wording. Each business's own GSTIN, name, address, PAN, logo, signature and bank details stay its own." },
+  { id: "checkout", label: "Checkout rules", desc: "What checkout asks, verification of the phone or email, the message after ordering, and abandoned-cart reminders." },
 ];
 export const PD_LABEL = Object.fromEntries(PD_SECTIONS.map((s) => [s.id, s.label])) as Record<PdId, string>;
 /** The connections each section brings (names of the database's settings). */
 export const PD_CONN: Partial<Record<PdId, string[]>> = { mail: ["mail"], msg: ["wa", "sms"], pay: ["rz", "cf", "pe", "st", "pp"] };
 const CONSENT_CARDS = ["Wording for visitors in India", "Wording for international visitors"];
 
+/** Fields of a section that stay each site's own (its identity, its bank, its own links). */
+const SKIP: Partial<Record<PdId, string[]>> = {
+  gst: ["gst.legalName", "gst.gstin", "gst.address", "gst.state", "gst.pan", "gst.sign", "invoice.logo", "invoice.bank", "invoice.sign"],
+  checkout: ["recovery.url", "recovery.offer"],
+};
+/** The footer: only its legal or credit line (the description and links are each site's own) and the badge switch. */
+const FOOTER = ["footer.legal", "contact.footerLeft", "contact.footerRight", "poweredBy.show"];
+
 /** The cards of a template's own editor that a section stands for (what the Studio edits, and what a site's admin locks). */
 export function pdCards(kind: string, sec: PdId): Card[] {
-  const S = TEMPLATES[kind]?.schema || [], cat = (id: string) => S.find((c) => c.id === id);
-  if (sec === "emails") return (cat("emails")?.cards || []).filter((c) => c.title !== "How templates work");
-  if (sec === "consent") return (cat("consent")?.cards || []).filter((c) => CONSENT_CARDS.includes(c.title));
-  if (sec === "pay") return cat("payments")?.cards || [];
+  const S = TEMPLATES[kind]?.schema || [], cat = (id: string) => S.find((c) => c.id === id), cards = (id: string, titles?: string[]) => (cat(id)?.cards || []).filter((c) => !titles || titles.includes(c.title));
+  if (sec === "emails") return cards("emails").filter((c) => c.title !== "How templates work");
+  if (sec === "consent") return cards("consent", CONSENT_CARDS);
+  if (sec === "pay") return cards("payments");
+  if (sec === "policies") return kind === "store" ? cards("contact", ["Policies"]) : [];
+  if (sec === "formprivacy") return cards("legal", ["Consent on forms", "Before consent", "Spam protection"]);
+  if (sec === "footer") return [...cards("footer", ["Footer"]), ...(kind === "store" || kind === "portfolio" ? cards("contact", ["Footer"]) : []), ...cards("features", ["“Powered by” badge"])];
+  if (sec === "gst") return [...cards("pricing", ["Tax"]).filter(() => kind === "store"), ...cards("gst"), ...(kind === "restaurant" ? cards("checkout", ["GST invoice", "Invoice style & layout", "Invoice contents & wording"]) : [])];
+  if (sec === "checkout") return kind === "store" ? cards("checkout") : kind === "restaurant" ? cards("checkout", ["Cart extras", "Contact details before checkout", "Abandoned carts"]) : [];
   return [];
 }
 /** Which sections a website type has. */
 export function pdSections(kind: string): PdId[] {
   const S = TEMPLATES[kind]?.schema || [], has = (id: string) => S.some((c) => c.id === id);
   return PD_SECTIONS.map((s) => s.id).filter((id) => {
-    if (id === "emails") return has("emails");
-    if (id === "consent") return has("consent");
     if (id === "privacy" || id === "terms") return has("legal");
-    if (id === "pay") return has("payments");
     if (id === "msg") return kind !== "portfolio";
-    return true;
+    if (id === "mail") return true;
+    return pdPaths(kind, id).length > 0;
   });
 }
 
@@ -67,7 +83,43 @@ export function fieldPaths(fields: Field[] | undefined, out: string[] = [], conn
   return out;
 }
 const uniq = <T,>(l: T[]) => [...new Set(l)];
-export function pdPaths(kind: string, sec: PdId): string[] { return uniq(pdCards(kind, sec).flatMap((c) => fieldPaths(c.fields))).filter((p) => p !== "@legal"); }
+export function pdPaths(kind: string, sec: PdId): string[] {
+  const skip = SKIP[sec] || [];
+  return uniq(pdCards(kind, sec).flatMap((c) => fieldPaths(c.fields))).filter((p) => p !== "@legal" && !skip.includes(p) && (sec !== "footer" || FOOTER.includes(p) || (kind === "store" && p === "footer.text")));
+}
+
+/** A field's own path(s), without what is inside a "when" (that is judged field by field). */
+function ownPaths(f: any): string[] { return f?.t === "grid" ? fieldPaths(f.fields) : f?.t === "when" ? [f.path] : f?.t === "legalPages" ? ["@legal"] : f?.t === "connection" ? ["@conn:" + f.kind] : f?.path ? [f.path] : []; }
+/** Splits fields into those a set of paths owns and the rest, keeping their order; grids and "when" blocks are split inside. */
+export function splitFields(fields: Field[], owns: (path: string) => boolean): { f: Field; own: boolean }[] {
+  const out: { f: Field; own: boolean }[] = [];
+  for (const f of fields || []) {
+    const x = f as any; if (!x) continue;
+    if (x.t === "note") { out.push({ f, own: false }); continue; }
+    if (x.t === "grid" || x.t === "when") {
+      const inner = splitFields(x.fields, owns), mine = inner.filter((i) => i.own).map((i) => i.f), rest = inner.filter((i) => !i.own && (i.f as any).t !== "note").map((i) => i.f);
+      const head = x.t === "when" && owns(x.path);
+      if (!rest.length && (mine.length || head)) { out.push({ f, own: true }); continue; }
+      if (!mine.length && !head) { out.push({ f, own: false }); continue; }
+      if (x.t === "grid") { out.push({ f: { ...x, fields: mine }, own: true }); out.push({ f: { ...x, fields: rest }, own: false }); }
+      else { if (mine.length) out.push({ f: { ...x, fields: mine }, own: true }); out.push({ f: { ...x, fields: inner.filter((i) => !i.own).map((i) => i.f) }, own: false }); }
+      continue;
+    }
+    const ps = ownPaths(x); out.push({ f, own: ps.length > 0 && ps.every(owns) });
+  }
+  return out;
+}
+/** What a section owns, as a test of one path (or "@legal" / "@conn:<kind>"). */
+export function ownsOf(kind: string, secs: PdId[], catId?: string): (p: string) => boolean {
+  const set = new Set<string>();
+  for (const s of secs) {
+    if (s === "privacy" || s === "terms") set.add("@legal");
+    for (const k of PD_CONN[s] || []) set.add("@conn:" + k);
+    if (s === "pay" && catId === "payments") return () => true;
+    for (const p of pdPaths(kind, s)) set.add(p);
+  }
+  return (p) => set.has(p);
+}
 
 /** What the Studio's Settings show first when a section is switched on: the template's own standard values. */
 export function pdSeed(kind: string, sec: PdId, base: any): any {
@@ -137,13 +189,14 @@ export function applySection(c: any, sec: PdId): void {
     if (sec === "privacy") { c.consent = c.consent || {}; if (!String(c.consent.policyUrl || "").trim()) c.consent.policyPage = meta.id; }
     return;
   }
-  for (const p of pdPaths(kind, sec)) { const x = getP(v, p); if (x === undefined) { const at = p.split("."), last = at.pop()!, o = getP(c, at.join(".")); if (o && typeof o === "object") delete o[last]; } else setP(c, p, clone(x)); }
+  const name = identity(c).name, year = String(new Date().getFullYear());
+  for (const p of pdPaths(kind, sec)) { let x = getP(v, p); if (sec === "footer" && typeof x === "string") { x = x.replace(/\{name\}/g, name); if (p.startsWith("contact.footer")) x = x.replace(/\{year\}/g, year); } if (x === undefined) { const at = p.split("."), last = at.pop()!, o = getP(c, at.join(".")); if (o && typeof o === "object") delete o[last]; } else setP(c, p, clone(x)); }
 }
 
 /** Puts the Studio's defaults for this website type into a site's content. Says whether anything changed. */
 export function applyDefaults(c: any, kind: string, d: ProjectDefaults = current): boolean {
   if (!c || typeof c !== "object") return false;
-  const before = JSON.stringify({ a: c.studioDefaults || null, e: c.emails, n: c.contact?.form?.notifySubject, co: c.consent, p: c.payments, o: c.ordering?.pay, s: c.staticPages });
+  const before = JSON.stringify(c);
   const on = pdOn(kind, d);
   if (!on.length) { if (c.studioDefaults) delete c.studioDefaults; }
   else {
@@ -151,7 +204,7 @@ export function applyDefaults(c: any, kind: string, d: ProjectDefaults = current
     c.studioDefaults = { kind, on, v };
     for (const s of on) if (c.defaultsOff?.[s] !== true) applySection(c, s);
   }
-  return before !== JSON.stringify({ a: c.studioDefaults || null, e: c.emails, n: c.contact?.form?.notifySubject, co: c.consent, p: c.payments, o: c.ordering?.pay, s: c.staticPages });
+  return before !== JSON.stringify(c);
 }
 
 /** The site's admin switches a section between the Studio's default and its own. */
@@ -163,12 +216,6 @@ export function setFollow(c: any, sec: PdId, use: boolean): void {
 /** Which of the sections the Studio gives a card of the editor belongs to (followed: its fields are then the Studio's). */
 export function cardSections(c: any, catId: string, card: Card): PdId[] {
   const f: PdId[] = Array.isArray(c?.studioDefaults?.on) ? c.studioDefaults.on : []; if (!f.length) return [];
-  const conns: string[] = [], paths = fieldPaths(card.fields, [], conns), out: PdId[] = [];
-  if (paths.includes("@legal")) for (const s of ["privacy", "terms"] as PdId[]) if (f.includes(s)) out.push(s);
-  for (const s of f) {
-    if (s === "privacy" || s === "terms") continue;
-    const own = pdPaths(c.studioDefaults.kind, s);
-    if ((s === "pay" && catId === "payments") || paths.some((p) => own.includes(p)) || conns.some((k) => PD_CONN[s]?.includes(k))) out.push(s);
-  }
-  return uniq(out);
+  const kind = c.studioDefaults.kind;
+  return f.filter((s) => splitFields(card.fields, ownsOf(kind, [s], catId)).some((x) => x.own));
 }

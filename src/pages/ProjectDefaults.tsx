@@ -6,7 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { TEMPLATES } from "../schema";
 import { Ctx, FieldView, type EditorCtx } from "../editor/fields";
 import { loadMergeBase } from "../lib/exporter";
-import { LEGAL_PH, PD_CONN, PD_KINDS, PD_SECTIONS, cleanPdefs, legalTemplate, pdCards, pdSections, pdSeed, type PdId, type ProjectDefaults } from "../lib/projdefaults";
+import { LEGAL_PH, PD_CONN, PD_KINDS, PD_SECTIONS, cleanPdefs, legalTemplate, ownsOf, pdCards, splitFields, pdSections, pdSeed, type PdId, type ProjectDefaults } from "../lib/projdefaults";
 import { clone } from "../lib/util";
 import type { Studio, StudioIndex } from "../lib/studio";
 import { MailForm, SmsForm, WhatsAppForm, useStudioWhere, type Where } from "./Connections";
@@ -54,7 +54,7 @@ export function ProjectDefaultsTab({ studio, index, onIndex, demo }: { studio: S
 
   return (
     <div className="flex flex-col gap-4 pb-6">
-      <p className="max-w-4xl text-sm text-ink-300">What every project of a website type starts with and keeps, set once here: email wording and accounts, the privacy policy and terms, the cookie banner's wording and the ways to pay. A section switched on here goes into each site at its next publish or <b className="text-ink-100">Push updates</b>; the site's own admin page shows it locked, with a switch to use its own instead.</p>
+      <p className="max-w-4xl text-sm text-ink-300">What every project of a website type starts with and keeps, set once here: email wording and accounts, the privacy policy and terms, shop policies, the cookie banner's wording, form consent and spam protection, the footer credit, GST invoices and tax, checkout rules and the ways to pay. A section switched on here goes into each site at its next publish or <b className="text-ink-100">Push updates</b>; the site's own admin page shows it locked, with a switch to use its own instead.</p>
       <div className="flex flex-wrap gap-1 self-start rounded-xl border border-ink-700 bg-ink-900 p-1" role="tablist" aria-label="Website type">
         {PD_KINDS.map((k) => <button key={k} type="button" role="tab" aria-selected={kind === k} onClick={() => setKind(k)}
           className={`flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-semibold transition ${kind === k ? "bg-brand-500/20 text-ink-100" : "text-ink-400 hover:bg-ink-800 hover:text-ink-100"}`}>
@@ -109,15 +109,15 @@ function Body({ kind, sec, S, where, bump, demo }: { kind: string; sec: PdId; S:
       </div>
     );
   }
-  const cards = pdCards(kind, sec);
+  const cards = pdCards(kind, sec), owns = ownsOf(kind, [sec], sec === "pay" ? "payments" : undefined);
   const root = (S.v ||= {});
   const ctx: EditorCtx = { tpl, root, bump, upload: async () => { throw new Error("Uploads aren't used here."); }, img: () => "", pd: sec === "pay" ? where ?? null : null };
   if (!cards.length) return <p className="text-sm text-ink-400">Nothing to set for this website type.</p>;
   return (
     <Ctx.Provider value={ctx}>
       {sec === "pay" && where === null && <p className="rounded-lg border border-ink-600 px-3 py-2 text-[13px] text-ink-300">Gateway keys are kept on the Studio's Cloudflare database: sign in to a Studio hosted on Cloudflare to set them here. The rest below is saved with the project defaults.{demo ? "" : ""}</p>}
-      <div className={`grid gap-3 ${sec === "pay" ? "xl:grid-cols-2" : ""}`}>
-        {cards.map((c) => <div key={c.title} className="flex min-w-0 flex-col gap-3 rounded-xl border border-ink-700 bg-ink-950/40 p-4"><h4 className="text-[14px] font-extrabold">{c.title}</h4>{c.fields.map((f, i) => <FieldView key={i} f={f} obj={root} base={"pd-" + sec} />)}</div>)}
+      <div className={`grid gap-3 ${sec === "pay" || sec === "gst" || sec === "checkout" || sec === "formprivacy" ? "xl:grid-cols-2" : ""}`}>
+        {cards.map((c) => { const fields = splitFields(c.fields, owns).filter((x) => x.own || (x.f as any).t === "note").map((x) => x.f); if (!fields.some((f: any) => f.t !== "note")) return null; return <div key={c.title} className="flex min-w-0 flex-col gap-3 rounded-xl border border-ink-700 bg-ink-950/40 p-4"><h4 className="text-[14px] font-extrabold">{c.title}</h4>{fields.map((f, i) => <FieldView key={i} f={f} obj={root} base={"pd-" + sec} />)}</div>; })}
       </div>
     </Ctx.Provider>
   );

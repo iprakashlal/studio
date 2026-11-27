@@ -2,7 +2,10 @@
 // or two about it. Steps whose target isn't on screen are left out. Esc, Skip or a click outside closes it.
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
-export type MiniStep = { /** What it points at (none: shown in the middle). */ sel?: string; title: string; text: string };
+export type MiniStep = { /** What it points at (none: shown in the middle). */ sel?: string; title: string; text: string; /** Shown only the first time on this device (a name for it). */ once?: string };
+const ONCE = "mini-tour-seen";
+const seenOnce = (): string[] => { try { const l = JSON.parse(localStorage.getItem(ONCE) || "[]"); return Array.isArray(l) ? l : []; } catch { return []; } };
+const markOnce = (k: string) => { try { const l = seenOnce(); if (!l.includes(k)) localStorage.setItem(ONCE, JSON.stringify([...l, k].slice(-50))); } catch { /* private mode */ } };
 type Box = { top: number; left: number; w: number; h: number };
 const found = (sel?: string): Element | null => {
   if (!sel) return null;
@@ -12,10 +15,11 @@ const found = (sel?: string): Element | null => {
 
 export function MiniTour({ steps, onEnd, label = "Help" }: { steps: MiniStep[]; onEnd: () => void; label?: string }) {
   // Only the steps whose target is on screen now (the others belong to a moment that hasn't come).
-  const [list] = useState(() => steps.filter((s) => !s.sel || found(s.sel)));
+  const [list] = useState(() => { const seen = seenOnce(); return steps.filter((s) => (!s.sel || found(s.sel)) && !(s.once && seen.includes(s.once))); });
   const [i, setI] = useState(0), [box, setBox] = useState<Box | null>(null), [pos, setPos] = useState<{ top: number; left: number; side: string; ax: number } | null>(null);
   const pop = useRef<HTMLDivElement>(null);
   const step = list[i];
+  useEffect(() => { if (step?.once) markOnce(step.once); }, [step]);
   const measure = useCallback(() => {
     if (!step) return;
     const W = Math.min(330, innerWidth - 24), H = pop.current?.offsetHeight || 170, G = 14, M = 12, e = found(step.sel), r = e?.getBoundingClientRect();

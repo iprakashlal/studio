@@ -41,8 +41,8 @@ const CHAT_HELP: MiniStep[] = [
   { sel: '[data-tour="diy-answer"]', title: "Answer here", text: "Tap a choice or type your answer. Questions you can leave out have a Skip." },
   { sel: 'section[aria-label="Start from a file or a link"]', title: "Or upload what you have", text: "A menu, brochure, catalogue or resume fills in most answers for you. No file yet? Download a details sheet, fill it in and upload it." },
   { sel: '[aria-label^="Change your answer"]', title: "Change any answer", text: "Press Edit beside an answer to change it." },
-  { sel: '[data-tour="diy-progress"]', title: "Your progress", text: "How far along you are. Preview shows your website so far at any time." },
-  { sel: '[data-tour="diy-help"]', title: "Help is here", text: "Open this help again whenever you need it." },
+  { sel: '[data-tour="diy-progress"]', title: "Your progress", text: "How far along you are. Preview shows your website so far at any time.", once: "diy-progress" },
+  { sel: '[data-tour="diy-help"]', title: "Help is here", text: "Open this help again whenever you need it.", once: "diy-help" },
 ];
 const PREVIEW_HELP: MiniStep[] = [
   { title: "Your preview is ready", text: "This is your website, made from your answers. Look around: it isn't published yet." },

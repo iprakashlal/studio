@@ -437,6 +437,14 @@ function rebrand(o: any, from: string, to: string, skip = new Set(["theme", "cod
   if (Array.isArray(o)) { o.forEach((v, i) => { if (typeof v === "string") o[i] = v.split(from).join(to); else rebrand(v, from, to, skip); }); return; }
   if (o && typeof o === "object") for (const key of Object.keys(o)) { if (skip.has(key)) continue; const v = o[key]; if (typeof v === "string") o[key] = v.split(from).join(to); else rebrand(v, from, to, skip); }
 }
+/** What the person's document said about each thing on offer (description, group, veg or not), by name: kept in the answers as `docitems`. */
+export type DocOffer = { n: string; d?: string; c?: string; v?: string };
+export function docOffers(a: Answers): Record<string, DocOffer & { i: number }> {
+  const o: Record<string, DocOffer & { i: number }> = {};
+  try { const l = JSON.parse(a.docitems || "[]"); if (Array.isArray(l)) l.forEach((x: any, i: number) => { if (x && typeof x.n === "string") o[x.n.trim().toLowerCase()] = { n: x.n, d: typeof x.d === "string" ? x.d : "", c: typeof x.c === "string" ? x.c : "", v: typeof x.v === "string" ? x.v : "", i }; }); } catch { /* none */ }
+  return o;
+}
+const firstLine = (t: string, max = 110) => { const m = /^.{20,}?[.!?](?=\s|$)/.exec(t); const x = m && m[0].length <= max ? m[0] : t.length <= max ? t : t.slice(0, max).replace(/\s+\S*$/, "") + "…"; return x; };
 const goals = (a: Answers) => { const g = (a.goal || "").split(",").filter(Boolean); if (a.cta) g.unshift(a.cta); if (a.reserve === "yes") g.push("table"); if (a.ordering === "yes") g.push("order"); return [...new Set(g)]; };
 
 /** The starter holds made-up facts (years of experience, clients, reviews, prices). A preview built from a few answers shouldn't show someone else's story as theirs, so those parts are hidden or emptied. */
@@ -480,7 +488,7 @@ function tidy(kind: Kind, c: any, o: { name: string; about: string; city: string
 
 export type Design = { kind: Kind; content: any; themeId: string; themeName: string; summary: string };
 /** Pictures and files chosen in the chat (kept on this device until the request is sent). */
-export type DesignFiles = { logo?: string; menu?: { name: string; b64: string }; /** Pictures for the picture questions (photo, banner, bimage, photos), each made small on the person's device. */ pics?: Record<string, string[]> };
+export type DesignFiles = { logo?: string; menu?: { name: string; b64: string }; /** Pictures for the picture questions (photo, banner, bimage, photos), each made small on the person's device. `items`: the pictures their document shows beside each thing on offer, in the order of `docitems` ("" where it shows none). */ pics?: Record<string, string[]> };
 
 const urlOf = (v: string) => { const t = v.trim(); if (!t) return ""; if (/^@?[\w.]{2,30}$/.test(t)) return "https://instagram.com/" + t.replace(/^@/, ""); return /^https?:\/\//i.test(t) ? t : /^[\w-]+(\.[\w-]+)+/.test(t) ? "https://" + t : ""; };
 
@@ -490,6 +498,8 @@ export async function buildDesign(a: Answers, copy?: Copy | null, files?: Design
   const kind = a.kind as Kind, tpl = TEMPLATES[kind], c: any = clone(await starter(kind)); tpl.prepare?.(c); c.festival = { ...(c.festival || {}), on: false }; // the festival overlay would hide the first screen of a preview
   const name = (a.name || "").trim(), about = cap((a.about || "").trim()), city = (a.city || "").trim(), g = goals(a), items = lines(a.items), usp = lines(a.usp), story = (a.story || "").trim();
   const phone = (a.phone || "").trim(), email = (a.email || "").trim(), address = (a.address || "").trim(), hours = (a.hours || "").trim(), social = urlOf(a.social || "");
+  // What their document said about each item (its own words, group and picture), used in place of a written-for-them line.
+  const offers = docOffers(a), offer = (n: string) => offers[n.trim().toLowerCase()], itemPic = (n: string) => { const o = offer(n), u = o ? files?.pics?.items?.[o.i] : ""; return u ? { url: u } : null; };
   const base0 = { service: clone(c.services?.items?.[0] || {}), work: clone(c.work?.items?.[0] || {}) };
   const theme = pickTheme(a), cp: Copy = copy || {}, noteOf = (n: string) => cp.items?.find((x) => x.name.toLowerCase() === n.toLowerCase())?.text || "";
   if (name) rebrand(c, "Picaffectz", name);
@@ -521,8 +531,10 @@ export async function buildDesign(a: Answers, copy?: Copy | null, files?: Design
     put("brand.showAnnouncement", false);
     if (items.length) {
       const base = c.products, cat = { ...c.categories[0], id: "all", name: "Our range", description: about };
-      c.categories = [cat];
-      c.products = items.map((l, i) => { const { name: n, price } = priced(l), s = clone(base[i % base.length]), t = noteOf(n); return { ...s, id: "p" + (i + 1), slug: n.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "item-" + (i + 1), name: n, category: "all", price: price ? +price : 0, compareAt: 0, short: t, description: t, features: [], options: [], optionName: "" }; });
+      // The groups their document lists its products under become the shop's categories.
+      const slug = (x: string) => x.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""), groups = [...new Set(items.map((l) => offer(priced(l).name)?.c || "").filter(Boolean))];
+      c.categories = groups.length >= 2 ? groups.map((gname) => ({ ...c.categories[0], id: slug(gname) || "all", name: gname, description: "", image: null })) : [cat];
+      c.products = items.map((l, i) => { const { name: n, price } = priced(l), s = clone(base[i % base.length]), o = offer(n), t = o?.d || noteOf(n), im = itemPic(n); return { ...s, id: "p" + (i + 1), slug: slug(n) || "item-" + (i + 1), name: n, category: groups.length >= 2 ? slug(o?.c || groups[0]) : "all", price: price ? +price : 0, compareAt: 0, images: im ? [im] : s.images, short: o?.d ? firstLine(o.d, 90) : t, description: t, features: [], options: [], optionName: "", ...(o?.d ? { badge: "" } : {}) }; });
     }
     if (usp.length) { put("home.banner.show", true); put("home.banner.title", usp[0]); put("home.banner.text", usp.slice(1).join(". ") || about); put("home.banner.cta", ""); }
     if (g.length) { const P = c.payments; P.cod.enabled = g.includes("cod"); P.upi.enabled = g.includes("upi"); P.razorpay.enabled = g.includes("card"); put("orders.sendVia", g.includes("whatsapp") || !phone ? "whatsapp" : "email"); }
@@ -536,7 +548,7 @@ export async function buildDesign(a: Answers, copy?: Copy | null, files?: Design
     if (about) { put("brand.tagline", a.tagline?.trim() || cp.tagline || about); put("hero.title", about + "."); put("hero.lede", cp.hero_text || `${name || "We"}${city ? ", " + city : ""}. Get in touch and we'll take it from there.`); put("about.body", aboutText || `${about}.`); put("cta.body", cp.cta_text || `Tell us what you need and we'll get back to you.`); }
     if (city) { put("hero.eyebrow", city); put("contact.address", city); } else put("hero.eyebrow", "");
     c.hero.badges = usp.slice(0, 4);
-    if (items.length) c.services.items = items.slice(0, 6).map((t, i) => ({ ...c.services.items[i % c.services.items.length], title: t, body: noteOf(t) || `${t}${name ? " by " + name : ""}.`, points: [] }));
+    if (items.length) c.services.items = items.slice(0, 6).map((t, i) => ({ ...c.services.items[i % c.services.items.length], title: priced(t).name, body: offer(priced(t).name)?.d || noteOf(t) || `${t}${name ? " by " + name : ""}.`, points: [] }));
     if (cp.services_text && items.length) c.services.lede = cp.services_text;
     const cta: Record<string, [string, string]> = { quote: ["Get a quote", "contact"], call: ["Call us", "contact"], book: [a.cta === "book" ? "Book a call" : "Book a visit", "contact"], whatsapp: ["WhatsApp us", "contact"], contact: ["Contact us", "contact"], demo: ["Request a demo", "contact"] };
     if (g[0] && cta[g[0]]) { put("nav.cta", cta[g[0]][0]); put("hero.ctaPrimary", cta[g[0]][0]); put("cta.button", cta[g[0]][0]); }
@@ -549,10 +561,11 @@ export async function buildDesign(a: Answers, copy?: Copy | null, files?: Design
     for (const x of Object.keys(c)) delete c[x]; Object.assign(c, e);
   } else {
     if (name) put("brand.name", name);
-    if (about) { put("brand.tagline", a.tagline?.trim() || cp.tagline || about); put("hero.eyebrow", about + (city ? " · " + city : "")); put("hero.lede", cp.hero_text || `${about}. Come hungry.`); put("about.body", aboutText || `${name || "We"} serve ${about.toLowerCase()}${city ? " in " + city : ""}.`); put("cta.body", cp.cta_text || "Book a table, or call us for takeaway."); }
+    if (about) { put("brand.tagline", a.tagline?.trim() || cp.tagline || about); put("hero.eyebrow", about + (city ? " · " + city : "")); put("hero.lede", a.tagline?.trim() ? `${a.tagline.trim().replace(/[.]+$/, "")}. ${cp.hero_text && cp.hero_text.length <= 150 ? cp.hero_text : about + "."}` : cp.hero_text || `${about}. Come hungry.`); put("about.body", aboutText || `${name || "We"} serve ${about.toLowerCase()}${city ? " in " + city : ""}.`); put("cta.body", cp.cta_text || "Book a table, or call us for takeaway."); }
     if (name) put("hero.title", name);
     put("hero.stamp", ""); c.hero.badges = usp.slice(0, 4);
-    if (items.length) c.specials.items = items.slice(0, 8).map((l, i) => { const { name: n, price } = priced(l); return { ...c.specials.items[i % c.specials.items.length], name: n, desc: noteOf(n), price, tag: "", image: null }; });
+    if (items.length) c.specials.items = items.slice(0, 8).map((l, i) => { const { name: n, price } = priced(l), o = offer(n); return { ...c.specials.items[i % c.specials.items.length], name: n, desc: o?.d ? firstLine(o.d, 150) : noteOf(n), price, tag: "", diet: o?.v || "", image: itemPic(n) }; });
+    if (a.docmoney) { put("food.currency", a.docmoney); if (a.docmoney !== "₹") put("food.note", ""); }
     const cta: Record<string, [string, string]> = { table: ["Book a table", "reserve"], order: ["Order online", "order"], menu: ["See the menu", "food"], event: ["Plan a party", "events"] };
     if (g[0] && cta[g[0]]) { put("nav.cta", cta[g[0]][0]); put("nav.ctaTarget", cta[g[0]][1]); put("hero.ctaPrimary", cta[g[0]][0]); put("hero.ctaPrimaryTarget", cta[g[0]][1]); }
     if (city) put("contact.address", city);
@@ -562,6 +575,14 @@ export async function buildDesign(a: Answers, copy?: Copy | null, files?: Design
     seo();
   }
   tidy(kind, c, { name, about, city, g, items, phone, email });
+  if (kind === "restaurant") {
+    // Their document's menu, as it groups it: every dish with its own words, price and picture.
+    if (items.length && Object.keys(offers).length) {
+      const groups: Record<string, any[]> = {};
+      for (const l of items) { const { name: n, price } = priced(l), o = offer(n), gname = o?.c || "Our menu"; (groups[gname] ||= []).push({ name: n, desc: o?.d || "", price, diet: o?.v || "", spice: "", tag: "", allergens: "", image: itemPic(n), variants: [], soldOut: false }); }
+      c.food.categories = Object.entries(groups).map(([gname, list]) => ({ name: gname, note: "", image: null, items: list }));
+    }
+  }
   // A section the person gave nothing for isn't shown (not even with the template's sample words).
   const hideIf = (cond: boolean, ...ids: string[]) => { if (cond) for (const x of c.sections || []) if (ids.includes(x.id)) { if ("visible" in x) x.visible = false; else x.show = false; } };
   if (!items.length) { if (kind === "business") c.services.items = []; if (kind === "restaurant") c.specials.items = []; if (kind === "portfolio") c.skills.items = []; }

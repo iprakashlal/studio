@@ -3,6 +3,7 @@
 // same labels, so the two can't drift apart. "*" marks an answer that must be filled in. A line starting with "#" is a note.
 import JSZip from "jszip";
 import { STEPS, isOptional, type Answers, type Step } from "./designer";
+import type { DocRead, DocItem } from "./docread";
 
 /** Asked after the upload instead (the type of business, the theme type and the look are chosen by tapping). */
 const LATER = ["kind", "how", "doc", "colour", "style", "btype", "etype", "ptype", "genre", "menuhow", "logo"];
@@ -107,4 +108,22 @@ export function readSheet(kind: string, rows: string[][]): SheetRead {
   }
   const missing = steps.filter((s) => (!s.when || s.when(answers)) && must(s, kind) && !answers[s.id]).map((s) => s.label!);
   return { labels, answers, missing, unclear };
+}
+
+// ---------------------------------------------------------------- a filled sheet as a document (to fill a project)
+/** A details sheet's answers as what a document says, so a project can be filled from it the same way as from any file. */
+export function sheetToDoc(kind: string, a: Answers): DocRead {
+  const f: Record<string, string> = {}, put = (k: string, v?: string) => { if (v && v.trim() && !f[k]) f[k] = v.trim(); };
+  put("name", a.name); put("tagline", a.tagline); put("email", a.email); put("phone", a.phone); put("city", a.city); put("domain", a.domain);
+  put("social", a.social && (/instagram\.com\/([\w.]+)/i.exec(a.social)?.[1] ? "@" + /instagram\.com\/([\w.]+)/i.exec(a.social)![1] : /^@/.test(a.social.trim()) ? a.social.trim() : ""));
+  put("about", a.about); put("story", a.story || a.eabout); put("hours", a.hours); put("address", a.address || a.evenue); put("mission", a.mission); put("usp", a.usp || a.ehigh);
+  if (kind === "restaurant" && a.outlets) { const l = a.outlets.split("\n").map((x) => x.split(/\s+[–—-]\s+/)).filter((x) => x.length >= 2).map((x) => `${x[0].trim()}: ${x.slice(1).join(", ").trim()}`); if (l.length) { put("address", l[0].split(": ").slice(1).join(": ")); if (l.length >= 2) f.places = l.join("\n"); } }
+  let money = "";
+  const items: DocItem[] = String(a.items || "").split("\n").map((l) => l.trim()).filter(Boolean).map((l) => {
+    const parts = l.split(/\s+[–—-]\s+/).map((x) => x.trim()).filter(Boolean), last = parts[parts.length - 1] || "", pm = parts.length >= 2 ? /^(₹|rs\.?|inr|\$|€|£|aed)?\s*(\d[\d,]*(?:\.\d{1,2})?)\s*(?:\/-)?$/i.exec(last) : null;
+    if (pm && !money) money = /\$/.test(pm[1] || "") ? "$" : /€/.test(pm[1] || "") ? "€" : /£/.test(pm[1] || "") ? "£" : /aed/i.test(pm[1] || "") ? "AED" : "₹";
+    const body = pm ? parts.slice(0, -1) : parts;
+    return { name: (body[0] || l).slice(0, 80), desc: body.slice(1).join(" – "), price: pm ? pm[2].replace(/,/g, "") : "", cat: "" };
+  });
+  return { fields: f, items, money };
 }

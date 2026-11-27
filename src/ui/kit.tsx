@@ -36,7 +36,7 @@ export function ToastHost({ children }: { children: ReactNode }) {
 }
 
 // ---------- modal ----------
-export function Modal({ title, onClose, children, wide, footer }: { title: string; onClose: () => void; children: ReactNode; wide?: boolean; footer?: ReactNode }) {
+export function Modal({ title, onClose, children, wide, footer, xl }: { title: string; onClose: () => void; children: ReactNode; wide?: boolean; footer?: ReactNode; /** Uses most of the screen's width, and the body lays itself out (its own columns scroll, not the dialog). */ xl?: boolean }) {
   useEffect(() => {
     const k = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     addEventListener("keydown", k);
@@ -45,12 +45,12 @@ export function Modal({ title, onClose, children, wide, footer }: { title: strin
   // Drawn on the page itself, not inside the card that opened it: a card with a glass blur would otherwise trap the dialog inside its own box.
   return createPortal(
     <div className="fixed inset-0 z-[200] grid place-items-center bg-black/60 px-4 py-6 backdrop-blur-sm" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div role="dialog" aria-modal="true" aria-label={title} className={`card flex max-h-[calc(100vh-48px)] w-full flex-col overflow-hidden rounded-2xl shadow-2xl ${wide ? "max-w-2xl" : "max-w-md"}`}>
+      <div role="dialog" aria-modal="true" aria-label={title} className={`card flex max-h-[calc(100vh-48px)] w-full flex-col overflow-hidden rounded-2xl shadow-2xl ${xl ? "h-[calc(100vh-48px)] max-w-[min(1480px,96vw)]" : wide ? "max-w-2xl" : "max-w-md"}`}>
         <div className="flex items-center justify-between gap-3 border-b border-ink-700 px-5 py-3.5">
           <h2 className="text-[15px] font-extrabold">{title}</h2>
           <button className="icon-btn" onClick={onClose} aria-label="Close">✕</button>
         </div>
-        <div className="scroll-thin flex flex-col gap-4 overflow-auto px-5 py-4">{children}</div>
+        {xl ? <div className="flex min-h-0 flex-1 flex-col">{children}</div> : <div className="scroll-thin flex flex-col gap-4 overflow-auto px-5 py-4">{children}</div>}
         {footer && <div className="flex flex-wrap justify-end gap-2 border-t border-ink-700 px-5 py-3">{footer}</div>}
       </div>
     </div>,

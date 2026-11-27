@@ -201,7 +201,7 @@ function useDiyLook(auto: "" | "light" | "dark" = "") {
       // over the glows, the answer bar is not a band: what is behind it is blurred, fading out at its edges
       `.diy-page>footer{border-color:transparent!important}`,
       // The answer box with its button built in: the box is the frame; the button takes its top, bottom and right edge.
-      `.diy-page .diy-join>.input{border:0!important;background:transparent!important;box-shadow:none!important;border-radius:0!important;outline:0!important}:root:root .diy-page .diy-join>.btn{align-self:stretch;height:auto;margin:-1px -1px -1px 0;border-top-left-radius:0!important;border-bottom-left-radius:0!important;border-top-right-radius:inherit!important;border-bottom-right-radius:inherit!important}:root:root .diy-page .diy-join>.btn:disabled{opacity:1;filter:saturate(.55) brightness(1.25) opacity(.55)}`,
+      `:is(.diy-page,[role=dialog]) .diy-join>.input{border:0!important;background:transparent!important;box-shadow:none!important;border-radius:0!important;outline:0!important}:root:root :is(.diy-page,[role=dialog]) .diy-join>.btn{align-self:stretch;height:auto;margin:-1px -1px -1px 0;border-top-left-radius:0!important;border-bottom-left-radius:0!important;border-top-right-radius:inherit!important;border-bottom-right-radius:inherit!important}:root:root :is(.diy-page,[role=dialog]) .diy-join>.btn:disabled{opacity:1;filter:saturate(.55) brightness(1.25) opacity(.55)}`,
       // The same for the Send button of the main answer box (the box has 8px of padding and a 1px frame to reach across).
       `:root:root .diy-page .diy-field>.btn.diy-edge{align-self:stretch;height:auto;margin:-9px -9px -9px 4px;border-top-left-radius:0!important;border-bottom-left-radius:0!important;border-top-right-radius:inherit!important;border-bottom-right-radius:inherit!important}:root:root .diy-page .diy-field>.btn.diy-edge:disabled{opacity:1;filter:saturate(.55) brightness(1.25) opacity(.55)}`,
       // Over colour glows or a picture / moving background the answer bar is clear: any band of flat colour would show as a strip.
@@ -550,7 +550,7 @@ function DesignPageInner({ studio, index, onIndex }: { studio?: Studio; index?: 
           <button type="button" className="btn btn-pri btn-sm rounded-full" onClick={() => pick.current?.click()}>{PIC_STEPS.includes(cur.id) ? (cur.id === "photos" || cur.id === "banner" ? "Choose pictures" : "Choose a picture") : cur.id === "logo" ? "Choose logo" : cur.id === "doc" ? "Choose document (PDF)" : "Choose PDF"}</button>
         </>}
         {cur && isOptional(cur, a) && (field$ || cur.type === "file") && <button type="button" className="btn btn-ghost btn-sm" onClick={() => answer(cur, "")}>{word("skipBtn")}</button>}
-        {cur?.type === "many" && <button type="submit" className="btn btn-pri btn-sm rounded-full" disabled={!many.length}>Done</button>}
+        {cur?.type === "many" && <button type="submit" className="btn btn-pri diy-edge px-5" disabled={!many.length}>Done</button>}
         {field$ && <button type="submit" className="btn btn-pri diy-edge px-5" disabled={!text.trim()} aria-label="Send">Send ↵</button>}
       </div>
       {cur?.type === "long" && <p className="px-3 text-xs text-ink-500">Press Enter for a new line. Ctrl + Enter sends.</p>}
@@ -998,12 +998,12 @@ export function ConnectPopup({ a, design, copy, files, host, sent, onSent, onClo
               <label className="flex flex-col gap-1.5 sm:col-span-2"><span className="label">Your name</span><input className="input" autoFocus value={f.person} onChange={(e) => setF({ ...f, person: e.target.value })} /></label>
               <label className="flex flex-col gap-1.5"><span className="label">Phone or WhatsApp (optional)</span><input className="input" inputMode="tel" value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} /></label>
               <div className="flex flex-col gap-1.5"><label className="label" htmlFor="cp-email">Email (required)</label>
-                <div className="flex gap-2"><input id="cp-email" className="input min-w-0 flex-1" type="email" autoComplete="email" required readOnly={!!given} value={f.email} onChange={(e) => { setF({ ...f, email: e.target.value }); setAsked(false); setCode(""); }} />
-                  {verified ? <span className="chip shrink-0 self-center border-emerald-400/60 text-emerald-200">{okMail ? "Verified ✓" : "Accepted ✓"}</span> : <button type="button" className="btn btn-sm shrink-0 self-center" disabled={busy || (asked && wait > 0) || !mail} onClick={askCode}>{asked ? (wait > 0 ? `Resend (${wait})` : "Resend code") : "Send code"}</button>}</div>
+                <div className={`flex gap-2 ${verified ? "" : "diy-join items-stretch gap-0 rounded-xl border border-ink-700 bg-ink-900 focus-within:border-brand-400"}`}><input id="cp-email" className="input min-w-0 flex-1" type="email" autoComplete="email" required readOnly={!!given} value={f.email} onChange={(e) => { setF({ ...f, email: e.target.value }); setAsked(false); setCode(""); }} />
+                  {verified ? <span className="chip shrink-0 self-center border-emerald-400/60 text-emerald-200">{okMail ? "Verified ✓" : "Accepted ✓"}</span> : <button type="button" className="btn btn-pri shrink-0 px-5" disabled={busy || (asked && wait > 0) || !mail} onClick={askCode}>{asked ? (wait > 0 ? `Resend (${wait})` : "Resend code") : "Send code"}</button>}</div>
               </div>
               {asked && !verified && <div className="flex flex-col gap-1.5 sm:col-span-2"><label className="label" htmlFor="cp-code">The 6-digit code we emailed you</label>
-                <div className="flex gap-2"><input id="cp-code" className="input max-w-[11rem] font-mono text-lg tracking-widest" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))} onKeyDown={(e) => { if (e.key === "Enter") checkCode(); }} />
-                  <button type="button" className="btn btn-pri btn-sm" disabled={busy || code.length < 6} onClick={checkCode}>Verify</button></div></div>}
+                <div className="diy-join flex max-w-[22rem] items-stretch rounded-xl border border-ink-700 bg-ink-900 focus-within:border-brand-400"><input id="cp-code" className="input min-w-0 flex-1 font-mono text-lg tracking-widest" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))} onKeyDown={(e) => { if (e.key === "Enter") checkCode(); }} />
+                  <button type="button" className="btn btn-pri shrink-0 px-5" disabled={busy || code.length < 6} onClick={checkCode}>Verify</button></div></div>}
               <label className="flex flex-col gap-1.5 sm:col-span-2"><span className="label">Anything else we should know? (optional)</span><textarea className="input min-h-[70px]" value={f.note} onChange={(e) => setF({ ...f, note: e.target.value })} /></label>
             </div>
             <div className="flex flex-wrap gap-2"><button type="button" className="btn btn-pri" disabled={busy || !verified} onClick={send} title={verified ? "" : "Confirm your email first"}>{busy ? "Working…" : "Send to Picaffectz"}</button><button type="button" className="btn btn-ghost" onClick={onClose}>Not now</button></div>
@@ -1054,9 +1054,9 @@ function useEmailChat(host: DesignHost | null, onPass: (p: Pass) => void): { thr
       <div className="diy-field flex items-end gap-2 rounded-3xl border border-ink-600 bg-ink-900 p-2 pl-4 shadow-xl focus-within:border-brand-400">
         {asked
           ? <><label className="sr-only" htmlFor="eg-code">The 6-digit code we emailed you</label><input id="eg-code" className="min-w-0 flex-1 bg-transparent py-2.5 font-mono text-lg tracking-widest text-ink-100 outline-none placeholder:text-ink-500" inputMode="numeric" autoComplete="one-time-code" maxLength={6} placeholder="6-digit code" autoFocus value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))} />
-            <button type="submit" className="btn btn-pri btn-sm rounded-full" disabled={busy || code.length < 6}>{busy ? "Checking…" : "Verify and start"}</button></>
+            <button type="submit" className="btn btn-pri diy-edge px-5" disabled={busy || code.length < 6}>{busy ? "Checking…" : "Verify and start"}</button></>
           : <><label className="sr-only" htmlFor="eg-email">Your email</label><input id="eg-email" className="min-w-0 flex-1 bg-transparent py-2.5 text-[15px] text-ink-100 outline-none placeholder:text-ink-500" type="email" autoComplete="email" autoFocus required placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} />
-            <button type="submit" className="btn btn-pri btn-sm rounded-full" disabled={busy || !mail}>{busy ? "Sending…" : "Send code"}</button></>}
+            <button type="submit" className="btn btn-pri diy-edge px-5" disabled={busy || !mail}>{busy ? "Sending…" : "Send code"}</button></>}
       </div>
       {asked && <div className="flex flex-wrap gap-2 px-1">
         <button type="button" className="btn btn-ghost btn-sm" disabled={busy || wait > 0} onClick={() => ask()}>{wait > 0 ? `Resend (${wait})` : "Resend code"}</button>

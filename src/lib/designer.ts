@@ -101,7 +101,13 @@ const P = (a: Answers) => k(a) === "portfolio", S = (a: Answers) => k(a) === "st
 const RAW: Step[] = [
   { id: "kind", group: "basics", label: "Type", type: "choice", ask: () => "Hi! Let's design your website together. What kind of website do you want?", options: () => KIND_OPTIONS },
   {
-    id: "doc", group: "basics", label: "Starting point", type: "file", optional: true, accept: ".pdf,.docx,.xlsx,.csv,.txt,application/pdf", maxKB: 51200,
+    id: "how", group: "basics", label: "Upload or type", type: "choice",
+    ask: (a) => by(a, { portfolio: "Do you have your details in a file (a resume, say), or would you like to type them in?", store: "Do you have your products in a file (a catalogue or price list), or would you like to type them in?", business: "Do you have your details in a file (a company profile or brochure), or would you like to type them in?", restaurant: "Do you have your menu or details in a file, or would you like to type them in?", events: "Do you have the details in a file (a brochure or invitation), or would you like to type them in?" }),
+    options: () => [{ v: "file", label: "Upload a file" }, { v: "type", label: "Enter manually" }],
+    help: () => "A file is read on your device and fills in what it can; then you only choose your type and look.",
+  },
+  {
+    id: "doc", group: "basics", label: "Starting point", type: "file", optional: true, when: (a) => a.how !== "type", accept: ".pdf,.docx,.xlsx,.csv,.txt,application/pdf", maxKB: 51200,
     ask: (a) => by(a, { portfolio: "Do you already have your details somewhere? Add your resume (PDF, Word or Excel) or paste your LinkedIn or website link, and we'll fill in what we can and take you to your preview.", store: "Do you already have your products somewhere? Add a catalogue or product menu (PDF, Word or Excel) or paste your website or Instagram link, and we'll fill in what we can and take you to your preview.", business: "Do you already have your details somewhere? Add a company profile or brochure (PDF, Word or Excel) or paste your website link, and we'll fill in what we can and take you to your preview.", restaurant: "Do you already have your menu or details somewhere? Add your menu or brochure (PDF, Word or Excel) or paste your website or Instagram link, and we'll fill in what we can and take you to your preview.", events: "Do you already have the details somewhere? Add the brochure or invitation (PDF, Word or Excel) or paste the event's page link, and we'll fill in what we can and take you to your preview." }),
     ph: () => "Paste a link, e.g. https://yourname.com",
     help: () => "We only use what is written there, and we won't ask again for what we find. You can skip this.",
@@ -289,7 +295,12 @@ if (typeof addEventListener === "function") addEventListener("studio:design-page
 export const STEP_LABEL: Record<string, string> = { pages: "Pages", usp: "Highlights", goal: "Goal", hours: "Hours", address: "Address", ...Object.fromEntries(RAW.filter((x) => x.label).map((x) => [x.id, x.label!])), about: "About", story: "Story", items: "Offerings" };
 
 /** The steps still to ask, in order. */
-export const nextStep = (a: Answers): Step | null => STEPS.find((s) => (s.when ? s.when(a) : true) && !(s.id in a)) || null;
+export const nextStep = (a: Answers): Step | null => {
+  const open = (s: Step) => (s.when ? s.when(a) : true) && !(s.id in a);
+  // After a file is uploaded, the type of business and the theme type are asked first, then the look.
+  if (a.how === "file" && a.doc) { for (const id of ["btype", "etype", "ptype", "genre"]) { const t = STEPS.find((s) => s.id === id && open(s)); if (t) return t; } }
+  return STEPS.find(open) || null;
+};
 /** The question with this id (several types share ids such as "about"): the one that applies to these answers. */
 export const stepOf = (id: string, a?: Answers) => (a && STEPS.find((s) => s.id === id && (!s.when || s.when(a)))) || STEPS.find((s) => s.id === id)!;
 /** Its place in the order asked (-1 when it is not a question). */

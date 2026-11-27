@@ -38,10 +38,10 @@ const DEVICES = [
 /** The content shown in a preview: the same, with the "Powered by" badge turned off. */
 const quiet = (c: any) => (c && typeof c === "object" ? { ...c, poweredBy: { ...(c.poweredBy || {}), show: false } } : c);
 
-export function Preview({ tpl, base, content, version, assets, editable = true, hidePages = false, onEditLink, hints, lite = false, note }: { /** A notice shown in a yellow strip beside the title. */ note?: string; /** A still page (no animations or effects), for a phone showing a live preview. */ lite?: boolean; /** The answers the page was made from: hovering text that shows one gets a pencil that opens that answer. */ hints?: { id: string; text?: string; img?: string }[];  /** A note such as "(Edit:story)" in the preview becomes an Edit link that calls this with the answer it belongs to. */ onEditLink?: (id: string) => void; tpl: TemplateDef; base: string; content: any; version: number; assets: Record<string, string>; editable?: boolean; /** No page list (a single-site preview). */ hidePages?: boolean }) {
+export function Preview({ tpl, base, content, version, assets, editable = true, hidePages = false, onEditLink, hints, lite = false, note, startDevice = "desktop" }: { /** The screen size it opens on. */ startDevice?: "desktop" | "tablet" | "phone"; /** A notice shown in a yellow strip beside the title. */ note?: string; /** A still page (no animations or effects), for a phone showing a live preview. */ lite?: boolean; /** The answers the page was made from: hovering text that shows one gets a pencil that opens that answer. */ hints?: { id: string; text?: string; img?: string }[];  /** A note such as "(Edit:story)" in the preview becomes an Edit link that calls this with the answer it belongs to. */ onEditLink?: (id: string) => void; tpl: TemplateDef; base: string; content: any; version: number; assets: Record<string, string>; editable?: boolean; /** No page list (a single-site preview). */ hidePages?: boolean }) {
   const frame = useRef<HTMLIFrameElement>(null);
   const box = useRef<HTMLDivElement>(null);
-  const [device, setDevice] = useState<(typeof DEVICES)[number]["id"]>("desktop");
+  const [device, setDevice] = useState<(typeof DEVICES)[number]["id"]>(startDevice);
   const [page, setPage] = useState(tpl.pages[0].file);
   const [src, setSrc] = useState(pageUrl(base, tpl.pages[0].file, 0, lite));
   const [size, setSize] = useState({ w: 600, h: 600 });

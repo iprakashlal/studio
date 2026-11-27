@@ -306,7 +306,11 @@ function PhoneNotice() {
   );
 }
 export function DesignPage(props: { studio?: Studio; index?: StudioIndex | null; onIndex?: (i: StudioIndex) => void }) {
-  return useNarrow() ? <PhoneNotice /> : <DesignPageInner {...props} />;
+  // On a phone: the "use a larger screen" notice, unless Settings → Design yourself lets phones use the page. Decided when the
+  // page opens (and when the setting changes), not on every resize: turning a phone sideways must not swap the page out and back,
+  // which looked like the page reloading.
+  const narrow = useNarrow(), [atOpen] = useState(narrow);
+  return atOpen && readDesignSettings().phoneNotice !== false ? <PhoneNotice /> : <DesignPageInner {...props} />;
 }
 function DesignPageInner({ studio, index, onIndex }: { studio?: Studio; index?: StudioIndex | null; onIndex?: (i: StudioIndex) => void }) {
   const toast = useToast();
@@ -760,7 +764,7 @@ function DesignPageInner({ studio, index, onIndex }: { studio?: Studio; index?: 
                   onDragOver={(e) => { e.preventDefault(); }} onDrop={(e) => { e.preventDefault(); const f = e.dataTransfer.files?.[0]; if (f) fromFile(f); }}>
                   <div>
                     <p className="text-[15px] font-bold text-ink-100">Already have your details? Upload them and skip the questions.</p>
-                    <p className="mt-0.5 text-[13px] text-ink-400">Choose a {DOC_KINDS} file (up to {DOC_MAX_MB} MB), or paste your current website's link. We read it in whatever order it is written (your details, hours, and your products, dishes or services with their descriptions, prices and pictures), and fill it all in. You then choose your type and look, and your preview opens. The file is read on your device.</p>
+                    <p className="mt-0.5 text-[13px] text-ink-400 max-sm:hidden">Choose a {DOC_KINDS} file (up to {DOC_MAX_MB} MB), or paste your current website's link. We read it in whatever order it is written (your details, hours, and your products, dishes or services with their descriptions, prices and pictures), and fill it all in. You then choose your type and look, and your preview opens. The file is read on your device.</p>
                     {/* The details sheets for this kind of website (the owner's own, or the Studio's), and the owner's help line. */}
                     <p className="mt-2 text-[13px] text-ink-300">{readDesignSettings().refs?.[(a.kind || "business") as Kind]?.note || REF_NOTE}{" "}
                       {REF_EXT.map((k2, i2) => <span key={k2}>{i2 ? " · " : ""}<button type="button" className="font-semibold text-brand-400 underline-offset-2 hover:underline" onClick={() => void getSheet(k2)}>{REF_NAME[k2]}</button></span>)}</p>
@@ -856,6 +860,7 @@ const PREVIEW_CSS = `
 .pv-glow i{position:absolute;width:5px;height:5px;border-radius:999px;background:#ffe7a3;box-shadow:0 0 8px 2px rgba(255,210,110,.9);opacity:0;animation:pvSpark 3.2s ease-in-out infinite}
 @keyframes pvGlow{0%,100%{opacity:.55;transform:scale(.94)}50%{opacity:1;transform:scale(1.06)}}
 @keyframes pvSpark{0%,100%{opacity:0;transform:translateY(4px) scale(.4)}40%{opacity:1;transform:translateY(-6px) scale(1)}70%{opacity:0;transform:translateY(-14px) scale(.5)}}
+@media (max-width:767px){.pv-side{width:42px;height:42px}.pv-side svg{width:20px;height:20px}.pv-side.l{left:6px}.pv-side.r{right:6px}.pv-cta-wrap{bottom:.9rem}.pv-cta-wrap .pv-cta{padding:.6rem 1.4rem!important;font-size:.92rem!important}.pv-glow{inset:-22px -40px}}
 @media (prefers-reduced-motion:reduce){.pv-side::before,.pv-side svg,.pv-step,.pv-glow::before,.pv-glow i{animation:none!important}}
 `;
 const Chevron = ({ left }: { left?: boolean }) => <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d={left ? "M15 5l-7 7 7 7" : "M9 5l7 7-7 7"} /></svg>;
@@ -869,6 +874,8 @@ export function PreviewPopup({ design, ver, a, onClose, onEdit, onEditLink, onCo
   const flow = !!(done && onTweak && build);
   // A phone can't hold several live websites at once (its browser gives up and reloads the page): there only the card in focus is live; its neighbours are light colour cards.
   const lite = useMemo(() => { try { return matchMedia("(max-width: 767px), (pointer: coarse)").matches; } catch { return false; } }, []);
+  // A phone's screen: the site is shown at phone size, the cards take nearly the whole width.
+  const small = useMemo(() => { try { return matchMedia("(max-width: 767px)").matches; } catch { return false; } }, []);
   const first = useRef(design.themeId);
   const akey = JSON.stringify({ ...a, theme: "" });
   const list = useMemo<Theme[]>(() => {
@@ -930,8 +937,8 @@ export function PreviewPopup({ design, ver, a, onClose, onEdit, onEditLink, onCo
                 const dd = built[akey + t.id] || (t.id === design.themeId ? design : null);
                 return (
                   <div key={t.id} role="group" aria-roledescription="slide" aria-label={`${t.name}, ${i + 1} of ${list.length}`} className="absolute bottom-2 top-2 flex flex-col overflow-hidden rounded-2xl border border-ink-600 bg-ink-950 shadow-2xl transition-all duration-300 ease-out"
-                    style={{ left: "50%", width: "min(78%, 1180px)", transform: `translateX(calc(-50% + ${d * 42}%)) scale(${d ? 0.86 : 1})`, zIndex: d ? 1 : 2, filter: d ? "brightness(.6)" : undefined }}>
-                    {d !== 0 && lite ? <div className="flex min-h-0 flex-1 flex-col gap-3 p-4" style={{ background: t.colors.bg, color: t.colors.text }} aria-hidden><span className="h-3 w-1/3 rounded-full" style={{ background: t.colors.c1 }} /><span className="h-6 w-4/5 rounded-full" style={{ background: t.colors.text }} /><span className="h-6 w-3/5 rounded-full" style={{ background: t.colors.text }} /><span className="mt-2 h-8 w-28 rounded-full" style={{ background: t.colors.c1 }} /><b className="mt-auto text-sm">{t.name}</b></div> : dd && settled ? <Preview key={t.id} lite={lite} tpl={TEMPLATES[design.kind]} base={`templates/${design.kind}/`} content={dd.content} version={ver} assets={{}} editable={false} hidePages onEditLink={d ? undefined : onEditLink} hints={hints} /> : <div className="grid min-h-0 flex-1 place-items-center"><Spinner /></div>}
+                    style={{ left: "50%", width: small ? "92%" : "min(78%, 1180px)", transform: `translateX(calc(-50% + ${d * (small ? 100 : 42)}%)) scale(${d ? 0.86 : 1})`, zIndex: d ? 1 : 2, filter: d ? "brightness(.6)" : undefined }}>
+                    {d !== 0 && lite ? <div className="flex min-h-0 flex-1 flex-col gap-3 p-4" style={{ background: t.colors.bg, color: t.colors.text }} aria-hidden><span className="h-3 w-1/3 rounded-full" style={{ background: t.colors.c1 }} /><span className="h-6 w-4/5 rounded-full" style={{ background: t.colors.text }} /><span className="h-6 w-3/5 rounded-full" style={{ background: t.colors.text }} /><span className="mt-2 h-8 w-28 rounded-full" style={{ background: t.colors.c1 }} /><b className="mt-auto text-sm">{t.name}</b></div> : dd && settled ? <Preview key={t.id} lite={lite} startDevice={small ? "phone" : "desktop"} tpl={TEMPLATES[design.kind]} base={`templates/${design.kind}/`} content={dd.content} version={ver} assets={{}} editable={false} hidePages onEditLink={d ? undefined : onEditLink} hints={hints} /> : <div className="grid min-h-0 flex-1 place-items-center"><Spinner /></div>}
                     {d !== 0 && <button type="button" aria-label={`Show ${t.name}`} className="absolute inset-0 z-10 cursor-pointer" onClick={() => go(i)} />}
                   </div>
                 );
@@ -946,7 +953,7 @@ export function PreviewPopup({ design, ver, a, onClose, onEdit, onEditLink, onCo
               <button type="button" className="pv-step r btn btn-sm rounded-full px-2.5" aria-label="Next theme" disabled={at >= list.length - 1} onClick={() => go(at + 1)}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M9 5l7 7-7 7" /></svg></button>
             </div>
           </>) : (
-            <div className="relative flex min-h-0 flex-1 flex-col"><Preview key={design.kind} tpl={TEMPLATES[design.kind]} base={`templates/${design.kind}/`} content={design.content} version={ver} assets={{}} editable={false} hidePages onEditLink={onEditLink} hints={hints} />
+            <div className="relative flex min-h-0 flex-1 flex-col"><Preview key={design.kind} startDevice={typeof matchMedia === "function" && matchMedia("(max-width: 767px)").matches ? "phone" : "desktop"} tpl={TEMPLATES[design.kind]} base={`templates/${design.kind}/`} content={design.content} version={ver} assets={{}} editable={false} hidePages onEditLink={onEditLink} hints={hints} />
               {onConnect && <span className="pv-cta-wrap"><CtaGlow /><button type="button" data-tour="diy-connect" onClick={(e) => onConnect(e.currentTarget.getBoundingClientRect())} className="pv-cta btn btn-pri whitespace-nowrap rounded-full px-10 py-4 text-base font-extrabold shadow-2xl shadow-black/50 ring-4 ring-brand-400/25">{word("connectBtn")}</button></span>}
             </div>
           )}

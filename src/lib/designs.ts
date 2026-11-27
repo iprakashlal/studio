@@ -28,6 +28,7 @@ export function cleanDesignSettings(x: any): DesignSettings {
   const ga = cleanGallery(x.gallery); if (ga) o.gallery = ga;
   const rf = cleanRefs(x.refs); if (rf) o.refs = rf;
   if (x.help === false) o.help = false;
+  if (x.phoneNotice === false) o.phoneNotice = false;
   const th = cleanThemes(x.themes); if (Object.keys(th).length) o.themes = th;
   if (x.images && typeof x.images === "object") { const im: NonNullable<DesignSettings["images"]> = {}; if (x.images.on === true) im.on = true; if (["photo", "illustration", "3d", "flat"].includes(x.images.style)) im.style = x.images.style; if (x.images.source === "engine" || x.images.source === "unsplash") im.source = x.images.source; if (Object.keys(im).length) o.images = im; }
   if (x.adminAi === false) o.adminAi = false;

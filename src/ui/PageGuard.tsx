@@ -24,7 +24,11 @@ let base = { w: 0, h: 0, dpr: 0 };
 function devtoolsOpen(): boolean {
   const dpr = window.devicePixelRatio || 1, w = outerWidth - innerWidth, h = outerHeight - innerHeight;
   if (base.dpr !== dpr) base = { w, h, dpr };   // zooming changes the sizes: measure again
-  let hit = w - base.w > 160 || h - base.h > 160;
+  // The size sign only counts on a computer. On a phone or tablet the on-screen keyboard, the address bar and turning the
+  // device all change the page area by far more than a docked panel would (that read as "tools open", hid the page and reloaded it).
+  const touch = typeof matchMedia === "function" && (matchMedia("(pointer: coarse)").matches || matchMedia("(hover: none)").matches);
+  const typing = !!(document.activeElement as HTMLElement | null)?.closest?.("input,textarea,select,[contenteditable=true]");
+  let hit = !touch && !typing && (w - base.w > 160 || h - base.h > 160);
   try { const el = new Image(); Object.defineProperty(el, "id", { get() { hit = true; return ""; } }); console.log(el); } catch { /* not detectable here */ }
   return hit;
 }

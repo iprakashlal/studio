@@ -2,7 +2,8 @@
 // the Studio's database (tokens as Worker secrets on your own Cloudflare, never read back), and each site's choice is
 // saved with the project, so every device signed in to the Studio sees and uses the same setup.
 import { CFDB_VERSION } from "../lib/cfdbSchema";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useUpdateStatus } from "../lib/autodb";
 import type { Session } from "../lib/auth";
 import type { ProjectMeta, Studio, StudioIndex } from "../lib/studio";
 import { CFDB_WORKER, CF_DB_TOKEN_PAGE, setupCfDb, cfAccountVault, cfDeployInfo, cfSignedIn, cfxDelete, cfxList, cfxPut, cfxSite, siteMembers } from "../lib/cfdb";
@@ -38,6 +39,8 @@ export function SitesHostingCard({ session, studio, index, onIndex }: { session:
   const [info, setInfo] = useState<{ /** The database runs this build's version. */ cur: boolean; cfx: boolean; imp: boolean; pages: boolean; del: boolean; mail: boolean; /** The database has a Resend key and sender (sign-in codes can be sent). */ resend: boolean; main: string | null; accounts: Acc[]; signed: boolean; gh: boolean; workers: string[] | null } | null>(null);
   const [mainName, setMainName] = useState("");
   /** Databases that sites keep on their own Cloudflare accounts (not the Studio's database): each is updated by itself. */
+  /** Site databases waiting their turn after the Studio's database update. */
+  const [queued, setQueued] = useState<string[]>([]);
   const [siteDbs, setSiteDbs] = useState<{ api: string; account: string; cur: boolean; sites: string[] }[]>([]);
   const loadSiteDbs = async (studioApi: string, justUpdated = "") => {
     const by = new Map<string, { account: string; sites: string[] }>();
@@ -70,6 +73,10 @@ export function SitesHostingCard({ session, studio, index, onIndex }: { session:
     }
   };
   useEffect(() => { load(); }, [session.token]);
+  // The automatic database update (the D icon) runs the Studio's database, then each site's, one after another: this list
+  // follows it, showing which site is being updated now and refreshing when it ends.
+  const auto = useUpdateStatus(), wasBusy = useRef(false);
+  useEffect(() => { if (wasBusy.current && !auto.dbBusy) load(); wasBusy.current = auto.dbBusy; }, [auto.dbBusy]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const run = async (k: string, f: () => Promise<void>) => { setErr(""); setBusy(k); try { await f(); } catch (e: any) { setErr(e?.message || explain(e)); } setBusy(""); };
   const accounts: Acc[] = [...(info?.main ? [{ id: info.main, name: mainName || "The Studio's own Cloudflare account" }] : []), ...(info?.accounts || [])];
@@ -153,7 +160,9 @@ export function SitesHostingCard({ session, studio, index, onIndex }: { session:
   useEffect(() => { netlifyToken.load(session.token).then((t) => setNf(t ? new Netlify(t.token) : null)).catch(() => setNf(null)); }, [session.token]);
   const cfAcc = useCfAccount(session.token, nf, true, true);
   const dbHost = db ? db.api.replace(/^https:\/\//, "").replace(/\/+$/, "") : "";
-  const updateSiteDb = (d: { api: string; account: string }) => run("sitedb:" + d.api, async () => {
+  const updateSiteDb = (d: { api: string; account: string }) => run("sitedb:" + d.api, async () => { await siteDbNow(d); toast("That site's database is up to date."); await loadSiteDbs(db?.api || "", d.api); });
+  /** Updates one site's own database (on its own Cloudflare account) to this build. */
+  const siteDbNow = async (d: { api: string; account: string }) => {
     const say = (x: string) => setBusy("sitedb:" + d.api + "|" + x), host = d.api.replace(/^https:\/\//, "");
     const { relay, cf, account, token } = await cfAcc.clientFor(d.account || undefined, say);
     // Only the account that runs that database (its workers.dev name is in the database's address).
@@ -164,8 +173,7 @@ export function SitesHostingCard({ session, studio, index, onIndex }: { session:
     await cfAccountVault.save({ ...(v || { token: "" }), setups: [...(v?.setups || []).filter((x) => x.account !== account.id), setup] }, session.token);
     // Shown as up to date at once (it was just uploaded); the check that follows only confirms it.
     setSiteDbs((l) => l.map((x) => (x.api === d.api ? { ...x, cur: true } : x)));
-    toast("That site's database is up to date."); await loadSiteDbs(db?.api || "", d.api);
-  });
+  };
   const updateDb = () => run("update", async () => {
     if (!db) return;
     const say = (x: string) => setBusy("update:" + x);
@@ -177,7 +185,19 @@ export function SitesHostingCard({ session, studio, index, onIndex }: { session:
     const deploy = (await cfDeployInfo(db.api)).deploy;
     const setup = await setupCfDb(relay, token, { account, resendKey: "", mailFrom: v?.mailFrom || "", name: "Picaffectz Studio", existing: v?.setup && v.setup.api === db.api ? v.setup : null, requireMail: false, ...(deploy ? { deployToken: token } : {}) }, say);
     await cfAccountVault.save({ ...(v || {}), token, account: account.id, setup }, session.token);
-    toast("Your Studio's database is up to date."); await load();
+    toast("Your Studio's database is up to date.");
+    // Then each site's own database that is behind, one after another (each finishes before the next starts).
+    const behind = siteDbs.filter((x) => !x.cur), failed: string[] = [];
+    for (let i = 0; i < behind.length; i++) {
+      setQueued(behind.slice(i + 1).map((x) => x.api));
+      const d = behind[i], name = d.sites.slice(0, 2).join(", ") + (d.sites.length > 2 ? ` +${d.sites.length - 2}` : "");
+      setBusy("sitedb:" + d.api + "|" + `Waiting (${i + 1} of ${behind.length})`);
+      try { await siteDbNow(d); toast(`${name}: database up to date (${i + 1} of ${behind.length}).`); }
+      catch (e: any) { failed.push(`${name}: ${e?.message || explain(e)}`); }
+    }
+    setQueued([]);
+    if (failed.length) setErr(`${failed.length === 1 ? "One site's database" : failed.length + " site databases"} couldn't be updated: ${failed.join(" · ")}`);
+    await load();
   });
   /** Changes the Resend key and/or sender the Studio's database sends sign-in codes with. A blank key keeps the one it has. */
   const saveMail = () => run("mail", async () => {
@@ -284,9 +304,9 @@ export function SitesHostingCard({ session, studio, index, onIndex }: { session:
                     // The site's own database (not the Studio's): whether it runs this build, with its own update button.
                     const sdb = otherDb ? siteDbs.find((d) => d.api === h!.cf!.api.replace(/\/+$/, "")) : undefined;
                     return (
-                      <li key={p.id} data-shut={isOpen(p.id) ? undefined : ""} className={`relative grid gap-x-4 gap-y-2 p-3 text-[13px] sm:grid-cols-[minmax(0,1fr)_auto] [&[data-shut]>button]:hidden [&[data-shut]>div>:not(:first-child)]:hidden ${!isOpen(p.id) && sdb && !sdb.cur ? "overflow-hidden pr-[12.5rem] first:rounded-t-[7px] last:rounded-b-[7px]" : ""}`} data-site={p.id}>
+                      <li key={p.id} data-shut={isOpen(p.id) ? undefined : ""} className={`relative grid gap-x-4 gap-y-2 text-[13px] sm:grid-cols-[minmax(0,1fr)_auto] [&[data-shut]>button]:hidden [&[data-shut]>div>:not(:first-child)]:hidden ${isOpen(p.id) ? "p-3" : "px-3 py-1.5"} ${!isOpen(p.id) && sdb && !sdb.cur ? "overflow-hidden pr-[10.5rem] first:rounded-t-[7px] last:rounded-b-[7px]" : ""}`} data-site={p.id}>
                         {/* Shut, with an older database: its update button is the right end of the row (it fills the row's top, bottom and right edge). */}
-                        {!isOpen(p.id) && sdb && !sdb.cur && <span className="absolute inset-y-0 right-0 flex"><button type="button" className="btn btn-pri h-full rounded-none border-0 px-5 text-[13px]" style={{ borderRadius: 0, minHeight: 0, boxShadow: "none" }} disabled={!!busy} onClick={() => updateSiteDb(sdb)}>{busy.startsWith("sitedb:" + sdb.api) ? (busy.split("|")[1] || "Updating") + "…" : "Update this database"}</button></span>}
+                        {!isOpen(p.id) && sdb && !sdb.cur && <span className="absolute inset-y-0 right-0 flex"><button type="button" className="btn btn-pri h-full w-[9.75rem] rounded-none border-0 px-3 text-[12.5px] leading-tight" style={{ borderRadius: 0, minHeight: 0, boxShadow: "none" }} disabled={!!busy || auto.dbBusy} onClick={() => updateSiteDb(sdb)}>{busy.startsWith("sitedb:" + sdb.api) ? (busy.split("|")[1] || "Updating") + "…" : queued.includes(sdb.api) ? "Queued" : auto.dbBusy ? (sdb.sites.some((n) => auto.dbStep.includes(n)) ? "Updating…" : "Waiting its turn") : "Update this database"}</button></span>}
                         <div className="flex min-w-0 flex-col gap-1.5">
                           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                             <button type="button" className="-ml-1 grid h-6 w-6 flex-none place-items-center rounded-md text-ink-400 hover:bg-ink-800 hover:text-ink-100" aria-expanded={isOpen(p.id)} aria-label={`${isOpen(p.id) ? "Hide" : "Show"} the details of ${p.name}`} onClick={() => toggleSite(p.id, hit.map((x) => x.id))}><span aria-hidden className={`inline-block text-[10px] transition-transform ${isOpen(p.id) ? "" : "-rotate-90"}`}>▼</span></button>
@@ -294,7 +314,7 @@ export function SitesHostingCard({ session, studio, index, onIndex }: { session:
                             {!isOpen(p.id) && sdb && !sdb.cur && <span className="chip border-amber-400/50 px-2 py-0.5 text-[11px] text-amber-200">Database: older build</span>}
                             {!isOpen(p.id) && !every && <span className="chip border-amber-400/50 px-2 py-0.5 text-[11px] text-amber-200">Publishing needs attention</span>}
                             {h && p.publish && <span className="rounded-full border border-ink-600 px-2 py-0.5 text-[11px]">+ GitHub copy</span>}
-                            {h ? <a className="truncate text-brand-300 underline" href={siteAddress(h)} target="_blank" rel="noopener noreferrer">{siteAddress(h).replace(/^https:\/\//, "")}</a> : p.publish && <span className="truncate font-mono text-[12px] text-ink-400">{p.publish.owner}/{p.publish.repo}</span>}
+                            {h ? <a className="min-w-0 max-w-full truncate text-brand-300 underline" href={siteAddress(h)} target="_blank" rel="noopener noreferrer">{siteAddress(h).replace(/^https:\/\//, "")}</a> : p.publish && <span className="truncate font-mono text-[12px] text-ink-400">{p.publish.owner}/{p.publish.repo}</span>}
                           </div>
                           <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-ink-300">
                             <dt className="text-ink-400">Publishing</dt>
@@ -314,7 +334,7 @@ export function SitesHostingCard({ session, studio, index, onIndex }: { session:
                               : h!.cf ? "Your Studio's database" : "Supabase"}
                               {sdb && <span className="mt-1.5 flex flex-wrap items-center gap-2" data-sitedb={sdb.cur ? "current" : "old"}>
                                 {sdb.cur ? <span className="chip border-emerald-400/50 text-emerald-200">Database up to date</span>
-                                  : <><span className="chip border-amber-400/50 text-amber-200">Database: older build</span><button type="button" className="btn btn-pri btn-sm" disabled={!!busy} onClick={() => updateSiteDb(sdb)}>{busy.startsWith("sitedb:" + sdb.api) ? (busy.split("|")[1] || "Updating") + "…" : "Update this database"}</button></>}
+                                  : <><span className="chip border-amber-400/50 text-amber-200">Database: older build</span><button type="button" className="btn btn-pri btn-sm" disabled={!!busy || auto.dbBusy} onClick={() => updateSiteDb(sdb)}>{busy.startsWith("sitedb:" + sdb.api) ? (busy.split("|")[1] || "Updating") + "…" : queued.includes(sdb.api) ? "Queued" : auto.dbBusy ? (sdb.sites.some((n) => auto.dbStep.includes(n)) ? "Updating…" : "Waiting its turn") : "Update this database"}</button></>}
                               </span>}</dd></>}
                             {h?.kind === "netlify" && <><dt className="text-ink-400">Data</dt><dd>{h.cf ? "Your Studio's database" : "Supabase"}</dd></>}
                           </dl>

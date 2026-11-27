@@ -77,7 +77,9 @@ async function clientFor(session: Session, api: string, main: boolean): Promise<
       for (const a of await cf.accounts().catch(() => [] as CfAccount[])) if (want(await cf.subdomainOf(a.id).catch(() => null))) return { cf, relay, account: a, token: t, own: t === v?.token };
     }
   }
-  if (main) {
+  // Through the Studio's database (its saved Cloudflare token), for the Studio's database and for a site database on an
+  // account that token can manage: the same way Settings → Hostings updates them, so they don't wait for a device token.
+  {
     const way = await studioDbWay().catch(() => null);
     if (way) for (const a of await new Cloudflare(null, way.token).accounts().catch(() => [] as CfAccount[])) {
       const t = cfDbToken(way.api, way.scope, a.id), cf = new Cloudflare(null, t);
@@ -93,7 +95,7 @@ export async function autoUpdateDatabases(session: Session, index: StudioIndex, 
   // Every database that is behind, so the progress counts them all (one bar for the whole update).
   const behind: { api: string; main: boolean; sites: string[]; info: Awaited<ReturnType<typeof cfDeployInfo>> }[] = [];
   for (const t of list) { const info = await cfDeployInfo(t.api); if (info.v && info.v < CFDB_VERSION) behind.push({ ...t, info }); }
-  // The Studio's own database first, by itself; then every site database at the same time. One bar counts them all.
+  // The Studio's own database first; then each site database, one after another (each finishes before the next starts). One bar counts them all.
   const done = behind.map(() => 0), n = behind.length;
   const total = () => (done.reduce((a, b) => a + b, 0) / n) * 100;
   const one = async ({ info, ...t }: (typeof behind)[number], at: number, together: number) => {
@@ -119,7 +121,7 @@ export async function autoUpdateDatabases(session: Session, index: StudioIndex, 
   const mainAt = behind.findIndex((b) => b.main);
   if (mainAt >= 0) await one(behind[mainAt], mainAt, 1);
   const rest = behind.map((b, i) => [b, i] as const).filter(([b]) => !b.main);
-  await Promise.all(rest.map(([b, i]) => one(b, i, rest.length)));
+  for (const [b, i] of rest) await one(b, i, 1);
   return did ? "updated" : skipped ? "skip" : "current";
 }
 

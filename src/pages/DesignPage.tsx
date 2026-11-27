@@ -349,7 +349,11 @@ function DesignPageInner({ studio, index, onIndex }: { studio?: Studio; index?: 
   const curRef = useRef(cur); curRef.current = cur;
   /** Leaves out every remaining optional question (stops at one that is needed). */
   // The quick start (a file or link given on the first screen): on until the person starts over or goes back to change an answer.
-  const [express, setExpress] = useState(false), [qlink, setQlink] = useState("");
+  // "all": from the first screen, everything is settled. "look": given after choosing the kind of website, the look (colour, style, and the type when the
+  // document doesn't say it) is still asked, then the preview shows.
+  const [express, setExpressRaw] = useState<"" | "all" | "look">(""), [qlink, setQlink] = useState("");
+  const expressRef = useRef<"" | "all" | "look">("");
+  const setExpress = (v: "" | "all" | "look" | boolean) => { const x = v === true ? "all" : v === false ? "" : v; expressRef.current = x; setExpressRaw(x); };
   const qpick = useRef<HTMLInputElement>(null);
   /** Everything that needs no typing is settled: optional questions are left out and a choice takes its standard pick. Stops at a question only the person can answer. */
   const fastForward = (n0: Answers): Answers => {
@@ -361,6 +365,8 @@ function DesignPageInner({ studio, index, onIndex }: { studio?: Studio; index?: 
         const o = s.options?.(n) || [], said = ` ${n.name || ""} ${n.about || ""} ${n.doctext || ""} `.toLowerCase();
         const times = (x: { label: string }) => { const l = x.label.toLowerCase().replace(/s$/, "").replace(/é/g, "e"); return l.length >= 4 ? said.replace(/é/g, "e").split(l).length - 1 : 0; };
         const named = o.filter((x) => times(x) > 0).sort((x, y) => times(y) - times(x) || y.label.length - x.label.length)[0];
+        // The look is the person's to choose when they began by choosing the kind of website; so is the type, unless their document names it.
+        if (expressRef.current === "look" && (["colour", "style"].includes(s.id) || (["btype", "ptype", "etype"].includes(s.id) && !named))) break;
         const pick = o.find((x) => /surprise/i.test(x.label)) || named || o.find((x) => /something else|^other|^any\b/i.test(x.label)) || o[0];
         if (!pick) break; n[s.id] = pick.v;
       }
@@ -484,7 +490,7 @@ function DesignPageInner({ studio, index, onIndex }: { studio?: Studio; index?: 
       });
     }
     const found = [...got.map((x) => (STEP_LABEL[x] || x).toLowerCase()), ...secs.filter((x) => !got.includes(x))];
-    toast(kind ? `Read it${found.length ? `: found ${found.join(", ")}` : ""}. Making ${KIND_SAY[kind] || "a website"}; you can change any answer.` : found.length ? `Found ${found.join(", ")}. You can change any answer.` : "Read it. It will help us write your text.");
+    toast(kind && expressRef.current === "look" ? `Read it${found.length ? `: found ${found.join(", ")}` : ""}. Just choose your look and your preview opens.` : kind ? `Read it${found.length ? `: found ${found.join(", ")}` : ""}. Making ${KIND_SAY[kind] || "a website"}; you can change any answer.` : found.length ? `Found ${found.join(", ")}. You can change any answer.` : "Read it. It will help us write your text.");
     // The Studio's AI (when it is the chosen engine) reads it more closely: what it finds replaces the rule-based guesses, never what the person typed.
     if (host && text.length >= 30) void understandText(host, a0.kind || "", text).then((u) => {
       const f = u.fields; if (!f || u.engine === "system") return;
@@ -529,7 +535,7 @@ function DesignPageInner({ studio, index, onIndex }: { studio?: Studio; index?: 
     let host$ = ""; try { host$ = new URL(url).hostname.replace(/^www\./, ""); } catch { toast("That doesn't look like a web address.", "bad"); return; }
     setReading(true);
     const r = host ? await readPage(host, url) : { error: "no database" };
-    if (r.text || r.title) applyDoc(host$, [r.site || r.title || "", r.description || "", r.text || ""].filter(Boolean).join("\n"), url, { name: (r.site || (r.title || "").split(/\s+[-–|·:]\s+/)[0] || "").trim(), about: r.description });
+    if (r.text || r.title) { const text = [r.site || r.title || "", r.description || "", r.text || ""].filter(Boolean).join("\n"); setExpress("look"); applyDoc(host$, text, url, { name: (r.site || (r.title || "").split(/\s+[-–|·:]\s+/)[0] || "").trim(), about: r.description }, a.kind, readDoc(rowsOf(text))); }
     else { setA((o) => ({ ...o, doc: host$, doclink: url })); toast((r.error ? r.error + " " : "") + "We'll pass the link to our team instead.", "bad"); }
     setReading(false);
   };
@@ -537,7 +543,7 @@ function DesignPageInner({ studio, index, onIndex }: { studio?: Studio; index?: 
   const choose = async (s: Step, f: File | undefined, extra: File[] = []) => {
     if (!f) return;
     try {
-      if (f.size > (s.maxKB || 1000) * 1024) throw new Error(`That file is over ${s.maxKB === 20480 ? 20 : Math.round((s.maxKB || 1000) / 1000)} MB. Please choose a smaller one.`);
+      if (f.size > (s.maxKB || 1000) * 1024) throw new Error(`That file is over ${s.maxKB === 20480 ? 20 : s.maxKB === 51200 ? 50 : Math.round((s.maxKB || 1000) / 1000)} MB. Please choose a smaller one.`);
       if (PIC_STEPS.includes(s.id)) {
         const list = [f, ...extra].filter((x) => /^image\//.test(x.type)).slice(0, s.id === "photos" ? 4 : s.id === "banner" ? 2 : 1);
         if (!list.length) throw new Error("Please choose a picture (PNG, JPG or WebP).");
@@ -547,9 +553,10 @@ function DesignPageInner({ studio, index, onIndex }: { studio?: Studio; index?: 
       else if (s.id === "doc") {
         setReading(true);
         const doc = await fileDoc(f), text = textOf(doc.rows).slice(0, 12000);
-        if (text.length < 30) throw new Error("We couldn't find any text in that PDF (it may be a scan). Try another one, or skip.");
+        if (text.length < 30) throw new Error("We couldn't find any text in that file (a scanned PDF has none). Try another one, or skip.");
         const rd = readDoc(doc.rows);
-        applyDoc(f.name.slice(0, 100), text, "", rd.fields.name ? { name: rd.fields.name, about: rd.fields.about ? oneLine(rd.fields.about) : undefined } : undefined, undefined, rd, doc.pics);
+        setExpress("look");
+        applyDoc(f.name.slice(0, 100), text, "", rd.fields.name ? { name: rd.fields.name, about: rd.fields.about ? oneLine(rd.fields.about) : undefined } : undefined, a.kind, rd, doc.pics);
       }
       else { const buf = await f.arrayBuffer(); if (new TextDecoder().decode(new Uint8Array(buf).slice(0, 4)) !== "%PDF") throw new Error("That doesn't look like a PDF."); setFiles((o) => ({ ...o, menu: { name: f.name.slice(0, 100), b64: toB64(buf) } })); answer(s, f.name.slice(0, 100)); }
     } catch (e: any) { toast(e?.message || "Couldn't read that file.", "bad"); }
@@ -584,7 +591,7 @@ function DesignPageInner({ studio, index, onIndex }: { studio?: Studio; index?: 
           : <input ref={field} aria-label={cur ? cur.ask(a) : "Your answer"} className="min-w-0 flex-1 basis-[12rem] bg-transparent py-2.5 text-[15px] text-ink-100 outline-none placeholder:text-ink-500" disabled={!field$ || reading} placeholder={reading ? "Reading…" : writing ? "Writing your text…" : !cur ? "All done. Your preview is ready." : cur.id === "kind" ? "Tell me what you want, e.g. an online shop for my candles" : field$ ? cur.ph?.(a) : cur.type === "many" ? "Tap what applies above, then press Done" : cur.type === "file" ? "Choose a file, or skip" : "Pick one of the choices above"} value={field$ ? text : ""} onChange={(e) => setText(e.target.value)} />}
         {cur?.type === "file" && !NO_UPLOAD.includes(cur.id) && <>
           <input ref={pick} type="file" accept={cur.accept} multiple={cur.id === "photos" || cur.id === "banner"} className="sr-only" aria-label={cur.ask(a)} onChange={(e) => choose(cur, e.target.files?.[0], Array.from(e.target.files || []).slice(1))} />
-          <button type="button" className="btn btn-pri btn-sm rounded-full" onClick={() => pick.current?.click()}>{PIC_STEPS.includes(cur.id) ? (cur.id === "photos" || cur.id === "banner" ? "Choose pictures" : "Choose a picture") : cur.id === "logo" ? "Choose logo" : cur.id === "doc" ? "Choose document (PDF)" : "Choose PDF"}</button>
+          <button type="button" className="btn btn-pri btn-sm rounded-full" onClick={() => pick.current?.click()}>{PIC_STEPS.includes(cur.id) ? (cur.id === "photos" || cur.id === "banner" ? "Choose pictures" : "Choose a picture") : cur.id === "logo" ? "Choose logo" : cur.id === "doc" ? "Upload a file" : "Choose PDF"}</button>
         </>}
         {cur && isOptional(cur, a) && (field$ || cur.type === "file") && <button type="button" className="btn btn-ghost btn-sm" onClick={() => answer(cur, "")}>{word("skipBtn")}</button>}
         {cur?.type === "many" && <button type="submit" className="btn btn-pri diy-edge px-5" disabled={!many.length}>Done</button>}
@@ -627,7 +634,7 @@ function DesignPageInner({ studio, index, onIndex }: { studio?: Studio; index?: 
         {isOptional(cur, a) && <button type="button" className="btn btn-ghost" disabled={reading} onClick={() => answer(cur, "")}>{word("skipBtn")}</button>}
         {cur.type === "file" && !NO_UPLOAD.includes(cur.id) && <>
           <input ref={pick} type="file" accept={cur.accept} multiple={cur.id === "photos" || cur.id === "banner"} className="sr-only" aria-label={cur.ask(a)} onChange={(e) => choose(cur, e.target.files?.[0], Array.from(e.target.files || []).slice(1))} />
-          <button type="button" className={`btn ${field$ ? "" : "btn-pri"}`} disabled={reading} onClick={() => pick.current?.click()}>{PIC_STEPS.includes(cur.id) ? (cur.id === "photos" || cur.id === "banner" ? "Choose pictures" : "Choose a picture") : cur.id === "logo" ? "Choose logo" : cur.id === "doc" ? "Add a PDF" : "Choose PDF"}</button>
+          <button type="button" className={`btn ${field$ ? "" : "btn-pri"}`} disabled={reading} onClick={() => pick.current?.click()}>{PIC_STEPS.includes(cur.id) ? (cur.id === "photos" || cur.id === "banner" ? "Choose pictures" : "Choose a picture") : cur.id === "logo" ? "Choose logo" : cur.id === "doc" ? "Upload a file" : "Choose PDF"}</button>
         </>}
         {cur.type === "many" && <button type="submit" className="btn btn-pri" disabled={!many.length}>Done</button>}
         {field$ && (cur.type === "long" || cur.input === "time" || cur.input === "date") && <button type="submit" className="btn btn-pri" disabled={!text.trim() || reading}>{cur.id === "doc" ? "Read my link" : "Next"}</button>}

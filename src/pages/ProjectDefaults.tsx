@@ -62,7 +62,7 @@ export function ProjectDefaultsTab({ studio, index, onIndex, demo }: { studio: S
 
   return (
     <div className="flex flex-col gap-4 pb-6">
-      <p className="max-w-4xl text-sm text-ink-300">What every project of a website type starts with and keeps, set once here: email wording and accounts, the privacy policy and terms, shop policies, the cookie banner's wording, form consent and spam protection, the footer credit, GST invoices and tax, checkout rules and the ways to pay. A section switched on here goes into each site at its next publish or <b className="text-ink-100">Push updates</b>; the site's own admin page shows it locked, with a switch to use its own instead.</p>
+      <p className="max-w-4xl text-sm text-ink-300">What every project of a website type starts with and keeps, set once here: email wording and accounts, the privacy policy and terms, shop policies, the cookie banner's wording, form consent and spam protection, the footer credit, GST invoices and tax, checkout rules and the ways to pay. A section switched on here goes into each site at its next publish or <b className="text-ink-100">Push updates</b>; each site's admin page shows it locked. To let one site have its own, switch “Use the Studio's default” off in that project's editor.</p>
       {/* The website types on the left and Save on the right, in one row that stays under the header while scrolling. */}
       <div className="sticky top-14 z-20 -mx-1 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl bg-ink-950/90 px-1 py-1.5 backdrop-blur">
       <div className="flex flex-wrap gap-1 rounded-xl border border-ink-700 bg-ink-900 p-1" role="tablist" aria-label="Website type">
@@ -89,8 +89,8 @@ export function ProjectDefaultsTab({ studio, index, onIndex, demo }: { studio: S
           </div>
           <Toggle id={`pd-${kind}-${sec}`} checked={secOn(S)} onChange={turn} label={`Give this to every ${TYPE_NAME[kind]} project`} />
           {secOn(S) && <p className="-mt-2 text-[12.5px] text-ink-400">{sec === "mail" || sec === "msg"
-            ? `Every ${TYPE_NAME[kind]} site on the Studio's database that follows this section uses the account below instead of its own. A site's admin can switch it off and use its own.`
-            : `At the next publish or Push updates this replaces that part of every ${TYPE_NAME[kind]} site, except where the site's admin switched it off.`}{sec === "pay" ? ` Gateway keys saved below are used by the ${TYPE_NAME[kind]} sites on the Studio's database that follow this section, so their payments go to those accounts: check them before you save.` : ""}</p>}
+            ? `Every ${TYPE_NAME[kind]} site on the Studio's database that follows this section uses the account below instead of its own. To let one site use its own, switch “Use the Studio's default” off in that project's editor.`
+            : `At the next publish or Push updates this replaces that part of every ${TYPE_NAME[kind]} site, except projects where you switched “Use the Studio's default” off (in that project's editor). Site owners see it locked in their admin page.`}{sec === "pay" ? ` Gateway keys saved below are used by the ${TYPE_NAME[kind]} sites on the Studio's database that follow this section, so their payments go to those accounts: check them before you save.` : ""}</p>}
           {!secOn(S) ? <p className="rounded-lg border border-dashed border-ink-600 px-3 py-3 text-sm text-ink-400">Switched off: each site keeps its own {meta.label.toLowerCase()}.</p>
             : S.v == null && !(PD_CONN[sec] && sec !== "pay") ? <p className="text-sm text-ink-400">{seeding ? "Loading the standard wording…" : "The standard wording could not be loaded. Reload the page to try again."}</p> : <Body kind={kind} sec={sec} S={S} where={where} bump={bump} demo={demo} />}
         </section>

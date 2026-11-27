@@ -11,7 +11,7 @@ import { Preview } from "../editor/Preview";
 import { Logo, Spinner, useToast } from "../ui/kit";
 import { packSections, readSections, sectionNames, unpackSections } from "../lib/docsections";
 import { relatedThemes } from "../lib/designer";
-import { COLOUR_DOT, STEPS, STEP_LABEL, buildDesign, fromDoc, isOptional, nextStep, rowsFmt, requestText, stepAt, sayAnswer, themeOf, themesFor, tweakTheme, writeCopy, type Answers, type Design, type DesignFiles, type Step } from "../lib/designer";
+import { COLOUR_DOT, STEPS, STEP_LABEL, buildDesign, fromDoc, isOptional, nextStep, rowsFmt, requestText, stepAt, stepOf, sayAnswer, themeOf, themesFor, tweakTheme, writeCopy, type Answers, type Design, type DesignFiles, type Step } from "../lib/designer";
 import { newDesignId, readDesignSettings, readLocalDesigns, writeLocalDesigns, type Copy, type DesignRec } from "../lib/designs";
 import { DIY_WORDS, NOTICE_TEXT, COLOUR_SLOTS, GROUPS, pagesChoice, readColsAnswer, readLookAnswer, resolvedLook, visibleAxes, type DiyWord, type Kind as LookKind } from "../lib/designlook";
 import { AiDraw } from "../ui/AiDraw";
@@ -30,29 +30,6 @@ const DRAFT = "site-studio:design-draft";
 type Draft = { a: Answers; copy: Copy | null; id: string; sent: boolean };
 const readDraft = (): Draft => { try { const d = JSON.parse(sessionStorage.getItem(DRAFT) || "{}"); return { a: d.a && typeof d.a === "object" ? d.a : {}, copy: d.copy || null, id: typeof d.id === "string" ? d.id : "", sent: !!d.sent }; } catch { return { a: {}, copy: null, id: "", sent: false }; } };
 
-/** What kind of website a whole document or web page reads as: the kind whose words appear most (a business when nothing stands out). */
-function guessDocKind(t: string): string {
-  const x = t.toLowerCase().slice(0, 8000), n = (re: RegExp) => (x.match(re) || []).length;
-  const score: Record<string, number> = {
-    restaurant: n(/\b(restaurant|caf[eé]|cuisines?|dishes|dine|dining|bakery|biryani|dosa|thali|tiffin|chef|table booking|veg|non-veg|menu)\b/g),
-    store: n(/\b(shop|store|products?|cart|checkout|shipping|ecommerce|e-commerce|catalogu?e|price list|in stock|free delivery|cod|returns?)\b/g),
-    portfolio: n(/\b(portfolio|resume|résumé|cv|curriculum vitae|work experience|education|skills|freelanc\w*|linkedin|i am|i'm|my work|certifications?)\b/g),
-    events: n(/\b(conference|summit|wedding|concert|festival|marathon|hackathon|webinar|speakers?|rsvp|tickets?|venue|agenda|register now)\b/g),
-    business: n(/\b(company|services?|clients?|solutions?|consult\w*|firm|agency|pvt|ltd|llp|inc|industry|our team|projects delivered|interiors?|clinic|repair|contractor|enterprise|b2b)\b/g),
-  };
-  const best = Object.entries(score).sort((a, b) => b[1] - a[1]);
-  return best[0][1] > 0 && best[0][1] > (best[1]?.[1] || 0) ? best[0][0] : score.business >= best[0][1] ? "business" : best[0][0];
-}
-/** A name and a one-line description written as "Label: value" (how a sheet or a form lists them). */
-function labelled(t: string): { name?: string; about?: string } {
-  const o: { name?: string; about?: string } = {};
-  for (const l of t.split("\n").slice(0, 80)) {
-    const m = /^\s*([A-Za-z /&']{2,30})\s*[:：]\s*(.{2,140})$/.exec(l); if (!m) continue; const k = m[1].trim().toLowerCase(), v = m[2].trim();
-    if (!o.name && /^((business|company|brand|shop|store|restaurant|caf[eé]|event|firm|studio|your|full|trade) )?name$/.test(k)) o.name = v.slice(0, 60);
-    else if (!o.about && /^(what we do|what you sell|what i do|about|about us|description|tagline|industry|business type|cuisines?|role|title|profession)$/.test(k)) o.about = v;
-  }
-  return o;
-}
 const KIND_SAY: Record<string, string> = { portfolio: "a personal website", store: "an online shop", business: "a business website", restaurant: "a restaurant website", events: "an event website" };
 /** What kind of website a few free words describe (null when unclear). */
 function guessKind(t: string): string | null {
@@ -473,7 +450,7 @@ function DesignPageInner({ studio, index, onIndex }: { studio?: Studio; index?: 
       return n;
     };
     const fill = { ...fromDoc(text, a0, meta), ...stated(a0) }, got = Object.keys(fill).filter((x) => !/^doc/.test(x)), secs = sectionNames(unpackSections(fill.docsec));
-    setA((o) => { const o2 = kind ? { ...o, kind } : o; const n = { ...o2, doc: label, ...(link ? { doclink: link } : {}), ...(text ? { doctext: text } : {}), ...fromDoc(text, o2, meta), ...stated(o2), ...(got.length ? { docfrom: got.join(",") } : {}) }; return kind ? fastForward(n) : n; });
+    setA((o) => { const o2 = kind ? { ...o, kind } : o; const n = { ...o2, how: "file", doc: label, ...(link ? { doclink: link } : {}), ...(text ? { doctext: text } : {}), ...fromDoc(text, o2, meta), ...stated(o2), ...(got.length ? { docfrom: got.join(",") } : {}) }; return kind ? fastForward(n) : n; });
     // Its pictures: the one beside each item goes with that item; the others become the site's own pictures (top picture, gallery).
     const linked = (rd?.items || []).slice(0, 80).map((i) => i.img || "");
     if (pics.length || linked.some(Boolean)) {
@@ -506,39 +483,17 @@ function DesignPageInner({ studio, index, onIndex }: { studio?: Studio; index?: 
       });
     });
   };
-  /** The quick start, from the first screen: a document or a website link is read, the answers it holds are filled in, and the
-   *  rest is settled without asking (optional questions left out, choices given a standard pick), so the preview shows at once.
-   *  Only what can't be guessed (such as a missing name) is still asked. */
-  const quick = async (f?: File, link?: string) => {
-    if (reading) return;
-    setReading(true);
-    try {
-      if (f) {
-        const doc = await fileDoc(f), full = textOf(doc.rows), text = full.slice(0, 12000);
-        if (text.length < 30) throw new Error("We couldn't find any text in that file (a scanned PDF has none). Try another file, or answer the questions.");
-        const rd = readDoc(doc.rows), m = labelled(text);
-        setExpress(true); applyDoc(f.name.slice(0, 100), text, "", rd.fields.name || m.name || m.about ? { name: rd.fields.name || m.name, about: rd.fields.about ? oneLine(rd.fields.about) : m.about } : undefined, guessDocKind(full), rd, doc.pics);
-      } else {
-        let url = (link || "").trim(); if (!url) return; if (!/^https?:\/\//i.test(url)) url = "https://" + url.replace(/^\/+/, "");
-        let h$ = ""; try { h$ = new URL(url).hostname.replace(/^www\./, ""); if (!h$.includes(".")) throw 0; } catch { throw new Error("That doesn't look like a web address."); }
-        const r = host ? await readPage(host, url) : { error: "Reading a link needs the Studio's database." } as any;
-        if (!(r.text || r.title)) throw new Error((r.error ? r.error + " " : "") + "Try a file instead, or answer the questions.");
-        const text = [r.site || r.title || "", r.description || "", r.text || ""].filter(Boolean).join("\n");
-        setExpress(true); applyDoc(h$, text, url, { name: (r.site || (r.title || "").split(/\s+[-–|·:]\s+/)[0] || "").trim(), about: r.description }, guessDocKind(text), readDoc(rowsOf(text)));
-      }
-      setQlink("");
-    } catch (e: any) { toast(e?.message || "Couldn't read that.", "bad"); }
-    setReading(false);
-    if (qpick.current) qpick.current.value = "";
-  };
   /** A link pasted for the starting point: the Studio's database reads the page; if it can't, the link goes to the team. */
+  /** At "upload or enter manually": the file or link is read for the kind of website already chosen. */
+  const fromFile = (f: File | undefined) => { if (f) void choose(stepOf("doc", a), f); };
+  const fromLink = () => { if (qlink.trim()) void readLink(qlink).then(() => setQlink("")); };
   const readLink = async (raw: string) => {
     let url = raw.trim(); if (!/^https?:\/\//i.test(url)) url = "https://" + url.replace(/^\/+/, "");
     let host$ = ""; try { host$ = new URL(url).hostname.replace(/^www\./, ""); } catch { toast("That doesn't look like a web address.", "bad"); return; }
     setReading(true);
     const r = host ? await readPage(host, url) : { error: "no database" };
     if (r.text || r.title) { const text = [r.site || r.title || "", r.description || "", r.text || ""].filter(Boolean).join("\n"); setExpress("look"); applyDoc(host$, text, url, { name: (r.site || (r.title || "").split(/\s+[-–|·:]\s+/)[0] || "").trim(), about: r.description }, a.kind, readDoc(rowsOf(text))); }
-    else { setA((o) => ({ ...o, doc: host$, doclink: url })); toast((r.error ? r.error + " " : "") + "We'll pass the link to our team instead.", "bad"); }
+    else { setA((o) => ({ ...o, how: "file", doc: host$, doclink: url })); toast((r.error ? r.error + " " : "") + "We'll pass the link to our team instead.", "bad"); }
     setReading(false);
   };
   /** A picture or PDF chosen for a file question. */
@@ -744,24 +699,25 @@ function DesignPageInner({ studio, index, onIndex }: { studio?: Studio; index?: 
           <div className="sticky bottom-0 -mx-3 border-t border-ink-800 bg-ink-950/95 px-3 pb-4 pt-4 backdrop-blur sm:-mx-6 sm:px-6">
             <div className="diy-col mx-auto flex max-h-[62vh] max-w-5xl flex-col gap-4 overflow-y-auto px-0.5 py-0.5">
               {!chatStarted ? <>{chips(cur)}
-                {/* The quick start: a document or a website link fills the answers and goes straight to the preview. */}
-                <div className="flex items-center gap-3 text-[11px] uppercase tracking-wide text-ink-500"><span className="h-px flex-1 bg-ink-800" />or<span className="h-px flex-1 bg-ink-800" /></div>
+                <div className="flex items-center gap-3 text-[11px] uppercase tracking-wide text-ink-500"><span className="h-px flex-1 bg-ink-800" />{word("typeOwn")}<span className="h-px flex-1 bg-ink-800" /></div>{bar}</> : cur.id === "how" ? <>
+                {/* After the kind of website: a file or a link fills the answers, or the person types them. */}
                 <section aria-label="Start from a file or a link" className="mx-auto flex w-full max-w-5xl flex-col gap-3 rounded-2xl border border-dashed border-ink-700 bg-ink-900/40 p-4"
-                  onDragOver={(e) => { e.preventDefault(); }} onDrop={(e) => { e.preventDefault(); const f = e.dataTransfer.files?.[0]; if (f) quick(f); }}>
+                  onDragOver={(e) => { e.preventDefault(); }} onDrop={(e) => { e.preventDefault(); const f = e.dataTransfer.files?.[0]; if (f) fromFile(f); }}>
                   <div>
                     <p className="text-[15px] font-bold text-ink-100">Already have your details? Upload them and skip the questions.</p>
-                    <p className="mt-0.5 text-[13px] text-ink-400">Choose a {DOC_KINDS} file (up to {DOC_MAX_MB} MB), or paste your current website's link. We read it in whatever order it is written (your details, hours, and your products, dishes or services with their descriptions, prices and pictures), fill it all in and show your preview straight away. The file is read on your device.</p>
+                    <p className="mt-0.5 text-[13px] text-ink-400">Choose a {DOC_KINDS} file (up to {DOC_MAX_MB} MB), or paste your current website's link. We read it in whatever order it is written (your details, hours, and your products, dishes or services with their descriptions, prices and pictures), and fill it all in. You then choose your type and look, and your preview opens. The file is read on your device.</p>
                   </div>
                   <div className="flex flex-wrap items-stretch gap-2">
-                    <input ref={qpick} type="file" accept={DOC_ACCEPT} className="sr-only" aria-label="Upload a file with your details" onChange={(e) => quick(e.target.files?.[0])} />
+                    <input ref={qpick} type="file" accept={DOC_ACCEPT} className="sr-only" aria-label="Upload a file with your details" onChange={(e) => { fromFile(e.target.files?.[0]); e.target.value = ""; }} />
                     <button type="button" className="btn btn-pri" disabled={reading} onClick={() => qpick.current?.click()}>{reading ? "Reading…" : "Upload a file"}</button>
                     <div className="diy-field diy-join flex min-w-[16rem] flex-1 items-stretch rounded-xl border border-ink-700 bg-ink-900 focus-within:border-brand-400">
-                      <input className="input min-w-0 flex-1" inputMode="url" aria-label="Your website link" placeholder="or paste your website link, e.g. www.mybusiness.com" disabled={reading} value={qlink} onChange={(e) => setQlink(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); quick(undefined, qlink); } }} />
-                      <button type="button" className="btn btn-pri shrink-0 px-5" disabled={reading || !qlink.trim()} onClick={() => quick(undefined, qlink)}>Read my site</button>
+                      <input className="input min-w-0 flex-1" inputMode="url" aria-label="Your website link" placeholder="or paste your website link, e.g. www.mybusiness.com" disabled={reading} value={qlink} onChange={(e) => setQlink(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); fromLink(); } }} />
+                      <button type="button" className="btn btn-pri shrink-0 px-5" disabled={reading || !qlink.trim()} onClick={() => fromLink()}>Read my site</button>
                     </div>
                   </div>
                 </section>
-                <div className="flex items-center gap-3 text-[11px] uppercase tracking-wide text-ink-500"><span className="h-px flex-1 bg-ink-800" />{word("typeOwn")}<span className="h-px flex-1 bg-ink-800" /></div>{bar}</> : <>{(cur.type === "choice" || cur.type === "many") && chips(cur)}{cardBar}</>}
+                <div className="flex items-center gap-3 text-[11px] uppercase tracking-wide text-ink-500"><span className="h-px flex-1 bg-ink-800" />or<span className="h-px flex-1 bg-ink-800" /></div>
+                <button type="button" className="diy-chip card mx-auto w-full max-w-5xl rounded-2xl px-4 py-3 text-left transition hover:border-brand-400 hover:bg-ink-800" disabled={reading} onClick={() => answer(cur, "type")}><b className="text-[14.5px] text-ink-100">Enter manually</b><span className="block text-[12.5px] leading-snug text-ink-400">Answer a few short questions instead.</span></button>{cardBar}</> : <>{(cur.type === "choice" || cur.type === "many") && chips(cur)}{cardBar}</>}
             </div>
           </div>
         )}

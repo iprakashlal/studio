@@ -9,7 +9,7 @@ import { applyTint } from "../lib/tint";
 import { TEMPLATES } from "../schema";
 import { Preview } from "../editor/Preview";
 import { Logo, Spinner, useToast } from "../ui/kit";
-import { packSections, sectionNames, unpackSections } from "../lib/docsections";
+import { packSections, readSections, sectionNames, unpackSections } from "../lib/docsections";
 import { relatedThemes } from "../lib/designer";
 import { COLOUR_DOT, STEPS, STEP_LABEL, buildDesign, fromDoc, isOptional, nextStep, rowsFmt, requestText, stepAt, sayAnswer, themeOf, themesFor, tweakTheme, writeCopy, type Answers, type Design, type DesignFiles, type Step } from "../lib/designer";
 import { newDesignId, readDesignSettings, readLocalDesigns, writeLocalDesigns, type Copy, type DesignRec } from "../lib/designs";
@@ -17,7 +17,7 @@ import { DIY_WORDS, NOTICE_TEXT, COLOUR_SLOTS, GROUPS, pagesChoice, readColsAnsw
 import { AiDraw } from "../ui/AiDraw";
 import { LogoMaker } from "../ui/LogoMaker";
 import { designHost, otpCheck, otpSend, passLive, readPage, readPass, saveDraft, submitQuery, understandText, writePass, type DesignHost, type Pass } from "../lib/designapi";
-import { DOC_ACCEPT, DOC_KINDS, DOC_MAX_MB, fileDoc, type DocPic } from "../lib/doctext";
+import { DOC_ACCEPT, DOC_KINDS, DOC_MAX_MB, fileDoc, pairPics, type DocPic } from "../lib/doctext";
 import { oneLine, readDoc, rowsOf, textOf, type DocRead } from "../lib/docread";
 import { watchDevtools } from "../lib/devtools";
 import type { Studio, StudioIndex } from "../lib/studio";
@@ -456,12 +456,17 @@ function DesignPageInner({ studio, index, onIndex }: { studio?: Studio; index?: 
     // What the document states outright (a labelled name, a priced list) takes the place of the guesses; never of what the person typed.
     const stated = (o: Answers): Answers => {
       if (!rd) return {}; const n: Answers = {}, K = o.kind || "";
-      for (const [k0, v] of Object.entries(rd.fields)) { if (o[k0] || (k0 === "address" && K === "portfolio")) continue; n[k0] = k0 === "about" ? oneLine(v) : v; }
+      for (const [k0, v] of Object.entries(rd.fields)) { if (k0 === "note" || k0 === "places") { if (!o["doc" + k0]) n["doc" + k0] = v; continue; } if (o[k0] || (k0 === "address" && K === "portfolio")) continue; n[k0] = k0 === "about" ? oneLine(v) : v; }
+      // The sections its headings and tables give (how you work, case studies, why you), with the ones read from its text.
+      if (rd.sections && Object.keys(rd.sections).length && !o.docsec) { const sec = packSections({ ...readSections(text), ...rd.sections }); if (sec && sec !== "{}") n.docsec = sec; }
       if (rd.fields.about && rd.fields.about.length > 80 && !o.story && !rd.fields.story) n.story = rd.fields.about;
+      // No one-line description in it, but a story: the story's opening says what the place is (better than a guess from its first page).
+      if (!rd.fields.about && rd.fields.story && !o.about) n.about = oneLine((/^.{20,}?[.!?](?=\s|$)/.exec(rd.fields.story)?.[0] || rd.fields.story));
       if (rd.items.length >= 2 && !o.items) {
-        const list = rd.items.slice(0, 40);
+        const list = rd.items.slice(0, 80);
         n.items = list.map((i) => (i.price ? `${i.name} - ${i.price}` : i.name)).join("\n");
-        n.docitems = JSON.stringify(list.map((i) => ({ n: i.name, d: i.desc.length > 260 ? i.desc.slice(0, 260).replace(/\s+\S*$/, "") + "…" : i.desc, c: i.cat, v: i.diet || "" })));
+        n.docitems = JSON.stringify(list.map((i) => ({ n: i.name, d: i.desc.length > 260 ? i.desc.slice(0, 260).replace(/\s+\S*$/, "") + "…" : i.desc, c: i.cat, v: i.diet || "", ...(i.sizes?.length ? { s: i.sizes.slice(0, 6).map((z) => [z.label, z.price]) } : {}), ...(i.points?.length ? { p: i.points } : {}) })));
+        if (rd.groupNotes && Object.keys(rd.groupNotes).length) n.docgroups = JSON.stringify(rd.groupNotes);
         if (rd.money) { n.docmoney = rd.money; if (K === "store" && !o.currency) { const cur = ({ "₹": "INR", "$": "USD", "€": "EUR", "£": "GBP", AED: "AED" } as Record<string, string>)[rd.money]; if (cur) n.currency = cur; } }
         const groups = [...new Set(list.map((i) => i.cat).filter(Boolean))]; if (K === "store" && groups.length >= 2 && !o.cats) n.cats = groups.join("\n");
       }
@@ -470,14 +475,11 @@ function DesignPageInner({ studio, index, onIndex }: { studio?: Studio; index?: 
     const fill = { ...fromDoc(text, a0, meta), ...stated(a0) }, got = Object.keys(fill).filter((x) => !/^doc/.test(x)), secs = sectionNames(unpackSections(fill.docsec));
     setA((o) => { const o2 = kind ? { ...o, kind } : o; const n = { ...o2, doc: label, ...(link ? { doclink: link } : {}), ...(text ? { doctext: text } : {}), ...fromDoc(text, o2, meta), ...stated(o2), ...(got.length ? { docfrom: got.join(",") } : {}) }; return kind ? fastForward(n) : n; });
     // Its pictures: the one beside each item goes with that item; the others become the site's own pictures (top picture, gallery).
-    const linked = (rd?.items || []).slice(0, 40).map((i) => i.img || "");
+    const linked = (rd?.items || []).slice(0, 80).map((i) => i.img || "");
     if (pics.length || linked.some(Boolean)) {
-      const K = a0.kind || "", list = (rd?.items || []).slice(0, 40), used = new Set<number>(), per: string[] = list.map(() => "");
-      const placed = pics.some((x) => x.y !== undefined) && list.some((i) => i.y !== undefined);
-      if (placed) list.forEach((it, i) => { let best = -1, d = 110; pics.forEach((x, j) => { if (used.has(j) || x.page !== it.page || x.y === undefined || it.y === undefined) return; const dy = Math.abs(x.y - (it.y + 18)); if (dy < d) { d = dy; best = j; } }); if (best >= 0) { used.add(best); per[i] = pics[best].url; } });
-      else if (list.length && pics.length >= list.length) { const skip = pics.length - list.length; list.forEach((_it, i) => { per[i] = pics[skip + i].url; used.add(skip + i); }); }
+      const K = a0.kind || "", list = (rd?.items || []).slice(0, 80), { per, rest: left } = pairPics(list, pics);
       const place = (per2: string[]) => {
-        const rest = pics.filter((_x, j) => !used.has(j)).map((x) => x.url), top = rest.length ? rest : per2.filter(Boolean).slice(0, 1);
+        const rest = left, top = rest.length ? rest : per2.filter(Boolean).slice(0, 1);
         setFiles((o) => ({ ...o, pics: { ...(o.pics || {}), ...(per2.some(Boolean) ? { items: per2 } : {}), ...(K === "restaurant" && top.length ? { photos: top.slice(0, 5) } : K === "store" && top.length ? { banner: top.slice(0, 2) } : (K === "business" || K === "events") && top.length ? { bimage: top.slice(0, 1) } : K === "portfolio" && rest.length ? { photo: rest.slice(0, 1) } : {}) } }));
       };
       if (per.some(Boolean) || pics.length) place(per);

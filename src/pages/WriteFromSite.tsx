@@ -12,8 +12,9 @@ import { enoughText, systemWrite } from "../lib/syswrite";
 import { applyBrief, dropFlagged, groupsOf, type Contact } from "../lib/writeMap";
 import { readPamphlet } from "../lib/pamphlet";
 import { Field, Modal, useToast } from "../ui/kit";
-import { DOC_ACCEPT, DOC_KINDS, DOC_MAX_MB, fileDoc, pairPics, type DocFile } from "../lib/doctext";
-import { readDoc, type DocRead } from "../lib/docread";
+import { DOC_ACCEPT, DOC_KINDS, DOC_MAX_MB, fileDoc, fileText, pairPics, type DocFile } from "../lib/doctext";
+import { readDoc, textOf, type DocRead } from "../lib/docread";
+import { readSections, sectionNames, type DocSections } from "../lib/docsections";
 import { fillFromDoc } from "../lib/docfill";
 import { useAiDb } from "./AiGate";
 
@@ -26,6 +27,8 @@ export function WriteFromSiteDialog({ session, project, draft, upload, onApply, 
   const [src, setSrc] = useState<"link" | "pdf" | "text" | "none" | "own">("link");
   // "My own document": the document's own words, prices and pictures are put into the site as they are (no rewriting).
   const [own, setOwn] = useState<{ name: string; doc: DocFile; rd: DocRead } | null>(null), [ownMine, setOwnMine] = useState(false);
+  const ownGroups = own ? [...new Set(own.rd.items.map((x) => x.cat).filter(Boolean))] : [];
+  const ownSecs = own ? sectionNames({ ...readSections(textOf(own.doc.rows)), ...(own.rd.sections || {}) } as DocSections) : [];
   const readOwn = async (f: File | undefined) => {
     if (!f) return; setErr(""); setOwn(null); setBusy("Reading your document");
     try {
@@ -46,7 +49,7 @@ export function WriteFromSiteDialog({ session, project, draft, upload, onApply, 
       const pics: ({ path: string } | { url: string } | null)[] = [];
       for (let i = 0; i < own.rd.items.length; i++) pics.push(await keep(per[i] || own.rd.items[i].img || "", i).catch(() => null));
       const topUrl = rest[0] || per.find(Boolean) || "", top = rest[0] ? await keep(topUrl, 900).catch(() => null) : pics.find(Boolean) || null;
-      const out = fillFromDoc(project.template, draft, own.rd, pics, top);
+      const out = fillFromDoc(project.template, draft, own.rd, pics, top, textOf(own.doc.rows));
       if (!out.did.length) throw new Error("Nothing in that document matched a part of this kind of website.");
       onApply(out.content); toast(`Filled in from your document: ${out.did.join(", ")}.`); onClose();
     } catch (e: any) { setErr(e?.message || "Couldn't fill the site from that document."); }
@@ -66,16 +69,18 @@ export function WriteFromSiteDialog({ session, project, draft, upload, onApply, 
   // Addresses found in an uploaded PDF, offered (never filled in on their own: the PDF may be another business's).
   const [found, setFound] = useState<{ emails: string[]; phones: string[] }>({ emails: [], phones: [] });
   const readPdf = async (f: File | undefined) => {
-    if (!f) return; setErr(""); setBusy("Reading the PDF");
+    if (!f) return; setErr(""); setBusy("Reading the file");
     try {
-      const doc = await readPamphlet([f], new URL("runtime/", location.href).href);
-      const t = doc.pages.map((p) => p.text).join("\n\n").trim(); doc.close();
-      if (t.split(/\s+/).length < 40) throw new Error("That PDF has almost no text to read (its pages are pictures). Copy its text and paste it instead.");
+      // A PDF is read page by page; a Word, Excel, CSV or text file is read as its text.
+      const isPdf = /\.pdf$/i.test(f.name) || f.type === "application/pdf"; let t = "";
+      if (isPdf) { const doc = await readPamphlet([f], new URL("runtime/", location.href).href); t = doc.pages.map((p) => p.text).join("\n\n").trim(); doc.close(); }
+      else t = (await fileText(f)).replace(/\t/g, "  ").trim();
+      if (t.split(/\s+/).length < 40) throw new Error(isPdf ? "That PDF has almost no text to read (its pages are pictures). Copy its text and paste it instead." : "That file has too little text to go on (under 40 words). Choose a fuller one, or paste the text instead.");
       setPdf({ name: f.name, text: t.slice(0, 60000) });
       const emails = [...new Set((t.match(/[\w.+-]+@[\w-]+(\.[\w-]+)+/g) || []).map((x) => x.toLowerCase()))].slice(0, 4);
       const phones = [...new Set((t.match(/(\+?\d[\d\s-]{8,}\d)/g) || []).map((x) => x.replace(/\s+/g, " ").trim()).filter((x) => x.replace(/\D/g, "").length >= 10))].slice(0, 3);
       setFound({ emails, phones });
-    } catch (e: any) { setPdf(null); setErr(e?.message || "Couldn't read that PDF."); }
+    } catch (e: any) { setPdf(null); setErr(e?.message || "Couldn't read that file."); }
     setBusy("");
   };
   const [brandName, setBrandName] = useState(String((kind === "portfolio" ? draft?.brand?.logoText : draft?.brand?.name) || ""));
@@ -87,7 +92,7 @@ export function WriteFromSiteDialog({ session, project, draft, upload, onApply, 
   const writeSys = async (n: number) => {
     let ref = src === "pdf" ? pdf!.text : src === "text" ? text.trim() : "";
     if (src === "link") {
-      if (!db.ready || !api) throw new Error("Reading a link is done by your Cloudflare database (no AI, so it costs nothing from the allowance), and this device isn't signed in to one. Choose A PDF, Pasted text or No reference: those work on this device alone.");
+      if (!db.ready || !api) throw new Error("Reading a link is done by your Cloudflare database (no AI, so it costs nothing from the allowance), and this device isn't signed in to one. Choose A file, Pasted text or No reference: those work on this device alone.");
       ref = await cfOutline(api, /^https?:\/\//.test(url.trim()) ? url.trim() : "https://" + url.trim());
       if (!enoughText(ref)) { const e: any = new Error("That page has almost no text to read (it may build its text with JavaScript). Paste the page's text into the box instead."); e.thin = true; throw e; }
     }
@@ -144,14 +149,14 @@ export function WriteFromSiteDialog({ session, project, draft, upload, onApply, 
     : <><button className="btn" onClick={onClose}>Cancel</button>{canUse && <button className="btn btn-pri" disabled={!canWrite || !!busy} onClick={write}>{busy ? busy + "…" : "Write new text"}</button>}</>;
 
   return (
-    <Modal title="Write text from a site or PDF, or fill from your own document" onClose={onClose} wide footer={footer}>
+    <Modal title="Write text from a site or a file, or fill from your own document" onClose={onClose} wide footer={footer}>
       <div className="flex flex-col gap-3 text-sm">
         {!res && <p className="text-ink-300">Give a site in the same line of business, or a PDF such as your brochure or company profile. The Studio reads what it covers and writes <b>new text of its own</b> for your brand, section by section: nothing is copied, and anything too close to the original is left out. Testimonials, numbers, team, clients, prices and products aren't written, so fill those in yourself.</p>}
         {!res && src !== "own" && <EnginePick label="Write with" value={eng} onChange={setEng} note={sys ? "On this device: the Studio composes the text from its own phrase bank for your kind of business and your notes. The reference only tells it what kind of business this is. No facts are invented." : undefined} />}
         {!sys && src !== "own" && db.ui}
         {!res && <>
         <div role="radiogroup" aria-label="Read from" className="flex flex-wrap gap-2">
-          {([["link", "A website"], ["pdf", "A PDF"], ["text", "Pasted text"], ...(sys ? [["none", "No reference"]] : []), ["own", "My own document"]] as [typeof src, string][]).map(([v, l]) => <button key={v} type="button" role="radio" aria-checked={src === v} className={`btn btn-sm ${src === v ? "btn-pri" : ""}`} onClick={() => setSrc(v)}>{l}</button>)}
+          {([["link", "A website"], ["pdf", "A file"], ["text", "Pasted text"], ...(sys ? [["none", "No reference"]] : []), ["own", "My own document"]] as [typeof src, string][]).map(([v, l]) => <button key={v} type="button" role="radio" aria-checked={src === v} className={`btn btn-sm ${src === v ? "btn-pri" : ""}`} onClick={() => setSrc(v)}>{l}</button>)}
         </div>
         </>}
         {(canUse || src === "own") && !res && <>
@@ -160,8 +165,8 @@ export function WriteFromSiteDialog({ session, project, draft, upload, onApply, 
           </Field>}
           {src === "link" && <Field label="Reference site" htmlFor="wf-url" hint="A page that shows what the business offers, for example its home or about page.">
             <input id="wf-url" className="input" placeholder="https://example.com" value={url} onChange={(e) => setUrl(e.target.value)} /></Field>}
-          {src === "pdf" && <Field label="PDF" htmlFor="wf-pdf" hint={pdf ? `Read ${pdf.text.split(/\s+/).length} words from ${pdf.name}.` : "A brochure, company profile or menu, up to 12 pages."}>
-            <input id="wf-pdf" className="input" type="file" accept=".pdf,application/pdf" onChange={(e) => readPdf(e.target.files?.[0])} /></Field>}
+          {src === "pdf" && <Field label="File" htmlFor="wf-pdf" hint={pdf ? `Read ${pdf.text.split(/\s+/).length} words from ${pdf.name}.` : `A brochure, company profile, menu or price list: ${DOC_KINDS} (a PDF up to 12 pages).`}>
+            <input id="wf-pdf" className="input" type="file" accept={DOC_ACCEPT} onChange={(e) => readPdf(e.target.files?.[0])} /></Field>}
           {src === "text" && <Field label="The page's text" htmlFor="wf-text" hint={sys ? "Paste text that shows what the business does (at least 20 words). It is only read to tell the kind of business." : "Some sites can't be read from here. Copy the page's text and paste it (at least 40 words)."}>
             <textarea id="wf-text" className="input min-h-[140px]" value={text} onChange={(e) => setText(e.target.value)} /></Field>}
           {src === "none" && <p className="rounded-lg border border-ink-700 px-3 py-2 text-[13px] text-ink-300">The text is written from the site's type and what you write under About your business below. Mention what you do there (“a family restaurant in Nashik”, “a dental clinic”), and it picks the right wording.</p>}
@@ -172,8 +177,9 @@ export function WriteFromSiteDialog({ session, project, draft, upload, onApply, 
             {own && <div className="rounded-lg border border-ink-700 bg-ink-950 p-3 text-[13px]" role="status">
               <b className="text-ink-100">Found in {own.name}</b>
               <dl className="mt-1.5 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1">
-                {([["name", "Name"], ["tagline", "Tagline"], ["about", "Description"], ["address", "Address"], ["phone", "Phone"], ["email", "Email"], ["domain", "Website"], ["social", "Instagram"], ["hours", "Hours"], ["usp", "Highlights"], ["story", "Story"]] as [string, string][]).filter(([k0]) => own.rd.fields[k0]).map(([k0, l]) => <div key={k0} className="contents"><dt className="text-ink-400">{l}</dt><dd className="truncate text-ink-100">{own.rd.fields[k0].replace(/\n/g, ", ")}</dd></div>)}
-                {own.rd.items.length > 0 && <div className="contents"><dt className="text-ink-400">Items</dt><dd className="text-ink-100">{own.rd.items.length}: {own.rd.items.slice(0, 4).map((x) => x.name + (x.price ? ` (${own.rd.money}${x.price})` : "")).join(", ")}{own.rd.items.length > 4 ? "…" : ""}</dd></div>}
+                {([["name", "Name"], ["tagline", "Tagline"], ["about", "Description"], ["address", "Address"], ["phone", "Phone"], ["email", "Email"], ["domain", "Website"], ["social", "Instagram"], ["hours", "Hours"], ["usp", "Highlights"], ["story", "Story"], ["places", "Locations"], ["note", "Note"]] as [string, string][]).filter(([k0]) => own.rd.fields[k0]).map(([k0, l]) => <div key={k0} className="contents"><dt className="text-ink-400">{l}</dt><dd className="truncate text-ink-100">{own.rd.fields[k0].replace(/\n/g, ", ")}</dd></div>)}
+                {own.rd.items.length > 0 && <div className="contents"><dt className="text-ink-400">Items</dt><dd className="text-ink-100">{own.rd.items.length}{ownGroups.length >= 2 ? ` in ${ownGroups.length} groups (${ownGroups.slice(0, 4).join(", ")}${ownGroups.length > 4 ? "…" : ""})` : ""}: {own.rd.items.slice(0, 4).map((x) => x.name + (x.price ? ` (${own.rd.money}${x.price})` : "")).join(", ")}{own.rd.items.length > 4 ? "…" : ""}</dd></div>}
+                {ownSecs.length > 0 && <div className="contents"><dt className="text-ink-400">Sections</dt><dd className="text-ink-100">{ownSecs.join(", ")}</dd></div>}
                 {(own.doc.pics.length > 0 || own.rd.items.some((x) => x.img)) && <div className="contents"><dt className="text-ink-400">Pictures</dt><dd className="text-ink-100">{own.doc.pics.length + own.rd.items.filter((x) => x.img).length}</dd></div>}
               </dl>
               <p className="mt-2 text-[12.5px] text-ink-400">These replace what the site says now in those places; everything else stays. Nothing is saved until you press Save, and History keeps the earlier version.</p>
@@ -185,7 +191,7 @@ export function WriteFromSiteDialog({ session, project, draft, upload, onApply, 
               <input id="wf-email" className="input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} /></Field>
             {kind !== "portfolio" && <Field label="Phone (optional)" htmlFor="wf-phone"><input id="wf-phone" className="input" value={phone} onChange={(e) => setPhone(e.target.value)} /></Field>}
           </div>}
-          {src === "pdf" && (found.emails.length > 0 || found.phones.length > 0) && <p className="text-[12.5px] text-ink-400">Found in the PDF (if it's yours):{" "}
+          {src === "pdf" && (found.emails.length > 0 || found.phones.length > 0) && <p className="text-[12.5px] text-ink-400">Found in the file (if it's yours):{" "}
             {found.emails.map((x) => <button key={x} type="button" className="mr-1.5 underline text-brand-300" onClick={() => setEmail(x)}>{x}</button>)}
             {kind !== "portfolio" && found.phones.map((x) => <button key={x} type="button" className="mr-1.5 underline text-brand-300" onClick={() => setPhone(x)}>{x}</button>)}</p>}
           {src !== "own" && <Field label="About your business (optional)" htmlFor="wf-notes" hint="What's different about you: city, speciality, tone. Only what's true.">

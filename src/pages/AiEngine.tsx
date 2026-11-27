@@ -38,7 +38,7 @@ export function AiEngineCard({ studio, index, onIndex }: { studio: Studio; index
   const rows: [string, string, string][] = [
     ["Translate a site (Languages)", "Every text, in all eleven languages. Best quality.", `The words every site shares come from the Studio's phrase book (${PHRASES} phrases, eleven languages). The rest is done by this browser's own translator, where it has the language.`],
     ["Fill in products or a menu from a file", "Reads text and photos, and understands loose layouts.", "Reads PDFs and sheets by rules; photos are read on this device (clear English print). Best with price lists, menus and sheets."],
-    ["Write text from a site or PDF", "Writes fresh text shaped by the reference.", "Composes text from the Studio's own phrase bank for your kind of business, using your notes. Works with a PDF, pasted text or no reference at all."],
+    ["Write text from a site or a file", "Writes fresh text shaped by the reference.", "Composes text from the Studio's own phrase bank for your kind of business, using your notes. Works with a PDF, pasted text or no reference at all."],
   ];
   return (
     <section className="card flex flex-col gap-3 p-5" aria-label="AI engine">

@@ -2,7 +2,7 @@
 // nothing is uploaded to be read. Used by Design yourself to fill in the answers from a file.
 import JSZip from "jszip";
 import { pdfLines, pdfBase } from "./pdftext";
-import { rowsOf, type DocRow } from "./docread";
+import { rowsOf, rowsFromRuns, type DocRow, type DocPage } from "./docread";
 
 /** What can be read, for the file chooser and for the message when something else is chosen. */
 export const DOC_ACCEPT = ".pdf,.docx,.xlsx,.csv,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv,text/plain";
@@ -67,9 +67,9 @@ export async function fileText(f: File): Promise<string> {
 
 // ---------------------------------------------------------------- the whole document: rows of cells, and its pictures
 /** A picture found in the document (made small), and where it was (a PDF), so it can be paired with the item beside it. */
-export type DocPic = { url: string; page?: number; y?: number };
+export type DocPic = { url: string; page?: number; y?: number; /** A PDF: the middle of the picture across the page, and its column on a two-column page. */ x?: number; w?: number; col?: number };
 export type DocFile = { rows: DocRow[]; pics: DocPic[] };
-const MAX_PICS = 24;
+const MAX_PICS = 60;
 
 /** A picture made small enough to keep (JPEG, at most 900px on its long side). */
 async function small(src: ImageBitmap | HTMLCanvasElement | HTMLImageElement, w: number, h: number): Promise<string> {
@@ -88,29 +88,12 @@ async function pdfDoc(f: File): Promise<DocFile> {
   let pdfjs: any; try { pdfjs = await load(new URL("pdf.min.js", base).href); } catch { throw new Error("The PDF reader didn't load. Check your connection and try again."); }
   pdfjs.GlobalWorkerOptions.workerSrc = new URL("pdf.worker.min.js", base).href;
   let doc: any; try { doc = await pdfjs.getDocument({ data: new Uint8Array(await f.arrayBuffer()), isEvalSupported: false }).promise; } catch (e: any) { throw new Error(/password/i.test(e?.name + e?.message) ? "This PDF is password-protected. Save a copy without a password and choose that." : "This file isn't a readable PDF."); }
-  const rows: DocRow[] = [], pics: DocPic[] = [];
+  const pages: DocPage[] = [], pics: DocPic[] = [], seen = new Map<string, Set<number>>();
   for (let p = 1; p <= Math.min(doc.numPages, 40); p++) {
     const page = await doc.getPage(p), vp = page.getViewport({ scale: 1 }), tc = await page.getTextContent();
-    type Run = { x: number; end: number; y: number; size: number; text: string };
-    const runs: Run[] = [];
+    const runs: DocPage["runs"] = [];
     for (const it of tc.items as any[]) { const t = String(it.str || ""); if (!t.trim()) continue; const size = Math.abs(it.transform[3]) || Math.abs(it.transform[0]) || 10; runs.push({ x: it.transform[4], end: it.transform[4] + (it.width || 0), y: vp.height - it.transform[5], size, text: t }); }
-    runs.sort((a, b) => a.y - b.y || a.x - b.x);
-    const lines: Run[][] = [];
-    for (const r of runs) { const l = lines[lines.length - 1]; if (l && Math.abs(l[0].y - r.y) <= Math.max(2, Math.min(l[0].size, r.size) * 0.45)) l.push(r); else lines.push([r]); }
-    let prev: { x: number }[] = [];
-    for (const l0 of lines) {
-      const l = l0.sort((a, b) => a.x - b.x), cells: { x: number; t: string }[] = [];
-      for (let i = 0; i < l.length; i++) {
-        const gap = i ? l[i].x - l[i - 1].end : 0, c = cells[cells.length - 1];
-        if (!i || gap > Math.max(14, l[i].size * 1.4)) cells.push({ x: l[i].x, t: l[i].text });
-        else c.t += (gap > l[i].size * 0.18 && !/\s$/.test(c.t) && !/^\s/.test(l[i].text) ? " " : "") + l[i].text;
-      }
-      const last = rows[rows.length - 1];
-      // A cell that wraps: a lone piece of text starting where the row above's last cell started continues that cell.
-      if (last && last.page === p && cells.length === 1 && prev.length >= 2 && Math.abs(cells[0].x - prev[prev.length - 1].x) <= 3) { const lc = last.cells; lc[lc.length - 1] += (lc[lc.length - 1].endsWith("-") ? "" : " ") + cells[0].t.trim(); continue; }
-      const out = cells.map((c) => c.t.replace(/\s+/g, " ").trim()).filter(Boolean); if (!out.length) continue;
-      rows.push({ cells: out, page: p, y: l[0].y }); prev = cells.map((c) => ({ x: c.x }));
-    }
+    pages.push({ width: vp.width, height: vp.height, runs });
     // Pictures, with where they sit: the drawing commands are replayed far enough to know each picture's place.
     if (pics.length < MAX_PICS) try {
       const ops = await page.getOperatorList(), O = pdfjs.OPS; let m = [1, 0, 0, 1, 0, 0]; const stack: number[][] = [];
@@ -125,14 +108,20 @@ async function pdfDoc(f: File): Promise<DocFile> {
           else img = await new Promise<any>((res) => { const from = args[0].startsWith("g_") ? page.commonObjs : page.objs; const t = setTimeout(() => res(null), 4000); try { from.get(args[0], (o: any) => { clearTimeout(t); res(o); }); } catch { clearTimeout(t); res(null); } });
           if (!img) continue;
           const w = img.width, h = img.height; let url = "";
+          // A border, a rule or a strip of pattern is decoration, not a photograph.
+          if (!w || !h || w / h > 2.6 || h / w > 2.6) continue;
           if (img.bitmap) url = await small(img.bitmap, w, h);
           else if (img.data && w && h) { const c = document.createElement("canvas"); c.width = w; c.height = h; const g = c.getContext("2d")!, id = g.createImageData(w, h), d = img.data, n = w * h; if (d.length === n * 4) id.data.set(d); else if (d.length === n * 3) for (let k = 0; k < n; k++) { id.data[k * 4] = d[k * 3]; id.data[k * 4 + 1] = d[k * 3 + 1]; id.data[k * 4 + 2] = d[k * 3 + 2]; id.data[k * 4 + 3] = 255; } else continue; g.putImageData(id, 0, 0); url = await small(c, w, h); }
-          if (url) pics.push({ url, page: p, y: vp.height - (m[5] + m[3] / 2) });
+          if (url) { pics.push({ url, page: p, y: vp.height - (m[5] + m[3] / 2), x: m[4] + m[0] / 2, w: Math.abs(m[0]) }); (seen.get(url) || seen.set(url, new Set()).get(url)!).add(p); }
         }
       }
     } catch { /* the words are enough */ }
   }
-  return { rows, pics };
+  const { rows, gutters } = rowsFromRuns(pages);
+  // The same picture on three or more pages is a logo or a background; on a two-column page a picture belongs to the column it sits in.
+  const own = pics.filter((x) => (seen.get(x.url)?.size || 0) < 3);
+  for (const x of own) { const g = gutters[(x.page || 1) - 1]; if (g != null && x.x !== undefined) x.col = x.x < g ? 0 : 1; }
+  return { rows, pics: own };
 }
 /** The pictures inside a Word or Excel file, in the order they are kept. */
 async function zipPics(zip: JSZip, folder: string): Promise<DocPic[]> {
@@ -153,10 +142,17 @@ export async function fileDoc(f: File): Promise<DocFile> {
 
 /** Which picture goes with which item: in a PDF the one beside it on the page; otherwise in order, when there is one for each.
  *  per: a picture for each item ("" where none); rest: the pictures that belong to no item. */
-export function pairPics(items: { page?: number; y?: number; img?: string }[], pics: DocPic[]): { per: string[]; rest: string[] } {
+export function pairPics(items: { page?: number; y?: number; col?: number; cx?: number; card?: boolean; img?: string }[], pics: DocPic[]): { per: string[]; rest: string[] } {
   const used = new Set<number>(), per = items.map(() => "");
   const placed = pics.some((x) => x.y !== undefined) && items.some((i) => i.y !== undefined);
-  if (placed) items.forEach((it, i) => { let best = -1, d = 110; pics.forEach((x, j) => { if (used.has(j) || x.page !== it.page || x.y === undefined || it.y === undefined) return; const dy = Math.abs(x.y - (it.y + 18)); if (dy < d) { d = dy; best = j; } }); if (best >= 0) { used.add(best); per[i] = pics[best].url; } });
+  if (placed) {
+    const side = (it: { col?: number }, x: DocPic) => it.col === undefined || x.col === undefined || it.col === x.col;
+    const beside = (strict: boolean) => items.forEach((it, i) => { if (per[i]) return; let best = -1, d = 110; pics.forEach((x, j) => { if (used.has(j) || x.page !== it.page || x.y === undefined || it.y === undefined || (strict && !side(it, x))) return; const dy = Math.abs(x.y - (it.y + 18)); if (dy < d) { d = dy; best = j; } }); if (best >= 0) { used.add(best); per[i] = pics[best].url; } });
+    // A card's picture sits above its name: the nearest one above it that its name is under.
+    items.forEach((it, i) => { if (!it.card || it.y === undefined) return; let best = -1, d = 320; pics.forEach((x, j) => { if (used.has(j) || x.page !== it.page || x.y === undefined || !side(it, x)) return; if (it.cx !== undefined && x.x !== undefined && x.w && Math.abs(it.cx - x.x) > x.w / 2) return; const up = it.y! - x.y; if (up > 20 && up < d) { d = up; best = j; } }); if (best >= 0) { used.add(best); per[i] = pics[best].url; } });
+    // Otherwise the picture beside it: in its own column first, then anywhere on its line.
+    beside(true); beside(false);
+  }
   else if (items.length && pics.length >= items.length) { const skip = pics.length - items.length; items.forEach((_it, i) => { per[i] = pics[skip + i].url; used.add(skip + i); }); }
   return { per, rest: pics.filter((_x, j) => !used.has(j)).map((x) => x.url) };
 }

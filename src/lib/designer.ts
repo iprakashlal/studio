@@ -438,10 +438,10 @@ function rebrand(o: any, from: string, to: string, skip = new Set(["theme", "cod
   if (o && typeof o === "object") for (const key of Object.keys(o)) { if (skip.has(key)) continue; const v = o[key]; if (typeof v === "string") o[key] = v.split(from).join(to); else rebrand(v, from, to, skip); }
 }
 /** What the person's document said about each thing on offer (description, group, veg or not), by name: kept in the answers as `docitems`. */
-export type DocOffer = { n: string; d?: string; c?: string; v?: string };
+export type DocOffer = { n: string; d?: string; c?: string; v?: string; /** Kinds or sizes with their own prices: [label, price]. */ s?: [string, string][]; /** Short points beside it. */ p?: string[] };
 export function docOffers(a: Answers): Record<string, DocOffer & { i: number }> {
   const o: Record<string, DocOffer & { i: number }> = {};
-  try { const l = JSON.parse(a.docitems || "[]"); if (Array.isArray(l)) l.forEach((x: any, i: number) => { if (x && typeof x.n === "string") o[x.n.trim().toLowerCase()] = { n: x.n, d: typeof x.d === "string" ? x.d : "", c: typeof x.c === "string" ? x.c : "", v: typeof x.v === "string" ? x.v : "", i }; }); } catch { /* none */ }
+  try { const l = JSON.parse(a.docitems || "[]"); if (Array.isArray(l)) l.forEach((x: any, i: number) => { if (x && typeof x.n === "string") o[x.n.trim().toLowerCase()] = { n: x.n, d: typeof x.d === "string" ? x.d : "", c: typeof x.c === "string" ? x.c : "", v: typeof x.v === "string" ? x.v : "", s: Array.isArray(x.s) ? x.s.filter((y: any) => Array.isArray(y) && typeof y[0] === "string" && typeof y[1] === "string").slice(0, 6) : [], p: Array.isArray(x.p) ? x.p.filter((y: any) => typeof y === "string").slice(0, 6) : [], i }; }); } catch { /* none */ }
   return o;
 }
 const firstLine = (t: string, max = 110) => { const m = /^.{20,}?[.!?](?=\s|$)/.exec(t); const x = m && m[0].length <= max ? m[0] : t.length <= max ? t : t.slice(0, max).replace(/\s+\S*$/, "") + "…"; return x; };
@@ -496,7 +496,7 @@ const urlOf = (v: string) => { const t = v.trim(); if (!t) return ""; if (/^@?[\
 export async function buildDesign(a: Answers, copy?: Copy | null, files?: DesignFiles | null): Promise<Design | null> {
   if (!a.kind || !TEMPLATES[a.kind]) return null;
   const kind = a.kind as Kind, tpl = TEMPLATES[kind], c: any = clone(await starter(kind)); tpl.prepare?.(c); c.festival = { ...(c.festival || {}), on: false }; // the festival overlay would hide the first screen of a preview
-  const name = (a.name || "").trim(), about = cap((a.about || "").trim()), city = (a.city || "").trim(), g = goals(a), items = lines(a.items), usp = lines(a.usp), story = (a.story || "").trim();
+  const name = (a.name || "").trim(), about = cap((a.about || "").trim()), city = (a.city || "").trim(), g = goals(a), /* a typed list is short; their own document's list is taken whole */ items = a.docitems ? String(a.items || "").split("\n").map((x) => x.trim()).filter(Boolean).slice(0, 80) : lines(a.items), usp = lines(a.usp), story = (a.story || "").trim();
   const phone = (a.phone || "").trim(), email = (a.email || "").trim(), address = (a.address || "").trim(), hours = (a.hours || "").trim(), social = urlOf(a.social || "");
   // What their document said about each item (its own words, group and picture), used in place of a written-for-them line.
   const offers = docOffers(a), offer = (n: string) => offers[n.trim().toLowerCase()], itemPic = (n: string) => { const o = offer(n), u = o ? files?.pics?.items?.[o.i] : ""; return u ? { url: u } : null; };
@@ -548,7 +548,7 @@ export async function buildDesign(a: Answers, copy?: Copy | null, files?: Design
     if (about) { put("brand.tagline", a.tagline?.trim() || cp.tagline || about); put("hero.title", about + "."); put("hero.lede", cp.hero_text || `${name || "We"}${city ? ", " + city : ""}. Get in touch and we'll take it from there.`); put("about.body", aboutText || `${about}.`); put("cta.body", cp.cta_text || `Tell us what you need and we'll get back to you.`); }
     if (city) { put("hero.eyebrow", city); put("contact.address", city); } else put("hero.eyebrow", "");
     c.hero.badges = usp.slice(0, 4);
-    if (items.length) c.services.items = items.slice(0, 6).map((t, i) => ({ ...c.services.items[i % c.services.items.length], title: priced(t).name, body: offer(priced(t).name)?.d || noteOf(t) || `${t}${name ? " by " + name : ""}.`, points: [] }));
+    if (items.length) c.services.items = items.slice(0, 6).map((t, i) => ({ ...c.services.items[i % c.services.items.length], title: priced(t).name, body: offer(priced(t).name)?.d || noteOf(t) || `${t}${name ? " by " + name : ""}.`, points: offer(priced(t).name)?.p || [] }));
     if (cp.services_text && items.length) c.services.lede = cp.services_text;
     const cta: Record<string, [string, string]> = { quote: ["Get a quote", "contact"], call: ["Call us", "contact"], book: [a.cta === "book" ? "Book a call" : "Book a visit", "contact"], whatsapp: ["WhatsApp us", "contact"], contact: ["Contact us", "contact"], demo: ["Request a demo", "contact"] };
     if (g[0] && cta[g[0]]) { put("nav.cta", cta[g[0]][0]); put("hero.ctaPrimary", cta[g[0]][0]); put("cta.button", cta[g[0]][0]); }
@@ -579,9 +579,14 @@ export async function buildDesign(a: Answers, copy?: Copy | null, files?: Design
     // Their document's menu, as it groups it: every dish with its own words, price and picture.
     if (items.length && Object.keys(offers).length) {
       const groups: Record<string, any[]> = {};
-      for (const l of items) { const { name: n, price } = priced(l), o = offer(n), gname = o?.c || "Our menu"; (groups[gname] ||= []).push({ name: n, desc: o?.d || "", price, diet: o?.v || "", spice: "", tag: "", allergens: "", image: itemPic(n), variants: [], soldOut: false }); }
-      c.food.categories = Object.entries(groups).map(([gname, list]) => ({ name: gname, note: "", image: null, items: list }));
+      for (const l of items) { const { name: n, price } = priced(l), o = offer(n), gname = o?.c || "Our menu"; const sizes = (o?.s || []).map(([label, p]) => ({ label, price: p })); (groups[gname] ||= []).push({ name: n, desc: o?.d || "", price: sizes.length ? "" : price, diet: o?.v || "", spice: "", tag: "", allergens: "", image: itemPic(n), variants: sizes, soldOut: false }); }
+      let notes: Record<string, string> = {}; try { const j = JSON.parse(a.docgroups || "{}"); if (j && typeof j === "object") notes = j; } catch { /* none */ }
+      c.food.categories = Object.entries(groups).map(([gname, list]) => ({ name: gname, note: typeof notes[gname] === "string" ? notes[gname] : "", image: null, items: list }));
     }
+    // A line their menu prints on every page (taxes, packing charges), and their other outlets.
+    if ((a.docnote || "").trim()) put("food.note", a.docnote.trim());
+    const outlets = (a.docplaces || "").split("\n").map((l) => /^(.{2,40}?):\s+(.{8,})$/.exec(l.trim())).filter(Boolean) as RegExpExecArray[];
+    if (outlets.length >= 2) { put("contact.placeTitle", outlets[0][1]); if (city) put("contact.placeGroup", city); put("contact.places", outlets.slice(1).map((m, i) => ({ id: "pl-doc" + (i + 1), on: true, title: m[1], group: city || "", address: m[2], phone: "", note: "", mapFrom: "", mapQ: "", mapUrl: "" }))); }
   }
   // A section the person gave nothing for isn't shown (not even with the template's sample words).
   const hideIf = (cond: boolean, ...ids: string[]) => { if (cond) for (const x of c.sections || []) if (ids.includes(x.id)) { if ("visible" in x) x.visible = false; else x.show = false; } };
@@ -712,7 +717,9 @@ export async function buildDesign(a: Answers, copy?: Copy | null, files?: Design
   return { kind, content: c, themeId: theme?.id || "", themeName: theme?.name || "", summary: tpl.summary(c) };
 }
 /** What the person's document says for each section of the website: it fills that section and shows it (sections the document says nothing about stay as they were). */
-function applySections(kind: Kind, c: any, d: DocSections, show: (...ids: string[]) => void) {
+export function applySections(kind: Kind, c: any, d0: DocSections, show: (...ids: string[]) => void) {
+  // "Why choose us" in a business's document is what the business site calls its values.
+  const d: DocSections = kind === "business" && d0.highlights?.length && !d0.values?.length ? { ...d0, values: d0.highlights } : d0;
   const has = (k: keyof DocSections) => { const v = (d as any)[k]; return Array.isArray(v) ? v.length > 0 : !!v; };
   const icons = (list: any[] | undefined, i: number, dflt: string) => (list && list.length ? list[i % list.length].icon : dflt);
   if (kind === "business") {

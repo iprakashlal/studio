@@ -5,7 +5,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { TEMPLATES } from "../schema";
 import { Ctx, FieldView, type EditorCtx } from "../editor/fields";
-import { LEGAL_PH, PD_CONN, PD_KINDS, PD_SECTIONS, cleanPdefs, legalTemplate, ownsOf, pdBase, pdCards, secOn, splitFields, pdSections, pdSeed, type PdId, type ProjectDefaults } from "../lib/projdefaults";
+import { LEGAL_PH, PD_CONN, PD_KINDS, PD_SECTIONS, cleanPdefs, fillStandard, legalTemplate, ownsOf, pdBase, pdCards, secOn, splitFields, pdSections, pdSeed, type PdId, type ProjectDefaults } from "../lib/projdefaults";
 import { clone } from "../lib/util";
 import type { Studio, StudioIndex } from "../lib/studio";
 import { MailForm, SmsForm, WhatsAppForm, useStudioWhere, type Where } from "./Connections";
@@ -121,6 +121,8 @@ function Body({ kind, sec, S, where, bump, demo }: { kind: string; sec: PdId; S:
   }
   const cards = pdCards(kind, sec), owns = ownsOf(kind, [sec], sec === "pay" ? "payments" : undefined);
   const root = (S.v ||= {});
+  // Empty email boxes would mean "the template's standard wording": show and keep that wording itself instead.
+  if (sec === "emails") fillStandard(kind, root);
   const ctx: EditorCtx = { tpl, root, bump, upload: async () => { throw new Error("Uploads aren't used here."); }, img: () => "", pd: sec === "pay" ? where ?? null : null };
   if (!cards.length) return <p className="text-sm text-ink-400">Nothing to set for this website type.</p>;
   return (

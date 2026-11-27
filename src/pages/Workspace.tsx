@@ -30,6 +30,8 @@ import { ghPublish } from "../lib/ghpublish";
 import { Field, Logo, Skel, SkelDashboard, SkelRows, useToast, Dock } from "../ui/kit";
 import { accentFromImage, SCHEMES, tintPalette } from "../lib/tint";
 import { setCurrentMenus } from "../lib/menus";
+import { setCurrentPdefs } from "../lib/projdefaults";
+import { ProjectDefaultsTab } from "./ProjectDefaults";
 import { MenusCard } from "./MenusCard";
 import { MigrationTab } from "./MigrationTab";
 import { PartnersTab } from "./PartnersTab";
@@ -112,6 +114,7 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
   // The "Powered by" badge's look, used when building sites and in previews.
   useEffect(() => { setCurrentBadge(index?.badge); }, [index?.badge]);
   useEffect(() => { setCurrentMenus(index?.menus); }, [index?.menus]);
+  useEffect(() => { setCurrentPdefs(index?.pdefs); }, [index?.pdefs]);
   // A moved Studio updates itself to the latest build when it opens (projects aren't touched).
   const upd = useStudioUpdate();
   const hostedId = index?.hosted?.siteId;
@@ -207,8 +210,8 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
     const showDesign = !hid("design") && sharedOk, showThemes = !hid("themes") && sharedOk;
     const tab = (want === "customize" && !showCustomize) || (want === "hostings" && !showHostings) || (want === "design" && !showDesign) || (want === "themes" && !showThemes) ? "general" : want;
     // "social" and "login" are parts of General: they are listed under it, set in a little
-    const adminTab = (k: string) => !role.managed || role.admin || !["social", "login", "hostings", "update", "migration", "roles"].includes(k);
-    const tabList = ([["general", "General"], ["social", "Social setup"], ["login", "Studio login setup"], ...(role.api ? [["roles", "Role Management"]] : []), ["ai", "AI"], ...(showCustomize ? [["customize", "Customize"]] : []), ...(showHostings ? [["hostings", "Hostings"]] : []), ...(showDesign ? [["design", "Design yourself"]] : []), ...(showThemes ? [["themes", "Themes"]] : []), ["update", "Updates"], ...(client ? [] : [["migration", "Migration"]]), ["help", "Help"]] as [string, string][]).filter(([k]) => adminTab(k));
+    const adminTab = (k: string) => !role.managed || role.admin || !["social", "login", "hostings", "update", "migration", "roles", "pdefs"].includes(k);
+    const tabList = ([["general", "General"], ["social", "Social setup"], ["login", "Studio login setup"], ...(role.api ? [["roles", "Role Management"]] : []), ["ai", "AI"], ...(showCustomize ? [["customize", "Customize"]] : []), ...(showHostings ? [["hostings", "Hostings"]] : []), ...(showDesign ? [["design", "Design yourself"]] : []), ...(showThemes ? [["themes", "Themes"]] : []), ["pdefs", "Project defaults"], ["update", "Updates"], ...(client ? [] : [["migration", "Migration"]]), ["help", "Help"]] as [string, string][]).filter(([k]) => adminTab(k));
     const here = tabList.some(([k]) => k === tab) ? tab : "general";
     /** The settings screen: its sections down the left on a wide screen (a row of tabs on a narrower one, a menu on a phone),
      *  and the chosen section using the rest of the width. */
@@ -249,6 +252,7 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
     // Role Management: people, their roles, and what each role can do (kept in the Studio's database).
     if (here === "roles") return shell(<div className="flex max-w-5xl flex-col gap-4"><p className="text-sm text-ink-300">Who can sign in to this Studio, the role each person has, and what each role is allowed to do. Each person has their own projects and their own choices; Administrators see everyone's.</p><RoleManagement api={role.api} scopeName={role.scope} where="studio" onView={(email) => { lookAt(email); location.hash = "#/"; }} /><PinCard api={role.api} /></div>);
     if (tab === "design") return shell(<DesignLookTab session={session} studio={studio} index={index} onIndex={setIndex} />);
+    if (tab === "pdefs") return shell(<ProjectDefaultsTab studio={studio} index={index} onIndex={setIndex} demo={repo.demo} />);
     if (tab === "themes") return shell(<ThemesSettingsTab session={session} studio={studio} index={index} onIndex={setIndex} />);
     if (tab === "help") return shell(<div className="max-w-3xl"><StudioHelp /></div>);
     // Updates: this Studio build onto live sites, and (a hosted Studio) the Studio's own update.
@@ -336,6 +340,7 @@ function WhoseProjects({ role, viewAs, onPick }: { role: ReturnType<typeof useMy
 const SUB_TABS = ["social", "login"];
 /** A small line icon for each settings section. */
 const SET_ICONS: Record<string, string> = {
+  pdefs: "M12 2 2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5",
   roles: "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75",
   social: "M7 3h10a4 4 0 014 4v10a4 4 0 01-4 4H7a4 4 0 01-4-4V7a4 4 0 014-4zM12 8.5a3.5 3.5 0 100 7 3.5 3.5 0 000-7zM17.2 6.8h.01",
   login: "M12 3a4 4 0 00-4 4v3H6.5A1.5 1.5 0 005 11.5v8A1.5 1.5 0 006.5 21h11a1.5 1.5 0 001.5-1.5v-8a1.5 1.5 0 00-1.5-1.5H16V7a4 4 0 00-4-4zM10 10V7a2 2 0 014 0v3M12 14v3",
@@ -355,6 +360,7 @@ function SetIcon({ k, on }: { k: string; on: boolean }) {
 /** Every settings section, for the find box: its tab, its title, other words people look for it by, and (when the title alone
  *  is not what the card says) the word that picks its card out on that tab. */
 const SET_INDEX: [tab: string, title: string, words: string, find?: string][] = [
+  ["pdefs", "Project defaults", "defaults every project email templates resend whatsapp sms privacy policy terms of use cookie consent wording india international payment upi razorpay gateway"],
   ["ai", "AI engine", "ai openai gemini groq openrouter cloudflare api key model translate write provider chatgpt"],
   ["ai", "AI for Design yourself", "diy ai writes text reads pdf engine"],
   ["ai", "Pictures drawn by AI", "diy draw logo banner images picture style unsplash photos"],

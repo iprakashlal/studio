@@ -30,6 +30,8 @@ export type EditorCtx = {
   site?: boolean;
   /** The site's own Cloudflare database, when it is hosted on one (for keys kept there). */
   cf?: { api: string; site: string } | null;
+  /** Settings → Project defaults: connections are the Studio's own for a website type, kept here. */
+  pd?: import("../pages/Connections").Where | null;
 };
 /** Asks the project view to open "Fill in from a pamphlet". */
 export const PAMPHLET_EVENT = "studio:pamphlet";
@@ -466,9 +468,10 @@ function MailTplField({ kind, subject }: { kind: string; subject?: string }) {
 }
 /** A connection's own form (its keys go to the site's database, never into the site's content). */
 function ConnectionField({ kind }: { kind: "rz" | "wa" | "cf" | "pe" | "st" | "pp" }) {
-  const { cf } = useCtx();
-  const signed = useSiteDbSigned(cf), where = cf && signed ? { api: cf.api, scope: "site:" + cf.site } : null;
-  if (cf && !signed) return <SiteDbSignIn cf={cf} small what="show the boxes for these keys" />;
+  const { cf, pd } = useCtx();
+  const signed = useSiteDbSigned(cf), where = pd !== undefined ? pd : cf && signed ? { api: cf.api, scope: "site:" + cf.site } : null;
+  if (pd === null) return null; // Settings → Project defaults without the Studio's database: the page says so once
+  if (pd === undefined && cf && !signed) return <SiteDbSignIn cf={cf} small what="show the boxes for these keys" />;
   return kind === "wa" ? <WhatsAppForm where={where} kind="site" /> : <GatewayForm where={where} gw={kind} />;
 }
 function VideoFileField({ id, label, hint, value, onChange }: { id: string; label: string; hint?: string; value: any; onChange: (v: any) => void }) {

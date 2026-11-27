@@ -11,6 +11,8 @@ import { ghPublish } from "./ghpublish";
 import { adminFile } from "../schema/common";
 import { TEMPLATES } from "../schema";
 import { merge } from "./util";
+import { applyDefaults, pdVersion } from "./projdefaults";
+import { jsonB64 } from "./repo";
 import type { ProjectMeta, Studio } from "./studio";
 import { STUDIO_BUILD } from "../build-info";
 import { badgeVersion } from "./badge";
@@ -40,7 +42,7 @@ export async function checkTarget(t: LiveTarget): Promise<TargetState> {
   try {
     const f = await t.repo!.getJSON<any>("cms/site.json");
     const b = f?.data?.studioBuild;
-    if (b?.id && b.id === STUDIO_BUILD.id && f!.data.badge === badgeVersion() && (f!.data.menuV || menuVersion(undefined)) === menuVersion(currentMenus()[t.project.template])) return { s: "current", at: f!.data.exportedAt };
+    if (b?.id && b.id === STUDIO_BUILD.id && f!.data.badge === badgeVersion() && (f!.data.menuV || menuVersion(undefined)) === menuVersion(currentMenus()[t.project.template]) && (f!.data.pdV || "") === pdVersion(t.project.template)) return { s: "current", at: f!.data.exportedAt };
     return { s: "old", at: f?.data?.exportedAt || null, build: b?.id || null };
   } catch (e) { return { s: "unreachable", msg: explain(e) }; }
 }
@@ -76,6 +78,9 @@ export async function pushTarget(t: LiveTarget, o: { studio: Studio; pages: (h: 
   await repo.check();
   const live = await repo.getJSON<any>("content.json").catch(() => null);
   if (!live) throw new Error("The repository has no content.json. Publish it once from the project first.");
+  // Settings → Project defaults reach the live content too (not the sections the site's admin switched off).
+  applyDefaults(draft, p.template);
+  if (live.data && typeof live.data === "object" && applyDefaults(live.data, p.template)) { o.step("Writing the Studio's defaults"); await repo.putFile("content.json", jsonB64(live.data), "Studio defaults", live.sha); }
   o.step("Building pages");
   // A site whose admin page signs in by email keeps doing so.
   const was = await repo.getJSON<any>("cms/site.json").catch(() => null);

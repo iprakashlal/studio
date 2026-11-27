@@ -18,6 +18,7 @@ import { AiDraw } from "../ui/AiDraw";
 import { LogoMaker } from "../ui/LogoMaker";
 import { designHost, otpCheck, otpSend, passLive, readPage, readPass, saveDraft, submitQuery, understandText, writePass, type DesignHost, type Pass } from "../lib/designapi";
 import { DOC_ACCEPT, DOC_KINDS, DOC_MAX_MB, fileDoc, pairPics, type DocPic } from "../lib/doctext";
+import { docFits } from "../lib/docfit";
 import { oneLine, readDoc, rowsOf, textOf, type DocRead } from "../lib/docread";
 import { watchDevtools } from "../lib/devtools";
 import type { Studio, StudioIndex } from "../lib/studio";
@@ -328,7 +329,7 @@ function DesignPageInner({ studio, index, onIndex }: { studio?: Studio; index?: 
   // The quick start (a file or link given on the first screen): on until the person starts over or goes back to change an answer.
   // "all": from the first screen, everything is settled. "look": given after choosing the kind of website, the look (colour, style, and the type when the
   // document doesn't say it) is still asked, then the preview shows.
-  const [express, setExpressRaw] = useState<"" | "all" | "look">(""), [qlink, setQlink] = useState("");
+  const [express, setExpressRaw] = useState<"" | "all" | "look">(""), [qlink, setQlink] = useState(""), [docErr, setDocErr] = useState("");
   const expressRef = useRef<"" | "all" | "look">("");
   const setExpress = (v: "" | "all" | "look" | boolean) => { const x = v === true ? "all" : v === false ? "" : v; expressRef.current = x; setExpressRaw(x); };
   const qpick = useRef<HTMLInputElement>(null);
@@ -508,15 +509,18 @@ function DesignPageInner({ studio, index, onIndex }: { studio?: Studio; index?: 
         setFiles((o) => ({ ...o, pics: { ...(o.pics || {}), [s.id]: urls } })); answer(s, `${urls.length} picture${urls.length > 1 ? "s" : ""} added`);
       } else if (s.id === "logo") { const u = await fitImage(f); setFiles((o) => ({ ...o, logo: u })); answer(s, "added"); }
       else if (s.id === "doc") {
-        setReading(true);
+        setReading(true); setDocErr("");
         const doc = await fileDoc(f), text = textOf(doc.rows).slice(0, 12000);
         if (text.length < 30) throw new Error("We couldn't find any text in that file (a scanned PDF has none). Try another one, or skip.");
         const rd = readDoc(doc.rows);
+        // The document has to be about the kind of website chosen: one of the things that kind shows must be in it.
+        const fit = docFits(a.kind || "", textOf(doc.rows), rd);
+        if (!fit.ok) throw new Error(`This file doesn't look like it is for ${KIND_SAY[a.kind || ""] || "this kind of website"}. Missing: ${fit.missing.join("; ")}. It needs at least one of these. Upload a file that has one, choose Enter manually, or press Start again to pick another kind of website.`);
         setExpress("look");
         applyDoc(f.name.slice(0, 100), text, "", rd.fields.name ? { name: rd.fields.name, about: rd.fields.about ? oneLine(rd.fields.about) : undefined } : undefined, a.kind, rd, doc.pics);
       }
       else { const buf = await f.arrayBuffer(); if (new TextDecoder().decode(new Uint8Array(buf).slice(0, 4)) !== "%PDF") throw new Error("That doesn't look like a PDF."); setFiles((o) => ({ ...o, menu: { name: f.name.slice(0, 100), b64: toB64(buf) } })); answer(s, f.name.slice(0, 100)); }
-    } catch (e: any) { toast(e?.message || "Couldn't read that file.", "bad"); }
+    } catch (e: any) { toast(e?.message || "Couldn't read that file.", "bad"); if (s.id === "doc") setDocErr(e?.message || "Couldn't read that file."); }
     setReading(false);
     if (pick.current) pick.current.value = "";
   };
@@ -535,7 +539,7 @@ function DesignPageInner({ studio, index, onIndex }: { studio?: Studio; index?: 
   const tweak = (p: Answers) => setA((o) => { const n = { ...o, ...p }; for (const key of Object.keys(p)) if (p[key] === "") delete n[key]; return n; });
   // Developer tools opened (see PageGuard): the preview (and its frame) goes and the questions start over.
   useEffect(() => { const f = () => { restart(); setPass(null); setShowPreview(false); setConnect(false); setEditId(null); }; addEventListener("studio:guard", f); return () => removeEventListener("studio:guard", f); }, []);
-  function restart() { setExpress(false); setA({}); setCopy(null); setFiles({}); setDesign(null); setSavedId(newDesignId()); setSent(false); lastSaved.current = ""; try { sessionStorage.removeItem(DRAFT); } catch { /* none */ } }
+  function restart() { setExpress(false); setDocErr(""); setA({}); setCopy(null); setFiles({}); setDesign(null); setSavedId(newDesignId()); setSent(false); lastSaved.current = ""; try { sessionStorage.removeItem(DRAFT); } catch { /* none */ } }
 
   const field$ = cur && (cur.type === "text" || cur.type === "long" || cur.id === "kind" || cur.id === "doc");
   const bar = (
@@ -715,6 +719,7 @@ function DesignPageInner({ studio, index, onIndex }: { studio?: Studio; index?: 
                       <button type="button" className="btn btn-pri shrink-0 px-5" disabled={reading || !qlink.trim()} onClick={() => fromLink()}>Read my site</button>
                     </div>
                   </div>
+                  {docErr && <p role="alert" className="rounded-xl border border-red-400/40 bg-red-500/10 px-3 py-2 text-[13px] text-red-200">{docErr}</p>}
                 </section>
                 <div className="flex items-center gap-3 text-[11px] uppercase tracking-wide text-ink-500"><span className="h-px flex-1 bg-ink-800" />or<span className="h-px flex-1 bg-ink-800" /></div>
                 <button type="button" className="diy-chip card mx-auto w-full max-w-5xl rounded-2xl px-4 py-3 text-left transition hover:border-brand-400 hover:bg-ink-800" disabled={reading} onClick={() => answer(cur, "type")}><b className="text-[14.5px] text-ink-100">Enter manually</b><span className="block text-[12.5px] leading-snug text-ink-400">Answer a few short questions instead.</span></button>{cardBar}</> : <>{(cur.type === "choice" || cur.type === "many") && chips(cur)}{cardBar}</>}

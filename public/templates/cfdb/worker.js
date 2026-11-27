@@ -56,7 +56,7 @@ var CFDB_UPGRADES = [
     "create index if not exists enquiries_ref on enquiries (site, ref)"
   ] }
 ];
-var CFDB_VERSION = 112;
+var CFDB_VERSION = 113;
 var CFDB_WORKER_NAME = "picaffectz-db";
 
 // src/lib/diylook.ts
@@ -1560,7 +1560,33 @@ async function adoptMail(env, scope) {
   await env.DB.prepare("delete from settings where scope = ? and name = 'mail!pending'").bind(scope).run();
   if (v && /^re_\S{8,}$/.test(String(v.key || "")) && /^[^<>\s@]+@[^<>\s@]+\.[^<>\s@]+$|<[^<>\s@]+@[^<>\s@]+\.[^<>\s@]+>$/.test(String(v.from || "").trim())) await putSetting(env, scope, "mail", { on: true, key: String(v.key), from: String(v.from).trim() });
 }
+var PD_SEC = { mail: "mail", wa: "msg", sms: "msg", rz: "pay", cf: "pay", pe: "pay", st: "pay", pp: "pay" };
+var PD_KIND = /^(portfolio|business|store|restaurant|events)$/;
+var pdSeen = /* @__PURE__ */ new Map();
+async function pdFollow(env, site) {
+  const k = site, hit = pdSeen.get(k);
+  if (hit && Date.now() - hit.at < 15e3) return hit.f;
+  const c = await siteContent(env, site).catch(() => null), D = c?.studioDefaults;
+  const f = D && typeof D.kind === "string" && Array.isArray(D.on) ? { kind: D.kind, on: D.on.map(String), off: c?.defaultsOff && typeof c.defaultsOff === "object" ? c.defaultsOff : {} } : null;
+  if (pdSeen.size > 200) pdSeen.clear();
+  pdSeen.set(k, { at: Date.now(), f });
+  return f;
+}
 async function getSetting(env, scope, name) {
+  const sec = PD_SEC[name];
+  if (sec && scope.startsWith("site:")) {
+    const f = await pdFollow(env, scope.slice(5)).catch(() => null);
+    if (f && PD_KIND.test(f.kind) && f.on.includes(sec) && f.off[sec] !== true) {
+      const r = await env.DB.prepare("select scope from settings where scope like ? and name = ? order by updated_at desc limit 1").bind("pd:" + f.kind + ":studio:%", name).first().catch(() => null);
+      if (r?.scope) {
+        const d = await getOwnSetting(env, r.scope, name);
+        if (d) return d;
+      }
+    }
+  }
+  return getOwnSetting(env, scope, name);
+}
+async function getOwnSetting(env, scope, name) {
   await ensure(env);
   if (name === "mail" && scope.startsWith("site:")) await adoptMail(env, scope).catch(() => {
   });
@@ -4690,8 +4716,11 @@ ${body}`)}${paras("Approve or hide it under Reviews in your site's admin page.",
       }
       if (p === "/set" || p === "/set/test" || p === "/set/wa" || p === "/set/sms") {
         if (role !== "owner") return err(403, "Only an owner can change connections.");
+        const pdK = u.searchParams.get("pd") || "";
+        if (pdK && (!PD_KIND.test(pdK) || !scope.startsWith("studio:"))) return err(400, "Unknown website type.");
+        const sc = pdK ? "pd:" + pdK + ":" + scope : scope;
         if (p === "/set/sms" && req.method === "POST") {
-          const b2 = await req.json(), z = await getSetting(env, scope, "sms"), to = waNum(b2.to, z?.cc);
+          const b2 = await req.json(), z = await getOwnSetting(env, sc, "sms"), to = waNum(b2.to, z?.cc);
           if (!smsReady(z)) return json({ error: "Switch SMS on, fill in the boxes and press Save first." });
           if (!to) return json({ error: "Enter the mobile number to send the test to." });
           try {
@@ -4702,11 +4731,11 @@ ${body}`)}${paras("Approve or hide it under Reviews in your site's admin page.",
           }
         }
         if (p === "/set/wa" && req.method === "POST") {
-          const b2 = await req.json(), old2 = await getSetting(env, scope, "wa") || {}, token = String(b2.token || "").trim() || String(old2.token || "");
+          const b2 = await req.json(), old2 = await getOwnSetting(env, sc, "wa") || {}, token = String(b2.token || "").trim() || String(old2.token || "");
           if (!token) return json({ error: "Paste the access token first." });
           if (b2.do === "find") {
             const f = await waFind(token, String(b2.waba || old2.waba || "").trim());
-            if (f.wabas.length && String(b2.token || "").trim()) await putSetting(env, scope, "wa", { ...old2, token });
+            if (f.wabas.length && String(b2.token || "").trim()) await putSetting(env, sc, "wa", { ...old2, token });
             return json(f);
           }
           if (b2.do === "templates") {
@@ -4739,7 +4768,7 @@ ${body}`)}${paras("Approve or hide it under Reviews in your site's admin page.",
         }
         if (p === "/set" && req.method === "GET") {
           const o = {};
-          for (const n of Object.keys(SETTINGS)) o[n] = maskSetting(n, await getSetting(env, scope, n));
+          for (const n of Object.keys(SETTINGS)) o[n] = maskSetting(n, await getOwnSetting(env, sc, n));
           return json(o);
         }
         const b = await req.json(), name = String(b.name || ""), S2 = SETTINGS[name];
@@ -4749,7 +4778,7 @@ ${body}`)}${paras("Approve or hide it under Reviews in your site's admin page.",
         }
         if (!S2) return err(400, "Unknown connection.");
         if (p === "/set/test" && name.startsWith("tk_")) {
-          const id = name.slice(3), z = await getSetting(env, scope, name);
+          const id = name.slice(3), z = await getOwnSetting(env, sc, name);
           if (!trackerReady(id, { ...z, on: true })) return json({ error: "Fill in the boxes and press Save first." });
           try {
             const live = await trackLive(id, z, String(b.awb || ""), String(b.courier || (TRACKERS[id].kind === "courier" ? id : "other")));
@@ -4760,13 +4789,13 @@ ${body}`)}${paras("Approve or hide it under Reviews in your site's admin page.",
         }
         if (p === "/set/test") {
           if (name === "un") {
-            const c2 = await getSetting(env, scope, "un");
+            const c2 = await getOwnSetting(env, sc, "un");
             if (!c2?.key) return json({ error: "Save the access key first." });
             const r = await unsplashFind(String(c2.key), "coffee shop", 1);
             return r.photos ? json({ ok: true, said: `a photo by ${r.photos[0].by || "an Unsplash photographer"}` }) : json({ error: r.error });
           }
           if (name === "ig") {
-            const c2 = await getSetting(env, scope, "ig");
+            const c2 = await getOwnSetting(env, sc, "ig");
             if (!c2?.token) return json({ error: "Save the access token first." });
             const h = igHandle(b.handle);
             if (b.handle && !h) return json({ error: "That doesn't look like an Instagram handle." });
@@ -4774,7 +4803,7 @@ ${body}`)}${paras("Approve or hide it under Reviews in your site's admin page.",
             return r.items ? json({ ok: true, said: r.items.length + (r.items.length === 1 ? " post" : " posts") + (h ? " from @" + h : "") }) : json({ error: r.error });
           }
           if (name !== "ai") return err(400, "Nothing to test.");
-          const c = await getSetting(env, scope, "ai");
+          const c = await getOwnSetting(env, sc, "ai");
           if (!c?.key || !c.model || !publicUrl(String(c.base || "").trim())) return json({ error: "Fill in the address, the model and the key first." });
           try {
             const r = await customAI(c).run("", { messages: [{ role: "user", content: "Reply with the single word: ready" }], max_tokens: 20, temperature: 0 });
@@ -4784,11 +4813,11 @@ ${body}`)}${paras("Approve or hide it under Reviews in your site's admin page.",
           }
         }
         if (b.value == null) {
-          await putSetting(env, scope, name, null);
+          await putSetting(env, sc, name, null);
           return json({ ok: true });
         }
-        if (name === "mail" && !scope.startsWith("site:")) return err(400, "Site email is set per site.");
-        const old = await getSetting(env, scope, name) || {}, v = {};
+        if (name === "mail" && !sc.startsWith("site:") && !sc.startsWith("pd:")) return err(400, "Site email is set per site.");
+        const old = await getOwnSetting(env, sc, name) || {}, v = {};
         for (const k of S2.text) v[k] = String(b.value[k] ?? old[k] ?? "").slice(0, 3e3).trim();
         for (const k of S2.flags) v[k] = b.value[k] == null ? !!old[k] : !!b.value[k];
         for (const k of S2.secret) v[k] = String(b.value[k] || "").trim().slice(0, 600) || old[k] || "";
@@ -4801,7 +4830,7 @@ ${body}`)}${paras("Approve or hide it under Reviews in your site's admin page.",
         }
         if (name === "ai" && v.base && !publicUrl(v.base)) return err(400, "The API address must be a public https:// address.");
         if (name.startsWith("tk_") && v.url && !publicUrl(v.url.replace(/\{(awb|courier)\}/g, "x"))) return err(400, "The tracking address must be a public https:// address.");
-        await putSetting(env, scope, name, v);
+        await putSetting(env, sc, name, v);
         return json({ ok: true, value: maskSetting(name, v) });
       }
       const limited = inStudio && !admin, sharedOk = limited ? await can("shared") : true;

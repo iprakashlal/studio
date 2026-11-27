@@ -561,7 +561,31 @@ async function adoptMail(env: Env, scope: string) {
   await env.DB.prepare("delete from settings where scope = ? and name = 'mail!pending'").bind(scope).run();
   if (v && /^re_\S{8,}$/.test(String(v.key || "")) && /^[^<>\s@]+@[^<>\s@]+\.[^<>\s@]+$|<[^<>\s@]+@[^<>\s@]+\.[^<>\s@]+>$/.test(String(v.from || "").trim())) await putSetting(env, scope, "mail", { on: true, key: String(v.key), from: String(v.from).trim() });
 }
+/** Settings → Project defaults: which section each connection belongs to, and the website types. */
+const PD_SEC: Record<string, string> = { mail: "mail", wa: "msg", sms: "msg", rz: "pay", cf: "pay", pe: "pay", st: "pay", pp: "pay" };
+const PD_KIND = /^(portfolio|business|store|restaurant|events)$/;
+const pdSeen = new Map<string, { at: number; f: { kind: string; on: string[]; off: Record<string, boolean> } | null }>();
+/** What a site's published content says about the Studio's defaults (kept a few seconds: one request reads it often). */
+async function pdFollow(env: Env, site: string) {
+  const k = site, hit = pdSeen.get(k); if (hit && Date.now() - hit.at < 15000) return hit.f;
+  const c = await siteContent(env, site).catch(() => null), D = c?.studioDefaults;
+  const f = D && typeof D.kind === "string" && Array.isArray(D.on) ? { kind: D.kind, on: D.on.map(String), off: c?.defaultsOff && typeof c.defaultsOff === "object" ? c.defaultsOff : {} } : null;
+  if (pdSeen.size > 200) pdSeen.clear(); pdSeen.set(k, { at: Date.now(), f }); return f;
+}
+/** A connection a site uses: the Studio's (Project defaults) when the site follows that section and the Studio set one,
+ *  otherwise the site's own. The site's own settings screens read and write getOwnSetting. */
 async function getSetting(env: Env, scope: string, name: string): Promise<any | null> {
+  const sec = PD_SEC[name];
+  if (sec && scope.startsWith("site:")) {
+    const f = await pdFollow(env, scope.slice(5)).catch(() => null);
+    if (f && PD_KIND.test(f.kind) && f.on.includes(sec) && f.off[sec] !== true) {
+      const r: any = await env.DB.prepare("select scope from settings where scope like ? and name = ? order by updated_at desc limit 1").bind("pd:" + f.kind + ":studio:%", name).first().catch(() => null);
+      if (r?.scope) { const d = await getOwnSetting(env, r.scope, name); if (d) return d; }
+    }
+  }
+  return getOwnSetting(env, scope, name);
+}
+async function getOwnSetting(env: Env, scope: string, name: string): Promise<any | null> {
   await ensure(env);
   if (name === "mail" && scope.startsWith("site:")) await adoptMail(env, scope).catch(() => {});
   const r: any = await env.DB.prepare("select value from settings where scope = ? and name = ?").bind(scope, name).first(); if (!r) return null;
@@ -2799,21 +2823,25 @@ export default {
       // ---- connections (the owner's own AI API, WhatsApp, Razorpay): owners set them; the keys are never sent back
       if (p === "/set" || p === "/set/test" || p === "/set/wa" || p === "/set/sms") {
         if (role !== "owner") return err(403, "Only an owner can change connections.");
+        // Settings → Project defaults: the Studio's own connection for a website type, used by the sites that follow it.
+        const pdK = u.searchParams.get("pd") || "";
+        if (pdK && (!PD_KIND.test(pdK) || !scope.startsWith("studio:"))) return err(400, "Unknown website type.");
+        const sc = pdK ? "pd:" + pdK + ":" + scope : scope;
         // SMS: a test code to the owner's own phone, with what is saved.
         if (p === "/set/sms" && req.method === "POST") {
-          const b = (await req.json()) as any, z = await getSetting(env, scope, "sms"), to = waNum(b.to, z?.cc);
+          const b = (await req.json()) as any, z = await getOwnSetting(env, sc, "sms"), to = waNum(b.to, z?.cc);
           if (!smsReady(z)) return json({ error: "Switch SMS on, fill in the boxes and press Save first." });
           if (!to) return json({ error: "Enter the mobile number to send the test to." });
           try { const own = !(await smsSend(z, to, "123456", env.NAME || "your site")); return json({ ok: true, own }); } catch (e: any) { return json({ error: String(e?.message || e).slice(0, 300) }); }
         }
         // WhatsApp set up from the token: find the account, make the templates, send a test code.
         if (p === "/set/wa" && req.method === "POST") {
-          const b = (await req.json()) as any, old = (await getSetting(env, scope, "wa")) || {}, token = String(b.token || "").trim() || String(old.token || "");
+          const b = (await req.json()) as any, old = (await getOwnSetting(env, sc, "wa")) || {}, token = String(b.token || "").trim() || String(old.token || "");
           if (!token) return json({ error: "Paste the access token first." });
           if (b.do === "find") {
             const f = await waFind(token, String(b.waba || old.waba || "").trim());
             // A token that works is kept at once, so the next steps need nothing typed again.
-            if (f.wabas.length && String(b.token || "").trim()) await putSetting(env, scope, "wa", { ...old, token });
+            if (f.wabas.length && String(b.token || "").trim()) await putSetting(env, sc, "wa", { ...old, token });
             return json(f);
           }
           if (b.do === "templates") {
@@ -2833,27 +2861,27 @@ export default {
           }
           return err(400, "Unknown step.");
         }
-        if (p === "/set" && req.method === "GET") { const o: any = {}; for (const n of Object.keys(SETTINGS)) o[n] = maskSetting(n, await getSetting(env, scope, n)); return json(o); }
+        if (p === "/set" && req.method === "GET") { const o: any = {}; for (const n of Object.keys(SETTINGS)) o[n] = maskSetting(n, await getOwnSetting(env, sc, n)); return json(o); }
         const b = (await req.json()) as any, name = String(b.name || ""), S = SETTINGS[name];
         // Pinterest needs no key, so it is not a saved connection: only its feed is tried, for the wall's settings screen.
         if (p === "/set/test" && name === "pin") { const r = await pinMedia(String(b.pin || ""), 6); return r.items ? json({ ok: true, said: r.items.length + (r.items.length === 1 ? " pin" : " pins") }) : json({ error: r.error }); }
         if (!S) return err(400, "Unknown connection.");
         if (p === "/set/test" && name.startsWith("tk_")) {
-          const id = name.slice(3), z = await getSetting(env, scope, name); if (!trackerReady(id, { ...z, on: true })) return json({ error: "Fill in the boxes and press Save first." });
+          const id = name.slice(3), z = await getOwnSetting(env, sc, name); if (!trackerReady(id, { ...z, on: true })) return json({ error: "Fill in the boxes and press Save first." });
           try { const live = await trackLive(id, z, String(b.awb || ""), String(b.courier || (TRACKERS[id].kind === "courier" ? id : "other"))); return json({ ok: true, live: { st: live.st, label: TRACK_STATES[live.st] || live.say, say: live.say, eta: live.eta, ev: live.ev.slice(0, 5), n: live.ev.length } }); }
           catch (e: any) { return json({ error: e instanceof TrackError ? e.message : "The tracking service's answer couldn't be read." }); }
         }
         if (p === "/set/test") {
-          if (name === "un") { const c = await getSetting(env, scope, "un"); if (!c?.key) return json({ error: "Save the access key first." }); const r = await unsplashFind(String(c.key), "coffee shop", 1); return r.photos ? json({ ok: true, said: `a photo by ${r.photos[0].by || "an Unsplash photographer"}` }) : json({ error: r.error }); }
-          if (name === "ig") { const c = await getSetting(env, scope, "ig"); if (!c?.token) return json({ error: "Save the access token first." }); const h = igHandle(b.handle); if (b.handle && !h) return json({ error: "That doesn't look like an Instagram handle." }); const r = await igMedia(String(c.token), 6, h, !!h && !/^EAA/.test(String(c.token))); return r.items ? json({ ok: true, said: r.items.length + (r.items.length === 1 ? " post" : " posts") + (h ? " from @" + h : "") }) : json({ error: r.error }); }
+          if (name === "un") { const c = await getOwnSetting(env, sc, "un"); if (!c?.key) return json({ error: "Save the access key first." }); const r = await unsplashFind(String(c.key), "coffee shop", 1); return r.photos ? json({ ok: true, said: `a photo by ${r.photos[0].by || "an Unsplash photographer"}` }) : json({ error: r.error }); }
+          if (name === "ig") { const c = await getOwnSetting(env, sc, "ig"); if (!c?.token) return json({ error: "Save the access token first." }); const h = igHandle(b.handle); if (b.handle && !h) return json({ error: "That doesn't look like an Instagram handle." }); const r = await igMedia(String(c.token), 6, h, !!h && !/^EAA/.test(String(c.token))); return r.items ? json({ ok: true, said: r.items.length + (r.items.length === 1 ? " post" : " posts") + (h ? " from @" + h : "") }) : json({ error: r.error }); }
           if (name !== "ai") return err(400, "Nothing to test.");
-          const c = await getSetting(env, scope, "ai"); if (!c?.key || !c.model || !publicUrl(String(c.base || "").trim())) return json({ error: "Fill in the address, the model and the key first." });
+          const c = await getOwnSetting(env, sc, "ai"); if (!c?.key || !c.model || !publicUrl(String(c.base || "").trim())) return json({ error: "Fill in the address, the model and the key first." });
           try { const r: any = await customAI(c).run("", { messages: [{ role: "user", content: "Reply with the single word: ready" }], max_tokens: 20, temperature: 0 }); return json({ ok: true, said: String(r.response || "").trim().slice(0, 80) }); }
           catch (e: any) { return json({ error: String(e?.message || e).slice(0, 300) }); }
         }
-        if (b.value == null) { await putSetting(env, scope, name, null); return json({ ok: true }); }
-        if (name === "mail" && !scope.startsWith("site:")) return err(400, "Site email is set per site.");
-        const old = (await getSetting(env, scope, name)) || {}, v: any = {};
+        if (b.value == null) { await putSetting(env, sc, name, null); return json({ ok: true }); }
+        if (name === "mail" && !sc.startsWith("site:") && !sc.startsWith("pd:")) return err(400, "Site email is set per site.");
+        const old = (await getOwnSetting(env, sc, name)) || {}, v: any = {};
         for (const k of S.text) v[k] = String(b.value[k] ?? old[k] ?? "").slice(0, 3000).trim();
         for (const k of S.flags) v[k] = b.value[k] == null ? !!old[k] : !!b.value[k];
         // A secret left empty keeps the one already saved.
@@ -2869,7 +2897,7 @@ export default {
         }
         if (name === "ai" && v.base && !publicUrl(v.base)) return err(400, "The API address must be a public https:// address.");
         if (name.startsWith("tk_") && v.url && !publicUrl(v.url.replace(/\{(awb|courier)\}/g, "x"))) return err(400, "The tracking address must be a public https:// address.");
-        await putSetting(env, scope, name, v);
+        await putSetting(env, sc, name, v);
         return json({ ok: true, value: maskSetting(name, v) });
       }
       // In a Studio, someone who is not an Administrator has their own space (users/<them>/) and their own projects;

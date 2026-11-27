@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { cfCall, cfRole, cfSendCode, cfSession, cfSignedIn, cfVerifyCode, resendDomainBlocked, resendTestOnly, siteMailBridge, signedInApi } from "../lib/cfdb";
 import { Field, Toggle, useToast } from "../ui/kit";
 import { COURIERS, TRACKERS } from "../lib/tracking";
+import { DefaultsLock } from "../editor/DefaultsLock";
 
 type Kind = "ai" | "un" | "ig" | "wa" | "rz" | "cf" | "pe" | "st" | "pp" | "pos" | "sms" | "ship" | "mail" | `tk_${string}`;
 /** What the Studio lets this site use a way of messaging for (content.cms.msg). */
@@ -13,7 +14,9 @@ export type MsgAllow = { login: boolean; checkout: boolean };
 export const msgAllow = (cms: any, way: "wa" | "sms"): MsgAllow => { const m = cms?.msg || {}, ok = (v: unknown) => v == null || v === "" || v === way || v === "both"; return { login: ok(m.login), checkout: ok(m.checkout) }; };
 const OFF_BY_STUDIO = " (switched off for this site by your Studio)";
 type Saved = Record<Kind, Record<string, any> | null>;
-export type Where = { api: string; scope: string };
+export type Where = { api: string; scope: string; /** Settings → Project defaults: the Studio's connection for this website type. */ pd?: string };
+/** The query naming where a connection is kept. */
+export const whereQ = (w: Where) => "scope=" + encodeURIComponent(w.scope) + (w.pd ? "&pd=" + encodeURIComponent(w.pd) : "");
 
 /** The Studio's own database and the Studio scope this person owns there (null when not signed in, or not an owner). */
 export async function studioWhere(): Promise<Where | null> {
@@ -24,11 +27,11 @@ function useSaved(w: Where | null) {
   const [saved, setSaved] = useState<Saved | null>(null), [err, setErr] = useState("");
   const load = async () => {
     if (!w) return; setErr("");
-    try { setSaved(await cfCall<Saved>(w.api, "/set?scope=" + encodeURIComponent(w.scope))); }
+    try { setSaved(await cfCall<Saved>(w.api, "/set?" + whereQ(w))); }
     catch (e: any) { setErr(e?.status === 404 ? "This needs the database updated once (Settings → Hostings → Update the database)." : e?.status === 403 ? "Only an owner can see or change connections." : e?.status === 401 ? "Sign in to this database on this device first." : e?.message || "Couldn't load the connections."); }
   };
   useEffect(() => { setSaved(null); load(); }, [w?.api, w?.scope]);
-  const save = async (name: Kind, value: Record<string, any> | null) => { const r = await cfCall<any>(w!.api, "/set?scope=" + encodeURIComponent(w!.scope), { method: "POST", body: JSON.stringify({ name, value }) }); setSaved((s) => ({ ...(s as Saved), [name]: value ? r.value : null })); };
+  const save = async (name: Kind, value: Record<string, any> | null) => { const r = await cfCall<any>(w!.api, "/set?" + whereQ(w!), { method: "POST", body: JSON.stringify({ name, value }) }); setSaved((s) => ({ ...(s as Saved), [name]: value ? r.value : null })); };
   /** Notes on this device that a secret is now saved, without loading everything again. */
   const mark = (name: Kind, patch: Record<string, any>) => setSaved((s) => (s ? { ...s, [name]: { ...(s[name] || {}), ...patch } } : s));
   return { saved, err, save, load, mark };
@@ -86,7 +89,7 @@ export function AiApiForm({ where }: { where: Where | null | undefined }) {
       <div className="flex flex-wrap gap-2">
         <Field label="Model for drawing pictures (optional)" htmlFor="ai-image" hint="Used when pictures are set to be drawn by the Studio's AI engine. Empty uses dall-e-3 for ChatGPT and gemini-2.5-flash-image for Gemini. Claude can't draw pictures."><input id="ai-image" className="input" value={f.image} onChange={(e) => setF({ ...f, image: e.target.value })} /></Field>
         <button type="button" className="btn btn-sm btn-pri" disabled={!ok || !!busy} onClick={go("Saving", async () => { await save("ai", { on: true, base: f.base.trim(), model: f.model.trim(), vision: f.vision.trim(), image: f.image.trim(), key: f.key.trim() }); setF((x) => ({ ...x, key: "" })); toast("Your AI API is saved."); })}>{busy === "Saving" ? "Saving…" : "Save"}</button>
-        <button type="button" className="btn btn-sm" disabled={!a?.key || !!busy} onClick={go("Testing", async () => { const r = await cfCall<any>(where.api, "/set/test?scope=" + encodeURIComponent(where.scope), { method: "POST", body: JSON.stringify({ name: "ai" }) }); if (r?.error) throw new Error(r.error); toast(`It answered: “${r.said || "(nothing)"}”. The connection works.`); })}>{busy === "Testing" ? "Testing…" : "Test the connection"}</button>
+        <button type="button" className="btn btn-sm" disabled={!a?.key || !!busy} onClick={go("Testing", async () => { const r = await cfCall<any>(where.api, "/set/test?" + whereQ(where), { method: "POST", body: JSON.stringify({ name: "ai" }) }); if (r?.error) throw new Error(r.error); toast(`It answered: “${r.said || "(nothing)"}”. The connection works.`); })}>{busy === "Testing" ? "Testing…" : "Test the connection"}</button>
         {a && <button type="button" className="btn btn-sm btn-danger ml-auto" disabled={!!busy} onClick={go("Removing", async () => { await save("ai", null); setF({ base: "", model: "", vision: "", image: "", key: "" }); toast("Removed."); })}>Remove</button>}
       </div>
       <p className="text-[12.5px] text-ink-400">Your text and pictures are sent to that provider when you use a helper, under that provider's terms and prices. The key is stored encrypted on your database and is never shown again or put in a site.</p>
@@ -121,7 +124,7 @@ export function UnsplashForm({ where }: { where: Where | null | undefined }) {
       <Secret id="un-key" label="Unsplash Access Key" saved={!!u?.key} value={key} onChange={setKey} />
       <div className="flex flex-wrap gap-2">
         <button type="button" className="btn btn-sm btn-pri" disabled={!key.trim() || !!busy} onClick={go("Saving", async () => { await save("un", { on: true, key: key.trim() }); setKey(""); toast("Your Unsplash key is saved."); })}>{busy === "Saving" ? "Saving…" : "Save key"}</button>
-        <button type="button" className="btn btn-sm" disabled={!u?.key || !!busy} onClick={go("Testing", async () => { const r = await cfCall<any>(where.api, "/set/test?scope=" + encodeURIComponent(where.scope), { method: "POST", body: JSON.stringify({ name: "un" }) }); if (r?.error) throw new Error(r.error); toast(`Unsplash answered with ${r.said}. The key works.`); })}>{busy === "Testing" ? "Testing…" : "Test"}</button>
+        <button type="button" className="btn btn-sm" disabled={!u?.key || !!busy} onClick={go("Testing", async () => { const r = await cfCall<any>(where.api, "/set/test?" + whereQ(where), { method: "POST", body: JSON.stringify({ name: "un" }) }); if (r?.error) throw new Error(r.error); toast(`Unsplash answered with ${r.said}. The key works.`); })}>{busy === "Testing" ? "Testing…" : "Test"}</button>
         {u && <button type="button" className="btn btn-sm btn-danger ml-auto" disabled={!!busy} onClick={go("Removing", async () => { await save("un", null); setKey(""); toast("Removed."); })}>Remove</button>}
       </div>
     </div>
@@ -153,13 +156,13 @@ export function InstagramForm({ where, kind = "site" }: { where: Where | null | 
       <Secret id="ig-token" label="Instagram access token" saved={!!g?.token} value={token} onChange={setToken} />
       <div className="flex flex-wrap gap-2">
         <button type="button" className="btn btn-sm btn-pri" disabled={!token.trim() || !!busy} onClick={go("Saving", async () => { await save("ig", { on: true, token: token.trim(), at: String(Date.now()) }); setToken(""); toast("Your Instagram token is saved."); })}>{busy === "Saving" ? "Saving…" : "Save token"}</button>
-        <button type="button" className="btn btn-sm" disabled={!g?.token || !!busy} onClick={go("Testing", async () => { const r = await cfCall<any>(where.api, "/set/test?scope=" + encodeURIComponent(where.scope), { method: "POST", body: JSON.stringify({ name: "ig" }) }); if (r?.error) throw new Error(r.error); toast(`Instagram answered with ${r.said}. The token works.`); })}>{busy === "Testing" ? "Testing…" : "Test"}</button>
+        <button type="button" className="btn btn-sm" disabled={!g?.token || !!busy} onClick={go("Testing", async () => { const r = await cfCall<any>(where.api, "/set/test?" + whereQ(where), { method: "POST", body: JSON.stringify({ name: "ig" }) }); if (r?.error) throw new Error(r.error); toast(`Instagram answered with ${r.said}. The token works.`); })}>{busy === "Testing" ? "Testing…" : "Test"}</button>
         {g?.token && <button type="button" className="btn btn-sm btn-danger ml-auto" disabled={!!busy} onClick={go("Removing", async () => { await save("ig", null); toast("Instagram token removed."); })}>Remove</button>}
       </div>
       {g?.token && <div className="flex flex-col gap-1.5 rounded-xl border border-ink-700 p-3">
         <label htmlFor={"ig-try-" + kind} className="text-[13px] font-semibold">Try a handle</label>
         <div className="flex flex-wrap gap-2"><input id={"ig-try-" + kind} className="input h-9 max-w-xs py-0 text-[13px]" placeholder="@anyaccount" value={handle} onChange={(e) => setHandle(e.target.value)} />
-          <button type="button" className="btn btn-sm" disabled={!handle.trim() || !!busy} onClick={go("Looking", async () => { const r = await cfCall<any>(where.api, "/set/test?scope=" + encodeURIComponent(where.scope), { method: "POST", body: JSON.stringify({ name: "ig", handle: handle.trim() }) }); if (r?.error) throw new Error(r.error); toast(`Instagram answered with ${r.said}.`); })}>{busy === "Looking" ? "Looking…" : "Look it up"}</button></div>
+          <button type="button" className="btn btn-sm" disabled={!handle.trim() || !!busy} onClick={go("Looking", async () => { const r = await cfCall<any>(where.api, "/set/test?" + whereQ(where), { method: "POST", body: JSON.stringify({ name: "ig", handle: handle.trim() }) }); if (r?.error) throw new Error(r.error); toast(`Instagram answered with ${r.said}.`); })}>{busy === "Looking" ? "Looking…" : "Look it up"}</button></div>
         <span className="text-[11.5px] text-ink-500">Shows whether this token can read another account's posts. The account must be public and a Business or Creator account; a personal account can't be read (switching is free in the Instagram app).</span>
       </div>}
       <p className="text-[12.5px] text-ink-400">{studio ? "All sites share this token's hourly allowance from Instagram; each site asks twice an hour at most. Only sites on the Studio's database can use it; a site on a separate database of its own shows the photos added by hand." : "Then choose “My newest Instagram posts” under Social photo wall → Fill it by itself. Pinterest needs no key: just give the wall a public profile or board."}</p>
@@ -178,7 +181,7 @@ export function WhatsAppForm({ where, kind, allow }: { where: Where | null | und
   useEffect(() => {
     const w: any = saved?.wa, key = where && w?.token && (w.waba || w.phoneId) ? where.api + "|" + where.scope + "|" + (w.waba || w.phoneId) : "";
     if (!key || looked.current === key) return; looked.current = key;
-    cfCall<any>(where!.api, "/set/wa?scope=" + encodeURIComponent(where!.scope), { method: "POST", body: JSON.stringify({ do: "find", token: "", waba: String(w.waba || w.phoneId || "") }) })
+    cfCall<any>(where!.api, "/set/wa?" + whereQ(where!), { method: "POST", body: JSON.stringify({ do: "find", token: "", waba: String(w.waba || w.phoneId || "") }) })
       .then((r) => { if (Array.isArray(r?.wabas) && r.wabas.length && r.wabas.some((a: any) => a.id)) setFound((cur) => cur || r.wabas); }).catch(() => {});
   }, [saved, where?.api, where?.scope]);
   const lead = <>Optional. Messages go through your own WhatsApp Business account (Meta's WhatsApp Business Cloud API), and Meta charges you per message. Nothing is sent on WhatsApp unless this is switched on and the matching box below is ticked; email keeps working as before.</>;
@@ -186,7 +189,7 @@ export function WhatsAppForm({ where, kind, allow }: { where: Where | null | und
   if (!where) return <Shell title="WhatsApp" lead={lead}><Missing why={kind === "studio" ? "WhatsApp is kept on the Studio's Cloudflare database. Host the Studio on Cloudflare (Settings → Hostings) and sign in there as its owner." : "WhatsApp needs this site hosted on your Cloudflare database, and you signed in to it on this device as its owner."} /></Shell>;
   if (err) return <Shell title="WhatsApp" lead={lead}><Missing why={err} /></Shell>;
   const w = saved?.wa, set = (k: string) => (e: any) => setF({ ...f, [k]: e.target.value });
-  const call = (body: any) => cfCall<any>(where.api, "/set/wa?scope=" + encodeURIComponent(where.scope), { method: "POST", body: JSON.stringify(body) });
+  const call = (body: any) => cfCall<any>(where.api, "/set/wa?" + whereQ(where), { method: "POST", body: JSON.stringify(body) });
   const acct = found?.find((a) => a.id === f.waba) || found?.[0] || null;
   const tpls = (cat: string) => (acct?.templates || []).filter((t) => t.category.toUpperCase() === cat && t.status.toUpperCase() === "APPROVED");
   const waiting = (acct?.templates || []).filter((t) => /PENDING|IN_APPEAL/i.test(t.status)).map((t) => t.name);
@@ -358,7 +361,7 @@ export function SmsForm({ where, kind, allow }: { where: Where | null | undefine
   const keyKept = !!z?.key && (z.provider || "msg91") === f.provider;
   const filled = (!!f.key.trim() || keyKept) && (tw ? !!String(f.sid).trim() && !!String(f.from).trim() : mc ? !!String(f.sid).trim() : !!String(f.tpl).trim()), ok = !f.on || filled;
   const doSave = async () => { setBusy("Saving"); try { const v: any = { ...f, key: f.key.trim() }; for (const k of ["login", "orderOtp"]) if (barred(k)) v[k] = false; if (sd && (!v.varName || v.varName === "var1")) v.varName = "code"; await save("sms", v); setF((x) => ({ ...x, key: "" })); toast(f.on ? "SMS is saved and on." : "Saved. SMS is off."); } catch (e: any) { toast(e?.status === 400 ? "This needs the database updated once (Settings → Hostings → Update this database)." : e?.message || "Couldn't save that.", "bad"); } setBusy(""); };
-  const test = async () => { setBusy("Testing"); try { const r = await cfCall<any>(where.api, "/set/sms?scope=" + encodeURIComponent(where.scope), { method: "POST", body: JSON.stringify({ to: testTo }) }); if (r?.error) throw new Error(r.error); toast(r?.own === false ? "Sent. A test code should arrive by SMS in a moment (Message Central chooses the code)." : "Sent. A test code (123456) should arrive by SMS in a moment."); } catch (e: any) { toast(e?.status === 404 ? "This needs the database updated once (Settings → Hostings → Update this database)." : e?.message || "The test wasn't sent.", "bad"); } setBusy(""); };
+  const test = async () => { setBusy("Testing"); try { const r = await cfCall<any>(where.api, "/set/sms?" + whereQ(where), { method: "POST", body: JSON.stringify({ to: testTo }) }); if (r?.error) throw new Error(r.error); toast(r?.own === false ? "Sent. A test code should arrive by SMS in a moment (Message Central chooses the code)." : "Sent. A test code (123456) should arrive by SMS in a moment."); } catch (e: any) { toast(e?.status === 404 ? "This needs the database updated once (Settings → Hostings → Update this database)." : e?.message || "The test wasn't sent.", "bad"); } setBusy(""); };
   return (
     <Shell title="SMS" on={!!(z?.on && z.key)} lead={lead}>
       <Toggle id={"sms-on-" + kind} checked={!!f.on} onChange={(v: boolean) => setF({ ...f, on: v })} label="Use SMS" />
@@ -567,7 +570,7 @@ export function CourierTrackingForm({ where }: { where: Where | null | undefined
         {z && <button type="button" className="btn btn-sm btn-danger ml-auto" disabled={!!busy} onClick={async () => { setBusy("rm"); try { await save(("tk_" + id) as Kind, null); toast(`${T.name} tracking removed.`); } catch (e: any) { toast(e?.message || "Couldn't remove it.", "bad"); } setBusy(""); }}>Remove</button>}
       </div>
       {z && <WithButton label="Try it with a real tracking number" htmlFor="tk-awb" hint="Use the number of a parcel you have already sent. Nothing is changed on any order."
-        button={<button type="button" className="btn" disabled={!!busy || awb.trim().length < 4} onClick={async () => { setBusy("test"); setRes(null); try { setRes(await cfCall<any>(where.api, "/set/test?scope=" + encodeURIComponent(where.scope), { method: "POST", body: JSON.stringify({ name: "tk_" + id, awb: awb.trim() }) })); } catch (e: any) { setRes({ error: e?.message || "Couldn't reach your database." }); } setBusy(""); }}>{busy === "test" ? "Asking…" : "Test"}</button>}>
+        button={<button type="button" className="btn" disabled={!!busy || awb.trim().length < 4} onClick={async () => { setBusy("test"); setRes(null); try { setRes(await cfCall<any>(where.api, "/set/test?" + whereQ(where), { method: "POST", body: JSON.stringify({ name: "tk_" + id, awb: awb.trim() }) })); } catch (e: any) { setRes({ error: e?.message || "Couldn't reach your database." }); } setBusy(""); }}>{busy === "test" ? "Asking…" : "Test"}</button>}>
         <input id="tk-awb" className="input min-w-0 flex-1 font-mono" autoComplete="off" value={awb} onChange={(e) => setAwb(e.target.value)} /></WithButton>}
       {res && (res.error
         ? <p role="status" className="rounded-lg border border-amber-400/40 px-3 py-2 text-[13px] text-amber-100" data-tk-res="bad">{res.error}</p>
@@ -580,16 +583,16 @@ export function CourierTrackingForm({ where }: { where: Where | null | undefined
 }
 
 /** A site's "Payments & WhatsApp" section (site admin and the Studio's editor). */
-export function SiteConnections({ cf, template, cms, site, only, account }: { account?: string; cf?: { api: string; site: string } | null; template: string; /** "mail": just the Email (Resend) card (portfolio sites have no WhatsApp or SMS). */ only?: "mail"; /** The site's content.cms (what the Studio allows it). */ cms?: any; /** True in the site's own admin page. */ site?: boolean }) {
+export function SiteConnections({ cf, template, cms, site, only, account, root, onChange }: { /** The site's content and its change callback: a connection the Studio gives (Project defaults) is switched here. */ root?: any; onChange?: () => void; account?: string; cf?: { api: string; site: string } | null; template: string; /** "mail": just the Email (Resend) card (portfolio sites have no WhatsApp or SMS). */ only?: "mail"; /** The site's content.cms (what the Studio allows it). */ cms?: any; /** True in the site's own admin page. */ site?: boolean }) {
   const aw = msgAllow(cms, "wa"), as = msgAllow(cms, "sms");
   const signed = useSiteDbSigned(cf), where = cf && signed ? { api: cf.api, scope: "site:" + cf.site } : null, mailBridge = useMailBridge(cf, account, signed);
-  if (only === "mail") return <div className="flex max-w-3xl flex-col gap-4">{cf && !signed && <SiteDbSignIn cf={cf} what="show this project's email settings" />}<MailForm bare where={where} studio={!site} bridge={mailBridge} /></div>;
+  const lock = (sec: "mail" | "msg", el: React.ReactNode) => root && onChange ? <DefaultsLock root={root} secs={[sec]} onChange={onChange} site={site}>{el}</DefaultsLock> : el;
+  if (only === "mail") return <div className="flex max-w-3xl flex-col gap-4">{cf && !signed && <SiteDbSignIn cf={cf} what="show this project's email settings" />}{lock("mail", <MailForm bare where={where} studio={!site} bridge={mailBridge} />)}</div>;
   return <div className="flex max-w-3xl flex-col gap-4">
     {cf && !signed && <SiteDbSignIn cf={cf} what={template === "restaurant" ? "show the boxes for Petpooja's and WhatsApp's keys" : "show the boxes for WhatsApp's keys"} />}
     {template === "restaurant" && <section className="card flex flex-col gap-2 p-5"><h3 className="text-[15px] font-extrabold">Restaurant backend</h3><p className="text-sm text-ink-300">Orders, payments and messages run on the site's own Cloudflare database: it saves each order under Purchased orders, works out what an order costs from your menu, confirms online payments with your payment gateway, passes orders to Petpooja, and sends WhatsApp messages. Keys you enter here stay on that database, encrypted. The payment gateways (Razorpay, Cashfree, PhonePe, Stripe, PayPal) and their keys are under Payments.</p></section>}
-    <MailForm where={where} studio={!site} bridge={mailBridge} />{template === "restaurant" && <PetpoojaForm where={where} />}{template === "store" && <CourierTrackingForm where={where} />}<WhatsAppForm where={where} kind="site" allow={aw} />{/* Instagram is set once for every site, in the Studio's own settings (Settings → General → Social setup): no site screen shows it. */}
-    {/* In the site's own admin page SMS shows only when the Studio lets the site use it for something. */}
-    {!(site && !as.login && !as.checkout) && <SmsForm where={where} kind="site" allow={as} />}
+    {lock("mail", <MailForm where={where} studio={!site} bridge={mailBridge} />)}{template === "restaurant" && <PetpoojaForm where={where} />}{template === "store" && <CourierTrackingForm where={where} />}{lock("msg", <><WhatsAppForm where={where} kind="site" allow={aw} />{!(site && !as.login && !as.checkout) && <SmsForm where={where} kind="site" allow={as} />}</>)}{/* Instagram is set once for every site, in the Studio's own settings (Settings → General → Social setup): no site screen shows it. */}
+    {/* In the site's own admin page SMS shows only when the Studio lets the site use it for something (inside the WhatsApp & SMS part above). */}
     {cf && signed && <GoogleSignInCard api={cf.api} what="this site's admin page (and anything else that signs in to the same database)" />}</div>;
 }
 /** The Studio's own database, looked up once. */

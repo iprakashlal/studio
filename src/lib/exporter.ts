@@ -2,6 +2,7 @@
 //   template files  +  content.json  +  images  +  cms/ (admin.js, admin.css, site.json)
 // and packs it as a ZIP or pushes it to a GitHub repository in one commit.
 
+import { pdVersion } from "./projdefaults";
 import { badgeScript, badgeVersion, type BadgeCfg } from "./badge";
 import { currentMenus, menuVersion } from "./menus";
 import { STUDIO_BUILD } from "../build-info";
@@ -142,7 +143,7 @@ export async function buildSite(opts: {
   if (!opts.host) files.push({ path: ".nojekyll", data: new Uint8Array() });
   files.push({
     path: "cms/site.json",
-    data: textToBytes(JSON.stringify({ template: template.id, name: opts.name, version: opts.version, admin, exportedAt: new Date().toISOString(), generator: "Site Studio", studioBuild: STUDIO_BUILD, badge: badgeVersion(opts.badge), ...(currentMenus()[template.id] ? { menu: currentMenus()[template.id] } : {}), menuV: menuVersion(currentMenus()[template.id]), ...(opts.signin && !opts.host ? { signin: opts.signin } : {}), ...(opts.host ? { host: "api" in opts.host ? { kind: "cloudflare", api: opts.host.api, site: opts.host.site } : { kind: "supabase", url: cleanUrl(opts.host.url), key: opts.host.key, site: opts.host.site } } : {}) }, null, 2)),
+    data: textToBytes(JSON.stringify({ template: template.id, name: opts.name, version: opts.version, admin, exportedAt: new Date().toISOString(), generator: "Site Studio", studioBuild: STUDIO_BUILD, badge: badgeVersion(opts.badge), ...(currentMenus()[template.id] ? { menu: currentMenus()[template.id] } : {}), menuV: menuVersion(currentMenus()[template.id]), ...(pdVersion(template.id) ? { pdV: pdVersion(template.id) } : {}), ...(opts.signin && !opts.host ? { signin: opts.signin } : {}), ...(opts.host ? { host: "api" in opts.host ? { kind: "cloudflare", api: opts.host.api, site: opts.host.site } : { kind: "supabase", url: cleanUrl(opts.host.url), key: opts.host.key, site: opts.host.site } } : {}) }, null, 2)),
   });
   // robots.txt and sitemap.xml, for search engines. The sitemap needs the site's address (SEO → Site address, or the
   // address it is being published to); without one only robots.txt is written.

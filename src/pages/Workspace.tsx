@@ -360,7 +360,7 @@ function SetIcon({ k, on }: { k: string; on: boolean }) {
 /** Every settings section, for the find box: its tab, its title, other words people look for it by, and (when the title alone
  *  is not what the card says) the word that picks its card out on that tab. */
 const SET_INDEX: [tab: string, title: string, words: string, find?: string][] = [
-  ["pdefs", "Project defaults", "defaults every project email templates resend whatsapp sms privacy policy terms of use cookie consent wording india international payment upi razorpay gateway"],
+  ["pdefs", "Project defaults", "defaults every project email templates resend whatsapp sms privacy policy terms of use cookie consent wording india international payment upi razorpay gateway shipping returns refunds cancellation shop policies form consent spam footer credit powered by gst invoice tax checkout abandoned cart"],
   ["ai", "AI engine", "ai openai gemini groq openrouter cloudflare api key model translate write provider chatgpt"],
   ["ai", "AI for Design yourself", "diy ai writes text reads pdf engine"],
   ["ai", "Pictures drawn by AI", "diy draw logo banner images picture style unsplash photos"],

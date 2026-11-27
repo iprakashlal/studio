@@ -971,7 +971,7 @@ export function staticPageFields(addr: string, links: Field[], back: string): Fi
     { t: "text", path: "slug", label: "Address name (optional)", ph: "made from the title", show: (v) => `Opens at ${addr}${pageSlug(v) || "<the title>"}. Letters, numbers and dashes. Empty uses the title.` },
     { t: "textarea", path: "subtitle", label: "Subtitle under the title (optional)", rows: 2 },
     { t: "text", path: "updated", label: "Last updated (optional)", ph: "15 November 2026", hint: "Shown under the title as “Last updated: …”. Leave empty to hide it." },
-    { t: "textarea", path: "body", label: "Text", rows: 16, pdf: true, rich: true, hint: "Plain text: a blank line starts a new paragraph. Select words and use the buttons for headings, lists, tables and text styles, or type the marks yourself: ## Heading, - bullet, 1. numbered, > quote, **bold**, | cell | cell | for a table row. Links and emails become clickable on their own. You can paste text from a document or fill it from a PDF." },
+    { t: "textarea", path: "body", label: "Text", rows: 16, pdf: true, rich: true, hint: "Write it as in a word processor: use the tool bar for headings, lists, tables, links and text styles. Paste from Word or Google Docs keeps the formatting, or fill it from a PDF. Web and email addresses become clickable on their own." },
     g2({ t: "toggle", path: "show", label: "Published (visitors can open it)" }, ...links),
     { t: "note", text: "Title options" },
     g2({ t: "toggle", path: "showTitle", label: "Show the title on the page" }, { t: "select", path: "align", label: "Title alignment", options: [{ value: "left", label: "Left" }, { value: "center", label: "Centre" }] },

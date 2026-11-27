@@ -211,3 +211,26 @@
   /* a block that runs across both columns keeps its distance from the cards above it */
   .set-cols > :not(.card):not(:first-child), .set-cols > .sticky { margin-top: 1rem; }
 }
+
+/* The visual page-text editor (editor/RichEditor.tsx): what the page shows, in the Studio's colours. */
+.rte-body > * { margin: 0 0 .75em; }
+.rte-body h2 { font-size: 1.35em; font-weight: 800; line-height: 1.25; margin-top: 1.1em; }
+.rte-body h3 { font-size: 1.12em; font-weight: 700; margin-top: .9em; }
+.rte-body ul { list-style: disc; padding-left: 1.5em; }
+.rte-body ol { list-style: decimal; padding-left: 1.5em; }
+.rte-body li { margin: .2em 0; }
+.rte-body a { color: rgb(var(--brand-400, 129 140 248)); text-decoration: underline; text-underline-offset: 3px; }
+.rte-body blockquote { border-left: 3px solid #818cf8; padding: .4em 1em; background: rgba(129,140,248,.08); border-radius: 0 8px 8px 0; }
+.rte-body .sp-note { border: 1px solid rgba(129,140,248,.45); background: rgba(129,140,248,.08); padding: .6em .9em; border-radius: 10px; }
+.rte-body .sp-center { text-align: center; }
+.rte-body mark { background: rgba(250,204,21,.35); color: inherit; padding: 0 .15em; border-radius: 3px; }
+.rte-body .sp-accent { color: #a5b4fc; }
+.rte-body .sp-muted { color: #94a3b8; }
+.rte-body .sp-big { font-size: 1.3em; }
+.rte-body .sp-small { font-size: .86em; }
+.rte-body hr { border: 0; border-top: 1px solid #475569; margin: 1.2em 0; }
+.rte-body table { width: 100%; border-collapse: collapse; font-size: .94em; }
+.rte-body th, .rte-body td { border: 1px solid #475569; padding: 6px 10px; text-align: left; vertical-align: top; min-width: 3em; }
+.rte-body th { background: rgba(129,140,248,.14); font-weight: 700; }
+fieldset[disabled] .rte-body { pointer-events: none; }
+fieldset[disabled] .rte [role="toolbar"] { display: none; }

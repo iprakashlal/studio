@@ -10,6 +10,7 @@ import { clone } from "../lib/util";
 import type { Studio, StudioIndex } from "../lib/studio";
 import { MailForm, SmsForm, WhatsAppForm, useStudioWhere, type Where } from "./Connections";
 import { Toggle, useToast } from "../ui/kit";
+import { RichEditor } from "../editor/RichEditor";
 
 const TYPE_NAME: Record<string, string> = { portfolio: "Portfolio", business: "Business", store: "Shop", restaurant: "Restaurant & café", events: "Events" };
 const KEY = "site-studio:pd-tab";
@@ -111,8 +112,8 @@ function Body({ kind, sec, S, where, bump, demo }: { kind: string; sec: PdId; S:
           <span className="flex-1" />
           <button type="button" className="btn btn-sm" onClick={() => { v.text = legalTemplate(kind, sec); bump(); }}>Start again from the standard text</button>
         </div>
-        <textarea className="input min-h-[22rem] font-mono text-[13px] leading-relaxed" aria-label={sec === "privacy" ? "Privacy policy text" : "Terms of use text"} value={v.text} onChange={(e) => { v.text = e.target.value; bump(); }} />
-        <p className="hint">Markdown: “## ” starts a heading, “- ” a list item. Each site's own details go in the place of {LEGAL_PH.map((p, i) => <span key={p}>{i ? " " : ""}<code className="rounded bg-ink-800 px-1">{p}</code></span>)} (from the site's Legal & privacy → Business identity, else its name and contact details); a line such as “GSTIN: {"{gstin}"}” is left out when the site has none. The wording is a starting point, not legal advice.</p>
+        <RichEditor label={sec === "privacy" ? "Privacy policy text" : "Terms of use text"} value={v.text} onChange={(t) => { v.text = t; bump(); }} minRows={18} />
+        <p className="hint">Format it with the tool bar, as in Word: headings, lists, tables, links and text styles. Each site's own details go in the place of {LEGAL_PH.map((p, i) => <span key={p}>{i ? " " : ""}<code className="rounded bg-ink-800 px-1">{p}</code></span>)} (from the site's Legal & privacy → Business identity, else its name and contact details); a line such as “GSTIN: {"{gstin}"}” is left out when the site has none. The wording is a starting point, not legal advice.</p>
       </div>
     );
   }

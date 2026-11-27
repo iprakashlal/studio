@@ -56,7 +56,7 @@ var CFDB_UPGRADES = [
     "create index if not exists enquiries_ref on enquiries (site, ref)"
   ] }
 ];
-var CFDB_VERSION = 109;
+var CFDB_VERSION = 110;
 var CFDB_WORKER_NAME = "picaffectz-db";
 
 // src/lib/diylook.ts
@@ -2851,6 +2851,7 @@ function dqDesignPub(d) {
     if (d.images.source === "engine" || d.images.source === "unsplash") im.source = d.images.source;
     if (Object.keys(im).length) out.images = im;
   }
+  if (d.help === false) out.help = false;
   if (d.refs && typeof d.refs === "object") {
     const o = {};
     for (const k of ["business", "restaurant", "portfolio", "store", "events"]) {

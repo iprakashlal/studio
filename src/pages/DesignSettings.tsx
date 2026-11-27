@@ -457,6 +457,10 @@ export function DesignLookTab({ session, studio, index, onIndex, part, lead }: {
         })()}
       </Block>
 
+      <Block title="Help tour" note="A short tour of the Design yourself page: shown by itself on a visitor's first visit, every time their finished preview opens, and from the Help button at the top.">
+        <Toggle id="ds-help" label="Show the help tour to visitors" checked={d.help !== false} onChange={(v) => upd({ help: v ? undefined : false })} />
+      </Block>
+
       <Block title="Notice bar" note='A bar across the top of the final website preview. Turn it off, or write your own words.'>
         <label className="flex items-start gap-2 text-[13px]">
           <input type="checkbox" className="mt-1" checked={d.notice?.on !== false} onChange={(e) => upd({ notice: e.target.checked ? (d.notice?.text ? { text: d.notice.text } : undefined) : { ...(d.notice || {}), on: false } })} />

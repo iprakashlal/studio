@@ -1457,6 +1457,7 @@ function dqDesignPub(d: any) {
   }
   if (d.themes && typeof d.themes === "object") { const th: any = {}; for (const kind of ["business", "restaurant", "portfolio", "store", "events"]) if (Array.isArray(d.themes[kind])) th[kind] = d.themes[kind].filter((v: any) => typeof v === "string" && /^[A-Za-z0-9_-]{1,40}$/.test(v)).slice(0, 400); out.themes = th; }
   if (d.images && typeof d.images === "object") { const im: any = {}; if (d.images.on === true) im.on = true; if (["photo", "illustration", "3d", "flat"].includes(d.images.style)) im.style = d.images.style; if (d.images.source === "engine" || d.images.source === "unsplash") im.source = d.images.source; if (Object.keys(im).length) out.images = im; }
+  if (d.help === false) out.help = false;   // the page's help tour turned off
   // The owner's details sheets per type: their names and the help line (the files themselves are fetched from /sd/…).
   if (d.refs && typeof d.refs === "object") {
     const o: any = {};

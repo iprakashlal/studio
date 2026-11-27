@@ -2,7 +2,7 @@
 // project's live site is, and publishing a project to Netlify or Cloudflare with its content and photos in the
 // Studio's Cloudflare database or Supabase.
 
-import { applyDefaults } from "./projdefaults";
+import { applyDefaults, pdReady } from "./projdefaults";
 import { GitHubRepo, type Repo } from "./repo";
 import { bytesB64, jsonB64 } from "./repo";
 import type { ProjectMeta } from "./studio";
@@ -75,6 +75,7 @@ export async function publishHosted(o: {
   let content = o.withContent || !live ? draft : live;
   // Settings → Project defaults: the sections the Studio gives this website type go into the content (what the site's
   // own admin page switched off stays as it is).
+  await pdReady();
   applyDefaults(draft, tpl.id);
   const pdLive = content !== draft && applyDefaults(content, tpl.id);
 

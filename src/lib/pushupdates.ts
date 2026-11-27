@@ -11,7 +11,7 @@ import { ghPublish } from "./ghpublish";
 import { adminFile } from "../schema/common";
 import { TEMPLATES } from "../schema";
 import { merge } from "./util";
-import { applyDefaults, pdVersion } from "./projdefaults";
+import { applyDefaults, pdReady, pdVersion } from "./projdefaults";
 import { jsonB64 } from "./repo";
 import type { ProjectMeta, Studio } from "./studio";
 import { STUDIO_BUILD } from "../build-info";
@@ -39,6 +39,7 @@ export function liveTargets(projects: ProjectMeta[], token: string): LiveTarget[
 
 /** Which Studio build the live site was made with, read from its cms/site.json. */
 export async function checkTarget(t: LiveTarget): Promise<TargetState> {
+  await pdReady();
   try {
     const f = await t.repo!.getJSON<any>("cms/site.json");
     const b = f?.data?.studioBuild;
@@ -79,6 +80,7 @@ export async function pushTarget(t: LiveTarget, o: { studio: Studio; pages: (h: 
   const live = await repo.getJSON<any>("content.json").catch(() => null);
   if (!live) throw new Error("The repository has no content.json. Publish it once from the project first.");
   // Settings → Project defaults reach the live content too (not the sections the site's admin switched off).
+  await pdReady();
   applyDefaults(draft, p.template);
   if (live.data && typeof live.data === "object" && applyDefaults(live.data, p.template)) { o.step("Writing the Studio's defaults"); await repo.putFile("content.json", jsonB64(live.data), "Studio defaults", live.sha); }
   o.step("Building pages");

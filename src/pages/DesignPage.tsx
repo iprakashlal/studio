@@ -18,6 +18,7 @@ import { AiDraw } from "../ui/AiDraw";
 import { LogoMaker } from "../ui/LogoMaker";
 import { designHost, otpCheck, otpSend, passLive, readPage, readPass, saveDraft, submitQuery, understandText, writePass, type DesignHost, type Pass } from "../lib/designapi";
 import { pdfLines } from "../lib/pdftext";
+import { DOC_ACCEPT, DOC_KINDS, DOC_MAX_MB, fileText } from "../lib/doctext";
 import { watchDevtools } from "../lib/devtools";
 import type { Studio, StudioIndex } from "../lib/studio";
 
@@ -29,6 +30,30 @@ const DRAFT = "site-studio:design-draft";
 type Draft = { a: Answers; copy: Copy | null; id: string; sent: boolean };
 const readDraft = (): Draft => { try { const d = JSON.parse(sessionStorage.getItem(DRAFT) || "{}"); return { a: d.a && typeof d.a === "object" ? d.a : {}, copy: d.copy || null, id: typeof d.id === "string" ? d.id : "", sent: !!d.sent }; } catch { return { a: {}, copy: null, id: "", sent: false }; } };
 
+/** What kind of website a whole document or web page reads as: the kind whose words appear most (a business when nothing stands out). */
+function guessDocKind(t: string): string {
+  const x = t.toLowerCase().slice(0, 8000), n = (re: RegExp) => (x.match(re) || []).length;
+  const score: Record<string, number> = {
+    restaurant: n(/\b(restaurant|caf[eé]|cuisines?|dishes|dine|dining|bakery|biryani|dosa|thali|tiffin|chef|table booking|veg|non-veg|menu)\b/g),
+    store: n(/\b(shop|store|products?|cart|checkout|shipping|ecommerce|e-commerce|catalogu?e|price list|in stock|free delivery|cod|returns?)\b/g),
+    portfolio: n(/\b(portfolio|resume|résumé|cv|curriculum vitae|work experience|education|skills|freelanc\w*|linkedin|i am|i'm|my work|certifications?)\b/g),
+    events: n(/\b(conference|summit|wedding|concert|festival|marathon|hackathon|webinar|speakers?|rsvp|tickets?|venue|agenda|register now)\b/g),
+    business: n(/\b(company|services?|clients?|solutions?|consult\w*|firm|agency|pvt|ltd|llp|inc|industry|our team|projects delivered|interiors?|clinic|repair|contractor|enterprise|b2b)\b/g),
+  };
+  const best = Object.entries(score).sort((a, b) => b[1] - a[1]);
+  return best[0][1] > 0 && best[0][1] > (best[1]?.[1] || 0) ? best[0][0] : score.business >= best[0][1] ? "business" : best[0][0];
+}
+/** A name and a one-line description written as "Label: value" (how a sheet or a form lists them). */
+function labelled(t: string): { name?: string; about?: string } {
+  const o: { name?: string; about?: string } = {};
+  for (const l of t.split("\n").slice(0, 80)) {
+    const m = /^\s*([A-Za-z /&']{2,30})\s*[:：]\s*(.{2,140})$/.exec(l); if (!m) continue; const k = m[1].trim().toLowerCase(), v = m[2].trim();
+    if (!o.name && /^((business|company|brand|shop|store|restaurant|caf[eé]|event|firm|studio|your|full|trade) )?name$/.test(k)) o.name = v.slice(0, 60);
+    else if (!o.about && /^(what we do|what you sell|what i do|about|about us|description|tagline|industry|business type|cuisines?|role|title|profession)$/.test(k)) o.about = v;
+  }
+  return o;
+}
+const KIND_SAY: Record<string, string> = { portfolio: "a personal website", store: "an online shop", business: "a business website", restaurant: "a restaurant website", events: "an event website" };
 /** What kind of website a few free words describe (null when unclear). */
 function guessKind(t: string): string | null {
   const x = t.toLowerCase();
@@ -321,6 +346,25 @@ function DesignPageInner({ studio, index, onIndex }: { studio?: Studio; index?: 
   const cur = nextStep(a);
   const curRef = useRef(cur); curRef.current = cur;
   /** Leaves out every remaining optional question (stops at one that is needed). */
+  // The quick start (a file or link given on the first screen): on until the person starts over or goes back to change an answer.
+  const [express, setExpress] = useState(false), [qlink, setQlink] = useState("");
+  const qpick = useRef<HTMLInputElement>(null);
+  /** Everything that needs no typing is settled: optional questions are left out and a choice takes its standard pick. Stops at a question only the person can answer. */
+  const fastForward = (n0: Answers): Answers => {
+    const n = { ...n0 }; let s: Step | null, guard = 0;
+    while ((s = nextStep(n)) && guard++ < 200) {
+      if (isOptional(s, n)) n[s.id] = "";
+      else if (s.type === "choice") {
+        // The pick: "Surprise me" where it is offered; else the choice the document itself names (its kind of business, say); else "Something else"; else the first.
+        const o = s.options?.(n) || [], said = ` ${n.name || ""} ${n.about || ""} ${n.doctext || ""} `.toLowerCase();
+        const named = o.filter((x) => { const l = x.label.toLowerCase().replace(/s$/, ""); return l.length >= 4 && said.includes(l); }).sort((x, y) => y.label.length - x.label.length)[0];
+        const pick = o.find((x) => /surprise/i.test(x.label)) || named || o.find((x) => /something else|^other|^any\b/i.test(x.label)) || o[0];
+        if (!pick) break; n[s.id] = pick.v;
+      }
+      else break;
+    }
+    return n;
+  };
   const skipRest = () => setA((o) => { const n = { ...o }; let s: Step | null; while ((s = nextStep(n)) && isOptional(s, n)) n[s.id] = ""; return n; });
   const answered = STEPS.filter((s) => s.id in a && (s.when ? s.when(a) : true));
   const total = STEPS.filter((x) => (x.when ? x.when(a) : true)).length;
@@ -348,6 +392,8 @@ function DesignPageInner({ studio, index, onIndex }: { studio?: Studio; index?: 
 
   // The last question is answered: the text for each topic is written (by the Studio's AI engine, else the Picaffectz system), then the site is shown.
   const finished = !cur && !!a.kind;
+  // Quick start: after an answer only the person could give, the rest is settled again without asking.
+  useEffect(() => { if (express && cur && !reading && cur.id !== "kind" && (isOptional(cur, a) || cur.type === "choice")) setA((o) => fastForward(o)); }, [express, cur?.id, reading]);
   useEffect(() => {
     if (!finished || copy || writing) return;
     setWriting(true);
@@ -394,13 +440,15 @@ function DesignPageInner({ studio, index, onIndex }: { studio?: Studio; index?: 
     answer(cur, text);
   };
   /** What a document or page says fills in the answers it can (the questions it covers are then not asked). */
-  const applyDoc = (label: string, text: string, link: string, meta?: { name?: string; about?: string }) => {
-    const fill = fromDoc(text, a, meta), got = Object.keys(fill).filter((x) => x !== "docsec"), secs = sectionNames(unpackSections(fill.docsec));
-    setA((o) => ({ ...o, doc: label, ...(link ? { doclink: link } : {}), ...(text ? { doctext: text } : {}), ...fromDoc(text, o, meta), ...(got.length ? { docfrom: got.join(",") } : {}) }));
+  /** kind: set when the file or link is the very first thing given (the quick start): the kind of website it reads as. */
+  const applyDoc = (label: string, text: string, link: string, meta?: { name?: string; about?: string }, kind?: string) => {
+    const a0 = kind ? { ...a, kind } : a;
+    const fill = fromDoc(text, a0, meta), got = Object.keys(fill).filter((x) => x !== "docsec"), secs = sectionNames(unpackSections(fill.docsec));
+    setA((o) => { const o2 = kind ? { ...o, kind } : o; const n = { ...o2, doc: label, ...(link ? { doclink: link } : {}), ...(text ? { doctext: text } : {}), ...fromDoc(text, o2, meta), ...(got.length ? { docfrom: got.join(",") } : {}) }; return kind ? fastForward(n) : n; });
     const found = [...got.map((x) => (STEP_LABEL[x] || x).toLowerCase()), ...secs.filter((x) => !got.includes(x))];
-    toast(found.length ? `Found ${found.join(", ")}. You can change any answer.` : "Read it. It will help us write your text.");
+    toast(kind ? `Read it${found.length ? `: found ${found.join(", ")}` : ""}. Making ${KIND_SAY[kind] || "a website"}; you can change any answer.` : found.length ? `Found ${found.join(", ")}. You can change any answer.` : "Read it. It will help us write your text.");
     // The Studio's AI (when it is the chosen engine) reads it more closely: what it finds replaces the rule-based guesses, never what the person typed.
-    if (host && text.length >= 30) void understandText(host, a.kind || "", text).then((u) => {
+    if (host && text.length >= 30) void understandText(host, a0.kind || "", text).then((u) => {
       const f = u.fields; if (!f || u.engine === "system") return;
       setA((o) => {
         const typed = new Set((o.docfrom || "").split(",").filter(Boolean)), n: Answers = {}, put = (k: string, v: any) => { if (k === curRef.current?.id) return; /* (the question they are answering now is theirs: it never fills in under their hands) */ if (typeof v === "string" && v.trim() && (!o[k] || typed.has(k))) n[k] = v.trim(); };
@@ -411,6 +459,31 @@ function DesignPageInner({ studio, index, onIndex }: { studio?: Studio; index?: 
         return { ...o, ...n, docfrom: [...new Set([...typed, ...keys])].join(",") };
       });
     });
+  };
+  /** The quick start, from the first screen: a document or a website link is read, the answers it holds are filled in, and the
+   *  rest is settled without asking (optional questions left out, choices given a standard pick), so the preview shows at once.
+   *  Only what can't be guessed (such as a missing name) is still asked. */
+  const quick = async (f?: File, link?: string) => {
+    if (reading) return;
+    setReading(true);
+    try {
+      if (f) {
+        const text = (await fileText(f)).slice(0, 12000);
+        if (text.length < 30) throw new Error("We couldn't find any text in that file (a scanned PDF has none). Try another file, or answer the questions.");
+        const m = labelled(text);
+        setExpress(true); applyDoc(f.name.slice(0, 100), text, "", m.name || m.about ? m : undefined, guessDocKind(text));
+      } else {
+        let url = (link || "").trim(); if (!url) return; if (!/^https?:\/\//i.test(url)) url = "https://" + url.replace(/^\/+/, "");
+        let h$ = ""; try { h$ = new URL(url).hostname.replace(/^www\./, ""); if (!h$.includes(".")) throw 0; } catch { throw new Error("That doesn't look like a web address."); }
+        const r = host ? await readPage(host, url) : { error: "Reading a link needs the Studio's database." } as any;
+        if (!(r.text || r.title)) throw new Error((r.error ? r.error + " " : "") + "Try a file instead, or answer the questions.");
+        const text = [r.site || r.title || "", r.description || "", r.text || ""].filter(Boolean).join("\n");
+        setExpress(true); applyDoc(h$, text, url, { name: (r.site || (r.title || "").split(/\s+[-–|·:]\s+/)[0] || "").trim(), about: r.description }, guessDocKind(text));
+      }
+      setQlink("");
+    } catch (e: any) { toast(e?.message || "Couldn't read that.", "bad"); }
+    setReading(false);
+    if (qpick.current) qpick.current.value = "";
   };
   /** A link pasted for the starting point: the Studio's database reads the page; if it can't, the link goes to the team. */
   const readLink = async (raw: string) => {
@@ -446,6 +519,7 @@ function DesignPageInner({ studio, index, onIndex }: { studio?: Studio; index?: 
   };
   /** Go back to a question: it and every later answer are cleared. */
   const rewind = (id: string) => {
+    setExpress(false);
     const at = stepAt(id, a);
     const docAt = stepAt("doc", a), look = ["theme", "accent", "mode", "corners"];
     const keep = Object.fromEntries(Object.entries(a).filter(([key]) => !look.includes(key) && !((key === "doctext" || key === "docfrom" || key === "docsec") && at <= docAt) && stepAt(key, a) < at));
@@ -458,7 +532,7 @@ function DesignPageInner({ studio, index, onIndex }: { studio?: Studio; index?: 
   const tweak = (p: Answers) => setA((o) => { const n = { ...o, ...p }; for (const key of Object.keys(p)) if (p[key] === "") delete n[key]; return n; });
   // Developer tools opened (see PageGuard): the preview (and its frame) goes and the questions start over.
   useEffect(() => { const f = () => { restart(); setPass(null); setShowPreview(false); setConnect(false); setEditId(null); }; addEventListener("studio:guard", f); return () => removeEventListener("studio:guard", f); }, []);
-  function restart() { setA({}); setCopy(null); setFiles({}); setDesign(null); setSavedId(newDesignId()); setSent(false); lastSaved.current = ""; try { sessionStorage.removeItem(DRAFT); } catch { /* none */ } }
+  function restart() { setExpress(false); setA({}); setCopy(null); setFiles({}); setDesign(null); setSavedId(newDesignId()); setSent(false); lastSaved.current = ""; try { sessionStorage.removeItem(DRAFT); } catch { /* none */ } }
 
   const field$ = cur && (cur.type === "text" || cur.type === "long" || cur.id === "kind" || cur.id === "doc");
   const bar = (
@@ -621,7 +695,24 @@ function DesignPageInner({ studio, index, onIndex }: { studio?: Studio; index?: 
         {!needMail && cur && (
           <div className="sticky bottom-0 -mx-3 border-t border-ink-800 bg-ink-950/95 px-3 pb-4 pt-4 backdrop-blur sm:-mx-6 sm:px-6">
             <div className="diy-col mx-auto flex max-h-[62vh] max-w-5xl flex-col gap-4 overflow-y-auto px-0.5 py-0.5">
-              {!chatStarted ? <>{chips(cur)}<div className="flex items-center gap-3 text-[11px] uppercase tracking-wide text-ink-500"><span className="h-px flex-1 bg-ink-800" />{word("typeOwn")}<span className="h-px flex-1 bg-ink-800" /></div>{bar}</> : <>{(cur.type === "choice" || cur.type === "many") && chips(cur)}{cardBar}</>}
+              {!chatStarted ? <>{chips(cur)}<div className="flex items-center gap-3 text-[11px] uppercase tracking-wide text-ink-500"><span className="h-px flex-1 bg-ink-800" />{word("typeOwn")}<span className="h-px flex-1 bg-ink-800" /></div>{bar}
+                {/* The quick start: a document or a website link fills the answers and goes straight to the preview. */}
+                <div className="flex items-center gap-3 text-[11px] uppercase tracking-wide text-ink-500"><span className="h-px flex-1 bg-ink-800" />or<span className="h-px flex-1 bg-ink-800" /></div>
+                <section aria-label="Start from a file or a link" className="mx-auto flex w-full max-w-5xl flex-col gap-3 rounded-2xl border border-dashed border-ink-700 bg-ink-900/40 p-4"
+                  onDragOver={(e) => { e.preventDefault(); }} onDrop={(e) => { e.preventDefault(); const f = e.dataTransfer.files?.[0]; if (f) quick(f); }}>
+                  <div>
+                    <p className="text-[15px] font-bold text-ink-100">Already have your details? Upload them and skip the questions.</p>
+                    <p className="mt-0.5 text-[13px] text-ink-400">Choose a {DOC_KINDS} file (up to {DOC_MAX_MB} MB), or paste your current website's link. We read it, fill in what it says and show your preview straight away. The file is read on your device.</p>
+                  </div>
+                  <div className="flex flex-wrap items-stretch gap-2">
+                    <input ref={qpick} type="file" accept={DOC_ACCEPT} className="sr-only" aria-label="Upload a file with your details" onChange={(e) => quick(e.target.files?.[0])} />
+                    <button type="button" className="btn btn-pri" disabled={reading} onClick={() => qpick.current?.click()}>{reading ? "Reading…" : "Upload a file"}</button>
+                    <div className="diy-field diy-join flex min-w-[16rem] flex-1 items-stretch rounded-xl border border-ink-700 bg-ink-900 focus-within:border-brand-400">
+                      <input className="input min-w-0 flex-1" inputMode="url" aria-label="Your website link" placeholder="or paste your website link, e.g. www.mybusiness.com" disabled={reading} value={qlink} onChange={(e) => setQlink(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); quick(undefined, qlink); } }} />
+                      <button type="button" className="btn btn-pri shrink-0 px-5" disabled={reading || !qlink.trim()} onClick={() => quick(undefined, qlink)}>Read my site</button>
+                    </div>
+                  </div>
+                </section></> : <>{(cur.type === "choice" || cur.type === "many") && chips(cur)}{cardBar}</>}
             </div>
           </div>
         )}

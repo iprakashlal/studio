@@ -833,6 +833,35 @@ const answerHints = (a: Answers, logo = ""): { id: string; text?: string; img?: 
   for (const id of ["items", "usp", "work"]) for (const l of (a[id] || "").split("\n")) { const t = l.split(/\s*(?::|\s[-–—]\s)/)[0].trim(); if (t.length >= 3) out.push({ id, text: t }); }
   return out;
 };
+const PREVIEW_CSS = `
+.pv-side{position:absolute;top:50%;z-index:6;display:grid;place-items:center;width:58px;height:58px;border-radius:999px;color:#fff;background:rgba(15,18,30,.42);border:1px solid rgba(255,255,255,.28);box-shadow:0 10px 30px -8px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.25);backdrop-filter:blur(10px) saturate(1.4);-webkit-backdrop-filter:blur(10px) saturate(1.4);transform:translateY(-50%);transition:transform .25s cubic-bezier(.2,.8,.2,1),background .25s,box-shadow .25s,opacity .2s;cursor:pointer}
+.pv-side::before{content:"";position:absolute;inset:-6px;border-radius:inherit;border:1.5px solid rgba(255,255,255,.35);opacity:0;animation:pvRing 2.6s ease-out infinite}
+.pv-side svg{transition:transform .25s}
+.pv-side.l{left:clamp(10px,4vw,56px)} .pv-side.r{right:clamp(10px,4vw,56px)}
+.pv-side.l svg{animation:pvNudgeL 2.6s ease-in-out infinite} .pv-side.r svg{animation:pvNudgeR 2.6s ease-in-out infinite}
+.pv-side:hover,.pv-side:focus-visible{background:rgb(var(--brand-500,91 124 255)/.92);transform:translateY(-50%) scale(1.1);box-shadow:0 14px 36px -8px rgba(0,0,0,.6),0 0 0 4px rgba(255,255,255,.16)}
+.pv-side:focus-visible{outline:2px solid #fff;outline-offset:3px}
+.pv-side:active{transform:translateY(-50%) scale(.96)}
+.pv-side:disabled{opacity:0;pointer-events:none}
+.pv-step{transition:transform .2s,background .2s}
+.pv-step.l:not(:disabled){animation:pvNudgeL 2.6s ease-in-out infinite} .pv-step.r:not(:disabled){animation:pvNudgeR 2.6s ease-in-out infinite}
+.pv-step:not(:disabled):hover{transform:scale(1.12);animation:none}
+@keyframes pvNudgeL{0%,70%,100%{transform:translateX(0)}80%{transform:translateX(-4px)}90%{transform:translateX(1px)}}
+@keyframes pvNudgeR{0%,70%,100%{transform:translateX(0)}80%{transform:translateX(4px)}90%{transform:translateX(-1px)}}
+@keyframes pvRing{0%{opacity:.55;transform:scale(.92)}70%,100%{opacity:0;transform:scale(1.25)}}
+.pv-cta-wrap{position:absolute;bottom:1.5rem;left:50%;z-index:5;transform:translateX(-50%)}
+.pv-cta-wrap .pv-cta{position:relative;z-index:1}
+.pv-glow{position:absolute;z-index:0;inset:-36px -72px;pointer-events:none}
+.pv-glow::before{content:"";position:absolute;inset:0;border-radius:999px;background:radial-gradient(closest-side,rgba(255,196,60,1),rgba(255,184,40,.65) 55%,rgba(255,176,30,0) 100%);filter:blur(16px);animation:pvGlow 2.8s ease-in-out infinite}
+.pv-glow i{position:absolute;width:5px;height:5px;border-radius:999px;background:#ffe7a3;box-shadow:0 0 8px 2px rgba(255,210,110,.9);opacity:0;animation:pvSpark 3.2s ease-in-out infinite}
+@keyframes pvGlow{0%,100%{opacity:.55;transform:scale(.94)}50%{opacity:1;transform:scale(1.06)}}
+@keyframes pvSpark{0%,100%{opacity:0;transform:translateY(4px) scale(.4)}40%{opacity:1;transform:translateY(-6px) scale(1)}70%{opacity:0;transform:translateY(-14px) scale(.5)}}
+@media (prefers-reduced-motion:reduce){.pv-side::before,.pv-side svg,.pv-step,.pv-glow::before,.pv-glow i{animation:none!important}}
+`;
+const Chevron = ({ left }: { left?: boolean }) => <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d={left ? "M15 5l-7 7 7 7" : "M9 5l7 7-7 7"} /></svg>;
+/** "Connect with Picaffectz": a light golden glow that breathes behind it, with a few sparks rising (nothing drawn over the button). */
+const CtaGlow = () => <span className="pv-glow" aria-hidden>{[[8, 30, 0], [22, 8, 0.6], [50, 2, 1.3], [78, 10, 0.3], [92, 34, 1.8], [64, 88, 2.2], [30, 92, 1]].map(([x, y, d], k) => <i key={k} style={{ left: `${x}%`, top: `${y}%`, animationDelay: `${d}s` }} />)}</span>;
+
 export function PreviewPopup({ design, ver, a, onClose, onEdit, onEditLink, onConnect, done, onTweak, build }: { design: Design; ver: number; a: Answers; onClose: () => void; onEdit?: () => void; onEditLink?: (id: string) => void; onConnect?: (from?: DOMRect) => void; done: boolean; onTweak?: (p: Answers) => void; /** The same website in another theme (builds the cards of the carousel). */ build?: (themeId: string) => Promise<Design | null> }) {
   const hints = useMemo(() => answerHints(a, design.content?.brand?.logo?.url || ""), [a, design]);
   const [play, setPlay] = useState(false);
@@ -880,6 +909,7 @@ export function PreviewPopup({ design, ver, a, onClose, onEdit, onEditLink, onCo
   }, []);
   return (
     <div role="dialog" aria-modal="true" aria-label="Your website preview" className="fixed inset-0 z-[70] flex flex-col bg-ink-950">
+      <style>{PREVIEW_CSS}</style>
       {done && <NoticeBar />}
       <div className="flex items-center gap-2 border-b border-ink-700 bg-ink-900 px-3 py-2 sm:px-4">
         <b className="min-w-0 truncate text-sm">{a.name || "Your website"}</b>
@@ -906,16 +936,18 @@ export function PreviewPopup({ design, ver, a, onClose, onEdit, onEditLink, onCo
                   </div>
                 );
               })}
-              {onConnect && <button type="button" data-tour="diy-connect" onClick={(e) => onConnect(e.currentTarget.getBoundingClientRect())} className="btn btn-pri absolute bottom-6 left-1/2 z-[5] -translate-x-1/2 whitespace-nowrap rounded-full px-10 py-4 text-base font-extrabold shadow-2xl shadow-black/50 ring-4 ring-brand-400/25">{word("connectBtn")}</button>}
+              <button type="button" className="pv-side l" aria-label="Previous design" title="Previous design" disabled={at === 0} onClick={() => go(at - 1)}><Chevron left /></button>
+              <button type="button" className="pv-side r" aria-label="Next design" title="Next design" disabled={at >= list.length - 1} onClick={() => go(at + 1)}><Chevron /></button>
+              {onConnect && <span className="pv-cta-wrap"><CtaGlow /><button type="button" data-tour="diy-connect" onClick={(e) => onConnect(e.currentTarget.getBoundingClientRect())} className="pv-cta btn btn-pri whitespace-nowrap rounded-full px-10 py-4 text-base font-extrabold shadow-2xl shadow-black/50 ring-4 ring-brand-400/25">{word("connectBtn")}</button></span>}
             </div>
             <div data-tour="diy-themes" className="flex flex-none items-center justify-center gap-3 border-t border-ink-700 bg-ink-900 px-3 py-2 text-[13px]">
-              <button type="button" className="btn btn-sm" aria-label="Previous theme" disabled={at === 0} onClick={() => go(at - 1)}>‹</button>
+              <button type="button" className="pv-step l btn btn-sm rounded-full px-2.5" aria-label="Previous theme" disabled={at === 0} onClick={() => go(at - 1)}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M15 5l-7 7 7 7" /></svg></button>
               <span className="flex min-w-0 items-center gap-2"><b className="truncate">{list[at]?.name}</b><span className="font-mono text-ink-400">{list[at] ? themeCode(list[at]) : ""}</span><span className="rounded border border-ink-600 px-1.5 py-px text-[11px] text-ink-300">{list[at]?.dark ? "Dark" : "Light"}</span><span className="text-ink-500">{at + 1} of {list.length}</span></span>
-              <button type="button" className="btn btn-sm" aria-label="Next theme" disabled={at >= list.length - 1} onClick={() => go(at + 1)}>›</button>
+              <button type="button" className="pv-step r btn btn-sm rounded-full px-2.5" aria-label="Next theme" disabled={at >= list.length - 1} onClick={() => go(at + 1)}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M9 5l7 7-7 7" /></svg></button>
             </div>
           </>) : (
             <div className="relative flex min-h-0 flex-1 flex-col"><Preview key={design.kind} tpl={TEMPLATES[design.kind]} base={`templates/${design.kind}/`} content={design.content} version={ver} assets={{}} editable={false} hidePages onEditLink={onEditLink} hints={hints} />
-              {onConnect && <button type="button" data-tour="diy-connect" onClick={(e) => onConnect(e.currentTarget.getBoundingClientRect())} className="btn btn-pri absolute bottom-6 left-1/2 z-[5] -translate-x-1/2 whitespace-nowrap rounded-full px-10 py-4 text-base font-extrabold shadow-2xl shadow-black/50 ring-4 ring-brand-400/25">{word("connectBtn")}</button>}
+              {onConnect && <span className="pv-cta-wrap"><CtaGlow /><button type="button" data-tour="diy-connect" onClick={(e) => onConnect(e.currentTarget.getBoundingClientRect())} className="pv-cta btn btn-pri whitespace-nowrap rounded-full px-10 py-4 text-base font-extrabold shadow-2xl shadow-black/50 ring-4 ring-brand-400/25">{word("connectBtn")}</button></span>}
             </div>
           )}
         </div>

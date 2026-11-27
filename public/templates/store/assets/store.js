@@ -177,7 +177,9 @@ function ph(seed, cls = "") {
   const cols = [C.theme.accent, C.theme.accent2, C.theme.sale];
   if (moOn()) {
     const a = cols[h % 3], b = cols[(h + 1) % 3];
-    return `<div class="ph mo-ph ${cls}" style="--c:${a}" aria-hidden="true">${SiteMotifs.img(MOTIF, seed, "", 900, "mo-photo")}<span class="mo-b" style="color:${b};--mo2:${a}">${SiteMotifs.svg(MOTIF, h % 8, 0, true)}</span></div>`;
+    // The pack's sticker in the corner, unless the owner turned it off (Theme & layout → Element pack).
+    const sticker = C.theme.noSticker ? "" : `<span class="mo-b" style="color:${b};--mo2:${a}">${SiteMotifs.svg(MOTIF, h % 8, 0, true)}</span>`;
+    return `<div class="ph mo-ph ${cls}" style="--c:${a}" aria-hidden="true">${SiteMotifs.img(MOTIF, seed, "", 900, "mo-photo")}${sticker}</div>`;
   }
   return `<div class="ph ${cls}" style="--c:${cols[h % 3]}" aria-hidden="true"><i class="a" style="left:${8 + (h % 20)}%;top:${10 + (h % 14)}%"></i><i class="b"></i><i class="c"></i><b>${esc(String(seed).trim()[0] || "")}</b></div>`;
 }

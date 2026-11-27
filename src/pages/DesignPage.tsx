@@ -13,7 +13,7 @@ import { packSections, readSections, sectionNames, unpackSections } from "../lib
 import { relatedThemes } from "../lib/designer";
 import { COLOUR_DOT, STEPS, STEP_LABEL, buildDesign, fromDoc, isOptional, nextStep, rowsFmt, requestText, stepAt, stepOf, sayAnswer, themeOf, themesFor, tweakTheme, writeCopy, type Answers, type Design, type DesignFiles, type Step } from "../lib/designer";
 import { newDesignId, readDesignSettings, readLocalDesigns, writeLocalDesigns, type Copy, type DesignRec } from "../lib/designs";
-import { DIY_WORDS, NOTICE_TEXT, COLOUR_SLOTS, GROUPS, pagesChoice, readColsAnswer, readLookAnswer, resolvedLook, visibleAxes, type DiyWord, type Kind as LookKind } from "../lib/designlook";
+import { DIY_WORDS, NOTICE_TEXT, COLOUR_SLOTS, GROUPS, pagesChoice, readColsAnswer, readLookAnswer, resolvedLook, visibleAxes, REF_EXT, REF_NAME, REF_NOTE, type DiyWord, type Kind as LookKind, type Kind, type RefExt } from "../lib/designlook";
 import { AiDraw } from "../ui/AiDraw";
 import { LogoMaker } from "../ui/LogoMaker";
 import { designHost, otpCheck, otpSend, passLive, readPage, readPass, saveDraft, submitQuery, understandText, writePass, type DesignHost, type Pass } from "../lib/designapi";
@@ -488,9 +488,18 @@ function DesignPageInner({ studio, index, onIndex }: { studio?: Studio; index?: 
   /** A link pasted for the starting point: the Studio's database reads the page; if it can't, the link goes to the team. */
   /** At "upload or enter manually": the file or link is read for the kind of website already chosen. */
   /** The details sheet for the kind of website chosen, to fill in and upload. */
-  const getSheet = async (as: "txt" | "xlsx" | "docx") => {
-    const k = a.kind || "business", blob = as === "txt" ? new Blob([sheetTxt(k)], { type: "text/plain" }) : as === "xlsx" ? await sheetXlsx(k) : await sheetDocx(k);
-    const u = URL.createObjectURL(blob), l = document.createElement("a"); l.href = u; l.download = `${(SHEET_KIND[k] || "Website").replace(/é/g, "e").replace(/[^A-Za-z]+/g, "-").replace(/-$/, "")}-website-details.${as}`; document.body.appendChild(l); l.click(); l.remove(); setTimeout(() => URL.revokeObjectURL(u), 4000);
+  const getSheet = async (as: RefExt) => {
+    const k = (a.kind || "business") as Kind, own = readDesignSettings().refs?.[k]?.[as], save = (blob: Blob, name: string) => { const u = URL.createObjectURL(blob), l = document.createElement("a"); l.href = u; l.download = name; document.body.appendChild(l); l.click(); l.remove(); setTimeout(() => URL.revokeObjectURL(u), 4000); };
+    const builtIn = async () => save(as === "txt" ? new Blob([sheetTxt(k)], { type: "text/plain" }) : as === "xlsx" ? await sheetXlsx(k) : await sheetDocx(k), `${(SHEET_KIND[k] || "Website").replace(/é/g, "e").replace(/[^A-Za-z]+/g, "-").replace(/-$/, "")}-website-details.${as}`);
+    if (!own) return builtIn();
+    // The Studio owner's own sheet: from the Studio's database for a visitor, from the Studio's data when signed in.
+    try {
+      let blob: Blob | null = null;
+      if (studio) blob = await studio.refDocBlob(k, as);
+      else if (host) { const r = await fetch(`${host.api.replace(/\/$/, "")}/sd/${encodeURIComponent(host.studio)}/${k}.${as}?v=${readDesignSettings().refs?.[k]?.v || 0}`); if (r.ok) blob = await r.blob(); }
+      if (!blob) throw new Error("");
+      save(blob, own.replace(/\.(txt|xlsx|docx)$/i, "") + "." + as);
+    } catch { toast(`This website's own ${REF_NAME[as]} sheet couldn't be downloaded right now, so you got the standard one. It works the same way.`, "bad"); await builtIn(); }
   };
   const fromFile = (f: File | undefined) => { if (f) void choose(stepOf("doc", a), f); };
   const fromLink = () => { if (qlink.trim()) void readLink(qlink).then(() => setQlink("")); };
@@ -726,6 +735,9 @@ function DesignPageInner({ studio, index, onIndex }: { studio?: Studio; index?: 
                   <div>
                     <p className="text-[15px] font-bold text-ink-100">Already have your details? Upload them and skip the questions.</p>
                     <p className="mt-0.5 text-[13px] text-ink-400">Choose a {DOC_KINDS} file (up to {DOC_MAX_MB} MB), or paste your current website's link. We read it in whatever order it is written (your details, hours, and your products, dishes or services with their descriptions, prices and pictures), and fill it all in. You then choose your type and look, and your preview opens. The file is read on your device.</p>
+                    {/* The details sheets for this kind of website (the owner's own, or the Studio's), and the owner's help line. */}
+                    <p className="mt-2 text-[13px] text-ink-300">{readDesignSettings().refs?.[(a.kind || "business") as Kind]?.note || REF_NOTE}{" "}
+                      {REF_EXT.map((k2, i2) => <span key={k2}>{i2 ? " · " : ""}<button type="button" className="font-semibold text-brand-400 underline-offset-2 hover:underline" onClick={() => void getSheet(k2)}>{REF_NAME[k2]}</button></span>)}</p>
                   </div>
                   <div className="flex flex-wrap items-stretch gap-2">
                     <input ref={qpick} type="file" accept={DOC_ACCEPT} className="sr-only" aria-label="Upload a file with your details" onChange={(e) => { fromFile(e.target.files?.[0]); e.target.value = ""; }} />
@@ -735,8 +747,6 @@ function DesignPageInner({ studio, index, onIndex }: { studio?: Studio; index?: 
                       <button type="button" className="btn btn-pri shrink-0 px-5" disabled={reading || !qlink.trim()} onClick={() => fromLink()}>Read my site</button>
                     </div>
                   </div>
-                  <p className="text-[13px] text-ink-400">Nothing ready yet? Download the {SHEET_KIND[a.kind || ""] || "website"} details sheet, fill it in (* = must) and upload it here:{" "}
-                    {([["txt", "Text (.txt)"], ["xlsx", "Excel (.xlsx)"], ["docx", "Word (.docx)"]] as ["txt" | "xlsx" | "docx", string][]).map(([k, l], i) => <span key={k}>{i ? " · " : ""}<button type="button" className="font-semibold text-brand-400 underline-offset-2 hover:underline" onClick={() => void getSheet(k)}>{l}</button></span>)}</p>
                   {docErr && <p role="alert" className="rounded-xl border border-red-400/40 bg-red-500/10 px-3 py-2 text-[13px] text-red-200">{docErr}</p>}
                 </section>
                 <div className="flex items-center gap-3 text-[11px] uppercase tracking-wide text-ink-500"><span className="h-px flex-1 bg-ink-800" />or<span className="h-px flex-1 bg-ink-800" /></div>

@@ -279,6 +279,19 @@ export class Studio {
     }, "Update the Studio's name and logo", files);
   }
 
+  /** A details sheet for one type of website on the Design yourself page (Settings → Design yourself): the file is kept in the
+   *  Studio's data, and its original name in the Design yourself settings. base64 null removes it (the Studio's own sheet is then offered). */
+  async saveRefDoc(kind: string, ext: string, name: string, base64: string | null): Promise<StudioIndex> {
+    const path = `studio-assets/diy-docs/${kind}.${ext}`;
+    return this.updateIndex((i) => {
+      const p: any = i.prefs || (i.prefs = {}), d: any = p.design || (p.design = {}), refs: any = d.refs || (d.refs = {}), r: any = refs[kind] || (refs[kind] = {});
+      if (base64) r[ext] = name; else delete r[ext]; r.v = Date.now();
+      if (!r.txt && !r.docx && !r.xlsx && !r.note) delete refs[kind]; if (!Object.keys(refs).length) delete d.refs;
+    }, base64 ? `Add the ${kind} details sheet (.${ext})` : `Remove the ${kind} details sheet (.${ext})`, base64 ? [{ path, base64 }] : [], base64 ? [] : [path]);
+  }
+  /** A details sheet uploaded with saveRefDoc (null when there is none). */
+  refDocBlob(kind: string, ext: string): Promise<Blob | null> { return this.repo.getRaw(`studio-assets/diy-docs/${kind}.${ext}`).catch(() => null); }
+
   async saveMenu(template: string, m: MenuCfg | null): Promise<StudioIndex> {
     return this.updateIndex((i) => {
       const all = cleanMenus(i.menus); const c = m && cleanMenu(m);

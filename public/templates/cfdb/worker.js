@@ -56,7 +56,7 @@ var CFDB_UPGRADES = [
     "create index if not exists enquiries_ref on enquiries (site, ref)"
   ] }
 ];
-var CFDB_VERSION = 108;
+var CFDB_VERSION = 109;
 var CFDB_WORKER_NAME = "picaffectz-db";
 
 // src/lib/diylook.ts
@@ -2851,6 +2851,19 @@ function dqDesignPub(d) {
     if (d.images.source === "engine" || d.images.source === "unsplash") im.source = d.images.source;
     if (Object.keys(im).length) out.images = im;
   }
+  if (d.refs && typeof d.refs === "object") {
+    const o = {};
+    for (const k of ["business", "restaurant", "portfolio", "store", "events"]) {
+      const r = d.refs[k];
+      if (!r || typeof r !== "object") continue;
+      const c = {};
+      for (const e of ["txt", "xlsx", "docx"]) if (typeof r[e] === "string" && r[e].trim()) c[e] = r[e].replace(/[<>"\\/]/g, "").trim().slice(0, 100);
+      if (typeof r.note === "string" && r.note.trim()) c.note = r.note.replace(/[<>]/g, "").trim().slice(0, 300);
+      if (Number.isFinite(+r.v) && +r.v > 0) c.v = Math.round(+r.v);
+      if (Object.keys(c).length) o[k] = c;
+    }
+    if (Object.keys(o).length) out.refs = o;
+  }
   if (d.notice && typeof d.notice === "object") {
     const n = {};
     if (d.notice.on === false) n.on = false;
@@ -4371,6 +4384,16 @@ ${body}`)}${paras("Approve or hide it under Reviews in your site's admin page.",
         const b = id ? await dqBrand(env, id) : null;
         if (!b) return err(404, "Not found.");
         return new Response(JSON.stringify(b), { headers: { ...cors, "Content-Type": "application/json", "Cache-Control": "public, max-age=60" } });
+      }
+      if (p.startsWith("/sd/") && req.method === "GET") {
+        const [, , sid, file] = p.split("/"), id = studioId(sid || ""), m = /^(business|restaurant|portfolio|store|events)\.(txt|xlsx|docx)$/.exec(decodeURIComponent(file || ""));
+        if (!id || !m) return err(404, "Not found.");
+        const idx = await studioIndex(env, id), name = idx?.prefs?.design?.refs?.[m[1]]?.[m[2]];
+        const f = typeof name === "string" && name ? await readFile(env, "studio:" + id, `studio-assets/diy-docs/${m[1]}.${m[2]}`) : null;
+        if (!f) return err(404, "That sheet isn't there any more.");
+        const type = m[2] === "txt" ? "text/plain; charset=utf-8" : m[2] === "xlsx" ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" : "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+        const safe = String(name).replace(/[^\w .()-]+/g, "_").replace(/\.(txt|xlsx|docx)$/i, "") + "." + m[2];
+        return new Response(f.bytes, { headers: { ...cors, "Content-Type": type, "Content-Disposition": `attachment; filename="${safe}"`, "Cache-Control": "public, max-age=60" } });
       }
       if (p.startsWith("/dq/photo-used/") && req.method === "POST") {
         const id = studioId(p.split("/")[3] || "");

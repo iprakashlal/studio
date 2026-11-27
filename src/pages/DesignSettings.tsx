@@ -2,7 +2,8 @@ import { themeCode } from "../themes/codes";
 import { useEffect, useMemo, useState } from "react";
 import { pushPref, savePrefNow } from "../lib/prefs";
 import { cleanDesignSettings, readDesignSettings, writeDesignSettings, type DesignSettings } from "../lib/designs";
-import { DIY_BUBBLES, DIY_FONTS, DIY_WORDS, NOTICE_TEXT, GROUPS, KINDS, LOOK_AXES, type DiyWord, type Gallery, type Kind, type LookRule } from "../lib/designlook";
+import { DIY_BUBBLES, DIY_FONTS, DIY_WORDS, NOTICE_TEXT, GROUPS, KINDS, LOOK_AXES, REF_EXT, REF_NAME, REF_NOTE, cleanRefs, type DiyWord, type Gallery, type Kind, type LookRule, type RefExt } from "../lib/designlook";
+import { sheetDocx, sheetTxt, sheetXlsx } from "../lib/detailsheet";
 import { shrinkImage } from "../lib/brand";
 import { ANIM_BGS, ANIM_SPEEDS, BG_PATTERNS } from "../schema/animbg";
 import type { DiyBg } from "../lib/diylook";
@@ -185,6 +186,34 @@ export function DesignLookTab({ session, studio, index, onIndex, part, lead }: {
   const [find, setFind] = useState("");
   const shownThemes = themes.filter((t) => !find.trim() || (t.name + " " + t.id + " " + t.tags.join(" ")).toLowerCase().includes(find.trim().toLowerCase()));
 
+  // ---- Reference documents (details sheets): a file is saved as soon as it is chosen; the help line goes with Save changes.
+  const [refBusy, setRefBusy] = useState("");
+  const refs = d.refs?.[kind] || {};
+  const setRefNote = (v: string) => { const all: any = { ...(d.refs || {}) }; all[kind] = { ...(all[kind] || {}), note: v }; upd({ refs: all }); };   // cleaned when saved (cleaning now would eat a space being typed)
+  const refPut = async (ext: RefExt, f: File | null) => {
+    if (f && !new RegExp(`\\.${ext}$`, "i").test(f.name)) { toast(`Please choose a ${REF_NAME[ext]} file.`, "bad"); return; }
+    if (f && f.size > 5 * 1024 * 1024) { toast("That file is over 5 MB. A details sheet is usually a few KB: please choose a smaller one.", "bad"); return; }
+    setRefBusy(ext);
+    try {
+      let b64: string | null = null;
+      if (f) { const bytes = new Uint8Array(await f.arrayBuffer()); let s = ""; for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000)); b64 = btoa(s); }
+      const idx = await studio.saveRefDoc(kind, ext, f ? f.name.slice(0, 100) : "", b64); onIndex(idx);
+      const got = cleanRefs(idx.prefs?.design?.refs);
+      // The files' names come from what was just saved; a help line typed and not saved yet stays as typed.
+      const merge = (o: DesignSettings) => { const n: any = { ...(got || {}) }; const mine = o.refs?.[kind]?.note; if (mine !== undefined) n[kind] = { ...(n[kind] || {}), note: mine }; return cleanRefs(n); };
+      writeDesignSettings(cleanDesignSettings({ ...readDesignSettings(), refs: got }));
+      setSaved((o) => ({ ...o, refs: got })); setD((o) => ({ ...o, refs: merge(o) }));
+      toast(f ? `${REF_NAME[ext]} sheet saved. Visitors get it from now on.` : `Removed. Visitors get the Studio's own ${REF_NAME[ext]} sheet.`);
+    } catch (e: any) { toast(e?.message || "Couldn't save that file.", "bad"); }
+    setRefBusy("");
+  };
+  const refGet = async (ext: RefExt) => {
+    const own = refs[ext] ? await studio.refDocBlob(kind, ext) : null;
+    if (refs[ext] && !own) { toast("Your file couldn't be read from the Studio's data. Upload it again.", "bad"); return; }
+    const blob = own || (ext === "txt" ? new Blob([sheetTxt(kind)], { type: "text/plain" }) : ext === "xlsx" ? await sheetXlsx(kind) : await sheetDocx(kind));
+    const u = URL.createObjectURL(blob), l = document.createElement("a"); l.href = u; l.download = own ? refs[ext]! : `${KIND_NAME[kind]}-website-details.${ext}`; document.body.appendChild(l); l.click(); l.remove(); setTimeout(() => URL.revokeObjectURL(u), 4000);
+  };
+
   const save = async () => {
     const clean = cleanDesignSettings({ ...d, on: readDesignSettings().on });
     setBusy(true); setErr("");
@@ -227,6 +256,24 @@ export function DesignLookTab({ session, studio, index, onIndex, part, lead }: {
       <div className="flex flex-wrap gap-1 rounded-xl border border-ink-700 bg-ink-800/40 p-1" role="tablist" aria-label="Type of website">
         {KINDS.map((k) => <button key={k} type="button" role="tab" aria-selected={kind === k} onClick={() => setKind(k)} className={`h-10 flex-1 rounded-lg px-3 text-[13px] font-semibold ${kind === k ? "bg-ink-700 text-ink-100 shadow" : "text-ink-400 hover:text-ink-100"}`}>{KIND_NAME[k]}</button>)}
       </div>
+
+      <Block title={`Reference documents · ${KIND_NAME[kind]}`} note={`The details sheets a visitor can download on the Design yourself page after choosing ${KIND_NAME[kind] === "Event" ? "an event" : KIND_NAME[kind] === "Shop" ? "a shop" : "a " + KIND_NAME[kind].toLowerCase()} website, fill in and upload, so the questions are answered in one go. Until you upload your own, the Studio's own sheet is offered (download it to start from). A file is saved as soon as you choose it.`}>
+        <div className="flex flex-col divide-y divide-ink-700 rounded-xl border border-ink-700">
+          {REF_EXT.map((ext) => (
+            <div key={ext} className="flex flex-wrap items-center gap-2 p-3">
+              <span className="min-w-[11rem] flex-1"><b className="block text-[13px]">{REF_NAME[ext]}</b>
+                <span className="text-[12px] text-ink-400">{refs[ext] ? <>Your file: <span className="text-ink-200">{refs[ext]}</span></> : "The Studio's own sheet"}</span></span>
+              <button type="button" className="btn btn-sm" disabled={!!refBusy} onClick={() => void refGet(ext)}>Download</button>
+              <label className={`btn btn-sm btn-pri ${refBusy ? "pointer-events-none opacity-60" : ""}`}>{refBusy === ext ? "Saving…" : refs[ext] ? "Replace" : "Upload"}
+                <input type="file" className="sr-only" accept={`.${ext}`} aria-label={`Upload the ${REF_NAME[ext]} sheet for ${KIND_NAME[kind]}`} disabled={!!refBusy} onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) void refPut(ext, f); }} /></label>
+              {refs[ext] && <button type="button" className="btn btn-sm btn-ghost" disabled={!!refBusy} onClick={() => void refPut(ext, null)}>Remove</button>}
+            </div>
+          ))}
+        </div>
+        <label className="flex flex-col gap-1.5 text-[13px] font-semibold">Help line shown with the documents
+          <textarea className="input min-h-[64px] text-[13px] font-normal" maxLength={300} aria-label={`Help line for the ${KIND_NAME[kind]} documents`} placeholder={REF_NOTE} value={refs.note || ""} onChange={(e) => setRefNote(e.target.value)} />
+          <span className="text-[11.5px] font-normal text-ink-500">Shown above the download links in the upload box. Empty: the standard line (shown greyed in the box). Saved with Save changes.</span></label>
+      </Block>
 
       <Block open={false} title={`Questions · ${KIND_NAME[kind]}`} note="The questions a visitor is asked: untick one to hide it, change its wording, or move it up or down with the arrows to change the order (the first question, the type of website, stays first). A question is also skipped when the visitor's PDF or link has already answered it. Press Save changes to store it in your Studio's database. If you hide the contact email question, the email address the visitor has already given at the start is used on their website.">
         {QUESTION_GROUPS.filter((g) => g.id === "basics" || g.id === kind).map((g) => (

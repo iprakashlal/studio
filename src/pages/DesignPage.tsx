@@ -182,7 +182,7 @@ function useDiyLook(auto: "" | "light" | "dark" = "") {
     const css = [
       // the page's own background (see useDiyBg): the colours the drawn backgrounds read, a background that stays put while the chat scrolls, and see-through bars over it
       `.diy-page{--c1:rgb(var(--brand-500,91 124 255));--c2:rgb(var(--brand-300,170 190 255));--c3:rgb(var(--brand-600,63 95 224));--bg:rgb(var(--ink-950,11 15 23));--text:rgb(var(--ink-100,230 235 245));--soft:rgb(var(--ink-300,160 170 190));--surface:rgb(var(--ink-900,15 20 29));--line:rgb(var(--ink-700,34 44 59))}`,
-      `.diy-page.has-sbg>.sbg{position:fixed}.diy-page.has-sbg>header{background-color:rgb(var(--ink-950,11 15 23)/.55)!important;-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px)}`,
+      `.diy-page{overflow-x:clip}.diy-page.has-sbg>.sbg{position:fixed}.diy-page.has-sbg>header{background-color:rgb(var(--ink-950,11 15 23)/.55)!important;-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px)}`,
       // the answer bar at the bottom is no band of its own: it fades into the page's own colour (or shows the picture behind it)
       `.diy-page{--diy-bg:${pageCol || "rgb(var(--ink-950,11 15 23))"}}.diy-page .sticky.bottom-0{background:linear-gradient(to top,var(--diy-bg) 62%,transparent)!important;border-color:transparent!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important}`,
       // the top bar's own colour, with text that reads on it

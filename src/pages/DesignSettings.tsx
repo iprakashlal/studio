@@ -461,6 +461,10 @@ export function DesignLookTab({ session, studio, index, onIndex, part, lead }: {
         <Toggle id="ds-help" label="Show the help tour to visitors" checked={d.help !== false} onChange={(v) => upd({ help: v ? undefined : false })} />
       </Block>
 
+      <Block title="On phones" note="On a phone, Design yourself can show a notice asking the visitor to open it on a larger screen (a computer or tablet), or the page itself, laid out for the phone.">
+        <Toggle id="ds-phone" label="Show “not available on phones” screen" checked={d.phoneNotice !== false} onChange={(v) => upd({ phoneNotice: v ? undefined : false })} />
+      </Block>
+
       <Block title="Notice bar" note='A bar across the top of the final website preview. Turn it off, or write your own words.'>
         <label className="flex items-start gap-2 text-[13px]">
           <input type="checkbox" className="mt-1" checked={d.notice?.on !== false} onChange={(e) => upd({ notice: e.target.checked ? (d.notice?.text ? { text: d.notice.text } : undefined) : { ...(d.notice || {}), on: false } })} />

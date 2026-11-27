@@ -292,14 +292,15 @@ function DiySteps({ a, cur, finished }: { a: Answers; cur: Step | null; finished
   return <ol className="diy-steps" aria-label="Stages">{STAGES.map((k, i) => <li key={k} data-s={i === now ? "now" : done(i) ? "done" : undefined} aria-current={i === now ? "step" : undefined}>{i + 1}. {word(k)}</li>)}</ol>;
 }
 function PhoneNotice() {
-  const brand = useBrand();
+  useBrand();
   return (
     <div className="flex min-h-screen flex-col bg-ink-950 text-ink-100">
       <header className="flex items-center gap-2 border-b border-ink-800 px-4 py-3 font-extrabold"><DiyMark /><span>{diyName()}</span><span className="text-ink-600" aria-hidden>|</span><span className="font-semibold text-ink-300">{readDesignSettings().ui?.tag || "DIY your web"}</span></header>
       <main className="flex flex-1 items-center justify-center px-5 py-10">
         <div className="card flex max-w-sm flex-col gap-3 p-6 text-center" role="alert">
-          <h1 className="m-0 text-lg font-extrabold">Not available on this screen size</h1>
-          <p className="m-0 text-[14px] leading-relaxed text-ink-300">Website DIY editing is only available on a desktop, laptop or tablet display. Please reopen this page on one of those devices to design your website with {brand.name}.</p>
+          <h1 className="m-0 text-lg font-extrabold">Design yourself is not available on mobile</h1>
+          <p className="m-0 text-[14px] leading-relaxed text-ink-300">Website design and editing are available only on a desktop, laptop or tablet display. Please open this page on one of those devices to continue.</p>
+          <a href="#/themes" className="btn mx-auto mt-1 inline-flex">← Back to themes</a>
         </div>
       </main>
     </div>
@@ -309,8 +310,10 @@ export function DesignPage(props: { studio?: Studio; index?: StudioIndex | null;
   // On a phone: the "use a larger screen" notice, unless Settings → Design yourself lets phones use the page. Decided when the
   // page opens (and when the setting changes), not on every resize: turning a phone sideways must not swap the page out and back,
   // which looked like the page reloading.
-  const narrow = useNarrow(), [atOpen] = useState(narrow);
-  return atOpen && readDesignSettings().phoneNotice !== false ? <PhoneNotice /> : <DesignPageInner {...props} />;
+  // The setting can arrive after the page opens (a visitor's settings come from the database): follow it when it changes.
+  const narrow = useNarrow(), [atOpen] = useState(narrow), [, again] = useState(0);
+  useEffect(() => { const f = () => again((n) => n + 1); addEventListener("studio:design-page", f); return () => removeEventListener("studio:design-page", f); }, []);
+  return atOpen && readDesignSettings().phoneNotice !== false && !props.studio ? <PhoneNotice /> : <DesignPageInner {...props} />;
 }
 function DesignPageInner({ studio, index, onIndex }: { studio?: Studio; index?: StudioIndex | null; onIndex?: (i: StudioIndex) => void }) {
   const toast = useToast();
@@ -691,15 +694,7 @@ function DesignPageInner({ studio, index, onIndex }: { studio?: Studio; index?: 
   const startEdit = (s: Step) => { if (s.type === "file") { rewind(s.id); return; } setEditId(s.id); setTimeout(() => document.getElementById("answer-" + s.id)?.scrollIntoView({ block: "center", behavior: "smooth" }), 80); };
   const ready = finished && !!copy && !writing;
   
-  if (phone && !studio) return (
-    <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-ink-950 px-6 text-center text-ink-100">
-      <div className="max-w-md rounded-3xl border border-ink-700 bg-ink-900 p-7 shadow-xl">
-        <h1 className="m-0 text-xl font-bold">Design yourself is not available on mobile</h1>
-        <p className="mt-3 text-[15px] leading-relaxed text-ink-300">Website design and editing are available only on a desktop, laptop or tablet display. Please open this page on one of those devices to continue.</p>
-        <a href="#/themes" className="btn mt-5 inline-flex">← Back to themes</a>
-      </div>
-    </div>
-  );
+  // (On a phone, the notice is decided once, by DesignPage below the Settings toggle; nothing here swaps the page for it.)
 
   const showSteps = !!readDesignSettings().ui?.steps && !needMail;
   return (

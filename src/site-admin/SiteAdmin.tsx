@@ -4,7 +4,7 @@ import { TourHost, type TourStep } from "../ui/Tour";
 import { brand } from "../lib/brand";
 import { accentFromImage, applyTint, isHex } from "../lib/tint";
 import { CfAccount, CfGate } from "./CfGate";
-import { CfRepo, cfCall, cfSession } from "../lib/cfdb";
+import { CfRepo, cfCall, cfSession, dbGitHub } from "../lib/cfdb";
 import { applyPrefs, cleanPrefs, mergePrefs, prefSync, type SyncedPrefs } from "../lib/prefs";
 import { cleanMenu } from "../lib/menus";
 import { EnquiriesPanel, enquiriesCfg } from "./EnquiriesPanel";
@@ -18,7 +18,7 @@ import { WarrantyPanel } from "./WarrantyPanel";
 import { GOTO_EVENT } from "../editor/Editor";
 import { TEMPLATES } from "../schema";
 import { device, session as sess, watchIdle, type Session } from "../lib/auth";
-import { GitHubRepo, explain, jsonB64, bytesB64, type Repo } from "../lib/repo";
+import { GitHubRepo, explain, ghRoute, jsonB64, bytesB64, type Repo } from "../lib/repo";
 import { SupabaseRepo, assetBase, cfAssetBase, type CfSiteCfg, type SbCfg } from "../lib/supa";
 import { SbGate, SbAccount, sbSignOut } from "./SbGate";
 import { blobToBytes, clone, safeFileName, textToB64 } from "../lib/util";
@@ -33,7 +33,7 @@ import { Logo, SkelEditor, useConfirm, useToast } from "../ui/kit";
 
 const NS = "site-cms";
 /** host: set when the site is hosted outside GitHub, with its content in Supabase. */
-type SiteInfo = { menu?: unknown; template: string; name: string; version?: number; admin?: string; worker?: string; files?: string[]; exportedAt?: string; generator?: string; host?: { kind: "supabase"; url: string; key: string; site: string } | { kind: "cloudflare"; api: string; site: string } };
+type SiteInfo = { menu?: unknown; template: string; name: string; version?: number; admin?: string; worker?: string; files?: string[]; exportedAt?: string; generator?: string; host?: { kind: "supabase"; url: string; key: string; site: string } | { kind: "cloudflare"; api: string; site: string }; /** A GitHub Pages site whose admin page signs in by email through the Studio's database, which saves to the repository. */ signin?: { api: string; site: string; owner: string; repo: string; branch: string } };
 /** Saved-but-not-published edits live here. The live site never reads this file. */
 const DRAFT = "cms/draft.json";
 /** This CMS page's own file name: from cms/site.json, else the address it was opened at. */
@@ -137,6 +137,12 @@ export function SiteAdmin() {
     const h = info.host;
     return watchIdle(NS, () => { (h.kind === "cloudflare" ? Promise.resolve(cfSession.clear(h.api)) : sbSignOut(h)).finally(() => setSbIn(false)); toast("Signed out after 30 minutes without activity"); });
   }, [sbIn]);
+  const [tokenWay, setTokenWay] = useState(false);
+  useEffect(() => {
+    if (!sbIn || !info?.signin || info.host) return;
+    const api = info.signin.api;
+    return watchIdle(NS, () => { cfSession.clear(api); setSbIn(false); toast("Signed out after 30 minutes without activity"); });
+  }, [sbIn]);
   useEffect(() => {
     if (!session) return;
     return watchIdle(NS, () => { sess.clear(NS); setSession(null); toast("Signed out after 30 minutes without activity"); });
@@ -154,6 +160,14 @@ export function SiteAdmin() {
     if (!sbIn) return <SbGate sb={sb} brand={`${info.name} · CMS`} onIn={() => setSbIn(true)} />;
     return <HostedWorkspace info={info} onInfo={setInfo} sb={sb} onSignOut={() => setSbIn(false)} />;
   }
+  // A GitHub Pages site set up for email sign-in: an email and a code on any device, and the Studio's database saves to the repository.
+  // A device that already has its own GitHub login keeps using it; "Use a GitHub token instead" is always there.
+  const si = info.signin && typeof info.signin.api === "string" && !info.host ? info.signin : null;
+  if (si && !session && !tokenWay && !device.load(NS)) {
+    const cf: CfSiteCfg = { api: si.api, site: si.site };
+    if (!sbIn) return <CfGate cf={cf} brand={`${info.name} · CMS`} onIn={() => setSbIn(true)} footer={<button type="button" className="self-start text-[12.5px] text-ink-400 underline hover:text-ink-100" onClick={() => setTokenWay(true)}>Use a GitHub token instead</button>} />;
+    return <MailGitHubWorkspace info={info} onInfo={setInfo} si={si} onSignOut={() => setSbIn(false)} />;
+  }
   if (!session) {
     return <Gate ns={NS} brand={`${info.name} · CMS`} repoNoun="website's repository"
       tokenHint="A fine-grained token for this website's repository only, with Contents: Read and write."
@@ -168,6 +182,14 @@ function GitHubWorkspace({ info, onInfo, session, onSession, onSignOut, onForget
   const repo = useMemo(() => new GitHubRepo(session.cfg, session.token), [session]);
   return <Workspace info={info} onInfo={onInfo} repo={repo} onSignOut={onSignOut} ghToken={session.token}
     account={<AccountPanel ns={NS} session={session} onUpdated={onSession} onSignOut={onSignOut} onForget={onForget} />} />;
+}
+
+/** A GitHub Pages site, signed in by email: the content is in the repository as always; every change goes through the Studio's database, which holds the GitHub token. */
+function MailGitHubWorkspace({ info, onInfo, si, onSignOut }: { info: SiteInfo; onInfo: (i: SiteInfo) => void; si: NonNullable<SiteInfo["signin"]>; onSignOut: () => void }) {
+  const cf: CfSiteCfg = { api: si.api, site: si.site };
+  const repo = useMemo(() => { ghRoute.via = dbGitHub(si.api, "site:" + si.site); return new GitHubRepo({ owner: si.owner, repo: si.repo, branch: si.branch }, ""); }, [si.api, si.site, si.owner, si.repo, si.branch]);
+  return <Workspace info={info} onInfo={onInfo} repo={repo} people={cf} onSignOut={() => { cfSession.clear(si.api); onSignOut(); }}
+    account={<CfAccount cf={cf} onSignOut={onSignOut} />} />;
 }
 
 function HostedWorkspace({ info, onInfo, sb, onSignOut }: { info: SiteInfo; onInfo: (i: SiteInfo) => void; sb: SbCfg; onSignOut: () => void }) {
@@ -190,7 +212,7 @@ function CfWorkspace({ info, onInfo, cf, onSignOut }: { info: SiteInfo; onInfo: 
 }
 
 /** hosted: the site is on Cloudflare or Netlify with content and photos in Supabase or the Cloudflare database (pages change only when the Studio publishes). */
-function Workspace({ info, onInfo, repo, account, onSignOut, hosted, ghToken }: { info: SiteInfo; onInfo: (i: SiteInfo) => void; repo: Repo; account: React.ReactNode; onSignOut: () => void; hosted?: SbCfg | CfSiteCfg; ghToken?: string }) {
+function Workspace({ info, onInfo, repo, account, onSignOut, hosted, ghToken, people }: { info: SiteInfo; onInfo: (i: SiteInfo) => void; repo: Repo; account: React.ReactNode; onSignOut: () => void; hosted?: SbCfg | CfSiteCfg; ghToken?: string; /** A GitHub Pages site signed in by email: where its people and roles are kept. */ people?: CfSiteCfg }) {
   const toast = useToast();
   const confirm = useConfirm();
   const tpl = TEMPLATES[info.template];
@@ -404,7 +426,7 @@ function Workspace({ info, onInfo, repo, account, onSignOut, hosted, ghToken }: 
     ...(tpl.id === "store" || tpl.id === "business" ? [
       { id: "warranty-records", label: "Warranty records", group: "Forms & records", desc: "Products' numbers, warranty and service status, for the site's warranty & status check.", render: () => <WarrantyPanel repo={repo} cfg={draft?.warranty} /> },
     ] : []),
-    ...(hosted && "api" in hosted ? [{ id: "people", label: "Role Management", group: "Settings", desc: "Who can sign in to this admin page, each person's role, and what each role may do.", render: () => <PeoplePanel cf={hosted} /> }] : []),
+    ...((hosted && "api" in hosted) || people ? [{ id: "people", label: "Role Management", group: "Settings", desc: "Who can sign in to this admin page, each person's role, and what each role may do.", render: () => <PeoplePanel cf={(hosted && "api" in hosted ? hosted : people)!} /> }] : []),
     { id: "backup", label: "Backup & reset", group: "Settings", desc: "Copy, restore or reset the site's content.", render: () => <BackupPanel draft={draft} onReplace={(c) => { setDraft(clone(c)); bump(); }} loadDefaults={async () => clone(saved)} hosted={!!hosted} /> },
     { id: "help", label: "Help", group: "Settings", desc: "A quick tour of the admin, and how to turn it on or off.", render: () => <HelpPanel /> },
     { id: "account", label: "Account", group: "Settings", desc: "Your login on this device.", render: () => account },
@@ -412,7 +434,7 @@ function Workspace({ info, onInfo, repo, account, onSignOut, hosted, ghToken }: 
 
   // Role Management: what this person's role may do on this site (a site on the Cloudflare database; otherwise everything, as before).
   const [sitePrivs, setSitePrivs] = useState<Record<string, boolean> | null>(null);
-  const cfApi = hosted && "api" in hosted ? hosted.api : "", cfSite = hosted && "api" in hosted ? hosted.site : "";
+  const cfApi = hosted && "api" in hosted ? hosted.api : people?.api || "", cfSite = hosted && "api" in hosted ? hosted.site : people?.site || "";
   useEffect(() => { if (!cfApi) return; cfCall<any>(cfApi, "/roles?scope=" + encodeURIComponent("site:" + cfSite)).then((r) => { if (r?.ready && r.me?.role !== "owner" && r.me?.role !== "partner") setSitePrivs(r.me.privs); }).catch(() => { /* an older database: no roles */ }); }, [cfApi, cfSite]);
   const RECORDS = ["enquiries", "purchased", "inventory", "recovery", "reviews", "customer-data", "warranty-records"];
   const extras = useMemo(() => !sitePrivs ? extrasAll : extrasAll.filter((x: any) => (sitePrivs.orders || !RECORDS.includes(x.id)) && (sitePrivs.settings || !["Settings", "Advanced setup"].includes(x.group) || ["help", "account", "people"].includes(x.id))), [extrasAll, sitePrivs]);

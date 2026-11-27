@@ -45,7 +45,9 @@ var CFDB_TABLES = [
   // and whose each project is (a project with no row belongs to the Studio's Administrators).
   "create table if not exists role_mgmt (scope text not null, role text not null, privs text not null default '{}', updated_at text not null, updated_by text not null default '', primary key (scope, role))",
   "create table if not exists project_owners (scope text not null, project text not null, email text not null, at text not null, primary key (scope, project))",
-  "create index if not exists project_owners_email on project_owners (scope, email)"
+  "create index if not exists project_owners_email on project_owners (scope, email)",
+  // A GitHub Pages site whose admin page signs in by email through this database: which repository the site's people may change (with the kept GitHub token).
+  "create table if not exists site_repos (site text primary key, repo text not null, studio text not null default '', at text not null)"
 ];
 var CFDB_SCHEMA = CFDB_TABLES.join(";\n") + ";";
 var CFDB_UPGRADES = [
@@ -54,7 +56,7 @@ var CFDB_UPGRADES = [
     "create index if not exists enquiries_ref on enquiries (site, ref)"
   ] }
 ];
-var CFDB_VERSION = 107;
+var CFDB_VERSION = 108;
 var CFDB_WORKER_NAME = "picaffectz-db";
 
 // src/lib/diylook.ts
@@ -5158,12 +5160,31 @@ ${body}`)}${paras("Approve or hide it under Reviews in your site's admin page.",
         const r = await fetch("https://api.cloudflare.com/client/v4" + path2, { method, headers: { Authorization: "Bearer " + (useJwt ? q.jwt : tokenOf), ...q.contentType ? { "Content-Type": String(q.contentType) } : {} }, body: method === "GET" ? void 0 : body });
         return json({ status: r.status, body: await r.text() });
       }
+      if (p === "/site/link" && req.method === "POST") {
+        if (!inStudio || !await can("publishGh")) return err(403, "Your role can't publish to GitHub. Ask an Administrator (Role Management).");
+        if (!env.GH_TOKEN) return err(501, "This database keeps no GitHub token, so it can't save for the site's people. Turn on Publish from any device (Settings \u2192 Hostings).");
+        const b = await req.json().catch(() => ({})), site = String(b.site || ""), repo = String(b.repo || "").toLowerCase();
+        if (!/^[\w-]{3,80}$/.test(site) || !/^[\w.-]+\/[\w.-]+$/.test(repo)) return err(400, "Which site and repository?");
+        const studio = scope.slice(7), had = await env.DB.prepare("select studio from site_repos where site = ?").bind(site).first();
+        if (had && had.studio !== studio) return err(403, "This site is linked to another Studio.");
+        const registered = !!await env.DB.prepare("select 1 from repos where repo = ? and scope = ?").bind(repo, scope).first();
+        if (!admin && !registered) return err(403, "Only an Administrator can set up email sign-in for a repository this Studio hasn't published through its database yet.");
+        const mine = !!had || registered || !await env.DB.prepare("select 1 from members where scope = ? limit 1").bind("site:" + site).first();
+        if (!mine) return err(403, "This site already has its own people. An Administrator of the site can link it.");
+        await env.DB.prepare("insert into site_repos (site, repo, studio, at) values (?, ?, ?, ?) on conflict (site) do update set repo = excluded.repo, at = excluded.at").bind(site, repo, studio, (/* @__PURE__ */ new Date()).toISOString()).run();
+        const mails = [...new Set([email, ...Array.isArray(b.emails) ? b.emails : []].map((x) => String(x || "").trim().toLowerCase()).filter(emailOk))].slice(0, 20);
+        for (const m of mails) await env.DB.prepare("insert into members (scope, email, role) values (?, ?, 'owner') on conflict (scope, email) do nothing").bind("site:" + site, m).run();
+        return json({ ok: true, people: mails });
+      }
       if (p === "/gh" && req.method === "POST") {
         if (!env.GH_TOKEN) return err(501, "This database can't reach GitHub: no GitHub token is kept here.");
-        if (!await can("publishGh")) return err(403, "Your role can't publish to GitHub. Ask an Administrator (Role Management).");
+        const forSite = scope.startsWith("site:");
+        if (forSite ? !await can("edit") : !await can("publishGh")) return err(403, forSite ? "Your role can't change this site. Ask its Administrator (Role Management)." : "Your role can't publish to GitHub. Ask an Administrator (Role Management).");
         const q = await req.json(), repo = String(q.repo || "").toLowerCase(), path2 = String(q.path || ""), method = String(q.method || "GET").toUpperCase();
         if (!/^[\w.-]+\/[\w.-]+$/.test(repo) || path2 && !/^\/[\w\-./%?=&,~]*$/.test(path2) || path2.includes("..") || !["GET", "PUT", "POST", "PATCH", "DELETE"].includes(method)) return err(400, "Not a GitHub call publishing needs.");
-        if (!await env.DB.prepare("select 1 from repos where repo = ? and scope = ?").bind(repo, scope).first()) return err(403, `The repository ${repo} isn't registered to ${scope}. Turn on Publish from any device again from a Studio that has the GitHub token.`);
+        if (forSite) {
+          if (!await env.DB.prepare("select 1 from site_repos where site = ? and repo = ?").bind(scope.slice(5), repo).first().catch(() => null)) return err(403, "This site's repository isn't linked to its email sign-in. Publish the site again from the Studio.");
+        } else if (!await env.DB.prepare("select 1 from repos where repo = ? and scope = ?").bind(repo, scope).first()) return err(403, `The repository ${repo} isn't registered to ${scope}. Turn on Publish from any device again from a Studio that has the GitHub token.`);
         const r = await fetch("https://api.github.com/repos/" + repo + path2, { method, headers: { Authorization: "Bearer " + env.GH_TOKEN, Accept: q.raw ? "application/vnd.github.raw+json" : "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28", "User-Agent": "site-studio-db", ...q.body != null ? { "Content-Type": "application/json" } : {} }, body: method === "GET" ? void 0 : q.body != null ? String(q.body) : void 0 });
         const bytes = new Uint8Array(await r.arrayBuffer());
         let bin = "";

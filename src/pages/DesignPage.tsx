@@ -464,13 +464,24 @@ function DesignPageInner({ studio, index, onIndex }: { studio?: Studio; index?: 
     const fill = { ...fromDoc(text, a0, meta), ...stated(a0) }, got = Object.keys(fill).filter((x) => !/^doc/.test(x)), secs = sectionNames(unpackSections(fill.docsec));
     setA((o) => { const o2 = kind ? { ...o, kind } : o; const n = { ...o2, doc: label, ...(link ? { doclink: link } : {}), ...(text ? { doctext: text } : {}), ...fromDoc(text, o2, meta), ...stated(o2), ...(got.length ? { docfrom: got.join(",") } : {}) }; return kind ? fastForward(n) : n; });
     // Its pictures: the one beside each item goes with that item; the others become the site's own pictures (top picture, gallery).
-    if (pics.length) {
+    const linked = (rd?.items || []).slice(0, 40).map((i) => i.img || "");
+    if (pics.length || linked.some(Boolean)) {
       const K = a0.kind || "", list = (rd?.items || []).slice(0, 40), used = new Set<number>(), per: string[] = list.map(() => "");
       const placed = pics.some((x) => x.y !== undefined) && list.some((i) => i.y !== undefined);
       if (placed) list.forEach((it, i) => { let best = -1, d = 110; pics.forEach((x, j) => { if (used.has(j) || x.page !== it.page || x.y === undefined || it.y === undefined) return; const dy = Math.abs(x.y - (it.y + 18)); if (dy < d) { d = dy; best = j; } }); if (best >= 0) { used.add(best); per[i] = pics[best].url; } });
       else if (list.length && pics.length >= list.length) { const skip = pics.length - list.length; list.forEach((_it, i) => { per[i] = pics[skip + i].url; used.add(skip + i); }); }
-      const rest = pics.filter((_x, j) => !used.has(j)).map((x) => x.url), top = rest.length ? rest : per.filter(Boolean).slice(0, 1);
-      setFiles((o) => ({ ...o, pics: { ...(o.pics || {}), ...(per.some(Boolean) ? { items: per } : {}), ...(K === "restaurant" && top.length ? { photos: top.slice(0, 5) } : K === "store" && top.length ? { banner: top.slice(0, 2) } : (K === "business" || K === "events") && top.length ? { bimage: top.slice(0, 1) } : K === "portfolio" && rest.length ? { photo: rest.slice(0, 1) } : {}) } }));
+      const place = (per2: string[]) => {
+        const rest = pics.filter((_x, j) => !used.has(j)).map((x) => x.url), top = rest.length ? rest : per2.filter(Boolean).slice(0, 1);
+        setFiles((o) => ({ ...o, pics: { ...(o.pics || {}), ...(per2.some(Boolean) ? { items: per2 } : {}), ...(K === "restaurant" && top.length ? { photos: top.slice(0, 5) } : K === "store" && top.length ? { banner: top.slice(0, 2) } : (K === "business" || K === "events") && top.length ? { bimage: top.slice(0, 1) } : K === "portfolio" && rest.length ? { photo: rest.slice(0, 1) } : {}) } }));
+      };
+      if (per.some(Boolean) || pics.length) place(per);
+      // A picture the document gives as a link ("Photo: https://…") is used when it really opens (some links are private or have expired).
+      const want = linked.map((u, i) => (u && !per[i] ? u : ""));
+      if (want.some(Boolean)) void Promise.all(want.map((u) => (!u ? Promise.resolve("") : new Promise<string>((res) => { const im = new Image(), t = setTimeout(() => res(""), 8000); im.onload = () => { clearTimeout(t); res(im.naturalWidth >= 80 ? u : ""); }; im.onerror = () => { clearTimeout(t); res(""); }; im.referrerPolicy = "no-referrer"; im.src = u; })))).then((ok) => {
+        const got = ok.filter(Boolean).length, asked = want.filter(Boolean).length;
+        if (got) place(per.map((x, i) => x || ok[i]));
+        if (got < asked) toast(`${asked - got} of the ${asked} picture links in your file didn't open (they may be private or expired), so those items show without a picture.`, "bad");
+      });
     }
     const found = [...got.map((x) => (STEP_LABEL[x] || x).toLowerCase()), ...secs.filter((x) => !got.includes(x))];
     toast(kind ? `Read it${found.length ? `: found ${found.join(", ")}` : ""}. Making ${KIND_SAY[kind] || "a website"}; you can change any answer.` : found.length ? `Found ${found.join(", ")}. You can change any answer.` : "Read it. It will help us write your text.");

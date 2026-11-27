@@ -59,7 +59,9 @@ export async function fileText(f: File): Promise<string> {
     if (zip?.file("xl/workbook.xml")) return xlsx(buf);
     throw new Error(`The Studio can't read that kind of file. Choose a ${DOC_KINDS} file.`);
   }
-  if (/\.(csv|txt|md)$/.test(name) || /^text\//.test(f.type)) return tidy((await f.text()).split("\n").map((l) => { const c = l.split(/\t|,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map((x) => x.trim().replace(/^"|"$/g, "")).filter(Boolean); return c.join("\t"); }).join("\n"));
+  // A CSV's commas separate cells; in notes (.txt) a comma is just a comma.
+  if (/\.csv$/.test(name) || f.type === "text/csv") return tidy((await f.text()).split("\n").map((l) => l.split(/\t|,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map((x) => x.trim().replace(/^"|"$/g, "")).filter(Boolean).join("\t")).join("\n"));
+  if (/\.(txt|md)$/.test(name) || /^text\//.test(f.type)) return tidy(await f.text());
   throw new Error(`The Studio can't read that kind of file. Choose a ${DOC_KINDS} file.`);
 }
 

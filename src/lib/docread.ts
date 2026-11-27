@@ -5,7 +5,7 @@
 
 /** One line of the document. cells: what was side by side on it. page / y: where it was (a PDF), to pair pictures with items. */
 export type DocRow = { cells: string[]; page?: number; y?: number };
-export type DocItem = { name: string; desc: string; price: string; cat: string; diet?: string; page?: number; y?: number };
+export type DocItem = { name: string; desc: string; price: string; cat: string; diet?: string; /** A picture the document gives as a link ("Photo: https://…"). */ img?: string; page?: number; y?: number };
 export type DocRead = { fields: Record<string, string>; items: DocItem[]; /** The money sign the prices carry ("$", "₹"…). */ money: string };
 
 /** Plain text → rows (a tab separates cells). */
@@ -24,6 +24,7 @@ const LIST = /^(our |main |key )?(services|products|menu|dishes|offerings|skills
 const MONEY = "(?:₹|rs\\.?|inr|\\$|usd|€|eur|£|gbp|aed)";
 const PRICE = new RegExp(`^${MONEY}?\\s*(\\d{1,3}(?:,\\d{3})+|\\d{1,7})(?:\\.(\\d{1,2}))?\\s*(?:/-|${MONEY})?$`, "i");
 const TAIL_PRICE = new RegExp(`^(.{2,80}?)\\s*(?:[-–—:]|\\.{2,}|…)\\s*(${MONEY}?\\s*\\d[\\d,]*(?:\\.\\d{1,2})?)\\s*(?:/-)?$`, "i");
+const TIME = /\d{1,2}(?::\d\d)?\s*(?:am|pm)?\s*(?:[-–—]|to)\s*\d{1,2}(?::\d\d)?\s*(?:am|pm)/i;
 const DAYS = /\b(mon|tue|wed|thu|fri|sat|sun)[a-z]*\b|\b(daily|every ?day|weekdays?|weekends?)\b/i;
 const sym = (p: string) => (/₹|rs|inr/i.test(p) ? "₹" : /\$|usd/i.test(p) ? "$" : /€|eur/i.test(p) ? "€" : /£|gbp/i.test(p) ? "£" : /aed/i.test(p) ? "AED" : "");
 const num = (p: string) => { const m = /(\d[\d,]*)(?:\.(\d{1,2}))?/.exec(p); return m ? m[1].replace(/,/g, "") + (m[2] ? "." + m[2].padEnd(2, "0") : "") : ""; };
@@ -34,7 +35,7 @@ const title = (s: string) => s.toLowerCase().replace(/(^|[\s(/&-])([a-z])/g, (_m
 const LABELS: [RegExp, string][] = [
   [/^((brand|business|company|caf[eé]|restaurant|store|shop|event|firm|studio|trade|legal|full|your|product|organi[sz]ation) )?name$|^brand$/, "name"],
   [/tagline|slogan|motto|hero headline|main headline|^headline$|^title line$/, "tagline"],
-  [/sub-?headline|short description|what we do|what (you|we|i) (sell|do)|^description$|one-?liner|^cuisines?$|^industry$|^role$|^job title$|^profession$|^speciali[sz]ation$|business type|^about$|^summary$/, "about"],
+  [/hero (text|copy|line)|^intro(duction)?$|sub-?headline|short description|what we do|what (you|we|i) (sell|do)|^description$|one-?liner|^cuisines?$|^industry$|^role$|^job title$|^profession$|^speciali[sz]ation$|business type|^about$|^summary$/, "about"],
   [/minimum order/, "minorder"], [/free (shipping|delivery)/, "freeship"], [/delivery time|dispatch/, "dtime"], [/shipping (fee|charge|cost)|flat shipping/, "ship"], [/returns?( policy)?$|refund/, "returns"],
   [/address|^location$|^venue$|where (to find|we are)/, "address"],
   [/e-?mail/, "email"],
@@ -45,7 +46,7 @@ const LABELS: [RegExp, string][] = [
   [/^city$|^town$/, "city"],
   [/founded|established|^since$|year (started|founded)/, "founded"],
   [/team size|employees|staff/, "teamsize"],
-  [/amenities|features|highlights|why (choose|us)|usp|specialt(y|ies)|tags$/, "usp"],
+  [/amenities|features|highlights|why (choose|us)|usp|specialt(y|ies)|tags$|^extras$|perks|facilities/, "usp"],
   [/cost for two/, "cost"], [/gst/, "gstin"], [/mission|vision/, "mission"],
   [/^(event )?date$|^when$/, "edate"], [/^(start )?time$/, "etime"],
   [/our story|about (us|the (company|store|caf[eé]|restaurant|brand))|^story$|who we are|^bio$|^biography$/, "story"],
@@ -59,7 +60,8 @@ function headKind(t: string): "hours" | "items" | "facts" | "about" | "other" {
   if (/about|story|who we are|introduction|bio\b/.test(x)) return "about";
   return "other";
 }
-const isHead = (r: DocRow) => { const t = r.cells.join(" "); return t.length <= 90 && (/^\d{1,2}[.)]\s+\S/.test(t) || (r.cells.length === 1 && caps(t) && t.split(/\s+/).length >= 2 && !PRICE.test(t))); };
+const NUMBERED = /^\d{1,2}[.)]\s+(?=\S)/;
+const isHead = (r: DocRow, inItems = false) => { const t = r.cells.join(" "); if (t.length > 90) return false; if (NUMBERED.test(t)) return caps(t) || (!inItems && !TAIL_PRICE.test(t) && !(r.cells.length >= 2 && PRICE.test(r.cells[r.cells.length - 1]))); return r.cells.length === 1 && caps(t) && t.split(/\s+/).length >= 2 && !PRICE.test(t); };
 
 export function readDoc(rows0: DocRow[]): DocRead {
   // A heading that wraps onto a second line ("... PRICING &" / "DESCRIPTIONS)") is one heading.
@@ -87,16 +89,36 @@ export function readDoc(rows0: DocRow[]): DocRead {
     }
     return hit;
   };
-  let sec: ReturnType<typeof headKind> | "" = "", cat = "", cur: DocItem | null = null, noted: DocItem | null = null, listing = false; const story: string[] = [], hours: string[] = [];
+  let sec: ReturnType<typeof headKind> | "" = "", cat = "", cur: DocItem | null = null, noted: DocItem | null = null, listing = false, wait = "", days = ""; const story: string[] = [], hours: string[] = [];
   const anyItemsHead = rows.some((r) => isHead(r) && headKind(r.cells.join(" ")) === "items");
   for (const r of rows) {
-    const c = r.cells, one = c.join(" ");
+    // A list mark ("- ", "• ") and, among things on offer, a number ("3. ") are only marks.
+    const c = r.cells.map((x, i) => (i ? x : x.replace(/^[-–•●▪*]\s+/, ""))), listed = c[0] !== r.cells[0];
+    if (sec === "items" && NUMBERED.test(c[0]) && !caps(c.join(" "))) c[0] = c[0].replace(NUMBERED, "");
+    const one = c.join(" ");
     if (/^page \d+( of \d+)?$/i.test(c[c.length - 1]) || /^\d+$/.test(one)) continue;   // a page number (a running footer ends in one)
-    if (isHead(r) && !(sec === "items" && c.length === 1 && caps(one) && !/^\d{1,2}[.)]\s/.test(one))) { sec = headKind(one); cur = null; cat = ""; continue; }
+    if (isHead(r, sec === "items") && !(sec === "items" && c.length === 1 && caps(one) && !NUMBERED.test(one))) { sec = headKind(one); cur = null; cat = ""; wait = ""; days = ""; continue; }
+    // A line that is only a label ("About Us:", "Hours:", "Drinks:", "Website Hero Text:"): what it starts depends on what it names.
+    const lone = c.length === 1 && !listed ? /^([A-Za-z][A-Za-z &/'’-]{1,44})\s*[:：]$/.exec(one) : null;
+    if (lone) {
+      const L = lone[1].trim(), hk = headKind(L), key = LABELS.find(([re]) => re.test(L.toLowerCase()))?.[1];
+      if (DAYS.test(L) && L.length <= 40) { days = L; continue; }
+      if (sec === "items" && hk !== "hours" && hk !== "facts" && !/notes?$|footer|polic/i.test(L) && L.split(/\s+/).length <= 5 && !/items?$|menu$/i.test(L)) { cat = L; cur = null; continue; }
+      cur = null; cat = ""; days = "";
+      if (hk === "hours" || hk === "items" || hk === "facts") { sec = hk; wait = ""; continue; }
+      if (key === "story" || hk === "about") { sec = "about"; wait = ""; continue; }
+      if (key) { wait = L; continue; }   // its value is the next line
+      sec = "other"; wait = ""; continue;
+    }
+    if (wait) { const L = wait; wait = ""; if (c.length === 1 && fact(L, one)) continue; }
+    // Hours given as a day line and the times under it ("Tuesday to Friday:" / "- Bar: 7:00 AM - 5:30 PM"): the first time is the main one.
+    if (days) { const t = TIME.exec(one); if (t) { hours.push(`${days}: ${t[0].replace(/\s+/g, " ")}`); days = ""; continue; } if (!listed) days = ""; else continue; }
+    else if (sec === "hours" && listed && TIME.test(one) && !DAYS.test(one.slice(0, 30))) continue;   // a second counter's times for the same days
+    if (sec === "hours" && DAYS.test(one.slice(0, 30)) && /closed/i.test(one) && !TIME.test(one)) { hours.push(`${one.split(/[:：]/)[0].trim()}: Closed`); continue; }
     // Opening hours, wherever they are: a row that starts with days and holds a time.
     if (DAYS.test(one.slice(0, 30)) && (sec === "hours" || c.length >= 2)) {
-      const t = /\d{1,2}(?::\d\d)?\s*(?:am|pm)?\s*(?:[-–—]|to)\s*\d{1,2}(?::\d\d)?\s*(?:am|pm)/i.exec(one), days = one.slice(0, t ? t.index : 0).replace(/[:\s]+$/, "").trim();
-      if (t && days && days.length <= 40) { hours.push(`${days}: ${t[0].replace(/\s+/g, " ")}`); cur = null; continue; }
+      const t = TIME.exec(one), dd = one.slice(0, t ? t.index : 0).replace(/[:\s]+$/, "").trim();
+      if (t && dd && dd.length <= 40) { hours.push(`${dd}: ${t[0].replace(/\s+/g, " ")}`); cur = null; continue; }
     }
     if (sec === "hours") continue;
     // Label and value: two cells, or "Label: value".
@@ -123,6 +145,7 @@ export function readDoc(rows0: DocRow[]): DocRead {
       if (sec === "items" && c.length === 1 && caps(one) && one.length <= 60) { cat = title(one); cur = null; continue; }
       if (sec === "items" && /\bprice\b/i.test(one) && !/\d/.test(one)) continue;   // the table's own header row
       if (cur && c.length === 1) {
+        const ph = /^(?:photo|image|picture|img)\s*[:：]\s*(https?:\/\/\S+)$/i.exec(one); if (ph) { if (!cur.img) cur.img = ph[1]; continue; }
         if (/^(dietary|diet|contains|allergens?|milk options?|add-?ons?|served|size|sizes|options?)\b\s*[:：]/i.test(one)) { if (!cur.diet && /^diet/i.test(one)) cur.diet = /vegan|vegetarian|\bveg\b/i.test(one) && !/non-?veg/i.test(one) ? "veg" : /non-?veg|chicken|meat|fish|egg/i.test(one) ? "nonveg" : ""; noted = cur; continue; }
         if (noted === cur) continue;   // the rest of a note that ran onto a second line
         if (cur.desc.length < 320) cur.desc = (cur.desc + (cur.desc.endsWith("-") ? "" : " ") + one).trim();
@@ -135,6 +158,11 @@ export function readDoc(rows0: DocRow[]): DocRead {
   // A name nobody labelled: the document's first short line that isn't a heading, a fact or a note.
   if (!fields.name) { const r = rows.slice(0, 6).find((x) => !isHead(x) && x.cells.join(" ").length >= 2 && x.cells.join(" ").length <= 45 && !/[@:]|https?:|\d{4,}/.test(x.cells.join(" "))); if (r) put("name", r.cells.join(" ")); }
   if (fields.address && !fields.city) { const m = /,\s*([A-Za-z .'-]{3,30}),\s*[A-Z]{2}\s*\d{5}/.exec(fields.address) || /,\s*([A-Za-z .'-]{3,30})\s*[-,]?\s*\d{6}\b/.exec(fields.address); if (m) put("city", m[1]); }
-  for (const it of items) it.desc = it.desc.replace(/(\w)- (\w)/g, "$1-$2").trim();
+  for (const it of items) {
+    it.desc = it.desc.replace(/(\w)- (\w)/g, "$1-$2").trim();
+    // A closing note in brackets ("(Vegan, Gluten-Free, 14 oz)") says what it suits; it isn't part of the description.
+    const note = /\s*\(([^()]{3,140})\)\s*$/.exec(it.desc);
+    if (note && /vegan|vegetarian|\bveg\b|gluten|dairy|nuts?|halal|jain|spicy|\boz\b|\bml\b|serves/i.test(note[1])) { if (!it.diet) it.diet = /vegan|vegetarian|\bveg\b/i.test(note[1]) && !/non-?veg/i.test(note[1]) ? "veg" : /non-?veg/i.test(note[1]) ? "nonveg" : ""; it.desc = it.desc.slice(0, note.index).trim(); }
+  }
   return { fields, items: items.slice(0, 60), money };
 }

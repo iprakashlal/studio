@@ -4,6 +4,9 @@ import { pushPref, savePrefNow } from "../lib/prefs";
 import { cleanDesignSettings, readDesignSettings, writeDesignSettings, type DesignSettings } from "../lib/designs";
 import { DIY_BUBBLES, DIY_FONTS, DIY_WORDS, NOTICE_TEXT, GROUPS, KINDS, LOOK_AXES, REF_EXT, REF_NAME, REF_NOTE, cleanRefs, type DiyWord, type Gallery, type Kind, type LookRule, type RefExt } from "../lib/designlook";
 import { sheetDocx, sheetTxt, sheetXlsx } from "../lib/detailsheet";
+import { designHost } from "../lib/designapi";
+import { cfCall, cfDeployInfo } from "../lib/cfdb";
+import { CFDB_VERSION } from "../lib/cfdbSchema";
 import { shrinkImage } from "../lib/brand";
 import { ANIM_BGS, ANIM_SPEEDS, BG_PATTERNS } from "../schema/animbg";
 import type { DiyBg } from "../lib/diylook";
@@ -203,10 +206,37 @@ export function DesignLookTab({ session, studio, index, onIndex, part, lead }: {
       const merge = (o: DesignSettings) => { const n: any = { ...(got || {}) }; const mine = o.refs?.[kind]?.note; if (mine !== undefined) n[kind] = { ...(n[kind] || {}), note: mine }; return cleanRefs(n); };
       writeDesignSettings(cleanDesignSettings({ ...readDesignSettings(), refs: got }));
       setSaved((o) => ({ ...o, refs: got })); setD((o) => ({ ...o, refs: merge(o) }));
-      toast(f ? `${REF_NAME[ext]} sheet saved. Visitors get it from now on.` : `Removed. Visitors get the Studio's own ${REF_NAME[ext]} sheet.`);
+      toast(f ? `${REF_NAME[ext]} sheet saved.` : `Removed. Visitors get the Studio's own ${REF_NAME[ext]} sheet.`);
+      setTimeout(() => void checkLive(), 300);
     } catch (e: any) { toast(e?.message || "Couldn't save that file.", "bad"); }
     setRefBusy("");
   };
+  /** What a visitor of the Design yourself page gets right now for this type, asked from the database as a visitor would
+   *  (bypassing the minute-long cache). Each problem is said with its reason. */
+  const [live, setLive] = useState<{ kind: Kind; ok: string[]; bad: string[] } | null>(null), [checking, setChecking] = useState(false);
+  const checkLive = async (k: Kind = kind) => {
+    setChecking(true); const ok: string[] = [], bad: string[] = [];
+    try {
+      const h = await designHost();
+      if (!h) bad.push("This Studio doesn't run on a Cloudflare database, so signed-out visitors get the standard help line and sheets. Your own show only on this device's Design yourself page.");
+      else {
+        const info = await cfDeployInfo(h.api).catch(() => null);
+        if (info?.v !== undefined && info.v < CFDB_VERSION) bad.push(`Your Studio's database is on an older build (${info.v}; this Studio needs ${CFDB_VERSION}). Visitors don't get your help line or sheets until you update it: Settings → Hostings → Update this database.`);
+        const pub = await cfCall<any>(h.api, `/sb/${encodeURIComponent(h.studio)}?t=${Date.now()}`, { auth: false }).catch(() => null);
+        const want = saved.refs?.[k] || {}, got = pub?.design?.refs?.[k] || {};
+        if (!pub) bad.push("The database didn't answer the visitors' request. Check your connection and try again.");
+        else {
+          if (want.note) { if (got.note === want.note) ok.push("help line"); else bad.push(got.note ? "Visitors still get the help line saved before. Press Save changes, then check again." : "Visitors get the standard help line, not yours." + (info?.v !== undefined && info.v < CFDB_VERSION ? "" : " Press Save changes, then check again.")); }
+          for (const e of REF_EXT) if (want[e]) {
+            const r = await fetch(`${h.api.replace(/\/$/, "")}/sd/${encodeURIComponent(h.studio)}/${k}.${e}?t=${Date.now()}`, { cache: "no-store" }).catch(() => null);
+            if (r?.ok) ok.push(REF_NAME[e]); else bad.push(`${REF_NAME[e]}: visitors get the standard sheet${r?.status === 404 ? (info?.v !== undefined && info.v < CFDB_VERSION ? " (the older database can't give out your file)" : " (your file isn't in the database: upload it again)") : " (the database didn't answer)"}.`);
+          }
+        }
+      }
+    } catch (e: any) { bad.push(e?.message || "Couldn't check."); }
+    setLive({ kind: k, ok, bad }); setChecking(false);
+  };
+  useEffect(() => { setLive(null); }, [kind]);
   const refGet = async (ext: RefExt) => {
     const own = refs[ext] ? await studio.refDocBlob(kind, ext) : null;
     if (refs[ext] && !own) { toast("Your file couldn't be read from the Studio's data. Upload it again.", "bad"); return; }
@@ -221,6 +251,7 @@ export function DesignLookTab({ session, studio, index, onIndex, part, lead }: {
       writeDesignSettings(clean);
       await savePrefNow({ design: clean });
       setSaved(clean); setD(clean); toast("Saved. The Design yourself page now uses these settings.");
+      if (clean.refs?.[kind] || saved.refs?.[kind]) setTimeout(() => void checkLive(), 300);
     } catch (e: any) { setErr((e?.message || "Couldn't save.") + " Your changes are still here: try Save again."); }
     setBusy(false);
   };
@@ -273,6 +304,13 @@ export function DesignLookTab({ session, studio, index, onIndex, part, lead }: {
         <label className="flex flex-col gap-1.5 text-[13px] font-semibold">Help line shown with the documents
           <textarea className="input min-h-[64px] text-[13px] font-normal" maxLength={300} aria-label={`Help line for the ${KIND_NAME[kind]} documents`} placeholder={REF_NOTE} value={refs.note || ""} onChange={(e) => setRefNote(e.target.value)} />
           <span className="text-[11.5px] font-normal text-ink-500">Shown above the download links in the upload box. Empty: the standard line (shown greyed in the box). Saved with Save changes.</span></label>
+        <div className="flex flex-wrap items-center gap-2">
+          <button type="button" className="btn btn-sm" disabled={checking} onClick={() => void checkLive()}>{checking ? "Checking…" : "Check what visitors get"}</button>
+          {live && live.kind === kind && !live.bad.length && <span className="text-[12.5px] text-emerald-300">{live.ok.length ? `Visitors get your ${live.ok.join(", ")}.` : "Nothing of your own set for this type: visitors get the standard line and sheets."}</span>}
+        </div>
+        {live && live.kind === kind && live.bad.length > 0 && <div role="alert" className="rounded-xl border border-amber-400/40 bg-amber-500/10 px-3 py-2 text-[12.5px] text-amber-100">
+          {live.ok.length > 0 && <p className="mb-1">Visitors get your {live.ok.join(", ")}.</p>}
+          <ul className="list-disc pl-4">{live.bad.map((x) => <li key={x}>{x}</li>)}</ul></div>}
       </Block>
 
       <Block open={false} title={`Questions · ${KIND_NAME[kind]}`} note="The questions a visitor is asked: untick one to hide it, change its wording, or move it up or down with the arrows to change the order (the first question, the type of website, stays first). A question is also skipped when the visitor's PDF or link has already answered it. Press Save changes to store it in your Studio's database. If you hide the contact email question, the email address the visitor has already given at the start is used on their website.">

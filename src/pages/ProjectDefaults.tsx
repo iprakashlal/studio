@@ -2,11 +2,10 @@
 // Resend, WhatsApp & SMS, privacy policy, terms, cookie banner wording and payments. Content goes into each site's
 // content at its next publish or Push updates; connections stay encrypted on the Studio's database and are used by every
 // site on it that follows them. Each site's own admin page can switch a section off and keep its own.
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { TEMPLATES } from "../schema";
 import { Ctx, FieldView, type EditorCtx } from "../editor/fields";
-import { loadMergeBase } from "../lib/exporter";
-import { LEGAL_PH, PD_CONN, PD_KINDS, PD_SECTIONS, cleanPdefs, legalTemplate, ownsOf, pdCards, splitFields, pdSections, pdSeed, type PdId, type ProjectDefaults } from "../lib/projdefaults";
+import { LEGAL_PH, PD_CONN, PD_KINDS, PD_SECTIONS, cleanPdefs, legalTemplate, ownsOf, pdBase, pdCards, secOn, splitFields, pdSections, pdSeed, type PdId, type ProjectDefaults } from "../lib/projdefaults";
 import { clone } from "../lib/util";
 import type { Studio, StudioIndex } from "../lib/studio";
 import { MailForm, SmsForm, WhatsAppForm, useStudioWhere, type Where } from "./Connections";
@@ -28,18 +27,26 @@ export function ProjectDefaultsTab({ studio, index, onIndex, demo }: { studio: S
   useEffect(() => { setPd(clone(saved)); }, [saved]);
   useEffect(() => { if (!secs.includes(sec)) setSec(secs[0]); }, [kind]);
   const setKind = (k: string) => { setKind0(k); try { localStorage.setItem(KEY, k); } catch { /* private mode */ } };
-  const dirty = JSON.stringify(cleanPdefs(pd)) !== JSON.stringify(saved);
+  // Standard values shown for a section never saved don't count as a change until they are edited.
+  const seeded = useRef<Record<string, string>>({});
+  const unseeded = (d: ProjectDefaults) => { const c = cleanPdefs(d); for (const k of Object.keys(c)) for (const x of Object.keys(c[k])) { const e = (c[k] as any)[x]; if (e.v != null && seeded.current[k + "/" + x] === JSON.stringify(e.v)) delete e.v; if (!Object.keys(e).length) delete (c[k] as any)[x]; } for (const k of Object.keys(c)) if (!Object.keys(c[k]).length) delete c[k]; return c; };
+  const dirty = JSON.stringify(unseeded(pd)) !== JSON.stringify(saved);
   const studioW = useStudioWhere();
   const where: Where | null | undefined = studioW ? { ...studioW, pd: kind } : studioW;
 
   const K = (pd[kind] ||= {}), S = (K[sec] ||= {});
   const turn = async (on: boolean) => {
     S.on = on;
-    if (on && S.v == null && !PD_CONN[sec]) {
-      try { let base: any = {}; if (sec !== "privacy" && sec !== "terms") { base = await loadMergeBase(kind); TEMPLATES[kind]?.prepare?.(base); } S.v = pdSeed(kind, sec, base); } catch { S.v = {}; }
-    }
     setPd({ ...pd });
   };
+  // A section that is on (they all are until switched off) shows the template's standard values until the Studio saves its own.
+  const [seeding, setSeeding] = useState(false);
+  useEffect(() => {
+    if (!secOn(S) || S.v != null || (PD_CONN[sec] && sec !== "pay")) return;
+    let live = true; setSeeding(true);
+    (async () => { try { const v = pdSeed(kind, sec, sec === "privacy" || sec === "terms" ? {} : await pdBase(kind)); if (live && S.v == null) { S.v = v; seeded.current[kind + "/" + sec] = JSON.stringify(cleanPdefs({ [kind]: { [sec]: { v } } })[kind]?.[sec]?.v ?? null); bump(); } } catch { /* shown empty */ } finally { if (live) setSeeding(false); } })();
+    return () => { live = false; };
+  }, [kind, sec, S.on]);
   const save = async () => {
     setBusy(true);
     try {
@@ -49,7 +56,7 @@ export function ProjectDefaultsTab({ studio, index, onIndex, demo }: { studio: S
     } catch (e: any) { toast("Not saved: " + (e?.message || e), "bad"); }
     finally { setBusy(false); }
   };
-  const onCount = (k: string) => pdSections(k).filter((s) => pd[k]?.[s]?.on).length;
+  const onCount = (k: string) => pdSections(k).filter((s) => secOn(pd[k]?.[s])).length;
   const meta = PD_SECTIONS.find((s) => s.id === sec)!;
 
   return (
@@ -62,7 +69,7 @@ export function ProjectDefaultsTab({ studio, index, onIndex, demo }: { studio: S
       </div>
       <div className="grid gap-4 lg:grid-cols-[15rem_minmax(0,1fr)] lg:items-start">
         <nav className="card flex flex-row gap-1 overflow-x-auto p-2 lg:sticky lg:top-20 lg:flex-col" aria-label="Sections">
-          {secs.map((id) => { const on = !!pd[kind]?.[id]?.on, m = PD_SECTIONS.find((s) => s.id === id)!; return (
+          {secs.map((id) => { const on = secOn(pd[kind]?.[id]), m = PD_SECTIONS.find((s) => s.id === id)!; return (
             <button key={id} type="button" aria-current={sec === id ? "true" : undefined} onClick={() => setSec(id)}
               className={`flex flex-none items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[13.5px] font-semibold transition ${sec === id ? "bg-ink-800 text-ink-100" : "text-ink-300 hover:bg-ink-800/60"}`}>
               <span aria-hidden className={`h-2 w-2 flex-none rounded-full ${on ? "bg-emerald-400 shadow-[0_0_8px] shadow-emerald-400/60" : "bg-ink-600"}`} />
@@ -73,12 +80,12 @@ export function ProjectDefaultsTab({ studio, index, onIndex, demo }: { studio: S
           <div className="flex flex-wrap items-start gap-3">
             <div className="min-w-0 flex-1"><h3 className="text-[16px] font-extrabold">{meta.label} <span className="font-semibold text-ink-400">· {TYPE_NAME[kind]}</span></h3><p className="mt-0.5 text-sm text-ink-400">{meta.desc}</p></div>
           </div>
-          <Toggle id={`pd-${kind}-${sec}`} checked={!!S.on} onChange={turn} label={`Give this to every ${TYPE_NAME[kind]} project`} />
-          {S.on && <p className="-mt-2 text-[12.5px] text-ink-400">{sec === "mail" || sec === "msg"
+          <Toggle id={`pd-${kind}-${sec}`} checked={secOn(S)} onChange={turn} label={`Give this to every ${TYPE_NAME[kind]} project`} />
+          {secOn(S) && <p className="-mt-2 text-[12.5px] text-ink-400">{sec === "mail" || sec === "msg"
             ? `Every ${TYPE_NAME[kind]} site on the Studio's database that follows this section uses the account below instead of its own. A site's admin can switch it off and use its own.`
             : `At the next publish or Push updates this replaces that part of every ${TYPE_NAME[kind]} site, except where the site's admin switched it off.`}{sec === "pay" ? ` Gateway keys saved below are used by the ${TYPE_NAME[kind]} sites on the Studio's database that follow this section, so their payments go to those accounts: check them before you save.` : ""}</p>}
-          {!S.on ? <p className="rounded-lg border border-dashed border-ink-600 px-3 py-3 text-sm text-ink-400">Off: each site keeps its own {meta.label.toLowerCase()}.</p>
-            : <Body kind={kind} sec={sec} S={S} where={where} bump={bump} demo={demo} />}
+          {!secOn(S) ? <p className="rounded-lg border border-dashed border-ink-600 px-3 py-3 text-sm text-ink-400">Switched off: each site keeps its own {meta.label.toLowerCase()}.</p>
+            : S.v == null && !(PD_CONN[sec] && sec !== "pay") ? <p className="text-sm text-ink-400">{seeding ? "Loading the standard wording…" : "The standard wording could not be loaded. Reload the page to try again."}</p> : <Body kind={kind} sec={sec} S={S} where={where} bump={bump} demo={demo} />}
         </section>
       </div>
       <div className="sticky bottom-3 z-10 flex items-center gap-3 self-start rounded-xl border border-ink-600 bg-ink-900/95 px-3 py-2 shadow-xl backdrop-blur">

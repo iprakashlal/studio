@@ -9,7 +9,7 @@ import { EnquiryInboxDialog } from "./EnquiryInboxDialog";
 import { EnquiriesPanel, enquiriesCfg } from "../site-admin/EnquiriesPanel";
 import { CustomerPanel } from "../site-admin/CustomerPanel";
 import { SiteConnections } from "./Connections";
-import { applyDefaults } from "../lib/projdefaults";
+import { applyDefaults, pdReady } from "../lib/projdefaults";
 import { InventoryPanel } from "../site-admin/InventoryPanel";
 import { RecoveryPanel } from "../site-admin/RecoveryPanel";
 import { ReviewsPanel } from "../site-admin/ReviewsPanel";
@@ -77,6 +77,7 @@ export function ProjectView({ studio, index, project, session, onIndex }: { stud
         setOpenAt(1);
         const c = await studio.loadContent(project.id);
         setOpenAt(2);
+        await pdReady();
         if (live) { const d = merge(defaults.current, c || {}); applyDefaults(d, project.template); setDraft(d); }
         // Came from the card's client-feedback strip: open the review link's comments.
         try { if (live && sessionStorage.getItem("site-studio:open-approve") === project.id) { sessionStorage.removeItem("site-studio:open-approve"); setModal("approve"); } } catch { /* private mode */ }

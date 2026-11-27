@@ -126,6 +126,12 @@ export function pdSeed(kind: string, sec: PdId, base: any): any {
   if (sec === "privacy" || sec === "terms") return { text: legalTemplate(kind, sec) };
   const v: any = {};
   for (const p of pdPaths(kind, sec)) { const x = getP(base, p); if (x !== undefined) setP(v, p, clone(x)); }
+  if (sec === "footer") {
+    // The sample's own name and year become placeholders; a shop's footer line starts as the copyright line.
+    const nm = identity(base).name, gen = (t: string) => (nm ? t.split(nm).join("{name}") : t).replace(/\b20\d\d\b/g, "{year}");
+    for (const p of pdPaths(kind, sec)) { const x = getP(v, p); if (typeof x === "string") setP(v, p, gen(x)); }
+    if (kind === "store") setP(v, "footer.text", "© {year} {name}");
+  }
   return v;
 }
 
@@ -146,20 +152,41 @@ export function fillLegal(text: string, c: any): string {
 }
 
 // ---- the Studio's defaults, for the code that publishes (set by the Studio screen when its data loads)
-let current: ProjectDefaults = {};
+let current: ProjectDefaults = {}, ready: Promise<void> = Promise.resolve(), gen = 0;
 export const currentPdefs = () => current;
-export const setCurrentPdefs = (d: any) => { current = cleanPdefs(d); };
+/** Every section is on unless the Studio switched it off; a section with no values saved yet uses the template's standard ones. */
+export const secOn = (x: PdSec | undefined) => x?.on !== false;
+export const setCurrentPdefs = (d: any) => { const me = ++gen; const c = cleanPdefs(d); current = c; ready = withSeeds(c).then((f) => { if (me === gen) current = f; }).catch(() => {}); };
+/** Resolves once the standard values of the sections the Studio hasn't written yet are loaded (publishing waits for it). */
+export const pdReady = () => ready;
+const seedCache: Record<string, any> = {};
+/** The template's standard content (with what its editor prepares), for seeding. */
+export async function pdBase(kind: string): Promise<any> {
+  if (!seedCache[kind]) { const { loadMergeBase } = await import("./exporter"); const b = await loadMergeBase(kind); TEMPLATES[kind]?.prepare?.(b); seedCache[kind] = b; }
+  return clone(seedCache[kind]);
+}
+/** The defaults with every switched-on section given values (the template's standard ones where none were saved). */
+export async function withSeeds(d: ProjectDefaults): Promise<ProjectDefaults> {
+  const out: ProjectDefaults = clone(d);
+  for (const k of PD_KINDS) for (const s of pdSections(k)) {
+    if (PD_CONN[s] && s !== "pay") continue;
+    const x = ((out[k] ||= {})[s] ||= {});
+    if (!secOn(x) || x.v != null) continue;
+    x.v = pdSeed(k, s, s === "privacy" || s === "terms" ? {} : await pdBase(k));
+  }
+  return out;
+}
 export function cleanPdefs(d: any): ProjectDefaults {
   const out: ProjectDefaults = {};
   for (const k of PD_KINDS) {
     const K = d?.[k]; if (!K || typeof K !== "object") continue; const o: PdKind = {};
-    for (const s of pdSections(k)) { const x = K[s]; if (!x || typeof x !== "object") continue; o[s] = { ...(x.on ? { on: true } : {}), ...(x.v && typeof x.v === "object" ? { v: clone(x.v) } : {}) }; }
+    for (const s of pdSections(k)) { const x = K[s]; if (!x || typeof x !== "object") continue; o[s] = { ...(x.on === false ? { on: false } : {}), ...(x.v && typeof x.v === "object" ? { v: clone(x.v) } : {}) }; }
     if (Object.keys(o).length) out[k] = o;
   }
   return out;
 }
 /** The sections the Studio gives this website type. */
-export const pdOn = (kind: string, d: ProjectDefaults = current): PdId[] => pdSections(kind).filter((s) => d[kind]?.[s]?.on);
+export const pdOn = (kind: string, d: ProjectDefaults = current): PdId[] => pdSections(kind).filter((s) => secOn(d[kind]?.[s]));
 /** A short fingerprint of what this website type gets, kept in cms/site.json so Push updates can tell it changed. */
 export function pdVersion(kind: string, d: ProjectDefaults = current): string {
   const on = pdOn(kind, d); if (!on.length) return "";
@@ -190,7 +217,7 @@ export function applySection(c: any, sec: PdId): void {
     return;
   }
   const name = identity(c).name, year = String(new Date().getFullYear());
-  for (const p of pdPaths(kind, sec)) { let x = getP(v, p); if (sec === "footer" && typeof x === "string") { x = x.replace(/\{name\}/g, name); if (p.startsWith("contact.footer")) x = x.replace(/\{year\}/g, year); } if (x === undefined) { const at = p.split("."), last = at.pop()!, o = getP(c, at.join(".")); if (o && typeof o === "object") delete o[last]; } else setP(c, p, clone(x)); }
+  for (const p of pdPaths(kind, sec)) { let x = getP(v, p); if (sec === "footer" && typeof x === "string") { x = x.replace(/\{name\}/g, name); if (p !== "footer.legal") x = x.replace(/\{year\}/g, year); } if (x === undefined) { const at = p.split("."), last = at.pop()!, o = getP(c, at.join(".")); if (o && typeof o === "object") delete o[last]; } else setP(c, p, clone(x)); }
 }
 
 /** Puts the Studio's defaults for this website type into a site's content. Says whether anything changed. */

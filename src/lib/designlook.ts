@@ -62,6 +62,8 @@ export type DesignSettings = {
   qorder?: Record<string, string[]>;
   /** false: the site editor has no "Draw with AI" button (on unless turned off). */
   adminAi?: boolean;
+  /** false: no help tour on the Design yourself page (no Help button, nothing shown by itself). On unless turned off. */
+  help?: boolean;
   /** The yellow notice bar at the top of "Design yourself": hidden when on === false, own words in text. */
   notice?: { on?: boolean; text?: string };
   /** The questions Design yourself asks: per group ("basics" or a type), per question: hidden (h), own wording (t), own help line (p). */

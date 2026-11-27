@@ -19,6 +19,7 @@ import { LogoMaker } from "../ui/LogoMaker";
 import { designHost, otpCheck, otpSend, passLive, readPage, readPass, saveDraft, submitQuery, understandText, writePass, type DesignHost, type Pass } from "../lib/designapi";
 import { DOC_ACCEPT, DOC_KINDS, DOC_MAX_MB, fileDoc, pairPics, type DocPic } from "../lib/doctext";
 import { docFits } from "../lib/docfit";
+import { MiniTour, type MiniStep } from "../ui/MiniTour";
 import { SHEET_KIND, readSheet, sheetDocx, sheetTxt, sheetXlsx } from "../lib/detailsheet";
 import { oneLine, readDoc, rowsOf, textOf, type DocRead } from "../lib/docread";
 import { watchDevtools } from "../lib/devtools";
@@ -31,6 +32,27 @@ import type { Studio, StudioIndex } from "../lib/studio";
 const DRAFT = "site-studio:design-draft";
 type Draft = { a: Answers; copy: Copy | null; id: string; sent: boolean };
 const readDraft = (): Draft => { try { const d = JSON.parse(sessionStorage.getItem(DRAFT) || "{}"); return { a: d.a && typeof d.a === "object" ? d.a : {}, copy: d.copy || null, id: typeof d.id === "string" ? d.id : "", sent: !!d.sent }; } catch { return { a: {}, copy: null, id: "", sent: false }; } };
+
+// ---- Help: a short tour of the page, and one of the preview (shown by itself each time the finished preview opens).
+// Settings → Design yourself → "Help tour" turns both off.
+const helpOn = () => readDesignSettings().help !== false;
+const CHAT_HELP: MiniStep[] = [
+  { title: "Design your website in minutes", text: "Answer a few short questions and your website takes shape as you go. It's only a preview: nothing is published." },
+  { sel: '[data-tour="diy-answer"]', title: "Answer here", text: "Tap a choice or type your answer. Questions you can leave out have a Skip." },
+  { sel: 'section[aria-label="Start from a file or a link"]', title: "Or upload what you have", text: "A menu, brochure, catalogue or resume fills in most answers for you. No file yet? Download a details sheet, fill it in and upload it." },
+  { sel: '[aria-label^="Change your answer"]', title: "Change any answer", text: "Press Edit beside an answer to change it." },
+  { sel: '[data-tour="diy-progress"]', title: "Your progress", text: "How far along you are. Preview shows your website so far at any time." },
+  { sel: '[data-tour="diy-help"]', title: "Help is here", text: "Open this help again whenever you need it." },
+];
+const PREVIEW_HELP: MiniStep[] = [
+  { title: "Your preview is ready", text: "This is your website, made from your answers. Look around: it isn't published yet." },
+  { sel: '[data-tour="diy-themes"]', title: "Try other designs", text: "Use the arrows to switch between designs that suit you. Your words and pictures stay the same." },
+  { sel: '[role=dialog][aria-label="Your website preview"] [aria-label="Device size"]', title: "Phone, tablet or computer", text: "See how it looks on each screen." },
+  { sel: '[data-tour="diy-play"]', title: "Make it yours", text: "Change colours, layouts, fonts and effects, live." },
+  { sel: '[data-tour="diy-edit"]', title: "Change your answers", text: "Go back to the questions; the preview updates." },
+  { sel: '[data-tour="diy-connect"]', title: "Like it? Connect with us", text: "Send it to us and we'll build and publish your website." },
+];
+const HelpIcon = () => <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><circle cx="12" cy="12" r="9.5" /><path d="M9.3 9.2a2.8 2.8 0 0 1 5.4 1c0 1.9-2.7 2.5-2.7 4" /><path d="M12 17.3h.01" /></svg>;
 
 const KIND_SAY: Record<string, string> = { portfolio: "a personal website", store: "an online shop", business: "a business website", restaurant: "a restaurant website", events: "an event website" };
 /** What kind of website a few free words describe (null when unclear). */
@@ -303,6 +325,9 @@ function DesignPageInner({ studio, index, onIndex }: { studio?: Studio; index?: 
   useEffect(() => { const f = () => setSetsVer((v) => v + 1); addEventListener("studio:design-page", f); return () => removeEventListener("studio:design-page", f); }, []);
   const [writing, setWriting] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
+  // The page's help: by itself once per visit (when it is on), and from the Help button.
+  const [help, setHelp] = useState(false);
+  useEffect(() => { if (!helpOn()) return; try { if (sessionStorage.getItem("diy-help-seen")) return; } catch { /* private mode */ } const t = setTimeout(() => { setHelp(true); try { sessionStorage.setItem("diy-help-seen", "1"); } catch { /* private mode */ } }, 1200); return () => clearTimeout(t); }, []);
   const [editId, setEditId] = useState<string | null>(null);
   const [connect, setConnect] = useState(false), [connectFrom, setConnectFrom] = useState<DOMRect | null>(null);
   const openConnect = (r?: DOMRect) => { setConnectFrom(r || null); setConnect(true); };
@@ -686,9 +711,10 @@ function DesignPageInner({ studio, index, onIndex }: { studio?: Studio; index?: 
         </div>
         {showSteps && <DiySteps a={a} cur={cur} finished={finished} />}
         <span className="diy-hr ml-auto flex shrink-0 items-center gap-2">
-          {cur && chatStarted && !needMail && <span className="mr-1 text-xs tabular-nums text-ink-500" aria-label={`Step ${Math.min(answered.length + 1, total)} of ${total}`}>{Math.min(answered.length + 1, total)} / {total}</span>}
+          {cur && chatStarted && !needMail && <span data-tour="diy-progress" className="mr-1 text-xs tabular-nums text-ink-500" aria-label={`Step ${Math.min(answered.length + 1, total)} of ${total}`}>{Math.min(answered.length + 1, total)} / {total}</span>}
           {design && a.name && <button type="button" className="btn btn-sm" onClick={() => setShowPreview(true)}>{word("previewBtn")}</button>}
           {chatStarted && <button type="button" className="btn btn-ghost btn-sm" onClick={restart}>{word("restartBtn")}</button>}
+          {helpOn() && <button type="button" data-tour="diy-help" className="btn btn-ghost btn-sm gap-1" onClick={() => setHelp(true)}><HelpIcon />Help</button>}
         </span>
         <div className="absolute inset-x-0 bottom-0 h-0.5 bg-ink-900" role="progressbar" aria-label="Progress" aria-valuemin={0} aria-valuemax={total} aria-valuenow={answered.length}><div className="h-full bg-brand-500 transition-all duration-500" style={{ width: `${chatStarted && !needMail ? Math.round((answered.length / total) * 100) : 0}%` }} /></div>
       </header>
@@ -725,7 +751,7 @@ function DesignPageInner({ studio, index, onIndex }: { studio?: Studio; index?: 
           <div ref={endRef} />
         </div>
         {!needMail && cur && (
-          <div className="sticky bottom-0 -mx-3 border-t border-ink-800 bg-ink-950/95 px-3 pb-4 pt-4 backdrop-blur sm:-mx-6 sm:px-6">
+          <div data-tour="diy-answer" className="sticky bottom-0 -mx-3 border-t border-ink-800 bg-ink-950/95 px-3 pb-4 pt-4 backdrop-blur sm:-mx-6 sm:px-6">
             <div className="diy-col mx-auto flex max-h-[62vh] max-w-5xl flex-col gap-4 overflow-y-auto px-0.5 py-0.5">
               {!chatStarted ? <>{chips(cur)}
                 <div className="flex items-center gap-3 text-[11px] uppercase tracking-wide text-ink-500"><span className="h-px flex-1 bg-ink-800" />{word("typeOwn")}<span className="h-px flex-1 bg-ink-800" /></div>{bar}</> : cur.id === "how" ? <>
@@ -759,6 +785,7 @@ function DesignPageInner({ studio, index, onIndex }: { studio?: Studio; index?: 
       </main>
       <StudioPageLinksHere where="design" />
 
+      {help && !showPreview && <MiniTour label="Help" steps={CHAT_HELP} onEnd={() => setHelp(false)} />}
       {showPreview && design && <PreviewPopup design={design} ver={ver} a={a} build={(id) => buildDesign({ ...a, theme: id }, copy, files)} onClose={() => setShowPreview(false)} onEditLink={(id) => { setShowPreview(false); if (cur && id === cur.id && !(id in a)) { /* the question being asked now: answer it in the box above, nothing is filled in or skipped */ window.scrollTo({ top: 0, behavior: "smooth" }); setTimeout(() => field.current?.focus(), 150); return; } if (!(id in a)) setA((o) => ({ ...o, [id]: "" })); const st = STEPS.find((x) => x.id === id); setTimeout(() => { if (st) startEdit(st); }, 60); }} onEdit={() => { setShowPreview(false); setTimeout(() => endRef.current?.scrollIntoView({ block: "end", behavior: "smooth" }), 80); }} onConnect={openConnect} done={ready} onTweak={ready ? tweak : undefined} />}
       {warn && (
         <div role="alertdialog" aria-modal="true" aria-label="Developer tools detected" className="fixed inset-0 z-[100] grid place-items-center bg-black/85 p-4">
@@ -843,6 +870,9 @@ export function PreviewPopup({ design, ver, a, onClose, onEdit, onEditLink, onCo
     const k = (e: KeyboardEvent) => { if ((e.target as HTMLElement)?.closest?.("input,textarea,select")) return; if (e.key === "ArrowRight") go(at + 1); else if (e.key === "ArrowLeft") go(at - 1); };
     addEventListener("keydown", k); return () => removeEventListener("keydown", k);
   }, [flow, at, list]);
+  // The preview's help: by itself every time the finished preview opens (when help is on), and from its Help button.
+  const [help, setHelp] = useState(false);
+  useEffect(() => { if (!done || !helpOn()) return; const t = setTimeout(() => setHelp(true), 1500); return () => clearTimeout(t); }, [done]);
   useEffect(() => {
     const k = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     addEventListener("keydown", k); const o = document.body.style.overflow; document.body.style.overflow = "hidden";
@@ -855,8 +885,9 @@ export function PreviewPopup({ design, ver, a, onClose, onEdit, onEditLink, onCo
         <b className="min-w-0 truncate text-sm">{a.name || "Your website"}</b>
         <span className="chip shrink-0 border-amber-400/50 text-amber-200 max-sm:hidden">{done ? "Preview · not published" : "Preview so far"}</span>
         <span className="ml-auto flex shrink-0 items-center gap-2">
-          {onTweak && <button type="button" className={`btn btn-sm play-btn !border-0 ${play ? "ring-2 ring-white/70" : ""}`} aria-pressed={play} onClick={() => setPlay((v) => !v)}><span className="max-sm:hidden">Play with your design</span><span className="sm:hidden">Customise</span></button>}
-          {onEdit && <button type="button" className="btn btn-sm" onClick={onEdit}>Edit answers</button>}
+          {onTweak && <button type="button" data-tour="diy-play" className={`btn btn-sm play-btn !border-0 ${play ? "ring-2 ring-white/70" : ""}`} aria-pressed={play} onClick={() => setPlay((v) => !v)}><span className="max-sm:hidden">Play with your design</span><span className="sm:hidden">Customise</span></button>}
+          {onEdit && <button type="button" data-tour="diy-edit" className="btn btn-sm" onClick={onEdit}>Edit answers</button>}
+          {helpOn() && <button type="button" data-tour="diy-help" className="btn btn-ghost btn-sm gap-1" onClick={() => setHelp(true)}><HelpIcon /><span className="max-sm:hidden">Help</span></button>}
           <button type="button" className="btn btn-sm" onClick={onClose} autoFocus>{done ? "Close" : "Back"}</button>
         </span>
       </div>
@@ -875,21 +906,22 @@ export function PreviewPopup({ design, ver, a, onClose, onEdit, onEditLink, onCo
                   </div>
                 );
               })}
-              {onConnect && <button type="button" onClick={(e) => onConnect(e.currentTarget.getBoundingClientRect())} className="btn btn-pri absolute bottom-6 left-1/2 z-[5] -translate-x-1/2 whitespace-nowrap rounded-full px-10 py-4 text-base font-extrabold shadow-2xl shadow-black/50 ring-4 ring-brand-400/25">{word("connectBtn")}</button>}
+              {onConnect && <button type="button" data-tour="diy-connect" onClick={(e) => onConnect(e.currentTarget.getBoundingClientRect())} className="btn btn-pri absolute bottom-6 left-1/2 z-[5] -translate-x-1/2 whitespace-nowrap rounded-full px-10 py-4 text-base font-extrabold shadow-2xl shadow-black/50 ring-4 ring-brand-400/25">{word("connectBtn")}</button>}
             </div>
-            <div className="flex flex-none items-center justify-center gap-3 border-t border-ink-700 bg-ink-900 px-3 py-2 text-[13px]">
+            <div data-tour="diy-themes" className="flex flex-none items-center justify-center gap-3 border-t border-ink-700 bg-ink-900 px-3 py-2 text-[13px]">
               <button type="button" className="btn btn-sm" aria-label="Previous theme" disabled={at === 0} onClick={() => go(at - 1)}>‹</button>
               <span className="flex min-w-0 items-center gap-2"><b className="truncate">{list[at]?.name}</b><span className="font-mono text-ink-400">{list[at] ? themeCode(list[at]) : ""}</span><span className="rounded border border-ink-600 px-1.5 py-px text-[11px] text-ink-300">{list[at]?.dark ? "Dark" : "Light"}</span><span className="text-ink-500">{at + 1} of {list.length}</span></span>
               <button type="button" className="btn btn-sm" aria-label="Next theme" disabled={at >= list.length - 1} onClick={() => go(at + 1)}>›</button>
             </div>
           </>) : (
             <div className="relative flex min-h-0 flex-1 flex-col"><Preview key={design.kind} tpl={TEMPLATES[design.kind]} base={`templates/${design.kind}/`} content={design.content} version={ver} assets={{}} editable={false} hidePages onEditLink={onEditLink} hints={hints} />
-              {onConnect && <button type="button" onClick={(e) => onConnect(e.currentTarget.getBoundingClientRect())} className="btn btn-pri absolute bottom-6 left-1/2 z-[5] -translate-x-1/2 whitespace-nowrap rounded-full px-10 py-4 text-base font-extrabold shadow-2xl shadow-black/50 ring-4 ring-brand-400/25">{word("connectBtn")}</button>}
+              {onConnect && <button type="button" data-tour="diy-connect" onClick={(e) => onConnect(e.currentTarget.getBoundingClientRect())} className="btn btn-pri absolute bottom-6 left-1/2 z-[5] -translate-x-1/2 whitespace-nowrap rounded-full px-10 py-4 text-base font-extrabold shadow-2xl shadow-black/50 ring-4 ring-brand-400/25">{word("connectBtn")}</button>}
             </div>
           )}
         </div>
         {play && onTweak && <Tweaks a={a} design={design} onTweak={onTweak} onClose={() => setPlay(false)} />}
       </div>
+      {help && <MiniTour label="Help" steps={PREVIEW_HELP} onEnd={() => setHelp(false)} />}
     </div>
   );
 }

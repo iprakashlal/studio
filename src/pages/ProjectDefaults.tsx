@@ -46,7 +46,7 @@ export function ProjectDefaultsTab({ studio, index, onIndex, demo }: { studio: S
     let live = true; setSeeding(true);
     (async () => { try { const v = pdSeed(kind, sec, sec === "privacy" || sec === "terms" ? {} : await pdBase(kind)); if (live && S.v == null) { S.v = v; seeded.current[kind + "/" + sec] = JSON.stringify(cleanPdefs({ [kind]: { [sec]: { v } } })[kind]?.[sec]?.v ?? null); bump(); } } catch { /* shown empty */ } finally { if (live) setSeeding(false); } })();
     return () => { live = false; };
-  }, [kind, sec, S.on]);
+  }, [kind, sec, S.on, pd]);
   const save = async () => {
     setBusy(true);
     try {

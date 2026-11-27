@@ -78,6 +78,7 @@ export function fieldPaths(fields: Field[] | undefined, out: string[] = [], conn
     if (x.t === "grid" || x.t === "when") { if (x.t === "when" && x.path) out.push(x.path); fieldPaths(x.fields, out, conns); }
     else if (x.t === "connection") conns?.push(x.kind);
     else if (x.t === "legalPages") out.push("@legal");
+    else if (x.t === "mailtpl") out.push(`emails.${x.kind}.tpl`);
     else if (x.path) out.push(x.path);
   }
   return out;
@@ -89,7 +90,7 @@ export function pdPaths(kind: string, sec: PdId): string[] {
 }
 
 /** A field's own path(s), without what is inside a "when" (that is judged field by field). */
-function ownPaths(f: any): string[] { return f?.t === "grid" ? fieldPaths(f.fields) : f?.t === "when" ? [f.path] : f?.t === "legalPages" ? ["@legal"] : f?.t === "connection" ? ["@conn:" + f.kind] : f?.path ? [f.path] : []; }
+function ownPaths(f: any): string[] { return f?.t === "grid" ? fieldPaths(f.fields) : f?.t === "when" ? [f.path] : f?.t === "legalPages" ? ["@legal"] : f?.t === "connection" ? ["@conn:" + f.kind] : f?.t === "mailtpl" ? [`emails.${f.kind}.tpl`] : f?.path ? [f.path] : []; }
 /** Splits fields into those a set of paths owns and the rest, keeping their order; grids and "when" blocks are split inside. */
 export function splitFields(fields: Field[], owns: (path: string) => boolean): { f: Field; own: boolean }[] {
   const out: { f: Field; own: boolean }[] = [];

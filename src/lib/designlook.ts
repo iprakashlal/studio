@@ -66,10 +66,30 @@ export type DesignSettings = {
   notice?: { on?: boolean; text?: string };
   /** The questions Design yourself asks: per group ("basics" or a type), per question: hidden (h), own wording (t), own help line (p). */
   questions?: Record<string, Record<string, { h?: boolean; t?: string; p?: string }>>;
+  /** Per type: the owner's own details sheets (the file names kept; the files are in the Studio's data at refDocPath) and the help line shown with them. */
+  refs?: Partial<Record<Kind, RefDocs>>;
   /** Per type, per layout / style / interaction / intro choice. */
   look?: Partial<Record<Kind, Record<string, LookRule>>>;
 };
 
+/** A type's reference documents: the original name of each file uploaded (none = the Studio's own sheet is offered), the help line, and when they last changed. */
+export type RefDocs = { txt?: string; docx?: string; xlsx?: string; note?: string; v?: number };
+export const REF_EXT = ["txt", "xlsx", "docx"] as const;
+export type RefExt = (typeof REF_EXT)[number];
+export const REF_NAME: Record<RefExt, string> = { txt: "Text (.txt)", xlsx: "Excel (.xlsx)", docx: "Word (.docx)" };
+export const REF_NOTE = "Nothing ready yet? Download a details sheet, fill it in (* = must) and upload it here:";
+export const refDocPath = (k: Kind, ext: RefExt) => `studio-assets/diy-docs/${k}.${ext}`;
+export function cleanRefs(x: any): DesignSettings["refs"] {
+  if (!x || typeof x !== "object") return undefined; const o: any = {};
+  for (const k of KINDS) {
+    const r = x[k]; if (!r || typeof r !== "object") continue; const c: RefDocs = {};
+    for (const e of REF_EXT) if (typeof r[e] === "string" && r[e].trim()) c[e] = r[e].replace(/[<>"\\/]/g, "").trim().slice(0, 100);
+    if (typeof r.note === "string" && r.note.trim()) c.note = r.note.replace(/[<>]/g, "").trim().slice(0, 300);
+    if (Number.isFinite(+r.v) && +r.v > 0) c.v = Math.round(+r.v);
+    if (c.txt || c.docx || c.xlsx || c.note) o[k] = c;
+  }
+  return Object.keys(o).length ? o : undefined;
+}
 export type Group = "Layout" | "Style" | "Interactions" | "Intro screen";
 export const GROUPS: Group[] = ["Layout", "Style", "Interactions", "Intro screen"];
 const AX = (a: Axis, forAnswer: string, group: Group = "Layout"): [Axis, string, Group] => [a, forAnswer, group];

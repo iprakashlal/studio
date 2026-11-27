@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 /** The words written for a design (by the Studio's AI engine or the Picaffectz system): a summary for each topic the person gave. */
 export type Copy = { tagline?: string; hero_text?: string; about_text?: string; services_text?: string; work_text?: string; cta_text?: string; items?: { name: string; text: string }[]; faq?: { q: string; a: string }[] };
 export type DesignRec = { id: string; name: string; kind: string; themeId: string; themeName: string; answers: Record<string, string>; createdAt: string; summary?: string; copy?: Copy; /** A small logo (data URL), when one was added. */ logo?: string };
-import { cleanAi, cleanDomain, cleanGallery, cleanLook, cleanThemes, type DesignSettings } from "./designlook";
+import { cleanAi, cleanDomain, cleanGallery, cleanLook, cleanRefs, cleanThemes, type DesignSettings } from "./designlook";
 import { cleanDiyLook } from "./diylook";
 export type { DesignSettings };
 
@@ -26,6 +26,7 @@ export function cleanDesignSettings(x: any): DesignSettings {
   const ai = cleanAi(x.ai); if (ai) o.ai = ai;
   const dm = cleanDomain(x.domain); if (dm) o.domain = dm;
   const ga = cleanGallery(x.gallery); if (ga) o.gallery = ga;
+  const rf = cleanRefs(x.refs); if (rf) o.refs = rf;
   const th = cleanThemes(x.themes); if (Object.keys(th).length) o.themes = th;
   if (x.images && typeof x.images === "object") { const im: NonNullable<DesignSettings["images"]> = {}; if (x.images.on === true) im.on = true; if (["photo", "illustration", "3d", "flat"].includes(x.images.style)) im.style = x.images.style; if (x.images.source === "engine" || x.images.source === "unsplash") im.source = x.images.source; if (Object.keys(im).length) o.images = im; }
   if (x.adminAi === false) o.adminAi = false;

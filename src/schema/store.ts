@@ -14,7 +14,7 @@ const g3 = (...fields: Field[]): Field => ({ t: "grid", cols: 3, fields });
 const schema: Category[] = [
   {
     id: "look", label: "Theme & layout", group: "Design", desc: `Choose from ${THEMES.length} themes, then fine-tune the layout, elements and animation.`,
-    cards: [...themeCards([STORE_AXES.grid, STORE_AXES.product], "“Stacked” puts the hero text over a full-width image. Visitors who ask their device for reduced motion always get a still page."), accountLookCard("store")],
+    cards: [...withSticker(themeCards([STORE_AXES.grid, STORE_AXES.product], "“Stacked” puts the hero text over a full-width image. Visitors who ask their device for reduced motion always get a still page.")), accountLookCard("store")],
   },
   {
     id: "theme", label: "Brand & theme", group: "Design", desc: "Store name, logo, colours, fonts and the announcement bar.",
@@ -341,3 +341,7 @@ export const storeTemplate: TemplateDef = {
     return [...w, ...legalChecks("store", c)];
   },
 };
+
+/** A shop's products without a photo show a stand-in picture with the element pack's sticker: this lets the owner hide the sticker. */
+function withSticker<T extends { title: string; fields: any[] }>(cards: T[]): T[] { return cards.map((c) => (c.title === "Element pack" ? { ...c, fields: [...c.fields, { t: "toggle", path: "theme.noSticker", label: "Hide the sticker on product pictures that stand in for a missing photo" }] } : c)); }
+

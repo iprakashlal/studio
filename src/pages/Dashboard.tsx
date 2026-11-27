@@ -20,6 +20,12 @@ import { SandIntro } from "../ui/SandIntro";
 import { PayNote } from "./PayNote";
 import { loadHostConfig } from "../lib/studiohost";
 import { rvSummary, type RvSummary } from "../lib/approvals";
+import { DOC_ACCEPT, DOC_KINDS, DOC_MAX_MB, fileDoc, pairPics } from "../lib/doctext";
+import { checkDoc, docText, type ProjectDoc } from "../lib/projectdoc";
+import { fillFromDoc } from "../lib/docfill";
+import { sheetDocx, sheetTxt, sheetXlsx, SHEET_KIND } from "../lib/detailsheet";
+import { readDesignSettings } from "../lib/designs";
+import { REF_EXT, REF_NAME, type Kind as LookKind, type RefExt } from "../lib/designlook";
 
 const STATUS: Record<ProjectMeta["status"], { label: string; cls: string }> = {
   draft: { label: "Draft", cls: "border-ink-500 text-ink-300" },
@@ -325,6 +331,26 @@ function NewProject({ studio, index, onClose, onCreated, templates }: { studio: 
   const [f, setF] = useState({ name: "", client: "", template: templates[0]?.id || "portfolio", starter: "default", theme: "", category: index.categories[0]?.id || "" });
   const [man, setMan] = useState<Record<string, Manifest>>({});
   const [busy, setBusy] = useState(false);
+  // Optional: the owner's own file (a menu, brochure, resume or details sheet) fills the new site, checked against the template chosen.
+  const [pdoc, setPdoc] = useState<ProjectDoc | null>(null), [reading, setReading] = useState(false), [readErr, setReadErr] = useState("");
+  const check = useMemo(() => (pdoc ? checkDoc(f.template, pdoc) : null), [pdoc, f.template]);
+  // The project takes the name the file gives, unless one was typed.
+  useEffect(() => { const n = check?.ok ? check.rd.fields.name : ""; if (n) setF((x) => (x.name.trim() ? x : { ...x, name: n.slice(0, 60) })); }, [check]);
+  const readFile = async (file: File | undefined) => {
+    if (!file) return; setReadErr(""); setPdoc(null); setReading(true);
+    try {
+      const doc = await fileDoc(file), text = docText(doc);
+      if (text.trim().length < 30) throw new Error("We couldn't find any text in that file (a scanned PDF has none). Try another one.");
+      setPdoc({ name: file.name.slice(0, 100), doc, text });
+    } catch (e: any) { setReadErr(e?.message || "Couldn't read that file."); }
+    setReading(false);
+  };
+  const getSheet = async (ext: RefExt) => {
+    const k = f.template as LookKind, own = readDesignSettings().refs?.[k]?.[ext], ownBlob = own ? await studio.refDocBlob(k, ext) : null;
+    const blob = ownBlob || (ext === "txt" ? new Blob([sheetTxt(k)], { type: "text/plain" }) : ext === "xlsx" ? await sheetXlsx(k) : await sheetDocx(k));
+    const u = URL.createObjectURL(blob), l = document.createElement("a"); l.href = u; l.download = ownBlob ? own! : `${(SHEET_KIND[k] || "Website").replace(/é/g, "e").replace(/[^A-Za-z]+/g, "-").replace(/-$/, "")}-website-details.${ext}`; document.body.appendChild(l); l.click(); l.remove(); setTimeout(() => URL.revokeObjectURL(u), 4000);
+    if (own && !ownBlob) toast(`Your own ${REF_NAME[ext]} sheet couldn't be read, so this is the Studio's standard one.`, "bad");
+  };
   // The themes this Studio may use for the chosen type (a client Studio's partner can narrow them): a new site starts on one of them.
   const pool = TEMPLATES[f.template].themes || THEMES, offered = limitThemes(pool, undefined, f.template);
   useEffect(() => { if (offered.length && offered.length < pool.length && !offered.some((t) => t.id === f.theme)) setF((x) => ({ ...x, theme: offered[0].id })); }, [f.template, f.theme, offered.length]);
@@ -334,6 +360,7 @@ function NewProject({ studio, index, onClose, onCreated, templates }: { studio: 
   }, [f.template]);
   const create = async () => {
     if (!f.name.trim()) return toast("Give the project a name.", "bad");
+    if (check && !check.ok) return toast("Your file doesn't fit this template: choose another file, another template, or remove the file.", "bad");
     setBusy(true);
     try {
       let content = await loadStarter(f.template, f.starter);
@@ -342,7 +369,19 @@ function NewProject({ studio, index, onClose, onCreated, templates }: { studio: 
       // An event theme belongs to a kind of event: the project starts with that kind's sample page (a wedding, a marathon…) instead of the conference.
       { const ev = (th as any)?.evt; if (f.template === "events" && ev?.type) { tpl.prepare?.(content); content = eventSample(content, ev.type, ev.regKind); } }
       if (th) content.theme = { ...(content.theme || {}), ...tpl.themeValues(th) };
-      const { index: i, id } = await studio.createProject({ name: f.name.trim(), template: f.template, category: f.category, client: f.client.trim(), content, summary: tpl.summary(content) });
+      let { index: i, id } = await studio.createProject({ name: f.name.trim(), template: f.template, category: f.category, client: f.client.trim(), content, summary: tpl.summary(content) });
+      // From the owner's file: its pictures are saved with the project, then its words, prices and pictures go into the site.
+      if (pdoc && check?.ok) {
+        try {
+          const rd = check.rd, { per, rest } = pairPics(rd.items, pdoc.doc.pics);
+          const keep = async (u: string, n: number): Promise<{ path: string } | { url: string } | null> => { if (!u) return null; if (!u.startsWith("data:")) return { url: u }; const b = await (await fetch(u)).blob(); return studio.uploadAsset(id, new File([b], `document-${n + 1}.jpg`, { type: b.type || "image/jpeg" })); };
+          const pics: ({ path: string } | { url: string } | null)[] = []; for (let k = 0; k < rd.items.length; k++) pics.push(await keep(per[k] || rd.items[k].img || "", k).catch(() => null));
+          const top = rest[0] ? await keep(rest[0], 900).catch(() => null) : pics.find(Boolean) || null;
+          const out = fillFromDoc(f.template, content, rd, pics, top, check.sheet ? "" : pdoc.text);
+          i = await studio.saveContent(id, out.content, tpl.summary(out.content));
+          toast(out.did.length ? `Created and filled in from ${pdoc.name}: ${out.did.join(", ")}.` : `Created. Nothing in ${pdoc.name} matched a part of this kind of website.`, out.did.length ? undefined : "bad");
+        } catch (e) { toast(`The project was created, but filling it from your file failed: ${explain(e)}`, "bad"); }
+      }
       onCreated(i, id);
     } catch (e) {
       toast(explain(e), "bad");
@@ -350,7 +389,7 @@ function NewProject({ studio, index, onClose, onCreated, templates }: { studio: 
     }
   };
   return (
-    <Modal title="New project" xl onClose={onClose} footer={<><span className="mr-auto self-center text-[12.5px] text-ink-400 max-sm:hidden">{TEMPLATES[f.template].name}{f.theme ? ` · ${themeById(f.theme)?.name || ""}` : " · its own look"}</span><button className="btn" onClick={onClose}>Cancel</button><button className="btn btn-pri" disabled={busy} onClick={create}>{busy ? "Creating…" : "Create project"}</button></>}>
+    <Modal title="New project" xl onClose={onClose} footer={<><span className="mr-auto self-center text-[12.5px] text-ink-400 max-sm:hidden">{TEMPLATES[f.template].name}{f.theme ? ` · ${themeById(f.theme)?.name || ""}` : " · its own look"}{check?.ok && pdoc ? ` · from ${pdoc.name}` : ""}</span><button className="btn" onClick={onClose}>Cancel</button><button className="btn btn-pri" disabled={busy || reading} onClick={create}>{busy ? (pdoc && check?.ok ? "Creating and filling…" : "Creating…") : "Create project"}</button></>}>
       {/* Wide screens: the details and the template on the left, the themes filling the right (each side scrolls by itself, if at all). */}
       <div className="grid min-h-0 flex-1 lg:grid-cols-[minmax(360px,5fr)_7fr]">
         <div className="scroll-thin flex min-h-0 flex-col gap-4 overflow-y-auto border-ink-700 px-5 py-4 lg:border-r">
@@ -365,11 +404,11 @@ function NewProject({ studio, index, onClose, onCreated, templates }: { studio: 
                 const on = f.template === t.id;
                 return (
                   <button key={t.id} type="button" role="radio" aria-checked={on} onClick={() => pick(t.id)} title={`${t.description}\n${t.pages.length} page${t.pages.length > 1 ? "s" : ""}: ${t.pages.map((p) => p.label).join(", ")}`}
-                    className={`group flex items-start gap-3 rounded-xl border px-3.5 py-2.5 text-left transition ${on ? "border-brand-500 bg-brand-500/10 shadow-[0_0_0_3px_rgb(var(--brand-500,91_124_255)/.15)]" : "border-ink-700 bg-ink-950/60 hover:border-ink-500 hover:bg-ink-900"}`}>
+                    className={`group flex items-start gap-3 rounded-xl border px-3.5 py-2 text-left transition ${on ? "border-brand-500 bg-brand-500/10 shadow-[0_0_0_3px_rgb(var(--brand-500,91_124_255)/.15)]" : "border-ink-700 bg-ink-950/60 hover:border-ink-500 hover:bg-ink-900"}`}>
                     <span aria-hidden className={`mt-1 grid h-4 w-4 flex-none place-items-center rounded-full border-2 ${on ? "border-brand-400" : "border-ink-500"}`}>{on && <span className="h-1.5 w-1.5 rounded-full bg-brand-400" />}</span>
                     <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                       <span className="flex flex-wrap items-center gap-x-2 gap-y-1"><b className="text-[14.5px] leading-snug">{t.name}</b><span className="chip py-0 text-[11px]">{t.kind}</span><span className="ml-auto text-[11px] text-ink-500">{t.pages.length} page{t.pages.length > 1 ? "s" : ""}</span></span>
-                      <span className={`text-[12.5px] leading-snug text-ink-300 ${on ? "" : "line-clamp-1"}`}>{t.description}</span>
+                      <span className={`text-[12.5px] leading-snug text-ink-300 ${on ? "line-clamp-2" : "line-clamp-1"}`}>{t.description}</span>
                       {on && <span className="text-[11.5px] text-ink-500">{t.pages.map((p) => p.label).join(" · ")}</span>}
                     </span>
                   </button>
@@ -392,6 +431,21 @@ function NewProject({ studio, index, onClose, onCreated, templates }: { studio: 
               </select>
             </Field>
           </div>
+          {/* Optional: start from the owner's own file, read and checked the same way as on Design yourself. */}
+          <section aria-label="Start from your file" className="flex flex-col gap-2 rounded-xl border border-dashed border-ink-600 bg-ink-950/40 p-3"
+            onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); void readFile(e.dataTransfer.files?.[0]); }}>
+            <span className="flex flex-wrap items-center gap-2"><b className="text-[13.5px]">Start from your file</b><span className="chip py-0 text-[11px]">optional</span>
+              <span className="text-[12px] leading-snug text-ink-400">{DOC_KINDS}, up to {DOC_MAX_MB} MB. It fills the site, and must fit the template.</span></span>
+            <div className="flex flex-wrap items-center gap-2">
+              <label className={`btn btn-sm btn-pri ${reading || busy ? "pointer-events-none opacity-60" : ""}`}>{reading ? "Reading…" : pdoc ? "Choose another file" : "Upload a file"}
+                <input type="file" className="sr-only" accept={DOC_ACCEPT} aria-label="Upload a file to start the project from" onChange={(e) => { const x = e.target.files?.[0]; e.target.value = ""; void readFile(x); }} /></label>
+              {pdoc ? <><span className="min-w-0 truncate text-[12.5px] text-ink-200">{pdoc.name}</span><button type="button" className="btn btn-ghost btn-sm" onClick={() => { setPdoc(null); setReadErr(""); }}>Remove</button></>
+                : <span className="text-[12px] text-ink-400">Details sheet: {REF_EXT.map((k, n) => <span key={k}>{n ? " · " : ""}<button type="button" className="font-semibold text-brand-300 hover:underline" title={`The ${TEMPLATES[f.template].name} details sheet, to fill in and upload here`} onClick={() => void getSheet(k)}>{REF_NAME[k]}</button></span>)}</span>}
+            </div>
+            {readErr && <p role="alert" className="rounded-lg border border-red-400/40 bg-red-500/10 px-3 py-2 text-[12.5px] text-red-200">{readErr}</p>}
+            {check && !check.ok && <p role="alert" className="rounded-lg border border-red-400/40 bg-red-500/10 px-3 py-2 text-[12.5px] text-red-200">{check.why}</p>}
+            {check && check.ok && <p className="rounded-lg border border-emerald-400/30 bg-emerald-500/10 px-3 py-2 text-[12.5px] text-emerald-100">{check.sheet ? "Details sheet read. " : ""}Found: {check.found.join(", ") || "a few details"}{pdoc && pdoc.doc.pics.length ? `, ${pdoc.doc.pics.length} picture${pdoc.doc.pics.length > 1 ? "s" : ""}` : ""}. It fills the site when you press Create project.{check.unclear.length ? ` Not understood, so left out: ${check.unclear.join("; ")}.` : ""}</p>}
+          </section>
         </div>
         <div className="flex min-h-0 flex-col gap-2 px-5 py-4 max-lg:border-t max-lg:border-ink-700">
           <span className="label flex flex-wrap items-center justify-between gap-2">Theme · {offered.length}

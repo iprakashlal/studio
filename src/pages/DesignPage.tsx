@@ -365,8 +365,8 @@ function DesignPageInner({ studio, index, onIndex }: { studio?: Studio; index?: 
         const o = s.options?.(n) || [], said = ` ${n.name || ""} ${n.about || ""} ${n.doctext || ""} `.toLowerCase();
         const times = (x: { label: string }) => { const l = x.label.toLowerCase().replace(/s$/, "").replace(/é/g, "e"); return l.length >= 4 ? said.replace(/é/g, "e").split(l).length - 1 : 0; };
         const named = o.filter((x) => times(x) > 0).sort((x, y) => times(y) - times(x) || y.label.length - x.label.length)[0];
-        // The look is the person's to choose when they began by choosing the kind of website; so is the type, unless their document names it.
-        if (expressRef.current === "look" && (["colour", "style"].includes(s.id) || (["btype", "ptype", "etype"].includes(s.id) && !named))) break;
+        // When they began by choosing the kind of website, the type of business, the theme type and the look are theirs to choose.
+        if (expressRef.current === "look" && ["colour", "style", "btype", "ptype", "etype", "genre"].includes(s.id)) break;
         const pick = o.find((x) => /surprise/i.test(x.label)) || named || o.find((x) => /something else|^other|^any\b/i.test(x.label)) || o[0];
         if (!pick) break; n[s.id] = pick.v;
       }
@@ -492,7 +492,7 @@ function DesignPageInner({ studio, index, onIndex }: { studio?: Studio; index?: 
       });
     }
     const found = [...got.map((x) => (STEP_LABEL[x] || x).toLowerCase()), ...secs.filter((x) => !got.includes(x))];
-    toast(kind && expressRef.current === "look" ? `Read it${found.length ? `: found ${found.join(", ")}` : ""}. Just choose your look and your preview opens.` : kind ? `Read it${found.length ? `: found ${found.join(", ")}` : ""}. Making ${KIND_SAY[kind] || "a website"}; you can change any answer.` : found.length ? `Found ${found.join(", ")}. You can change any answer.` : "Read it. It will help us write your text.");
+    toast(kind && expressRef.current === "look" ? `Read it${found.length ? `: found ${found.join(", ")}` : ""}. Just choose your type and look, and your preview opens.` : kind ? `Read it${found.length ? `: found ${found.join(", ")}` : ""}. Making ${KIND_SAY[kind] || "a website"}; you can change any answer.` : found.length ? `Found ${found.join(", ")}. You can change any answer.` : "Read it. It will help us write your text.");
     // The Studio's AI (when it is the chosen engine) reads it more closely: what it finds replaces the rule-based guesses, never what the person typed.
     if (host && text.length >= 30) void understandText(host, a0.kind || "", text).then((u) => {
       const f = u.fields; if (!f || u.engine === "system") return;

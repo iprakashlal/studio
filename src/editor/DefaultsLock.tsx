@@ -14,11 +14,19 @@ export function DefaultsLock({ root, secs, onChange, children, site, quiet }: { 
   const body = typeof children === "function" ? children(use) : use ? <fieldset disabled className="flex min-w-0 flex-col gap-4 opacity-60" aria-label={`${names}: set by the Studio`}>{children}</fieldset> : children;
   const flip = (v: boolean) => { for (const s of mine) setFollow(root, s, v); if (v) for (const s of mine) applySection(root, s); onChange(); };
   if (quiet) return <div className="flex min-w-0 flex-col gap-4" data-defaults-quiet={mine.join(" ")}>{body}</div>;
+  // The site's own admin page: only the Studio decides, so no switch here. What the Studio sets is shown locked with a
+  // line saying so; a section the Studio let this site keep is simply its own.
+  if (site) return use ? (
+    <div className="flex flex-col gap-3" data-defaults-site={mine.join(" ")}>
+      <p className="flex items-center gap-2 rounded-lg border border-ink-700 bg-ink-900/60 px-3 py-2 text-[12.5px] text-ink-400"><span aria-hidden>🔒</span>{names}: set by your website's provider for every site of this type. Ask them if you need it changed.</p>
+      {body}
+    </div>
+  ) : <>{body}</>;
   return (
     <div className="flex flex-col gap-4" data-defaults={mine.join(" ")}>
       <div className={`flex flex-col gap-1.5 rounded-xl border p-2 ${use ? "border-brand-400/40 bg-brand-500/10" : "border-ink-700"}`}>
         <Toggle id={id} checked={use} onChange={flip} label={`Use the Studio's default · ${names}`} />
-        <span className="px-1 text-[12.5px] text-ink-400">{use ? `Set by ${site ? "your Studio" : "Settings → Project defaults"} for every site of this type. Switch off to edit ${site ? "your" : "this site's"} own.` : `This site uses its own. Switch on to go back to the Studio's default (it replaces what is here).`}</span>
+        <span className="px-1 text-[12.5px] text-ink-400">{use ? "Set by Settings → Project defaults for every site of this type, and locked in the site's own admin page. Switch off to let this site have its own." : `This site uses its own, and its admin page can edit it. Switch on to go back to the Studio's default (it replaces what is here).`}</span>
       </div>
       {body}
     </div>

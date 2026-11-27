@@ -19,6 +19,7 @@ import { LogoMaker } from "../ui/LogoMaker";
 import { designHost, otpCheck, otpSend, passLive, readPage, readPass, saveDraft, submitQuery, understandText, writePass, type DesignHost, type Pass } from "../lib/designapi";
 import { DOC_ACCEPT, DOC_KINDS, DOC_MAX_MB, fileDoc, pairPics, type DocPic } from "../lib/doctext";
 import { docFits } from "../lib/docfit";
+import { SHEET_KIND, readSheet, sheetDocx, sheetTxt, sheetXlsx } from "../lib/detailsheet";
 import { oneLine, readDoc, rowsOf, textOf, type DocRead } from "../lib/docread";
 import { watchDevtools } from "../lib/devtools";
 import type { Studio, StudioIndex } from "../lib/studio";
@@ -486,6 +487,11 @@ function DesignPageInner({ studio, index, onIndex }: { studio?: Studio; index?: 
   };
   /** A link pasted for the starting point: the Studio's database reads the page; if it can't, the link goes to the team. */
   /** At "upload or enter manually": the file or link is read for the kind of website already chosen. */
+  /** The details sheet for the kind of website chosen, to fill in and upload. */
+  const getSheet = async (as: "txt" | "xlsx" | "docx") => {
+    const k = a.kind || "business", blob = as === "txt" ? new Blob([sheetTxt(k)], { type: "text/plain" }) : as === "xlsx" ? await sheetXlsx(k) : await sheetDocx(k);
+    const u = URL.createObjectURL(blob), l = document.createElement("a"); l.href = u; l.download = `${(SHEET_KIND[k] || "Website").replace(/é/g, "e").replace(/[^A-Za-z]+/g, "-").replace(/-$/, "")}-website-details.${as}`; document.body.appendChild(l); l.click(); l.remove(); setTimeout(() => URL.revokeObjectURL(u), 4000);
+  };
   const fromFile = (f: File | undefined) => { if (f) void choose(stepOf("doc", a), f); };
   const fromLink = () => { if (qlink.trim()) void readLink(qlink).then(() => setQlink("")); };
   const readLink = async (raw: string) => {
@@ -512,6 +518,16 @@ function DesignPageInner({ studio, index, onIndex }: { studio?: Studio; index?: 
         setReading(true); setDocErr("");
         const doc = await fileDoc(f), text = textOf(doc.rows).slice(0, 12000);
         if (text.length < 30) throw new Error("We couldn't find any text in that file (a scanned PDF has none). Try another one, or skip.");
+        // A details sheet (the Studio's own "Label: answer" file for this kind of website) is read answer by answer.
+        const sheet = readSheet(a.kind || "", doc.rows.map((r) => r.cells));
+        if (sheet.labels >= 4) {
+          if (sheet.missing.length) throw new Error(`Your details sheet is missing ${sheet.missing.length === 1 ? "an answer that" : "answers that"} must be filled in (marked *): ${sheet.missing.join("; ")}. Fill ${sheet.missing.length === 1 ? "it" : "them"} in and upload the file again.`);
+          const ans = { ...sheet.answers }, n = Object.keys(ans).filter((x) => x !== "kind").length; if (a.kind === "restaurant" && ans.items) ans.menuhow = "type";
+          setExpress("look"); setA((o) => fastForward({ ...o, how: "file", doc: f.name.slice(0, 100), ...ans, docfrom: Object.keys(ans).filter((x) => x !== "kind").join(",") }));
+          toast(`Read your details sheet: ${n} ${n === 1 ? "answer" : "answers"} filled in. Just choose your type and look, and your preview opens.`);
+          if (sheet.unclear.length) toast(`Not understood, so left out: ${sheet.unclear.join("; ")}. You can set ${sheet.unclear.length === 1 ? "it" : "them"} with Edit answers.`, "bad");
+          setReading(false); if (pick.current) pick.current.value = ""; return;
+        }
         const rd = readDoc(doc.rows);
         // The document has to be about the kind of website chosen: one of the things that kind shows must be in it.
         const fit = docFits(a.kind || "", textOf(doc.rows), rd);
@@ -719,6 +735,8 @@ function DesignPageInner({ studio, index, onIndex }: { studio?: Studio; index?: 
                       <button type="button" className="btn btn-pri shrink-0 px-5" disabled={reading || !qlink.trim()} onClick={() => fromLink()}>Read my site</button>
                     </div>
                   </div>
+                  <p className="text-[13px] text-ink-400">Nothing ready yet? Download the {SHEET_KIND[a.kind || ""] || "website"} details sheet, fill it in (* = must) and upload it here:{" "}
+                    {([["txt", "Text (.txt)"], ["xlsx", "Excel (.xlsx)"], ["docx", "Word (.docx)"]] as ["txt" | "xlsx" | "docx", string][]).map(([k, l], i) => <span key={k}>{i ? " · " : ""}<button type="button" className="font-semibold text-brand-400 underline-offset-2 hover:underline" onClick={() => void getSheet(k)}>{l}</button></span>)}</p>
                   {docErr && <p role="alert" className="rounded-xl border border-red-400/40 bg-red-500/10 px-3 py-2 text-[13px] text-red-200">{docErr}</p>}
                 </section>
                 <div className="flex items-center gap-3 text-[11px] uppercase tracking-wide text-ink-500"><span className="h-px flex-1 bg-ink-800" />or<span className="h-px flex-1 bg-ink-800" /></div>

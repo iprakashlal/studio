@@ -122,11 +122,25 @@ export function ownsOf(kind: string, secs: PdId[], catId?: string): (p: string) 
   return (p) => set.has(p);
 }
 
+/** The standard wording of each email box (shown in grey when empty), written into the boxes, so the Studio's default
+ *  shows and sends real words. Says whether anything was filled in. */
+export function fillStandard(kind: string, v: any): boolean {
+  let n = 0;
+  const walk = (fields: Field[] | undefined) => { for (const f of fields || []) { const x = f as any; if (!x) continue;
+    if (x.t === "grid" || x.t === "when") { walk(x.fields); continue; }
+    if ((x.t !== "text" && x.t !== "textarea") || !x.path || String(getP(v, x.path) ?? "").trim()) continue;
+    const std = typeof x.ph === "string" && x.ph.trim() ? x.ph : /^Standard:\s*/.test(String(x.hint || "")) ? String(x.hint).replace(/^Standard:\s*/, "").replace(/\s+\/\s+/g, "\n").replace(/\.$/, (m: string) => m) : "";
+    if (std) { setP(v, x.path, x.path === "emails.signin.intro" ? "Enter this code to sign in to {site}:" : std); n++; }
+  } };
+  for (const c of pdCards(kind, "emails")) walk(c.fields);
+  return n > 0;
+}
 /** What the Studio's Settings show first when a section is switched on: the template's own standard values. */
 export function pdSeed(kind: string, sec: PdId, base: any): any {
   if (sec === "privacy" || sec === "terms") return { text: legalTemplate(kind, sec) };
   const v: any = {};
   for (const p of pdPaths(kind, sec)) { const x = getP(base, p); if (x !== undefined) setP(v, p, clone(x)); }
+  if (sec === "emails") fillStandard(kind, v);
   if (sec === "footer") {
     // The sample's own name and year become placeholders; a shop's footer line starts as the copyright line.
     const nm = identity(base).name, gen = (t: string) => (nm ? t.split(nm).join("{name}") : t).replace(/\b20\d\d\b/g, "{year}");
@@ -172,6 +186,7 @@ export async function withSeeds(d: ProjectDefaults): Promise<ProjectDefaults> {
   for (const k of PD_KINDS) for (const s of pdSections(k)) {
     if (PD_CONN[s] && s !== "pay") continue;
     const x = ((out[k] ||= {})[s] ||= {});
+    if (secOn(x) && x.v != null && s === "emails") fillStandard(k, x.v);
     if (!secOn(x) || x.v != null) continue;
     x.v = pdSeed(k, s, s === "privacy" || s === "terms" ? {} : await pdBase(k));
   }

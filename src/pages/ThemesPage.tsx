@@ -8,6 +8,7 @@ import { REST_TAGS, REST_THEMES, restaurantThemeValues } from "../themes/restaur
 import { EVT_GROUPS, EVT_THEMES, EVT_TYPES, eventThemeValues, type EvtTheme } from "../themes/events";
 import { eventSample } from "../lib/eventcopy";
 import { limitThemes } from "../themes/limit";
+import { withoutReserved } from "../lib/designer";
 import { ThemeSwatch } from "../themes/ThemeGallery";
 import { themeCode } from "../themes/codes";
 import { TEMPLATES } from "../schema";
@@ -29,7 +30,7 @@ const family = (k: Kind) => (k === "business" || k === "restaurant" || k === "ev
 const familyOf = (t: Theme) => (t.id.startsWith("biz-") ? "business" : t.id.startsWith("rest-") ? "restaurant" : t.id.startsWith("evt-") ? "events" : "shared");
 const KINDS: { id: Kind; label: string }[] = [{ id: "portfolio", label: "Personal portfolio" }, { id: "store", label: "Shop" }, { id: "business", label: "Business portfolio" }, { id: "restaurant", label: "Restaurant & café" }, { id: "events", label: "Event" }];
 /** Business sites have their own themes; personal portfolios and shops share the rest. */
-const poolOf = (k: Kind): Theme[] => limitThemes(k === "business" ? BIZ_THEMES : k === "restaurant" ? REST_THEMES : k === "events" ? EVT_THEMES : THEMES, undefined, k);
+const poolOf = (k: Kind): Theme[] => withoutReserved(limitThemes(k === "business" ? BIZ_THEMES : k === "restaurant" ? REST_THEMES : k === "events" ? EVT_THEMES : THEMES, undefined, k));
 const ALL: Theme[] = [...THEMES, ...BIZ_THEMES, ...REST_THEMES, ...EVT_THEMES];
 const LS = "site-studio:theme-shortlist";
 

@@ -1453,6 +1453,7 @@ function dqDesignPub(d: any) {
     if (g.tags === false) o.tags = false;
     if (tx(g.title, 80)) o.title = tx(g.title, 80);
     if (tx(g.intro, 400)) o.intro = tx(g.intro, 400);
+    if (Array.isArray(g.reserved)) { const l = [...new Set(g.reserved.filter((v: any) => typeof v === "string" && /^[\w-]{1,60}$/.test(v)))].slice(0, 3000); if (l.length) o.reserved = l; }   // reserved themes: hidden from visitors
     if (Object.keys(o).length) out.gallery = o;
   }
   if (d.themes && typeof d.themes === "object") { const th: any = {}; for (const kind of ["business", "restaurant", "portfolio", "store", "events"]) if (Array.isArray(d.themes[kind])) th[kind] = d.themes[kind].filter((v: any) => typeof v === "string" && /^[A-Za-z0-9_-]{1,40}$/.test(v)).slice(0, 400); out.themes = th; }

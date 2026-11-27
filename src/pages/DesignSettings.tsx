@@ -1,4 +1,5 @@
 import { themeCode } from "../themes/codes";
+import { ReservedThemes } from "./ReservedThemes";
 import { useEffect, useMemo, useState } from "react";
 import { pushPref, savePrefNow } from "../lib/prefs";
 import { cleanDesignSettings, readDesignSettings, writeDesignSettings, type DesignSettings } from "../lib/designs";
@@ -131,6 +132,9 @@ export function ThemesSettingsTab({ session, studio, index, onIndex }: { session
           {KINDS.map((k) => <label key={k} className="flex items-center gap-2 text-[13px]"><input type="checkbox" checked={types.includes(k)} onChange={(e) => toggleType(k, e.target.checked)} />{KIND_NAME[k]}</label>)}
         </div>
         <Toggle id="gal-tags" label="Show the tag filters (Dark, Warm, Bold…)" checked={g.tags !== false} onChange={(v) => set({ tags: v ? undefined : false })} />
+      </Block>
+      <Block title="Reserved themes" note="Keep themes for your own projects: a reserved theme is hidden from the public gallery and from Design yourself. Projects that use it keep it, and you can still pick it in the Studio. Type theme IDs, or switch themes off in the list; the two stay in step.">
+        <ReservedThemes studio={studio} index={index} saved={g.reserved || []} onSave={(ids) => set({ reserved: ids.length ? ids : undefined })} />
       </Block>
       <p className="text-[13px] text-ink-400">Theme IDs (like T-07, B-12 or R-005) show on every theme card. They also appear on each Design yourself submission, so you know which look a visitor chose. <a className="underline" href="#/themes">Open the gallery</a></p>
     </div>

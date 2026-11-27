@@ -20,6 +20,8 @@ export type Gallery = {
   domain?: string;
   /** The text of the Studio's link to it (default "Themes"). */
   link?: string;
+  /** Reserved themes (their ids): kept for the Studio's own projects, hidden from the public gallery and from Design yourself. */
+  reserved?: string[];
   /** The count line: "found" = "12 of 48 themes" (default), "total" = "48 themes", "off" = none. */
   count?: "found" | "total" | "off";
   /** The types of site shown (none listed = all four). */
@@ -153,6 +155,7 @@ export function cleanGallery(x: any): Gallery | undefined {
   if (x.tags === false) o.tags = false;
   if (t(x.title, 80)) o.title = t(x.title, 80);
   if (t(x.intro, 400)) o.intro = t(x.intro, 400);
+  if (Array.isArray(x.reserved)) { const l = [...new Set(x.reserved.filter((v: any) => typeof v === "string" && /^[\w-]{1,60}$/.test(v)))].slice(0, 3000) as string[]; if (l.length) o.reserved = l; }
   return Object.keys(o).length ? o : undefined;
 }
 export const cleanAi = (v: unknown): DesignSettings["ai"] => (v === "cloudflare" || v === "system" || v === "custom" ? v : undefined);

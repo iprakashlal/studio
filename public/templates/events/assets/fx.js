@@ -757,6 +757,7 @@
   // A link given for a section's background video: a YouTube or Vimeo address (shown as a silent background player) or a video file's address.
   function vlink(u) { u = String(u || "").trim(); if (!u) return ""; if (/(?:youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|shorts\/|live\/)|youtu\.be\/)([\w-]{11})/i.test(u) || /vimeo\.com\/(?:video\/)?(\d{6,12})/i.test(u) || /^https:\/\//i.test(u) || !/^[a-z][a-z0-9+.-]*:/i.test(u)) return u; return ""; }
   var SBG_CSS = ".has-sbg{isolation:isolate}.has-sbg[data-sbg-c]{background:var(--sbg)!important}" +
+    ".sbg img,.sbg video{object-position:var(--sbp,50% 50%)}.sbg-still{position:absolute;left:0;top:0;width:100%;will-change:transform}.sbg-still>i{position:absolute;inset:0}" +
     ".fx-sbg-hide{display:none!important}.has-sbg[data-sbg-nobefore]::before,.has-sbg[data-sbg-noafter]::after{display:none!important}" +
     ".sbg{position:absolute;inset:0;z-index:-1;overflow:hidden;pointer-events:none;border-radius:inherit}" +
     ".sbg img,.sbg video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}.sbg i{position:absolute;inset:0}" +
@@ -822,6 +823,17 @@
       var full = cs.top === "0px" && cs.left === "0px" && (cs.right === "0px" || parseFloat(cs.width) >= R.width * 0.7) && (cs.bottom === "0px" || parseFloat(cs.height) >= R.height * 0.6);
       if ((cs.position === "absolute" || cs.position === "fixed") && full) el.setAttribute("data-sbg-no" + p, "");
     });
+  }
+  /** A background that stays still while the page scrolls past it (like a window onto it): its picture, slides, video
+   *  or pattern is held at the screen's top while the section moves, cut to the section's shape. */
+  var stills = [], stillOn = false;
+  function stillPlace() { stills = stills.filter(function (b) { return b.box.isConnected; }); stills.forEach(function (b) { var r = b.box.getBoundingClientRect(); b.in.style.transform = "translate3d(0," + (-r.top) + "px,0)"; b.in.style.height = innerHeight + "px"; }); }
+  function stillBg(box) {
+    var inn = document.createElement("div"); inn.className = "sbg-still";
+    while (box.firstChild) inn.appendChild(box.firstChild);
+    box.appendChild(inn); box.setAttribute("data-still", ""); stills.push({ box: box, in: inn });
+    if (!stillOn) { stillOn = true; var q = false, go = function () { if (q) return; q = true; requestAnimationFrame(function () { q = false; stillPlace(); }); }; addEventListener("scroll", go, { passive: true }); addEventListener("resize", go); }
+    stillPlace();
   }
   var COLOR_OK = /^(#[0-9a-f]{3,8}|rgba?\([0-9., %]+\))$/i;
   /** A section's own font, text colour and text style. */
@@ -1411,9 +1423,13 @@
           pr.src = look;
         }
       }
+      // Where the picture or video sits in the section (what stays in view when it is cropped).
+      var POS = { center: "50% 50%", top: "50% 0%", bottom: "50% 100%", left: "0% 50%", right: "100% 50%", "top-left": "0% 0%", "top-right": "100% 0%", "bottom-left": "0% 100%", "bottom-right": "100% 100%" };
+      if (POS[k.pos]) box.style.setProperty("--sbp", POS[k.pos]);
       el.insertBefore(box, el.firstChild); if (box.__ctl) el.appendChild(box.__ctl);
       if (kind === "anim") box.__ab = animMount(box, k.anim, { speed: k.animSpeed, strength: k.animStrength, bg: col });
       else if (kind === "pattern") { var pt = document.createElement("i"); pt.setAttribute("data-pattern", k.pattern); pt.style.background = patternCss(k.pattern, animCols(box, col)); box.insertBefore(pt, box.firstChild); }
+      if (k.fixed && kind !== "anim" && !RM) { try { stillBg(box); } catch (e) { /* it scrolls with the section */ } }
     });
   }
   // ---- Legal & privacy (content.legal, content.privacy)

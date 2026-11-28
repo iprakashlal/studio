@@ -3,8 +3,10 @@
 // public/templates/restaurant/assets/rest.css. No two themes share the same mix of hero layout, picture frame, menu
 // bar, menu style, background, section edge, ornament and gallery.
 import { type Axis, type Theme, FX_KEYS, onColor, DISPLAY_FONTS, BODY_FONTS } from "./catalog";
+import { LOOK_AXIS, LOOK_TAGS, lookOk, lookTheme } from "./looks";
 
 export const REST_AXES: Record<string, Axis> = {
+  look: LOOK_AXIS,
   layout: { key: "layout", label: "Hero layout", options: [["split", "Words left, picture right"], ["center", "Centred, picture below"], ["editorial", "Big headline, wide picture"], ["panel", "Dark panel"], ["full", "Full-width photo behind the words"], ["poster", "Poster: dark block, centred words"], ["framed", "Photo in a frame, words on a card"], ["side", "Half words, half photo to the edge"], ["collage", "Three-photo collage"], ["pile", "Words on top, wide picture below"], ["flip", "Picture left, words right"], ["overlap", "Words on a card over the photo"], ["colour", "Solid colour band"], ["aurora", "Aurora glow, centred"], ["typeonly", "Big type only"], ["centretype", "Big type only, centred"], ["cinema", "Wide picture first, words below in two columns"], ["tall", "Tall picture, rounded"], ["boxed", "Hero in a soft box"]] },
   heroArt: { key: "heroArt", label: "Picture frame", options: [["default", "Plain"], ["frame", "Thin frame"], ["offset", "Offset shadow"], ["arch", "Arch"], ["circle", "Circle"], ["blob", "Soft blob"], ["tilt", "Tilted print"], ["stamp", "Scalloped edge"], ["round", "Extra-round corners"], ["polaroid", "Instant photo"], ["double", "Double frame"], ["cut", "Cut corners"], ["leaf", "Leaf"], ["glow", "Accent glow"], ["layers", "Stacked sheets"], ["window", "Browser window"], ["hex", "Hexagon"], ["coupon", "Dashed border"]] },
   nav: { key: "nav", label: "Menu bar", options: [["bar", "Clean bar"], ["float", "Floating panel"], ["line", "Underlined bar"], ["dark", "Dark bar"], ["center", "Links in the centre"], ["stack", "Name on top, links below"], ["split", "Links left, name in the centre"], ["pills", "Pill links"], ["glass", "Frosted glass"], ["raised", "Raised bar with shadow"], ["topline", "Accent line on top"], ["caps", "Small capitals"], ["accent", "Accent-colour bar"], ["boxed", "Boxed links"], ["island", "Links in a floating island"], ["tabs", "Tabs"], ["dots", "Dot under the link"]] },
@@ -22,7 +24,7 @@ export const REST_AXES: Record<string, Axis> = {
   width: { key: "width", label: "Page width", options: [["normal", "Standard"], ["wide", "Wide"], ["narrow", "Narrow"], ["xwide", "Extra wide"], ["full", "Full, edge to edge"]] },
 };
 
-export const REST_TAGS = ["Classic", "Modern", "Light", "Dark", "Fine dining", "Café", "Bistro", "Bakery", "Bar", "Grill", "Seafood", "Indian", "Italian", "Asian", "Vegan", "Street food", "Dessert", "Family", "Warm", "Fresh", "Bold", "Minimal", "Luxury", "Rustic", "Brewery", "Cloud kitchen", "Picaffectz"];
+export const REST_TAGS = ["Classic", "Modern", "Light", "Dark", "Fine dining", "Café", "Bistro", "Bakery", "Bar", "Grill", "Seafood", "Indian", "Italian", "Asian", "Vegan", "Street food", "Dessert", "Family", "Warm", "Fresh", "Bold", "Minimal", "Luxury", "Rustic", "Brewery", "Cloud kitchen", "Picaffectz", ...LOOK_TAGS];
 /** Headline fonts the restaurant site can load (the shared list plus a few made for menus and signs). */
 export const REST_DISPLAY_FONTS = [...DISPLAY_FONTS, ...["Marcellus", "Cinzel", "Abril Fatface", "Yeseva One", "Prata", "Italiana", "Philosopher", "Bodoni Moda", "Spectral", "Alfa Slab One", "Righteous", "Caveat", "Jost", "Raleway", "Quicksand"].filter((f) => !DISPLAY_FONTS.includes(f))];
 export const REST_BODY_FONTS = [...BODY_FONTS, ...["Mulish", "Jost", "Raleway", "Quicksand", "Spectral"].filter((f) => !BODY_FONTS.includes(f))];
@@ -215,7 +217,7 @@ const lumHex = (h: string) => {
 const NO_FX = Object.fromEntries(FX_KEYS.map((k) => [k, "none"])) as Theme["fx"];
 
 export type RestTheme = Theme & { rest: { bands: string; menuStyle: string; divider: string; ornament: string; gallery: string } };
-export const REST_THEMES: RestTheme[] = ROWS.map(([slug, name, tags, cols, display, body, radius, style, blurb, extra]) => {
+const REST_BASE: RestTheme[] = ROWS.map(([slug, name, tags, cols, display, body, radius, style, blurb, extra]) => {
   const c = cols.split(" "), s = style.split(" ");
   if (c.length !== 9 || s.length !== 15) throw new Error("Bad restaurant theme row: " + slug);
   const [layout, nav, cards, buttons, heading, shead, pattern, bands, heroArt, motionStyle, width, menuStyle, divider, ornament, gallery] = s;
@@ -233,6 +235,15 @@ export const REST_THEMES: RestTheme[] = ROWS.map(([slug, name, tags, cols, displ
   };
 });
 
+/** A Neumorphism and a Spatial UI theme for every kind of place, built on that kind's first theme. They come last, so the
+ *  existing codes (R-xxx) never move. */
+const REST_KINDS = ["Fine dining", "Café", "Bistro", "Bakery", "Bar", "Grill", "Seafood", "Indian", "Italian", "Asian", "Vegan", "Street food", "Dessert", "Family", "Brewery", "Cloud kitchen"];
+const kslug = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+export const REST_THEMES: RestTheme[] = [...REST_BASE, ...REST_KINDS.flatMap((kind) => {
+  const base = REST_BASE.find((t) => t.tags.includes(kind)) || REST_BASE[0];
+  return (["neu", "spatial"] as const).map((l) => lookTheme(base, l, `rest-${l}-${kslug(kind)}`, `${kind} · ${l === "neu" ? "Neumorphism" : "Spatial UI"}`, [kind], l === "spatial" ? true : base.dark));
+})];
+
 /** Stable IDs for restaurant themes: R-001 … in the order above. Add new themes at the end only. */
 export const REST_CODES: Record<string, string> = Object.fromEntries(REST_THEMES.map((t, i) => [t.id, "R-" + String(i + 1).padStart(3, "0")]));
 export const isRestTheme = (id: string) => id.startsWith("rest-");
@@ -246,7 +257,7 @@ export function restaurantThemeValues(t: Theme): Record<string, unknown> {
   return {
     bg: c.bg, surface: c.surface, deep: c.deep, text: c.text, soft: c.soft, line: c.line, c1: c.c1, c2: c.c2, c3: c.c3,
     fontDisplay: t.display, fontBody: t.body, radius: t.radius, preset: t.id,
-    layout: ok("layout", s.layout, "split"), heroArt: ok("heroArt", s.heroArt, "default"), nav: ok("nav", s.nav, "bar"),
+    look: lookOk(t.look), layout: ok("layout", s.layout, "split"), heroArt: ok("heroArt", s.heroArt, "default"), nav: ok("nav", s.nav, "bar"),
     cards: ok("cards", s.cards, "outline"), buttons: ok("buttons", s.buttons, "rounded"), heading: ok("heading", s.heading, "normal"), shead: ok("shead", s.shead, "label"),
     pattern: ok("pattern", s.pattern, "none"), bands: ok("bands", r?.bands, "soft"), menuStyle: ok("menuStyle", r?.menuStyle, "classic"), divider: ok("divider", r?.divider, "none"),
     ornament: ok("ornament", r?.ornament, "none"), gallery: ok("gallery", r?.gallery, "grid"),

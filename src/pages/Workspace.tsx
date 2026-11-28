@@ -370,7 +370,7 @@ const SET_INDEX: [tab: string, title: string, words: string, find?: string][] = 
   ["general", "Design yourself page", "diy show hide themes page submissions", "Design yourself"],
   ["general", "Dashboard numbers", "stats counts projects published"],
   ["general", "Account and sign-in", "login password username sign out session device token", "Sign"],
-  ["customize", "Studio name & logo", "brand colours colors layout glass classic soft sharp dark light icon animation", "Studio name"],
+  ["customize", "Studio name & logo", "brand colours colors layout glass classic soft sharp neumorphism spatial dark light icon animation", "Studio name"],
   ["pdefs", "“Powered by” badge", "badge footer credit studio"],
   ["pdefs", "Additional pages", "studio pages public about terms privacy"],
   ["login", "Sign-in email", "email template code mail"],

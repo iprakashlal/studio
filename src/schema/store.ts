@@ -14,7 +14,7 @@ const g3 = (...fields: Field[]): Field => ({ t: "grid", cols: 3, fields });
 const schema: Category[] = [
   {
     id: "look", label: "Theme & layout", group: "Design", desc: `Choose from ${THEMES.length} themes, then fine-tune the layout, elements and animation.`,
-    cards: [...withSticker(themeCards([STORE_AXES.grid, STORE_AXES.product], "“Stacked” puts the hero text over a full-width image. Visitors who ask their device for reduced motion always get a still page.")), accountLookCard("store")],
+    cards: [...withSticker(themeCards([STORE_AXES.look, STORE_AXES.grid, STORE_AXES.product], "“Stacked” puts the hero text over a full-width image. Visitors who ask their device for reduced motion always get a still page.")), accountLookCard("store")],
   },
   {
     id: "theme", label: "Brand & theme", group: "Design", desc: "Store name, logo, colours, fonts and the announcement bar.",
@@ -276,7 +276,7 @@ const schema: Category[] = [
   codeCategory(),
 ];
 { const k = schema.find((c) => c.id === "pricing"); if (k) k.cards.push(loyaltyCard("store")); }
-themeOnly(schema, [["home.hero.image", "layout", ["minimal"]], ["home.hero.video", "layout", ["minimal"]], ["home.hero.image", "heroArt", ["none"]], ["home.hero.video", "heroArt", ["none"]]]);
+themeOnly(schema, [["theme.buttons", "look", ["neu", "spatial"]], ["theme.nav", "look", ["neu", "spatial"]], ["theme.pattern", "look", ["spatial"]], ["home.hero.image", "layout", ["minimal"]], ["home.hero.video", "layout", ["minimal"]], ["home.hero.image", "heroArt", ["none"]], ["home.hero.video", "heroArt", ["none"]]]);
 withSectionBg(schema, { wall: [["wall", "Background & text of the social wall"]], home: [["hero", "Background & text: hero"], ["featured", "Background & text: featured products"], ["categories", "Background & text: categories"], ["banner", "Background & text: banner"], ["reviews", "Background & text: customer reviews"]], contact: [["footer", "Background & text: footer"]] }, [...FONTS_D, ...FONTS_B]);
 
 /** Defaults for settings added after a shop was made. */

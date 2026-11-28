@@ -173,6 +173,55 @@
 :root[data-layout="sharp"] .input { padding: .5rem .7rem; font-size: 14px; }
 :root[data-layout="sharp"] .chip { border-radius: .3rem; }
 :root[data-layout="sharp"] .label { letter-spacing: .1em; }
+/* Neumorphism: every panel is cut from the same soft surface and lifted out of it (a light edge on top-left, a shade on
+   bottom-right); fields and pressed buttons sink into it. No borders: depth alone separates things. */
+:root[data-layout="neu"] { --neu-bg: rgb(var(--ink-900, 15 20 29)); --neu-hi: rgb(255 255 255 / .055); --neu-lo: rgb(0 0 0 / .55); }
+:root[data-layout="neu"][data-ui="light"] { --neu-bg: rgb(var(--ink-800, 237 241 246)); --neu-hi: rgb(255 255 255 / .95); --neu-lo: rgb(var(--ink-600, 198 207 219) / .85); }
+:root[data-layout="neu"], :root[data-layout="neu"] body { background: var(--neu-bg); }
+:root[data-layout="neu"] .card, :root[data-layout="neu"] aside, :root[data-layout="neu"] header { background-color: var(--neu-bg); border-color: transparent; box-shadow: 9px 9px 20px var(--neu-lo), -7px -7px 18px var(--neu-hi); }
+:root[data-layout="neu"] .card { border-radius: 1.6rem; }
+:root[data-layout="neu"] .card .card { box-shadow: inset 5px 5px 12px var(--neu-lo), inset -4px -4px 10px var(--neu-hi); }
+:root[data-layout="neu"] aside, :root[data-layout="neu"] header { box-shadow: 4px 4px 14px var(--neu-lo), -3px -3px 10px var(--neu-hi); }
+:root[data-layout="neu"] .input { background-color: var(--neu-bg); border-color: transparent; border-radius: 1rem; box-shadow: inset 4px 4px 9px var(--neu-lo), inset -4px -4px 9px var(--neu-hi); }
+:root[data-layout="neu"] .input:focus { box-shadow: inset 4px 4px 9px var(--neu-lo), inset -4px -4px 9px var(--neu-hi), 0 0 0 2px rgb(var(--brand-500, 91 124 255) / .45); }
+:root[data-layout="neu"] .btn, :root[data-layout="neu"] .icon-btn, :root[data-layout="neu"] .chip { background-color: var(--neu-bg); border-color: transparent; border-radius: 999px; box-shadow: 4px 4px 9px var(--neu-lo), -3px -3px 8px var(--neu-hi); transition: box-shadow .18s, transform .18s; }
+:root[data-layout="neu"] .btn:hover:not(:disabled), :root[data-layout="neu"] .icon-btn:hover:not(:disabled) { border-color: transparent; box-shadow: 6px 6px 13px var(--neu-lo), -5px -5px 11px var(--neu-hi); }
+:root[data-layout="neu"] .btn:active:not(:disabled), :root[data-layout="neu"] .icon-btn:active:not(:disabled), :root[data-layout="neu"] [aria-checked="true"].btn, :root[data-layout="neu"] [aria-pressed="true"].btn, :root[data-layout="neu"] [aria-current="page"] { box-shadow: inset 4px 4px 9px var(--neu-lo), inset -3px -3px 8px var(--neu-hi); }
+:root[data-layout="neu"] .btn.btn-ghost { box-shadow: none; background: transparent; }
+:root[data-layout="neu"] .btn.btn-pri { background-color: rgb(var(--brand-500, 91 124 255)); color: #fff; box-shadow: 5px 5px 12px var(--neu-lo), -4px -4px 10px var(--neu-hi), inset 0 1px 0 rgb(255 255 255 / .25); }
+:root[data-layout="neu"] .btn.btn-pri:active:not(:disabled) { box-shadow: inset 3px 3px 8px rgb(0 0 0 / .35), inset -2px -2px 6px rgb(255 255 255 / .18); }
+:root[data-layout="neu"] .btn.btn-danger { background-color: var(--neu-bg); }
+:root[data-layout="neu"] [role="dialog"].card { box-shadow: 18px 18px 44px var(--neu-lo), -10px -10px 30px var(--neu-hi); }
+
+/* Spatial UI: the Studio's screens become windows floating in a lit room, as on a headset. Deep, lit backdrop; thick
+   glass windows with a bright rim and long shadows; the menu and the top bar float free of the edges; capsules that light
+   up under the pointer. */
+:root[data-layout="spatial"] body { background: transparent; }
+:root[data-layout="spatial"] { background: rgb(var(--ink-950, 11 15 23)); --sp-rim: rgb(255 255 255 / .16); --sp-win: rgb(var(--ink-800, 24 32 45) / .42); }
+:root[data-layout="spatial"][data-ui="light"] { --sp-rim: rgb(255 255 255 / .85); --sp-win: rgb(255 255 255 / .62); }
+:root[data-layout="spatial"]::before { content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background: radial-gradient(60% 45% at 50% 108%, rgb(var(--brand-500, 91 124 255) / .38), transparent 70%), radial-gradient(40% 40% at 8% 8%, rgb(56 189 248 / .22), transparent 70%), radial-gradient(42% 40% at 96% 12%, rgb(244 114 182 / .18), transparent 70%), linear-gradient(180deg, rgb(var(--ink-950, 11 15 23)), rgb(var(--ink-900, 15 20 29)) 60%, rgb(var(--ink-950, 11 15 23))); }
+:root[data-layout="spatial"]::after { content: ""; position: fixed; left: -10%; right: -10%; bottom: -30vh; height: 70vh; z-index: -1; pointer-events: none; opacity: .35;
+  background-image: linear-gradient(rgb(var(--brand-400, 129 140 248) / .35) 1px, transparent 1px), linear-gradient(90deg, rgb(var(--brand-400, 129 140 248) / .35) 1px, transparent 1px); background-size: 64px 64px;
+  transform: perspective(600px) rotateX(62deg); transform-origin: 50% 0; -webkit-mask-image: linear-gradient(to bottom, transparent, #000 30%, transparent 90%); mask-image: linear-gradient(to bottom, transparent, #000 30%, transparent 90%); }
+:root[data-layout="spatial"] .card, :root[data-layout="spatial"] aside, :root[data-layout="spatial"] header { background-color: var(--sp-win); -webkit-backdrop-filter: blur(36px) saturate(1.8); backdrop-filter: blur(36px) saturate(1.8); border-color: var(--sp-rim); box-shadow: inset 0 1px 0 rgb(255 255 255 / .22), inset 0 -1px 0 rgb(0 0 0 / .18), 0 40px 70px -30px rgb(0 0 0 / .7), 0 12px 24px -12px rgb(0 0 0 / .4); }
+:root[data-layout="spatial"][data-ui="light"] .card, :root[data-layout="spatial"][data-ui="light"] aside, :root[data-layout="spatial"][data-ui="light"] header { box-shadow: inset 0 1px 0 #fff, 0 40px 70px -30px rgb(30 40 90 / .35), 0 12px 24px -12px rgb(30 40 90 / .18); }
+:root[data-layout="spatial"] .card { border-radius: 2rem; }
+:root[data-layout="spatial"] .card .card { border-radius: 1.4rem; background-color: rgb(var(--ink-950, 11 15 23) / .28); box-shadow: inset 0 1px 0 rgb(255 255 255 / .1); }
+:root[data-layout="spatial"][data-ui="light"] .card .card { background-color: rgb(255 255 255 / .5); }
+:root[data-layout="spatial"] aside { border-radius: 1.75rem; margin: .6rem; }
+:root[data-layout="spatial"] header { border-radius: 1.25rem; margin: .6rem .6rem 0; }
+:root[data-layout="spatial"] [role="dialog"].card { background-color: rgb(var(--ink-900, 15 20 29) / .96); }
+:root[data-layout="spatial"][data-ui="light"] [role="dialog"].card { background-color: rgb(255 255 255 / .97); }
+:root[data-layout="spatial"] .btn, :root[data-layout="spatial"] .icon-btn, :root[data-layout="spatial"] .chip { border-radius: 999px; transition: transform .2s, box-shadow .2s, background-color .2s; }
+:root[data-layout="spatial"] .btn:not(.btn-pri):not(.btn-ghost):not(.btn-danger), :root[data-layout="spatial"] .icon-btn, :root[data-layout="spatial"] .chip { background-color: rgb(255 255 255 / .08); border-color: rgb(255 255 255 / .12); }
+:root[data-layout="spatial"][data-ui="light"] .btn:not(.btn-pri):not(.btn-ghost):not(.btn-danger), :root[data-layout="spatial"][data-ui="light"] .icon-btn, :root[data-layout="spatial"][data-ui="light"] .chip { background-color: rgb(255 255 255 / .75); border-color: rgb(30 40 90 / .12); }
+:root[data-layout="spatial"] .btn:hover:not(:disabled), :root[data-layout="spatial"] .icon-btn:hover:not(:disabled) { transform: translateY(-1px) scale(1.03); box-shadow: 0 0 0 1px rgb(255 255 255 / .25), 0 10px 24px -8px rgb(var(--brand-500, 91 124 255) / .55); }
+:root[data-layout="spatial"] .btn.btn-pri { box-shadow: inset 0 1px 0 rgb(255 255 255 / .35), 0 8px 20px -8px rgb(var(--brand-500, 91 124 255) / .8); }
+:root[data-layout="spatial"] .input { border-radius: 1rem; background-color: rgb(var(--ink-950, 11 15 23) / .38); border-color: rgb(255 255 255 / .12); }
+:root[data-layout="spatial"][data-ui="light"] .input { background-color: rgb(255 255 255 / .7); border-color: rgb(30 40 90 / .12); }
+:root[data-layout="spatial"]:not([data-ui="light"]) .card :where(h1, h2, h3, b, strong) { color: rgb(244 247 255); }
+:root[data-layout="spatial"]:not([data-ui="light"]) .text-ink-400, :root[data-layout="spatial"]:not([data-ui="light"]) .text-ink-500 { color: rgb(178 189 214); }
 @media (prefers-reduced-motion: reduce) { :root[data-layout="glass"]::before { animation: none; } }
 
 /* One stack for every notification, centred at the bottom of the page (ui/kit.tsx Dock). */

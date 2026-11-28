@@ -23,7 +23,7 @@ const schema: Category[] = [
     id: "look", label: "Theme & layout", group: "Design", desc: `Choose from ${BIZ_THEMES.length} business themes, then fine-tune the layout and style.`,
     cards: [
       { title: "Theme", fields: [{ t: "note", studio: true, text: `${BIZ_THEMES.length} business themes (B-01 to B-${BIZ_THEMES.length}). Picking one restyles the whole site: colours, fonts, hero layout, menu, cards, buttons and section style. Your content stays as it is, and every setting below stays editable.` }, { t: "themes" }] },
-      { title: "Layout", fields: [g2(sel(BIZ_AXES.layout), sel(BIZ_AXES.heroArt), sel(BIZ_AXES.nav), NAV_MODE_FIELD, NAV_MODE_MOB_FIELD, sel(BIZ_AXES.width), sel(BIZ_AXES.bands))] },
+      { title: "Layout", fields: [g2(sel(BIZ_AXES.look), sel(BIZ_AXES.layout), sel(BIZ_AXES.heroArt), sel(BIZ_AXES.nav), NAV_MODE_FIELD, NAV_MODE_MOB_FIELD, sel(BIZ_AXES.width), sel(BIZ_AXES.bands))] },
       { title: "Style", fields: [g2(sel(BIZ_AXES.heading), sel(BIZ_AXES.shead), sel(BIZ_AXES.cards), sel(BIZ_AXES.buttons), sel(BIZ_AXES.pattern), sel(BIZ_AXES.motionStyle)),
         { t: "note", text: "“Full-width photo” needs a hero image (Hero → Image); without one the hero uses the split layout. Visitors who ask their device for reduced motion always get a still page." }, ...ANIM_BG_FIELDS] },
       { title: "Interactions (optional)", fields: [{ t: "note", text: "Business themes keep these off for a calm, professional feel. Switch one on if it suits your brand." },
@@ -226,7 +226,7 @@ const schema: Category[] = [
   customCodeCategory(),
   codeCategory(),
 ];
-themeOnly(schema, [["hero.image", "layout", ["typeonly", "centretype"]], ["hero.video", "layout", ["typeonly", "centretype"]]]);
+themeOnly(schema, [["theme.cards", "look", ["neu", "spatial"]], ["theme.bands", "look", ["neu", "spatial"]], ["theme.buttons", "look", ["neu", "spatial"]], ["theme.nav", "look", ["neu", "spatial"]], ["theme.pattern", "look", ["spatial"]], ["hero.image", "layout", ["typeonly", "centretype"]], ["hero.video", "layout", ["typeonly", "centretype"]]]);
 withSectionBg(schema, { contact: [["contact"]], footer: [["footer"]] }, [...DISPLAY_FONTS, ...BODY_FONTS]);
 
 function prepareBusiness(c: any) {

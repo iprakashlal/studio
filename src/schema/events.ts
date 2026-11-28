@@ -25,7 +25,7 @@ const schema: Category[] = [
     id: "look", label: "Theme & layout", group: "Design", desc: `Choose from ${EVT_THEMES.length} event themes (${EVT_TYPES.length} kinds of event, 20 each), then fine-tune the layout and style.`,
     cards: [
       { title: "Theme", fields: [{ t: "note", studio: true, text: `${EVT_THEMES.length} event themes (E-0001 to E-${String(EVT_THEMES.length).padStart(4, "0")}): 20 for every kind of event. Picking one restyles the whole site: colours, fonts, hero layout, menu, schedule, line-up, tickets, countdown and the registration page, and sets the kind of registration that suits the event (change it under Registration). Your content stays as it is, and every setting below stays editable.` }, { t: "themes" }] },
-      { title: "Layout", fields: [g2(sel(BIZ_AXES.layout), sel(BIZ_AXES.heroArt), sel(BIZ_AXES.nav), NAV_MODE_FIELD, NAV_MODE_MOB_FIELD, sel(BIZ_AXES.width), sel(BIZ_AXES.bands))] },
+      { title: "Layout", fields: [g2(sel(BIZ_AXES.look), sel(BIZ_AXES.layout), sel(BIZ_AXES.heroArt), sel(BIZ_AXES.nav), NAV_MODE_FIELD, NAV_MODE_MOB_FIELD, sel(BIZ_AXES.width), sel(BIZ_AXES.bands))] },
       { title: "Style", fields: [g2(sel(BIZ_AXES.heading), sel(BIZ_AXES.shead), sel(BIZ_AXES.cards), sel(BIZ_AXES.buttons), sel(BIZ_AXES.pattern), sel(BIZ_AXES.motionStyle)),
         { t: "note", text: "“Full-width photo” needs a hero image (Hero → Image); without one the hero uses the split layout. Visitors who ask their device for reduced motion always get a still page." }, ...ANIM_BG_FIELDS] },
       { title: "Event parts", fields: [g2(sel(BIZ_AXES.dateBadge), sel(BIZ_AXES.count), sel(BIZ_AXES.sched), sel(BIZ_AXES.lineup), sel(BIZ_AXES.tix), sel(BIZ_AXES.reg))] },
@@ -259,7 +259,7 @@ const schema: Category[] = [
   customCodeCategory(),
   codeCategory(),
 ];
-themeOnly(schema, [["hero.image", "layout", ["typeonly", "centretype"]], ["hero.video", "layout", ["typeonly", "centretype"]], ["services.items>icon", "high", ["numbered"]]]);
+themeOnly(schema, [["theme.cards", "look", ["neu", "spatial"]], ["theme.bands", "look", ["neu", "spatial"]], ["theme.buttons", "look", ["neu", "spatial"]], ["theme.nav", "look", ["neu", "spatial"]], ["theme.pattern", "look", ["spatial"]], ["hero.image", "layout", ["typeonly", "centretype"]], ["hero.video", "layout", ["typeonly", "centretype"]], ["services.items>icon", "high", ["numbered"]]]);
 withSectionBg(schema, { contact: [["contact"]], footer: [["footer"]] }, [...DISPLAY_FONTS, ...BODY_FONTS]);
 function prepareEvents(c: any) {
   if (!c || typeof c !== "object") return;

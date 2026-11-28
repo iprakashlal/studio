@@ -3,7 +3,7 @@ import type { Category, Field, TemplateDef } from "./types";
 import { FX_AXES, HERO_FX_AXIS, LOADER_ON_AXIS, LINE_BREAKS_AXIS, type Axis } from "../themes/catalog";
 import { REST_AXES, REST_BODY_FONTS, REST_DISPLAY_FONTS, REST_TAGS, REST_THEMES, restaurantThemeValues } from "../themes/restaurant";
 import { INTRO_CARD, NAV_MODE_FIELD, NAV_MODE_MOB_FIELD } from "../themes/fields";
-import { ANIM_BG_FIELDS, gstCategory, adminCategory, loyaltyCard, accountsCategory, accountLookCard, legalCategory, codeCategory, customCodeCategory, withSectionBg, videoCategory, wallCategory, socialCategory, logoFields, consentCategory, emailsCategory, i18nCategory, prepareI18n, featuresCategory, festivalCategory, menuCategory, menuItem, prepareMenu, staticPagesCategory, heroSlidesCard, prepareSlides, prepareMaintenance, seoCategory, customFontsCard } from "./common";
+import { themeOnly, ANIM_BG_FIELDS, gstCategory, adminCategory, loyaltyCard, accountsCategory, accountLookCard, legalCategory, codeCategory, customCodeCategory, withSectionBg, videoCategory, wallCategory, socialCategory, logoFields, consentCategory, emailsCategory, i18nCategory, prepareI18n, featuresCategory, festivalCategory, menuCategory, menuItem, prepareMenu, staticPagesCategory, heroSlidesCard, prepareSlides, prepareMaintenance, seoCategory, customFontsCard } from "./common";
 
 const g2 = (...fields: Field[]): Field => ({ t: "grid", cols: 2, fields });
 const g3 = (...fields: Field[]): Field => ({ t: "grid", cols: 3, fields });
@@ -31,7 +31,7 @@ const schema: Category[] = [
     id: "look", label: "Theme & layout", group: "Design", desc: `Choose from ${REST_THEMES.length} restaurant themes, then fine-tune the layout, the food menu's style and the graphics.`,
     cards: [
       { title: "Theme", fields: [{ t: "note", studio: true, text: `${REST_THEMES.length} restaurant themes (R-001 to R-${String(REST_THEMES.length).padStart(3, "0")}), half classic and half modern. Each has its own mix of hero layout, picture frame, menu bar, food-menu style, background, section edges and ornament. Picking one restyles the whole site; your content stays as it is, and every setting below stays editable.` }, { t: "themes" }] },
-      { title: "Layout", fields: [g2(sel(REST_AXES.layout), sel(REST_AXES.heroArt), sel(REST_AXES.nav), NAV_MODE_FIELD, NAV_MODE_MOB_FIELD, sel(REST_AXES.width), sel(REST_AXES.bands)),
+      { title: "Layout", fields: [g2(sel(REST_AXES.look), sel(REST_AXES.layout), sel(REST_AXES.heroArt), sel(REST_AXES.nav), NAV_MODE_FIELD, NAV_MODE_MOB_FIELD, sel(REST_AXES.width), sel(REST_AXES.bands)),
         { t: "note", text: "“Full-width photo” and “Photo in a frame” need a hero photo (Hero → Picture); the collage needs two or three. Without a photo, each hero layout has its own arrangement, and the picture is replaced by an emblem drawn from your name. The Picture frame chooses the emblem: a plate (Plain), a printed label (Thin frame), a solid block (Offset shadow), an arch, a round stamp (Circle), a soft blob, today's card (Tilted print) or a scalloped seal." }] },
       { title: "Food menu & gallery", fields: [g2(sel(REST_AXES.menuStyle), sel(REST_AXES.gallery)),
         { t: "note", text: "Photo cards, the list and the magazine style show dish photos; the classic, chalkboard, printed card and boxes keep the menu to words and prices." }] },
@@ -422,6 +422,7 @@ const schema: Category[] = [
   codeCategory(),
 ];
 { const k = schema.find((c) => c.id === "coupons"); if (k) k.cards.push(loyaltyCard("restaurant")); }
+themeOnly(schema, [["theme.cards", "look", ["neu", "spatial"]], ["theme.bands", "look", ["neu", "spatial"]], ["theme.buttons", "look", ["neu", "spatial"]], ["theme.nav", "look", ["neu", "spatial"]], ["theme.pattern", "look", ["spatial"]]]);
 withSectionBg(schema, { contact: [["contact"]], forms: [["reserve", "Background & text of the booking section"]] }, [...REST_DISPLAY_FONTS, ...REST_BODY_FONTS]);
 
 function prepareRestaurant(c: any) {

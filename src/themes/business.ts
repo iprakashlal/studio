@@ -2,8 +2,10 @@
 // firms, agencies and practices. They have their own IDs (B-01 …) and their own style options, which match
 // public/templates/business/assets/biz.css.
 import { type Axis, type Theme, FX_KEYS, onColor } from "./catalog";
+import { LOOK_AXIS, LOOK_TAGS, lookOk, lookTheme } from "./looks";
 
 export const BIZ_AXES: Record<string, Axis> = {
+  look: LOOK_AXIS,
   layout: { key: "layout", label: "Hero layout", options: [["split", "Text left, picture right"], ["center", "Centred, picture below"], ["editorial", "Editorial: big headline, wide picture"], ["panel", "Dark panel"], ["full", "Full-width photo behind the text"], ["pile", "Words on top, wide picture below"], ["flip", "Picture left, words right"], ["overlap", "Words on a card over the picture"], ["colour", "Solid colour band"], ["aurora", "Aurora glow, centred"], ["typeonly", "Big type only"], ["centretype", "Big type only, centred"], ["cinema", "Wide picture first, words below in two columns"], ["tall", "Tall picture, rounded"], ["boxed", "Hero in a soft box"], ["duo", "Half words, half picture to the edge"], ["poster", "Poster: big headline over a wide picture"], ["diagonal", "Picture cut on a slant, to the edge"], ["bleed", "Picture bleeding off the screen edge"], ["stagger", "Stepped: picture dropped, on a colour block"]] },
   heroArt: { key: "heroArt", label: "Hero picture frame", options: [["default", "Plain"], ["frame", "Thin frame"], ["offset", "Offset shadow"], ["arch", "Arch"], ["disc", "Circle"], ["organic", "Soft blob"], ["askew", "Tilted print"], ["round", "Extra-round corners"], ["polaroid", "Instant photo"], ["double", "Double frame"], ["cut", "Cut corners"], ["leaf", "Leaf"], ["glow", "Accent glow"], ["layers", "Stacked sheets"], ["window", "Browser window"], ["hex", "Hexagon"], ["coupon", "Dashed border"]] },
   nav: { key: "nav", label: "Menu", options: [["bar", "Clean bar"], ["float", "Floating panel"], ["line", "Underlined bar"], ["dark", "Dark bar"], ["center", "Links in the centre"], ["pills", "Pill links"], ["glass", "Frosted glass"], ["raised", "Raised bar with shadow"], ["topline", "Accent line on top"], ["caps", "Small capitals"], ["accent", "Accent-colour bar"], ["boxed", "Boxed links"], ["island", "Links in a floating island"], ["tabs", "Tabs"], ["dots", "Dot under the link"]] },
@@ -17,7 +19,7 @@ export const BIZ_AXES: Record<string, Axis> = {
   width: { key: "width", label: "Page width", options: [["normal", "Standard"], ["wide", "Wide"], ["narrow", "Narrow"], ["xwide", "Extra wide"], ["full", "Full, edge to edge"]] },
 };
 
-export const BIZ_STYLE_TAGS = ["Corporate", "Finance", "Legal", "Consulting", "Tech", "Health", "Creative", "Industry", "Property", "Hospitality", "Light", "Dark", "Classy", "Modern", "Bold", "Minimal", "Warm", "Calm", "Nature", "Luxury", "Factory", "Agency", "Education", "Picaffectz", "Gym", "Fitness", "Trainer", "Coach", "Wellness", "Yoga", "Meditation", "Nutrition", "Dietitian", "Weight-Loss", "Sports", "Bodybuilding", "Health-Club", "Doctor", "Clinic", "Dentist", "PCOS", "Ayurveda"];
+export const BIZ_STYLE_TAGS = [...LOOK_TAGS, "Corporate", "Finance", "Legal", "Consulting", "Tech", "Health", "Creative", "Industry", "Property", "Hospitality", "Light", "Dark", "Classy", "Modern", "Bold", "Minimal", "Warm", "Calm", "Nature", "Luxury", "Factory", "Agency", "Education", "Picaffectz", "Gym", "Fitness", "Trainer", "Coach", "Wellness", "Yoga", "Meditation", "Nutrition", "Dietitian", "Weight-Loss", "Sports", "Bodybuilding", "Health-Club", "Doctor", "Clinic", "Dentist", "PCOS", "Ayurveda"];
 /** What the Themes page offers as filters: the styles, then the kinds of business (see businessTypes.ts). */
 export const BIZ_TAGS = [...BIZ_STYLE_TAGS, ...BIZ_TYPES];
 export { BIZ_TYPES };
@@ -148,7 +150,8 @@ const ROWS: Row[] = [...BASE_ROWS, ...HEALTH_ROWS, ...TYPE_ROWS];
 const NO_FX = Object.fromEntries(FX_KEYS.map((k) => [k, "none"])) as Theme["fx"];
 
 export type BizTheme = Theme & { biz: { bands: string } };
-export const BIZ_THEMES: BizTheme[] = ROWS.map(([slug, name, tags, cols, display, body, radius, style, blurb, extra]) => {
+/** The themes from the rows above (the events catalogue builds on these). */
+export const BIZ_BASE_THEMES: BizTheme[] = ROWS.map(([slug, name, tags, cols, display, body, radius, style, blurb, extra]) => {
   const c = cols.split(" "), s = style.split(" ");
   if (c.length !== 9 || s.length !== 11) throw new Error("Bad business theme row: " + slug);
   const [layout, nav, cards, buttons, heading, shead, pattern, bands, heroArt, motionStyle, width] = s;
@@ -166,6 +169,15 @@ export const BIZ_THEMES: BizTheme[] = ROWS.map(([slug, name, tags, cols, display
   };
 });
 
+const slugOf = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+/** A Neumorphism and a Spatial UI theme for every kind of business, built on that kind's first theme. They come last, so
+ *  the existing codes (B-xx) never move. */
+const LOOK_THEMES: BizTheme[] = BIZ_TYPES.flatMap((type) => {
+  const base = BIZ_BASE_THEMES.find((t) => t.tags.includes(type)) || BIZ_BASE_THEMES[0];
+  return (["neu", "spatial"] as const).map((l) => lookTheme(base, l, `biz-${l}-${slugOf(type)}`, `${type} · ${l === "neu" ? "Neumorphism" : "Spatial UI"}`, [type], l === "spatial" ? true : base.dark));
+});
+export const BIZ_THEMES: BizTheme[] = [...BIZ_BASE_THEMES, ...LOOK_THEMES];
+
 /** Stable IDs for business themes: B-01 … in the order above. Add new themes at the end only. */
 export const BIZ_CODES: Record<string, string> = Object.fromEntries(BIZ_THEMES.map((t, i) => [t.id, "B-" + String(i + 1).padStart(2, "0")]));
 export const isBizTheme = (id: string) => id.startsWith("biz-");
@@ -176,7 +188,7 @@ export function businessThemeValues(t: Theme): Record<string, unknown> {
   return {
     bg: c.bg, surface: c.surface, deep: c.deep, text: c.text, soft: c.soft, line: c.line, c1: c.c1, c2: c.c2, c3: c.c3,
     fontDisplay: t.display, fontBody: t.body, radius: t.radius, preset: t.id,
-    layout: BIZ_AXES.layout.options.some(([v]) => v === s.layout) ? s.layout : "split",
+    look: lookOk(t.look), layout: BIZ_AXES.layout.options.some(([v]) => v === s.layout) ? s.layout : "split",
     heroArt: BIZ_AXES.heroArt.options.some(([v]) => v === s.heroArt) ? s.heroArt : "default", nav: BIZ_AXES.nav.options.some(([v]) => v === s.nav) ? s.nav : "bar",
     cards: BIZ_AXES.cards.options.some(([v]) => v === s.cards) ? s.cards : "outline",
     buttons: BIZ_AXES.buttons.options.some(([v]) => v === s.buttons) ? s.buttons : "rounded",

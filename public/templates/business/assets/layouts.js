@@ -680,6 +680,218 @@
     },
   };
 
+  /* =====================================================================
+     9. NEUMORPHISM: a soft control panel. Everything is pressed out of one surface: a capsule menu that sinks
+        under the section in view, the hero as one raised slab with a round portrait lens and stat dials,
+        skills as keys that press down, roles that open like drawers.
+     ===================================================================== */
+  K.neumorphism = {
+    name: "Neumorphism: soft control panel",
+    css: [
+      ".k-neumorphism{--nhi:color-mix(in srgb,var(--bg) 30%,#fff);--nlo:color-mix(in srgb,var(--bg) 84%,#1a2340);--nup:12px 12px 28px var(--nlo),-12px -12px 28px var(--nhi);--nsm:6px 6px 14px var(--nlo),-6px -6px 14px var(--nhi);--nin:inset 6px 6px 13px var(--nlo),inset -6px -6px 13px var(--nhi);background:var(--bg);color:var(--text);min-height:100vh;padding:0 clamp(14px,3vw,40px) 40px;overflow-x:hidden}",
+      ".k-neumorphism.dk{--nhi:color-mix(in srgb,var(--bg) 88%,#fff);--nlo:color-mix(in srgb,var(--bg) 40%,#000)}",
+      ".kn-top{position:sticky;top:14px;z-index:40;max-width:1180px;margin:14px auto 0;display:flex;align-items:center;gap:10px;padding:8px 8px 8px 22px;border-radius:999px;background:var(--bg);box-shadow:var(--nsm)}",
+      ".kn-top b{font-family:var(--fd);font-size:18px;margin-right:auto;white-space:nowrap}",
+      ".kn-top nav{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none}.kn-top nav::-webkit-scrollbar{display:none}",
+      ".kn-top nav a{padding:9px 16px;border-radius:999px;color:var(--soft);text-decoration:none;font-size:14px;font-weight:600;white-space:nowrap;transition:box-shadow .25s,color .25s}",
+      ".kn-top nav a:hover{box-shadow:var(--nsm);color:var(--text)}.kn-top nav a.on{box-shadow:var(--nin);color:var(--c1)}",
+      "@media(max-width:700px){.kn-top{padding-left:16px}.kn-top nav a{padding:8px 11px;font-size:13px}.kn-top b{display:none}}",
+      ".kn-wrap{max-width:1180px;margin:0 auto;display:flex;flex-direction:column;gap:clamp(40px,6vw,72px);padding-top:clamp(28px,4vw,48px)}",
+      ".kn-slab{background:var(--bg);border-radius:clamp(28px,4vw,48px);box-shadow:var(--nup);padding:clamp(24px,4vw,56px)}",
+      ".kn-well{border-radius:28px;box-shadow:var(--nin);padding:clamp(18px,2.4vw,28px)}",
+      ".kn-hero{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,.8fr);gap:clamp(24px,4vw,56px);align-items:center}",
+      "@media(max-width:860px){.kn-hero{grid-template-columns:1fr}}",
+      ".kn-pill{display:inline-flex;align-items:center;gap:8px;padding:8px 16px;border-radius:999px;box-shadow:var(--nin);color:var(--c1);font-size:13px;font-weight:700;letter-spacing:.04em}",
+      ".kn-pill i{width:8px;height:8px;border-radius:50%;background:var(--c1);box-shadow:0 0 10px var(--c1)}",
+      ".kn-hero h1{font-family:var(--fd);font-size:clamp(44px,7vw,96px);line-height:.98;letter-spacing:-.035em;margin:22px 0 14px}",
+      ".kn-hero h1 span{color:var(--c1)}.kn-role{font-size:clamp(17px,1.6vw,21px);color:var(--soft);max-width:44ch}",
+      ".kn-acts{display:flex;flex-wrap:wrap;gap:14px;margin-top:28px}",
+      ".kn-btn{font:inherit;font-weight:700;font-size:15px;padding:14px 24px;border:0;border-radius:999px;background:var(--bg);color:var(--text);box-shadow:var(--nsm);cursor:pointer;text-decoration:none;transition:box-shadow .18s,color .18s}",
+      ".kn-btn:hover{box-shadow:8px 8px 18px var(--nlo),-8px -8px 18px var(--nhi)}.kn-btn:active,.kn-btn.on{box-shadow:var(--nin)}",
+      ".kn-btn.pri{background:var(--c1);color:var(--on-c1)}",
+      ".kn-lens{justify-self:center;width:min(100%,380px);aspect-ratio:1;border-radius:50%;padding:22px;box-shadow:var(--nup);background:var(--bg);position:relative}",
+      ".kn-lens>div{width:100%;height:100%;border-radius:50%;overflow:hidden;box-shadow:var(--nin);padding:12px;background:var(--bg)}",
+      ".kn-lens img,.kn-lens>div>span{width:100%;height:100%;object-fit:cover;border-radius:50%;display:block}",
+      ".kn-lens::after{content:'';position:absolute;inset:-14px;border-radius:50%;border:2px dashed color-mix(in srgb,var(--c1) 35%,transparent);animation:knspin 40s linear infinite}",
+      "@keyframes knspin{to{transform:rotate(360deg)}}",
+      ".kn-dials{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:clamp(18px,3vw,32px);margin-top:clamp(28px,4vw,44px)}",
+      ".kn-dial{aspect-ratio:1;max-width:180px;width:100%;justify-self:center;border-radius:50%;box-shadow:var(--nup);display:grid;place-items:center;text-align:center;position:relative;padding:16px}",
+      ".kn-dial svg{position:absolute;inset:10px;width:calc(100% - 20px);height:calc(100% - 20px);transform:rotate(-90deg)}",
+      ".kn-dial circle{fill:none;stroke-width:6;stroke-linecap:round}.kn-dial .tr{stroke:color-mix(in srgb,var(--text) 8%,transparent)}",
+      ".kn-dial .ar{stroke:var(--c1);stroke-dasharray:0 400;transition:stroke-dasharray 1.6s cubic-bezier(.2,.8,.2,1)}",
+      ".kn-dial b{display:block;font-family:var(--fd);font-size:clamp(26px,3vw,38px);line-height:1}.kn-dial small{display:block;color:var(--soft);font-size:12px;margin-top:6px;max-width:12ch;line-height:1.3}",
+      ".kn-h{display:flex;align-items:center;gap:16px;margin-bottom:clamp(20px,3vw,32px);flex-wrap:wrap}",
+      ".kn-h h2{font-family:var(--fd);font-size:clamp(30px,4vw,52px);letter-spacing:-.03em;line-height:1}",
+      ".kn-about{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:28px}",
+      "@media(max-width:860px){.kn-about{grid-template-columns:1fr}}",
+      ".kn-about .prose p{color:var(--soft);font-size:17px;line-height:1.75;margin-bottom:14px}.kn-about h3{font-family:var(--fd);font-size:24px;margin-bottom:12px}",
+      ".kn-quote{font-family:var(--fd);font-size:clamp(22px,2.4vw,30px);line-height:1.25}.kn-quote+small{display:block;margin-top:14px;color:var(--soft)}",
+      ".kn-keys{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:24px}",
+      ".kn-key{font:inherit;color:inherit;text-align:left;border:0;background:var(--bg);border-radius:26px;padding:20px;box-shadow:var(--nup);cursor:pointer;transition:box-shadow .2s,transform .2s;display:flex;flex-direction:column;gap:12px}",
+      ".kn-key:hover{transform:translateY(-2px)}.kn-key.on,.kn-key:active{box-shadow:var(--nin);transform:none}",
+      ".kn-key .ic{width:54px;height:54px;border-radius:18px;box-shadow:var(--nin);display:grid;place-items:center}",
+      ".kn-key h4{font-size:16px}.kn-key p{color:var(--soft);font-size:13.5px;line-height:1.5}",
+      ".kn-key .led{width:8px;height:8px;border-radius:50%;background:color-mix(in srgb,var(--text) 18%,transparent);margin-left:auto;transition:background .3s,box-shadow .3s}",
+      ".kn-key.on .led{background:var(--c1);box-shadow:0 0 10px var(--c1)}",
+      ".kn-jobs{display:flex;flex-direction:column;gap:18px}",
+      ".kn-job{border-radius:30px;box-shadow:var(--nup);background:var(--bg);overflow:hidden}",
+      ".kn-job>button{all:unset;box-sizing:border-box;width:100%;display:grid;grid-template-columns:auto 1fr auto auto;gap:18px;align-items:center;padding:18px 22px;cursor:pointer}",
+      ".kn-job>button:focus-visible{outline:2px solid var(--c1);outline-offset:-4px;border-radius:30px}",
+      ".kn-job .lg{width:48px;height:48px;border-radius:50%;box-shadow:var(--nin);display:grid;place-items:center;font-family:var(--fd);font-weight:800;color:var(--c1)}",
+      ".kn-job h4{font-size:17px}.kn-job p{color:var(--soft);font-size:14px}.kn-job time{color:var(--soft);font-size:13px;white-space:nowrap}",
+      ".kn-job .tg{width:36px;height:36px;border-radius:50%;box-shadow:var(--nsm);display:grid;place-items:center;transition:transform .3s,box-shadow .3s}",
+      ".kn-job.open .tg{transform:rotate(45deg);box-shadow:var(--nin)}",
+      ".kn-job .bd{display:grid;grid-template-rows:0fr;transition:grid-template-rows .4s cubic-bezier(.2,.8,.2,1)}.kn-job.open .bd{grid-template-rows:1fr}",
+      ".kn-job .bd>div{overflow:hidden}.kn-job ul{margin:0 22px 22px 88px;padding:16px 20px 16px 36px;border-radius:22px;box-shadow:var(--nin);color:var(--soft);font-size:14.5px;line-height:1.6}",
+      "@media(max-width:640px){.kn-job>button{grid-template-columns:auto 1fr auto}.kn-job time{display:none}.kn-job ul{margin-left:22px}}",
+      ".kn-projs{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:26px}",
+      ".kn-proj{background:var(--bg);border-radius:30px;padding:14px 14px 20px;box-shadow:var(--nup);text-decoration:none;color:inherit;display:flex;flex-direction:column;gap:14px;transition:box-shadow .25s}",
+      ".kn-proj:hover{box-shadow:var(--nsm)}.kn-proj figure{margin:0;aspect-ratio:16/11;border-radius:22px;overflow:hidden;box-shadow:var(--nin);padding:8px}",
+      ".kn-proj img,.kn-proj figure>span{width:100%;height:100%;object-fit:cover;border-radius:16px;display:block}.kn-proj h4{font-size:17px;padding:0 6px}.kn-proj p{color:var(--soft);font-size:14px;padding:0 6px}",
+      ".kn-learn{display:flex;flex-wrap:wrap;gap:16px}",
+      ".kn-chip{display:flex;align-items:center;gap:12px;padding:10px 18px 10px 10px;border-radius:999px;box-shadow:var(--nsm)}",
+      ".kn-chip .ic{width:40px;height:40px;border-radius:50%;box-shadow:var(--nin);display:grid;place-items:center}.kn-chip b{display:block;font-size:14px}.kn-chip span{font-size:12px;color:var(--soft)}",
+      ".kn-contact{text-align:center;display:flex;flex-direction:column;align-items:center;gap:20px}",
+      ".kn-contact h2{font-family:var(--fd);font-size:clamp(34px,5vw,64px);letter-spacing:-.03em;line-height:1}.kn-contact>p{color:var(--soft);max-width:52ch}",
+      ".kn-big{font:inherit;font-weight:800;font-size:clamp(16px,1.8vw,20px);width:min(100%,420px);padding:24px 30px;border:0;border-radius:999px;background:var(--bg);color:var(--c1);box-shadow:var(--nup);cursor:pointer;transition:box-shadow .15s}",
+      ".kn-big:active,.kn-big.done{box-shadow:var(--nin)}",
+      ".kn-links{display:flex;flex-wrap:wrap;justify-content:center;gap:14px}.kn-links a{padding:12px 18px;border-radius:999px;box-shadow:var(--nsm);text-decoration:none;font-weight:600;font-size:14px;color:var(--text)}.kn-links a:hover{color:var(--c1)}.kn-links a:active{box-shadow:var(--nin)}",
+      ".kn-foot{max-width:1180px;margin:clamp(40px,6vw,64px) auto 0;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:16px 24px;border-radius:999px;box-shadow:var(--nin);color:var(--soft);font-size:13px}",
+      "@media(prefers-reduced-motion:reduce){.kn-lens::after{animation:none}}",
+    ].join("\n"),
+    render: function (c, h) {
+      var H = c.hero, A = c.about, out = "";
+      var av = h.heroPic ? '<img src="' + h.esc(h.heroPic) + '" alt="' + h.esc(name(c)) + '">' : h.pimg(0, "", 600);
+      // the about section's numbers, else the hero's highlights that hold a number
+      var stats = (A.stats.length ? A.stats.map(function (s) { return { v: parseFloat(s.value) || 0, suf: s.suffix || "", l: s.label }; }) : H.meta.filter(function (m) { return /\d/.test(m.value); }).map(function (m) { return { v: parseFloat(m.value) || 0, suf: String(m.value).replace(/[\d.,]/g, ""), l: m.label }; })).slice(0, 4);
+      var max = Math.max.apply(null, stats.map(function (s) { return s.v; }).concat([1]));
+      out += '<header class="kn-top"><b>' + ic(h) + h.esc(c.brand.logoText) + "</b><nav>" + navOf(c).map(function (s) { return '<a href="#' + s.id + '" data-nav="' + s.id + '">' + h.esc(s.navLabel) + "</a>"; }).join("") + (on(c, "contact") ? '<a href="#contact" data-nav="contact">' + h.esc(c.brand.contactLabel) + "</a>" : "") + "</nav></header>";
+      out += '<main class="kn-wrap" id="top"><section class="kn-slab" id="hero"><div class="kn-hero"><div><span class="kn-pill"><i></i>' + h.esc(H.eyebrow) + '</span><h1 data-fx-text>' + h.esc(H.firstName) + " <span>" + h.esc(H.lastName) + '</span></h1><p class="kn-role">' + h.rich(H.role) + '</p><div class="kn-acts">' + (on(c, "contact") ? '<a class="kn-btn pri" href="#contact">' + h.esc(c.brand.contactLabel) + "</a>" : "") + (on(c, "work") ? '<a class="kn-btn" href="#work">' + h.esc(c.work.eyebrow || c.work.title) + "</a>" : "") + '</div></div><div class="kn-lens"><div>' + av + "</div></div></div>";
+      if (stats.length) out += '<div class="kn-dials">' + stats.map(function (s) { return '<div class="kn-dial" data-p="' + Math.max(0.12, Math.min(1, s.v / max)).toFixed(3) + '"><svg viewBox="0 0 100 100"><circle class="tr" cx="50" cy="50" r="44"/><circle class="ar" cx="50" cy="50" r="44"/></svg><div><b data-to="' + s.v + '" data-suf="' + h.esc(s.suf) + '">' + h.esc(s.v + s.suf) + "</b><small>" + h.esc(s.l) + "</small></div></div>"; }).join("") + "</div>";
+      out += "</section>";
+      if (on(c, "about")) out += '<section id="about"><div class="kn-h"><span class="kn-pill">' + h.esc(A.eyebrow) + '</span></div><div class="kn-about"><div class="kn-slab prose"><h3>' + h.rich(A.storyHeading) + "</h3>" + paras(h, A.story) + "</div>" + (A.quote ? '<div class="kn-well"><p class="kn-quote">' + h.rich(A.quote) + "</p><small>" + h.esc(A.quoteLabel) + "</small></div>" : "") + "</div></section>";
+      if (on(c, "skills")) out += '<section id="skills"><div class="kn-h"><span class="kn-pill">' + h.esc(c.skills.eyebrow) + "</span><h2>" + h.rich(c.skills.title) + '</h2></div><div class="kn-keys">' + c.skills.items.map(function (s, i) { return '<button type="button" class="kn-key" data-key><span style="display:flex;align-items:center"><span class="ic">' + h.mo(s.shape, "var(--" + (s.color === "surface" || s.color === "deep" || !s.color ? ["c1", "c2", "c3"][i % 3] : s.color) + ")", 30) + '</span><i class="led"></i></span><h4>' + h.esc(s.title) + "</h4><p>" + h.esc(s.detail) + "</p></button>"; }).join("") + "</div></section>";
+      if (on(c, "work")) out += '<section id="work"><div class="kn-h"><span class="kn-pill">' + h.esc(c.work.eyebrow) + "</span><h2>" + h.rich(c.work.title) + '</h2></div><div class="kn-jobs">' + c.work.items.map(function (w, i) { return '<article class="kn-job' + (i === 0 ? " open" : "") + '"><button type="button" aria-expanded="' + (i === 0) + '"><span class="lg">' + h.esc((w.org || "?").trim()[0]) + "</span><span><h4>" + h.esc(w.title) + "</h4><p>" + h.esc(w.org) + (w.orgNote ? " · " + h.esc(w.orgNote) : "") + "</p></span><time>" + h.esc(w.period) + '</time><span class="tg" aria-hidden="true">+</span></button><div class="bd"><div>' + (w.bullets.length ? "<ul>" + w.bullets.map(function (b) { return "<li>" + h.esc(b) + "</li>"; }).join("") + "</ul>" : "") + "</div></div></article>"; }).join("") + "</div></section>";
+      if (on(c, "projects")) { var pr = projectsOf(c); out += '<section id="projects"><div class="kn-h"><span class="kn-pill">' + h.esc(c.projects.eyebrow || "") + "</span><h2>" + h.rich(c.projects.title) + '</h2></div><div class="kn-projs">' + pr.map(function (p, i) { return '<a class="kn-proj" ' + (p.url ? 'href="' + h.esc(h.safeUrl(p.url)) + '" target="_blank" rel="noopener"' : "") + "><figure>" + h.itemImg(p, i + 2, p.title, 700) + "</figure><h4>" + h.esc(p.title) + "</h4><p>" + h.esc(p.body) + "</p></a>"; }).join("") + "</div></section>"; }
+      if (on(c, "learning")) out += '<section id="learning"><div class="kn-h"><span class="kn-pill">' + h.esc(c.learning.eyebrow || "") + "</span><h2>" + h.rich(c.learning.title) + '</h2></div><div class="kn-learn">' + c.learning.items.map(function (l) { return '<div class="kn-chip"><span class="ic">' + h.mo(l.shape, "var(--c1)", 24) + "</span><div><b>" + h.esc(l.title) + "</b><span>" + h.esc(l.sub) + (l.period ? " · " + h.esc(l.period) : "") + "</span></div></div>"; }).join("") + "</div></section>";
+      if (on(c, "contact")) out += '<section id="contact" class="kn-slab kn-contact"><span class="kn-pill">' + h.esc(c.contact.eyebrow || c.brand.contactLabel || "") + "</span><h2>" + h.rich(c.contact.title) + "</h2><p>" + h.esc(c.contact.body) + "</p>" + (c.contact.email ? '<button type="button" class="kn-big" data-copy="' + h.esc(c.contact.email) + '">' + h.esc(c.contact.email) + "</button>" : "") + '<div class="kn-links">' + links(h, c) + "</div></section>";
+      return out + '</main><footer class="kn-foot"><span>' + h.esc(c.contact.footerLeft) + "</span><span>" + h.esc(c.contact.footerRight) + "</span></footer>";
+    },
+    init: function (root, c, h) {
+      bindCopy(root, h);
+      var k = root.closest(".k-neumorphism") || root;
+      // the light edge and the shade are mixed for a light or a dark page
+      try { var bg = getComputedStyle(k).backgroundColor.match(/\d+(\.\d+)?/g).map(Number); k.classList.toggle("dk", 0.2126 * bg[0] + 0.7152 * bg[1] + 0.0722 * bg[2] < 110); } catch (e) {}
+      root.querySelectorAll("[data-key]").forEach(function (b) { b.addEventListener("click", function () { b.classList.toggle("on"); b.setAttribute("aria-pressed", b.classList.contains("on")); }, { signal: h.signal }); });
+      root.querySelectorAll(".kn-job>button").forEach(function (b) { b.addEventListener("click", function () { var j = b.parentNode, o = !j.classList.contains("open"); j.classList.toggle("open", o); b.setAttribute("aria-expanded", o); }, { signal: h.signal }); });
+      root.querySelectorAll(".kn-big").forEach(function (b) { b.addEventListener("click", function () { b.classList.add("done"); setTimeout(function () { b.classList.remove("done"); }, 900); }, { signal: h.signal }); });
+      var navs = root.querySelectorAll("[data-nav]");
+      var stop1 = inView(Array.prototype.slice.call(root.querySelectorAll("main section[id]")), function (el, vis) { if (vis) navs.forEach(function (a) { a.classList.toggle("on", a.getAttribute("data-nav") === el.id); }); }, { rootMargin: "-45% 0px -50% 0px" });
+      var stop2 = inView(Array.prototype.slice.call(root.querySelectorAll(".kn-dial")), function (el, vis) {
+        if (!vis || el.classList.contains("in")) return; el.classList.add("in");
+        var ar = el.querySelector(".ar"), p = +el.getAttribute("data-p"); if (ar) ar.style.strokeDasharray = (276.5 * p).toFixed(1) + " 400";
+        var b = el.querySelector("b"), to = +b.getAttribute("data-to"), suf = b.getAttribute("data-suf"), t0 = performance.now(), dec = to % 1 ? 1 : 0;
+        (function step(t) { var q = h.motion ? Math.min(1, (t - t0) / 1400) : 1; b.textContent = (to * (1 - Math.pow(1 - q, 3))).toFixed(dec) + suf; if (q < 1) requestAnimationFrame(step); })(t0);
+      });
+      return function () { stop1(); stop2(); };
+    },
+  };
+
+  /* =====================================================================
+     10. SPATIAL UI: windows floating in a lit room, as on a headset. A glass tab bar floats at the side, the hero
+         window and the portrait in front of it turn toward the pointer, every section is a window that comes forward
+         from the depth as it scrolls in, and tiles catch a soft light where the pointer rests.
+     ===================================================================== */
+  K["spatial-ui"] = {
+    name: "Spatial UI: floating windows",
+    css: [
+      ".k-spatial-ui{--win:color-mix(in srgb,var(--surface) 46%,transparent);--rim:rgb(255 255 255 / .16);--drop:0 60px 100px -46px rgb(0 0 0 / .8),0 16px 30px -16px rgb(0 0 0 / .5);position:relative;min-height:100vh;color:var(--text);overflow-x:clip;padding:0 clamp(12px,3vw,40px) 60px clamp(96px,9vw,130px)}",
+      ".k-spatial-ui.lt{--win:color-mix(in srgb,var(--surface) 62%,transparent);--rim:rgb(255 255 255 / .8);--drop:0 60px 100px -46px rgb(20 30 70 / .4),0 16px 30px -16px rgb(20 30 70 / .2)}",
+      "@media(max-width:760px){.k-spatial-ui{padding:0 12px 120px}}",
+      // the room sits behind the page, so the page itself has no background of its own
+      "html:has(.k-spatial-ui){background:var(--bg)}body:has(.k-spatial-ui){background:transparent!important}",
+      ".ksu-room{position:fixed;inset:0;z-index:-1;pointer-events:none;background:radial-gradient(60% 45% at 50% 112%,color-mix(in srgb,var(--c1) 45%,transparent),transparent 70%),radial-gradient(40% 38% at 4% 4%,color-mix(in srgb,var(--c2) 34%,transparent),transparent 70%),radial-gradient(42% 40% at 98% 10%,color-mix(in srgb,var(--c3) 28%,transparent),transparent 70%),var(--bg)}",
+      ".ksu-room::after{content:'';position:absolute;left:-25%;right:-25%;bottom:-30vh;height:70vh;opacity:.32;background-image:linear-gradient(color-mix(in srgb,var(--c1) 65%,transparent) 1px,transparent 1px),linear-gradient(90deg,color-mix(in srgb,var(--c1) 65%,transparent) 1px,transparent 1px);background-size:72px 72px;transform:perspective(620px) rotateX(64deg);transform-origin:50% 0;-webkit-mask-image:linear-gradient(transparent,#000 30%,transparent 92%);mask-image:linear-gradient(transparent,#000 30%,transparent 92%)}",
+      ".ksu-glass{background:var(--win);-webkit-backdrop-filter:blur(36px) saturate(1.8);backdrop-filter:blur(36px) saturate(1.8);border:1px solid var(--rim);box-shadow:inset 0 1px 0 rgb(255 255 255 / .3),inset 0 -1px 0 rgb(0 0 0 / .1),var(--drop)}",
+      ".ksu-bar{position:fixed;left:clamp(14px,2vw,28px);top:50%;transform:translateY(-50%);z-index:50;display:flex;flex-direction:column;gap:6px;padding:10px;border-radius:40px}",
+      ".ksu-bar a{position:relative;display:grid;place-items:center;width:48px;height:48px;border-radius:50%;text-decoration:none;color:var(--text);font-weight:800;font-size:15px;transition:background .25s,transform .25s}",
+      ".ksu-bar a:hover{background:color-mix(in srgb,var(--text) 12%,transparent);transform:scale(1.08)}.ksu-bar a.on{background:color-mix(in srgb,var(--text) 18%,transparent)}",
+      ".ksu-bar a span{position:absolute;left:calc(100% + 14px);top:50%;translate:0 -50%;white-space:nowrap;padding:7px 14px;border-radius:999px;font-size:13px;font-weight:600;opacity:0;pointer-events:none;transition:opacity .2s,translate .2s;background:var(--win);-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);border:1px solid var(--rim)}",
+      ".ksu-bar a:hover span,.ksu-bar a:focus-visible span{opacity:1;translate:4px -50%}",
+      "@media(max-width:760px){.ksu-bar{top:auto;bottom:14px;left:50%;transform:translateX(-50%);flex-direction:row;max-width:calc(100% - 24px);overflow-x:auto}.ksu-bar a span{display:none}}",
+      ".ksu-stage{max-width:1180px;margin:0 auto;display:flex;flex-direction:column;gap:clamp(36px,6vw,80px);padding-top:clamp(28px,5vw,60px)}",
+      ".ksu-hero{position:relative;min-height:min(86vh,820px);display:grid;place-items:center;perspective:1600px}",
+      ".ksu-scene{position:relative;width:100%;display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,.75fr);align-items:center;transform-style:preserve-3d;transform:rotateX(var(--rx,0deg)) rotateY(var(--ry,0deg));transition:transform .6s cubic-bezier(.2,.8,.2,1)}",
+      "@media(max-width:860px){.ksu-scene{grid-template-columns:1fr}}",
+      ".ksu-main{border-radius:44px;padding:clamp(28px,5vw,72px);transform:translateZ(0)}",
+      ".ksu-chip{display:inline-flex;align-items:center;gap:8px;padding:7px 14px;border-radius:999px;font-size:13px;font-weight:600;background:color-mix(in srgb,var(--text) 9%,transparent);border:1px solid var(--rim)}",
+      ".ksu-chip i{width:8px;height:8px;border-radius:50%;background:var(--c1);box-shadow:0 0 12px var(--c1)}",
+      ".ksu-main h1{font-family:var(--fd);font-size:clamp(46px,7.4vw,104px);line-height:.96;letter-spacing:-.04em;margin:22px 0 16px}",
+      ".ksu-main p{color:var(--soft);font-size:clamp(17px,1.6vw,21px);max-width:44ch}",
+      ".ksu-orn{display:flex;gap:10px;flex-wrap:wrap;margin-top:30px}",
+      ".ksu-btn{font:inherit;font-weight:700;font-size:15px;padding:13px 22px;border-radius:999px;border:1px solid var(--rim);background:color-mix(in srgb,var(--text) 9%,transparent);color:var(--text);cursor:pointer;text-decoration:none;transition:transform .22s,box-shadow .22s,background .22s;-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px)}",
+      ".ksu-btn:hover{transform:scale(1.05);box-shadow:0 0 0 1px rgb(255 255 255 / .3),0 14px 30px -10px color-mix(in srgb,var(--c1) 75%,transparent)}",
+      ".ksu-btn.pri{background:var(--c1);color:var(--on-c1);border-color:transparent;box-shadow:inset 0 1px 0 rgb(255 255 255 / .35),0 12px 28px -10px color-mix(in srgb,var(--c1) 80%,transparent)}",
+      ".ksu-pic{position:relative;margin-left:-14%;border-radius:36px;padding:10px;transform:translateZ(90px) translate(var(--px,0px),var(--py,0px));transition:transform .6s cubic-bezier(.2,.8,.2,1)}",
+      "@media(max-width:860px){.ksu-pic{margin:-40px 8% 0;transform:none}}",
+      ".ksu-pic figure{margin:0;aspect-ratio:4/5;border-radius:28px;overflow:hidden}.ksu-pic img,.ksu-pic figure>span{width:100%;height:100%;object-fit:cover;display:block}",
+      ".ksu-grab{display:block;width:72px;height:6px;border-radius:9px;margin:14px auto 0;background:color-mix(in srgb,var(--text) 30%,transparent)}",
+      ".ksu-win{border-radius:40px;padding:clamp(24px,4.4vw,60px);opacity:0;transform:perspective(1400px) translateZ(-160px) rotateX(8deg);filter:blur(6px);transition:opacity .9s,transform 1s cubic-bezier(.2,.8,.2,1),filter .9s}",
+      ".ksu-win.in,.ksu-still .ksu-win{opacity:1;transform:none;filter:none}",
+      ".ksu-h{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:clamp(20px,3vw,34px)}",
+      ".ksu-h h2{font-family:var(--fd);font-size:clamp(30px,4vw,54px);letter-spacing:-.035em;line-height:1}",
+      ".ksu-tile{position:relative;border-radius:26px;padding:22px;background:color-mix(in srgb,var(--surface) 40%,transparent);border:1px solid var(--rim);box-shadow:inset 0 1px 0 rgb(255 255 255 / .25);overflow:hidden;transition:transform .35s cubic-bezier(.2,.8,.2,1),box-shadow .35s}",
+      ".ksu-tile::before{content:'';position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity .3s;background:radial-gradient(240px circle at var(--gx,50%) var(--gy,50%),rgb(255 255 255 / .22),transparent 60%)}",
+      ".ksu-tile:hover{transform:translateY(-6px) scale(1.02);box-shadow:inset 0 1px 0 rgb(255 255 255 / .35),0 30px 50px -24px rgb(0 0 0 / .55),0 0 0 1.5px color-mix(in srgb,var(--c1) 55%,transparent)}.ksu-tile:hover::before{opacity:1}",
+      ".ksu-about{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:22px}@media(max-width:860px){.ksu-about{grid-template-columns:1fr}}",
+      ".ksu-about .prose p{color:var(--soft);font-size:17px;line-height:1.75;margin-bottom:14px}.ksu-about h3{font-family:var(--fd);font-size:24px;margin-bottom:12px}",
+      ".ksu-stats{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-content:start}.ksu-stats b{display:block;font-family:var(--fd);font-size:clamp(30px,3.4vw,46px);line-height:1}.ksu-stats small{color:var(--soft);font-size:13px}",
+      ".ksu-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px}",
+      ".ksu-grid h4{font-size:16px;margin-top:12px}.ksu-grid p{color:var(--soft);font-size:14px;line-height:1.5}",
+      ".ksu-rail{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(280px,360px);gap:18px;overflow-x:auto;scroll-snap-type:x mandatory;padding:6px 4px 18px;scrollbar-width:thin}",
+      ".ksu-rail>*{scroll-snap-align:start}.ksu-rail time{display:inline-block;font-size:12px;font-weight:700;padding:5px 11px;border-radius:999px;background:color-mix(in srgb,var(--c1) 22%,transparent)}",
+      ".ksu-rail h4{font-size:18px;margin-top:14px}.ksu-rail p{color:var(--soft);font-size:14px}.ksu-rail ul{margin:12px 0 0 18px;color:var(--soft);font-size:14px;line-height:1.55}",
+      ".ksu-projs{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:18px}.ksu-projs a{text-decoration:none;color:inherit;padding:10px 10px 18px}",
+      ".ksu-projs figure{margin:0;aspect-ratio:16/10;border-radius:18px;overflow:hidden}.ksu-projs img,.ksu-projs figure>span{width:100%;height:100%;object-fit:cover;display:block}.ksu-projs h4{font-size:17px;margin:14px 8px 4px}.ksu-projs p{color:var(--soft);font-size:14px;margin:0 8px}",
+      ".ksu-learn{display:flex;flex-wrap:wrap;gap:12px}.ksu-learn>div{display:flex;align-items:center;gap:12px;padding:10px 18px 10px 10px;border-radius:999px}.ksu-learn b{display:block;font-size:14px}.ksu-learn span{font-size:12px;color:var(--soft)}",
+      ".ksu-contact{text-align:center;display:flex;flex-direction:column;align-items:center;gap:18px}.ksu-contact h2{font-family:var(--fd);font-size:clamp(34px,5vw,68px);letter-spacing:-.035em;line-height:1}.ksu-contact>p{color:var(--soft);max-width:52ch}",
+      ".ksu-contact>.ksu-btn{font-size:clamp(16px,1.8vw,20px);padding:18px 30px}",
+      ".ksu-foot{max-width:1180px;margin:40px auto 0;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:14px 24px;border-radius:999px;color:var(--soft);font-size:13px}",
+      "@media(prefers-reduced-motion:reduce){.ksu-scene,.ksu-pic{transform:none!important}.ksu-win{opacity:1;transform:none;filter:none}}",
+    ].join("\n"),
+    render: function (c, h) {
+      var H = c.hero, A = c.about, out = '<div class="ksu-room" aria-hidden="true"></div>';
+      var av = h.heroPic ? '<img src="' + h.esc(h.heroPic) + '" alt="' + h.esc(name(c)) + '">' : h.pimg(0, "", 700);
+      var items = navOf(c).concat(on(c, "contact") ? [{ id: "contact", navLabel: c.brand.contactLabel }] : []);
+      out += '<nav class="ksu-bar ksu-glass" aria-label="' + h.esc(c.brand.logoText) + '"><a href="#top" data-nav="top" aria-label="' + h.esc(c.brand.logoText) + '">' + (ic(h) || "●") + "<span>" + h.esc(c.brand.logoText) + "</span></a>" + items.map(function (s) { var t = String(s.navLabel || s.id); return '<a href="#' + s.id + '" data-nav="' + s.id + '" aria-label="' + h.esc(t) + '">' + h.esc(chars(t)[0] || "•") + "<span>" + h.esc(t) + "</span></a>"; }).join("") + "</nav>";
+      out += '<main class="ksu-stage" id="top"><section class="ksu-hero" id="hero"><div class="ksu-scene"><div class="ksu-main ksu-glass"><span class="ksu-chip"><i></i>' + h.esc(H.eyebrow) + '</span><h1 data-fx-text>' + h.esc(name(c)) + "</h1><p>" + h.rich(H.role) + '</p><div class="ksu-orn">' + (on(c, "contact") ? '<a class="ksu-btn pri" href="#contact">' + h.esc(c.brand.contactLabel) + "</a>" : "") + (on(c, "projects") || on(c, "work") ? '<a class="ksu-btn" href="#' + (on(c, "projects") ? "projects" : "work") + '">' + h.esc(on(c, "projects") ? c.projects.title : c.work.title) + "</a>" : "") + '</div></div><div class="ksu-pic ksu-glass"><figure>' + av + '</figure></div></div><span class="ksu-grab" aria-hidden="true"></span></section>';
+      function win(id, cls, head, body) { return '<section id="' + id + '" class="ksu-win ksu-glass ' + (cls || "") + '">' + head + body + '</section>'; }
+      function hd(eb, t) { return '<div class="ksu-h"><h2>' + h.rich(t) + "</h2>" + (eb ? '<span class="ksu-chip">' + h.esc(eb) + "</span>" : "") + "</div>"; }
+      if (on(c, "about")) out += win("about", "", hd(A.eyebrow, A.storyHeading || ""), '<div class="ksu-about"><div class="prose">' + paras(h, A.story) + (A.quote ? '<p style="font-family:var(--fd);font-size:22px;color:var(--text)">' + h.rich(A.quote) + "</p>" : "") + '</div><div class="ksu-stats">' + A.stats.map(function (s) { return '<div class="ksu-tile"><b>' + h.esc(s.value) + h.esc(s.suffix) + "</b><small>" + h.esc(s.label) + "</small></div>"; }).join("") + "</div></div>");
+      if (on(c, "skills")) out += win("skills", "", hd(c.skills.eyebrow, c.skills.title), '<div class="ksu-grid">' + c.skills.items.map(function (s, i) { return '<div class="ksu-tile">' + h.mo(s.shape, "var(--" + (s.color === "surface" || s.color === "deep" || !s.color ? ["c1", "c2", "c3"][i % 3] : s.color) + ")", 38) + "<h4>" + h.esc(s.title) + "</h4><p>" + h.esc(s.detail) + "</p></div>"; }).join("") + "</div>");
+      if (on(c, "work")) out += win("work", "", hd(c.work.eyebrow, c.work.title), '<div class="ksu-rail">' + c.work.items.map(function (w) { return '<article class="ksu-tile"><time>' + h.esc(w.period) + "</time><h4>" + h.esc(w.title) + "</h4><p>" + h.esc(w.org) + (w.orgNote ? " · " + h.esc(w.orgNote) : "") + "</p>" + (w.bullets.length ? "<ul>" + w.bullets.slice(0, 3).map(function (b) { return "<li>" + h.esc(b) + "</li>"; }).join("") + "</ul>" : "") + "</article>"; }).join("") + "</div>");
+      if (on(c, "projects")) { var pr = projectsOf(c); out += win("projects", "", hd(c.projects.eyebrow, c.projects.title), '<div class="ksu-projs">' + pr.map(function (p, i) { return '<a class="ksu-tile" ' + (p.url ? 'href="' + h.esc(h.safeUrl(p.url)) + '" target="_blank" rel="noopener"' : "") + "><figure>" + h.itemImg(p, i + 2, p.title, 700) + "</figure><h4>" + h.esc(p.title) + "</h4><p>" + h.esc(p.body) + "</p></a>"; }).join("") + "</div>"); }
+      if (on(c, "learning")) out += win("learning", "", hd(c.learning.eyebrow, c.learning.title), '<div class="ksu-learn">' + c.learning.items.map(function (l) { return '<div class="ksu-tile">' + h.mo(l.shape, "var(--c1)", 30) + "<div><b>" + h.esc(l.title) + "</b><span>" + h.esc(l.sub) + (l.period ? " · " + h.esc(l.period) : "") + "</span></div></div>"; }).join("") + "</div>");
+      if (on(c, "contact")) out += win("contact", "ksu-contact", '<span class="ksu-chip"><i></i>' + h.esc(c.contact.eyebrow || c.brand.contactLabel || "") + "</span><h2>" + h.rich(c.contact.title) + "</h2><p>" + h.esc(c.contact.body) + "</p>", (c.contact.email ? '<button type="button" class="ksu-btn pri" data-copy="' + h.esc(c.contact.email) + '">' + h.esc(c.contact.email) + "</button>" : "") + '<div class="ksu-orn" style="justify-content:center">' + links(h, c, "ksu-btn") + "</div>");
+      return out + '</main><footer class="ksu-foot ksu-glass"><span>' + h.esc(c.contact.footerLeft) + "</span><span>" + h.esc(c.contact.footerRight) + "</span></footer>";
+    },
+    init: function (root, c, h) {
+      bindCopy(root, h);
+      var k = root.closest(".k-spatial-ui") || root;
+      try { var bg = getComputedStyle(document.documentElement).getPropertyValue("--bg").trim(), n = parseInt(bg.replace("#", ""), 16); if (!isNaN(n)) k.classList.toggle("lt", 0.2126 * (n >> 16 & 255) + 0.7152 * (n >> 8 & 255) + 0.0722 * (n & 255) > 140); } catch (e) {}
+      if (!h.motion) k.classList.add("ksu-still");
+      var navs = root.querySelectorAll("[data-nav]");
+      var stop1 = inView(Array.prototype.slice.call(root.querySelectorAll("main section[id]")), function (el, vis) { if (vis) navs.forEach(function (a) { a.classList.toggle("on", a.getAttribute("data-nav") === el.id || (el.id === "hero" && a.getAttribute("data-nav") === "top")); }); }, { rootMargin: "-45% 0px -50% 0px" });
+      var stop2 = inView(Array.prototype.slice.call(root.querySelectorAll(".ksu-win")), function (el, vis) { if (vis) el.classList.add("in"); }, { threshold: 0.08 });
+      var scene = root.querySelector(".ksu-scene"), pic = root.querySelector(".ksu-pic"), raf = 0, px = 0, py = 0;
+      function move() { raf = 0; if (scene) { scene.style.setProperty("--ry", (px * 7).toFixed(2) + "deg"); scene.style.setProperty("--rx", (-py * 5).toFixed(2) + "deg"); } if (pic) { pic.style.setProperty("--px", (px * 26).toFixed(1) + "px"); pic.style.setProperty("--py", (py * 20).toFixed(1) + "px"); } }
+      if (h.motion) addEventListener("pointermove", function (e) { if (e.pointerType === "touch") return; px = e.clientX / innerWidth - 0.5; py = e.clientY / innerHeight - 0.5; if (!raf) raf = requestAnimationFrame(move); }, { passive: true, signal: h.signal });
+      // where the pointer rests, the glass catches the light
+      root.addEventListener("pointermove", function (e) { var t = e.target.closest && e.target.closest(".ksu-tile"); if (!t) return; var r = t.getBoundingClientRect(); t.style.setProperty("--gx", (e.clientX - r.left) + "px"); t.style.setProperty("--gy", (e.clientY - r.top) + "px"); }, { passive: true, signal: h.signal });
+      return function () { stop1(); stop2(); };
+    },
+  };
+
   /* ---------- the sections the page adds to a layout: the social photo wall, kind words and the message form ----------
      Each page-style layout says how such a section looks in it: x.cls (the section's classes), x.head (its heading, in the
      layout's own markup), x.secs (the elements the wall is placed among) and the styles for the quotes, the form and the photos.
@@ -735,6 +947,23 @@
     ".k-editorial-motion .has-sbg :is(.pf-b,.sw-btn){background:transparent;color:var(--text)}",
     ".k-editorial-motion .sw-g{gap:10px}.k-editorial-motion .sw-t{border-radius:0;border:1px solid var(--text);filter:grayscale(.25)}.k-editorial-motion .sw-fw{margin-top:22px}",
     "@media(max-width:760px){.k-editorial-motion .pf-q,.k-editorial-motion .pf-f{grid-template-columns:1fr}.k-editorial-motion .pf-q figure{border-left:0;padding:14px 0;border-top:1px solid var(--line)}}",
+  ]);
+
+  X("neumorphism", { cls: "kn-x", head: function (eb, title, text) { return '<div class="kn-h">' + (eb ? '<span class="kn-pill">' + eb + "</span>" : "") + "<h2>" + title + "</h2></div>" + (text ? '<p class="px-lede">' + text + "</p>" : ""); } }, [
+    ".k-neumorphism .pf-extra{max-width:1180px;margin:clamp(40px,6vw,72px) auto 0}.k-neumorphism .px-lede{color:var(--soft);margin:-10px 0 22px}",
+    ".k-neumorphism .pf-q{gap:24px}.k-neumorphism .pf-q figure{background:var(--bg);border:0;border-radius:30px;box-shadow:var(--nup);padding:26px}",
+    ".k-neumorphism .pf-f{max-width:720px;background:var(--bg);border-radius:36px;box-shadow:var(--nup);padding:clamp(22px,3vw,36px);gap:18px}",
+    ".k-neumorphism .pf-f input,.k-neumorphism .pf-f textarea{background:var(--bg);border:0;border-radius:18px;box-shadow:var(--nin);padding:14px 16px}",
+    ".k-neumorphism .pf-b,.k-neumorphism .sw-btn{font:inherit;font-weight:700;padding:14px 24px;border:0;border-radius:999px;background:var(--c1);color:var(--on-c1);box-shadow:var(--nsm);cursor:pointer;text-decoration:none}",
+    ".k-neumorphism .pf-b:active,.k-neumorphism .sw-btn:active{box-shadow:var(--nin)}",
+    ".k-neumorphism .sw-g{gap:20px}.k-neumorphism .sw-t{border:10px solid var(--bg);border-radius:26px;box-shadow:var(--nup)}",
+  ]);
+  X("spatial-ui", { cls: "ksu-x ksu-glass", head: function (eb, title, text) { return '<div class="ksu-h"><h2>' + title + "</h2>" + (eb ? '<span class="ksu-chip">' + eb + "</span>" : "") + "</div>" + (text ? '<p class="px-lede">' + text + "</p>" : ""); } }, [
+    ".k-spatial-ui .pf-extra{max-width:1180px;margin:clamp(36px,6vw,80px) auto 0;border-radius:40px;padding:clamp(24px,4.4vw,60px)}.k-spatial-ui .px-lede{color:var(--soft);margin:-10px 0 22px}",
+    ".k-spatial-ui .pf-q{gap:16px}.k-spatial-ui .pf-q figure{background:color-mix(in srgb,var(--surface) 40%,transparent);border:1px solid var(--rim);border-radius:26px;padding:22px}",
+    ".k-spatial-ui .pf-f{max-width:760px;gap:16px}.k-spatial-ui .pf-f input,.k-spatial-ui .pf-f textarea{background:color-mix(in srgb,var(--bg) 50%,transparent);border:1px solid var(--rim);border-radius:16px;color:var(--text)}",
+    ".k-spatial-ui .pf-b,.k-spatial-ui .sw-btn{font:inherit;font-weight:700;padding:13px 22px;border-radius:999px;border:0;background:var(--c1);color:var(--on-c1);cursor:pointer;text-decoration:none;box-shadow:0 12px 28px -10px color-mix(in srgb,var(--c1) 80%,transparent)}",
+    ".k-spatial-ui .sw-g{gap:14px}.k-spatial-ui .sw-t{border-radius:22px;border:1px solid var(--rim)}",
   ]);
 
   root.SiteLayouts = { kits: K, has: function (id) { return !!K[id]; }, list: Object.keys(K).map(function (k) { return [k, K[k].name]; }) };

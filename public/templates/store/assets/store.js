@@ -557,7 +557,7 @@ function applyTheme(t) {
   r.setProperty("--logo-r", Math.max(0, Math.min(50, t.logoRadius ?? 26)) + "%");
   MOTIF = window.SiteMotifs ? SiteMotifs.resolve(t, "cafe") : "geometric";
   const d = document.documentElement.dataset; d.motif = moOn() ? MOTIF : "geometric";
-  for (const k of ["layout", "heroArt", "nav", "cards", "buttons", "motionStyle", "pattern", "ornament", "heading", "shead", "width", "grid", "product", "cursor", "loader", "textfx", "hoverfx", "scrollfx", "overlay", "herofx", "loaderOn"]) d[k] = String(t[k] || "");
+  for (const k of ["look", "layout", "heroArt", "nav", "cards", "buttons", "motionStyle", "pattern", "ornament", "heading", "shead", "width", "grid", "product", "cursor", "loader", "textfx", "hoverfx", "scrollfx", "overlay", "herofx", "loaderOn"]) d[k] = String(t[k] || "");
   d.scrollease = t.scrollEase || "light"; d.linebreaks = t.lineBreaks || "typed"; d.menu = String(t.navMode || ""); d.menumob = String(t.navModeMob || "");
   d.crumbs = (C.nav || {}).crumbs === false ? "off" : "on"; d.introfont = t.introFont || "display"; d.introcase = t.introCase || "upper";
   r.setProperty("--r", (+t.radius || 0) + "px");

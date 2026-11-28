@@ -52,6 +52,10 @@ export const CFDB_TABLES: string[] = [
   // a visitor once a day and can't be followed from one day to the next. Rows older than about 13 months are removed.
   "create table if not exists hits (site text not null, day text not null, ts integer not null, path text not null default '/', ref text not null default '', src text not null default '', dev text not null default '', cc text not null default '', vh text not null default '')",
   "create index if not exists hits_site_day on hits (site, day)",
+  // What visitors do on a page (built-in analytics): products seen in lists (imp) and added to the cart (cart), taps on call,
+  // WhatsApp and email links, forms sent, links out (out). key: the product, number or site; pv: the page view it happened on.
+  "create table if not exists events (site text not null, day text not null, ts integer not null, kind text not null, key text not null default '', vh text not null default '', pv text not null default '')",
+  "create index if not exists events_site_day on events (site, day, kind)",
 ];
 export const CFDB_SCHEMA = CFDB_TABLES.join(";\n") + ";";
 /** Changes to a table that already exists. Each is made once: the Worker first asks `probe`; only if that fails does it run `steps`
@@ -59,11 +63,18 @@ export const CFDB_SCHEMA = CFDB_TABLES.join(";\n") + ";";
  *  - enquiries.ref: an order's or registration's number, read out of the saved JSON by the database itself (a generated column, so no
  *    row is rewritten and nothing that saves an enquiry changes), with an index, so one is found directly instead of by searching the text. */
 export const CFDB_UPGRADES: { name: string; probe: string; steps: string[] }[] = [
+  // hits: the page view's own id (pv), how long it was looked at (dur, seconds) and how far down it was read (depth, %).
+  { name: "hits.engaged", probe: "select pv, dur, depth from hits limit 1", steps: [
+    "alter table hits add column pv text not null default ''",
+    "alter table hits add column dur integer not null default 0",
+    "alter table hits add column depth integer not null default 0",
+    "create index if not exists hits_pv on hits (site, pv)",
+  ] },
   { name: "enquiries.ref", probe: "select ref from enquiries limit 1", steps: [
     "alter table enquiries add column ref text generated always as (case when json_valid(data) then coalesce(nullif(json_extract(data, '$.order_no'), ''), nullif(json_extract(data, '$.reg_no'), ''), '') else '' end) virtual",
     "create index if not exists enquiries_ref on enquiries (site, ref)",
   ] },
 ];
-export const CFDB_VERSION = 117;
+export const CFDB_VERSION = 118;
 /** The database Worker's name on Cloudflare. */
 export const CFDB_WORKER_NAME = "picaffectz-db";

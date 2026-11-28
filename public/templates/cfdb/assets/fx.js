@@ -812,22 +812,59 @@
     sc.textContent = "(function(block){try{\n" + js + "\n}catch(e){console.error(" + JSON.stringify(name) + ",e)}})(window.__ccBlock);";
     document.body.appendChild(sc); window.__ccBlock = null;
   }
-  /* Built-in analytics: this page view, sent to the site's own database (cms/site.json says which) once per page load.
+  /* Built-in analytics: this page view and what happens on it, sent to the site's own database (cms/site.json says which).
      Only when the visitor allows analytics under the site's cookie consent (or the site asks for none), never in the
      Studio's preview, and not when the site switched it off (content.analytics.on === false). No cookie is set and nothing
-     is stored in the browser; the database keeps the page, the referring site, the device type and the country. */
+     is stored in the browser. Sent: the page view (page, referring site, campaign, device type); how long the page was
+     looked at and how far down it was read; products seen in lists (impressions) and added to the cart; taps on call,
+     WhatsApp and email links, forms sent and links out to other sites. */
   function siteAnalytics(c) {
     if (PREVIEW || window.__saSent || navigator.webdriver || (c && c.analytics && c.analytics.on === false)) return;
     if (/^(localhost|127\.|192\.168\.)/.test(location.hostname) || location.protocol === "file:") return;
     var allowed = function () { var S = window.SiteConsent; try { return !(S && S.state && S.state().asked) || S.has("analytics"); } catch (e) { return true; } };
+    var pv = Math.random().toString(36).slice(2, 12), H = null, queue = [], seen = {}, shown = 0, since = 0, depth = 0;
+    var post = function (path, o) {
+      if (!H) return; var url = String(H.api).replace(/\/+$/, "") + path, body = JSON.stringify(o);
+      if (!(navigator.sendBeacon && navigator.sendBeacon(url, body))) fetch(url, { method: "POST", body: body, keepalive: true, mode: "cors" }).catch(function () {});
+    };
+    var ev = function (k, key) { if (!H) return; queue.push({ k: k, key: String(key || "").slice(0, 120) }); if (queue.length >= 25) flush(); };
+    var flush = function () { if (H && queue.length) { post("/a/ev", { site: H.site, pv: pv, ev: queue.splice(0, 30) }); } };
+    var look = function () { var now = Date.now(); if (since) shown += now - since; since = document.visibilityState === "visible" ? now : 0; };
+    var end = function () { look(); flush(); if (H) post("/a/end", { site: H.site, pv: pv, sec: Math.round(shown / 1000), depth: depth }); };
+    var key = function (el) {
+      var a = el.closest ? el.closest("a[href]") : null, inner = el.querySelector ? el.querySelector('a[href*="product.html?p="]') : null;
+      var h = (el.getAttribute && (el.getAttribute("href") || "")) || (a && a.getAttribute("href")) || (inner && inner.getAttribute("href")) || "", m = /product\.html\?p=([^&#]+)/.exec(h);
+      if (el.getAttribute && el.getAttribute("data-product")) return el.getAttribute("data-product");
+      if (m) { try { return decodeURIComponent(m[1]); } catch (x) { return m[1]; } }
+      var n = el.querySelector && el.querySelector(".dish-n span"); return n ? n.textContent.trim() : "";
+    };
+    var start = function () {
+      // Products seen: each product shown at least half on screen, counted once per page view.
+      if ("IntersectionObserver" in window) {
+        var io = new IntersectionObserver(function (es) { es.forEach(function (e) { if (!e.isIntersecting) return; var k = key(e.target); io.unobserve(e.target); if (k && !seen[k]) { seen[k] = 1; ev("imp", k); } }); }, { threshold: 0.5 });
+        var watch = function () { document.querySelectorAll('[data-product],a.pcard[href*="product.html?p="],.prod,.dish').forEach(function (el) { if (!el.__saW) { el.__saW = 1; io.observe(el); } }); };
+        watch(); setTimeout(watch, 1500); setInterval(watch, 4000);
+      }
+      addEventListener("site:cart", function (e) { var d = (e && e.detail) || {}; ev("cart", d.key || d.name || ""); });
+      document.addEventListener("click", function (e) {
+        var a = e.target && e.target.closest && e.target.closest("a[href]"); if (!a) return; var h = a.getAttribute("href") || "";
+        if (/^tel:/i.test(h)) ev("call", h.slice(4)); else if (/^mailto:/i.test(h)) ev("email", ""); else if (/wa\.me|whatsapp\.com|api\.whatsapp/i.test(h)) ev("whatsapp", "");
+        else if (/^https?:/i.test(h)) { try { var u = new URL(h, location.href); if (u.hostname !== location.hostname) ev("out", u.hostname.replace(/^www\./, "")); } catch (x) { /* not a link */ } }
+      }, true);
+      document.addEventListener("submit", function (e) { var f = e.target; ev("form", (f && (f.getAttribute("aria-label") || f.id || f.className || "")).toString().slice(0, 60)); }, true);
+      addEventListener("scroll", function () { var d = document.documentElement, h = Math.max(1, d.scrollHeight - innerHeight); depth = Math.max(depth, Math.min(100, Math.round((scrollY / h) * 100))); }, { passive: true });
+      since = document.visibilityState === "visible" ? Date.now() : 0;
+      document.addEventListener("visibilitychange", function () { if (document.visibilityState === "hidden") end(); else look(); });
+      addEventListener("pagehide", end);
+      setInterval(flush, 8000);
+    };
     var send = function () {
       if (window.__saSent || !allowed()) return; window.__saSent = 1;
       fetch("cms/site.json", { cache: "force-cache" }).then(function (r) { return r.json(); }).then(function (j) {
-        var h = j && (j.host && j.host.kind === "cloudflare" ? j.host : j.signin); if (!h || !h.api || !h.site) return;
-        var q = new URLSearchParams(location.search), w = innerWidth || 1200, key = q.get("p") ? "p" : q.get("s") ? "s" : q.get("product") ? "product" : "";
-        var body = JSON.stringify({ site: h.site, path: location.pathname + (key ? "?" + key + "=" + q.get(key) : ""), ref: document.referrer || "", host: location.hostname, dev: w < 768 ? "mobile" : w < 1100 ? "tablet" : "desktop", src: q.get("utm_source") || q.get("ref") || "" });
-        var url = String(h.api).replace(/\/+$/, "") + "/a/hit";
-        if (!(navigator.sendBeacon && navigator.sendBeacon(url, body))) fetch(url, { method: "POST", body: body, keepalive: true, mode: "cors" }).catch(function () {});
+        var h = j && (j.host && j.host.kind === "cloudflare" ? j.host : j.signin); if (!h || !h.api || !h.site) return; H = h;
+        var q = new URLSearchParams(location.search), w = innerWidth || 1200, k = q.get("p") ? "p" : q.get("s") ? "s" : q.get("product") ? "product" : "";
+        post("/a/hit", { site: h.site, pv: pv, path: location.pathname + (k ? "?" + k + "=" + q.get(k) : ""), ref: document.referrer || "", host: location.hostname, dev: w < 768 ? "mobile" : w < 1100 ? "tablet" : "desktop", src: q.get("utm_source") || q.get("ref") || "" });
+        start();
       }).catch(function () {});
     };
     // The consent banner is drawn a moment after the page: wait for it, then count now or once the visitor allows analytics.

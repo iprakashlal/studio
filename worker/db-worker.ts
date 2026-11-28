@@ -695,42 +695,103 @@ async function siteMail(env: Env, site: string): Promise<Env> {
 const dayOf = (t: number) => new Date(t).toISOString().slice(0, 10);
 const BOT = /bot|crawl|spider|slurp|preview|headless|lighthouse|pingdom|monitor|curl|wget|python|httpclient|facebookexternalhit|whatsapp/i;
 const aclip = (v: unknown, n: number) => String(v ?? "").replace(/[\u0000-\u001f]/g, "").trim().slice(0, n);
+/** Only a site this database serves (its own content here, or a GitHub site that signs in here) is counted. */
+async function siteKnown(env: Env, site: string) {
+  return !!((await env.DB.prepare("select 1 x from files where scope = ? and path = 'content.json'").bind("site:" + site).first()) || (await env.DB.prepare("select 1 x from site_repos where site = ?").bind(site).first()));
+}
+const visitorHash = async (env: Env, req: Request, site: string, day: string) => b64u(await hmac(env.SECRET, "v:" + site + ":" + day + ":" + (req.headers.get("CF-Connecting-IP") || req.headers.get("X-Forwarded-For") || "") + ":" + (req.headers.get("User-Agent") || ""))).slice(0, 16);
+const none = () => new Response(null, { status: 204, headers: cors });
+const pvOk = (v: unknown) => (/^[a-z0-9]{4,16}$/.test(String(v || "")) ? String(v) : "");
 async function recordHit(env: Env, req: Request): Promise<Response> {
   const ua = req.headers.get("User-Agent") || "";
-  if (BOT.test(ua)) return new Response(null, { status: 204, headers: cors });
-  let b: any = {}; try { b = JSON.parse(await req.text()); } catch { return new Response(null, { status: 204, headers: cors }); }
+  if (BOT.test(ua)) return none();
+  let b: any = {}; try { b = JSON.parse(await req.text()); } catch { return none(); }
   const site = String(b.site || "");
-  if (!/^[a-z0-9][a-z0-9-]{0,59}$/.test(site)) return new Response(null, { status: 204, headers: cors });
+  if (!/^[a-z0-9][a-z0-9-]{0,59}$/.test(site)) return none();
   await ensure(env);
-  // Only a site this database serves (its own content here, or a GitHub site that signs in here) is counted.
-  const known = (await env.DB.prepare("select 1 x from files where scope = ? and path = 'content.json'").bind("site:" + site).first()) || (await env.DB.prepare("select 1 x from site_repos where site = ?").bind(site).first());
-  if (!known) return new Response(null, { status: 204, headers: cors });
-  const now = Date.now(), day = dayOf(now), ip = req.headers.get("CF-Connecting-IP") || req.headers.get("X-Forwarded-For") || "";
-  const vh = b64u(await hmac(env.SECRET, "v:" + site + ":" + day + ":" + ip + ":" + ua)).slice(0, 16);
+  if (!(await siteKnown(env, site))) return none();
+  const now = Date.now(), day = dayOf(now), vh = await visitorHash(env, req, site, day);
   // One visitor's own reloads count once a minute per page, so a stuck refresh can't pump the numbers.
   let path = aclip(b.path, 200) || "/"; if (!path.startsWith("/")) path = "/" + path;
   const recent = await env.DB.prepare("select 1 x from hits where site = ? and day = ? and vh = ? and path = ? and ts > ? limit 1").bind(site, day, vh, path, now - 60_000).first();
-  if (recent) return new Response(null, { status: 204, headers: cors });
+  if (recent) return none();
   let ref = ""; try { const h = new URL(String(b.ref || "")).hostname.replace(/^www\./, ""); if (h && h !== String(b.host || "").replace(/^www\./, "")) ref = h.slice(0, 100); } catch { /* none */ }
   const dev = ["mobile", "tablet", "desktop"].includes(b.dev) ? b.dev : /Mobi|Android|iPhone/i.test(ua) ? "mobile" : "desktop";
   const cc = aclip((req as any).cf?.country || req.headers.get("CF-IPCountry") || "", 2).toUpperCase().replace(/[^A-Z]/g, "");
-  await env.DB.prepare("insert into hits (site, day, ts, path, ref, src, dev, cc, vh) values (?, ?, ?, ?, ?, ?, ?, ?, ?)").bind(site, day, now, path, ref, aclip(b.src, 60).toLowerCase(), dev, cc, vh).run();
+  const src = aclip(b.src, 60).toLowerCase(), pv = pvOk(b.pv);
+  if (await upgradedTo(env, "hits.engaged")) await env.DB.prepare("insert into hits (site, day, ts, path, ref, src, dev, cc, vh, pv) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").bind(site, day, now, path, ref, src, dev, cc, vh, pv).run();
+  else await env.DB.prepare("insert into hits (site, day, ts, path, ref, src, dev, cc, vh) values (?, ?, ?, ?, ?, ?, ?, ?, ?)").bind(site, day, now, path, ref, src, dev, cc, vh).run();
   // Now and then, rows older than about 13 months go.
-  if (Math.random() < 0.002) await env.DB.prepare("delete from hits where day < ?").bind(dayOf(now - 400 * 864e5)).run().catch(() => {});
-  return new Response(null, { status: 204, headers: cors });
+  if (Math.random() < 0.002) { const old = dayOf(now - 400 * 864e5); await env.DB.prepare("delete from hits where day < ?").bind(old).run().catch(() => {}); await env.DB.prepare("delete from events where day < ?").bind(old).run().catch(() => {}); }
+  return none();
 }
-/** A site's numbers for the last `days` days (and the same length before, to compare). `q` runs one query: this database's
- *  own, or (through /cfx/db) a site database on another Cloudflare account. */
-async function siteStats(q: (sql: string, args: unknown[]) => Promise<any[]>, site: string, days: number) {
-  days = Math.max(1, Math.min(365, Math.round(days) || 30));
-  const now = Date.now(), from = dayOf(now - (days - 1) * 864e5), prev = dayOf(now - (2 * days - 1) * 864e5);
-  const W = "from hits where site = ? and day >= ?", top = async (col: string, n: number, extra = "") => (await q(`select ${col} k, count(*) v, count(distinct day || vh) u ${W} ${extra} group by ${col} order by v desc limit ${n}`, [site, from])).map((r) => ({ k: r.k, v: +r.v, u: +r.u }));
-  const [t] = await q(`select count(*) v, count(distinct day || vh) u ${W}`, [site, from]);
-  const [p] = await q("select count(*) v, count(distinct day || vh) u from hits where site = ? and day >= ? and day < ?", [site, prev, from]);
+/** The end of a page view: how long it was looked at (seconds, only while on screen) and how far down it was read. */
+async function recordEnd(env: Env, req: Request): Promise<Response> {
+  let b: any = {}; try { b = JSON.parse(await req.text()); } catch { return none(); }
+  const site = String(b.site || ""), pv = pvOk(b.pv); if (!/^[a-z0-9][a-z0-9-]{0,59}$/.test(site) || !pv) return none();
+  const sec = Math.max(0, Math.min(3600, Math.round(+b.sec || 0))), depth = Math.max(0, Math.min(100, Math.round(+b.depth || 0)));
+  await ensure(env); if (!(await upgradedTo(env, "hits.engaged"))) return none();
+  // Only the page view's own row, and only upwards (a page sends this each time it is left, and again when it is closed).
+  await env.DB.prepare("update hits set dur = max(dur, ?), depth = max(depth, ?) where site = ? and pv = ? and ts > ?").bind(sec, depth, site, pv, Date.now() - 2 * 864e5).run();
+  return none();
+}
+const EV_KINDS = ["imp", "cart", "call", "whatsapp", "email", "form", "out"];
+/** What visitors did on a page: products seen and added to the cart, taps on call / WhatsApp / email, forms, links out. */
+async function recordEvents(env: Env, req: Request): Promise<Response> {
+  if (BOT.test(req.headers.get("User-Agent") || "")) return none();
+  let b: any = {}; try { b = JSON.parse(await req.text()); } catch { return none(); }
+  const site = String(b.site || ""), pv = pvOk(b.pv), list = Array.isArray(b.ev) ? b.ev.slice(0, 30) : [];
+  if (!/^[a-z0-9][a-z0-9-]{0,59}$/.test(site) || !pv || !list.length) return none();
+  await ensure(env); if (!(await siteKnown(env, site))) return none();
+  const now = Date.now(), day = dayOf(now), vh = await visitorHash(env, req, site, day);
+  const rows = list.map((e: any) => ({ k: String(e?.k || ""), key: aclip(e?.key, 120) })).filter((e: any) => EV_KINDS.includes(e.k));
+  if (rows.length) await env.DB.batch(rows.map((e: any) => env.DB.prepare("insert into events (site, day, ts, kind, key, vh, pv) values (?, ?, ?, ?, ?, ?, ?)").bind(site, day, now, e.k, e.key, vh, pv)));
+  return none();
+}
+/** A money amount as the site wrote it ("₹1,480.00", "1480") as a number. */
+const moneyOf = (v: unknown) => { const n = parseFloat(String(v ?? "").replace(/[^\d.]/g, "")); return Number.isFinite(n) ? n : 0; };
+/** A site's numbers for a period: the last `days` days, or from..to (YYYY-MM-DD, inclusive), with the same length before
+ *  it to compare. `q` runs one query: this database's own, or (through /cfx/db) a site database on another Cloudflare account.
+ *  tz: the reader's offset from UTC in minutes, for the hour of the day. top: how many rows each list has (up to 100). */
+async function siteStats(q: (sql: string, args: unknown[]) => Promise<any[]>, site: string, o: { days?: number; from?: string; to?: string; tz?: number; top?: number }) {
+  const now = Date.now(), D = /^\d{4}-\d{2}-\d{2}$/;
+  let from: string, to: string;
+  if (o.from && o.to && D.test(o.from) && D.test(o.to) && o.from <= o.to) { from = o.from; to = o.to; }
+  else { const days = Math.max(1, Math.min(366, Math.round(o.days || 30))); to = dayOf(now); from = dayOf(now - (days - 1) * 864e5); }
+  const span = Math.round((Date.parse(to) - Date.parse(from)) / 864e5) + 1, prevTo = dayOf(Date.parse(from) - 864e5), prevFrom = dayOf(Date.parse(from) - span * 864e5);
+  const n = Math.max(5, Math.min(100, Math.round(o.top || 15))), tz = Math.max(-720, Math.min(840, Math.round(o.tz || 0)));
+  const W = "from hits where site = ? and day >= ? and day <= ?", A = [site, from, to];
+  const safe = async (sql: string, args: unknown[]) => { try { return await q(sql, args); } catch { return [] as any[]; } };
+  const top = async (col: string, extra = "") => (await q(`select ${col} k, count(*) v, count(distinct day || vh) u ${W} ${extra} group by ${col} order by v desc limit ${n}`, A)).map((r) => ({ k: String(r.k ?? ""), v: +r.v, u: +r.u }));
+  const sums = async (f: string, t: string) => (await safe(`select count(*) v, count(distinct day || vh) u, coalesce(sum(dur), 0) d, sum(case when dur > 0 then 1 else 0 end) dn, coalesce(avg(case when dur > 0 then depth end), 0) dp from hits where site = ? and day >= ? and day <= ?`, [site, f, t]))[0]
+    || (await q(`select count(*) v, count(distinct day || vh) u, 0 d, 0 dn, 0 dp from hits where site = ? and day >= ? and day <= ?`, [site, f, t]))[0];
+  const bounce = async (f: string, t: string) => +((await safe("select count(*) b from (select day, vh, count(*) c, max(dur) m from hits where site = ? and day >= ? and day <= ? group by day, vh) where c = 1 and m < 10", [site, f, t]))[0]?.b || 0);
+  const t = await sums(from, to), p = await sums(prevFrom, prevTo);
   const [live] = await q("select count(distinct vh) n from hits where site = ? and ts > ?", [site, now - 5 * 60_000]);
-  const daily = (await q(`select day, count(*) v, count(distinct vh) u ${W} group by day order by day`, [site, from])).map((r) => ({ day: r.day, v: +r.v, u: +r.u }));
-  return { days, from, views: +t?.v || 0, visitors: +t?.u || 0, prevViews: +p?.v || 0, prevVisitors: +p?.u || 0, live: +live?.n || 0, daily,
-    pages: await top("path", 15), refs: await top("ref", 10, "and ref != ''"), sources: await top("src", 10, "and src != ''"), devices: await top("dev", 3), countries: await top("cc", 12, "and cc != ''") };
+  const daily = (await safe(`select day, count(*) v, count(distinct vh) u, coalesce(sum(dur), 0) d ${W} group by day order by day`, A)).map((r) => ({ day: String(r.day), v: +r.v, u: +r.u, d: +r.d }));
+  const pages = (await safe(`select path k, count(*) v, count(distinct day || vh) u, coalesce(avg(case when dur > 0 then dur end), 0) t, coalesce(avg(case when dur > 0 then depth end), 0) dp ${W} group by path order by v desc limit ${n}`, A)).map((r) => ({ k: String(r.k), v: +r.v, u: +r.u, t: Math.round(+r.t), dp: Math.round(+r.dp) }));
+  const edge = async (dir: string) => (await safe(`select path k, count(*) v from (select path, row_number() over (partition by day, vh order by ts ${dir}) rn ${W}) where rn = 1 group by path order by v desc limit ${n}`, A)).map((r) => ({ k: String(r.k), v: +r.v, u: +r.v }));
+  const hours = Array(24).fill(0), week = Array(7).fill(0);
+  for (const r of await safe(`select cast(strftime('%H', ts / 1000 + ? * 60, 'unixepoch') as integer) h, cast(strftime('%w', ts / 1000 + ? * 60, 'unixepoch') as integer) w, count(*) v ${W} group by h, w`, [tz, tz, ...A])) { hours[+r.h] += +r.v; week[+r.w] += +r.v; }
+  // Products: seen in lists (impressions), their own page opened (views, with the time spent there), and added to the cart.
+  const P = new Map<string, { k: string; imp: number; v: number; t: number; cart: number }>(), pr = (k: string) => { let x = P.get(k); if (!x) P.set(k, (x = { k, imp: 0, v: 0, t: 0, cart: 0 })); return x; };
+  for (const r of await safe("select key, kind, count(*) c from events where site = ? and day >= ? and day <= ? and kind in ('imp', 'cart') and key != '' group by key, kind", A)) { const x = pr(String(r.key)); if (r.kind === "imp") x.imp = +r.c; else x.cart = +r.c; }
+  for (const r of await safe(`select substr(path, instr(path, '?p=') + 3) k, count(*) v, coalesce(avg(case when dur > 0 then dur end), 0) t ${W} and path like '%product.html?p=%' group by k`, A)) { let k = String(r.k); try { k = decodeURIComponent(k); } catch { /* as written */ } const x = pr(k); x.v += +r.v; x.t = Math.round(+r.t); }
+  const products = [...P.values()].sort((a, b) => b.v - a.v || b.imp - a.imp || b.cart - a.cart).slice(0, n);
+  const actions: Record<string, number> = {}; for (const r of await safe("select kind, count(*) c from events where site = ? and day >= ? and day <= ? and kind != 'imp' group by kind", A)) actions[String(r.kind)] = +r.c;
+  const outs = (await safe(`select key k, count(*) v from events where site = ? and day >= ? and day <= ? and kind = 'out' group by key order by v desc limit ${n}`, A)).map((r) => ({ k: String(r.k), v: +r.v, u: +r.v }));
+  // Orders and enquiries the site's forms saved in the period (the shop and restaurant orders carry an order number and a total).
+  let orders = 0, revenue = 0, enquiries = 0, pOrders = 0, pRevenue = 0;
+  for (const r of await safe("select data, created_at from enquiries where site = ? and created_at >= ? and created_at < ? and status != 'cancelled' limit 20000", [site, prevFrom, dayOf(Date.parse(to) + 864e5)])) {
+    let d: any = {}; try { d = JSON.parse(r.data); } catch { /* skip */ }
+    const cur = String(r.created_at) >= from;
+    if (d?.order_no) { if (cur) { orders++; revenue += moneyOf(d.total); } else { pOrders++; pRevenue += moneyOf(d.total); } } else if (cur) enquiries++;
+  }
+  return { days: span, from, to, views: +t?.v || 0, visitors: +t?.u || 0, prevViews: +p?.v || 0, prevVisitors: +p?.u || 0, live: +live?.n || 0,
+    time: +t?.d || 0, timed: +t?.dn || 0, prevTime: +p?.d || 0, depth: Math.round(+t?.dp || 0), bounces: await bounce(from, to), prevBounces: await bounce(prevFrom, prevTo),
+    orders, revenue: Math.round(revenue), enquiries, prevOrders: pOrders, prevRevenue: Math.round(pRevenue), daily, hours, week,
+    pages, entries: await edge("asc"), exits: await edge("desc"), refs: await top("ref", "and ref != ''"), sources: await top("src", "and src != ''"), devices: await top("dev"), countries: await top("cc", "and cc != ''"),
+    products, actions, outs };
 }
 /** The Resend the database itself sends with (the Studio's own emails, and every site that has none of its own): the
  *  Studio's Project defaults → Email (Resend) when the database was set up to use them (MAIL_PD), or when it has no key of
@@ -2060,7 +2121,7 @@ export default {
     const u = new URL(req.url), p = u.pathname.replace(/\/+$/, "") || "/";
     try {
       env = await withStudioMail(env);
-      if (p === "/") return json({ ok: true, service: "site-studio-db", v: V, mail: !!(env.RESEND_API_KEY && env.MAIL_FROM), ...(env.MAIL_PD === "1" ? { mailPd: true } : {}), ...(env.CF_TOKEN && env.CF_ACCOUNT ? { deploy: true, account: env.CF_ACCOUNT } : {}), ...(env.GH_TOKEN ? { gh: true } : {}), ...(env.AI ? { ai: true, pamphlet: 2 } : {}), reviews: true, analytics: 1, dq: 1, look: 1, outline: 1, pictures: 1, connect: 2, translate: 4, approvals: 1, accounts: 2, cfx: 4, cfa: 1, google: 1, studioPages: 1, del: 1, enqMail: 3, ...(otherAccounts(env).length ? { more: otherAccounts(env).length } : {}) });
+      if (p === "/") return json({ ok: true, service: "site-studio-db", v: V, mail: !!(env.RESEND_API_KEY && env.MAIL_FROM), ...(env.MAIL_PD === "1" ? { mailPd: true } : {}), ...(env.CF_TOKEN && env.CF_ACCOUNT ? { deploy: true, account: env.CF_ACCOUNT } : {}), ...(env.GH_TOKEN ? { gh: true } : {}), ...(env.AI ? { ai: true, pamphlet: 2 } : {}), reviews: true, analytics: 2, dq: 1, look: 1, outline: 1, pictures: 1, connect: 2, translate: 4, approvals: 1, accounts: 2, cfx: 4, cfa: 1, google: 1, studioPages: 1, del: 1, enqMail: 3, ...(otherAccounts(env).length ? { more: otherAccounts(env).length } : {}) });
 
       // ---- a site's social photo wall, filled by itself (public): GET /wall/<site>?src=instagram|pinterest&pin=<profile or board>&n=12
       // Answers are kept for half an hour, so a busy site asks Instagram or Pinterest twice an hour at most.
@@ -2249,6 +2310,8 @@ export default {
 
       // ---- a published site's page view (built-in analytics): public, nothing that names the visitor is kept
       if (p === "/a/hit" && req.method === "POST") return recordHit(env, req);
+      if (p === "/a/end" && req.method === "POST") return recordEnd(env, req);
+      if (p === "/a/ev" && req.method === "POST") return recordEvents(env, req);
       // ---- public reads for hosted sites: /p/<site>/<path>
       if (p.startsWith("/p/") && req.method === "GET") {
         const [, , site, ...rest] = p.split("/"); const path = decodeURIComponent(rest.join("/"));
@@ -3146,7 +3209,7 @@ export default {
               if (sub === "delete") { await q("delete from enquiries where id = ? and site = ?", [id, site]); return json({ db: dbId, ok: true }); }
               return err(400, "Unknown operation.");
             }
-            if (op === "stats") return json({ db: dbId, stats: await siteStats(q, site, +b.days || 30) });
+            if (op === "stats") return json({ db: dbId, stats: await siteStats(q, site, { days: +b.days || 30, from: b.from, to: b.to, tz: +b.tz || 0, top: +b.top || 15 }) });
             if (op === "mem") {
               // The site's sign-in emails (its editors): list, add, remove.
               const sub = String(b.sub || "list");
@@ -3476,7 +3539,9 @@ export default {
       // Built-in analytics: a site's numbers, for its own people (and the Studio's owners, who are members of the sites they publish).
       if (p === "/a/stats" && scope.startsWith("site:")) {
         await ensure(env);
-        return json(await siteStats(async (sql, args) => ((await env.DB.prepare(sql).bind(...args).all()).results || []) as any[], scope.slice(5), +(u.searchParams.get("days") || 30)));
+        await upgradedTo(env, "hits.engaged");
+        const g = (k: string) => u.searchParams.get(k) || undefined;
+        return json(await siteStats(async (sql, args) => ((await env.DB.prepare(sql).bind(...args).all()).results || []) as any[], scope.slice(5), { days: +(g("days") || 30), from: g("from"), to: g("to"), tz: +(g("tz") || 0), top: +(g("top") || 15) }));
       }
       if (p === "/e/list") {
         const site = scope.replace(/^site:/, "");

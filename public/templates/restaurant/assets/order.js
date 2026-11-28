@@ -454,6 +454,7 @@
     x.G.forEach((g, gi) => (s.g[gi] || []).forEach((oi) => g.opts[oi] && addons.push({ label: g.opts[oi].label, price: g.opts[oi].price })));
     const note = String(s.note || "").trim().slice(0, 140), key = [x.id, v ? v.label : "", addons.map((a) => a.label).join("+"), note].join("|");
     const unit = (v ? v.price : x.base) + addons.reduce((n, a) => n + a.price, 0), had = cart.find((l) => l.key === key);
+    try { dispatchEvent(new CustomEvent("site:cart", { detail: { key: x.d.name, name: x.d.name, qty: s.qty } })); } catch (e) { /* old browsers: not counted */ }
     if (had) had.qty = Math.min(50, had.qty + s.qty); else cart.push({ key, id: x.id, name: x.d.name, diet: x.d.diet || "", variant: v ? v.label : "", addons, note, qty: Math.min(50, s.qty), unit });
     save();
   }

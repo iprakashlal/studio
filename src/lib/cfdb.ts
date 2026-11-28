@@ -459,15 +459,25 @@ export async function siteMailBridge(cf: { api: string; site: string }, account?
   return { set: async (key, from) => { const r = await cfCall<any>(l.api, `/cfx/db?scope=${encodeURIComponent("studio:" + l.studio)}`, { method: "POST", body: JSON.stringify({ account, site: cf.site, db: dbIds.get(account!), op: "mail", key, from }) }); if (r?.db) dbIds.set(account!, r.db); } };
 }
 /** A site's enquiries: from its own database when signed in to it here, else through the Studio's database. */
-/** Built-in analytics: a site's numbers for the last `days` days, from its own database (signed in on this device) or
- *  through the Studio's database (a site database on another Cloudflare account). */
-export type SiteStats = { days: number; from: string; views: number; visitors: number; prevViews: number; prevVisitors: number; live: number; daily: { day: string; v: number; u: number }[];
-  pages: Row3[]; refs: Row3[]; sources: Row3[]; devices: Row3[]; countries: Row3[] };
-type Row3 = { k: string; v: number; u: number };
-export async function siteStats(cf: { api: string; site: string }, days: number, account?: string): Promise<SiteStats> {
+/** Built-in analytics: a site's numbers for a period (the last `days` days, or from..to), from its own database (signed in on
+ *  this device) or through the Studio's database (a site database on another Cloudflare account). */
+export type Row3 = { k: string; v: number; u: number };
+export type SiteStats = { days: number; from: string; to?: string; views: number; visitors: number; prevViews: number; prevVisitors: number; live: number;
+  /** Seconds looked at, in all; how many views sent their time; the period before's; average depth read (%). */
+  time?: number; timed?: number; prevTime?: number; depth?: number;
+  /** Visitors who saw one page for under 10 seconds. */
+  bounces?: number; prevBounces?: number;
+  orders?: number; revenue?: number; enquiries?: number; prevOrders?: number; prevRevenue?: number;
+  daily: { day: string; v: number; u: number; d?: number }[]; hours?: number[]; week?: number[];
+  pages: (Row3 & { t?: number; dp?: number })[]; entries?: Row3[]; exits?: Row3[]; refs: Row3[]; sources: Row3[]; devices: Row3[]; countries: Row3[];
+  products?: { k: string; imp: number; v: number; t: number; cart: number }[]; actions?: Record<string, number>; outs?: Row3[] };
+export type StatsAsk = { days?: number; from?: string; to?: string; top?: number };
+export async function siteStats(cf: { api: string; site: string }, ask: StatsAsk | number, account?: string): Promise<SiteStats> {
+  const o: StatsAsk = typeof ask === "number" ? { days: ask } : ask, tz = -new Date().getTimezoneOffset();
   const l = !cfSession.load(cf.api) && account ? await studioLink(cf.api) : null;
-  if (l) { const r = await cfCall<any>(l.api, `/cfx/db?scope=${encodeURIComponent("studio:" + l.studio)}`, { method: "POST", body: JSON.stringify({ account, site: cf.site, db: dbIds.get(account!), op: "stats", days }) }); if (r?.db) dbIds.set(account!, r.db); return r.stats; }
-  return cfCall<SiteStats>(cf.api, `/a/stats?scope=${encodeURIComponent("site:" + cf.site)}&days=${days}`);
+  if (l) { const r = await cfCall<any>(l.api, `/cfx/db?scope=${encodeURIComponent("studio:" + l.studio)}`, { method: "POST", body: JSON.stringify({ account, site: cf.site, db: dbIds.get(account!), op: "stats", ...o, tz }) }); if (r?.db) dbIds.set(account!, r.db); return r.stats; }
+  const q = new URLSearchParams({ scope: "site:" + cf.site, tz: String(tz), ...(o.from && o.to ? { from: o.from, to: o.to } : { days: String(o.days || 30) }), ...(o.top ? { top: String(o.top) } : {}) });
+  return cfCall<SiteStats>(cf.api, `/a/stats?${q}`);
 }
 export async function siteEnquiries(cf: { api: string; site: string }, account?: string) {
   const scope = "scope=" + encodeURIComponent("site:" + cf.site);

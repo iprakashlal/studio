@@ -3228,6 +3228,29 @@ export default {
       }
       // ---- Email sign-in for a GitHub Pages site's admin page: the Studio links the site to its repository and names who may sign in.
       // After this the site's people sign in here with an emailed code and save through /gh (the kept token), with no GitHub token on their devices.
+      // ---- A GitHub repository the Studio just published: kept on the list its people may publish to with the kept token
+      // (what Hostings → Publish from any device → Update GitHub sites does), and checked with GitHub there and then.
+      if (p === "/gh/register" && req.method === "POST") {
+        if (!inStudio || !admin) return err(403, "Only an Administrator can add a repository for publishing from any device.");
+        if (!env.GH_TOKEN) return err(501, "This database keeps no GitHub token.");
+        const b = (await req.json().catch(() => ({}))) as any, repo = String(b.repo || "").toLowerCase();
+        if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) return err(400, "Which repository?");
+        const other: any = await env.DB.prepare("select scope from repos where repo = ?").bind(repo).first();
+        if (other && other.scope !== scope) return err(403, "This repository is kept for another Studio.");
+        await env.DB.prepare("insert into repos (repo, scope) values (?, ?) on conflict (repo) do update set scope = excluded.scope").bind(repo, scope).run();
+        const r = await fetch("https://api.github.com/repos/" + repo, { headers: { Authorization: "Bearer " + env.GH_TOKEN, Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28", "User-Agent": "site-studio-db" } }).catch(() => null);
+        return json({ ok: true, github: r ? r.status : 0 });
+      }
+      // ---- Who signs in to a GitHub Pages site's admin page (shown when publishing it again).
+      if (p === "/site/people" && req.method === "GET") {
+        if (!inStudio) return err(403, "Not a Studio.");
+        const site = u.searchParams.get("site") || "";
+        if (!/^[\w-]{3,80}$/.test(site)) return err(400, "Which site?");
+        const had: any = await env.DB.prepare("select studio, repo from site_repos where site = ?").bind(site).first();
+        if (!had || had.studio !== scope.slice(7)) return json({ linked: false, people: [] });
+        const rows: any[] = (await env.DB.prepare("select email, role from members where scope = ? order by role = 'owner' desc, email").bind("site:" + site).all()).results || [];
+        return json({ linked: true, repo: had.repo, people: rows.map((x) => ({ email: x.email, role: x.role })) });
+      }
       if (p === "/site/link" && req.method === "POST") {
         if (!inStudio || !(await can("publishGh"))) return err(403, "Your role can't publish to GitHub. Ask an Administrator (Role Management).");
         if (!env.GH_TOKEN) return err(501, "This database keeps no GitHub token, so it can't save for the site's people. Turn on Publish from any device (Settings → Hostings).");

@@ -431,6 +431,9 @@ function PublishDialog({ studio, project, tpl, draft, dirty, save, onIndex, getB
   // Email sign-in for the site's admin page: possible when the Studio's database keeps a GitHub token (Publish from any device). On unless switched off.
   const [way, setWay] = useState<{ api: string; scope: string } | null>(null), [mailIn, setMailIn] = useState(true), [people, setPeople] = useState(""), [linked, setLinked] = useState<string[] | null>(null);
   useEffect(() => { if (demo || project.host) return; (async () => { const hc = await loadStudioHost().catch(() => null); if (!hc || hc.kind !== "cloudflare" || !cfSess.load(hc.api)) return; const i = await cfInfoDb(hc.api); if (i.gh && (i.v || 0) >= 108) setWay({ api: hc.api, scope: "studio:" + hc.studio }); })(); }, []);
+  // Who already signs in to this site's admin page (a site published before): shown as names, not asked again.
+  const [known, setKnown] = useState<{ email: string; role: string }[] | null>(null);
+  useEffect(() => { if (!way) return; cfCallDb<any>(way.api, "/site/people?scope=" + encodeURIComponent(way.scope) + "&site=" + encodeURIComponent(project.id)).then((r) => setKnown(r?.linked ? r.people || [] : null)).catch(() => setKnown(null)); }, [way]);
   // A new project publishes under the publishing account once it's connected.
   useEffect(() => { if (login && !project.publish && t.owner === session.cfg.owner) setT((x) => ({ ...x, owner: login })); }, [login]);
   const checks = tpl.checks?.(draft) || [];
@@ -456,7 +459,7 @@ function PublishDialog({ studio, project, tpl, draft, dirty, save, onIndex, getB
       if (way && mailIn) {
         setStep("Setting up email sign-in for the admin page…");
         try {
-          const r = await cfCallDb<any>(way.api, "/site/link?scope=" + encodeURIComponent(way.scope), { method: "POST", body: JSON.stringify({ site: project.id, repo: `${target.owner}/${target.repo}`, emails: people.split(/[,;\s]+/).filter(Boolean) }) });
+          const r = await cfCallDb<any>(way.api, "/site/link?scope=" + encodeURIComponent(way.scope), { method: "POST", body: JSON.stringify({ site: project.id, repo: `${target.owner}/${target.repo}`, emails: known?.length ? [] : people.split(/[,;\s]+/).filter(Boolean) }) });
           signin = { api: way.api, site: project.id, ...target }; setLinked(r.people || []);
         } catch (e: any) { toast(`Email sign-in wasn't set up (${e?.message || e}). The admin page will ask for a GitHub token on each device.`, "bad"); }
         setStep("Uploading the site…");
@@ -464,6 +467,15 @@ function PublishDialog({ studio, project, tpl, draft, dirty, save, onIndex, getB
       const { files, warnings, admin } = await buildSite({ signin, template: tpl, content: draft, name: project.name, version: next, includeContent: withContent, getAsset: getBlob, admin: live ? adminFile(live.data) : undefined, headContent: live?.data, base: `https://${target.owner}.github.io/${target.repo === `${target.owner}.github.io` ? "" : target.repo + "/"}`, keep });
       await publishSite(repo, files, `Publish v${next} from Site Studio${note.trim() ? `: ${note.trim()}` : ""}`, admin);
       setAdmin(admin);
+      // The repository joins the list the database may publish to with its kept GitHub token (Hostings → Publish from any
+      // device → Update GitHub sites), checked with GitHub there and then.
+      if (way) {
+        setStep("Adding the repository for publishing from any device…");
+        try {
+          const r = await cfCallDb<any>(way.api, "/gh/register?scope=" + encodeURIComponent(way.scope), { method: "POST", body: JSON.stringify({ repo: `${target.owner}/${target.repo}` }) });
+          if (r?.github && r.github !== 200) toast(`The GitHub token the database keeps ${r.github === 401 ? "is rejected by GitHub (expired?)" : "can't see " + target.owner + "/" + target.repo}. Give it access, then Settings → Hostings → Publish from any device → Update GitHub sites.`, "bad");
+        } catch { /* not an Administrator, or an older database: Update GitHub sites does it */ }
+      }
       setStep("Turning on GitHub Pages…");
       const pages = await ensurePages(token, target.owner, target.repo, target.branch);
       setResult({ created, pages });
@@ -514,7 +526,11 @@ function PublishDialog({ studio, project, tpl, draft, dirty, save, onIndex, getB
       {way && <section className="flex flex-col gap-2 rounded-xl border border-ink-700 bg-ink-950 p-4" aria-label="Admin page sign-in">
         <Toggle id="pb-mailin" label="Sign in to the admin page with an email code" checked={mailIn} onChange={setMailIn} />
         <p className="hint">{mailIn ? "The site's admin page asks for an email and a 6-digit code, on any device. No GitHub token or password to set up there: this Studio's database saves the changes to the repository." : "The admin page asks each device for a GitHub token, a username and a password."}</p>
-        {mailIn && <Field label="Who else can sign in (emails, optional)" htmlFor="pb-people" hint="You are added by yourself. More people can be added later in the admin page: Settings → Role Management."><input id="pb-people" className="input" placeholder="client@example.com, editor@example.com" value={people} onChange={(e) => setPeople(e.target.value)} /></Field>}
+        {mailIn && (known && known.length > 0 ? <div className="flex flex-col gap-1.5">
+          <span className="label">Who signs in</span>
+          <div className="flex flex-wrap gap-1.5">{known.map((x) => <span key={x.email} className="inline-flex items-center gap-1.5 rounded-full border border-ink-600 bg-ink-900 px-3 py-1 text-[13px] text-ink-100"><span aria-hidden className="h-1.5 w-1.5 rounded-full bg-emerald-400" />{x.email}{x.role === "owner" && <span className="text-[11px] text-ink-400">Administrator</span>}</span>)}</div>
+          <p className="hint">To add or remove people, open the site's admin page → Settings → Role Management.</p>
+        </div> : <Field label="Who else can sign in (emails, optional)" htmlFor="pb-people" hint="You are added by yourself. More people can be added later in the admin page: Settings → Role Management."><input id="pb-people" className="input" placeholder="client@example.com, editor@example.com" value={people} onChange={(e) => setPeople(e.target.value)} /></Field>)}
       </section>}
       <Field label="Version note (optional)" htmlFor="pb-note"><input id="pb-note" className="input" value={note} onChange={(e) => setNote(e.target.value)} /></Field>
       {step && <p className="text-[13px] text-brand-300" aria-live="polite">{step}</p>}

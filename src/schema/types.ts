@@ -67,7 +67,7 @@ export type Field =
   /** Languages: the table of the site's texts and their translations (content.i18n.t). */
   | { t: "translations" };
 
-export type Card = { title: string; fields: Field[]; /** Shown in the Studio only, not in the site's admin page. */ studio?: boolean };
+export type Card = { title: string; fields: Field[]; /** Shown in the Studio only, not in the site's admin page. */ studio?: boolean; /** Shown only when this returns true for the content (e.g. the page layout draws it). */ showIf?: (content: any) => boolean };
 export type Category = { id: string; label: string; group: string; /** A folding sub-heading inside the group (e.g. "Sections"). */ sub?: string; desc: string; cards: Card[]; /** Show the category only when this returns true for the current content. */ showIf?: (content: any) => boolean;
   /** Studio only. A site's own admin page shows it once the Studio has allowed this id for that site (content.cms.allow). */ siteIf?: string;
   /** A different name and menu heading in the site's own admin page. */ site?: { label?: string; group?: string } };

@@ -114,7 +114,13 @@ const schema: Category[] = [
           { t: "text", path: "labels.close", label: "“Close” button" }, { t: "text", path: "labels.scenes", label: "Scene count (Cinema)", hint: "{n} becomes the number of scenes." },
           { t: "text", path: "labels.stickerHint", label: "Sticker hint (Sticker board)" }, { t: "text", path: "labels.edition", label: "Masthead line (Broadsheet)" },
           { t: "text", path: "labels.inThisEdition", label: "“In this edition”" }, { t: "text", path: "labels.classifieds", label: "“Classifieds”" },
-          { t: "text", path: "labels.letters", label: "“Letters to the editor”" }),
+          { t: "text", path: "labels.letters", label: "“Letters to the editor”" },
+          { t: "text", path: "labels.scene", label: "Scene label (Cinema)", hint: "Above each scene, before its number, e.g. “Scene” or “Chapter”." }, { t: "toggle", path: "labels.sceneHide", label: "Hide the scene label and number (Cinema)" },
+          { t: "text", path: "labels.availableAt", label: "Clock line (Profile dashboard)", hint: "{time} becomes the visitor's local time." }, { t: "text", path: "labels.sayHi", label: "Email button (Sticker board)" },
+          { t: "text", path: "labels.vol", label: "“Vol.” (Broadsheet)" }, { t: "text", path: "labels.by", label: "“By” before your name (Broadsheet)" },
+          { t: "text", path: "labels.writeTo", label: "“Write to” before your email (Broadsheet)" }, { t: "text", path: "labels.explorer", label: "File list heading (Terminal)" },
+          { t: "text", path: "labels.commands", label: "“Commands:” (Terminal)" }, { t: "text", path: "labels.termTip", label: "Tip line (Terminal)" },
+          { t: "text", path: "labels.open", label: "“open ↗” link (Terminal)" }, { t: "text", path: "labels.notFound", label: "Unknown command (Terminal)", hint: "{cmd} becomes what was typed." }),
       ] },
     ],
   },
@@ -230,6 +236,33 @@ const schema: Category[] = [
   adminCategory(),
   codeCategory(),
 ];
+/* What each page layout draws (assets/layouts.js): a card of a section is shown only when the chosen layout uses it.
+ * The classic page draws everything; its Velocity hero keeps its own art. Checked against each layout's render code. */
+const KITS = ["solare", "tech-lead", "kinetic-noir", "decode", "gallery", "velvet-cinema", "studio-pop", "editorial-motion"];
+export function kitOf(c: any): string {
+  const t = c?.theme || {};
+  if (t.kit === "classic") return "classic";
+  if (t.kit && KITS.includes(t.kit)) return t.kit;
+  return KITS.includes(t.preset) ? t.preset : "classic";
+}
+const ALL = KITS;
+const KIT_CARDS: Record<string, Record<string, string[]>> = {
+  hero: { "Buttons": [], "Highlights under the buttons": ["solare", "tech-lead", "decode", "editorial-motion"], "Hero graphic": [], "Hero elements": [], "Background slides": [], "Scrolling skills band": [] },
+  about: { "Heading": ["solare", "tech-lead", "kinetic-noir", "gallery", "velvet-cinema", "editorial-motion"], "Story tile": ALL, "Number tiles": ["solare", "tech-lead", "decode", "gallery", "studio-pop", "editorial-motion"], "Motto tile": ["solare", "gallery", "velvet-cinema", "studio-pop", "editorial-motion"], "Quick facts": ["solare", "decode", "editorial-motion"] },
+  skills: { "Heading": ["solare", "tech-lead", "kinetic-noir", "velvet-cinema", "studio-pop", "editorial-motion"] },
+  work: { "Heading": ["solare", "tech-lead", "velvet-cinema", "studio-pop", "editorial-motion"] },
+  projects: { "Heading": ["tech-lead", "velvet-cinema", "studio-pop", "editorial-motion"] },
+  learning: { "Heading": ["solare", "tech-lead", "kinetic-noir", "velvet-cinema", "studio-pop", "editorial-motion"], "Entries": ["solare", "tech-lead", "kinetic-noir", "decode", "velvet-cinema", "studio-pop", "editorial-motion"], "Languages": ["decode"] },
+  contact: { "Links": ["solare", "tech-lead", "kinetic-noir", "decode", "velvet-cinema", "studio-pop", "editorial-motion"], "Footer": ["solare", "tech-lead", "studio-pop", "editorial-motion"] },
+};
+const VELOCITY_OWN = ["Hero graphic", "Hero elements", "Background slides"];
+for (const cat of schema) {
+  const m = KIT_CARDS[cat.id]; if (!m) continue;
+  for (const card of cat.cards) {
+    const kits = m[card.title]; if (!kits) continue;
+    card.showIf = (c) => { const k = kitOf(c); return k === "classic" ? !(cat.id === "hero" && VELOCITY_OWN.includes(card.title) && c?.theme?.layout === "velocity") : kits.includes(k); };
+  }
+}
 withSectionBg(schema, { contact: [["contact"]], extras: [["testimonials", "Background & text: kind words"], ["message", "Background & text: message form"]] }, [...FONTS_D, ...FONTS_B]);
 
 /** Words the Motion layouts show (src/fx/layouts.js reads content.labels with these as fallbacks). */

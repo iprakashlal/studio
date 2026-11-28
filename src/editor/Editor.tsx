@@ -217,7 +217,7 @@ export function Editor({ tpl, draft, version, onChange, upload, img, extras = []
               <h2 className="text-lg font-extrabold">{entry?.label}</h2>
               <p className="mt-1 text-sm text-ink-400">{entry?.desc}</p>
             </div>
-            {!entry?.extra && (() => { const shownPd = new Set<string>(); return entry?.cards.filter(({ card }) => !(site && card.studio)).map(({ card, cat: from }) => { const secs = cardSections(draft, from, card), quiet = secs.length > 0 && secs.every((x) => shownPd.has(x)); secs.forEach((x) => shownPd.add(x)); return (
+            {!entry?.extra && (() => { const shownPd = new Set<string>(); return entry?.cards.filter(({ card }) => !(site && card.studio) && (!card.showIf || card.showIf(draft))).map(({ card, cat: from }) => { const secs = cardSections(draft, from, card), quiet = secs.length > 0 && secs.every((x) => shownPd.has(x)); secs.forEach((x) => shownPd.add(x)); return (
               <section key={from + ":" + card.title} className="card flex flex-col gap-4 p-4 sm:p-5">
                 <h3 className="text-[15px] font-extrabold">{card.title}</h3>
                 <DefaultsLock root={draft} secs={secs} quiet={quiet} onChange={onChange} site={site}>{(use) => {

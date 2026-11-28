@@ -44,6 +44,15 @@ const CHAT_HELP: MiniStep[] = [
   { sel: '[data-tour="diy-progress"]', title: "Your progress", text: "How far along you are. Preview shows your website so far at any time.", once: "diy-progress" },
   { sel: '[data-tour="diy-help"]', title: "Help is here", text: "Open this help again whenever you need it.", once: "diy-help" },
 ];
+/** The first time someone reaches "upload or type it in" on this device: what each way does. */
+const HOW_HELP: MiniStep[] = [
+  { title: "Two ways to fill in your website", text: "Upload what you already have and most answers fill themselves in, or answer a few short questions. Either way you see your preview at the end." },
+  { sel: '[data-tour="diy-upload"]', title: "Upload a file", text: "A menu, brochure, price list, catalogue or resume: PDF, Word, Excel, CSV or text. It is read on your device, and you check everything before your preview opens." },
+  { sel: '[data-tour="diy-link"]', title: "Or your current website", text: "Paste its address and we read your details, products or services from it." },
+  { sel: '[data-tour="diy-sheets"]', title: "Nothing ready yet?", text: "Download a details sheet, fill it in (* = must) and upload it here." },
+  { sel: '[data-tour="diy-manual"]', title: "Or enter it yourself", text: "Answer a few short questions instead. You can still upload a file later." },
+];
+const HOW_SEEN = "diy-how-help-seen";
 const PREVIEW_HELP: MiniStep[] = [
   { title: "Your preview is ready", text: "This is your website, made from your answers. Look around: it isn't published yet." },
   { sel: '[data-tour="diy-themes"]', title: "Try other designs", text: "Use the arrows to switch between designs that suit you. Your words and pictures stay the same." },
@@ -357,6 +366,13 @@ function DesignPageInner({ studio, index, onIndex }: { studio?: Studio; index?: 
   const field = useRef<HTMLInputElement & HTMLTextAreaElement>(null);
   const pick = useRef<HTMLInputElement>(null);
   const cur = nextStep(a);
+  // "Upload or type it in": its own short help, by itself the first time on this device (when help is on).
+  const [howHelp, setHowHelp] = useState(false);
+  useEffect(() => {
+    if (cur?.id !== "how" || !helpOn() || help) return;
+    try { if (localStorage.getItem(HOW_SEEN)) return; } catch { /* private mode: shown */ }
+    const t = setTimeout(() => setHowHelp(true), 700); return () => clearTimeout(t);
+  }, [cur?.id, help]);
   const curRef = useRef(cur); curRef.current = cur;
   /** Leaves out every remaining optional question (stops at one that is needed). */
   // The quick start (a file or link given on the first screen): on until the person starts over or goes back to change an answer.
@@ -761,13 +777,13 @@ function DesignPageInner({ studio, index, onIndex }: { studio?: Studio; index?: 
                     <p className="text-[15px] font-bold text-ink-100">Already have your details? Upload them and skip the questions.</p>
                     <p className="mt-0.5 text-[13px] text-ink-400 max-sm:hidden">Choose a {DOC_KINDS} file (up to {DOC_MAX_MB} MB), or paste your current website's link. We read it in whatever order it is written (your details, hours, and your products, dishes or services with their descriptions, prices and pictures), and fill it all in. You then choose your type and look, and your preview opens. The file is read on your device.</p>
                     {/* The details sheets for this kind of website (the owner's own, or the Studio's), and the owner's help line. */}
-                    <p className="mt-2 text-[13px] text-ink-300">{readDesignSettings().refs?.[(a.kind || "business") as Kind]?.note || REF_NOTE}{" "}
+                    <p data-tour="diy-sheets" className="mt-2 text-[13px] text-ink-300">{readDesignSettings().refs?.[(a.kind || "business") as Kind]?.note || REF_NOTE}{" "}
                       {REF_EXT.map((k2, i2) => <span key={k2}>{i2 ? " · " : ""}<button type="button" className="font-semibold text-brand-400 underline-offset-2 hover:underline" onClick={() => void getSheet(k2)}>{REF_NAME[k2]}</button></span>)}</p>
                   </div>
                   <div className="flex flex-wrap items-stretch gap-2">
                     <input ref={qpick} type="file" accept={DOC_ACCEPT} className="sr-only" aria-label="Upload a file with your details" onChange={(e) => { fromFile(e.target.files?.[0]); e.target.value = ""; }} />
-                    <button type="button" className="btn btn-pri" disabled={reading} onClick={() => qpick.current?.click()}>{reading ? "Reading…" : "Upload a file"}</button>
-                    <div className="diy-field diy-join flex min-w-[16rem] flex-1 items-stretch rounded-xl border border-ink-700 bg-ink-900 focus-within:border-brand-400">
+                    <button type="button" data-tour="diy-upload" className="btn btn-pri" disabled={reading} onClick={() => qpick.current?.click()}>{reading ? "Reading…" : "Upload a file"}</button>
+                    <div data-tour="diy-link" className="diy-field diy-join flex min-w-[16rem] flex-1 items-stretch rounded-xl border border-ink-700 bg-ink-900 focus-within:border-brand-400">
                       <input className="input min-w-0 flex-1" inputMode="url" aria-label="Your website link" placeholder="or paste your website link, e.g. www.mybusiness.com" disabled={reading} value={qlink} onChange={(e) => setQlink(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); fromLink(); } }} />
                       <button type="button" className="btn btn-pri shrink-0 px-5" disabled={reading || !qlink.trim()} onClick={() => fromLink()}>Read my site</button>
                     </div>
@@ -775,7 +791,7 @@ function DesignPageInner({ studio, index, onIndex }: { studio?: Studio; index?: 
                   {docErr && <p role="alert" className="rounded-xl border border-red-400/40 bg-red-500/10 px-3 py-2 text-[13px] text-red-200">{docErr}</p>}
                 </section>
                 <div className="flex items-center gap-3 text-[11px] uppercase tracking-wide text-ink-500"><span className="h-px flex-1 bg-ink-800" />or<span className="h-px flex-1 bg-ink-800" /></div>
-                <button type="button" className="diy-chip card mx-auto w-full max-w-5xl rounded-2xl px-4 py-3 text-left transition hover:border-brand-400 hover:bg-ink-800" disabled={reading} onClick={() => answer(cur, "type")}><b className="text-[14.5px] text-ink-100">Enter manually</b><span className="block text-[12.5px] leading-snug text-ink-400">Answer a few short questions instead.</span></button>{cardBar}</> : <>{(cur.type === "choice" || cur.type === "many") && chips(cur)}{cardBar}</>}
+                <button type="button" data-tour="diy-manual" className="diy-chip card mx-auto w-full max-w-5xl rounded-2xl px-4 py-3 text-left transition hover:border-brand-400 hover:bg-ink-800" disabled={reading} onClick={() => answer(cur, "type")}><b className="text-[14.5px] text-ink-100">Enter manually</b><span className="block text-[12.5px] leading-snug text-ink-400">Answer a few short questions instead.</span></button>{cardBar}</> : <>{(cur.type === "choice" || cur.type === "many") && chips(cur)}{cardBar}</>}
             </div>
           </div>
         )}
@@ -785,6 +801,7 @@ function DesignPageInner({ studio, index, onIndex }: { studio?: Studio; index?: 
       <StudioPageLinksHere where="design" />
 
       {help && !showPreview && <MiniTour label="Help" steps={CHAT_HELP} onEnd={() => setHelp(false)} />}
+      {howHelp && !help && !showPreview && <MiniTour label="Help" steps={HOW_HELP} onEnd={() => { setHowHelp(false); try { localStorage.setItem(HOW_SEEN, "1"); } catch { /* private mode */ } }} />}
       {showPreview && design && <PreviewPopup design={design} ver={ver} a={a} build={(id) => buildDesign({ ...a, theme: id }, copy, files)} onClose={() => setShowPreview(false)} onEditLink={(id) => { setShowPreview(false); if (cur && id === cur.id && !(id in a)) { /* the question being asked now: answer it in the box above, nothing is filled in or skipped */ window.scrollTo({ top: 0, behavior: "smooth" }); setTimeout(() => field.current?.focus(), 150); return; } if (!(id in a)) setA((o) => ({ ...o, [id]: "" })); const st = STEPS.find((x) => x.id === id); setTimeout(() => { if (st) startEdit(st); }, 60); }} onEdit={() => { setShowPreview(false); setTimeout(() => endRef.current?.scrollIntoView({ block: "end", behavior: "smooth" }), 80); }} onConnect={openConnect} done={ready} onTweak={ready ? tweak : undefined} />}
       {warn && (
         <div role="alertdialog" aria-modal="true" aria-label="Developer tools detected" className="fixed inset-0 z-[100] grid place-items-center bg-black/85 p-4">

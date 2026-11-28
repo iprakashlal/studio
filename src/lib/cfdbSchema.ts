@@ -47,6 +47,11 @@ export const CFDB_TABLES: string[] = [
   "create index if not exists project_owners_email on project_owners (scope, email)",
   // A GitHub Pages site whose admin page signs in by email through this database: which repository the site's people may change (with the kept GitHub token).
   "create table if not exists site_repos (site text primary key, repo text not null, studio text not null default '', at text not null)",
+  // Built-in analytics: one row per page view a published site reports (only when its visitor allows analytics). No cookie and no
+  // address is kept: vh is a hash of the visitor's address and browser with the day and this database's secret, so it counts
+  // a visitor once a day and can't be followed from one day to the next. Rows older than about 13 months are removed.
+  "create table if not exists hits (site text not null, day text not null, ts integer not null, path text not null default '/', ref text not null default '', src text not null default '', dev text not null default '', cc text not null default '', vh text not null default '')",
+  "create index if not exists hits_site_day on hits (site, day)",
 ];
 export const CFDB_SCHEMA = CFDB_TABLES.join(";\n") + ";";
 /** Changes to a table that already exists. Each is made once: the Worker first asks `probe`; only if that fails does it run `steps`
@@ -59,6 +64,6 @@ export const CFDB_UPGRADES: { name: string; probe: string; steps: string[] }[] =
     "create index if not exists enquiries_ref on enquiries (site, ref)",
   ] },
 ];
-export const CFDB_VERSION = 116;
+export const CFDB_VERSION = 117;
 /** The database Worker's name on Cloudflare. */
 export const CFDB_WORKER_NAME = "picaffectz-db";

@@ -47,7 +47,12 @@ var CFDB_TABLES = [
   "create table if not exists project_owners (scope text not null, project text not null, email text not null, at text not null, primary key (scope, project))",
   "create index if not exists project_owners_email on project_owners (scope, email)",
   // A GitHub Pages site whose admin page signs in by email through this database: which repository the site's people may change (with the kept GitHub token).
-  "create table if not exists site_repos (site text primary key, repo text not null, studio text not null default '', at text not null)"
+  "create table if not exists site_repos (site text primary key, repo text not null, studio text not null default '', at text not null)",
+  // Built-in analytics: one row per page view a published site reports (only when its visitor allows analytics). No cookie and no
+  // address is kept: vh is a hash of the visitor's address and browser with the day and this database's secret, so it counts
+  // a visitor once a day and can't be followed from one day to the next. Rows older than about 13 months are removed.
+  "create table if not exists hits (site text not null, day text not null, ts integer not null, path text not null default '/', ref text not null default '', src text not null default '', dev text not null default '', cc text not null default '', vh text not null default '')",
+  "create index if not exists hits_site_day on hits (site, day)"
 ];
 var CFDB_SCHEMA = CFDB_TABLES.join(";\n") + ";";
 var CFDB_UPGRADES = [
@@ -56,7 +61,7 @@ var CFDB_UPGRADES = [
     "create index if not exists enquiries_ref on enquiries (site, ref)"
   ] }
 ];
-var CFDB_VERSION = 116;
+var CFDB_VERSION = 117;
 var CFDB_WORKER_NAME = "picaffectz-db";
 
 // src/lib/diylook.ts
@@ -175,6 +180,7 @@ var PRIVS = [
   { key: "duplicate", label: "Duplicate projects", group: "Projects", where: "studio" },
   { key: "delete", label: "Delete projects", group: "Projects", where: "studio" },
   { key: "themes", label: "Themes gallery", group: "Features", where: "studio" },
+  { key: "analytics", label: "Analytics (visits to the sites)", group: "Features", where: "studio" },
   { key: "design", label: "Design yourself and its submissions", group: "Features", where: "studio" },
   { key: "approve", label: "Share for approval", group: "Features", where: "studio" },
   { key: "festival", label: "Festival overlay", group: "Features", where: "studio" },
@@ -188,8 +194,8 @@ var only = (...on) => Object.fromEntries(PRIVS.map((p) => [p.key, on.includes(p.
 var DEFAULT_PRIVS = {
   owner: ALL(),
   partner: ALL(),
-  member: only("publishCf", "publishGh", "export", "new", "duplicate", "delete", "themes", "design", "approve", "festival", "edit", "orders", "settings"),
-  developer: only("publishCf", "publishGh", "export", "new", "duplicate", "delete", "themes", "design", "festival", "edit", "settings"),
+  member: only("publishCf", "publishGh", "export", "new", "duplicate", "delete", "themes", "analytics", "design", "approve", "festival", "edit", "orders", "settings"),
+  developer: only("publishCf", "publishGh", "export", "new", "duplicate", "delete", "themes", "analytics", "design", "festival", "edit", "settings"),
   tester: only("export", "new", "duplicate", "themes", "design", "festival", "edit", "orders"),
   demo: only("new", "themes", "edit")
 };
@@ -1761,6 +1767,66 @@ async function siteMail(env, site) {
   if (!/^[a-z0-9][a-z0-9-]{0,59}$/.test(site)) return env;
   const m = await getSetting(env, "site:" + site, "mail").catch(() => null);
   return m?.on && m.key && m.from ? { ...env, RESEND_API_KEY: String(m.key), MAIL_FROM: String(m.from) } : env;
+}
+var dayOf = (t) => new Date(t).toISOString().slice(0, 10);
+var BOT = /bot|crawl|spider|slurp|preview|headless|lighthouse|pingdom|monitor|curl|wget|python|httpclient|facebookexternalhit|whatsapp/i;
+var aclip = (v, n) => String(v ?? "").replace(/[\u0000-\u001f]/g, "").trim().slice(0, n);
+async function recordHit(env, req) {
+  const ua = req.headers.get("User-Agent") || "";
+  if (BOT.test(ua)) return new Response(null, { status: 204, headers: cors });
+  let b = {};
+  try {
+    b = JSON.parse(await req.text());
+  } catch {
+    return new Response(null, { status: 204, headers: cors });
+  }
+  const site = String(b.site || "");
+  if (!/^[a-z0-9][a-z0-9-]{0,59}$/.test(site)) return new Response(null, { status: 204, headers: cors });
+  await ensure(env);
+  const known = await env.DB.prepare("select 1 x from files where scope = ? and path = 'content.json'").bind("site:" + site).first() || await env.DB.prepare("select 1 x from site_repos where site = ?").bind(site).first();
+  if (!known) return new Response(null, { status: 204, headers: cors });
+  const now = Date.now(), day2 = dayOf(now), ip = req.headers.get("CF-Connecting-IP") || req.headers.get("X-Forwarded-For") || "";
+  const vh = b64u(await hmac(env.SECRET, "v:" + site + ":" + day2 + ":" + ip + ":" + ua)).slice(0, 16);
+  let path = aclip(b.path, 200) || "/";
+  if (!path.startsWith("/")) path = "/" + path;
+  const recent = await env.DB.prepare("select 1 x from hits where site = ? and day = ? and vh = ? and path = ? and ts > ? limit 1").bind(site, day2, vh, path, now - 6e4).first();
+  if (recent) return new Response(null, { status: 204, headers: cors });
+  let ref = "";
+  try {
+    const h = new URL(String(b.ref || "")).hostname.replace(/^www\./, "");
+    if (h && h !== String(b.host || "").replace(/^www\./, "")) ref = h.slice(0, 100);
+  } catch {
+  }
+  const dev = ["mobile", "tablet", "desktop"].includes(b.dev) ? b.dev : /Mobi|Android|iPhone/i.test(ua) ? "mobile" : "desktop";
+  const cc = aclip(req.cf?.country || req.headers.get("CF-IPCountry") || "", 2).toUpperCase().replace(/[^A-Z]/g, "");
+  await env.DB.prepare("insert into hits (site, day, ts, path, ref, src, dev, cc, vh) values (?, ?, ?, ?, ?, ?, ?, ?, ?)").bind(site, day2, now, path, ref, aclip(b.src, 60).toLowerCase(), dev, cc, vh).run();
+  if (Math.random() < 2e-3) await env.DB.prepare("delete from hits where day < ?").bind(dayOf(now - 400 * 864e5)).run().catch(() => {
+  });
+  return new Response(null, { status: 204, headers: cors });
+}
+async function siteStats(q, site, days) {
+  days = Math.max(1, Math.min(365, Math.round(days) || 30));
+  const now = Date.now(), from = dayOf(now - (days - 1) * 864e5), prev = dayOf(now - (2 * days - 1) * 864e5);
+  const W = "from hits where site = ? and day >= ?", top2 = async (col, n, extra = "") => (await q(`select ${col} k, count(*) v, count(distinct day || vh) u ${W} ${extra} group by ${col} order by v desc limit ${n}`, [site, from])).map((r) => ({ k: r.k, v: +r.v, u: +r.u }));
+  const [t] = await q(`select count(*) v, count(distinct day || vh) u ${W}`, [site, from]);
+  const [p] = await q("select count(*) v, count(distinct day || vh) u from hits where site = ? and day >= ? and day < ?", [site, prev, from]);
+  const [live] = await q("select count(distinct vh) n from hits where site = ? and ts > ?", [site, now - 5 * 6e4]);
+  const daily = (await q(`select day, count(*) v, count(distinct vh) u ${W} group by day order by day`, [site, from])).map((r) => ({ day: r.day, v: +r.v, u: +r.u }));
+  return {
+    days,
+    from,
+    views: +t?.v || 0,
+    visitors: +t?.u || 0,
+    prevViews: +p?.v || 0,
+    prevVisitors: +p?.u || 0,
+    live: +live?.n || 0,
+    daily,
+    pages: await top2("path", 15),
+    refs: await top2("ref", 10, "and ref != ''"),
+    sources: await top2("src", 10, "and src != ''"),
+    devices: await top2("dev", 3),
+    countries: await top2("cc", 12, "and cc != ''")
+  };
 }
 var pdMail = { at: 0, v: null };
 async function withStudioMail(env) {
@@ -3641,7 +3707,7 @@ var db_worker_default = {
     const u = new URL(req.url), p = u.pathname.replace(/\/+$/, "") || "/";
     try {
       env = await withStudioMail(env);
-      if (p === "/") return json({ ok: true, service: "site-studio-db", v: V, mail: !!(env.RESEND_API_KEY && env.MAIL_FROM), ...env.MAIL_PD === "1" ? { mailPd: true } : {}, ...env.CF_TOKEN && env.CF_ACCOUNT ? { deploy: true, account: env.CF_ACCOUNT } : {}, ...env.GH_TOKEN ? { gh: true } : {}, ...env.AI ? { ai: true, pamphlet: 2 } : {}, reviews: true, dq: 1, look: 1, outline: 1, pictures: 1, connect: 2, translate: 4, approvals: 1, accounts: 2, cfx: 4, cfa: 1, google: 1, studioPages: 1, del: 1, enqMail: 3, ...otherAccounts(env).length ? { more: otherAccounts(env).length } : {} });
+      if (p === "/") return json({ ok: true, service: "site-studio-db", v: V, mail: !!(env.RESEND_API_KEY && env.MAIL_FROM), ...env.MAIL_PD === "1" ? { mailPd: true } : {}, ...env.CF_TOKEN && env.CF_ACCOUNT ? { deploy: true, account: env.CF_ACCOUNT } : {}, ...env.GH_TOKEN ? { gh: true } : {}, ...env.AI ? { ai: true, pamphlet: 2 } : {}, reviews: true, analytics: 1, dq: 1, look: 1, outline: 1, pictures: 1, connect: 2, translate: 4, approvals: 1, accounts: 2, cfx: 4, cfa: 1, google: 1, studioPages: 1, del: 1, enqMail: 3, ...otherAccounts(env).length ? { more: otherAccounts(env).length } : {} });
       if (/^\/wall\/[a-z0-9][a-z0-9-]{0,59}$/.test(p) && req.method === "GET") {
         const src = u.searchParams.get("src") === "pinterest" ? "pinterest" : "instagram", pin = String(u.searchParams.get("pin") || "").slice(0, 200), n = Math.max(3, Math.min(24, +(u.searchParams.get("n") || 12) || 12)), handle = src === "instagram" ? igHandle(u.searchParams.get("h")) : "";
         const key = new Request(u.origin + p + "?src=" + src + "&pin=" + encodeURIComponent(pin) + "&n=" + n + "&h=" + handle.toLowerCase()), store = globalThis.caches?.default;
@@ -3866,6 +3932,7 @@ var db_worker_default = {
         const rows = (await env.DB.prepare("select scope, role from members where email = ?").bind(e).all()).results || [];
         return json({ email: e, scopes: rows });
       }
+      if (p === "/a/hit" && req.method === "POST") return recordHit(env, req);
       if (p.startsWith("/p/") && req.method === "GET") {
         const [, , site, ...rest] = p.split("/");
         const path2 = decodeURIComponent(rest.join("/"));
@@ -5139,6 +5206,7 @@ ${body}`)}${paras("Approve or hide it under Reviews in your site's admin page.",
               }
               return err(400, "Unknown operation.");
             }
+            if (op === "stats") return json({ db: dbId, stats: await siteStats(q, site, +b.days || 30) });
             if (op === "mem") {
               const sub = String(b.sub || "list");
               if (sub === "list") return json({ db: dbId, rows: await q("select email, role from members where scope = ? order by email", [S2]) });
@@ -5508,6 +5576,10 @@ ${body}`)}${paras("Approve or hide it under Reviews in your site's admin page.",
         });
         await env.DB.prepare("delete from design_queries where studio = ? and id = ?").bind(sid, qid).run();
         return json({ ok: true });
+      }
+      if (p === "/a/stats" && scope.startsWith("site:")) {
+        await ensure(env);
+        return json(await siteStats(async (sql, args) => (await env.DB.prepare(sql).bind(...args).all()).results || [], scope.slice(5), +(u.searchParams.get("days") || 30)));
       }
       if (p === "/e/list") {
         const site = scope.replace(/^site:/, "");

@@ -34,7 +34,7 @@ export function roleHides(r: MyRole, viewingOther = false): (key: string) => boo
   if (!r.managed) return () => false;
   const off = new Set<string>();
   if (!r.admin) {
-    for (const k of ["new", "duplicate", "delete", "themes", "design", "festival"]) if (!r.privs[k]) off.add(k);
+    for (const k of ["new", "duplicate", "delete", "themes", "design", "festival", "analytics"]) if (!r.privs[k]) off.add(k);
     if (!r.privs.shared) for (const k of ["brand", "badge", "pages", "menus"]) off.add(k);
     off.add("hosting");
   }

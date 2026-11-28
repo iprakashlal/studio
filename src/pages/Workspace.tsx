@@ -1,3 +1,4 @@
+import { AnalyticsPage } from "./AnalyticsPage";
 import { GUIDES, guide } from "../lib/guides";
 import { Explorer, ExplorerCard } from "../ui/Explorer";
 import { prefSync, applyPrefs } from "../lib/prefs";
@@ -175,6 +176,7 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
         {!repo.demo && !isHosted(session) && olderData() && <a href="?data=shared" className="chip border-amber-400/50 text-amber-200" title="This tab shows the GitHub data from before the Studio moved. Press to go back to the shared projects.">Older GitHub data · switch back</a>}
         <nav className="ml-auto flex items-center gap-1" aria-label="Studio">
           <a href="#/" className={`btn btn-ghost btn-sm ${!route || route === "/" || route.startsWith("type/") ? "text-ink-100" : "text-ink-400"}`}>Projects</a>
+          {!hid("analytics") && <a href="#/analytics" className={`btn btn-ghost btn-sm ${route.startsWith("analytics") ? "text-ink-100" : "text-ink-400"}`}>Analytics</a>}
           {!hid("themes") && <a href={gal.domain ? `https://${gal.domain}/` : "#/themes"} className="btn btn-ghost btn-sm text-ink-400">{gal.link || "Themes"}</a>}
           {(index?.prefs?.links || []).map((l) => <a key={l.label + l.url} href={l.url} {...(l.url.startsWith("https://") ? { target: "_blank", rel: "noopener noreferrer" } : {})} className="btn btn-ghost btn-sm text-ink-400">{l.label}</a>)}
           {!repo.demo && client === false && <a href="#/partners" className={`btn btn-ghost btn-sm ${route.startsWith("partners") ? "text-ink-100" : "text-ink-400"}`}>Partners</a>}
@@ -196,6 +198,9 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
 
   // Design yourself: the chat that builds a preview (signed in, its previews are kept in the Studio).
   if (/^design(\?|$)/.test(route) && !hid("design")) return <DesignPage studio={studio} index={index} onIndex={setIndex} />;
+
+  // Analytics: visits to the live sites (built-in analytics, counted by each site's database).
+  if (route.startsWith("analytics") && !hid("analytics") && index) return <>{header}<AnalyticsPage index={index} demo={!!repo.demo} /></>;
 
   // Studio Partners: its own page (it used to be a tab of Settings; the old address still lands here).
   if ((route.startsWith("partners") || route === "settings/partners") && !repo.demo) {

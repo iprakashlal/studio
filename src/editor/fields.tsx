@@ -3,7 +3,7 @@ import { ThemeDrawer, ThemeGallery, ThemeSwatch } from "../themes/ThemeGallery";
 import { ThemeFromRef } from "./ThemeFromRef";
 import { BulkPhotos } from "./BulkPhotos";
 import { AdminLookField } from "./AdminLook";
-import { Translations } from "./Translations";
+import { SiteWords, Translations } from "./Translations";
 import type { Made } from "../lib/themefrom";
 import { LinkedInImport } from "./LinkedInImport";
 import { pdfToText } from "../lib/pdftext";
@@ -106,7 +106,7 @@ export function FieldView({ f, obj, base }: { f: F; obj: any; base: string }) {
   switch (f.t) {
     case "when": {
       const v = String(getP(f.local ? obj : root, f.path) ?? "");
-      if (f.is !== undefined ? v !== f.is : v === f.not) return null;
+      if (f.isAny ? !f.isAny.includes(v) : f.notAny ? f.notAny.includes(v) : f.is !== undefined ? v !== f.is : v === f.not) return null;
       return <>{f.fields.map((x, i) => <FieldView key={i} f={x} obj={obj} base={base} />)}</>;
     }
     case "grid":
@@ -117,6 +117,8 @@ export function FieldView({ f, obj, base }: { f: F; obj: any; base: string }) {
       );
     case "translations":
       return <Translations root={root} bump={bump} />;
+    case "siteWords":
+      return <SiteWords root={root} bump={bump} />;
     case "mailtpl":
       return <MailTplField kind={f.kind} subject={f.subject} />;
     case "note":

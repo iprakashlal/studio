@@ -934,7 +934,8 @@ const ckOn = () => !!(C.consent && C.consent.on && C.consent.footerLink !== fals
 /* Regional languages (assets/lang.js): the chosen language is put into the content before the page is drawn, then
    the page's fixed wording is translated and the language switcher added. */
 let lgP, lgFail = false;
-const langOn = () => { const n = C.i18n || {}; return !!n.on && (n.langs || []).some((l) => l && l.on !== false); };
+// Also loaded for the owner's own words for the page's fixed wording (content.words).
+const langOn = () => { const n = C.i18n || {}; return (!!n.on && (n.langs || []).some((l) => l && l.on !== false)) || (!!C.words && Object.values(C.words).some((v) => typeof v === "string" && v.trim())); };
 function langGate() {
   if (window.SiteLang) { if (PREVIEW) window.SiteLang.force((C.i18n || {}).preview || ""); window.SiteLang.apply(C); return false; }
   if (!langOn() || lgFail) return false;

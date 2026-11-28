@@ -14,7 +14,7 @@ function piecesOf(known: Set<string>): Set<string> {
   return out;
 }
 /** The page's fixed wording (buttons, labels the template writes itself): text in the preview that isn't content. */
-function harvest(known: Set<string>): string[] {
+export function harvest(known: Set<string>): string[] {
   const doc = (document.querySelector('iframe[name="cms-preview"]') as HTMLIFrameElement | null)?.contentDocument; if (!doc?.body) return [];
   // A piece of one of the site's own texts (the words inside *emphasis*, one line of a heading) isn't fixed wording:
   // translating it on its own would mix two languages in one sentence.
@@ -132,6 +132,53 @@ export function Translations({ root, bump }: { root: any; bump: () => void }) {
         {!list.length && <li className="p-3 text-[13px] text-ink-400">{find.trim() ? "No text matches." : "Nothing left to translate."}</li>}
       </ul>
       {list.length > shown && <button type="button" className="btn btn-sm self-start" onClick={() => setShown(shown + 60)}>Show more ({list.length - shown} left)</button>}
+    </div>
+  );
+}
+
+/** Languages → Fixed words: the words the page writes itself (buttons, small headings, messages) in the owner's own
+ *  words. Read from the preview; a word that only shows later (a form's thank-you or error line) can be typed in. */
+export function SiteWords({ root, bump }: { root: any; bump: () => void }) {
+  const [busy, setBusy] = useState(false), [find, setFind] = useState(""), [add, setAdd] = useState(""), [shown, setShown] = useState(40);
+  const words: Record<string, string> = root.words && typeof root.words === "object" ? root.words : {};
+  const list: string[] = Array.isArray(root.wordsList) ? root.wordsList : [];
+  const all = [...new Set([...list, ...Object.keys(words)])];
+  const rows = all.filter((s) => !find.trim() || (s + " " + (words[s] || "")).toLowerCase().includes(find.trim().toLowerCase()));
+  const put = (s: string, v: string) => { root.words = { ...(root.words || {}) }; if (v.trim()) root.words[s] = v; else delete root.words[s]; if (!Object.keys(root.words).length) delete root.words; bump(); };
+  const read = async () => {
+    setBusy(true);
+    try {
+      const was = root.i18n?.preview; if (root.i18n) { root.i18n.preview = ""; bump(); }
+      // The page shows its standard words while they are read (the owner's own are put back after).
+      const keep = root.words; delete root.words; bump(); await new Promise((r) => setTimeout(r, 1000));
+      // Initials on avatars and lines built from the owner's own text (a client's name with its industry) are content, not fixed words.
+      const known = new Set(siteTexts(root).map(norm)), long = [...known].filter((k) => k.length >= 4);
+      const found = harvest(known).filter((t) => !/^[A-Z]{1,3}$/.test(t) && !long.some((k) => t.includes(k)));
+      if (keep) root.words = keep; if (root.i18n && was) root.i18n.preview = was;
+      root.wordsList = [...new Set([...list.filter((x) => !known.has(norm(x))), ...found])].slice(0, 500); bump();
+    } finally { setBusy(false); }
+  };
+  const addOne = () => { const t = norm(add); if (!t) return; root.wordsList = [...new Set([...list, t])]; setAdd(""); bump(); };
+  return (
+    <div className="flex flex-col gap-3" aria-label="Fixed words">
+      <div className="flex flex-wrap items-center gap-2">
+        <button type="button" className="btn btn-pri" disabled={busy} onClick={read}>{busy ? "Reading the page…" : list.length ? "Read the page again" : "Find the page's fixed words"}</button>
+        <span className="text-[12.5px] text-ink-400">{all.length ? `${all.length} words and lines · ${Object.keys(words).length} changed` : "Reads the words on the page shown in the preview. Open another page in the preview and read again to add its words."}</span>
+      </div>
+      {all.length > 0 && <input className="input py-1.5" type="search" aria-label="Find a word" placeholder="Find a word…" value={find} onChange={(e) => { setFind(e.target.value); setShown(40); }} />}
+      {rows.length > 0 && <ul className="flex flex-col divide-y divide-ink-700 rounded-lg border border-ink-700">
+        {rows.slice(0, shown).map((s) => (
+          <li key={s} className="grid items-center gap-2 p-2.5 sm:grid-cols-2">
+            <p className="break-words text-[13px] text-ink-300">{s}</p>
+            <input className="input py-1.5 text-[13.5px]" aria-label={`Your words for: ${s.slice(0, 60)}`} placeholder={s} value={words[s] || ""} onChange={(e) => put(s, e.target.value)} />
+          </li>))}
+      </ul>}
+      {rows.length > shown && <button type="button" className="btn btn-sm self-start" onClick={() => setShown(shown + 60)}>Show more</button>}
+      <div className="flex flex-wrap items-center gap-2">
+        <input className="input min-w-0 flex-1 py-1.5" aria-label="A fixed word to change" placeholder="A word that shows only sometimes, exactly as on the page (e.g. Please fill in the required fields.)" value={add} onChange={(e) => setAdd(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addOne(); } }} />
+        <button type="button" className="btn btn-sm" disabled={!norm(add)} onClick={addOne}>Add</button>
+      </div>
+      <p className="hint">Leave a box empty to keep the page's own word. Your words show in every language, unless that language has its own translation of the original (Translations above).</p>
     </div>
   );
 }

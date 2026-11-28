@@ -1624,7 +1624,7 @@ function addons(c){
 let lgP,lgFail=false;
 function langGate(c){
   if(window.SiteLang){if(PREVIEW)SiteLang.force((c.i18n||{}).preview||"");SiteLang.apply(c);return false}
-  const n=c.i18n||{};if(!(n.on&&(n.langs||[]).some(l=>l&&l.on!==false))||lgFail)return false;
+  const n=c.i18n||{};if(!((n.on&&(n.langs||[]).some(l=>l&&l.on!==false))||(c.words&&Object.values(c.words).some(v=>typeof v==="string"&&v.trim())))||lgFail)return false;
   (lgP||(lgP=new Promise((ok,no)=>{const s=document.createElement("script");s.src="assets/lang.js";s.onload=()=>ok();s.onerror=no;document.head.appendChild(s)}))).then(()=>renderSite(c),()=>{lgFail=true;renderSite(c)});
   return true}
 function lang(c){if(window.SiteLang)SiteLang.mount(c,{navs:[".nav ul",".ks-top nav",".kp-top nav",".ke-mast nav"],again:()=>renderSite(c)})}

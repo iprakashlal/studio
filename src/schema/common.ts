@@ -501,7 +501,7 @@ export function i18nCategory(group = "Settings"): Category {
   const g2 = (...fields: Field[]): Field => ({ t: "grid", cols: 2, fields });
   return {
     id: "languages", label: "Languages", group,
-    desc: "Offer the site in Hindi, Marathi, Tamil and other languages. Visitors switch with one tap; every translation is made in one click and stays editable.",
+    desc: "Offer the site in Hindi, Marathi, Tamil and other languages, and change any word the page writes by itself (Fixed words on the page).",
     cards: [
       { title: "Languages on this site", fields: [
         { t: "toggle", path: "i18n.on", label: "Offer the site in more than one language" },
@@ -524,6 +524,10 @@ export function i18nCategory(group = "Settings"): Category {
           { t: "translations" },
         ] },
         { t: "when", path: "i18n.on", not: "true", fields: [{ t: "note", text: "Switch languages on above to translate the site." }] },
+      ] },
+      { title: "Fixed words on the page", fields: [
+        { t: "note", text: "Words the page writes by itself, not from your content: small headings, button and form labels, messages. Put your own wording beside any of them." },
+        { t: "siteWords" },
       ] },
     ],
   };
@@ -1079,4 +1083,20 @@ export function heroSlidesCard(base: string, artLabel = "the hero's own picture"
       ] },
     ],
   };
+}
+
+/** Fields the chosen theme doesn't draw are left out of the editor: [field path (inside a list: "list.path>field"),
+ *  theme key, the theme values that don't draw it]. Each such field is wrapped in a "when" on theme.<key>. */
+export function themeOnly(schema: Category[], rules: [string, string, string[]][]): Category[] {
+  const wrap = (fields: Field[], at: string): Field[] => fields.map((f: any) => {
+    if (!f) return f;
+    if (f.t === "grid" || f.t === "when") return { ...f, fields: wrap(f.fields, at) };
+    if (f.t === "list") return { ...f, item: wrap(f.item || [], at + f.path + ">") };
+    const me = at + f.path;
+    let out: Field = f;
+    for (const [path, key, values] of rules) if (path === me) out = { t: "when", path: "theme." + key, notAny: values, fields: [out] };
+    return out;
+  });
+  for (const c of schema) for (const card of c.cards) card.fields = wrap(card.fields, "");
+  return schema;
 }

@@ -56,7 +56,7 @@ var CFDB_UPGRADES = [
     "create index if not exists enquiries_ref on enquiries (site, ref)"
   ] }
 ];
-var CFDB_VERSION = 114;
+var CFDB_VERSION = 115;
 var CFDB_WORKER_NAME = "picaffectz-db";
 
 // src/lib/diylook.ts
@@ -5269,6 +5269,26 @@ ${body}`)}${paras("Approve or hide it under Reviews in your site's admin page.",
         if (useJwt && !/^[\w.~+/=-]{8,4096}$/.test(String(q.jwt || ""))) return err(400, "Missing upload token.");
         const r = await fetch("https://api.cloudflare.com/client/v4" + path2, { method, headers: { Authorization: "Bearer " + (useJwt ? q.jwt : tokenOf), ...q.contentType ? { "Content-Type": String(q.contentType) } : {} }, body: method === "GET" ? void 0 : body });
         return json({ status: r.status, body: await r.text() });
+      }
+      if (p === "/gh/register" && req.method === "POST") {
+        if (!inStudio || !admin) return err(403, "Only an Administrator can add a repository for publishing from any device.");
+        if (!env.GH_TOKEN) return err(501, "This database keeps no GitHub token.");
+        const b = await req.json().catch(() => ({})), repo = String(b.repo || "").toLowerCase();
+        if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) return err(400, "Which repository?");
+        const other = await env.DB.prepare("select scope from repos where repo = ?").bind(repo).first();
+        if (other && other.scope !== scope) return err(403, "This repository is kept for another Studio.");
+        await env.DB.prepare("insert into repos (repo, scope) values (?, ?) on conflict (repo) do update set scope = excluded.scope").bind(repo, scope).run();
+        const r = await fetch("https://api.github.com/repos/" + repo, { headers: { Authorization: "Bearer " + env.GH_TOKEN, Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28", "User-Agent": "site-studio-db" } }).catch(() => null);
+        return json({ ok: true, github: r ? r.status : 0 });
+      }
+      if (p === "/site/people" && req.method === "GET") {
+        if (!inStudio) return err(403, "Not a Studio.");
+        const site = u.searchParams.get("site") || "";
+        if (!/^[\w-]{3,80}$/.test(site)) return err(400, "Which site?");
+        const had = await env.DB.prepare("select studio, repo from site_repos where site = ?").bind(site).first();
+        if (!had || had.studio !== scope.slice(7)) return json({ linked: false, people: [] });
+        const rows = (await env.DB.prepare("select email, role from members where scope = ? order by role = 'owner' desc, email").bind("site:" + site).all()).results || [];
+        return json({ linked: true, repo: had.repo, people: rows.map((x) => ({ email: x.email, role: x.role })) });
       }
       if (p === "/site/link" && req.method === "POST") {
         if (!inStudio || !await can("publishGh")) return err(403, "Your role can't publish to GitHub. Ask an Administrator (Role Management).");

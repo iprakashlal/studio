@@ -133,12 +133,16 @@
     if (!done) { var f = make(); f.classList.add("sl-float"); f.setAttribute("data-side", place === "left" ? "left" : "right"); document.body.appendChild(f); }
   }
   /** After the page is drawn: translate its fixed wording and show the switcher. o.again redraws the page (else it reloads). */
+  /** The owner's own wording for the page's fixed words (content.words = { "<fixed text>": "<their words>" }), in
+   *  every language unless a translation of the fixed text is given for the language shown. */
+  function wordsOf(C) { var w = C && C.words, out = null; if (!w || typeof w !== "object") return null; for (var k in w) if (typeof w[k] === "string" && w[k].trim() && norm(k)) { out = out || {}; out[norm(k)] = w[k]; } return out; }
   function mount(C, o) {
-    o = o || {}; var lang = current(C);
-    cur = { C: C, d: dictOf(C, lang), again: o.again || null };
+    o = o || {}; var lang = current(C), t = dictOf(C, lang), w = wordsOf(C), d = t;
+    if (w) { d = {}; for (var a in w) d[a] = w[a]; if (t) for (var b in t) if (typeof t[b] === "string" && t[b].trim()) d[b] = t[b]; }
+    cur = { C: C, d: d, again: o.again || null };
     if (cur.d || orig) sweep(document.body);
     switcher(C, o, lang);
-    if (wanted(C)) watch();
+    if (wanted(C) || w) watch();
     return lang;
   }
   /** The editor's preview: show this language ("" = the site's own) until the switcher in the preview picks another. */

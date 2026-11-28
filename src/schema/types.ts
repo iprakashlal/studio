@@ -39,7 +39,7 @@ export type Field =
   /** "Edit template": the whole email written in the notepad (src/editor/MailTemplate.tsx), kept at emails.<kind>.tpl. subject: where this email's subject is kept. */
   | { t: "mailtpl"; kind: string; subject?: string }
   /** Shows `fields` only while the value at `path` (in the whole content, or in the list item with `local`) is / isn't the given value. */
-  | { t: "when"; path: string; is?: string; not?: string; fields: Field[]; /** Read `path` from the list item being edited instead of the whole content. */ local?: boolean }
+  | { t: "when"; path: string; is?: string; not?: string; /** Shown when the value is one of these / none of these. */ isAny?: string[]; notAny?: string[]; fields: Field[]; /** Read `path` from the list item being edited instead of the whole content. */ local?: boolean }
   | { t: "presets"; target: string; presets: { name: string; values: Record<string, string> }[] }
   /** The theme gallery: picking one writes the template's themeValues into content.theme. */
   | { t: "themes" }
@@ -65,7 +65,8 @@ export type Field =
   /** Buttons that show a page in the live preview: { file, label } (e.g. the checkout with a sample cart). */
   | { t: "previewPages"; pages: { file: string; label: string }[]; text?: string }
   /** Languages: the table of the site's texts and their translations (content.i18n.t). */
-  | { t: "translations" };
+  | { t: "translations" }
+  | { t: "siteWords" };
 
 export type Card = { title: string; fields: Field[]; /** Shown in the Studio only, not in the site's admin page. */ studio?: boolean; /** Shown only when this returns true for the content (e.g. the page layout draws it). */ showIf?: (content: any) => boolean };
 export type Category = { id: string; label: string; group: string; /** A folding sub-heading inside the group (e.g. "Sections"). */ sub?: string; desc: string; cards: Card[]; /** Show the category only when this returns true for the current content. */ showIf?: (content: any) => boolean;

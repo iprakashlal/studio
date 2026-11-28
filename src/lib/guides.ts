@@ -11,7 +11,7 @@ export const GUIDES: Guide[] = [
       { go: "#/", title: "Your projects", text: "Every site you make is a card on this dashboard. This tour goes from making one to putting it live." },
       { sel: '[data-tour="new-project"]', title: "1 · Start a project", text: "Press + New project, pick the type (Portfolio, Business, Store or Restaurant), give it a name, choose a theme and press Create." },
       { sel: "article", title: "2 · Your project card", text: "The coloured bar on top is the type's colour. The chip shows its status, and the logo you upload for the project replaces the initials." },
-      { sel: '[data-tour="card-actions"]', title: "3 · Open, Quick Setup, Quick Overview", text: "Open edits the site. Quick Setup holds who signs in, how email and codes work and publishing. Quick Overview shows orders, carts and enquiries." },
+      { sel: '[data-tour="card-actions"]', title: "3 · Open, Quick Setup, Overview", text: "Open edits the site. Quick Setup holds who signs in to the admin page and publishing. Overview shows orders, carts and enquiries. Each turns the card over into a window." },
       { click: 'article a[href^="#/p/"]', sel: 'nav[aria-label="Content categories"]', title: "4 · The menu", text: "Every part of the site is a section here. Advanced setup, just above Settings, holds sign-in people, email, WhatsApp/SMS codes, the backend and payments." },
       { sel: "#menu-search", title: "5 · Find a setting", text: "Type a word like phone, logo or hours and the menu shows where it lives." },
       { sel: '[data-tour="edit"]', title: "6 · Change things", text: "Edit words, photos and choices. Nothing is live yet: you are changing a draft." },

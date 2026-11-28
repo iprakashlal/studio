@@ -114,8 +114,10 @@ export function AnalyticsPage({ index, demo }: { index: StudioIndex; demo: boole
           <h1 className="font-display text-4xl font-extrabold tracking-tight">Analytics</h1>
           <p className="mt-1 max-w-[80ch] text-sm text-ink-400">Visits to your live sites, counted by each site's own database. No cookies and nothing that names a visitor: a page view is sent only when the visitor allows analytics under the site's cookie consent.</p>
         </div>
+        <div className="flex flex-wrap items-center justify-end gap-3">
         <LiveStatus busy={busy} at={at} onRefresh={() => setAgain((n) => n + 1)} />
         {view === "dash" && <Period rk={rk} onRk={setRk} />}
+        </div>
       </div>
       <div role="tablist" aria-label="Analytics" className="-mb-2 flex gap-1 border-b border-ink-700">
         {([["dash", "Dashboard"], ["reports", "Reports & downloads"]] as const).map(([k, l]) => <button key={k} type="button" role="tab" aria-selected={view === k} onClick={() => setView(k)} className={`-mb-px border-b-2 px-4 py-2.5 text-sm font-semibold transition ${view === k ? "border-brand-400 text-ink-100" : "border-transparent text-ink-400 hover:text-ink-200"}`}>{l}</button>)}
@@ -538,7 +540,7 @@ function LiveStatus({ busy, at, onRefresh }: { busy: boolean; at: number | null;
         <span className="relative inline-flex h-2 w-2"><span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" /><span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" /></span>
         <span><b className="font-semibold text-emerald-300">Live</b>{busy ? " · updating…" : at ? ` · updated ${ago(at)}` : ""}</span>
       </span>
-      <button type="button" className="btn btn-sm inline-flex items-center gap-1.5" disabled={busy} onClick={onRefresh} title="Read the numbers again now">
+      <button type="button" className="btn inline-flex h-[42px] items-center gap-2 rounded-full px-4 text-[13px]" disabled={busy} onClick={onRefresh} title="Read the numbers again now">
         <svg aria-hidden viewBox="0 0 24 24" className={`h-3.5 w-3.5 ${busy ? "animate-spin" : ""}`} fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36" /><path d="M21 4v5h-5" /></svg>
         Refresh
       </button>

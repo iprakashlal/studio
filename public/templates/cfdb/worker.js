@@ -72,7 +72,7 @@ var CFDB_UPGRADES = [
     "create index if not exists enquiries_ref on enquiries (site, ref)"
   ] }
 ];
-var CFDB_VERSION = 118;
+var CFDB_VERSION = 119;
 var CFDB_WORKER_NAME = "picaffectz-db";
 
 // src/lib/diylook.ts
@@ -1921,7 +1921,7 @@ async function siteStats(q, site, o) {
   const actions = {};
   for (const r of await safe("select kind, count(*) c from events where site = ? and day >= ? and day <= ? and kind != 'imp' group by kind", A)) actions[String(r.kind)] = +r.c;
   const outs = (await safe(`select key k, count(*) v from events where site = ? and day >= ? and day <= ? and kind = 'out' group by key order by v desc limit ${n}`, A)).map((r) => ({ k: String(r.k), v: +r.v, u: +r.v }));
-  let orders = 0, revenue = 0, enquiries = 0, pOrders = 0, pRevenue = 0;
+  let orders = 0, revenue = 0, enquiries = 0, pOrders = 0, pRevenue = 0, regs = 0, regRevenue = 0, pRegs = 0;
   for (const r of await safe("select data, created_at from enquiries where site = ? and created_at >= ? and created_at < ? and status != 'cancelled' limit 20000", [site, prevFrom, dayOf(Date.parse(to) + 864e5)])) {
     let d = {};
     try {
@@ -1937,6 +1937,11 @@ async function siteStats(q, site, o) {
         pOrders++;
         pRevenue += moneyOf(d.total);
       }
+    } else if (d?.reg_no) {
+      if (cur) {
+        regs++;
+        regRevenue += moneyOf(d.total);
+      } else pRegs++;
     } else if (cur) enquiries++;
   }
   return {
@@ -1957,6 +1962,9 @@ async function siteStats(q, site, o) {
     orders,
     revenue: Math.round(revenue),
     enquiries,
+    regs,
+    regRevenue: Math.round(regRevenue),
+    prevRegs: pRegs,
     prevOrders: pOrders,
     prevRevenue: Math.round(pRevenue),
     daily,

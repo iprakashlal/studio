@@ -13,7 +13,7 @@ import { TEMPLATES } from "../schema";
 import { Skel } from "../ui/kit";
 
 type Src = { cf: { api: string; site: string }; account?: string };
-type Entry = { p: ProjectMeta; src: Src | null; why?: string; stats?: SiteStats | null; err?: string };
+type Entry = { p: ProjectMeta; src: Src | null; why?: string; stats?: SiteStats | null; err?: string; /** The site's address, when the project doesn't say it (a site's own admin page). */ url?: string };
 const RANGES: [string, string][] = [["d1", "Today"], ["d7", "7 days"], ["d30", "30 days"], ["d90", "90 days"], ["d365", "12 months"]];
 const today = () => new Date().toISOString().slice(0, 10);
 /** A period as the database is asked for it: "d30" (the last 30 days) or "c:2026-01-01:2026-01-31" (from, to). */
@@ -231,12 +231,13 @@ function SitesTable({ list, onOpen }: { list: Entry[]; onOpen: (id: string) => v
 }
 
 /** One site: its numbers, chart and breakdowns. */
-function SiteView({ e }: { e: Entry }) {
-  const s = e.stats!, url = liveUrl(e.p), devTotal = s.devices.reduce((a, b) => a + b.v, 0) || 1;
+function SiteView({ e, head = true }: { e: Entry; head?: boolean }) {
+  const s = e.stats!, url = e.url || liveUrl(e.p), devTotal = s.devices.reduce((a, b) => a + b.v, 0) || 1;
   const DEV: Record<string, [string, string]> = { mobile: ["Phone", "bg-brand-500"], tablet: ["Tablet", "bg-sky-400"], desktop: ["Computer", "bg-emerald-400"] };
   return <>
-    <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1"><h2 className="font-display text-2xl font-extrabold">{e.p.name}</h2>{url && <a className="text-[13px] text-brand-300 underline-offset-2 hover:underline" href={url} target="_blank" rel="noopener noreferrer">{url.replace(/^https:\/\//, "").replace(/\/$/, "")} ↗</a>}</div>
+    {head && <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1"><h2 className="font-display text-2xl font-extrabold">{e.p.name}</h2>{url && <a className="text-[13px] text-brand-300 underline-offset-2 hover:underline" href={url} target="_blank" rel="noopener noreferrer">{url.replace(/^https:\/\//, "").replace(/\/$/, "")} ↗</a>}</div>}
     <Kpis s={s} />
+    <GoalsPanel s={s} kind={e.p.template} />
     <Panel title="Views and visitors" right={<Legend />}><Chart s={s} /></Panel>
     <div className="grid gap-4 lg:grid-cols-2">
       <Panel title="Top pages" note="Views, then the average time on the page."><Bars rows={s.pages.map((r) => ({ ...r, label: pageName(r.k), extra: r.t ? dur(r.t) : "" }))} empty="No views in this period." /></Panel>
@@ -378,7 +379,7 @@ function combine(all: SiteStats[], rk: string): SiteStats {
   const a = askOf(rk), to = a.to || today(), from = a.from || new Date(Date.now() - ((a.days || 30) - 1) * 864e5).toISOString().slice(0, 10), timed = sum("timed");
   return { days: spanOf(rk), from, to, views: sum("views"), visitors: sum("visitors"), prevViews: sum("prevViews"), prevVisitors: sum("prevVisitors"), live: sum("live"),
     time: sum("time"), timed, prevTime: sum("prevTime"), depth: timed ? Math.round(all.reduce((x, s) => x + (s.depth || 0) * (s.timed || 0), 0) / timed) : 0, bounces: sum("bounces"), prevBounces: sum("prevBounces"),
-    orders: sum("orders"), revenue: sum("revenue"), enquiries: sum("enquiries"), prevOrders: sum("prevOrders"), prevRevenue: sum("prevRevenue"),
+    orders: sum("orders"), revenue: sum("revenue"), enquiries: sum("enquiries"), regs: sum("regs"), regRevenue: sum("regRevenue"), prevRegs: sum("prevRegs"), prevOrders: sum("prevOrders"), prevRevenue: sum("prevRevenue"),
     daily: [...daily.values()].sort((x, y) => x.day.localeCompare(y.day)), hours: arr("hours", 24), week: arr("week", 7),
     pages: [...PG.values()].map((x) => ({ ...x, t: Math.round(x.t), dp: Math.round(x.dp) })).sort((a, b) => b.v - a.v).slice(0, 50), entries: add("entries"), exits: add("exits"), refs: add("refs"), sources: add("sources"), devices: add("devices"), countries: add("countries"), outs: add("outs"),
     products: [...P.values()].map((p) => ({ ...p, t: Math.round(p.t) })).sort((x, y) => y.v - x.v || y.imp - x.imp).slice(0, 50), actions };
@@ -392,7 +393,7 @@ function sample(rk: string, seed: number): SiteStats {
   const share = (k: string, f: number) => ({ k, v: Math.round(views * f), u: Math.round(visitors * f) });
   const orders = Math.round(visitors * 0.021);
   return { days, from: daily[0].day, to: daily[daily.length - 1].day, views, visitors, prevViews: Math.round(views * (0.8 + rnd() * 0.3)), prevVisitors: Math.round(visitors * 0.9), live: Math.round(rnd() * 4), daily,
-    time, timed: views, prevTime: Math.round(time * 0.92), depth: 58, bounces: Math.round(visitors * 0.38), prevBounces: Math.round(visitors * 0.41), orders, revenue: orders * 1450, enquiries: Math.round(visitors * 0.012), prevOrders: Math.round(orders * 0.85), prevRevenue: Math.round(orders * 0.85 * 1380),
+    time, timed: views, prevTime: Math.round(time * 0.92), depth: 58, bounces: Math.round(visitors * 0.38), prevBounces: Math.round(visitors * 0.41), orders, revenue: orders * 1450, enquiries: Math.round(visitors * 0.012), prevOrders: Math.round(orders * 0.85), prevRevenue: Math.round(orders * 0.85 * 1380), regs: Math.round(visitors * 0.016), regRevenue: Math.round(visitors * 0.016) * 500, prevRegs: Math.round(visitors * 0.013),
     hours: Array.from({ length: 24 }, (_, h) => Math.round((views / 24) * (0.2 + Math.max(0, Math.sin(((h - 6) / 24) * Math.PI * 2)) * 1.8))), week: [0.11, 0.15, 0.15, 0.14, 0.15, 0.16, 0.14].map((f) => Math.round(views * f)),
     pages: [share("/", 0.46), share("/products.html", 0.18), share("/product.html?p=stoneware-mug", 0.12), share("/about.html", 0.09), share("/?s=gallery", 0.05)].map((x, i) => ({ ...x, t: [42, 65, 88, 51, 30][i], dp: [62, 70, 81, 55, 48][i] })),
     entries: [share("/", 0.4), share("/product.html?p=stoneware-mug", 0.08), share("/products.html", 0.06)], exits: [share("/", 0.22), share("/product.html?p=stoneware-mug", 0.1), share("/about.html", 0.07)],
@@ -451,6 +452,7 @@ function Reports({ list, rk: dashRk, loading }: { list: Entry[]; rk: string; loa
   const chosen = c.sites.length ? list.filter((e) => c.sites.includes(e.p.id)) : list;
   const shown = list.filter((e) => !q.trim() || e.p.name.toLowerCase().includes(q.trim().toLowerCase()) || (e.p.client || "").toLowerCase().includes(q.trim().toLowerCase()));
   const toggleSite = (id: string) => { const cur = c.sites.length ? c.sites : list.map((e) => e.p.id); const next = cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]; set({ sites: next.length === list.length ? [] : next }); };
+  const nSec = c.sections.filter((k) => !(chosen.length <= 1 && k === "sites")).length;
   const toggleSec = (k: string) => set({ sections: c.sections.includes(k) ? c.sections.filter((x) => x !== k) : SECTIONS.map(([x]) => x).filter((x) => x === k || c.sections.includes(x)) });
   const rangeFor = (r: string) => { if (r !== "lastMonth") return r; const d = new Date(), f = new Date(d.getFullYear(), d.getMonth() - 1, 1), t = new Date(d.getFullYear(), d.getMonth(), 0); return `c:${iso(f)}:${iso(t)}`; };
   const make = async (cc: Criteria, r: string) => {
@@ -466,12 +468,13 @@ function Reports({ list, rk: dashRk, loading }: { list: Entry[]; rk: string; loa
       out.sort((a, b) => sites.indexOf(a.e) - sites.indexOf(b.e));
       setBusy("Making the " + (cc.format === "pdf" ? "PDF" : cc.format === "xlsx" ? "Excel file" : "CSV files"));
       const all = out.length === 1 ? out[0].stats : combine(out.map((x) => x.stats), r);
-      const { name, blob } = await buildReport(cc, out.map((x) => ({ name: x.e.p.name, url: liveUrl(x.e.p), stats: x.stats })), all, brand().name || "Picaffectz Studio");
+      const { name, blob } = await buildReport(cc, out.map((x) => ({ name: x.e.p.name, url: x.e.url || liveUrl(x.e.p), stats: x.stats })), all, brand().name || "Picaffectz Studio");
       downloadBlob(blob, name); toast(`Downloaded ${name}` + (out.length < sites.length ? ` (${sites.length - out.length} site${sites.length - out.length === 1 ? "" : "s"} couldn't be read)` : ""));
     } catch (e: any) { toast(e?.message || "Couldn't make the report.", "bad"); }
     setBusy("");
   };
   const savePreset = () => { const name = pname.trim() || c.title; const next = [...presets.filter((x) => x.name !== name), { name, c, rk }]; setPresets(next); keep(PRESETS_KEY, next); setPname(""); toast(`Saved “${name}”.`); };
+  const one = list.length <= 1, num = (n: number) => (one && n > 2 ? n - 1 : n);
   const Box = ({ n, title, children, right }: { n: number; title: string; children: React.ReactNode; right?: React.ReactNode }) => (
     <section className="card flex flex-col gap-3 p-5"><div className="flex flex-wrap items-center gap-2"><span className="grid h-6 w-6 place-items-center rounded-full bg-brand-500/20 text-[12px] font-extrabold text-brand-300">{n}</span><h3 className="text-[15px] font-extrabold">{title}</h3>{right && <span className="ml-auto">{right}</span>}</div>{children}</section>);
   const FORMATS: [Criteria["format"], string, string, string][] = [["pdf", "PDF", "A designed report to send or print: cover, headline tiles, charts and tables.", "📄"], ["xlsx", "Excel", "A workbook with a sheet per table, filters and frozen headings, ready to sort and chart.", "📊"], ["csv", "CSV", "Plain data files in a ZIP, one per table, for any other tool.", "🗂️"]];
@@ -485,13 +488,13 @@ function Reports({ list, rk: dashRk, loading }: { list: Entry[]; rk: string; loa
           </div>
           <label className="flex flex-col gap-1"><span className="label">Notes on the cover (optional)</span><textarea className="input min-h-[64px]" placeholder="What changed this month, campaigns that ran…" value={c.note} onChange={(e) => set({ note: e.target.value })} /></label>
         </Box>
-        <Box n={2} title="Sites" right={<span className="text-[12.5px] text-ink-400">{chosen.length} of {list.length} chosen</span>}>
+        {!one && <Box n={2} title="Sites" right={<span className="text-[12.5px] text-ink-400">{chosen.length} of {list.length} chosen</span>}>
           <div className="flex flex-wrap gap-2"><input className="input max-w-xs py-2" placeholder="Search sites or clients" value={q} onChange={(e) => setQ(e.target.value)} /><button type="button" className="btn btn-sm" onClick={() => set({ sites: [] })}>All</button><button type="button" className="btn btn-sm" onClick={() => set({ sites: list.length ? [list[0].p.id] : [] })}>Just one</button></div>
           {!list.length ? <p className="text-[13px] text-ink-400">No site is counted yet.</p> :
             <ul className="scroll-thin grid max-h-56 gap-1.5 overflow-auto sm:grid-cols-2 lg:grid-cols-3">{shown.map((e) => { const on = !c.sites.length || c.sites.includes(e.p.id); return <li key={e.p.id}><label className={`flex cursor-pointer items-center gap-2.5 rounded-xl border px-3 py-2 text-[13px] ${on ? "border-brand-400/60 bg-brand-500/10" : "border-ink-700"}`}><input type="checkbox" checked={on} onChange={() => toggleSite(e.p.id)} className="accent-brand-500" /><span className="min-w-0 flex-1 truncate font-semibold">{e.p.name}</span>{e.stats && <span className="text-[11.5px] tabular-nums text-ink-400">{fmt(e.stats.views)}</span>}</label></li>; })}</ul>}
           {chosen.length > 1 && <label className="flex items-center gap-2 text-[13px]"><input type="checkbox" className="accent-brand-500" checked={c.perSite} onChange={(e) => set({ perSite: e.target.checked })} />A section for each site too (after the totals for all of them)</label>}
-        </Box>
-        <Box n={3} title="Period">
+        </Box>}
+        <Box n={num(3)} title="Period">
           <div className="flex flex-wrap items-start justify-between gap-3"><Period rk={rk} onRk={setRk} />
             <div className="flex flex-col gap-2 text-[13px]">
               <label className="flex items-center gap-2"><input type="checkbox" className="accent-brand-500" checked={c.compare} onChange={(e) => set({ compare: e.target.checked })} />Compare with the period before</label>
@@ -499,11 +502,11 @@ function Reports({ list, rk: dashRk, loading }: { list: Entry[]; rk: string; loa
             </div>
           </div>
         </Box>
-        <Box n={4} title="What goes in" right={<span className="flex gap-1.5"><button type="button" className="btn btn-ghost btn-sm" onClick={() => set({ sections: SECTIONS.map(([k]) => k) })}>All</button><button type="button" className="btn btn-ghost btn-sm" onClick={() => set({ sections: ["summary"] })}>Only the summary</button></span>}>
-          <ul className="grid gap-2 md:grid-cols-2">{SECTIONS.map(([k, l, d]) => { const on = c.sections.includes(k); return <li key={k}><label className={`flex h-full cursor-pointer gap-3 rounded-xl border p-3 text-[13px] ${on ? "border-brand-400/60 bg-brand-500/10" : "border-ink-700"}`}><input type="checkbox" className="mt-0.5 accent-brand-500" checked={on} onChange={() => toggleSec(k)} /><span><b className="block">{l}</b><span className="text-[12.5px] text-ink-400">{d}</span></span></label></li>; })}</ul>
+        <Box n={num(4)} title="What goes in" right={<span className="flex gap-1.5"><button type="button" className="btn btn-ghost btn-sm" onClick={() => set({ sections: SECTIONS.map(([k]) => k) })}>All</button><button type="button" className="btn btn-ghost btn-sm" onClick={() => set({ sections: ["summary"] })}>Only the summary</button></span>}>
+          <ul className="grid gap-2 md:grid-cols-2">{SECTIONS.filter(([k]) => !(one && k === "sites")).map(([k, l, d]) => { const on = c.sections.includes(k); return <li key={k}><label className={`flex h-full cursor-pointer gap-3 rounded-xl border p-3 text-[13px] ${on ? "border-brand-400/60 bg-brand-500/10" : "border-ink-700"}`}><input type="checkbox" className="mt-0.5 accent-brand-500" checked={on} onChange={() => toggleSec(k)} /><span><b className="block">{l}</b><span className="text-[12.5px] text-ink-400">{d}</span></span></label></li>; })}</ul>
           <label className="flex items-center gap-2 text-[13px]"><span className="text-ink-400">Rows in each list</span><select className="input w-auto py-1.5" value={c.top} onChange={(e) => set({ top: +e.target.value })}>{[10, 15, 25, 50, 100].map((n) => <option key={n} value={n}>Top {n}</option>)}</select></label>
         </Box>
-        <Box n={5} title="Format">
+        <Box n={num(5)} title="Format">
           <div role="radiogroup" aria-label="Format" className="grid gap-2 sm:grid-cols-3">{FORMATS.map(([k, l, d, ic]) => <button key={k} type="button" role="radio" aria-checked={c.format === k} onClick={() => set({ format: k })} className={`flex flex-col gap-1 rounded-xl border p-3 text-left ${c.format === k ? "border-brand-400 bg-brand-500/10" : "border-ink-700 hover:border-ink-500"}`}><span className="text-xl" aria-hidden>{ic}</span><b>{l}</b><span className="text-[12px] text-ink-400">{d}</span></button>)}</div>
           <div className="flex flex-wrap items-center gap-2 border-t border-ink-700 pt-3">
             <button type="button" className="btn btn-pri" disabled={!!busy || !chosen.length} onClick={() => make(c, rk)}>{busy ? busy + "…" : `Download ${c.format === "pdf" ? "PDF" : c.format === "xlsx" ? "Excel" : "CSV"} report`}</button>
@@ -512,7 +515,7 @@ function Reports({ list, rk: dashRk, loading }: { list: Entry[]; rk: string; loa
         </Box>
       </div>
       <aside className="flex flex-col gap-4 xl:sticky xl:top-20">
-        <section className="card flex flex-col gap-3 p-5" aria-label="Quick reports"><h3 className="text-[15px] font-extrabold">Quick reports</h3><p className="-mt-1 text-[12.5px] text-ink-400">Ready-made, for all the sites chosen in step 2. One press downloads it.</p>
+        <section className="card flex flex-col gap-3 p-5" aria-label="Quick reports"><h3 className="text-[15px] font-extrabold">Quick reports</h3><p className="-mt-1 text-[12.5px] text-ink-400">{one ? "Ready-made for this site. One press downloads it." : "Ready-made, for all the sites chosen in step 2. One press downloads it."}</p>
           <ul className="flex flex-col gap-2">{QUICK.map((x) => <li key={x.name}><button type="button" disabled={!!busy} onClick={() => make({ ...c, title: x.c.title || x.name, ...x.c } as Criteria, rangeFor(x.rk))} className="flex w-full flex-col rounded-xl border border-ink-700 p-3 text-left transition hover:border-brand-400/60 hover:bg-brand-500/5 disabled:opacity-50"><b className="text-[13.5px]">{x.name}</b><span className="text-[12px] text-ink-400">{x.note}</span></button></li>)}</ul>
         </section>
         <section className="card flex flex-col gap-3 p-5" aria-label="Saved report setups"><h3 className="text-[15px] font-extrabold">Saved setups</h3>
@@ -521,7 +524,7 @@ function Reports({ list, rk: dashRk, loading }: { list: Entry[]; rk: string; loa
             <ul className="flex flex-col divide-y divide-ink-700 text-[13px]">{presets.map((x) => <li key={x.name} className="flex items-center gap-2 py-2"><button type="button" className="min-w-0 flex-1 truncate text-left font-semibold hover:text-brand-300" onClick={() => { setC({ ...DEFAULT_CRITERIA, ...x.c }); setRk(x.rk); }}>{x.name}</button><span className="text-[11.5px] uppercase text-ink-400">{x.c.format}</span><button type="button" className="btn btn-sm" disabled={!!busy} onClick={() => make({ ...DEFAULT_CRITERIA, ...x.c }, x.rk)}>Download</button><button type="button" className="icon-btn h-7 w-7" aria-label={`Delete ${x.name}`} onClick={() => { const next = presets.filter((y) => y.name !== x.name); setPresets(next); keep(PRESETS_KEY, next); }}>✕</button></li>)}</ul>}
         </section>
         <section className="card flex flex-col gap-2 p-5 text-[12.5px] text-ink-400" aria-label="In this report"><h3 className="text-[15px] font-extrabold text-ink-100">In this report</h3>
-          <p><b className="text-ink-200">{chosen.length}</b> site{chosen.length === 1 ? "" : "s"} · <b className="text-ink-200">{spanOf(rk)}</b> day{spanOf(rk) === 1 ? "" : "s"}{c.compare ? ", compared with the days before" : ""} · <b className="text-ink-200">{c.sections.length}</b> section{c.sections.length === 1 ? "" : "s"} · top {c.top} rows · {c.format.toUpperCase()}</p>
+          <p><b className="text-ink-200">{chosen.length}</b> site{chosen.length === 1 ? "" : "s"} · <b className="text-ink-200">{spanOf(rk)}</b> day{spanOf(rk) === 1 ? "" : "s"}{c.compare ? ", compared with the days before" : ""} · <b className="text-ink-200">{nSec}</b> section{nSec === 1 ? "" : "s"} · top {c.top} rows · {c.format.toUpperCase()}</p>
           <p>Made on this device from the sites' own numbers. Nothing is sent anywhere else.</p>
         </section>
       </aside>
@@ -544,6 +547,75 @@ function LiveStatus({ busy, at, onRefresh }: { busy: boolean; at: number | null;
         <svg aria-hidden viewBox="0 0 24 24" className={`h-3.5 w-3.5 ${busy ? "animate-spin" : ""}`} fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36" /><path d="M21 4v5h-5" /></svg>
         Refresh
       </button>
+    </div>
+  );
+}
+
+/* What matters most for each kind of website: the visits that turned into what the site is for. */
+const GOALS: Record<string, { title: string; note: string; tiles: (s: SiteStats) => [string, string, string?][] }> = {
+  store: { title: "Shop goals", note: "How visits turn into sales.", tiles: (s) => [
+    ["Orders", String(s.orders || 0), `${per100(s.orders, s.visitors)} per 100 visitors`], ["Revenue", money0(s.revenue), `${money0(s.visitors ? (s.revenue || 0) / s.visitors : 0)} per visitor`],
+    ["Adds to cart", String(s.actions?.cart || 0), `${per100(s.actions?.cart, s.visitors)} per 100 visitors`], ["Cart to order", (s.actions?.cart ? Math.round(((s.orders || 0) / s.actions.cart) * 100) : 0) + "%", "orders per add to cart"]] },
+  restaurant: { title: "Restaurant goals", note: "Orders, and guests reaching you to book or ask.", tiles: (s) => [
+    ["Orders", String(s.orders || 0), `${per100(s.orders, s.visitors)} per 100 visitors`], ["Revenue", money0(s.revenue), s.orders ? `${money0((s.revenue || 0) / s.orders)} per order` : ""],
+    ["Calls & WhatsApp", String((s.actions?.call || 0) + (s.actions?.whatsapp || 0)), "taps to call or message"], ["Bookings & messages", String(s.enquiries || 0), "sent through the site's forms"]] },
+  business: { title: "Lead goals", note: "Visitors who got in touch: forms, calls, WhatsApp and emails.", tiles: (s) => { const leads = (s.enquiries || 0) + (s.actions?.call || 0) + (s.actions?.whatsapp || 0) + (s.actions?.email || 0); return [
+    ["Leads", String(leads), `${per100(leads, s.visitors)} per 100 visitors`], ["Enquiries", String(s.enquiries || 0), "sent through the site's forms"],
+    ["Calls & WhatsApp", String((s.actions?.call || 0) + (s.actions?.whatsapp || 0)), "taps to call or message"], ["Product interest", String((s.products || []).reduce((a, p) => a + p.v, 0)), "product pages opened"]]; } },
+  events: { title: "Event goals", note: "Registrations, and the visitors who asked about the event.", tiles: (s) => [
+    ["Registrations", String(s.regs || 0), `${per100(s.regs, s.visitors)} per 100 visitors`], ["From registrations", money0(s.regRevenue), (s.regs ? `${money0((s.regRevenue || 0) / s.regs)} each` : "")],
+    ["Change", (s.prevRegs ? pct(s.regs || 0, s.prevRegs) : 0) + "%", "registrations against the period before"], ["Messages", String(s.enquiries || 0), "sent through the site's forms"]] },
+  portfolio: { title: "Portfolio goals", note: "Visitors who reached out or went to your profiles.", tiles: (s) => { const c = (s.actions?.email || 0) + (s.actions?.form || 0) + (s.actions?.call || 0) + (s.actions?.whatsapp || 0); return [
+    ["Contacts", String(c), `${per100(c, s.visitors)} per 100 visitors`], ["Profiles opened", String(s.actions?.out || 0), "links out (LinkedIn, GitHub…)"],
+    ["Avg. time per visitor", dur(s.visitors ? (s.time || 0) / s.visitors : 0), "looking at your work"], ["Read to the end", (s.depth || 0) + "%", "average depth read"]]; } },
+};
+const per100 = (a?: number, b?: number) => (b ? (((a || 0) / b) * 100).toFixed(1) : "0");
+const money0 = (n?: number) => "₹" + Math.round(n || 0).toLocaleString("en-IN");
+function GoalsPanel({ s, kind }: { s: SiteStats; kind: string }) {
+  const g = GOALS[kind] || GOALS.business;
+  return <section className="card flex flex-col gap-3 border-brand-500/30 bg-gradient-to-br from-brand-500/10 via-transparent to-transparent p-5" aria-label={g.title}>
+    <div className="flex flex-wrap items-baseline gap-x-3"><h3 className="text-[15px] font-extrabold">🎯 {g.title}</h3><span className="text-[12.5px] text-ink-400">{g.note}</span></div>
+    <ul className="grid grid-cols-2 gap-3 lg:grid-cols-4">{g.tiles(s).map(([l, v, sub]) => <li key={l} className="rounded-2xl border border-ink-700 bg-ink-900/60 p-4"><span className="block text-[11.5px] font-bold uppercase tracking-wider text-ink-400">{l}</span><b className="mt-1 block font-display text-2xl font-extrabold">{v}</b>{sub && <span className="text-[12px] text-ink-400">{sub}</span>}</li>)}</ul>
+  </section>;
+}
+
+/** A site's own admin page → Analytics: the same dashboard and reports for this one site, read with the admin's own sign-in
+ *  to the site's database (or the Studio's link to it). Shown at once from what this device saw last; live every minute. */
+export function SiteAnalytics({ cf, account, name, url, kind, demo }: { cf: { api: string; site: string } | null; account?: string; name: string; url?: string; kind: string; demo?: boolean }) {
+  const p = useMemo(() => ({ id: cf?.site || "site", name, template: kind, client: "" }) as unknown as ProjectMeta, [cf?.site, name, kind]);
+  const key = (rk: string) => `site-analytics:${cf?.site || "x"}:${rk}`;
+  const read = (rk: string): { at: number; stats: SiteStats } | null => { try { return JSON.parse(localStorage.getItem(key(rk)) || "null"); } catch { return null; } };
+  const [rk, setRk] = useState("d30"), [view, setView] = useState<"dash" | "reports">("dash");
+  const [stats, setStats] = useState<SiteStats | null | undefined>(() => (demo ? sample("d30", 1) : read("d30")?.stats));
+  const [at, setAt] = useState<number | null>(() => read("d30")?.at ?? null), [busy, setBusy] = useState(false), [err, setErr] = useState(""), [again, setAgain] = useState(0);
+  useEffect(() => {
+    if (demo) { setStats(sample(rk, 1)); return; } if (!cf) return;
+    let live = true; const c = read(rk); if (c) { setStats(c.stats); setAt(c.at); } else { setStats(undefined); setAt(null); }
+    setBusy(true);
+    siteStats(cf, askOf(rk), account).then((s) => { if (!live) return; setStats(s); setErr(""); const t = Date.now(); setAt(t); try { localStorage.setItem(key(rk), JSON.stringify({ at: t, stats: s })); } catch { /* full */ } })
+      .catch((x: any) => { if (live) setErr(x?.status === 401 ? "Sign in again to see this site's numbers." : x?.status === 403 ? "Your role can't see this site's numbers. Ask its Administrator (Role Management)." : /Unknown|Not found|404/i.test(x?.message || "") ? "This site's database needs updating once before it can count visits (ask whoever set up the site)." : x?.message || "Couldn't read the numbers."); })
+      .finally(() => { if (live) setBusy(false); });
+    return () => { live = false; };
+  }, [rk, again, cf?.api, cf?.site, demo]);
+  useEffect(() => {
+    if (demo || !cf) return;
+    const due = () => document.visibilityState === "visible" && (!at || Date.now() - at > 55_000);
+    const t = setInterval(() => { if (!busy && due()) setAgain((n) => n + 1); }, 60_000), back = () => { if (!busy && due()) setAgain((n) => n + 1); };
+    document.addEventListener("visibilitychange", back); return () => { clearInterval(t); document.removeEventListener("visibilitychange", back); };
+  }, [busy, at, demo, cf?.api]);
+  const e: Entry | null = stats ? { p, src: cf ? { cf, account } : null, stats, url } : null;
+  if (!cf && !demo) return <section className="card p-5 text-[13px] text-ink-300">Visits are counted by the site's database on Cloudflare. This site keeps its content elsewhere, so there are no numbers to show here yet.</section>;
+  return (
+    <div className="flex flex-col gap-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div role="tablist" aria-label="Analytics" className="flex gap-1 rounded-full border border-ink-700 p-1">
+          {([["dash", "Dashboard"], ["reports", "Reports & downloads"]] as const).map(([k, l]) => <button key={k} type="button" role="tab" aria-selected={view === k} onClick={() => setView(k)} className={`rounded-full px-4 py-1.5 text-[13px] font-semibold transition ${view === k ? "bg-brand-500 text-white" : "text-ink-300 hover:text-ink-100"}`}>{l}</button>)}
+        </div>
+        {view === "dash" && <div className="flex flex-wrap items-center justify-end gap-3"><LiveStatus busy={busy} at={at} onRefresh={() => setAgain((n) => n + 1)} /><Period rk={rk} onRk={setRk} /></div>}
+      </div>
+      {err && <p role="alert" className="rounded-xl border border-amber-400/40 bg-amber-400/5 px-4 py-2.5 text-[13px] text-amber-100">{err}</p>}
+      {view === "reports" ? (e ? <Reports list={[e]} rk={rk} loading={busy} /> : <SkelPage />) : !e ? <SkelPage /> : <SiteView e={e} head={false} />}
+      <p className="text-[12.5px] text-ink-400">A visitor is counted once a day (an address and browser, scrambled with the day, so nobody can be followed from one day to the next), and only when they allow analytics under the site's cookie consent. No cookies are set.</p>
     </div>
   );
 }

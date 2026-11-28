@@ -468,6 +468,8 @@ export type SiteStats = { days: number; from: string; to?: string; views: number
   /** Visitors who saw one page for under 10 seconds. */
   bounces?: number; prevBounces?: number;
   orders?: number; revenue?: number; enquiries?: number; prevOrders?: number; prevRevenue?: number;
+  /** An event's registrations in the period (and their total), and the period before's count. */
+  regs?: number; regRevenue?: number; prevRegs?: number;
   daily: { day: string; v: number; u: number; d?: number }[]; hours?: number[]; week?: number[];
   pages: (Row3 & { t?: number; dp?: number })[]; entries?: Row3[]; exits?: Row3[]; refs: Row3[]; sources: Row3[]; devices: Row3[]; countries: Row3[];
   products?: { k: string; imp: number; v: number; t: number; cart: number }[]; actions?: Record<string, number>; outs?: Row3[] };

@@ -968,7 +968,7 @@ function CodeTemplateField() {
 
 /** Studio only: tick the sections this site's own admin page shows. Unticked ones are listed in content.cms.hide and
  *  left out of that admin page's menu (the Studio always shows everything). */
-export const ADMIN_EXTRAS: [string, string, string][] = [["enquiries", "Enquiries", "Forms & records"], ["warranty-records", "Warranty records", "Forms & records"], ["orders", "Orders", "Shop"], ["customers", "Customers", "Shop"], ["customer-data", "Customer Data", "Forms & records"]];
+export const ADMIN_EXTRAS: [string, string, string][] = [["analytics", "Analytics", "Insights"], ["enquiries", "Enquiries", "Forms & records"], ["warranty-records", "Warranty records", "Forms & records"], ["orders", "Orders", "Shop"], ["customers", "Customers", "Shop"], ["customer-data", "Customer Data", "Forms & records"]];
 function AdminSectionsField() {
   const { tpl, root, bump } = useCtx();
   root.cms = root.cms || {};

@@ -252,7 +252,7 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
     // Role Management: people, their roles, and what each role can do (kept in the Studio's database).
     if (here === "roles") return shell(<div className="flex max-w-5xl flex-col gap-4"><p className="text-sm text-ink-300">Who can sign in to this Studio, the role each person has, and what each role is allowed to do. Each person has their own projects and their own choices; Administrators see everyone's.</p><RoleManagement api={role.api} scopeName={role.scope} where="studio" onView={(email) => { lookAt(email); location.hash = "#/"; }} /><PinCard api={role.api} /></div>);
     if (tab === "design") return shell(<DesignLookTab session={session} studio={studio} index={index} onIndex={setIndex} />);
-    if (tab === "pdefs") return shell(<ProjectDefaultsTab studio={studio} index={index} onIndex={setIndex} demo={repo.demo} repo={repo} />);
+    if (tab === "pdefs") return shell(<ProjectDefaultsTab studio={studio} index={index} onIndex={setIndex} demo={repo.demo} repo={repo} badge={hid("badge") ? undefined : <BadgeCard studio={studio} saved={index.badge} onIndex={setIndex} />} pages={hid("pages") ? undefined : <StudioPagesCard repo={repo} />} />);
     if (tab === "themes") return shell(<ThemesSettingsTab session={session} studio={studio} index={index} onIndex={setIndex} />);
     if (tab === "help") return shell(<div className="max-w-3xl"><StudioHelp /></div>);
     // Updates: this Studio build onto live sites, and (a hosted Studio) the Studio's own update.
@@ -262,10 +262,8 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
           <FoldAll />
           <FoldCards scope={tab === "customize" || tab === "hostings" ? tab : "general"} className="set-cols">
           {tab === "customize" ? <>
-            <p className="text-sm text-ink-300">How your Studio and its sites' admin pages look: the Studio's name and logo, the “Powered by” badge, the Studio's own pages and the admin menus.</p>
+            <p className="text-sm text-ink-300">How your Studio and its sites' admin pages look: the Studio's name and logo, the Explorer helper and the admin menus. The “Powered by” badge and the Studio's own pages are in Project defaults → Studio.</p>
             {!hid("brand") && <BrandCard studio={studio} onIndex={setIndex} />}
-            {!hid("badge") && <BadgeCard studio={studio} saved={index.badge} onIndex={setIndex} />}
-            {!hid("pages") && <StudioPagesCard repo={repo} />}
             <ExplorerCard />
             {!hid("menus") && <MenusCard studio={studio} menus={index.menus || {}} onIndex={setIndex} />}
           </> : tab === "hostings" ? <>
@@ -373,8 +371,8 @@ const SET_INDEX: [tab: string, title: string, words: string, find?: string][] = 
   ["general", "Dashboard numbers", "stats counts projects published"],
   ["general", "Account and sign-in", "login password username sign out session device token", "Sign"],
   ["customize", "Studio name & logo", "brand colours colors layout glass classic soft sharp dark light icon animation", "Studio name"],
-  ["customize", "“Powered by” badge", "badge footer credit", "badge"],
-  ["customize", "Additional pages", "studio pages public about terms privacy"],
+  ["pdefs", "“Powered by” badge", "badge footer credit studio"],
+  ["pdefs", "Additional pages", "studio pages public about terms privacy"],
   ["login", "Sign-in email", "email template code mail"],
   ["login", "Sign in with a PIN", "pin code digits login"],
   ["login", "Who can sign in to this Studio", "owners members team people access"],

@@ -2,7 +2,7 @@
 // Resend, WhatsApp & SMS, privacy policy, terms, cookie banner wording and payments. Content goes into each site's
 // content at its next publish or Push updates; connections stay encrypted on the Studio's database and are used by every
 // site on it that follows them. Each site's own admin page can switch a section off and keep its own.
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { TEMPLATES } from "../schema";
 import { Ctx, FieldView, type EditorCtx } from "../editor/fields";
 import { LEGAL_PH, PD_CONN, PD_KINDS, PD_SECTIONS, cleanPdefs, fillStandard, legalTemplate, ownsOf, pdBase, pdCards, secOn, splitFields, pdSections, pdSeed, type PdId, type ProjectDefaults } from "../lib/projdefaults";
@@ -18,7 +18,7 @@ const TYPE_NAME: Record<string, string> = { portfolio: "Portfolio", business: "B
 const KEY = "site-studio:pd-tab";
 const read = (k: string, d: string) => { try { return localStorage.getItem(k) || d; } catch { return d; } };
 
-export function ProjectDefaultsTab({ studio, index, onIndex, demo, repo }: { studio: Studio; index: StudioIndex; onIndex: (i: StudioIndex) => void; demo?: boolean; /** The Studio's own data (its emails are kept there). */ repo: Repo }) {
+export function ProjectDefaultsTab({ studio, index, onIndex, demo, repo, badge, pages }: { studio: Studio; index: StudioIndex; onIndex: (i: StudioIndex) => void; demo?: boolean; /** The Studio's own data (its emails are kept there). */ repo: Repo; /** The Studio tab's “Powered by” badge and pages cards. */ badge?: ReactNode; pages?: ReactNode }) {
   const toast = useToast();
   const saved = useMemo(() => cleanPdefs(index.pdefs || {}), [index.pdefs]);
   const [pd, setPd] = useState<ProjectDefaults>(() => clone(saved));
@@ -81,7 +81,7 @@ export function ProjectDefaultsTab({ studio, index, onIndex, demo, repo }: { stu
         <button type="button" className="btn btn-pri" disabled={!dirty || busy || demo} onClick={save}>{busy ? "Saving…" : "Save project defaults"}</button>
         </>}
       </div>
-      {kind === "studio" ? <StudioEmails repo={repo} demo={demo} /> :
+      {kind === "studio" ? <StudioTab repo={repo} demo={demo} badge={badge} pages={pages} /> :
       <div className="grid gap-4 lg:grid-cols-[15rem_minmax(0,1fr)] lg:items-start">
         <nav className="card flex flex-row gap-1 overflow-x-auto p-2 lg:sticky lg:top-32 lg:flex-col" aria-label="Sections">
           {secs.map((id) => { const on = secOn(pd[kind]?.[id]), m = PD_SECTIONS.find((s) => s.id === id)!; return (
@@ -140,5 +140,26 @@ function Body({ kind, sec, S, where, bump, demo }: { kind: string; sec: PdId; S:
         {cards.map((c) => { const fields = splitFields(c.fields, owns).filter((x) => x.own || (x.f as any).t === "note").map((x) => x.f); if (!fields.some((f: any) => f.t !== "note")) return null; return <div key={c.title} className="flex min-w-0 flex-col gap-3 rounded-xl border border-ink-700 bg-ink-950/40 p-4"><h4 className="text-[14px] font-extrabold">{c.title}</h4>{fields.map((f, i) => <FieldView key={i} f={f} obj={root} base={"pd-" + sec} />)}</div>; })}
       </div>
     </Ctx.Provider>
+  );
+}
+
+/** Project defaults → Studio: what the Studio itself has — its emails, its own pages (privacy, terms…) and the
+ *  “Powered by” badge every site shows. */
+const STUDIO_PARTS = [["emails", "Emails"], ["pages", "Pages"], ["badge", "“Powered by” badge"]] as const;
+function StudioTab({ repo, demo, badge, pages }: { repo: Repo; demo?: boolean; badge?: ReactNode; pages?: ReactNode }) {
+  const parts = STUDIO_PARTS.filter(([k]) => k === "emails" || (k === "pages" ? pages : badge));
+  const [part, setPart0] = useState<string>(() => read("site-studio:pd-studio", "emails"));
+  const here = parts.some(([k]) => k === part) ? part : "emails";
+  const setPart = (k: string) => { setPart0(k); try { localStorage.setItem("site-studio:pd-studio", k); } catch { /* private mode */ } };
+  return (
+    <div className="flex flex-col gap-4">
+      {parts.length > 1 && <div className="flex flex-wrap gap-1 self-start border-b border-ink-700" role="tablist" aria-label="Studio">
+        {parts.map(([k, l]) => <button key={k} type="button" role="tab" aria-selected={here === k} onClick={() => setPart(k)}
+          className={`-mb-px border-b-2 px-3 py-2 text-sm font-semibold transition ${here === k ? "border-brand-400 text-ink-100" : "border-transparent text-ink-400 hover:text-ink-100"}`}>{l}</button>)}
+      </div>}
+      {here === "emails" && <StudioEmails repo={repo} demo={demo} />}
+      {here === "pages" && <div className="max-w-5xl">{pages}</div>}
+      {here === "badge" && <div className="max-w-5xl">{badge}</div>}
+    </div>
   );
 }

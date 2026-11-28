@@ -1,6 +1,6 @@
 // Studio → Analytics: visits to the Studio's live sites, counted by each site's own database (built-in analytics: the
 // pages report a view only when the visitor allows analytics; no cookie, nothing that names a visitor is kept).
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ProjectMeta, StudioIndex } from "../lib/studio";
 import { cfSession, siteStats, type SiteStats } from "../lib/cfdb";
 import { loadHostConfig } from "../lib/studiohost";
@@ -48,14 +48,17 @@ export function AnalyticsPage({ index, demo }: { index: StudioIndex; demo: boole
       const studioDb = hc && hc.kind === "cloudflare" && cfSession.load(hc.api) ? { api: hc.api } : null;
       const base: Entry[] = projects.map((p) => ({ p, ...sourceOf(p, studioDb) }));
       if (live) setList(base);
-      await Promise.all(base.map(async (e, i) => {
+      // Six at a time, so a Studio with a hundred sites doesn't send a hundred requests at once.
+      let next = 0;
+      const one = async (e: Entry, i: number) => {
         if (!e.src) return;
         try { const s = await siteStats(e.src.cf, days, e.src.account); if (live) setList((l) => l && l.map((x, j) => (j === i ? { ...x, stats: s } : x))); }
         catch (x: any) {
           const msg = x?.status === 401 ? "Sign in to this site's database on this device." : x?.status === 403 ? "You aren't one of this site's people, so its numbers stay with them." : /Unknown|Not found|404/i.test(x?.message || "") ? "Update the database once (Settings → Updates) to start counting." : x?.message || "Couldn't read its numbers.";
           if (live) setList((l) => l && l.map((y, j) => (j === i ? { ...y, stats: null, err: msg } : y)));
         }
-      }));
+      };
+      await Promise.all(Array.from({ length: 6 }, async () => { while (live && next < base.length) { const i = next++; await one(base[i], i); } }));
     })();
     return () => { live = false; };
   }, [days, projects, demo]);
@@ -78,19 +81,14 @@ export function AnalyticsPage({ index, demo }: { index: StudioIndex; demo: boole
       </div>
       {demo && <p className="rounded-xl border border-amber-400/40 bg-amber-400/5 px-4 py-2.5 text-[13px] text-amber-100">Demo: these numbers are made up, to show how the page looks.</p>}
 
-      <div className="flex flex-wrap gap-2" role="tablist" aria-label="Site">
-        <button type="button" role="tab" aria-selected={!pick} onClick={() => setPick("")} className={`chip ${!pick ? "border-ink-100 bg-ink-100 text-ink-950" : ""}`}>All sites <span className="opacity-60">{counted.length}</span></button>
-        {counted.map((e) => <button key={e.p.id} type="button" role="tab" aria-selected={pick === e.p.id} onClick={() => setPick(e.p.id)} className={`chip ${pick === e.p.id ? "border-ink-100 bg-ink-100 text-ink-950" : ""}`}>{e.p.name}</button>)}
-      </div>
+      <SitePicker list={counted} pick={pick} onPick={setPick} />
 
       {list === null ? <SkelPage /> : one && one.stats ? <SiteView e={one} /> : one && one.stats === undefined ? <SkelPage /> : <>
         <Kpis s={total} label={`All ${counted.length} counted site${counted.length === 1 ? "" : "s"}`} />
         <Panel title="Views and visitors" right={<Legend />}><Chart s={total} /></Panel>
-        <Panel title="Sites" note="Press a site for its pages, where visitors come from, their devices and countries.">
+        <Panel title="Sites" note="Search, sort by any column, and press a site for its pages, where visitors come from, their devices and countries.">
           {!counted.length ? <p className="text-[13px] text-ink-400">No site is counted yet. Publish a site with its database on Cloudflare (or a GitHub Pages site with email sign-in), then Push updates so its pages report visits.</p> :
-            <ul className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-              {[...counted].sort((a, b) => (b.stats?.views || 0) - (a.stats?.views || 0)).map((e) => <li key={e.p.id}><SiteCard e={e} onOpen={() => setPick(e.p.id)} /></li>)}
-            </ul>}
+            <SitesTable list={counted} onOpen={setPick} />}
           {loading && <p className="text-[12.5px] text-ink-400" role="status">Reading the sites' numbers…</p>}
         </Panel>
       </>}
@@ -102,6 +100,87 @@ export function AnalyticsPage({ index, demo }: { index: StudioIndex; demo: boole
       </Panel>}
       <p className="text-[12.5px] text-ink-400">A visitor is counted once a day per site (an address and browser, scrambled with the day, so they can't be followed from one day to the next). Each site's pages start reporting once it's published or updated with Settings → Updates → Push updates. Views older than about 13 months are removed.</p>
     </main>
+  );
+}
+
+/** Which site to show: a button that opens a searchable list (any number of sites), busiest first, with each one's views. */
+function SitePicker({ list, pick, onPick }: { list: Entry[]; pick: string; onPick: (id: string) => void }) {
+  const [open, setOpen] = useState(false), [q, setQ] = useState(""), [at, setAt] = useState(0);
+  const box = useRef<HTMLDivElement>(null), input = useRef<HTMLInputElement>(null);
+  const cur = list.find((e) => e.p.id === pick);
+  const rows = useMemo(() => {
+    const w = q.trim().toLowerCase(), sorted = [...list].sort((a, b) => (b.stats?.views || 0) - (a.stats?.views || 0) || a.p.name.localeCompare(b.p.name));
+    return [{ id: "", name: "All sites", views: list.reduce((n, e) => n + (e.stats?.views || 0), 0), d: null as number | null },
+      ...sorted.filter((e) => !w || e.p.name.toLowerCase().includes(w) || (e.p.client || "").toLowerCase().includes(w)).map((e) => ({ id: e.p.id, name: e.p.name, views: e.stats?.views || 0, d: e.stats ? pct(e.stats.views, e.stats.prevViews) : null }))]
+      .filter((r) => r.id || !w);
+  }, [list, q]);
+  useEffect(() => { if (!open) return; setAt(Math.max(0, rows.findIndex((r) => r.id === pick))); setTimeout(() => input.current?.focus(), 0);
+    const off = (e: MouseEvent) => { if (!box.current?.contains(e.target as Node)) setOpen(false); }; addEventListener("mousedown", off); return () => removeEventListener("mousedown", off); }, [open]);
+  useEffect(() => setAt(0), [q]);
+  const choose = (id: string) => { onPick(id); setOpen(false); setQ(""); };
+  const idx = list.findIndex((e) => e.p.id === pick), step = (d: number) => { if (!list.length) return; const n = idx < 0 ? (d > 0 ? 0 : list.length - 1) : (idx + d + list.length) % list.length; onPick(list[n].p.id); };
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <div ref={box} className="relative">
+        <button type="button" aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen(!open)} className="card flex min-w-[260px] items-center gap-3 rounded-2xl px-4 py-2.5 text-left transition hover:border-ink-500">
+          <span className="grid h-9 w-9 place-items-center rounded-xl bg-brand-500/15 font-display text-sm font-extrabold text-brand-300">{cur ? cur.p.name.trim()[0]?.toUpperCase() : "∑"}</span>
+          <span className="min-w-0 flex-1"><span className="block text-[11px] font-bold uppercase tracking-wider text-ink-400">Showing</span><b className="block truncate">{cur ? cur.p.name : `All sites · ${list.length}`}</b></span>
+          <span aria-hidden className="text-ink-400">▾</span>
+        </button>
+        {open && <div className="card absolute left-0 top-[calc(100%+6px)] z-30 flex w-[min(420px,calc(100vw-32px))] flex-col overflow-hidden rounded-2xl shadow-2xl">
+          <div className="border-b border-ink-700 p-2"><input ref={input} className="input py-2" placeholder={`Search ${list.length} site${list.length === 1 ? "" : "s"} or clients`} aria-label="Search sites" value={q} onChange={(e) => setQ(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "ArrowDown") { e.preventDefault(); setAt((a) => Math.min(rows.length - 1, a + 1)); } else if (e.key === "ArrowUp") { e.preventDefault(); setAt((a) => Math.max(0, a - 1)); } else if (e.key === "Enter" && rows[at]) choose(rows[at].id); else if (e.key === "Escape") setOpen(false); }} /></div>
+          <ul role="listbox" aria-label="Sites" className="scroll-thin max-h-[min(420px,60vh)] overflow-auto p-1.5">
+            {rows.map((r, i) => <li key={r.id || "all"} role="option" aria-selected={r.id === pick}>
+              <button type="button" onMouseEnter={() => setAt(i)} onClick={() => choose(r.id)} className={`flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-[13.5px] ${i === at ? "bg-ink-800" : ""} ${r.id === pick ? "text-brand-300" : ""}`}>
+                <span className="min-w-0 flex-1 truncate font-semibold">{r.name}</span>
+                <span className="tabular-nums text-ink-300">{fmt(r.views)}</span>
+                <span className={`w-12 text-right text-[12px] tabular-nums ${r.d === null ? "text-ink-500" : r.d > 0 ? "text-emerald-300" : r.d < 0 ? "text-red-300" : "text-ink-400"}`}>{r.d === null ? "" : (r.d > 0 ? "+" : "") + r.d + "%"}</span>
+              </button></li>)}
+            {rows.length === (q.trim() ? 0 : 1) && q.trim() && <li className="px-3 py-3 text-[13px] text-ink-400">No site matches “{q}”.</li>}
+          </ul>
+        </div>}
+      </div>
+      {list.length > 1 && <div className="flex gap-1"><button type="button" className="icon-btn h-10 w-10 rounded-xl" aria-label="Previous site" onClick={() => step(-1)}>‹</button><button type="button" className="icon-btn h-10 w-10 rounded-xl" aria-label="Next site" onClick={() => step(1)}>›</button></div>}
+      {pick && <button type="button" className="btn btn-ghost btn-sm" onClick={() => onPick("")}>← All sites</button>}
+    </div>
+  );
+}
+
+/** Every site in one table: search, sort by any column, the busiest first; long lists show the first rows until asked. */
+function SitesTable({ list, onOpen }: { list: Entry[]; onOpen: (id: string) => void }) {
+  type K = "name" | "views" | "visitors" | "change" | "live";
+  const [q, setQ] = useState(""), [by, setBy] = useState<K>("views"), [asc, setAsc] = useState(false), [all, setAll] = useState(false);
+  const val = (e: Entry, k: K): number | string => { const s = e.stats; return k === "name" ? e.p.name.toLowerCase() : !s ? -1 : k === "views" ? s.views : k === "visitors" ? s.visitors : k === "live" ? s.live : pct(s.views, s.prevViews); };
+  const rows = useMemo(() => { const w = q.trim().toLowerCase(); return list.filter((e) => !w || e.p.name.toLowerCase().includes(w) || (e.p.client || "").toLowerCase().includes(w)).sort((a, b) => { const x = val(a, by), y = val(b, by); const c = x < y ? -1 : x > y ? 1 : 0; return asc ? c : -c; }); }, [list, q, by, asc]);
+  const shown = all ? rows : rows.slice(0, 15);
+  const H = ({ k, children, right }: { k: K; children: React.ReactNode; right?: boolean }) => <th scope="col" aria-sort={by === k ? (asc ? "ascending" : "descending") : "none"} className={`px-3 py-2 font-semibold ${right ? "text-right" : "text-left"}`}><button type="button" className={`inline-flex items-center gap-1 uppercase tracking-wider hover:text-ink-100 ${by === k ? "text-ink-100" : ""}`} onClick={() => { if (by === k) setAsc(!asc); else { setBy(k); setAsc(k === "name"); } }}>{children}<span aria-hidden className="text-[10px]">{by === k ? (asc ? "▲" : "▼") : ""}</span></button></th>;
+  return (
+    <div className="flex flex-col gap-3">
+      {list.length > 6 && <input className="input max-w-sm py-2" placeholder={`Search ${list.length} sites or clients`} aria-label="Search the sites" value={q} onChange={(e) => setQ(e.target.value)} />}
+      <div className="scroll-thin overflow-x-auto rounded-xl border border-ink-700">
+        <table className="w-full min-w-[720px] text-[13.5px]">
+          <thead className="bg-ink-950/50 text-[12px] uppercase tracking-wider text-ink-400"><tr>
+            <H k="name">Site</H><H k="views" right>Views</H><H k="visitors" right>Visitors</H><H k="change" right>Change</H><H k="live" right>Now</H>
+            <th scope="col" className="px-3 py-2 text-left font-semibold">Trend</th><th scope="col" className="px-3 py-2 text-left font-semibold">Top page</th></tr></thead>
+          <tbody className="divide-y divide-ink-700">
+            {shown.map((e) => { const s = e.stats, d = s ? pct(s.views, s.prevViews) : 0; return (
+              <tr key={e.p.id} className="cursor-pointer transition hover:bg-ink-800/60" onClick={() => onOpen(e.p.id)}>
+                <td className="px-3 py-2.5"><button type="button" className="text-left font-semibold hover:text-brand-300" onClick={(x) => { x.stopPropagation(); onOpen(e.p.id); }}>{e.p.name}</button>{e.p.client?.trim() && <span className="block text-[12px] text-ink-400">{e.p.client}</span>}</td>
+                {!s ? <td colSpan={6} className="px-3 py-2.5"><Skel className="h-4 w-full" /></td> : <>
+                  <td className="px-3 py-2.5 text-right font-display text-base font-extrabold tabular-nums">{fmt(s.views)}</td>
+                  <td className="px-3 py-2.5 text-right tabular-nums">{fmt(s.visitors)}</td>
+                  <td className={`px-3 py-2.5 text-right text-[12.5px] font-semibold tabular-nums ${d > 0 ? "text-emerald-300" : d < 0 ? "text-red-300" : "text-ink-400"}`}>{d > 0 ? "▲" : d < 0 ? "▼" : "•"} {Math.abs(d)}%</td>
+                  <td className="px-3 py-2.5 text-right tabular-nums">{s.live ? <span className="inline-flex items-center gap-1.5 text-emerald-300"><i className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />{s.live}</span> : <span className="text-ink-500">0</span>}</td>
+                  <td className="w-40 px-3 py-1"><Spark s={s} /></td>
+                  <td className="max-w-[200px] truncate px-3 py-2.5 text-ink-300">{s.pages[0] ? pageName(s.pages[0].k) : "—"}</td></>}
+              </tr>); })}
+            {!rows.length && <tr><td colSpan={7} className="px-3 py-4 text-ink-400">No site matches “{q}”.</td></tr>}
+          </tbody>
+        </table>
+      </div>
+      {rows.length > 15 && <button type="button" className="btn btn-sm self-start" onClick={() => setAll(!all)}>{all ? "Show the first 15" : `Show all ${rows.length} sites`}</button>}
+    </div>
   );
 }
 
@@ -186,21 +265,6 @@ function Bars({ rows, empty }: { rows: { label: string; v: number; u: number }[]
     </li>))}</ul>;
 }
 
-function SiteCard({ e, onOpen }: { e: Entry; onOpen: () => void }) {
-  const s = e.stats, d = s ? pct(s.views, s.prevViews) : 0;
-  return (
-    <button type="button" onClick={onOpen} className="card flex w-full flex-col gap-3 p-4 text-left transition hover:-translate-y-0.5 hover:border-ink-500">
-      <span className="flex items-center gap-2"><b className="min-w-0 flex-1 truncate">{e.p.name}</b>{s && s.live > 0 && <span className="chip border-emerald-400/50 text-emerald-200"><i className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />{s.live} now</span>}</span>
-      {!s ? <Skel className="h-12 w-full" /> : <>
-        <span className="flex items-end gap-4"><span><b className="font-display text-2xl font-extrabold">{fmt(s.views)}</b><span className="block text-[12px] text-ink-400">views</span></span>
-          <span><b className="font-display text-2xl font-extrabold">{fmt(s.visitors)}</b><span className="block text-[12px] text-ink-400">visitors</span></span>
-          <span className={`ml-auto text-[12.5px] font-semibold ${d > 0 ? "text-emerald-300" : d < 0 ? "text-red-300" : "text-ink-400"}`}>{d > 0 ? "▲" : d < 0 ? "▼" : "•"} {Math.abs(d)}%</span></span>
-        <Spark s={s} />
-        <span className="truncate text-[12px] text-ink-400">Top page: {s.pages[0] ? pageName(s.pages[0].k) : "none yet"}</span>
-      </>}
-    </button>
-  );
-}
 function Spark({ s }: { s: SiteStats }) {
   const pts = fill(s), max = Math.max(1, ...pts.map((p) => p.v)), n = Math.max(1, pts.length - 1);
   const d = pts.map((p, i) => `${i ? "L" : "M"}${((i / n) * 100).toFixed(1)} ${(30 - (p.v / max) * 26).toFixed(1)}`).join("");

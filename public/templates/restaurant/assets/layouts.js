@@ -511,7 +511,9 @@
     ].join("\n"),
     render: function (c, h) {
       var S = [], A = c.about, k = 0;
-      function scene(id, inner, ph) { S.push('<section class="kv-s"' + (id ? ' id="' + id + '"' : "") + '><div class="kv-bg">' + h.pimg(ph, "", 1600) + '</div><div class="kv-in">' + (c.labels && c.labels.sceneHide ? "" : '<span class="kv-sc">' + L(h, "scene", "Scene") + " " + String(S.length + 1).padStart(2, "0") + "</span>") + inner + "</div></section>"); }
+      // Each scene's label is the section's own (content.<section>.scene, set in that section), else "Scene 02".
+      function scene(id, inner, ph) { var key = id === "top" ? "hero" : id, own = (c[key] && c[key].scene) || "", hide = (c[key] && c[key].sceneHide) || (c.labels && c.labels.sceneHide);
+        S.push('<section class="kv-s"' + (id ? ' id="' + id + '"' : "") + '><div class="kv-bg">' + h.pimg(ph, "", 1600) + '</div><div class="kv-in">' + (hide ? "" : '<span class="kv-sc" data-edit="' + key + '.scene">' + (own ? h.esc(own) : h.esc((h.lab && h.lab("scene", "Scene")) || "Scene") + " " + String(S.length + 1).padStart(2, "0")) + "</span>") + inner + "</div></section>"); }
       scene("top", '<p style="margin:0 auto 16px;letter-spacing:.3em;text-transform:uppercase;font-size:13px">' + h.esc(c.hero.eyebrow) + '</p><h1 data-fx-text>' + h.esc(name(c)) + '</h1><p class="kv-by">' + h.rich(c.hero.role) + "</p>", k++);
       if (on(c, "about")) scene("about", "<h2>" + h.rich(A.storyHeading || A.title) + "</h2>" + paras(h, A.story) + (A.quote ? '<p class="kv-by">' + h.rich(A.quote) + "</p>" : ""), k++);
       if (on(c, "skills")) scene("skills", "<h2>" + h.rich(c.skills.title) + '</h2><div class="kv-grid">' + c.skills.items.map(function (s) { return "<div><h3>" + h.esc(s.title) + "</h3><p>" + h.esc(s.detail) + "</p></div>"; }).join("") + "</div>", k++);

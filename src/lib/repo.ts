@@ -46,8 +46,11 @@ export function explain(e: unknown): string {
   const err = e as RepoError;
   if (err && err.message === NO_GH_TOKEN) return NO_GH_TOKEN;
   if (err && (err as any).db) return err.message; // the Studio's Cloudflare database, not GitHub
+  // Signed in by email: the GitHub token is the one the Studio keeps on its database, not one on this device.
+  if (err && err.status === 401 && ghRoute.via) return "GitHub rejected the token the Studio keeps for this site (it may have expired). The Studio's owner can renew it: in the Studio, Settings → Hostings → GitHub publishing (a new token), then Publish from any device → Update GitHub sites.";
   if (err && err.status === 401) return "GitHub rejected the token. It may have expired; add a new one in Settings.";
   if (err && err.status === 403) return "The token can't write to this repository. Give it Contents: Read and write.";
+  if (err && err.status === 404 && ghRoute.via) return "GitHub can't find this site's repository with the token the Studio keeps. If the token is limited to some repositories, add this one to it (or use All repositories), then in the Studio: Settings → Hostings → Publish from any device → Update GitHub sites.";
   if (err && err.status === 404) return "Repository, branch or file not found. Check the details and the token's repository access.";
   if (err && (err.status === 409 || err.status === 422)) return "The file changed on GitHub since it was loaded. Try again.";
   if (e instanceof TypeError) return "Couldn't reach GitHub. Check your connection.";

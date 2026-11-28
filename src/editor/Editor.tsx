@@ -99,7 +99,7 @@ export function Editor({ tpl, draft, version, onChange, upload, img, extras = []
   }
   // The usual order of the headings (a custom admin menu keeps its own order).
   if (!menu?.items?.length) {
-    const base = byOwnerDay ? byOwnerDay.groups : ["Design", "Event", "Pages", "Catalogue", "Selling", "Shop", "Forms & records", "Features", "Settings", "Project"];
+    const base = byOwnerDay ? byOwnerDay.groups : ["Insights", "Design", "Event", "Pages", "Catalogue", "Selling", "Shop", "Forms & records", "Features", "Settings", "Project"];
     const ORDER = base.flatMap((g) => (g === "Settings" ? ["Advanced setup", g] : [g]));
     const at = (g: string) => { const i = ORDER.indexOf(g); return i < 0 ? ORDER.length : i; };
     groups.sort((a, b) => at(a.group) - at(b.group));
@@ -212,7 +212,7 @@ export function Editor({ tpl, draft, version, onChange, upload, img, extras = []
           {!found && !(drawer && !wide) && <button type="button" className="mt-auto hidden rounded-lg px-2.5 py-2 text-left text-[12px] font-semibold text-ink-500 hover:bg-ink-800 hover:text-ink-200 md:block" onClick={() => { const v = drawer ? "list" : "drawer"; setNavView(v); keep("studio-nav", v); pushPref({ nav: { view: v as "drawer" | "list" } }); }}>{drawer ? "Show the full list instead" : "Show as a drawer with icons"}</button>}
         </nav>
         <div ref={scroller} className="scroll-thin min-w-0 flex-1 overflow-y-auto">
-          <div className="mx-auto flex max-w-5xl flex-col gap-4 px-4 py-5 sm:px-6">
+          <div className={`mx-auto flex ${extra?.id === "analytics" ? "max-w-[1400px]" : "max-w-5xl"} flex-col gap-4 px-4 py-5 sm:px-6`}>
             <div key={landed} data-tour="section-head" className={landed ? "hub-landed -mx-2 rounded-lg px-2 py-1" : undefined}>
               <h2 className="text-lg font-extrabold">{entry?.label}</h2>
               <p className="mt-1 text-sm text-ink-400">{entry?.desc}</p>

@@ -781,15 +781,17 @@ async function siteStats(q: (sql: string, args: unknown[]) => Promise<any[]>, si
   const actions: Record<string, number> = {}; for (const r of await safe("select kind, count(*) c from events where site = ? and day >= ? and day <= ? and kind != 'imp' group by kind", A)) actions[String(r.kind)] = +r.c;
   const outs = (await safe(`select key k, count(*) v from events where site = ? and day >= ? and day <= ? and kind = 'out' group by key order by v desc limit ${n}`, A)).map((r) => ({ k: String(r.k), v: +r.v, u: +r.v }));
   // Orders and enquiries the site's forms saved in the period (the shop and restaurant orders carry an order number and a total).
-  let orders = 0, revenue = 0, enquiries = 0, pOrders = 0, pRevenue = 0;
+  let orders = 0, revenue = 0, enquiries = 0, pOrders = 0, pRevenue = 0, regs = 0, regRevenue = 0, pRegs = 0;
   for (const r of await safe("select data, created_at from enquiries where site = ? and created_at >= ? and created_at < ? and status != 'cancelled' limit 20000", [site, prevFrom, dayOf(Date.parse(to) + 864e5)])) {
     let d: any = {}; try { d = JSON.parse(r.data); } catch { /* skip */ }
     const cur = String(r.created_at) >= from;
-    if (d?.order_no) { if (cur) { orders++; revenue += moneyOf(d.total); } else { pOrders++; pRevenue += moneyOf(d.total); } } else if (cur) enquiries++;
+    if (d?.order_no) { if (cur) { orders++; revenue += moneyOf(d.total); } else { pOrders++; pRevenue += moneyOf(d.total); } }
+    else if (d?.reg_no) { if (cur) { regs++; regRevenue += moneyOf(d.total); } else pRegs++; } // an event's registrations
+    else if (cur) enquiries++;
   }
   return { days: span, from, to, views: +t?.v || 0, visitors: +t?.u || 0, prevViews: +p?.v || 0, prevVisitors: +p?.u || 0, live: +live?.n || 0,
     time: +t?.d || 0, timed: +t?.dn || 0, prevTime: +p?.d || 0, depth: Math.round(+t?.dp || 0), bounces: await bounce(from, to), prevBounces: await bounce(prevFrom, prevTo),
-    orders, revenue: Math.round(revenue), enquiries, prevOrders: pOrders, prevRevenue: Math.round(pRevenue), daily, hours, week,
+    orders, revenue: Math.round(revenue), enquiries, regs, regRevenue: Math.round(regRevenue), prevRegs: pRegs, prevOrders: pOrders, prevRevenue: Math.round(pRevenue), daily, hours, week,
     pages, entries: await edge("asc"), exits: await edge("desc"), refs: await top("ref", "and ref != ''"), sources: await top("src", "and src != ''"), devices: await top("dev"), countries: await top("cc", "and cc != ''"),
     products, actions, outs };
 }

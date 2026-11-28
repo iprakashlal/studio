@@ -98,6 +98,7 @@ function parts(s: SiteStats, c: Criteria, scope: string): Part[] {
     ["Revenue", money(s.revenue || 0), ...(c.compare ? [money(s.prevRevenue || 0), sign(pc(s.revenue || 0, s.prevRevenue || 0))] : [])],
     ["Average order value", money(s.orders ? (s.revenue || 0) / s.orders : 0), ...(c.compare ? [money(s.prevOrders ? (s.prevRevenue || 0) / s.prevOrders : 0), ""] : [])],
     ["Conversion rate (orders per visitor)", pctOf(s.orders || 0, s.visitors, 2) + "%", ...(c.compare ? [pctOf(s.prevOrders || 0, s.prevVisitors, 2) + "%", ""] : [])],
+    ...((s.regs || 0) + (s.prevRegs || 0) ? [["Registrations", s.regs || 0, ...(c.compare ? [s.prevRegs || 0, sign(pc(s.regs || 0, s.prevRegs || 0))] : [])], ["Registration revenue", money(s.regRevenue || 0), ...(c.compare ? ["", ""] : [])]] as Cell[][] : []),
     ["Enquiries", s.enquiries || 0, ...(c.compare ? ["", ""] : [])]] });
   return out.map((p) => ({ ...p, title: p.title + (scope ? " · " + scope : "") }));
 }

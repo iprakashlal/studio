@@ -15,6 +15,7 @@ import { RecoveryPanel } from "./RecoveryPanel";
 import { ReviewsPanel } from "./ReviewsPanel";
 import { PeoplePanel } from "./PeoplePanel";
 import { WarrantyPanel } from "./WarrantyPanel";
+import { SiteAnalytics } from "../pages/AnalyticsPage";
 import { GOTO_EVENT } from "../editor/Editor";
 import { TEMPLATES } from "../schema";
 import { device, session as sess, watchIdle, type Session } from "../lib/auth";
@@ -235,8 +236,9 @@ function Workspace({ info, onInfo, repo, account, onSignOut, hosted, ghToken, pe
   // Click-to-edit from the preview: on small screens, switch to the editor to show the field.
   useEffect(() => { const on = () => setPane("edit"); addEventListener(GOTO_EVENT, on); return () => removeEventListener(GOTO_EVENT, on); }, []);
   const [assets, setAssets] = useState<Record<string, string>>({});
-  const [, setCat] = useState("");
-  const wide = false;
+  const [cat, setCat] = useState("");
+  // Analytics needs the whole width: the preview steps aside while it is open.
+  const wide = cat === "analytics";
 
   const load = useCallback(async () => {
     setErr("");
@@ -408,6 +410,9 @@ function Workspace({ info, onInfo, repo, account, onSignOut, hosted, ghToken, pe
   };
 
   const extrasAll = useMemo(() => [
+    // Analytics: this site's visits, what visitors did and what it led to, with reports to download (built-in, no cookies).
+    { id: "analytics", label: "Analytics", group: "Insights", desc: tpl.id === "store" ? "Visits, time on the site, products seen and added to the cart, orders, revenue and conversion; with reports to download." : tpl.id === "restaurant" ? "Visits, dishes seen, orders, revenue, calls and WhatsApp; with reports to download." : tpl.id === "events" ? "Visits, registrations and where visitors come from; with reports to download." : tpl.id === "portfolio" ? "Who looks at your work, for how long, and who gets in touch; with reports to download." : "Visits, leads (enquiries, calls, WhatsApp), products viewed and where visitors come from; with reports to download.",
+      render: () => <SiteAnalytics cf={(hosted && "api" in hosted ? hosted : people) || null} account={undefined} name={info.name} url={location.href.replace(/[?#].*$/, "").replace(/[^/]*$/, "")} kind={tpl.id} /> },
     ...(tpl.id === "business" || tpl.id === "restaurant" || tpl.id === "events" ? [
       { id: "enquiries", label: tpl.id === "events" ? "Registrations & messages" : "Enquiries", group: "Forms & records", desc: tpl.id === "events" ? "Every registration for the event (with its number, what was chosen and the total), and the messages sent through the contact form." : tpl.id === "restaurant" ? "Table-booking and event requests sent through your website's form." : "Messages sent through your website's enquiry form.", render: () => <EnquiriesPanel cfg={hosted && "api" in hosted ? null : enquiriesCfg(saved, hosted)} cf={hosted && "api" in hosted ? hosted : undefined} hosted={!!hosted} email={saved?.contact?.email} form={saved?.contact?.form} ghToken={ghToken} only="enquiries" /> },
     ] : []),
@@ -433,13 +438,13 @@ function Workspace({ info, onInfo, repo, account, onSignOut, hosted, ghToken, pe
     { id: "backup", label: "Backup & reset", group: "Settings", desc: "Copy, restore or reset the site's content.", render: () => <BackupPanel draft={draft} onReplace={(c) => { setDraft(clone(c)); bump(); }} loadDefaults={async () => clone(saved)} hosted={!!hosted} /> },
     { id: "help", label: "Help", group: "Settings", desc: "A quick tour of the admin, and how to turn it on or off.", render: () => <HelpPanel /> },
     { id: "account", label: "Account", group: "Settings", desc: "Your login on this device.", render: () => account },
-  ], [draft, saved, account, tpl.id, hosted, ghToken, repo]);
+  ], [draft, saved, account, tpl.id, hosted, ghToken, repo, people, info.name]);
 
   // Role Management: what this person's role may do on this site (a site on the Cloudflare database; otherwise everything, as before).
   const [sitePrivs, setSitePrivs] = useState<Record<string, boolean> | null>(null);
   const cfApi = hosted && "api" in hosted ? hosted.api : people?.api || "", cfSite = hosted && "api" in hosted ? hosted.site : people?.site || "";
   useEffect(() => { if (!cfApi) return; cfCall<any>(cfApi, "/roles?scope=" + encodeURIComponent("site:" + cfSite)).then((r) => { if (r?.ready && r.me?.role !== "owner" && r.me?.role !== "partner") setSitePrivs(r.me.privs); }).catch(() => { /* an older database: no roles */ }); }, [cfApi, cfSite]);
-  const RECORDS = ["enquiries", "purchased", "inventory", "recovery", "reviews", "customer-data", "warranty-records"];
+  const RECORDS = ["analytics", "enquiries", "purchased", "inventory", "recovery", "reviews", "customer-data", "warranty-records"];
   const extras = useMemo(() => !sitePrivs ? extrasAll : extrasAll.filter((x: any) => (sitePrivs.orders || !RECORDS.includes(x.id)) && (sitePrivs.settings || !["Settings", "Advanced setup"].includes(x.group) || ["help", "account", "people"].includes(x.id))), [extrasAll, sitePrivs]);
   const mayEdit = !sitePrivs || !!sitePrivs.edit;
 

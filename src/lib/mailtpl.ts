@@ -41,7 +41,24 @@ export const MAIL_KINDS: Record<string, MailKind> = {
     std: "New enquiry from the {site} website.\n\n{details}\n\n{muted:It is also saved under Enquiries in the site's admin page.}", sample: { name: "Asha Verma", email: "asha@example.com", site: "Your site", page: "Contact", details: DETAILS_SAMPLE } },
   reply: { label: "Thank-you email to the visitor", vars: [["name", "the visitor's name"], ["site", "your site's name"]], blocks: [["details", "a copy of what they sent"]], subject: "Thank you for contacting {site}",
     std: "Hi {name},\n\nThank you for your message. We have received it and will get back to you soon.\n\n{site}", sample: { name: "Asha Verma", email: "asha@example.com", site: "Your site", page: "Contact", details: DETAILS_SAMPLE } },
+  // ---- The Studio's own emails (Settings → Project defaults → Studio), kept in the Studio's public/emails.json.
+  studioSignin: { label: "Studio sign-in code", vars: [["studio", "your Studio's name"], ["email", "the address signing in"]], blocks: [["code", "the 6-digit code, large"]], subject: "Your sign-in code",
+    std: "# Your sign-in code\n\nEnter this code to sign in to {studio}:\n\n{code}\n\n{muted:It works for 10 minutes. If you didn't ask for it, ignore this email.}", sample: { studio: "Picaffectz Studio", email: "you@example.com", code: "482 913" } },
+  diyCode: { label: "Design yourself: email code", vars: [["studio", "your Studio's name"], ["email", "the visitor's email"], ["code", "the code, as words (for the subject)"]], blocks: [["code", "the 6-digit code, large"]], subject: "{code} is your code for {studio}",
+    std: "Your code to confirm this email address for {studio}:\n\n{code}\n\n{muted:It works for 10 minutes. If you didn't ask for it, ignore this email.}", sample: { studio: "Picaffectz", email: "asha@example.com", code: "482 913" } },
+  diyRequest: { label: "New website request (to you)", vars: [["person", "the visitor's name"], ["email", "the visitor's email"], ["phone", "the visitor's phone"], ["name", "the website's name"], ["type", "the kind of website"], ["studio", "your Studio's name"]], blocks: [["details", "everything the visitor sent"]], subject: "New website request: {name} ({type})",
+    std: "**{person}** designed a website on your Design yourself page and wants to take it forward.\n\n{details}\n\n{muted:Open Projects → Design yourself Query in your Studio to see the preview.}",
+    sample: { person: "Asha Verma", email: "asha@example.com", phone: "98765 43210", name: "Asha's Bakery", type: "Restaurant & café", studio: "Picaffectz", details: "Name: Asha Verma\nPhone: 98765 43210\nEmail: asha@example.com\nType: Restaurant & café\nWebsite name: Asha's Bakery\nCity: Pune\nNote: Can we add online orders?" } },
+  review: { label: "Design approval or comment", vars: [["who", "who answered"], ["action", "approved / asked for changes to / commented on"], ["project", "the project's name"], ["studio", "your Studio's name"]], blocks: [["note", "what they wrote"]], subject: "{who} {action} {project}",
+    std: "# {who} {action} {project}\n\n{note}\n\n{muted:Open the project in your Studio → Share for approval to read it and reply.}", sample: { who: "Asha Verma", action: "asked for changes to", project: "Asha's Bakery", studio: "Picaffectz", note: "Please make the logo bigger and use our green." } },
 };
+/** The Studio's own emails, and where each is kept inside public/emails.json. */
+export const STUDIO_MAILS: { kind: string; key: string; note: string }[] = [
+  { kind: "studioSignin", key: "signin", note: "Sent to you and your team when signing in to this Studio." },
+  { kind: "diyCode", key: "diyCode", note: "Sent to a visitor on Design yourself to confirm their email address." },
+  { kind: "diyRequest", key: "diyRequest", note: "Sent to you (the Studio's owners) when a visitor sends a design from Design yourself." },
+  { kind: "review", key: "review", note: "Sent to the person who shared a design for approval, when the client approves, asks for changes or comments." },
+];
 /** The longest template kept or sent. */
 export const MAIL_TPL_MAX = 60000;
 

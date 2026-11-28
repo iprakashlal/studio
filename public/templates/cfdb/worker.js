@@ -56,7 +56,7 @@ var CFDB_UPGRADES = [
     "create index if not exists enquiries_ref on enquiries (site, ref)"
   ] }
 ];
-var CFDB_VERSION = 113;
+var CFDB_VERSION = 114;
 var CFDB_WORKER_NAME = "picaffectz-db";
 
 // src/lib/diylook.ts
@@ -282,6 +282,39 @@ var MAIL_KINDS = {
     subject: "Thank you for contacting {site}",
     std: "Hi {name},\n\nThank you for your message. We have received it and will get back to you soon.\n\n{site}",
     sample: { name: "Asha Verma", email: "asha@example.com", site: "Your site", page: "Contact", details: DETAILS_SAMPLE }
+  },
+  // ---- The Studio's own emails (Settings → Project defaults → Studio), kept in the Studio's public/emails.json.
+  studioSignin: {
+    label: "Studio sign-in code",
+    vars: [["studio", "your Studio's name"], ["email", "the address signing in"]],
+    blocks: [["code", "the 6-digit code, large"]],
+    subject: "Your sign-in code",
+    std: "# Your sign-in code\n\nEnter this code to sign in to {studio}:\n\n{code}\n\n{muted:It works for 10 minutes. If you didn't ask for it, ignore this email.}",
+    sample: { studio: "Picaffectz Studio", email: "you@example.com", code: "482 913" }
+  },
+  diyCode: {
+    label: "Design yourself: email code",
+    vars: [["studio", "your Studio's name"], ["email", "the visitor's email"], ["code", "the code, as words (for the subject)"]],
+    blocks: [["code", "the 6-digit code, large"]],
+    subject: "{code} is your code for {studio}",
+    std: "Your code to confirm this email address for {studio}:\n\n{code}\n\n{muted:It works for 10 minutes. If you didn't ask for it, ignore this email.}",
+    sample: { studio: "Picaffectz", email: "asha@example.com", code: "482 913" }
+  },
+  diyRequest: {
+    label: "New website request (to you)",
+    vars: [["person", "the visitor's name"], ["email", "the visitor's email"], ["phone", "the visitor's phone"], ["name", "the website's name"], ["type", "the kind of website"], ["studio", "your Studio's name"]],
+    blocks: [["details", "everything the visitor sent"]],
+    subject: "New website request: {name} ({type})",
+    std: "**{person}** designed a website on your Design yourself page and wants to take it forward.\n\n{details}\n\n{muted:Open Projects \u2192 Design yourself Query in your Studio to see the preview.}",
+    sample: { person: "Asha Verma", email: "asha@example.com", phone: "98765 43210", name: "Asha's Bakery", type: "Restaurant & caf\xE9", studio: "Picaffectz", details: "Name: Asha Verma\nPhone: 98765 43210\nEmail: asha@example.com\nType: Restaurant & caf\xE9\nWebsite name: Asha's Bakery\nCity: Pune\nNote: Can we add online orders?" }
+  },
+  review: {
+    label: "Design approval or comment",
+    vars: [["who", "who answered"], ["action", "approved / asked for changes to / commented on"], ["project", "the project's name"], ["studio", "your Studio's name"]],
+    blocks: [["note", "what they wrote"]],
+    subject: "{who} {action} {project}",
+    std: "# {who} {action} {project}\n\n{note}\n\n{muted:Open the project in your Studio \u2192 Share for approval to read it and reply.}",
+    sample: { who: "Asha Verma", action: "asked for changes to", project: "Asha's Bakery", studio: "Picaffectz", note: "Please make the logo bigger and use our green." }
   }
 };
 var MAIL_TPL_MAX = 6e4;
@@ -1094,6 +1127,19 @@ var oneLine = (x) => String(x).replace(/[\r\n]+/g, " ").trim();
 var fill = (t, vars) => String(t).replace(/\{(\w+)\}/g, (m, k) => k in vars ? vars[k] : m);
 var paras = (t, style = "margin:0 0 12px") => String(t).trim().split(/\n\s*\n/).filter((p) => p.trim()).map((p) => `<p style="${style}">${hesc(p.trim()).replace(/\n/g, "<br>")}</p>`).join("");
 var WRAP = (inner) => `<div style="font:15px/1.55 system-ui,Segoe UI,Arial,sans-serif;color:#111;max-width:560px">${inner}</div>`;
+async function studioMails(env, id) {
+  try {
+    const f = await readFile(env, "studio:" + id, "public/emails.json");
+    return f ? JSON.parse(new TextDecoder().decode(f.bytes)) || {} : {};
+  } catch {
+    return {};
+  }
+}
+function studioMail(E2, key, vars, blocks, std) {
+  const T = E2 && typeof E2[key] === "object" ? E2[key] : {}, tp = tplOf(E2 || {}, key);
+  const subject = T.subject ? oneLine(fill(String(T.subject), vars)).slice(0, 150) || std.subject : std.subject;
+  return { subject, html: tp ? mailEmail(tp, vars, blocks, WRAP) : std.html };
+}
 async function siteContent(env, site) {
   const f = await readFile(env, "site:" + site, "content.json");
   if (!f) return null;
@@ -3000,8 +3046,9 @@ async function dqOtp(env, id, req, send) {
     const code = String(1e5 + crypto.getRandomValues(new Uint32Array(1))[0] % 9e5);
     await env.DB.prepare("insert into otps (k, hash, expires, tries, sent) values (?, ?, ?, 0, ?) on conflict (k) do update set hash = excluded.hash, expires = excluded.expires, tries = 0, sent = excluded.sent").bind(k, b64u(await hmac(env.SECRET, k + ":" + code)), now + 10 * 6e4, now).run();
     const name = oneLine(String((await studioIndex(env, id))?.brand?.name || "")).slice(0, 60) || "Picaffectz";
+    const M = studioMail(await studioMails(env, id), "diyCode", { studio: name, email: em, code }, { code: codeBlock(code) }, { subject: `${code} is your code for ${name}`, html: `<p>Your code to confirm this email address for ${hesc(name)}:</p><p style="font-size:28px;font-weight:700;letter-spacing:4px">${code}</p><p>It works for 10 minutes. If you didn't ask for it, ignore this email.</p>` });
     try {
-      await sendMail(env, em, `${code} is your code for ${name}`, `<p>Your code to confirm this email address for ${hesc(name)}:</p><p style="font-size:28px;font-weight:700;letter-spacing:4px">${code}</p><p>It works for 10 minutes. If you didn't ask for it, ignore this email.</p>`);
+      await sendMail(env, em, M.subject, M.html);
     } catch {
       const exp2 = now + 8 * 36e5;
       return json({ ok: false, skip: exp2 + "." + b64u(await hmac(env.SECRET, "dqskip:" + id + ":" + em + ":" + exp2)) });
@@ -3127,7 +3174,8 @@ async function dqSubmit(env, id, req, ctx) {
       else {
         const rows = [["Name", person], ["Phone", phone], ["Email", email], ["Type", DQ_LABEL[kind]], ["Website name", name], ["What they do", answers.about || ""], ["City", answers.city || ""], ["Pages", answers.pages || ""], ["Feel", answers.style || ""], ["Colour", answers.colour || ""], ["Items", (answers.items || "").replace(/\n/g, ", ")], ["Visitors can", answers.goal || ""], ["Hours", answers.hours || ""], ["Address", answers.address || ""], ["Their document", answers.doc || ""], ["Document link", answers.doclink || ""], ["Chosen look", [answers.theme, answers.accent, answers.mode].filter(Boolean).join(" \xB7 ")], ["Note", note]];
         const table = `<table style="border-collapse:collapse;margin:0 0 14px">${rows.filter(([, v]) => v).map(([k, v]) => `<tr><td style="padding:4px 12px 4px 0;color:#666;vertical-align:top">${hesc(k)}</td><td style="padding:4px 0">${hesc(v).replace(/\n/g, "<br>")}</td></tr>`).join("")}</table>`;
-        await sendMail(env, owners, `New website request: ${name} (${DQ_LABEL[kind]})`.slice(0, 150), WRAP(`<p style="margin:0 0 12px"><b>${hesc(person)}</b> designed a website on your Design yourself page and wants to take it forward.</p>${table}<p style="margin:0;color:#666">Open Projects \u2192 Design yourself Query in your Studio to see the preview.${pdf ? " A menu PDF is attached to the request there." : ""}</p>`), EMAIL_RE.test(email) ? email : void 0);
+        const E2 = await studioMails(env, id), M = studioMail(E2, "diyRequest", { person, email, phone, name, type: DQ_LABEL[kind] || kind, studio: oneLine(String(E2?.name || "")) }, { details: table }, { subject: `New website request: ${name} (${DQ_LABEL[kind]})`.slice(0, 150), html: WRAP(`<p style="margin:0 0 12px"><b>${hesc(person)}</b> designed a website on your Design yourself page and wants to take it forward.</p>${table}<p style="margin:0;color:#666">Open Projects \u2192 Design yourself Query in your Studio to see the preview.${pdf ? " A menu PDF is attached to the request there." : ""}</p>`) });
+        await sendMail(env, owners, M.subject, M.html, EMAIL_RE.test(email) ? email : void 0);
       }
     } catch (e) {
       said = "Not emailed: " + String(e?.message || e).slice(0, 200);
@@ -3637,6 +3685,8 @@ var db_worker_default = {
             }
             if (T.intro) intro = fill(String(T.intro), vars);
             if (T.footer) footer = fill(String(T.footer), vars);
+            const tp = tplOf(E2, "signin");
+            if (tp && /\{code\}/.test(tp)) custom = mailEmail(tp, { ...vars, code }, { code: codeBlock(code) }, WRAP);
           }
         }
         let onWa = false, onSms = false;
@@ -3859,7 +3909,9 @@ var db_worker_default = {
           const mail = (async () => {
             if (!env.RESEND_API_KEY || !env.MAIL_FROM || !EMAIL_RE.test(a.created_by || "")) return;
             const what = kind === "approved" ? "approved" : kind === "changes" ? "asked for changes to" : "commented on";
-            await sendMail(env, a.created_by, `${whoIs} ${what} ${oneLine(a.name)}`.slice(0, 150), WRAP(`<h2 style="margin:0 0 12px;font-size:20px">${hesc(whoIs)} ${what} ${hesc(a.name)}</h2>${body ? paras(body) : ""}${paras("Open the project in your Studio \u2192 Share for approval to read it and reply.", "margin:0 0 8px;color:#667;font-size:13px")}`));
+            const E2 = String(a.scope || "").startsWith("studio:") ? await studioMails(env, String(a.scope).slice(7)) : {};
+            const M = studioMail(E2, "review", { who: whoIs, action: what, project: oneLine(a.name), studio: oneLine(String(E2?.name || "")) }, { note: body ? paras(body) : "" }, { subject: `${whoIs} ${what} ${oneLine(a.name)}`.slice(0, 150), html: WRAP(`<h2 style="margin:0 0 12px;font-size:20px">${hesc(whoIs)} ${what} ${hesc(a.name)}</h2>${body ? paras(body) : ""}${paras("Open the project in your Studio \u2192 Share for approval to read it and reply.", "margin:0 0 8px;color:#667;font-size:13px")}`) });
+            await sendMail(env, a.created_by, M.subject, M.html);
           })().catch((e) => {
             if (env.DEBUG) console.log("approval mail:", e?.message);
           });

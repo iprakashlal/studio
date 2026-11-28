@@ -13,7 +13,7 @@ import { BrandMark, useBrand } from "../lib/brand";
 import { Logo, useToast, Skel, SkelLines, SkelRows } from "../ui/kit";
 import { Ctx, FieldView } from "../editor/fields";
 import { TEMPLATES } from "../schema";
-import { basePath, textToB64 } from "../lib/util";
+import { basePath } from "../lib/util";
 
 const SP = () => (window as any).SitePages as { article: (p: any, o: any) => string; missing: (o: any) => string; after: (p: any) => void };
 /** Reading colours follow the Studio's own theme (light or dark), so text is never pale on pale (assets/pages.js reads these). */
@@ -111,39 +111,13 @@ export function StudioPagesCard({ repo }: { repo: Repo }) {
   );
 }
 
-const EMAILS_FILE = "public/emails.json";
-/** Settings → Customize → Sign-in email: the wording of the email that carries the Studio's sign-in code. */
-export function StudioEmailCard({ repo }: { repo: Repo }) {
-  const toast = useToast(), b = useBrand();
-  const [t, setT] = useState<{ subject: string; intro: string; footer: string } | null>(null);
-  const [sha, setSha] = useState<string | null>(null), [saved, setSaved] = useState(""), [busy, setBusy] = useState(false);
-  const [cf, setCf] = useState<boolean | null>(null);
-  useEffect(() => {
-    repo.getText(EMAILS_FILE).then((f) => {
-      let s: any = {}; try { s = f ? JSON.parse(f.text)?.signin || {} : {}; } catch { /* start empty */ }
-      const v = { subject: String(s.subject || ""), intro: String(s.intro || ""), footer: String(s.footer || "") };
-      setT(v); setSha(f?.sha || null); setSaved(JSON.stringify(v));
-    }).catch((e) => toast(explain(e), "bad"));
-    loadHostConfig().then((h) => setCf(h?.kind === "cloudflare")).catch(() => setCf(null));
-  }, [repo]);
-  const save = async () => {
-    if (!t) return; setBusy(true);
-    try { setSha(await repo.putFile(EMAILS_FILE, textToB64(JSON.stringify({ name: b.name, signin: t }, null, 2)), "Update the Studio's sign-in email", sha)); setSaved(JSON.stringify(t)); toast("Saved. The next sign-in code uses this wording."); }
-    catch (e) { toast(explain(e), "bad"); }
-    setBusy(false);
-  };
-  const set = (k: "subject" | "intro" | "footer") => (e: { target: { value: string } }) => setT((x) => (x ? { ...x, [k]: e.target.value } : x));
+/** Settings → Studio login setup → Sign-in email: now kept with the Studio's other emails in Project defaults. */
+export function StudioEmailCard(_: { repo: Repo }) {
   return (
-    <section className="card flex flex-col gap-3 p-5" aria-label="Sign-in email">
+    <section className="card flex flex-col gap-2 p-5" aria-label="Sign-in email">
       <h3 className="text-[15px] font-extrabold">Sign-in email</h3>
-      <p className="text-sm text-ink-300">The email that carries the 6-digit code when someone signs in to this Studio. Leave a box empty to keep the standard wording shown in grey. <span className="font-mono text-[12.5px]">{"{studio}"}</span> is filled in with the Studio's name. Each site has its own under Forms &amp; records → Email templates in its admin page.</p>
-      {cf === false && <p className="rounded-lg border border-amber-400/40 bg-amber-400/5 px-3 py-2 text-[13px] text-amber-100">Sign-in codes are only emailed by a Studio on Cloudflare (Settings → Migration). This Studio signs in another way, so the wording isn't used yet.</p>}
-      {!t ? <SkelLines n={5} /> : <>
-        <label className="flex flex-col gap-1"><span className="label">Subject and heading</span><input className="input" value={t.subject} onChange={set("subject")} placeholder="Your sign-in code" maxLength={150} /></label>
-        <label className="flex flex-col gap-1"><span className="label">Line above the code</span><textarea className="input" rows={2} value={t.intro} onChange={set("intro")} placeholder={`Enter this code to sign in to ${b.name}:`} maxLength={600} /></label>
-        <label className="flex flex-col gap-1"><span className="label">Line below the code</span><textarea className="input" rows={2} value={t.footer} onChange={set("footer")} placeholder="It works for 10 minutes. If you didn't ask for it, ignore this email." maxLength={600} /></label>
-      </>}
-      <button type="button" className="btn btn-pri self-start" disabled={busy || !t || JSON.stringify(t) === saved} onClick={save}>{busy ? "Saving…" : "Save"}</button>
+      <p className="text-sm text-ink-300">The email with the 6-digit sign-in code, and the Studio's other emails, are now set in one place, with a full template editor and preview.</p>
+      <a className="btn btn-sm self-start" href="#/settings/pdefs" onClick={() => { try { localStorage.setItem("site-studio:pd-tab", "studio"); } catch { /* private mode */ } }}>Open Settings → Project defaults → Studio</a>
     </section>
   );
 }

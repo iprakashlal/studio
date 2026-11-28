@@ -252,7 +252,7 @@ export function Workspace({ repo, session, onSession, onSignOut, onForget }: { r
     // Role Management: people, their roles, and what each role can do (kept in the Studio's database).
     if (here === "roles") return shell(<div className="flex max-w-5xl flex-col gap-4"><p className="text-sm text-ink-300">Who can sign in to this Studio, the role each person has, and what each role is allowed to do. Each person has their own projects and their own choices; Administrators see everyone's.</p><RoleManagement api={role.api} scopeName={role.scope} where="studio" onView={(email) => { lookAt(email); location.hash = "#/"; }} /><PinCard api={role.api} /></div>);
     if (tab === "design") return shell(<DesignLookTab session={session} studio={studio} index={index} onIndex={setIndex} />);
-    if (tab === "pdefs") return shell(<ProjectDefaultsTab studio={studio} index={index} onIndex={setIndex} demo={repo.demo} />);
+    if (tab === "pdefs") return shell(<ProjectDefaultsTab studio={studio} index={index} onIndex={setIndex} demo={repo.demo} repo={repo} />);
     if (tab === "themes") return shell(<ThemesSettingsTab session={session} studio={studio} index={index} onIndex={setIndex} />);
     if (tab === "help") return shell(<div className="max-w-3xl"><StudioHelp /></div>);
     // Updates: this Studio build onto live sites, and (a hosted Studio) the Studio's own update.

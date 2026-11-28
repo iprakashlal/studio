@@ -174,6 +174,16 @@ const fill = (t: string, vars: Record<string, string>) => String(t).replace(/\{(
 /** Template text → email HTML: escaped, a blank line starts a new paragraph, single line breaks are kept. */
 const paras = (t: string, style = "margin:0 0 12px") => String(t).trim().split(/\n\s*\n/).filter((p) => p.trim()).map((p) => `<p style="${style}">${hesc(p.trim()).replace(/\n/g, "<br>")}</p>`).join("");
 const WRAP = (inner: string) => `<div style="font:15px/1.55 system-ui,Segoe UI,Arial,sans-serif;color:#111;max-width:560px">${inner}</div>`;
+/** The Studio's own email wording (Settings → Project defaults → Studio), kept in its public/emails.json. */
+async function studioMails(env: Env, id: string): Promise<any> {
+  try { const f = await readFile(env, "studio:" + id, "public/emails.json"); return f ? JSON.parse(new TextDecoder().decode(f.bytes)) || {} : {}; } catch { return {}; }
+}
+/** One of the Studio's emails: its own subject and template when saved, otherwise the standard ones given. */
+function studioMail(E: any, key: string, vars: Record<string, string>, blocks: Record<string, string>, std: { subject: string; html: string }): { subject: string; html: string } {
+  const T = E && typeof E[key] === "object" ? E[key] : {}, tp = tplOf(E || {}, key);
+  const subject = T.subject ? oneLine(fill(String(T.subject), vars)).slice(0, 150) || std.subject : std.subject;
+  return { subject, html: tp ? mailEmail(tp, vars, blocks, WRAP) : std.html };
+}
 async function siteContent(env: Env, site: string): Promise<any | null> {
   const f = await readFile(env, "site:" + site, "content.json"); if (!f) return null;
   try { return JSON.parse(new TextDecoder().decode(f.bytes)); } catch { return null; }
@@ -1562,7 +1572,8 @@ async function dqOtp(env: Env, id: string, req: Request, send: boolean): Promise
     const code = String(100000 + (crypto.getRandomValues(new Uint32Array(1))[0] % 900000));
     await env.DB.prepare("insert into otps (k, hash, expires, tries, sent) values (?, ?, ?, 0, ?) on conflict (k) do update set hash = excluded.hash, expires = excluded.expires, tries = 0, sent = excluded.sent").bind(k, b64u(await hmac(env.SECRET, k + ":" + code)), now + 10 * 60_000, now).run();
     const name = oneLine(String((await studioIndex(env, id))?.brand?.name || "")).slice(0, 60) || "Picaffectz";
-    try { await sendMail(env, em, `${code} is your code for ${name}`, `<p>Your code to confirm this email address for ${hesc(name)}:</p><p style="font-size:28px;font-weight:700;letter-spacing:4px">${code}</p><p>It works for 10 minutes. If you didn't ask for it, ignore this email.</p>`); }
+    const M = studioMail(await studioMails(env, id), "diyCode", { studio: name, email: em, code }, { code: codeBlock(code) }, { subject: `${code} is your code for ${name}`, html: `<p>Your code to confirm this email address for ${hesc(name)}:</p><p style="font-size:28px;font-weight:700;letter-spacing:4px">${code}</p><p>It works for 10 minutes. If you didn't ask for it, ignore this email.</p>` });
+    try { await sendMail(env, em, M.subject, M.html); }
     catch { const exp = now + 8 * 3600_000; return json({ ok: false, skip: exp + "." + b64u(await hmac(env.SECRET, "dqskip:" + id + ":" + em + ":" + exp)) }); }
     return json({ ok: true });
   }
@@ -1654,7 +1665,8 @@ async function dqSubmit(env: Env, id: string, req: Request, ctx?: { waitUntil(p:
       else {
         const rows: [string, string][] = [["Name", person], ["Phone", phone], ["Email", email], ["Type", DQ_LABEL[kind]], ["Website name", name], ["What they do", answers.about || ""], ["City", answers.city || ""], ["Pages", answers.pages || ""], ["Feel", answers.style || ""], ["Colour", answers.colour || ""], ["Items", (answers.items || "").replace(/\n/g, ", ")], ["Visitors can", answers.goal || ""], ["Hours", answers.hours || ""], ["Address", answers.address || ""], ["Their document", answers.doc || ""], ["Document link", answers.doclink || ""], ["Chosen look", [answers.theme, answers.accent, answers.mode].filter(Boolean).join(" · ")], ["Note", note]];
         const table = `<table style="border-collapse:collapse;margin:0 0 14px">${rows.filter(([, v]) => v).map(([k, v]) => `<tr><td style="padding:4px 12px 4px 0;color:#666;vertical-align:top">${hesc(k)}</td><td style="padding:4px 0">${hesc(v).replace(/\n/g, "<br>")}</td></tr>`).join("")}</table>`;
-        await sendMail(env, owners, `New website request: ${name} (${DQ_LABEL[kind]})`.slice(0, 150), WRAP(`<p style="margin:0 0 12px"><b>${hesc(person)}</b> designed a website on your Design yourself page and wants to take it forward.</p>${table}<p style="margin:0;color:#666">Open Projects → Design yourself Query in your Studio to see the preview.${pdf ? " A menu PDF is attached to the request there." : ""}</p>`), EMAIL_RE.test(email) ? email : undefined);
+        const E = await studioMails(env, id), M = studioMail(E, "diyRequest", { person, email, phone, name, type: DQ_LABEL[kind] || kind, studio: oneLine(String(E?.name || "")) }, { details: table }, { subject: `New website request: ${name} (${DQ_LABEL[kind]})`.slice(0, 150), html: WRAP(`<p style="margin:0 0 12px"><b>${hesc(person)}</b> designed a website on your Design yourself page and wants to take it forward.</p>${table}<p style="margin:0;color:#666">Open Projects → Design yourself Query in your Studio to see the preview.${pdf ? " A menu PDF is attached to the request there." : ""}</p>`) });
+        await sendMail(env, owners, M.subject, M.html, EMAIL_RE.test(email) ? email : undefined);
       }
     } catch (e: any) { said = "Not emailed: " + String(e?.message || e).slice(0, 200); }
     if (said && made?.id) await env.DB.prepare("update design_queries set mail = ? where id = ?").bind(said, made.id).run().catch(() => {});
@@ -2044,6 +2056,7 @@ export default {
             if (T.subject) { subject = oneLine(fill(String(T.subject), vars)).slice(0, 150) || subject; heading = subject; }
             if (T.intro) intro = fill(String(T.intro), vars);
             if (T.footer) footer = fill(String(T.footer), vars);
+            const tp = tplOf(E, "signin"); if (tp && /\{code\}/.test(tp)) custom = mailEmail(tp, { ...vars, code }, { code: codeBlock(code) }, WRAP);
           }
         }
         // The same code on WhatsApp too, when the Studio or the site has that switched on and knows this person's number.
@@ -2234,7 +2247,9 @@ export default {
           const mail = (async () => {
             if (!env.RESEND_API_KEY || !env.MAIL_FROM || !EMAIL_RE.test(a.created_by || "")) return;
             const what = kind === "approved" ? "approved" : kind === "changes" ? "asked for changes to" : "commented on";
-            await sendMail(env, a.created_by, `${whoIs} ${what} ${oneLine(a.name)}`.slice(0, 150), WRAP(`<h2 style="margin:0 0 12px;font-size:20px">${hesc(whoIs)} ${what} ${hesc(a.name)}</h2>${body ? paras(body) : ""}${paras("Open the project in your Studio → Share for approval to read it and reply.", "margin:0 0 8px;color:#667;font-size:13px")}`));
+            const E = String(a.scope || "").startsWith("studio:") ? await studioMails(env, String(a.scope).slice(7)) : {};
+            const M = studioMail(E, "review", { who: whoIs, action: what, project: oneLine(a.name), studio: oneLine(String(E?.name || "")) }, { note: body ? paras(body) : "" }, { subject: `${whoIs} ${what} ${oneLine(a.name)}`.slice(0, 150), html: WRAP(`<h2 style="margin:0 0 12px;font-size:20px">${hesc(whoIs)} ${what} ${hesc(a.name)}</h2>${body ? paras(body) : ""}${paras("Open the project in your Studio → Share for approval to read it and reply.", "margin:0 0 8px;color:#667;font-size:13px")}`) });
+            await sendMail(env, a.created_by, M.subject, M.html);
           })().catch((e) => { if ((env as any).DEBUG) console.log("approval mail:", e?.message); });
           if (ctx?.waitUntil) ctx.waitUntil(mail); else await mail;
           return json({ ok: true, status, notes: await notes() });

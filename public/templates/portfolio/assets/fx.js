@@ -803,6 +803,44 @@
       if (block && (cs.maxWidth !== "none" || tag === "svg" || tag === "img" || tag === "hr")) n.classList.add("fx-salm");
     });
   }
+  // ---- Custom site & code blocks (content.custom, content.blocks): the owner's own HTML, CSS and JavaScript, as a whole
+  // page in place of the sections or as blocks placed after a section. Drawn again with the page (old copies are removed).
+  function ccRun(js, el, name) {
+    if (!String(js || "").trim()) return;
+    var sc = document.createElement("script"); sc.setAttribute("data-cc", "");
+    window.__ccBlock = el;
+    sc.textContent = "(function(block){try{\n" + js + "\n}catch(e){console.error(" + JSON.stringify(name) + ",e)}})(window.__ccBlock);";
+    document.body.appendChild(sc); window.__ccBlock = null;
+  }
+  function customCode(c, root) {
+    if (!c || !root) return;
+    Array.prototype.forEach.call(document.querySelectorAll(".cc-site,.cc-block,style[data-cc],script[data-cc]"), function (n) { n.remove(); });
+    Array.prototype.forEach.call(root.querySelectorAll(".cc-hidden"), function (n) { n.classList.remove("cc-hidden"); });
+    var home = (document.body.getAttribute("data-page") || "home") === "home" && !/[?&]p=/.test(location.search);
+    var main = root.querySelector("main") || root, css = function (t, id) { if (!String(t || "").trim()) return; var st = document.createElement("style"); st.setAttribute("data-cc", id); st.textContent = t; document.head.appendChild(st); };
+    if (!document.getElementById("cc-css")) { var b = document.createElement("style"); b.id = "cc-css"; b.textContent = ".cc-hidden{display:none!important}"; document.head.appendChild(b); }
+    var K = c.custom;
+    if (K && K.on && (K.pages === "all" || home)) {
+      // Everything the page drew in its main part is put away; before it is the menu bar, after it the footer.
+      Array.prototype.forEach.call(main.children, function (n) { n.classList.add("cc-hidden"); });
+      var kids = Array.prototype.slice.call(root.children), at = kids.indexOf(main);
+      if (at >= 0) kids.forEach(function (n, i) { if (n === main || /^(SCRIPT|STYLE)$/.test(n.tagName) || n.classList.contains("skip")) return; if ((i < at && K.keepNav === false) || (i > at && K.keepFooter === false)) n.classList.add("cc-hidden"); });
+      var box = document.createElement("div"); box.className = "cc-site"; box.innerHTML = String(K.html || "");
+      main.insertBefore(box, main.firstChild); css(K.css, "site"); ccRun(K.js, box, "Custom site");
+    }
+    var list = Array.isArray(c.blocks) ? c.blocks : [], last = {};
+    list.forEach(function (k, i) {
+      if (!k || k.on === false || !(k.pages === "all" || home)) return;
+      var el = document.createElement("div"); el.className = "cc-block"; el.id = "cc-" + String(k.id || i).replace(/[^\w-]/g, ""); el.innerHTML = String(k.html || "");
+      var key = String(k.after || ""), prev = last[key], target = null;
+      if (key && key !== "^top") { try { target = main.querySelector("#" + (window.CSS && CSS.escape ? CSS.escape(key) : key)) || main.querySelector('[data-sec="' + key + '"]'); } catch (e) { target = null; } }
+      if (prev) prev.after(el);
+      else if (key === "^top") main.insertBefore(el, main.firstChild);
+      else if (target) target.after(el);
+      else main.appendChild(el);
+      last[key] = el; css(k.css, el.id); ccRun(k.js, el, k.name || "Code block");
+    });
+  }
   /** A section given its own background: the page layout's or theme's own picture layers behind its content (an image
    *  or canvas spread over the whole section, with no words or buttons in it, or a covering ::before / ::after) are put
    *  away, so what the owner chose shows instead of the layout's standard graphic. */
@@ -1542,6 +1580,7 @@
     var root = opts.root || document.body;
     try { legalBits(opts, root); } catch (e) { /* never worth a broken page */ }
     try { sectionBgs(opts, root); } catch (e) { /* a background is never worth a broken page */ }
+    try { customCode(opts.c, root); } catch (e) { /* the page stays as the template draws it */ }
     try { pageBg(opts, root); } catch (e) { /* a background is never worth a broken page */ }
     try { logoMotion(opts, root); } catch (e) { /* nor is a moving logo */ }
     try { glassMode(); } catch (e) {}

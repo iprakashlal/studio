@@ -49,6 +49,8 @@ export type Field =
   | { t: "adminSections" }
   /** Code Update: the site's own copy of the template's HTML, CSS and JavaScript (content.code). */
   | { t: "codeTemplate" }
+  | { t: "code"; path: string; label: string; hint?: string }
+  | { t: "placePick"; path: string; label: string; hint?: string }
   /** Legal & privacy: writes the privacy policy and terms pages from the business's details. */
   | { t: "legalPages" }
   /** Many photos at once, each assigned to a dish or a product. */

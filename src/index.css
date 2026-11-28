@@ -191,7 +191,9 @@
 :root[data-layout="neu"] .btn.btn-pri { background-color: rgb(var(--brand-500, 91 124 255)); color: #fff; box-shadow: 5px 5px 12px var(--neu-lo), -4px -4px 10px var(--neu-hi), inset 0 1px 0 rgb(255 255 255 / .25); }
 :root[data-layout="neu"] .btn.btn-pri:active:not(:disabled) { box-shadow: inset 3px 3px 8px rgb(0 0 0 / .35), inset -2px -2px 6px rgb(255 255 255 / .18); }
 :root[data-layout="neu"] .btn.btn-danger { background-color: var(--neu-bg); }
-:root[data-layout="neu"] [role="dialog"].card { box-shadow: 18px 18px 44px var(--neu-lo), -10px -10px 30px var(--neu-hi); }
+/* A window over the page sits on a dark scrim, where the light edge of a raised panel reads as a white glow: it gets a deep
+   shade under it instead, and keeps the light edge only inside, as a thin rim. */
+:root[data-layout="neu"] [role="dialog"].card { box-shadow: 0 28px 70px -18px rgb(0 0 0 / .6), 0 10px 24px -10px rgb(0 0 0 / .4), inset 1px 1px 0 var(--neu-hi), inset -1px -1px 0 var(--neu-lo); }
 
 /* Spatial UI: the Studio's screens become windows floating in a lit room, as on a headset. Deep, lit backdrop; thick
    glass windows with a bright rim and long shadows; the menu and the top bar float free of the edges; capsules that light

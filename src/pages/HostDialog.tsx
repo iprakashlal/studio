@@ -298,7 +298,7 @@ export function HostDialog({ studio, project, tpl, draft, dirty, save, onIndex, 
           </div>
         ));
   return (
-    <Modal title={host ? `Hosted on ${PAGES_LABEL[host.kind]}` : "Host to External Services"} wide onClose={onClose}
+    <Modal title={host ? `Hosted on ${PAGES_LABEL[host.kind]}` : "Host to External Services"} desk onClose={onClose}
       footer={<><button className="btn" onClick={onClose}>Close</button><button className="btn btn-pri" disabled={!!busy || !pagesOk || !dbOk || (mustFix && !anyway)} onClick={publish}>{busy === "publish" ? "Publishing…" : dbMoving ? `Move to Cloudflare and publish v${project.version + 1}` : host && !moving ? `Publish v${project.version + 1}` : `Move the site and publish v${project.version + 1}`}</button></>}>
       {/* What publishing is doing, at the top where it is seen without scrolling. */}
       {step && (
@@ -312,6 +312,9 @@ export function HostDialog({ studio, project, tpl, draft, dirty, save, onIndex, 
 
       {(() => { const list = (tpl.checks?.(draft) || []).filter((w: string) => /^Required:|^Accessibility:|legal name|Consent on forms/.test(w)); return list.length ? <div className="rounded-lg border border-amber-400/40 bg-amber-400/5 px-3 py-2.5 text-[13px] text-amber-100" aria-label="Before you publish"><b>Before you publish:</b><ul className="mt-1 list-disc pl-5">{list.map((w: string) => <li key={w}>{w}</li>)}</ul>{mustFix && <label className="mt-2 flex items-start gap-2 text-ink-100"><input type="checkbox" className="mt-0.5 accent-brand-500" checked={anyway} onChange={(e) => setAnyway(e.target.checked)} /><span>Publish anyway: I will add what is marked “Required” later.</span></label>}</div> : null; })()}
 
+      {/* On a desktop the two parts sit side by side: where the pages are served on the left, where the content lives on the right. */}
+      <div className="grid items-start gap-4 lg:grid-cols-2">
+      <div className="flex min-w-0 flex-col gap-4">
       <Sect id="hosting" label="Hosting" title="1 · Hosting (serves the pages)">
 
         <div className="flex flex-wrap rounded-lg border border-ink-600 self-start" role="radiogroup" aria-label="Pages host">
@@ -332,6 +335,10 @@ export function HostDialog({ studio, project, tpl, draft, dirty, save, onIndex, 
           </Field>
         )}
       </Sect>
+      {host && !moving && host.kind === "netlify" && nf && <DomainCard host={host} nf={nf} onHost={async (h) => onIndex(await studio.updateMeta(project.id, { host: h }, "Update the site's domain"))} />}
+      {host && !moving && host.kind === "cloudflare" && cfAcc.ready && siteAccKnown && <CfDomainCard host={host} acc={{ ...cfAcc, client: siteClient }} onHost={async (h) => onIndex(await studio.updateMeta(project.id, { host: h }, "Update the site's domain"))} />}
+      </div>
+      <div className="flex min-w-0 flex-col gap-4">
 
       {otherDb && !bridged && !cfSigned && (
         <section className="flex flex-col gap-2 rounded-xl border border-brand-400/40 bg-brand-500/5 p-4 text-[13px]" aria-label="Reach this site from every device">
@@ -414,6 +421,8 @@ export function HostDialog({ studio, project, tpl, draft, dirty, save, onIndex, 
         {sbReady && sbSignIn}
         </>}
       </Sect>
+      </div>
+      </div>
 
       {host && !dbMoving && <Toggle id="hd-content" label="Replace the site's content with this version" checked={withContent} onChange={setWithContent} />}
       {host && !dbMoving && <p className="hint">{withContent ? "Overwrites the live content in the database, including edits made in the site's own CMS. Photos it already has aren't uploaded again." : "Updates pages, design code and the CMS only. Content edited in the site's own CMS is kept."}</p>}
@@ -436,17 +445,16 @@ export function HostDialog({ studio, project, tpl, draft, dirty, save, onIndex, 
         </div>
       ) : null}
 
-      {host && !moving && host.kind === "netlify" && nf && <DomainCard host={host} nf={nf} onHost={async (h) => onIndex(await studio.updateMeta(project.id, { host: h }, "Update the site's domain"))} />}
-      {host && !moving && host.kind === "cloudflare" && cfAcc.ready && siteAccKnown && <CfDomainCard host={host} acc={{ ...cfAcc, client: siteClient }} onHost={async (h) => onIndex(await studio.updateMeta(project.id, { host: h }, "Update the site's domain"))} />}
       <Field label="Version note (optional)" htmlFor="hd-note"><input id="hd-note" className="input" value={note} onChange={(e) => setNote(e.target.value)} /></Field>
     </Modal>
   );
 }
 
-/** A numbered part of the publish window: its heading folds it away. Starts folded; what is opened is remembered on this device. */
+/** A numbered part of the publish window: its heading folds it away. Starts open; what is folded or opened is remembered on this device. */
 function Sect({ id, label, title, children }: { id: string; label: string; title: ReactNode; children: ReactNode }) {
   const KEY = "studio-hostdlg-open";
-  const [open, setOpen] = useState(() => { try { const v = localStorage.getItem(KEY); if (v === "all") return true; return !!JSON.parse(v || "{}")[id]; } catch { return false; } });
+  // Open unless folded on this device before: the two parts sit side by side on a desktop, with room for both.
+  const [open, setOpen] = useState(() => { try { const v = localStorage.getItem(KEY); if (v === "all") return true; const j = JSON.parse(v || "{}"); return id in j ? !!j[id] : true; } catch { return true; } });
   return (
     <section className="rounded-xl border border-ink-700 bg-ink-950 p-4" aria-label={label}>
       <details className="group" open={open} onToggle={(e) => {

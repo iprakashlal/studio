@@ -62,10 +62,10 @@ export function BrandKitDialog({ project, draft, img, onClose }: { project: Proj
   };
   const field = (k: keyof KitInfo, label: string, ph = "") => <label className="flex flex-col gap-1"><span className="label">{label}</span><input className="input py-1.5" aria-label={label} value={String(info?.[k] ?? "")} placeholder={ph} onChange={set(k)} /></label>;
   return (
-    <Modal title="Brand kit" onClose={onClose} wide footer={<button type="button" className="btn btn-pri" disabled={!info || !!busy} onClick={all}>{busy === "zip" ? "Making the ZIP…" : `Download everything (ZIP, ${pieces.length} pieces)`}</button>}>
+    <Modal title="Brand kit" onClose={onClose} desk footer={<button type="button" className="btn btn-pri" disabled={!info || !!busy} onClick={all}>{busy === "zip" ? "Making the ZIP…" : `Download everything (ZIP, ${pieces.length} pieces)`}</button>}>
       {!info ? <p className="text-sm text-ink-300">Drawing the kit from your theme and logo…</p> : (
-        <div className="grid gap-5 text-sm lg:grid-cols-[300px_1fr]">
-          <div className="flex flex-col gap-3" aria-label="Brand kit details">
+        <div className="grid gap-6 text-sm lg:grid-cols-[360px_minmax(0,1fr)]">
+          <div className="flex flex-col gap-3 lg:sticky lg:top-0 lg:max-h-[calc(100vh-220px)] lg:self-start lg:overflow-auto lg:pr-1 scroll-thin" aria-label="Brand kit details">
             <p className="text-[13px] text-ink-300">Made from this project's colours, fonts and logo. Change any detail and every piece redraws. Nothing here changes the site.</p>
             {field("name", "Business name")}{field("tagline", "Tagline")}
             <div className="grid grid-cols-2 gap-2">{field("person", "Person on the card", "optional")}{field("role", "Their role", "optional")}</div>
@@ -84,10 +84,10 @@ export function BrandKitDialog({ project, draft, img, onClose }: { project: Proj
           </div>
           <div className="flex min-w-0 flex-col gap-3">
             <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="Pieces">{groups.map((g) => <button key={g} type="button" role="tab" aria-selected={tab === g} className={`rounded-full border px-3 py-1.5 text-[13px] font-semibold ${tab === g ? "border-brand-400 bg-brand-500/15 text-ink-100" : "border-ink-600 text-ink-300"}`} onClick={() => setTab(g)}>{g}</button>)}</div>
-            <div className={`grid gap-4 ${tab === "Festival posts" || tab === "Visiting card" ? "sm:grid-cols-2" : ""}`}>
+            <div className={`grid gap-5 ${tab === "Festival posts" ? "sm:grid-cols-2 2xl:grid-cols-3" : tab === "Visiting card" ? "sm:grid-cols-2" : "sm:grid-cols-[repeat(auto-fill,minmax(300px,1fr))]"}`}>
               {pieces.filter((p) => p.group === tab).map((p) => (
                 <figure key={p.id} className="flex flex-col gap-2" aria-label={p.name}>
-                  <div className="overflow-hidden rounded-xl border border-ink-600 bg-ink-950 [&>svg]:block [&>svg]:h-auto [&>svg]:w-full" style={tab === "Visiting card" || tab === "Festival posts" ? undefined : { maxWidth: 380 }} dangerouslySetInnerHTML={{ __html: p.svg }} />
+                  <div className="overflow-hidden rounded-xl border border-ink-600 bg-ink-950 [&>svg]:block [&>svg]:h-auto [&>svg]:w-full" style={tab === "Visiting card" || tab === "Festival posts" ? undefined : { maxWidth: 440 }} dangerouslySetInnerHTML={{ __html: p.svg }} />
                   <figcaption className="flex flex-wrap items-center gap-2 text-[13px]"><b className="mr-auto">{p.name} <span className="font-normal text-ink-400">· {p.size}</span></b>
                     <button type="button" className="btn btn-sm" disabled={!!busy} onClick={() => png(p)}>{busy === p.id ? "Saving…" : "PNG"}</button>
                     <button type="button" className="btn btn-sm btn-ghost" onClick={() => save(new Blob([p.svg], { type: "image/svg+xml" }), file(p, "svg"))}>SVG</button></figcaption>

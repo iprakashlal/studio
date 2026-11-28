@@ -149,8 +149,10 @@ export function WriteFromSiteDialog({ session, project, draft, upload, onApply, 
     : <><button className="btn" onClick={onClose}>Cancel</button>{canUse && <button className="btn btn-pri" disabled={!canWrite || !!busy} onClick={write}>{busy ? busy + "…" : "Write new text"}</button>}</>;
 
   return (
-    <Modal title="Write text from a site or a file, or fill from your own document" onClose={onClose} wide footer={footer}>
-      <div className="flex flex-col gap-3 text-sm">
+    <Modal title="Write text from a site or a file, or fill from your own document" onClose={onClose} desk footer={footer}>
+      {/* On a desktop: where the text comes from on the left, what to write with on the right. The result fills the width. */}
+      <div className={!res && (canUse || src === "own") ? "grid items-start gap-6 text-sm lg:grid-cols-[minmax(0,.9fr)_minmax(0,1.1fr)]" : "flex max-w-[1000px] flex-col gap-3 text-sm"}>
+      <div className="flex min-w-0 flex-col gap-3">
         {!res && <p className="text-ink-300">Give a site in the same line of business, or a PDF such as your brochure or company profile. The Studio reads what it covers and writes <b>new text of its own</b> for your brand, section by section: nothing is copied, and anything too close to the original is left out. Testimonials, numbers, team, clients, prices and products aren't written, so fill those in yourself.</p>}
         {!res && src !== "own" && <EnginePick label="Write with" value={eng} onChange={setEng} note={sys ? "On this device: the Studio composes the text from its own phrase bank for your kind of business and your notes. The reference only tells it what kind of business this is. No facts are invented." : undefined} />}
         {!sys && src !== "own" && db.ui}
@@ -159,6 +161,8 @@ export function WriteFromSiteDialog({ session, project, draft, upload, onApply, 
           {([["link", "A website"], ["pdf", "A file"], ["text", "Pasted text"], ...(sys ? [["none", "No reference"]] : []), ["own", "My own document"]] as [typeof src, string][]).map(([v, l]) => <button key={v} type="button" role="radio" aria-checked={src === v} className={`btn btn-sm ${src === v ? "btn-pri" : ""}`} onClick={() => setSrc(v)}>{l}</button>)}
         </div>
         </>}
+      </div>
+      <div className="flex min-w-0 flex-col gap-3">
         {(canUse || src === "own") && !res && <>
           {src !== "own" && <Field label="Your brand name" htmlFor="wf-brand" hint="Used in the new text and set as the site's name.">
             <input id="wf-brand" className="input" value={brandName} onChange={(e) => setBrandName(e.target.value)} />
@@ -198,15 +202,18 @@ export function WriteFromSiteDialog({ session, project, draft, upload, onApply, 
             <textarea id="wf-notes" className="input min-h-[70px]" value={notes} onChange={(e) => setNotes(e.target.value)} />
           </Field>}
         </>}
+      </div>
         {res && <>
           {sys && made && <p role="status" className="rounded-lg border border-ink-600 px-3 py-2 text-[12.5px] text-ink-300">Written on this device by the Picaffectz system, as a <b className="text-ink-100">{made.toLowerCase()}</b>. Not quite right? Press Another version, or go Back and say more under About your business.</p>}
           <p className="text-ink-300">Tick the sections to put in the editor. Nothing is saved until you press Save, and History keeps the earlier version.{res.flagged.length ? ` ${res.flagged.length} line${res.flagged.length > 1 ? "s were" : " was"} too close to the reference and left out.` : ""}</p>
+          <div className="grid gap-3 lg:grid-cols-2">
           {groups.map((g) => (
             <label key={g.id} className="flex gap-3 rounded-lg border border-ink-700 p-3">
               <input type="checkbox" className="mt-1" checked={pick.has(g.id)} onChange={(e) => { const n = new Set(pick); e.target.checked ? n.add(g.id) : n.delete(g.id); setPick(n); }} />
               <span className="min-w-0"><b className="text-ink-100">{g.label}</b>{g.preview.map((t, i) => <span key={i} className="mt-1 block text-[12.5px] text-ink-300">{t}</span>)}</span>
             </label>
           ))}
+          </div>
         </>}
         {res && src === "link" && upload && db.ready && api && (
           <section className="flex flex-col gap-2 rounded-lg border border-ink-600 p-3" aria-label="Pictures from the site">
@@ -229,7 +236,7 @@ export function WriteFromSiteDialog({ session, project, draft, upload, onApply, 
                 <button type="button" className="btn btn-sm btn-pri" disabled={!ticked.size || !bulk} onClick={() => { setUse((u) => { const n = { ...u }, sl = slots.find((x) => x.id === bulk), urls = pics.filter((p) => ticked.has(p.url)).map((p) => p.url); for (const url of (sl && !sl.many ? urls.slice(0, 1) : urls)) assign(n, url, bulk === "-" ? "" : bulk); return n; }); setTicked(new Set()); }}>Apply</button>
                 {(() => { const sl = slots.find((x) => x.id === bulk); return sl && !sl.many && ticked.size > 1 ? <span className="text-amber-200">{sl.label} holds one picture: only the first ticked one goes there.</span> : null; })()}
               </div>
-              <ul className="grid max-h-[320px] grid-cols-2 gap-2 overflow-auto sm:grid-cols-4" aria-label="Pictures found">
+              <ul className="grid max-h-[420px] grid-cols-2 gap-2 overflow-auto sm:grid-cols-4 lg:grid-cols-6" aria-label="Pictures found">
                 {pics.map((p) => (
                   <li key={p.url} className={`flex flex-col gap-1.5 rounded-lg border p-1.5 ${use[p.url] ? "border-brand-500/60" : "border-ink-700"}`}>
                     <label className="relative block cursor-pointer"><input type="checkbox" aria-label={`Tick ${p.alt || "this picture"}`} className="absolute left-1.5 top-1.5 z-10 h-4 w-4 accent-brand-500" checked={ticked.has(p.url)} onChange={(e) => setTicked((t) => { const n = new Set(t); e.target.checked ? n.add(p.url) : n.delete(p.url); return n; })} />

@@ -509,21 +509,34 @@ function PublishDialog({ studio, project, tpl, draft, dirty, save, onIndex, getB
     );
   }
   return (
-    <Modal title="Publish to GitHub" onClose={onClose} footer={<><button className="btn" onClick={onClose}>Cancel</button><button className="btn btn-pri" disabled={busy || demo} onClick={go}>{busy ? "Publishing…" : `Publish v${project.version + 1}`}</button></>}>
+    <Modal title="Publish to GitHub" desk onClose={onClose} footer={<><button className="btn" onClick={onClose}>Cancel</button><button className="btn btn-pri" disabled={busy || demo} onClick={go}>{busy ? "Publishing…" : `Publish v${project.version + 1}`}</button></>}>
       {demo ? <p className="rounded-lg border border-amber-400/40 bg-amber-400/5 px-3 py-2.5 text-[13px] text-amber-100">Publishing needs a real GitHub login. Exit the demo and connect your repository to use it.</p>
-        : <p className="text-sm text-ink-300">Publishes the whole site to a GitHub repository in one go. If the repository doesn't exist yet, the Studio creates it, and it switches on GitHub Pages for you.</p>}
+        : <p className="max-w-[80ch] text-sm text-ink-300">Publishes the whole site to a GitHub repository in one go. If the repository doesn't exist yet, the Studio creates it, and it switches on GitHub Pages for you.</p>}
+      {/* On a desktop: where it goes and what it sends on the left; who signs in to its admin page, and what to check, on the right. */}
+      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,.9fr)]">
+      <div className="flex min-w-0 flex-col gap-4">
       {!demo && <section className="flex flex-col gap-3 rounded-xl border border-ink-700 bg-ink-950 p-4" aria-label="GitHub account"><GitHubPublishAccount session={session} onLogin={setLogin} />
         {!login && <p className="text-[13px] text-ink-400">Without a publishing token the Studio uses its own login, which can only publish to repositories that already exist and that its token includes.</p>}</section>}
       {project.host && !demo && <p className="rounded-lg border border-sky-400/30 bg-sky-400/5 px-3 py-2.5 text-[13px] text-sky-100">This site is live on {project.host.kind === "cloudflare" ? "Cloudflare" : "Netlify"}. Publishing here makes or updates a separate GitHub copy (for example a backup, or a GitHub Pages version). The hosted site, its content in the database and the Studio's live-site sync aren't changed.</p>}
-      <Checks list={checks} />
+      <section className="flex flex-col gap-3 rounded-xl border border-ink-700 bg-ink-950 p-4" aria-label="Repository">
+      <b className="text-sm">Repository</b>
       <div className="grid gap-3 sm:grid-cols-3">
         <Field label="Owner" htmlFor="pb-o"><input id="pb-o" className="input" value={t.owner} onChange={(e) => setT({ ...t, owner: e.target.value })} /></Field>
         <Field label="Repository" htmlFor="pb-r"><input id="pb-r" className="input" value={t.repo} onChange={(e) => setT({ ...t, repo: e.target.value })} /></Field>
         <Field label="Branch" htmlFor="pb-b"><input id="pb-b" className="input" value={t.branch} onChange={(e) => setT({ ...t, branch: e.target.value })} /></Field>
       </div>
+      {t.owner.trim() && t.repo.trim() && <p className="hint">The site's address: <span className="font-mono text-ink-200">https://{t.owner.trim()}.github.io/{t.repo.trim().replace(/\s+/g, "-")}/</span></p>}
+      </section>
+      <section className="flex flex-col gap-2 rounded-xl border border-ink-700 bg-ink-950 p-4" aria-label="What is sent">
       <Toggle id="pb-content" label="Replace the site's content with this version" checked={withContent} onChange={setWithContent} />
       <p className="hint">{withContent ? "Overwrites content.json and images on the site, including any edits made in the site's own CMS." : "Updates pages, design code and the CMS only. Content edited in the site's own CMS is kept. Use Details → Import from site to bring those edits here."}</p>
-      {way && <section className="flex flex-col gap-2 rounded-xl border border-ink-700 bg-ink-950 p-4" aria-label="Admin page sign-in">
+      <Field label="Version note (optional)" htmlFor="pb-note"><input id="pb-note" className="input" value={note} onChange={(e) => setNote(e.target.value)} /></Field>
+      </section>
+      </div>
+      <div className="flex min-w-0 flex-col gap-4">
+      {step && <p className="rounded-xl border border-brand-500/40 bg-brand-500/10 px-3 py-2.5 text-[13px] text-brand-200" aria-live="polite">{step}</p>}
+      <Checks list={checks} />
+      {way ? <section className="flex flex-col gap-2 rounded-xl border border-ink-700 bg-ink-950 p-4" aria-label="Admin page sign-in">
         <Toggle id="pb-mailin" label="Sign in to the admin page with an email code" checked={mailIn} onChange={setMailIn} />
         <p className="hint">{mailIn ? "The site's admin page asks for an email and a 6-digit code, on any device. No GitHub token or password to set up there: this Studio's database saves the changes to the repository." : "The admin page asks each device for a GitHub token, a username and a password."}</p>
         {mailIn && (known && known.length > 0 ? <div className="flex flex-col gap-1.5">
@@ -531,9 +544,12 @@ function PublishDialog({ studio, project, tpl, draft, dirty, save, onIndex, getB
           <div className="flex flex-wrap gap-1.5">{known.map((x) => <span key={x.email} className="inline-flex items-center gap-1.5 rounded-full border border-ink-600 bg-ink-900 px-3 py-1 text-[13px] text-ink-100"><span aria-hidden className="h-1.5 w-1.5 rounded-full bg-emerald-400" />{x.email}{x.role === "owner" && <span className="text-[11px] text-ink-400">Administrator</span>}</span>)}</div>
           <p className="hint">To add or remove people, open the site's admin page → Settings → Role Management.</p>
         </div> : <Field label="Who else can sign in (emails, optional)" htmlFor="pb-people" hint="You are added by yourself. More people can be added later in the admin page: Settings → Role Management."><input id="pb-people" className="input" placeholder="client@example.com, editor@example.com" value={people} onChange={(e) => setPeople(e.target.value)} /></Field>)}
+      </section> : !demo && <section className="flex flex-col gap-2 rounded-xl border border-ink-700 bg-ink-950 p-4 text-[13px]" aria-label="Admin page sign-in">
+        <b className="text-sm">Admin page sign-in</b>
+        <p className="text-ink-400">{project.host ? "This site is hosted elsewhere: its admin page signs in through its own host." : "The admin page will ask each device for a GitHub token. For email-code sign-in on any device, put your Studio's database on Cloudflare, sign in to it on this device and turn on Publish from any device (Settings → Hostings)."}</p>
       </section>}
-      <Field label="Version note (optional)" htmlFor="pb-note"><input id="pb-note" className="input" value={note} onChange={(e) => setNote(e.target.value)} /></Field>
-      {step && <p className="text-[13px] text-brand-300" aria-live="polite">{step}</p>}
+      </div>
+      </div>
     </Modal>
   );
 }

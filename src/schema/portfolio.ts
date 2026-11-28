@@ -106,21 +106,16 @@ const schema: Category[] = [
       { title: "Menu when scrolling", fields: [NAV_MODE_FIELD, NAV_MODE_MOB_FIELD, { t: "note", text: NAV_MODE_NOTE + " The same setting is under Theme & layout → Layout & elements." }] },
       { title: "Header", fields: [g2({ t: "text", path: "brand.logoText", label: "Logo text" }, { t: "text", path: "brand.contactLabel", label: "Header button label" })] },
       { title: "Sections & menu titles", fields: [{ t: "note", text: "Open a section to rename its menu title or hide it." }, { t: "list", path: "sections", fixed: true, add: () => ({}), title: (it) => `${SECTION_NAMES[it.id]} · menu: “${it.navLabel || ""}”` + (it.visible ? "" : "  (hidden)"), item: [g2({ t: "toggle", path: "visible", label: "Show on page" }, { t: "text", path: "navLabel", label: "Menu title" })] }] },
-      { title: "Page layout labels", fields: [
-        { t: "note", text: "Words the Motion page layouts show around your content: menu buttons, hints and small headings. They only appear in the layout that uses them." },
-        g2({ t: "text", path: "labels.scrollHint", label: "Scroll hint (Type specimen)" }, { t: "text", path: "labels.project", label: "“Project” tag" },
-          { t: "text", path: "labels.available", label: "Status badge (Profile dashboard)" }, { t: "text", path: "labels.dragHint", label: "Drag hint (Drag canvas)" },
-          { t: "text", path: "labels.listView", label: "“List view” button" }, { t: "text", path: "labels.canvasView", label: "“Canvas view” button" },
-          { t: "text", path: "labels.close", label: "“Close” button" }, { t: "text", path: "labels.scenes", label: "Scene count (Cinema)", hint: "{n} becomes the number of scenes." },
-          { t: "text", path: "labels.stickerHint", label: "Sticker hint (Sticker board)" }, { t: "text", path: "labels.edition", label: "Masthead line (Broadsheet)" },
-          { t: "text", path: "labels.inThisEdition", label: "“In this edition”" }, { t: "text", path: "labels.classifieds", label: "“Classifieds”" },
-          { t: "text", path: "labels.letters", label: "“Letters to the editor”" },
-          { t: "text", path: "labels.scene", label: "Scene label (Cinema)", hint: "Above each scene, before its number, e.g. “Scene” or “Chapter”." }, { t: "toggle", path: "labels.sceneHide", label: "Hide the scene label and number (Cinema)" },
-          { t: "text", path: "labels.availableAt", label: "Clock line (Profile dashboard)", hint: "{time} becomes the visitor's local time." }, { t: "text", path: "labels.sayHi", label: "Email button (Sticker board)" },
-          { t: "text", path: "labels.vol", label: "“Vol.” (Broadsheet)" }, { t: "text", path: "labels.by", label: "“By” before your name (Broadsheet)" },
-          { t: "text", path: "labels.writeTo", label: "“Write to” before your email (Broadsheet)" }, { t: "text", path: "labels.explorer", label: "File list heading (Terminal)" },
-          { t: "text", path: "labels.commands", label: "“Commands:” (Terminal)" }, { t: "text", path: "labels.termTip", label: "Tip line (Terminal)" },
-          { t: "text", path: "labels.open", label: "“open ↗” link (Terminal)" }, { t: "text", path: "labels.notFound", label: "Unknown command (Terminal)", hint: "{cmd} becomes what was typed." }),
+      { title: "Page layout labels", showIf: (c) => kitOf(c) !== "classic", fields: [
+        { t: "note", text: "Words the page layout shows around the whole page. Words that belong to a section (a scene's label, a tag, a button) are set in that section, under “Words the page layout shows here”." },
+        g2({ t: "text", path: "labels.scenes", label: "Line at the top (Cinema)", hint: "{n} becomes the number of scenes." }, { t: "text", path: "labels.scene", label: "Standard scene label (Cinema)", hint: "Used with the number (“Scene 02”) where a section has no label of its own." },
+          { t: "toggle", path: "labels.sceneHide", label: "Hide the label on every scene (Cinema)" }, { t: "text", path: "labels.dragHint", label: "Drag hint (Drag canvas)" },
+          { t: "text", path: "labels.listView", label: "“List view” button (Drag canvas)" }, { t: "text", path: "labels.canvasView", label: "“Canvas view” button (Drag canvas)" },
+          { t: "text", path: "labels.close", label: "“Close” button (Drag canvas)" }, { t: "text", path: "labels.edition", label: "Masthead line (Broadsheet)" },
+          { t: "text", path: "labels.vol", label: "“Vol.” (Broadsheet)" }, { t: "text", path: "labels.inThisEdition", label: "“In this edition” (Broadsheet)" },
+          { t: "text", path: "labels.explorer", label: "File list heading (Terminal)" }, { t: "text", path: "labels.commands", label: "“Commands:” (Terminal)" },
+          { t: "text", path: "labels.termTip", label: "Tip line (Terminal)" }, { t: "text", path: "labels.open", label: "“open ↗” link (Terminal)" },
+          { t: "text", path: "labels.notFound", label: "Unknown command (Terminal)", hint: "{cmd} becomes what was typed." }),
       ] },
     ],
   },
@@ -255,6 +250,22 @@ const KIT_CARDS: Record<string, Record<string, string[]>> = {
   learning: { "Heading": ["solare", "tech-lead", "kinetic-noir", "velvet-cinema", "studio-pop", "editorial-motion"], "Entries": ["solare", "tech-lead", "kinetic-noir", "decode", "velvet-cinema", "studio-pop", "editorial-motion"], "Languages": ["decode"] },
   contact: { "Links": ["solare", "tech-lead", "kinetic-noir", "decode", "velvet-cinema", "studio-pop", "editorial-motion"], "Footer": ["solare", "tech-lead", "studio-pop", "editorial-motion"] },
 };
+/* Words a page layout writes inside a section, set in that section ("Words the page layout shows here"): one card per
+ * layout that has such words there, shown only with that layout. */
+const sceneWords = (key: string): Field => g2({ t: "text", path: `${key}.scene`, label: "Label above this scene", ph: "Scene 0" + (["hero", "about", "skills", "work", "projects", "learning", "contact"].indexOf(key) + 1), hint: "Empty: the standard label with the scene's number." }, { t: "toggle", path: `${key}.sceneHide`, label: "Hide the label on this scene" });
+const SECTION_WORDS: Record<string, [string, Field[]][]> = {
+  hero: [["velvet-cinema", [sceneWords("hero")]], ["solare", [{ t: "text", path: "labels.scrollHint", label: "Scroll hint", ph: "Scroll to discover" }]],
+    ["tech-lead", [g2({ t: "text", path: "labels.available", label: "Status badge", ph: "Available" }, { t: "text", path: "labels.availableAt", label: "Clock line", ph: "Available · {time} local", hint: "{time} becomes the visitor's local time." })]],
+    ["studio-pop", [{ t: "text", path: "labels.stickerHint", label: "Sticker hint", ph: "Grab a sticker and move it around." }]], ["editorial-motion", [{ t: "text", path: "labels.by", label: "“By” before your name", ph: "By" }]]],
+  about: [["velvet-cinema", [sceneWords("about")]]],
+  skills: [["velvet-cinema", [sceneWords("skills")]]],
+  work: [["velvet-cinema", [sceneWords("work")]]],
+  projects: [["velvet-cinema", [sceneWords("projects")]], ["solare", [{ t: "text", path: "labels.project", label: "“Project” tag", ph: "Project" }]], ["kinetic-noir", [{ t: "text", path: "labels.project", label: "“Project” tag", ph: "Project" }]]],
+  learning: [["velvet-cinema", [sceneWords("learning")]], ["editorial-motion", [{ t: "text", path: "labels.classifieds", label: "Section heading", ph: "Classifieds" }]]],
+  contact: [["velvet-cinema", [sceneWords("contact")]], ["studio-pop", [{ t: "text", path: "labels.sayHi", label: "Email button", ph: "Say hi 👋" }]],
+    ["editorial-motion", [g2({ t: "text", path: "labels.letters", label: "Section heading", ph: "Letters to the editor" }, { t: "text", path: "labels.writeTo", label: "Before your email", ph: "Write to" })]]],
+};
+for (const cat of schema) for (const [kit, fields] of SECTION_WORDS[cat.id] || []) cat.cards.splice(1, 0, { title: "Words the page layout shows here", showIf: (c) => kitOf(c) === kit, fields });
 const VELOCITY_OWN = ["Hero graphic", "Hero elements", "Background slides"];
 for (const cat of schema) {
   const m = KIT_CARDS[cat.id]; if (!m) continue;

@@ -757,6 +757,7 @@
   // A link given for a section's background video: a YouTube or Vimeo address (shown as a silent background player) or a video file's address.
   function vlink(u) { u = String(u || "").trim(); if (!u) return ""; if (/(?:youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|shorts\/|live\/)|youtu\.be\/)([\w-]{11})/i.test(u) || /vimeo\.com\/(?:video\/)?(\d{6,12})/i.test(u) || /^https:\/\//i.test(u) || !/^[a-z][a-z0-9+.-]*:/i.test(u)) return u; return ""; }
   var SBG_CSS = ".has-sbg{isolation:isolate}.has-sbg[data-sbg-c]{background:var(--sbg)!important}" +
+    ".fx-sbg-hide{display:none!important}.has-sbg[data-sbg-nobefore]::before,.has-sbg[data-sbg-noafter]::after{display:none!important}" +
     ".sbg{position:absolute;inset:0;z-index:-1;overflow:hidden;pointer-events:none;border-radius:inherit}" +
     ".sbg img,.sbg video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}.sbg i{position:absolute;inset:0}" +
     // a YouTube or Vimeo player is cropped to fill the section like a picture
@@ -799,6 +800,27 @@
       if (n.parentNode === el || cs.position === "absolute" || cs.position === "fixed") return;   // the section's own wrapper stays where it is
       var tag = n.tagName.toLowerCase(), block = d === "block" || d === "flex" || d === "grid" || d === "flow-root" || d === "list-item";
       if (block && (cs.maxWidth !== "none" || tag === "svg" || tag === "img" || tag === "hr")) n.classList.add("fx-salm");
+    });
+  }
+  /** A section given its own background: the page layout's or theme's own picture layers behind its content (an image
+   *  or canvas spread over the whole section, with no words or buttons in it, or a covering ::before / ::after) are put
+   *  away, so what the owner chose shows instead of the layout's standard graphic. */
+  function hideCovers(el) {
+    var R = el.getBoundingClientRect(); if (R.width < 10 || R.height < 10) return;
+    var covers = function (cs, w, h) { return (cs.position === "absolute" || cs.position === "fixed") && w >= R.width * 0.7 && h >= R.height * 0.6; };
+    var walk = function (n, depth) {
+      Array.prototype.forEach.call(n.children, function (ch) {
+        if (ch.classList.contains("sbg") || ch.classList.contains("sbg-ctl") || ch.classList.contains("fx-sbg-hide")) return;
+        var cs = getComputedStyle(ch), r = ch.getBoundingClientRect();
+        if (covers(cs, r.width, r.height) && !(ch.textContent || "").trim() && !ch.querySelector("a,button,input,select,textarea,label,h1,h2,h3,p")) { ch.classList.add("fx-sbg-hide"); return; }
+        if (depth < 2) walk(ch, depth + 1);
+      });
+    };
+    walk(el, 0);
+    ["before", "after"].forEach(function (p) {
+      var cs = getComputedStyle(el, "::" + p); if (!cs || !cs.content || cs.content === "none" || cs.content === "normal") return;
+      var full = cs.top === "0px" && cs.left === "0px" && (cs.right === "0px" || parseFloat(cs.width) >= R.width * 0.7) && (cs.bottom === "0px" || parseFloat(cs.height) >= R.height * 0.6);
+      if ((cs.position === "absolute" || cs.position === "fixed") && full) el.setAttribute("data-sbg-no" + p, "");
     });
   }
   var COLOR_OK = /^(#[0-9a-f]{3,8}|rgba?\([0-9., %]+\))$/i;
@@ -1275,7 +1297,7 @@
     Object.keys(map).forEach(function (key) {
       var k = map[key]; if (!k || !(k.on || k.align)) return;
       var el = null; try { el = root.querySelector("#" + (window.CSS && CSS.escape ? CSS.escape(key) : key)) || root.querySelector('[data-sec="' + key + '"]'); } catch (e) { /* odd key */ }
-      if (!el && key === "hero") el = root.querySelector("section.hero,.hero");
+      if (!el && key === "hero") el = root.querySelector("section.hero,.hero,#top");
       if (!el && key === "footer") el = root.querySelector("footer");
       if (!el) return;
       if (/^(left|center|right)$/.test(k.align || "")) { el.setAttribute("data-salign", k.align); try { sectionAlign(el); } catch (e) { /* the text is still aligned */ } }
@@ -1291,6 +1313,9 @@
       try { sectionText(el, k, opts); } catch (e) { /* the text keeps the theme's look */ }
       if (k.kind === "none" || (kind === "color" && !col)) return;
       el.setAttribute("data-sbg", kind);
+      // Clean up what an earlier pass put away (the owner may have switched the background off since), then put away the layout's own.
+      Array.prototype.forEach.call(el.querySelectorAll(".fx-sbg-hide"), function (n) { n.classList.remove("fx-sbg-hide"); }); el.removeAttribute("data-sbg-nobefore"); el.removeAttribute("data-sbg-noafter");
+      try { hideCovers(el); } catch (e) { /* the layout's graphic stays */ }
       if (col) { el.style.setProperty("--sbg", col); el.setAttribute("data-sbg-c", ""); }
       if (k.text === "light" || k.text === "dark") el.setAttribute("data-sbg-text", k.text);
       var cs = getComputedStyle(el);

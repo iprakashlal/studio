@@ -1,7 +1,7 @@
 import { legalChecks } from "../lib/legal";
 import type { Category, Field, TemplateDef } from "./types";
 import { AXES, BODY_FONTS, DISPLAY_FONTS, KIT_AXIS, LINE_BREAKS_AXIS, PORTFOLIO_AXES, THEMES, onColor, portfolioThemeValues } from "../themes/catalog";
-import { adminCategory, legalCategory, codeCategory, withSectionBg, videoCategory, wallCategory, socialCategory, logoFields, consentCategory, emailsCategory, i18nCategory, prepareI18n, featuresCategory, festivalCategory, menuCategory, menuItem, prepareMenu, staticPagesCategory, heroSlidesCard, prepareSlides, prepareMaintenance, seoCategory, customFontsCard, customFontFields } from "./common";
+import { adminCategory, legalCategory, codeCategory, customCodeCategory, withSectionBg, videoCategory, wallCategory, socialCategory, logoFields, consentCategory, emailsCategory, i18nCategory, prepareI18n, featuresCategory, festivalCategory, menuCategory, menuItem, prepareMenu, staticPagesCategory, heroSlidesCard, prepareSlides, prepareMaintenance, seoCategory, customFontsCard, customFontFields } from "./common";
 import VELOCITY_DEFAULTS from "./velocity-defaults.json";
 import { NAV_MODE_FIELD, NAV_MODE_MOB_FIELD, NAV_MODE_NOTE, themeCards } from "../themes/fields";
 
@@ -229,6 +229,7 @@ const schema: Category[] = [
   consentCategory(),
   legalCategory(),
   adminCategory(),
+  customCodeCategory(),
   codeCategory(),
 ];
 /* What each page layout draws (assets/layouts.js): a card of a section is shown only when the chosen layout uses it.

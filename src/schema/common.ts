@@ -712,6 +712,42 @@ export function codeCategory(): Category {
   };
 }
 
+/** Custom site & code blocks (content.custom, content.blocks): the owner's own HTML, CSS and JavaScript, either in place
+ *  of the page's sections (a whole page of their own) or as blocks placed between sections, in any order. Drawn by fx.js
+ *  for every template and theme. Studio only unless allowed for the site (content.cms.allow has "code"). */
+export function customCodeCategory(): Category {
+  return {
+    id: "custom", label: "Custom site & code blocks", group: "Pages", siteIf: "code",
+    desc: "Your own code on the site: a whole page of your own in place of the sections, or code blocks placed between sections, in any order.",
+    cards: [
+      { title: "Custom site", fields: [
+        { t: "toggle", path: "custom.on", label: "Hide all the sections and show my own code instead" },
+        { t: "when", path: "custom.on", is: "true", fields: [
+          { t: "grid", cols: 3, fields: [
+            { t: "select", path: "custom.pages", label: "On", options: [{ value: "", label: "The home page" }, { value: "all", label: "Every page" }] },
+            { t: "toggle", path: "custom.keepNav", label: "Keep the menu bar", def: true },
+            { t: "toggle", path: "custom.keepFooter", label: "Keep the footer", def: true }] },
+          { t: "code", path: "custom.html", label: "HTML", hint: "The page's content, in place of the sections. Your theme's colours and fonts are there to use as var(--c1), var(--text), var(--bg)…" },
+          { t: "code", path: "custom.css", label: "CSS", hint: "Styles for your page." },
+          { t: "code", path: "custom.js", label: "JavaScript", hint: "Runs after your HTML is on the page. `block` is your page's own element." },
+        ] },
+        { t: "note", text: "To hide only some sections, switch them off under Sections & order (Menu & order in a portfolio)." },
+      ] },
+      { title: "Code blocks between sections", fields: [
+        { t: "note", text: "Each block is your own HTML, CSS and JavaScript, placed after the section you choose. Blocks after the same section follow the order of this list: move them with the arrows." },
+        { t: "list", path: "blocks", max: 30, title: (it: any) => `${it?.name || "Code block"}${it?.on === false ? " · off" : ""}${it?.after ? " · after " + it.after : ""}`, add: () => ({ id: "b" + Math.random().toString(36).slice(2, 8), name: "", on: true, after: "", html: "<section class=\"my-block\">\n  <h2>My section</h2>\n</section>", css: ".my-block { max-width: 1100px; margin: 0 auto; padding: 64px 24px; }", js: "" }),
+          item: [
+            { t: "grid", cols: 2, fields: [{ t: "text", path: "name", label: "Name (for you)", ph: "Price calculator" }, { t: "toggle", path: "on", label: "Show it", def: true }] },
+            { t: "grid", cols: 2, fields: [{ t: "placePick", path: "after", label: "Place it", hint: "The sections are read from the page in the preview." }, { t: "select", path: "pages", label: "On", options: [{ value: "", label: "The home page" }, { value: "all", label: "Every page" }] }] },
+            { t: "code", path: "html", label: "HTML" },
+            { t: "code", path: "css", label: "CSS" },
+            { t: "code", path: "js", label: "JavaScript", hint: "Runs after the block is on the page. `block` is the block's own element." },
+          ] },
+      ] },
+    ],
+  };
+}
+
 /** Points for returning customers (content.loyalty): earned on every order kept in the site's database; a restaurant's
  *  guest with a verified mobile number can spend them at checkout. */
 /** Customer accounts: sign in before checkout with a code, then "My account" with orders and points. */

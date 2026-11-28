@@ -275,6 +275,10 @@ export function FieldView({ f, obj, base }: { f: F; obj: any; base: string }) {
       return <AdminSectionsField />;
     case "codeTemplate":
       return <CodeTemplateField />;
+    case "code":
+      return <CodeBox label={f.label} hint={f.hint || ""} value={String(getP(obj, f.path) ?? "")} onSave={(v) => { setP(obj, f.path, v); bump(); }} />;
+    case "placePick":
+      return <PlacePick f={f} obj={obj} />;
     case "bulkPhotos":
       return <BulkPhotos kind={f.kind} />;
     case "adminLook":
@@ -877,6 +881,31 @@ function CodeBox({ label, hint, value, onSave }: { label: string; hint: string; 
         onChange={(e) => edit(e.target.value)} />
       <p className="text-[12.5px] text-ink-400">{hint}</p>
     </div>
+  );
+}
+/** Where a code block goes: after one of the sections on the page in the preview (read from it), or at the top or end. */
+function PlacePick({ f, obj }: { f: { path: string; label: string; hint?: string }; obj: any }) {
+  const { bump } = useCtx();
+  const [list, setList] = useState<[string, string][]>([]);
+  const read = () => {
+    const doc = (document.querySelector('iframe[name="cms-preview"]') as HTMLIFrameElement | null)?.contentDocument; if (!doc) return;
+    const main = doc.querySelector("main") || doc.body, out: [string, string][] = [], seen = new Set<string>();
+    main.querySelectorAll("section[id],[data-sec]").forEach((el) => {
+      const id = el.id || el.getAttribute("data-sec") || ""; if (!id || seen.has(id) || el.closest(".cc-block,.cc-site")) return; seen.add(id);
+      const h = ((el.querySelector("h1,h2,h3") as HTMLElement | null)?.innerText || "").replace(/\s+/g, " ").trim().slice(0, 50);
+      out.push([id, h ? `${id} · ${h}` : id]);
+    });
+    setList(out);
+  };
+  useEffect(() => { read(); const t = window.setTimeout(read, 1500); return () => window.clearTimeout(t); }, []);
+  const v = String(getP(obj, f.path) ?? "");
+  const opts: [string, string][] = [["", "At the end of the page"], ["^top", "At the top of the page"], ...list.map(([id, l]) => [id, "After " + l] as [string, string])];
+  if (v && !opts.some(([x]) => x === v)) opts.push([v, "After " + v + " (not on the page in the preview)"]);
+  return (
+    <Field label={f.label} hint={f.hint}>
+      <div className="flex gap-2"><select className="input min-w-0 flex-1" aria-label={f.label} value={v} onChange={(e) => { setP(obj, f.path, e.target.value); bump(); }}>{opts.map(([x, l]) => <option key={x} value={x}>{l}</option>)}</select>
+        <button type="button" className="btn btn-sm" onClick={read} title="Read the sections from the preview again">↻</button></div>
+    </Field>
   );
 }
 function CodeTemplateField() {

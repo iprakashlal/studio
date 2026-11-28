@@ -234,7 +234,8 @@ const schema: Category[] = [
 ];
 /* What each page layout draws (assets/layouts.js): a card of a section is shown only when the chosen layout uses it.
  * The classic page draws everything; its Velocity hero keeps its own art. Checked against each layout's render code. */
-const KITS = ["solare", "tech-lead", "kinetic-noir", "decode", "gallery", "velvet-cinema", "studio-pop", "editorial-motion"];
+const KITS = ["solare", "tech-lead", "kinetic-noir", "decode", "gallery", "velvet-cinema", "studio-pop", "editorial-motion", "neumorphism", "spatial-ui"];
+const NS = ["neumorphism", "spatial-ui"];
 export function kitOf(c: any): string {
   const t = c?.theme || {};
   if (t.kit === "classic") return "classic";
@@ -243,13 +244,13 @@ export function kitOf(c: any): string {
 }
 const ALL = KITS;
 const KIT_CARDS: Record<string, Record<string, string[]>> = {
-  hero: { "Buttons": [], "Highlights under the buttons": ["solare", "tech-lead", "decode", "editorial-motion"], "Hero graphic": [], "Hero elements": [], "Background slides": [], "Scrolling skills band": [] },
-  about: { "Heading": ["solare", "tech-lead", "kinetic-noir", "gallery", "velvet-cinema", "editorial-motion"], "Story tile": ALL, "Number tiles": ["solare", "tech-lead", "decode", "gallery", "studio-pop", "editorial-motion"], "Motto tile": ["solare", "gallery", "velvet-cinema", "studio-pop", "editorial-motion"], "Quick facts": ["solare", "decode", "editorial-motion"] },
-  skills: { "Heading": ["solare", "tech-lead", "kinetic-noir", "velvet-cinema", "studio-pop", "editorial-motion"] },
-  work: { "Heading": ["solare", "tech-lead", "velvet-cinema", "studio-pop", "editorial-motion"] },
-  projects: { "Heading": ["tech-lead", "velvet-cinema", "studio-pop", "editorial-motion"] },
-  learning: { "Heading": ["solare", "tech-lead", "kinetic-noir", "velvet-cinema", "studio-pop", "editorial-motion"], "Entries": ["solare", "tech-lead", "kinetic-noir", "decode", "velvet-cinema", "studio-pop", "editorial-motion"], "Languages": ["decode"] },
-  contact: { "Links": ["solare", "tech-lead", "kinetic-noir", "decode", "velvet-cinema", "studio-pop", "editorial-motion"], "Footer": ["solare", "tech-lead", "studio-pop", "editorial-motion"] },
+  hero: { "Buttons": [], "Highlights under the buttons": ["solare", "tech-lead", "decode", "editorial-motion", "neumorphism"], "Hero graphic": [], "Hero elements": [], "Background slides": [], "Scrolling skills band": [] },
+  about: { "Heading": ["solare", "tech-lead", "kinetic-noir", "gallery", "velvet-cinema", "editorial-motion", ...NS], "Story tile": ALL, "Number tiles": ["solare", "tech-lead", "decode", "gallery", "studio-pop", "editorial-motion", ...NS], "Motto tile": ["solare", "gallery", "velvet-cinema", "studio-pop", "editorial-motion", ...NS], "Quick facts": ["solare", "decode", "editorial-motion"] },
+  skills: { "Heading": ["solare", "tech-lead", "kinetic-noir", "velvet-cinema", "studio-pop", "editorial-motion", ...NS] },
+  work: { "Heading": ["solare", "tech-lead", "velvet-cinema", "studio-pop", "editorial-motion", ...NS] },
+  projects: { "Heading": ["tech-lead", "velvet-cinema", "studio-pop", "editorial-motion", ...NS] },
+  learning: { "Heading": ["solare", "tech-lead", "kinetic-noir", "velvet-cinema", "studio-pop", "editorial-motion", ...NS], "Entries": ["solare", "tech-lead", "kinetic-noir", "decode", "velvet-cinema", "studio-pop", "editorial-motion", ...NS], "Languages": ["decode"] },
+  contact: { "Links": ["solare", "tech-lead", "kinetic-noir", "decode", "velvet-cinema", "studio-pop", "editorial-motion", ...NS], "Footer": ["solare", "tech-lead", "studio-pop", "editorial-motion", ...NS] },
 };
 /* Words a page layout writes inside a section, set in that section ("Words the page layout shows here"): one card per
  * layout that has such words there, shown only with that layout. */

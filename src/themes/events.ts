@@ -4,7 +4,8 @@
 // tickets, the countdown, the date and the registration page are drawn, and what kind of registration it is.
 // No two themes share the same mix. The styles match public/templates/events/assets/evt.css.
 import { type Axis, type Theme } from "./catalog";
-import { BIZ_AXES, BIZ_THEMES, businessThemeValues } from "./business";
+import { BIZ_AXES, BIZ_BASE_THEMES as BIZ_THEMES, businessThemeValues } from "./business";
+import { LOOK_TAGS, lookTheme } from "./looks";
 
 export const EVT_AXES: Record<string, Axis> = {
   ...BIZ_AXES,
@@ -217,12 +218,19 @@ function build(): EvtTheme[] {
   });
   return out;
 }
-export const EVT_THEMES: EvtTheme[] = build();
+/** A Neumorphism and a Spatial UI theme for every kind of event, built on that kind's first theme. They come after all the
+ *  others, so the existing codes (E-xxxx) never move. */
+const lookThemes = (all: EvtTheme[]): EvtTheme[] => T.flatMap(([type]) => {
+  const base = all.find((t) => t.evt.type === type)!;
+  return (["neu", "spatial"] as const).map((l) => lookTheme(base, l, `evt-${slug(type)}-${l}`, `${type} · ${l === "neu" ? "Neumorphism" : "Spatial UI"}`, [type, base.evt.group], l === "spatial" ? true : base.dark));
+});
+const BUILT = build();
+export const EVT_THEMES: EvtTheme[] = [...BUILT, ...lookThemes(BUILT)];
 /** Stable IDs: E-0001 … in the order above (type by type). New types go at the end of the list only. */
 export const EVT_CODES: Record<string, string> = Object.fromEntries(EVT_THEMES.map((t, i) => [t.id, "E-" + String(i + 1).padStart(4, "0")]));
 export const isEvtTheme = (id: string) => id.startsWith("evt-");
 /** The filters on the Themes page: the groups and styles as buttons, the kinds of event in a menu. */
-export const EVT_TAGS = [...EVT_GROUPS, "Light", "Dark", ...STYLE_TAGS, ...EVT_TYPES];
+export const EVT_TAGS = [...EVT_GROUPS, "Light", "Dark", ...LOOK_TAGS, ...STYLE_TAGS, ...EVT_TYPES];
 export const evtThemesOf = (type: string) => EVT_THEMES.filter((t) => t.evt.type === type);
 
 /** Events content.theme values for a theme. */

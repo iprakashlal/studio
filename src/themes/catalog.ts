@@ -5,6 +5,7 @@
 
 import "../fx/motifs.js";
 import "../fx/layouts.js";
+import { LOOK_AXIS } from "./looks";
 
 /** The page layouts (src/fx/layouts.js) the portfolio template can use instead of the classic page. */
 export const Layouts: { list: [string, string][]; has: (id: string) => boolean } = (globalThis as any).SiteLayouts;
@@ -86,6 +87,7 @@ export const PORTFOLIO_AXES: Record<string, Axis> = {
 };
 /** Shop-only layouts. */
 export const STORE_AXES: Record<string, Axis> = {
+  look: LOOK_AXIS,
   grid: { key: "grid", label: "Products per row", options: [["auto", "Automatic"], ["2", "2 large"], ["3", "3"], ["4", "4 compact"]] },
   product: { key: "product", label: "Product card", options: [["classic", "Classic"], ["framed", "Framed card"], ["overlay", "Name over image"], ["minimal", "Minimal"], ["polaroid", "Polaroid"], ["tall", "Tall, fashion"], ["float", "Floating, soft shadow"]] },
 };
@@ -131,6 +133,8 @@ export type Theme = {
   kit: string;
   /** Quiet loop on the hero picture (see HERO_FX_AXIS). Unset keeps the site's own choice. */
   herofx?: string;
+  /** Page style over the theme (themes/looks.ts, assets/looks.js): "neu" or "spatial"; classic when unset. */
+  look?: string;
   /** A signature theme brings its own page layout (portfolio) with extra content controls. */
   signature?: boolean;
   blurb?: string;
@@ -379,6 +383,12 @@ const ROWS: Row[] = [
   ["pz-farm-fresh", "Farm Fresh", "Homemade Picaffectz Light Modern", "#F6F9F5 #FFFFFF #1C3414 #192B12 #60725A #D9E1D6 #338017 #2C9644 #42F088", "Caveat", "Quicksand", 14, "framed pill outline soft skew topo soft tight dot wide blob", "bento cube stack t", "auto polaroid", "ring wipe lines zoom dots none", "nature", "breathe", "classic"],
   ["pz-cookie-jar", "Cookie Jar", "Homemade Picaffectz Light Modern", "#EDF8ED #F9FDF9 #143414 #132B12 #5A725A #D3DED3 #188017 #962C74 #429CF0", "Fraunces", "Karla", 0, "orbit dock inset soft zoom topo soft normal line narrow none", "stack cube stack nt", "2 classic", "dot wipe flip shine dots none", "cafe", "sparkle", "classic"],
   ["pz-ghar-ka-khana", "Ghar Ka Khana", "Homemade Picaffectz Dark Modern", "#0F1A17 #1B2825 #09110F #EDF3F1 #A0B1AD #30413D #4CF0CD #52E062 #9DF368", "Righteous", "Nunito Sans", 12, "reverse center soft soft none topo soft italic pill full arch", "columns cube timeline n", "3 minimal", "ring curtain words zoom progress paper", "nature", "float", "classic"],
+  // ---------------- page styles: Neumorphism and Spatial UI, each with its own whole-page layout (assets/layouts.js) on a
+  // portfolio and its own page style (assets/looks.js) on a shop.
+  ["neumorphism", "Neumorphism", "Light Minimal Calm Modern Motion Neumorphism", "#E4E8EE #E4E8EE #2A3242 #2B3242 #687083 #D2D7DF #4F5FE8 #1E9E8F #FF8A65", "Poppins", "Nunito Sans", 24, "split pill soft pill rise none none normal dot normal default", "bento grid timeline -", "3 float", "none fade none lift none none", "geometric", "", ""],
+  ["neumorphism-dark", "Neumorphism Dark", "Dark Minimal Calm Modern Motion Neumorphism", "#272C35 #272C35 #15181E #E7EAF0 #A2A9B7 #353B47 #8C9BFF #3DD6B8 #FFB86B", "Poppins", "Nunito Sans", 24, "split pill soft pill rise none none normal dot normal default", "bento grid timeline -", "3 float", "none fade none lift none none", "geometric", "", "neumorphism"],
+  ["spatial-ui", "Spatial UI", "Dark Tech Modern Motion Spatial-UI", "#090D1A #1C2337 #04060C #F3F5FB #AAB2C8 #2A3352 #7C8CFF #5BE1FF #FF7AD9", "Plus Jakarta Sans", "Inter", 28, "center float glass pill blur none soft tight dot wide default", "bento grid timeline -", "3 float", "spotlight fade words tilt reveal none", "tech", "", ""],
+  ["spatial-ui-light", "Spatial UI Light", "Light Tech Modern Motion Spatial-UI", "#EDF0F7 #FFFFFF #141A2E #131A2C #59627A #D8DDEA #4F5BFF #0096B4 #E0407F", "Plus Jakarta Sans", "Inter", 28, "center float glass pill blur none soft tight dot wide default", "bento grid timeline -", "3 float", "spotlight fade words tilt reveal none", "tech", "", "spatial-ui"],
 ];
 
 function axis(s: string, n: number): string[] {
@@ -400,7 +410,7 @@ const BASE_THEMES: Theme[] = ROWS.map((r) => {
     return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2];
   };
   return {
-    id, name, tags: tags.split(" "), dark: lum(c[0]) < 0.2,
+    id, name, tags: tags.split(" ").map((x) => (x === "Spatial-UI" ? "Spatial UI" : x)), dark: lum(c[0]) < 0.2,
     colors: { bg: c[0], surface: c[1], deep: c[2], text: c[3], soft: c[4], line: c[5], c1: c[6], c2: c[7], c3: c[8] },
     display, body, radius: +radius,
     style: { layout: s[0], heroArt: s[10] || "default", nav: s[1], cards: s[2], buttons: s[3], motionStyle: s[4], pattern: s[5], ornament: s[6], heading: s[7], shead: s[8], width: s[9] },
@@ -408,6 +418,7 @@ const BASE_THEMES: Theme[] = ROWS.map((r) => {
     store: { grid, product },
     motif: motif || Motifs.themes[id] || "tech",
     kit: Layouts.has(id) ? id : kitPick && Layouts.has(kitPick) ? kitPick : "classic",
+    ...(id.startsWith("neumorphism") ? { look: "neu" } : id.startsWith("spatial-ui") ? { look: "spatial" } : {}),
     fx: { cursor: f[0], loader: f[1], textfx: f[2], hoverfx: f[3], scrollfx: f[4], overlay: f[5] },
     ...(herofx ? { herofx } : {}),
   };
@@ -416,7 +427,7 @@ const BASE_THEMES: Theme[] = ROWS.map((r) => {
 /** True when a theme turns on any interaction effect. */
 export const hasFx = (t: Theme) => FX_KEYS.some((k) => t.fx[k] !== "none");
 
-export const THEME_TAGS = ["Signature", "Modern", "Classy", "Dark", "Light", "Bold", "Minimal", "Elegant", "Playful", "Tech", "Calm", "Warm", "Nature", "Retro", "Luxury", "Motion", "YouTuber", "Influencer", "Model", "Sports", "Education", "Trading", "Products", "Craft", "Homemade", "Picaffectz"];
+export const THEME_TAGS = ["Neumorphism", "Spatial UI", "Signature", "Modern", "Classy", "Dark", "Light", "Bold", "Minimal", "Elegant", "Playful", "Tech", "Calm", "Warm", "Nature", "Retro", "Luxury", "Motion", "YouTuber", "Influencer", "Model", "Sports", "Education", "Trading", "Products", "Craft", "Homemade", "Picaffectz"];
 
 /** Signature themes: a whole new portfolio layout, not just a restyle. */
 const VELOCITY: Theme = {
@@ -453,7 +464,7 @@ export function storeThemeValues(t: Theme): Record<string, unknown> {
   return {
     bg: c.bg, surface: c.surface, text: c.text, soft: c.soft, line: c.line, accent: c.c1, accent2: c.c3, sale: c.c2, deep: c.deep,
     fontDisplay: t.display, fontBody: t.body, radius: Math.min(t.radius, 28),
-    ...styleValues(t), layout: t.style.layout === "velocity" ? "stacked" : t.style.layout, grid: t.store.grid, product: t.store.product,
+    ...styleValues(t), layout: t.style.layout === "velocity" ? "stacked" : t.style.layout, grid: t.store.grid, product: t.store.product, look: t.look === "neu" || t.look === "spatial" ? t.look : "classic",
   };
 }
 

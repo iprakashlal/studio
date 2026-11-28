@@ -239,6 +239,10 @@ export const THEME_CODES: Record<string, string> = {
   "pz-farm-fresh": "T-230",
   "pz-cookie-jar": "T-231",
   "pz-ghar-ka-khana": "T-232",
+  "neumorphism": "T-233",
+  "neumorphism-dark": "T-234",
+  "spatial-ui": "T-235",
+  "spatial-ui-light": "T-236",
 };
 
 /** The ID shown for a theme, e.g. "T-07". Themes without an ID yet fall back to their slug. */

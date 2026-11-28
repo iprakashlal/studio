@@ -293,7 +293,7 @@ function applyTheme(t) {
   r.setProperty("--fd", `"${t.fontDisplay}",Georgia,serif`); r.setProperty("--fb", `"${t.fontBody}","Helvetica Neue",Arial,sans-serif`);
   if (window.SiteFonts) { const cd = SiteFonts.use(t, "display", imgUrl), cb = SiteFonts.use(t, "body", imgUrl); if (cd) r.setProperty("--fd", `"${cd}","${t.fontDisplay}",Georgia,serif`); if (cb) r.setProperty("--fb", `"${cb}","${t.fontBody}","Helvetica Neue",Arial,sans-serif`); }
   const d = document.documentElement.dataset;
-  for (const k of ["layout", "heroArt", "nav", "cards", "buttons", "motionStyle", "pattern", "heading", "shead", "width", "bands", "cursor", "loader", "textfx", "hoverfx", "scrollfx", "overlay", "herofx", "loaderOn", "sched", "lineup", "tix", "count", "dateBadge", "reg", "high", "stat", "about", "faq", "cta", "quote"]) d[k] = String(t[k] || "");
+  for (const k of ["look", "layout", "heroArt", "nav", "cards", "buttons", "motionStyle", "pattern", "heading", "shead", "width", "bands", "cursor", "loader", "textfx", "hoverfx", "scrollfx", "overlay", "herofx", "loaderOn", "sched", "lineup", "tix", "count", "dateBadge", "reg", "high", "stat", "about", "faq", "cta", "quote"]) d[k] = String(t[k] || "");
   d.scrollease = t.scrollEase || "light"; d.linebreaks = t.lineBreaks || "typed"; d.menu = String(t.navMode || ""); d.menumob = String(t.navModeMob || "");
   d.crumbs = (C.site || {}).crumbs === false ? "off" : "on"; d.introfont = t.introFont || "display"; d.introcase = t.introCase || "upper"; d.dark = String(onColor(t.bg) === "#FFFFFF");
   const FOK = !(window.SiteFX && window.SiteFX.fontsOk) || window.SiteFX.fontsOk(C); // Google Fonts wait for consent when the site says so

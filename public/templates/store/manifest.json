@@ -14,6 +14,7 @@
     "assets/store.css",
     "assets/store.js",
     "assets/fx.js",
+    "assets/looks.js",
     "assets/slides.js",
     "assets/motifs.js",
     "assets/warranty.js",
@@ -25,7 +26,8 @@
     "assets/menu.js",
     "assets/lang.js",
     "assets/video.js",
-    "assets/social.js", "assets/wall.js",
+    "assets/social.js",
+    "assets/wall.js",
     "assets/acct.js",
     "assets/invoice.js",
     "README.md"

@@ -14,7 +14,7 @@ import { siteAddress } from "../lib/hosting";
 import { explain } from "../lib/repo";
 import { Cloudflare } from "../lib/cloudflare";
 import { getHelper } from "../lib/relay";
-import { useConfirm, useToast, Skel, SkelRows } from "../ui/kit";
+import { useConfirm, useToast, Skel, SkelRows, Toggle } from "../ui/kit";
 import { projectPlan, teardownProject } from "../lib/teardown";
 import { TeardownDialog } from "./TeardownDialog";
 import { useCfAccount } from "./CfPicker";
@@ -36,7 +36,7 @@ export function SitesHostingCard({ session, studio, index, onIndex }: { session:
   const isOpen = (id: string) => openSites === "all" || openSites.split(",").includes(id);
   const keepOpen = (v: string) => { setOpenSites(v); try { localStorage.setItem("studio-sites-open", v); } catch { /* private window */ } };
   const toggleSite = (id: string, all: string[]) => { const cur = openSites === "all" ? all : openSites.split(",").filter(Boolean); keepOpen((cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]).join(",")); };
-  const [info, setInfo] = useState<{ /** The database runs this build's version. */ cur: boolean; cfx: boolean; imp: boolean; pages: boolean; del: boolean; mail: boolean; /** The database has a Resend key and sender (sign-in codes can be sent). */ resend: boolean; main: string | null; accounts: Acc[]; signed: boolean; gh: boolean; workers: string[] | null } | null>(null);
+  const [info, setInfo] = useState<{ /** The database runs this build's version. */ cur: boolean; cfx: boolean; imp: boolean; pages: boolean; del: boolean; mail: boolean; /** The database has a Resend key and sender (sign-in codes can be sent). */ resend: boolean; /** It sends with the Studio's Project defaults email. */ mailPd: boolean; main: string | null; accounts: Acc[]; signed: boolean; gh: boolean; workers: string[] | null } | null>(null);
   const [mainName, setMainName] = useState("");
   /** Databases that sites keep on their own Cloudflare accounts (not the Studio's database): each is updated by itself. */
   /** Site databases waiting their turn after the Studio's database update. */
@@ -48,7 +48,7 @@ export function SitesHostingCard({ session, studio, index, onIndex }: { session:
     setSiteDbs(await Promise.all([...by].map(async ([api, e]) => ({ api, account: e.account, sites: e.sites, cur: api === justUpdated || ((await cfDeployInfo(api)).v || 0) >= CFDB_VERSION }))));
   };
   const [busy, setBusy] = useState(""), [err, setErr] = useState("");
-  const [mailKey, setMailKey] = useState(""), [mailFrom, setMailFrom] = useState("");
+  const [mailKey, setMailKey] = useState(""), [mailFrom, setMailFrom] = useState(""), [mailPd, setMailPd] = useState<boolean | null>(null);
   useEffect(() => { cfAccountVault.load(session.token).then((v) => { if (v?.mailFrom) setMailFrom((x) => x || v.mailFrom!); }).catch(() => {}); }, [session.token]);
   const [tear, setTear] = useState<ProjectMeta | null>(null);
   const [addTok, setAddTok] = useState(""), [replaceFor, setReplaceFor] = useState<string | null>(null);
@@ -66,7 +66,7 @@ export function SitesHostingCard({ session, studio, index, onIndex }: { session:
     setDb({ api, studio: sid });
     const d = await cfDeployInfo(api), signed = !!(await cfSignedIn(api));
     const l = signed && d.cfx ? await cfxList(api, sid).catch(() => null) : null;
-    setInfo({ cur: (d.v || 0) >= CFDB_VERSION, cfx: !!d.cfx, imp: !!d.bridge, pages: !!d.studioPages, del: !!d.del, mail: !!d.enqMail, resend: !!d.mail, main: l?.main ?? (d.deploy ? d.account || null : null), accounts: l?.accounts || [], signed, gh: !!d.gh, workers: l?.workers || null });
+    setInfo({ cur: (d.v || 0) >= CFDB_VERSION, cfx: !!d.cfx, imp: !!d.bridge, pages: !!d.studioPages, del: !!d.del, mail: !!d.enqMail, resend: !!d.mail, mailPd: !!d.mailPd, main: l?.main ?? (d.deploy ? d.account || null : null), accounts: l?.accounts || [], signed, gh: !!d.gh, workers: l?.workers || null });
     if (v?.account && v.account === (l?.main ?? d.account)) {
       // The main account's name, from this device's token (only shown here).
       try { const acc = await new Cloudflare(await getHelper(session.token, null), v.token).accounts(); setMainName(acc.find((a) => a.id === v.account)?.name || ""); } catch { /* name stays generic */ }
@@ -202,18 +202,18 @@ export function SitesHostingCard({ session, studio, index, onIndex }: { session:
   /** Changes the Resend key and/or sender the Studio's database sends sign-in codes with. A blank key keeps the one it has. */
   const saveMail = () => run("mail", async () => {
     if (!db) return;
-    const from = mailFrom.trim(), key = mailKey.trim();
-    if (!/<[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+>$|^[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+$/.test(from)) throw new Error("The sender should look like Name <codes@your-domain.com>, or just codes@your-domain.com.");
-    if (key && !/^re_\S{8,}$/.test(key)) throw new Error("A Resend API key starts with re_. Copy it again from resend.com/api-keys.");
+    const from = mailFrom.trim(), key = mailKey.trim(), pd = mailPd ?? !!info?.mailPd;
+    if (!pd && !/<[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+>$|^[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+$/.test(from)) throw new Error("The sender should look like Name <codes@your-domain.com>, or just codes@your-domain.com.");
+    if (!pd && key && !/^re_\S{8,}$/.test(key)) throw new Error("A Resend API key starts with re_. Copy it again from resend.com/api-keys.");
     const say = (x: string) => setBusy("mail:" + x);
     const { relay, cf, account, token } = await cfAcc.client(say);
     const sub = await cf.subdomainOf(account.id);
     if (!sub || `picaffectz-db.${sub}.workers.dev` !== dbHost) throw new Error(`This token is for ${account.name}, but your Studio's database (${dbHost}) is on another Cloudflare account. Connect that account's token here.`);
     const v = await cfAccountVault.load(session.token);
     const deploy = (await cfDeployInfo(db.api)).deploy;
-    const setup = await setupCfDb(relay, token, { account, resendKey: key, mailFrom: from, name: "Picaffectz Studio", existing: v?.setup && v.setup.api === db.api ? v.setup : null, requireMail: true, ...(deploy ? { deployToken: token } : {}) }, say);
+    const setup = await setupCfDb(relay, token, { account, resendKey: pd ? "" : key, mailFrom: from, name: "Picaffectz Studio", existing: v?.setup && v.setup.api === db.api ? v.setup : null, requireMail: !pd, mailPd: pd, ...(deploy ? { deployToken: token } : {}) }, say);
     await cfAccountVault.save({ ...(v || {}), token, account: account.id, setup, mailFrom: from, ...(key ? { resendKey: key } : {}) }, session.token);
-    setMailKey(""); toast("Sign-in emails will now be sent from " + from + "."); await load();
+    setMailKey(""); setMailPd(null); toast(pd ? "Sign-in emails now go out through Settings → Project defaults → Email (Resend)." : "Sign-in emails will now be sent from " + from + "."); await load();
   });
   if (db === undefined) return null;
   return (
@@ -241,14 +241,16 @@ export function SitesHostingCard({ session, studio, index, onIndex }: { session:
             host={{ kind: "cloudflare", siteId: index.hosted.siteId, siteName: index.hosted.siteName, url: index.hosted.url, account: index.hosted.account, domain: index.hosted.domain, subdomain: index.hosted.subdomain, domainSetup: index.hosted.domainSetup } as HostCfg}
             onHost={async (h) => { onIndex(await studio.updateIndex((i) => { if (i.hosted) { i.hosted = { ...i.hosted, domain: h.domain, subdomain: h.subdomain, domainSetup: h.domainSetup }; } }, h.domain ? `Studio address: ${h.domain}` : "Studio address removed")); }} /></div>}
           <details className="group rounded-lg border border-ink-700 p-3 text-[13px]" aria-label="Sign-in emails (Resend)" open={!info.resend}>
-            <summary className="flex cursor-pointer select-none flex-wrap items-baseline gap-x-2"><b className="text-sm">Sign-in emails (Resend)</b>{info.resend ? <span className="chip border-emerald-400/50 text-emerald-200">Connected{mailFrom.trim() ? " · " + mailFrom.trim() : ""}</span> : <span className="chip border-amber-400/50 text-amber-200">Not set up</span>}<span className="text-ink-400">How this Studio emails its 6-digit sign-in codes. Each site's own email settings are separate.</span></summary>
+            <summary className="flex cursor-pointer select-none flex-wrap items-baseline gap-x-2"><b className="text-sm">Sign-in emails (Resend)</b>{info.resend ? <span className="chip border-emerald-400/50 text-emerald-200">Connected{info.mailPd ? " · Project defaults" : mailFrom.trim() ? " · " + mailFrom.trim() : ""}</span> : <span className="chip border-amber-400/50 text-amber-200">Not set up</span>}<span className="text-ink-400">How this Studio emails its 6-digit sign-in codes. Each site's own email settings are separate.</span></summary>
             <div className="mt-2 flex flex-col gap-2">
+            <Toggle id="sh-mail-pd" checked={mailPd ?? info.mailPd} onChange={setMailPd} label="Use the Studio's Project defaults for email (Resend)" />
+            {(mailPd ?? info.mailPd) ? <p className="text-ink-400">Sign-in codes and the Studio's emails go out through the Resend key and sender set in Settings → Project defaults → Email (Resend). Until that's filled in, no codes are emailed.</p> : <>
             <label className="flex flex-col gap-1"><span className="text-ink-300">Resend API key</span>
               <input className="input font-mono text-xs" type="password" autoComplete="off" aria-label="Resend API key for the Studio's codes" placeholder="Leave empty to keep the current key (re_…)" value={mailKey} onChange={(e) => setMailKey(e.target.value)} /></label>
             <label className="flex flex-col gap-1"><span className="text-ink-300">Codes come from</span>
               <input className="input text-xs" aria-label="Sender for the Studio's codes" placeholder="Picaffectz Studio <codes@your-domain.com>" value={mailFrom} onChange={(e) => setMailFrom(e.target.value)} /></label>
-            <p className="text-ink-400">The sender's domain must be verified in <a className="underline" href="https://resend.com/domains" target="_blank" rel="noopener noreferrer">Resend → Domains</a>. Until then, <span className="font-mono">onboarding@resend.dev</span> works but only delivers to your own Resend email. <a className="underline" href={RESEND_KEYS_PAGE} target="_blank" rel="noopener noreferrer">Create a key ↗</a></p>
-            <button type="button" className="btn btn-pri btn-sm self-start" disabled={!!busy || !mailFrom.trim()} onClick={saveMail}>{busy.startsWith("mail") ? (busy.split(":").slice(1).join(":") || "Saving") + "…" : "Save sign-in email settings"}</button>
+            <p className="text-ink-400">The sender's domain must be verified in <a className="underline" href="https://resend.com/domains" target="_blank" rel="noopener noreferrer">Resend → Domains</a>. Until then, <span className="font-mono">onboarding@resend.dev</span> works but only delivers to your own Resend email. <a className="underline" href={RESEND_KEYS_PAGE} target="_blank" rel="noopener noreferrer">Create a key ↗</a></p></>}
+            <button type="button" className="btn btn-pri btn-sm self-start" disabled={!!busy || (!(mailPd ?? info.mailPd) && !mailFrom.trim())} onClick={saveMail}>{busy.startsWith("mail") ? (busy.split(":").slice(1).join(":") || "Saving") + "…" : "Save sign-in email settings"}</button>
             </div>
           </details>
           <div className="flex flex-col gap-2 rounded-lg border border-ink-700 p-3 text-[13px]" aria-label="Cloudflare accounts on the database">

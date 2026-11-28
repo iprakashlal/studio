@@ -245,7 +245,7 @@ export const membersSql = (scope: string, list: { email: string; role: "owner" |
   list.map((m) => `insert into members (scope, email, role) values (${q(scope)}, lower(${q(m.email.trim())}), ${q(m.role)}) on conflict (scope, email) do update set role = excluded.role;`).join("\n");
 
 /** Finds or creates the database, its tables and the Worker, and checks the Worker answers. Safe to run again. */
-export async function setupCfDb(relay: Relay, token: string, o: { account: CfAccount; resendKey: string; mailFrom: string; name: string; existing?: CfDbSetup | null; deployToken?: string; requireMail?: boolean }, step: (s: string) => void): Promise<CfDbSetup> {
+export async function setupCfDb(relay: Relay, token: string, o: { account: CfAccount; resendKey: string; mailFrom: string; name: string; existing?: CfDbSetup | null; deployToken?: string; requireMail?: boolean; /** Send with the Studio's Project defaults email instead of a key of its own. Unset: as the database has it now. */ mailPd?: boolean }, step: (s: string) => void): Promise<CfDbSetup> {
   const cf = new Cloudflare(relay, token), acc = o.account.id;
   // A Cloudflare sign-in's token runs out within hours: it is never kept on the Worker as its publishing token.
   const dep = o.deployToken && !cfShortTokens.has(o.deployToken) && !isCfDbToken(o.deployToken) ? o.deployToken : "";
@@ -258,10 +258,13 @@ export async function setupCfDb(relay: Relay, token: string, o: { account: CfAcc
   step("Getting the database's code");
   const r = await fetch(`templates/cfdb/worker.js?v=${STUDIO_BUILD.id}`, { cache: "no-store" });
   if (!r.ok) throw new Error("Couldn't load the database Worker from the Studio.");
+  // Which Resend the database uses is kept across updates unless this setup says otherwise.
+  let mailPd = o.mailPd;
+  if (mailPd === undefined && o.existing?.api) try { mailPd = !!(await (await fetch(o.existing.api + "/?t=" + Date.now(), { cache: "no-store" })).json())?.mailPd; } catch { mailPd = false; }
   step("Uploading the Worker");
   const secret = [...crypto.getRandomValues(new Uint8Array(32))].map((b) => b.toString(16).padStart(2, "0")).join("");
   await cf.upload(acc, CFDB_WORKER, await r.text(), {
-    vars: { MAIL_FROM: o.mailFrom, NAME: o.name, ...(dep ? { CF_ACCOUNT: acc } : {}) },
+    vars: { MAIL_FROM: o.mailFrom, NAME: o.name, MAIL_PD: mailPd ? "1" : "0", ...(dep ? { CF_ACCOUNT: acc } : {}) },
     secrets: { ...(keep ? {} : { SECRET: secret }), ...(o.resendKey ? { RESEND_API_KEY: o.resendKey } : {}), ...(dep ? { CF_TOKEN: dep } : {}) },
     d1: [{ name: "DB", id: db.uuid }], keep, ai: true,
   });
@@ -279,7 +282,7 @@ export async function setupCfDb(relay: Relay, token: string, o: { account: CfAcc
     await new Promise((res) => setTimeout(res, 2000));
   }
   if (last?.service !== "site-studio-db") throw new Error("The database Worker was uploaded but doesn't answer yet. Wait a minute and try again.");
-  if (!last.mail && o.requireMail !== false) throw new Error("The database is up, but email isn't set: add your Resend API key and sender, then run the setup again.");
+  if (!last.mail && o.requireMail !== false && !mailPd) throw new Error("The database is up, but email isn't set: add your Resend API key and sender, then run the setup again.");
   return { account: acc, api, databaseId: db.uuid, v: CFDB_VERSION };
 }
 /** Adds people to a Studio or site in the database (owner/partner/member). */
@@ -294,8 +297,8 @@ export const resendTestOnly = (msg: string): string | null => /own email address
 
 // ---------------------------------------------------------------- publishing from any device
 /** Whether this database keeps a Cloudflare token for publishing (and for which account). */
-export async function cfDeployInfo(api: string): Promise<{ /** The database build's version number. */ v?: number; cfx?: boolean; cfxImport?: boolean; bridge?: boolean; studioPages?: boolean; del?: boolean; enqMail?: boolean; /** The database can send email (a Resend key and sender are set). */ mail?: boolean; deploy: boolean; account?: string; gh?: boolean; ai?: boolean; /** Passes on the Studio owners' Cloudflare calls with its kept tokens (connect once, every device). */ cfa?: boolean; reviews?: boolean; pamphlet?: boolean; accounts?: boolean; more?: number }> {
-  try { const j = await (await fetch(clean(api) + "/", { cache: "no-store" })).json(); return { v: +j?.v || 0, deploy: !!j?.deploy, account: j?.account, cfa: !!j?.cfa, gh: !!j?.gh, ai: !!j?.ai, reviews: !!j?.reviews, cfx: !!j?.cfx, cfxImport: (+j?.cfx || 0) >= 2, bridge: (+j?.cfx || 0) >= 3, studioPages: !!j?.studioPages, del: !!j?.del, mail: !!j?.mail, enqMail: (+j?.enqMail || 0) >= 3, pamphlet: (+j?.pamphlet || 0) >= 2, accounts: (+j?.accounts || 0) >= 2, more: +j?.more || 0 }; } catch { return { deploy: false }; }
+export async function cfDeployInfo(api: string): Promise<{ /** The database build's version number. */ v?: number; cfx?: boolean; cfxImport?: boolean; bridge?: boolean; studioPages?: boolean; del?: boolean; enqMail?: boolean; /** The database can send email (a Resend key and sender are set). */ mail?: boolean; /** It sends with the Studio's Project defaults email. */ mailPd?: boolean; deploy: boolean; account?: string; gh?: boolean; ai?: boolean; /** Passes on the Studio owners' Cloudflare calls with its kept tokens (connect once, every device). */ cfa?: boolean; reviews?: boolean; pamphlet?: boolean; accounts?: boolean; more?: number }> {
+  try { const j = await (await fetch(clean(api) + "/", { cache: "no-store" })).json(); return { v: +j?.v || 0, deploy: !!j?.deploy, account: j?.account, cfa: !!j?.cfa, gh: !!j?.gh, ai: !!j?.ai, reviews: !!j?.reviews, cfx: !!j?.cfx, cfxImport: (+j?.cfx || 0) >= 2, bridge: (+j?.cfx || 0) >= 3, studioPages: !!j?.studioPages, del: !!j?.del, mail: !!j?.mail, mailPd: !!j?.mailPd, enqMail: (+j?.enqMail || 0) >= 3, pamphlet: (+j?.pamphlet || 0) >= 2, accounts: (+j?.accounts || 0) >= 2, more: +j?.more || 0 }; } catch { return { deploy: false }; }
 }
 /** Where this device can do the Studio's Cloudflare work with no token or helper of its own: the Studio's database,
  *  when the Studio signs in there by email, this device is signed in, and the database keeps a token and passes calls on. */

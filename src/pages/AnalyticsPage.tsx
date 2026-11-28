@@ -34,19 +34,33 @@ function sourceOf(p: ProjectMeta, studioDb: { api: string } | null): { src: Src 
   return { src: null, why: "Not published yet." };
 }
 
+/* The last numbers this device saw, per period: shown at once when the page opens (or the period changes), while the fresh
+   ones are read quietly behind them. Kept in this browser only. */
+type Snap = { at: number; rows: Record<string, { has: boolean; stats?: SiteStats | null; err?: string; why?: string }> };
+const SNAP = (d: number) => "studio-analytics:" + d;
+const readSnap = (d: number): Snap | null => { try { const j = JSON.parse(localStorage.getItem(SNAP(d)) || "null"); return j && j.rows ? j : null; } catch { return null; } };
+const writeSnap = (d: number, l: Entry[]) => { try { const rows: Snap["rows"] = {}; for (const e of l) if (e.stats !== undefined || !e.src) rows[e.p.id] = { has: !!e.src, stats: e.stats, err: e.err, why: e.why }; localStorage.setItem(SNAP(d), JSON.stringify({ at: Date.now(), rows })); } catch { /* full or private: the next visit reads afresh */ } };
+const fromSnap = (projects: ProjectMeta[], sn: Snap): Entry[] => projects.map((p) => { const r = sn.rows[p.id]; return r ? { p, src: r.has ? { cf: { api: "", site: p.id } } : null, stats: r.stats, err: r.err, why: r.why } : { p, src: { cf: { api: "", site: p.id } } }; });
+const ago = (t: number) => { const m = Math.round((Date.now() - t) / 60000); return m < 1 ? "just now" : m < 60 ? m + " min ago" : m < 1440 ? Math.round(m / 60) + " h ago" : Math.round(m / 1440) + " d ago"; };
+
 export function AnalyticsPage({ index, demo }: { index: StudioIndex; demo: boolean }) {
   const [days, setDays] = useState(30), [pick, setPick] = useState<string>(() => { try { return sessionStorage.getItem("studio-analytics-site") || ""; } catch { return ""; } });
-  const [list, setList] = useState<Entry[] | null>(null);
+  const [list, setList] = useState<Entry[] | null>(() => { const sn = demo ? null : readSnap(30); return sn ? fromSnap(index.projects, sn) : null; });
+  const [at, setAt] = useState<number | null>(() => (demo ? null : readSnap(30)?.at ?? null)), [busy, setBusy] = useState(false), [again, setAgain] = useState(0);
   useEffect(() => { try { sessionStorage.setItem("studio-analytics-site", pick); } catch { /* private mode */ } }, [pick]);
   const projects = useMemo(() => index.projects.slice(), [index.projects]);
   useEffect(() => {
     let live = true;
-    setList((old) => old && old.map((e) => ({ ...e, stats: e.src ? undefined : e.stats })));
+    // What this device saw last for this period, straight away; the fresh numbers replace it as they come.
+    const sn = demo ? null : readSnap(days), seen = new Map<string, SiteStats | null | undefined>();
+    if (sn) { const l = fromSnap(projects, sn); l.forEach((e) => seen.set(e.p.id, e.stats)); setList(l); setAt(sn.at); }
+    else { setList((old) => old && old.map((e) => ({ ...e, stats: e.src ? undefined : e.stats }))); setAt(null); }
+    setBusy(true);
     (async () => {
-      if (demo) { if (live) setList(projects.map((p, i) => ({ p, src: { cf: { api: "", site: p.id } }, stats: sample(days, i) }))); return; }
+      if (demo) { if (live) { setList(projects.map((p, i) => ({ p, src: { cf: { api: "", site: p.id } }, stats: sample(days, i) }))); setBusy(false); } return; }
       const hc = await loadHostConfig().catch(() => null);
       const studioDb = hc && hc.kind === "cloudflare" && cfSession.load(hc.api) ? { api: hc.api } : null;
-      const base: Entry[] = projects.map((p) => ({ p, ...sourceOf(p, studioDb) }));
+      const base: Entry[] = projects.map((p) => { const x = sourceOf(p, studioDb), old = seen.get(p.id); return { p, ...x, ...(x.src && old ? { stats: old } : {}) }; });
       if (live) setList(base);
       // Six at a time, so a Studio with a hundred sites doesn't send a hundred requests at once.
       let next = 0;
@@ -59,14 +73,28 @@ export function AnalyticsPage({ index, demo }: { index: StudioIndex; demo: boole
         }
       };
       await Promise.all(Array.from({ length: 6 }, async () => { while (live && next < base.length) { const i = next++; await one(base[i], i); } }));
+      if (live) { setList((l) => { if (l) writeSnap(days, l); return l; }); setAt(Date.now()); setBusy(false); }
     })();
     return () => { live = false; };
-  }, [days, projects, demo]);
+  }, [days, projects, demo, again]);
 
   const counted = (list || []).filter((e) => e.src && e.stats !== null), off = (list || []).filter((e) => !e.src || e.stats === null);
   const one = pick ? (list || []).find((e) => e.p.id === pick) : null;
   const total = useMemo(() => combine(counted.map((e) => e.stats).filter(Boolean) as SiteStats[], days), [list, days]);
   const loading = counted.some((e) => e.stats === undefined);
+  // Switching period from the overview is instant too: once this period is in, the other periods are read behind it, a few sites at a time.
+  useEffect(() => {
+    if (demo || busy || !list) return; let live = true;
+    const t = setTimeout(async () => {
+      for (const [d] of RANGES) {
+        if (!live || d === days) continue; const sn = readSnap(d); if (sn && Date.now() - sn.at < 10 * 60_000) continue;
+        const out: Entry[] = list.map((e) => ({ ...e, stats: e.src && e.stats !== null ? undefined : e.stats })); let next = 0;
+        await Promise.all(Array.from({ length: 3 }, async () => { while (live && next < out.length) { const i = next++, e = out[i]; if (!e.src || e.stats === null || !e.src.cf.api) continue; try { out[i] = { ...e, stats: await siteStats(e.src.cf, d, e.src.account) }; } catch { /* left for its own visit */ } } }));
+        if (live) writeSnap(d, out.filter((e) => e.stats !== undefined || !e.src));
+      }
+    }, 2500);
+    return () => { live = false; clearTimeout(t); };
+  }, [busy]);
 
   return (
     <main className="mx-auto flex max-w-[1400px] flex-col gap-6 px-4 py-8 sm:px-6">
@@ -75,6 +103,7 @@ export function AnalyticsPage({ index, demo }: { index: StudioIndex; demo: boole
           <h1 className="font-display text-4xl font-extrabold tracking-tight">Analytics</h1>
           <p className="mt-1 max-w-[80ch] text-sm text-ink-400">Visits to your live sites, counted by each site's own database. No cookies and nothing that names a visitor: a page view is sent only when the visitor allows analytics under the site's cookie consent.</p>
         </div>
+        <span className="flex items-center gap-2 text-[12.5px] text-ink-400" role="status">{busy ? <><i className="h-1.5 w-1.5 animate-pulse rounded-full bg-brand-400" />{at ? `Updating · shown from ${ago(at)}` : "Reading the numbers…"}</> : at ? <>Updated {ago(at)}<button type="button" className="icon-btn h-7 w-7" aria-label="Read the numbers again" title="Read the numbers again" onClick={() => setAgain((n) => n + 1)}>↻</button></> : null}</span>
         <div role="radiogroup" aria-label="Period" className="flex rounded-full border border-ink-700 p-1">
           {RANGES.map(([d, l]) => <button key={d} type="button" role="radio" aria-checked={days === d} onClick={() => setDays(d)} className={`rounded-full px-3.5 py-1.5 text-[13px] font-semibold transition ${days === d ? "bg-brand-500 text-white" : "text-ink-300 hover:text-ink-100"}`}>{l}</button>)}
         </div>
@@ -89,7 +118,7 @@ export function AnalyticsPage({ index, demo }: { index: StudioIndex; demo: boole
         <Panel title="Sites" note="Search, sort by any column, and press a site for its pages, where visitors come from, their devices and countries.">
           {!counted.length ? <p className="text-[13px] text-ink-400">No site is counted yet. Publish a site with its database on Cloudflare (or a GitHub Pages site with email sign-in), then Push updates so its pages report visits.</p> :
             <SitesTable list={counted} onOpen={setPick} />}
-          {loading && <p className="text-[12.5px] text-ink-400" role="status">Reading the sites' numbers…</p>}
+          {loading && !at && <p className="text-[12.5px] text-ink-400" role="status">Reading the sites' numbers…</p>}
         </Panel>
       </>}
 

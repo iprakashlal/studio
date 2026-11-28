@@ -284,6 +284,8 @@ function addToCart(id, opt, qty) {
   const ex = cart.find((l) => l.id === id && l.opt === opt);
   if (ex) ex.qty = Math.min(max, ex.qty + qty); else cart.push({ id, opt, qty: Math.min(max, qty) });
   saveCart();
+  // Built-in analytics (assets/fx.js) counts an add to cart per product.
+  try { const p = prodBy(id); dispatchEvent(new CustomEvent("site:cart", { detail: { key: p ? slugOf(p) : id, name: p ? p.name : "", qty } })); } catch (e) { /* old browsers */ }
 }
 /* Delivery areas (content.shipping): the same rules as the shop backend (functions/shop/index.ts). */
 function pinsMatch(list, pin) {

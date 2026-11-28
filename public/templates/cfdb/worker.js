@@ -52,16 +52,27 @@ var CFDB_TABLES = [
   // address is kept: vh is a hash of the visitor's address and browser with the day and this database's secret, so it counts
   // a visitor once a day and can't be followed from one day to the next. Rows older than about 13 months are removed.
   "create table if not exists hits (site text not null, day text not null, ts integer not null, path text not null default '/', ref text not null default '', src text not null default '', dev text not null default '', cc text not null default '', vh text not null default '')",
-  "create index if not exists hits_site_day on hits (site, day)"
+  "create index if not exists hits_site_day on hits (site, day)",
+  // What visitors do on a page (built-in analytics): products seen in lists (imp) and added to the cart (cart), taps on call,
+  // WhatsApp and email links, forms sent, links out (out). key: the product, number or site; pv: the page view it happened on.
+  "create table if not exists events (site text not null, day text not null, ts integer not null, kind text not null, key text not null default '', vh text not null default '', pv text not null default '')",
+  "create index if not exists events_site_day on events (site, day, kind)"
 ];
 var CFDB_SCHEMA = CFDB_TABLES.join(";\n") + ";";
 var CFDB_UPGRADES = [
+  // hits: the page view's own id (pv), how long it was looked at (dur, seconds) and how far down it was read (depth, %).
+  { name: "hits.engaged", probe: "select pv, dur, depth from hits limit 1", steps: [
+    "alter table hits add column pv text not null default ''",
+    "alter table hits add column dur integer not null default 0",
+    "alter table hits add column depth integer not null default 0",
+    "create index if not exists hits_pv on hits (site, pv)"
+  ] },
   { name: "enquiries.ref", probe: "select ref from enquiries limit 1", steps: [
     "alter table enquiries add column ref text generated always as (case when json_valid(data) then coalesce(nullif(json_extract(data, '$.order_no'), ''), nullif(json_extract(data, '$.reg_no'), ''), '') else '' end) virtual",
     "create index if not exists enquiries_ref on enquiries (site, ref)"
   ] }
 ];
-var CFDB_VERSION = 117;
+var CFDB_VERSION = 118;
 var CFDB_WORKER_NAME = "picaffectz-db";
 
 // src/lib/diylook.ts
@@ -1771,26 +1782,30 @@ async function siteMail(env, site) {
 var dayOf = (t) => new Date(t).toISOString().slice(0, 10);
 var BOT = /bot|crawl|spider|slurp|preview|headless|lighthouse|pingdom|monitor|curl|wget|python|httpclient|facebookexternalhit|whatsapp/i;
 var aclip = (v, n) => String(v ?? "").replace(/[\u0000-\u001f]/g, "").trim().slice(0, n);
+async function siteKnown(env, site) {
+  return !!(await env.DB.prepare("select 1 x from files where scope = ? and path = 'content.json'").bind("site:" + site).first() || await env.DB.prepare("select 1 x from site_repos where site = ?").bind(site).first());
+}
+var visitorHash = async (env, req, site, day2) => b64u(await hmac(env.SECRET, "v:" + site + ":" + day2 + ":" + (req.headers.get("CF-Connecting-IP") || req.headers.get("X-Forwarded-For") || "") + ":" + (req.headers.get("User-Agent") || ""))).slice(0, 16);
+var none = () => new Response(null, { status: 204, headers: cors });
+var pvOk = (v) => /^[a-z0-9]{4,16}$/.test(String(v || "")) ? String(v) : "";
 async function recordHit(env, req) {
   const ua = req.headers.get("User-Agent") || "";
-  if (BOT.test(ua)) return new Response(null, { status: 204, headers: cors });
+  if (BOT.test(ua)) return none();
   let b = {};
   try {
     b = JSON.parse(await req.text());
   } catch {
-    return new Response(null, { status: 204, headers: cors });
+    return none();
   }
   const site = String(b.site || "");
-  if (!/^[a-z0-9][a-z0-9-]{0,59}$/.test(site)) return new Response(null, { status: 204, headers: cors });
+  if (!/^[a-z0-9][a-z0-9-]{0,59}$/.test(site)) return none();
   await ensure(env);
-  const known = await env.DB.prepare("select 1 x from files where scope = ? and path = 'content.json'").bind("site:" + site).first() || await env.DB.prepare("select 1 x from site_repos where site = ?").bind(site).first();
-  if (!known) return new Response(null, { status: 204, headers: cors });
-  const now = Date.now(), day2 = dayOf(now), ip = req.headers.get("CF-Connecting-IP") || req.headers.get("X-Forwarded-For") || "";
-  const vh = b64u(await hmac(env.SECRET, "v:" + site + ":" + day2 + ":" + ip + ":" + ua)).slice(0, 16);
+  if (!await siteKnown(env, site)) return none();
+  const now = Date.now(), day2 = dayOf(now), vh = await visitorHash(env, req, site, day2);
   let path = aclip(b.path, 200) || "/";
   if (!path.startsWith("/")) path = "/" + path;
   const recent = await env.DB.prepare("select 1 x from hits where site = ? and day = ? and vh = ? and path = ? and ts > ? limit 1").bind(site, day2, vh, path, now - 6e4).first();
-  if (recent) return new Response(null, { status: 204, headers: cors });
+  if (recent) return none();
   let ref = "";
   try {
     const h = new URL(String(b.ref || "")).hostname.replace(/^www\./, "");
@@ -1799,33 +1814,164 @@ async function recordHit(env, req) {
   }
   const dev = ["mobile", "tablet", "desktop"].includes(b.dev) ? b.dev : /Mobi|Android|iPhone/i.test(ua) ? "mobile" : "desktop";
   const cc = aclip(req.cf?.country || req.headers.get("CF-IPCountry") || "", 2).toUpperCase().replace(/[^A-Z]/g, "");
-  await env.DB.prepare("insert into hits (site, day, ts, path, ref, src, dev, cc, vh) values (?, ?, ?, ?, ?, ?, ?, ?, ?)").bind(site, day2, now, path, ref, aclip(b.src, 60).toLowerCase(), dev, cc, vh).run();
-  if (Math.random() < 2e-3) await env.DB.prepare("delete from hits where day < ?").bind(dayOf(now - 400 * 864e5)).run().catch(() => {
-  });
-  return new Response(null, { status: 204, headers: cors });
+  const src = aclip(b.src, 60).toLowerCase(), pv = pvOk(b.pv);
+  if (await upgradedTo(env, "hits.engaged")) await env.DB.prepare("insert into hits (site, day, ts, path, ref, src, dev, cc, vh, pv) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").bind(site, day2, now, path, ref, src, dev, cc, vh, pv).run();
+  else await env.DB.prepare("insert into hits (site, day, ts, path, ref, src, dev, cc, vh) values (?, ?, ?, ?, ?, ?, ?, ?, ?)").bind(site, day2, now, path, ref, src, dev, cc, vh).run();
+  if (Math.random() < 2e-3) {
+    const old = dayOf(now - 400 * 864e5);
+    await env.DB.prepare("delete from hits where day < ?").bind(old).run().catch(() => {
+    });
+    await env.DB.prepare("delete from events where day < ?").bind(old).run().catch(() => {
+    });
+  }
+  return none();
 }
-async function siteStats(q, site, days) {
-  days = Math.max(1, Math.min(365, Math.round(days) || 30));
-  const now = Date.now(), from = dayOf(now - (days - 1) * 864e5), prev = dayOf(now - (2 * days - 1) * 864e5);
-  const W = "from hits where site = ? and day >= ?", top2 = async (col, n, extra = "") => (await q(`select ${col} k, count(*) v, count(distinct day || vh) u ${W} ${extra} group by ${col} order by v desc limit ${n}`, [site, from])).map((r) => ({ k: r.k, v: +r.v, u: +r.u }));
-  const [t] = await q(`select count(*) v, count(distinct day || vh) u ${W}`, [site, from]);
-  const [p] = await q("select count(*) v, count(distinct day || vh) u from hits where site = ? and day >= ? and day < ?", [site, prev, from]);
+async function recordEnd(env, req) {
+  let b = {};
+  try {
+    b = JSON.parse(await req.text());
+  } catch {
+    return none();
+  }
+  const site = String(b.site || ""), pv = pvOk(b.pv);
+  if (!/^[a-z0-9][a-z0-9-]{0,59}$/.test(site) || !pv) return none();
+  const sec = Math.max(0, Math.min(3600, Math.round(+b.sec || 0))), depth = Math.max(0, Math.min(100, Math.round(+b.depth || 0)));
+  await ensure(env);
+  if (!await upgradedTo(env, "hits.engaged")) return none();
+  await env.DB.prepare("update hits set dur = max(dur, ?), depth = max(depth, ?) where site = ? and pv = ? and ts > ?").bind(sec, depth, site, pv, Date.now() - 2 * 864e5).run();
+  return none();
+}
+var EV_KINDS = ["imp", "cart", "call", "whatsapp", "email", "form", "out"];
+async function recordEvents(env, req) {
+  if (BOT.test(req.headers.get("User-Agent") || "")) return none();
+  let b = {};
+  try {
+    b = JSON.parse(await req.text());
+  } catch {
+    return none();
+  }
+  const site = String(b.site || ""), pv = pvOk(b.pv), list = Array.isArray(b.ev) ? b.ev.slice(0, 30) : [];
+  if (!/^[a-z0-9][a-z0-9-]{0,59}$/.test(site) || !pv || !list.length) return none();
+  await ensure(env);
+  if (!await siteKnown(env, site)) return none();
+  const now = Date.now(), day2 = dayOf(now), vh = await visitorHash(env, req, site, day2);
+  const rows = list.map((e) => ({ k: String(e?.k || ""), key: aclip(e?.key, 120) })).filter((e) => EV_KINDS.includes(e.k));
+  if (rows.length) await env.DB.batch(rows.map((e) => env.DB.prepare("insert into events (site, day, ts, kind, key, vh, pv) values (?, ?, ?, ?, ?, ?, ?)").bind(site, day2, now, e.k, e.key, vh, pv)));
+  return none();
+}
+var moneyOf = (v) => {
+  const n = parseFloat(String(v ?? "").replace(/[^\d.]/g, ""));
+  return Number.isFinite(n) ? n : 0;
+};
+async function siteStats(q, site, o) {
+  const now = Date.now(), D = /^\d{4}-\d{2}-\d{2}$/;
+  let from, to;
+  if (o.from && o.to && D.test(o.from) && D.test(o.to) && o.from <= o.to) {
+    from = o.from;
+    to = o.to;
+  } else {
+    const days = Math.max(1, Math.min(366, Math.round(o.days || 30)));
+    to = dayOf(now);
+    from = dayOf(now - (days - 1) * 864e5);
+  }
+  const span = Math.round((Date.parse(to) - Date.parse(from)) / 864e5) + 1, prevTo = dayOf(Date.parse(from) - 864e5), prevFrom = dayOf(Date.parse(from) - span * 864e5);
+  const n = Math.max(5, Math.min(100, Math.round(o.top || 15))), tz = Math.max(-720, Math.min(840, Math.round(o.tz || 0)));
+  const W = "from hits where site = ? and day >= ? and day <= ?", A = [site, from, to];
+  const safe = async (sql, args) => {
+    try {
+      return await q(sql, args);
+    } catch {
+      return [];
+    }
+  };
+  const top2 = async (col, extra = "") => (await q(`select ${col} k, count(*) v, count(distinct day || vh) u ${W} ${extra} group by ${col} order by v desc limit ${n}`, A)).map((r) => ({ k: String(r.k ?? ""), v: +r.v, u: +r.u }));
+  const sums = async (f, t2) => (await safe(`select count(*) v, count(distinct day || vh) u, coalesce(sum(dur), 0) d, sum(case when dur > 0 then 1 else 0 end) dn, coalesce(avg(case when dur > 0 then depth end), 0) dp from hits where site = ? and day >= ? and day <= ?`, [site, f, t2]))[0] || (await q(`select count(*) v, count(distinct day || vh) u, 0 d, 0 dn, 0 dp from hits where site = ? and day >= ? and day <= ?`, [site, f, t2]))[0];
+  const bounce = async (f, t2) => +((await safe("select count(*) b from (select day, vh, count(*) c, max(dur) m from hits where site = ? and day >= ? and day <= ? group by day, vh) where c = 1 and m < 10", [site, f, t2]))[0]?.b || 0);
+  const t = await sums(from, to), p = await sums(prevFrom, prevTo);
   const [live] = await q("select count(distinct vh) n from hits where site = ? and ts > ?", [site, now - 5 * 6e4]);
-  const daily = (await q(`select day, count(*) v, count(distinct vh) u ${W} group by day order by day`, [site, from])).map((r) => ({ day: r.day, v: +r.v, u: +r.u }));
+  const daily = (await safe(`select day, count(*) v, count(distinct vh) u, coalesce(sum(dur), 0) d ${W} group by day order by day`, A)).map((r) => ({ day: String(r.day), v: +r.v, u: +r.u, d: +r.d }));
+  const pages = (await safe(`select path k, count(*) v, count(distinct day || vh) u, coalesce(avg(case when dur > 0 then dur end), 0) t, coalesce(avg(case when dur > 0 then depth end), 0) dp ${W} group by path order by v desc limit ${n}`, A)).map((r) => ({ k: String(r.k), v: +r.v, u: +r.u, t: Math.round(+r.t), dp: Math.round(+r.dp) }));
+  const edge = async (dir) => (await safe(`select path k, count(*) v from (select path, row_number() over (partition by day, vh order by ts ${dir}) rn ${W}) where rn = 1 group by path order by v desc limit ${n}`, A)).map((r) => ({ k: String(r.k), v: +r.v, u: +r.v }));
+  const hours = Array(24).fill(0), week = Array(7).fill(0);
+  for (const r of await safe(`select cast(strftime('%H', ts / 1000 + ? * 60, 'unixepoch') as integer) h, cast(strftime('%w', ts / 1000 + ? * 60, 'unixepoch') as integer) w, count(*) v ${W} group by h, w`, [tz, tz, ...A])) {
+    hours[+r.h] += +r.v;
+    week[+r.w] += +r.v;
+  }
+  const P = /* @__PURE__ */ new Map(), pr = (k) => {
+    let x = P.get(k);
+    if (!x) P.set(k, x = { k, imp: 0, v: 0, t: 0, cart: 0 });
+    return x;
+  };
+  for (const r of await safe("select key, kind, count(*) c from events where site = ? and day >= ? and day <= ? and kind in ('imp', 'cart') and key != '' group by key, kind", A)) {
+    const x = pr(String(r.key));
+    if (r.kind === "imp") x.imp = +r.c;
+    else x.cart = +r.c;
+  }
+  for (const r of await safe(`select substr(path, instr(path, '?p=') + 3) k, count(*) v, coalesce(avg(case when dur > 0 then dur end), 0) t ${W} and path like '%product.html?p=%' group by k`, A)) {
+    let k = String(r.k);
+    try {
+      k = decodeURIComponent(k);
+    } catch {
+    }
+    const x = pr(k);
+    x.v += +r.v;
+    x.t = Math.round(+r.t);
+  }
+  const products = [...P.values()].sort((a, b) => b.v - a.v || b.imp - a.imp || b.cart - a.cart).slice(0, n);
+  const actions = {};
+  for (const r of await safe("select kind, count(*) c from events where site = ? and day >= ? and day <= ? and kind != 'imp' group by kind", A)) actions[String(r.kind)] = +r.c;
+  const outs = (await safe(`select key k, count(*) v from events where site = ? and day >= ? and day <= ? and kind = 'out' group by key order by v desc limit ${n}`, A)).map((r) => ({ k: String(r.k), v: +r.v, u: +r.v }));
+  let orders = 0, revenue = 0, enquiries = 0, pOrders = 0, pRevenue = 0;
+  for (const r of await safe("select data, created_at from enquiries where site = ? and created_at >= ? and created_at < ? and status != 'cancelled' limit 20000", [site, prevFrom, dayOf(Date.parse(to) + 864e5)])) {
+    let d = {};
+    try {
+      d = JSON.parse(r.data);
+    } catch {
+    }
+    const cur = String(r.created_at) >= from;
+    if (d?.order_no) {
+      if (cur) {
+        orders++;
+        revenue += moneyOf(d.total);
+      } else {
+        pOrders++;
+        pRevenue += moneyOf(d.total);
+      }
+    } else if (cur) enquiries++;
+  }
   return {
-    days,
+    days: span,
     from,
+    to,
     views: +t?.v || 0,
     visitors: +t?.u || 0,
     prevViews: +p?.v || 0,
     prevVisitors: +p?.u || 0,
     live: +live?.n || 0,
+    time: +t?.d || 0,
+    timed: +t?.dn || 0,
+    prevTime: +p?.d || 0,
+    depth: Math.round(+t?.dp || 0),
+    bounces: await bounce(from, to),
+    prevBounces: await bounce(prevFrom, prevTo),
+    orders,
+    revenue: Math.round(revenue),
+    enquiries,
+    prevOrders: pOrders,
+    prevRevenue: Math.round(pRevenue),
     daily,
-    pages: await top2("path", 15),
-    refs: await top2("ref", 10, "and ref != ''"),
-    sources: await top2("src", 10, "and src != ''"),
-    devices: await top2("dev", 3),
-    countries: await top2("cc", 12, "and cc != ''")
+    hours,
+    week,
+    pages,
+    entries: await edge("asc"),
+    exits: await edge("desc"),
+    refs: await top2("ref", "and ref != ''"),
+    sources: await top2("src", "and src != ''"),
+    devices: await top2("dev"),
+    countries: await top2("cc", "and cc != ''"),
+    products,
+    actions,
+    outs
   };
 }
 var pdMail = { at: 0, v: null };
@@ -3707,7 +3853,7 @@ var db_worker_default = {
     const u = new URL(req.url), p = u.pathname.replace(/\/+$/, "") || "/";
     try {
       env = await withStudioMail(env);
-      if (p === "/") return json({ ok: true, service: "site-studio-db", v: V, mail: !!(env.RESEND_API_KEY && env.MAIL_FROM), ...env.MAIL_PD === "1" ? { mailPd: true } : {}, ...env.CF_TOKEN && env.CF_ACCOUNT ? { deploy: true, account: env.CF_ACCOUNT } : {}, ...env.GH_TOKEN ? { gh: true } : {}, ...env.AI ? { ai: true, pamphlet: 2 } : {}, reviews: true, analytics: 1, dq: 1, look: 1, outline: 1, pictures: 1, connect: 2, translate: 4, approvals: 1, accounts: 2, cfx: 4, cfa: 1, google: 1, studioPages: 1, del: 1, enqMail: 3, ...otherAccounts(env).length ? { more: otherAccounts(env).length } : {} });
+      if (p === "/") return json({ ok: true, service: "site-studio-db", v: V, mail: !!(env.RESEND_API_KEY && env.MAIL_FROM), ...env.MAIL_PD === "1" ? { mailPd: true } : {}, ...env.CF_TOKEN && env.CF_ACCOUNT ? { deploy: true, account: env.CF_ACCOUNT } : {}, ...env.GH_TOKEN ? { gh: true } : {}, ...env.AI ? { ai: true, pamphlet: 2 } : {}, reviews: true, analytics: 2, dq: 1, look: 1, outline: 1, pictures: 1, connect: 2, translate: 4, approvals: 1, accounts: 2, cfx: 4, cfa: 1, google: 1, studioPages: 1, del: 1, enqMail: 3, ...otherAccounts(env).length ? { more: otherAccounts(env).length } : {} });
       if (/^\/wall\/[a-z0-9][a-z0-9-]{0,59}$/.test(p) && req.method === "GET") {
         const src = u.searchParams.get("src") === "pinterest" ? "pinterest" : "instagram", pin = String(u.searchParams.get("pin") || "").slice(0, 200), n = Math.max(3, Math.min(24, +(u.searchParams.get("n") || 12) || 12)), handle = src === "instagram" ? igHandle(u.searchParams.get("h")) : "";
         const key = new Request(u.origin + p + "?src=" + src + "&pin=" + encodeURIComponent(pin) + "&n=" + n + "&h=" + handle.toLowerCase()), store = globalThis.caches?.default;
@@ -3933,6 +4079,8 @@ var db_worker_default = {
         return json({ email: e, scopes: rows });
       }
       if (p === "/a/hit" && req.method === "POST") return recordHit(env, req);
+      if (p === "/a/end" && req.method === "POST") return recordEnd(env, req);
+      if (p === "/a/ev" && req.method === "POST") return recordEvents(env, req);
       if (p.startsWith("/p/") && req.method === "GET") {
         const [, , site, ...rest] = p.split("/");
         const path2 = decodeURIComponent(rest.join("/"));
@@ -5206,7 +5354,7 @@ ${body}`)}${paras("Approve or hide it under Reviews in your site's admin page.",
               }
               return err(400, "Unknown operation.");
             }
-            if (op === "stats") return json({ db: dbId, stats: await siteStats(q, site, +b.days || 30) });
+            if (op === "stats") return json({ db: dbId, stats: await siteStats(q, site, { days: +b.days || 30, from: b.from, to: b.to, tz: +b.tz || 0, top: +b.top || 15 }) });
             if (op === "mem") {
               const sub = String(b.sub || "list");
               if (sub === "list") return json({ db: dbId, rows: await q("select email, role from members where scope = ? order by email", [S2]) });
@@ -5579,7 +5727,9 @@ ${body}`)}${paras("Approve or hide it under Reviews in your site's admin page.",
       }
       if (p === "/a/stats" && scope.startsWith("site:")) {
         await ensure(env);
-        return json(await siteStats(async (sql, args) => (await env.DB.prepare(sql).bind(...args).all()).results || [], scope.slice(5), +(u.searchParams.get("days") || 30)));
+        await upgradedTo(env, "hits.engaged");
+        const g = (k) => u.searchParams.get(k) || void 0;
+        return json(await siteStats(async (sql, args) => (await env.DB.prepare(sql).bind(...args).all()).results || [], scope.slice(5), { days: +(g("days") || 30), from: g("from"), to: g("to"), tz: +(g("tz") || 0), top: +(g("top") || 15) }));
       }
       if (p === "/e/list") {
         const site = scope.replace(/^site:/, "");

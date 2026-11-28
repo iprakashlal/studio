@@ -63,7 +63,7 @@ function ProjectMark({ studio, p, acc }: { studio: Studio; p: ProjectMeta; acc: 
     : <span aria-hidden className="grid h-11 w-11 flex-none place-items-center rounded-2xl font-display text-[15px] font-extrabold" style={{ background: `${acc}26`, color: acc }}>{initials}</span>;
 }
 /** A project that isn't published anywhere yet says what to do next. */
-function NextStep({ p, onPublish }: { p: ProjectMeta; onPublish: () => void }) {
+function NextStep({ p, onPublish }: { p: ProjectMeta; onPublish: (e?: React.MouseEvent) => void }) {
   if (p.host || p.publish) return null;
   return (
     <div className="relative z-10 flex items-center justify-between gap-2 rounded-xl border border-amber-400/30 bg-amber-400/5 px-3 py-2" aria-label="Next step">
@@ -168,7 +168,9 @@ export function Dashboard({ studio, index, onIndex, token, hid = () => false, ma
 
   const stats = dashStats(index.dash?.stats).map((d) => ({ n: d.count(index.projects), l: d.label }));
 
-  const [quick, setQuick] = useState<{ id: string; kind: "setup" | "overview"; tab?: "who" | "how" | "publish" } | null>(null);
+  const [quick, setQuick] = useState<{ id: string; kind: "setup" | "overview"; tab?: "who" | "publish"; from: HTMLElement | null } | null>(null);
+  /** The project card a button sits on: the window turns out of it. */
+  const cardOf = (e: React.MouseEvent) => (e.currentTarget as HTMLElement).closest("article") as HTMLElement | null;
   const run = async (key: string, fn: () => Promise<StudioIndex>, ok: string) => {
     setBusy(key);
     try { onIndex(await fn()); toast(ok); } catch (e) { toast(explain(e), "bad"); }
@@ -212,7 +214,7 @@ export function Dashboard({ studio, index, onIndex, token, hid = () => false, ma
                     </div>
                   </div>
                   {p.summary && <p className="-mt-1 line-clamp-2 text-[13px] text-ink-400">{p.summary}</p>}
-                  <NextStep p={p} onPublish={() => setQuick({ id: p.id, kind: "setup", tab: "publish" })} />
+                  <NextStep p={p} onPublish={(e) => setQuick({ id: p.id, kind: "setup", tab: "publish", from: e ? cardOf(e) : null })} />
                   {fb[p.id] && <Feedback s={fb[p.id]} id={p.id} />}
                   <div className="mt-auto flex flex-col gap-2.5">
                     <PayNote id={"p:" + p.id} pay={p.pay} onSave={async (pay) => onIndex(await studio.savePay(p.id, pay))} />
@@ -221,8 +223,8 @@ export function Dashboard({ studio, index, onIndex, token, hid = () => false, ma
                   <div className="relative z-10 border-t border-ink-700/70 pt-4">
 <div data-tour="card-actions" className="relative z-10 flex flex-wrap items-center gap-2 bg-inherit">
                     <a href={`#/p/${p.id}`} className="btn btn-pri btn-sm">Open</a>
-                    <button type="button" className="btn btn-sm" onClick={() => setQuick({ id: p.id, kind: "setup" })}>Quick Setup</button>
-                    <button type="button" className="btn btn-sm" onClick={() => setQuick({ id: p.id, kind: "overview" })}>Quick Overview</button>
+                    <button type="button" className="btn btn-sm" onClick={(e) => setQuick({ id: p.id, kind: "setup", from: cardOf(e) })}>Quick Setup</button>
+                    <button type="button" className="btn btn-sm" onClick={(e) => setQuick({ id: p.id, kind: "overview", from: cardOf(e) })}>Overview</button>
                     </div>
                     </div>
                 </div>
@@ -321,7 +323,7 @@ export function Dashboard({ studio, index, onIndex, token, hid = () => false, ma
 
       {creating && <NewProject templates={offered} studio={studio} index={index} onClose={() => setCreating(false)} onCreated={(i, id) => { onIndex(i); setCreating(false); location.hash = `#/p/${id}`; }} />}
       {managing && <Categories studio={studio} index={index} onClose={() => setManaging(false)} onIndex={onIndex} />}
-      {quick && (() => { const qp = index.projects.find((x) => x.id === quick.id); return qp ? (quick.kind === "setup" ? <QuickSetup project={qp} start={quick.tab} onClose={() => setQuick(null)} /> : <QuickOverview project={qp} onClose={() => setQuick(null)} />) : null; })()}
+      {quick && (() => { const qp = index.projects.find((x) => x.id === quick.id); return qp ? (quick.kind === "setup" ? <QuickSetup project={qp} start={quick.tab} from={quick.from} onClose={() => setQuick(null)} /> : <QuickOverview project={qp} from={quick.from} onClose={() => setQuick(null)} />) : null; })()}
     </main>
   );
 }

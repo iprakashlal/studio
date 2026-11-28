@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import type { Session } from "../lib/auth";
 import { cfVault, Cloudflare as CloudflareApi } from "../lib/cloudflare";
-import { cfAccountVault, cfShortTokens } from "../lib/cfdb";
+import { cfAccountVault, cfSession, cfShortTokens, dbGitHub } from "../lib/cfdb";
 import { cfOauthMint } from "../lib/cfoauth";
 import { netlifyToken } from "../lib/hosting";
 import { Netlify } from "../lib/netlify";
@@ -15,7 +15,7 @@ import type { Cloudflare } from "../lib/cloudflare";
 import type { StudioIndex } from "../lib/studio";
 import { brand } from "../lib/brand";
 import { useToast } from "../ui/kit";
-import { ghPublish } from "../lib/ghpublish";
+import { ghPublish, ghWhoAmI } from "../lib/ghpublish";
 import { isHosted } from "../lib/backend";
 
 /** One hosting account in Settings → Hostings: a heading that folds its box away. What is open is remembered on this device. */
@@ -118,10 +118,26 @@ function AnyDevice({ session, acc, index }: { session: Session; acc: CfAccountHo
     setErr(""); setBusy("Keeping the GitHub token");
     try {
       const v = await cfAccountVault.load(session.token); if (!v?.setup) throw new Error("Press Turn on first.");
+      // The token on this device first: an expired one would only make every site's admin page fail later.
+      setBusy("Checking the GitHub token");
+      const who = await ghWhoAmI(ghToken);
       const { cf } = await acc.client((x) => setBusy(x));
       await cf.putSecret(v.setup.account, CFDB_WORKER, "GH_TOKEN", ghToken);
       await registerRepos(cf, v.setup, ghProjects.map((p) => ({ repo: `${p.publish!.owner}/${p.publish!.repo}`, scope: "studio:" + emailStudio })));
-      setGh((await cfDeployInfo(v.setup.api)).gh || false); toast("GitHub sites included.");
+      setGh((await cfDeployInfo(v.setup.api)).gh || false);
+      // Then through the database, as a site's admin page will use it (a new secret can take a few seconds to apply).
+      let bad: string[] = [];
+      if (cfSession.load(v.setup.api)) {
+        setBusy("Checking each site's repository");
+        const via = dbGitHub(v.setup.api, "studio:" + emailStudio);
+        for (const p of ghProjects.slice(0, 30)) {
+          const repo = `${p.publish!.owner}/${p.publish!.repo}`;
+          let st = 0; for (let t = 0; t < 3; t++) { st = (await via(repo, "", { method: "GET" }, false).catch(() => null))?.status || 0; if (st !== 401) break; await new Promise((r) => setTimeout(r, 2500)); }
+          if (st === 401) bad.push(repo + " (token rejected)"); else if (st === 404 || st === 403) bad.push(repo + " (the token can't see it)");
+        }
+      }
+      if (bad.length) setErr(`The token (GitHub account ${who.login}) is kept, but GitHub refuses it for: ${bad.join(", ")}. Give the token access to those repositories (or All repositories) with Contents: Read and write, then press this again.`);
+      else toast(`GitHub sites updated: the database now uses the token of ${who.login}.`);
     } catch (e: any) { setErr(e?.message || "Couldn't include the GitHub sites."); }
     setBusy("");
   };

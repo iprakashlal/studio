@@ -31,7 +31,9 @@ import { BackupPanel } from "../editor/BackupPanel";
 import { AccountPanel, Gate } from "../ui/gate";
 import { Logo, SkelEditor, useConfirm, useToast } from "../ui/kit";
 
-const NS = "site-cms";
+/** Where this admin page keeps its sign-in on this device: one per site, as several sites can share an address
+ *  (github.io/<site-a>/ and github.io/<site-b>/), and one site's saved GitHub token must not open another's. */
+const NS = (() => { try { const dir = location.pathname.replace(/[^/]*$/, ""); return dir === "/" ? "site-cms" : "site-cms:" + dir; } catch { return "site-cms"; } })();
 /** host: set when the site is hosted outside GitHub, with its content in Supabase. */
 type SiteInfo = { menu?: unknown; template: string; name: string; version?: number; admin?: string; worker?: string; files?: string[]; exportedAt?: string; generator?: string; host?: { kind: "supabase"; url: string; key: string; site: string } | { kind: "cloudflare"; api: string; site: string }; /** A GitHub Pages site whose admin page signs in by email through the Studio's database, which saves to the repository. */ signin?: { api: string; site: string; owner: string; repo: string; branch: string } };
 /** Saved-but-not-published edits live here. The live site never reads this file. */
@@ -174,7 +176,8 @@ export function SiteAdmin() {
       onAuthed={setSession}
       footer={<a href="./" className="text-sm text-ink-400 hover:text-ink-100">← Back to the website</a>} />;
   }
-  const signOut = () => { sess.clear(NS); setSession(null); };
+  // With email sign-in set up, signing out of a GitHub token goes back to the email sign-in (the token stays only if remembered again).
+  const signOut = () => { sess.clear(NS); if (si) device.clear(NS); setSession(null); setTokenWay(false); };
   return <GitHubWorkspace info={info} onInfo={setInfo} session={session} onSession={setSession} onSignOut={signOut} onForget={() => { device.clear(NS); sess.clear(NS); setSession(null); }} />;
 }
 

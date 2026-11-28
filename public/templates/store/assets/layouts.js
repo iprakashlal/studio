@@ -40,7 +40,8 @@
   }
   function lerp(a, b, t) { return a + (b - a) * t; }
   /** A word the layout shows (menu buttons, hints): the owner's wording from content.labels, or the default. */
-  function L(h, k, d) { return h.esc((h.lab && h.lab(k, d)) || d); }
+  // A word the layout writes itself, from Menu & order → Page layout labels: a click on it in the editor's preview opens that box.
+  function L(h, k, d) { return '<span data-edit="labels.' + k + '">' + h.esc((h.lab && h.lab(k, d)) || d) + "</span>"; }
   /** The owner's logo icon before the name in a header, when it is switched on for the menu. */
   function ic(h) { return h.logoIc ? h.logoIc() : ""; }
 

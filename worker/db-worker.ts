@@ -688,6 +688,50 @@ async function siteMail(env: Env, site: string): Promise<Env> {
   const m = await getSetting(env, "site:" + site, "mail").catch(() => null);
   return m?.on && m.key && m.from ? { ...env, RESEND_API_KEY: String(m.key), MAIL_FROM: String(m.from) } : env;
 }
+/* ============================================================
+   Built-in analytics. A published site's pages report a view (assets/fx.js, only once the visitor allows analytics) to
+   /a/hit; the Studio and the site's own admin read the totals with /a/stats. Nothing that names a visitor is kept.
+   ============================================================ */
+const dayOf = (t: number) => new Date(t).toISOString().slice(0, 10);
+const BOT = /bot|crawl|spider|slurp|preview|headless|lighthouse|pingdom|monitor|curl|wget|python|httpclient|facebookexternalhit|whatsapp/i;
+const aclip = (v: unknown, n: number) => String(v ?? "").replace(/[\u0000-\u001f]/g, "").trim().slice(0, n);
+async function recordHit(env: Env, req: Request): Promise<Response> {
+  const ua = req.headers.get("User-Agent") || "";
+  if (BOT.test(ua)) return new Response(null, { status: 204, headers: cors });
+  let b: any = {}; try { b = JSON.parse(await req.text()); } catch { return new Response(null, { status: 204, headers: cors }); }
+  const site = String(b.site || "");
+  if (!/^[a-z0-9][a-z0-9-]{0,59}$/.test(site)) return new Response(null, { status: 204, headers: cors });
+  await ensure(env);
+  // Only a site this database serves (its own content here, or a GitHub site that signs in here) is counted.
+  const known = (await env.DB.prepare("select 1 x from files where scope = ? and path = 'content.json'").bind("site:" + site).first()) || (await env.DB.prepare("select 1 x from site_repos where site = ?").bind(site).first());
+  if (!known) return new Response(null, { status: 204, headers: cors });
+  const now = Date.now(), day = dayOf(now), ip = req.headers.get("CF-Connecting-IP") || req.headers.get("X-Forwarded-For") || "";
+  const vh = b64u(await hmac(env.SECRET, "v:" + site + ":" + day + ":" + ip + ":" + ua)).slice(0, 16);
+  // One visitor's own reloads count once a minute per page, so a stuck refresh can't pump the numbers.
+  let path = aclip(b.path, 200) || "/"; if (!path.startsWith("/")) path = "/" + path;
+  const recent = await env.DB.prepare("select 1 x from hits where site = ? and day = ? and vh = ? and path = ? and ts > ? limit 1").bind(site, day, vh, path, now - 60_000).first();
+  if (recent) return new Response(null, { status: 204, headers: cors });
+  let ref = ""; try { const h = new URL(String(b.ref || "")).hostname.replace(/^www\./, ""); if (h && h !== String(b.host || "").replace(/^www\./, "")) ref = h.slice(0, 100); } catch { /* none */ }
+  const dev = ["mobile", "tablet", "desktop"].includes(b.dev) ? b.dev : /Mobi|Android|iPhone/i.test(ua) ? "mobile" : "desktop";
+  const cc = aclip((req as any).cf?.country || req.headers.get("CF-IPCountry") || "", 2).toUpperCase().replace(/[^A-Z]/g, "");
+  await env.DB.prepare("insert into hits (site, day, ts, path, ref, src, dev, cc, vh) values (?, ?, ?, ?, ?, ?, ?, ?, ?)").bind(site, day, now, path, ref, aclip(b.src, 60).toLowerCase(), dev, cc, vh).run();
+  // Now and then, rows older than about 13 months go.
+  if (Math.random() < 0.002) await env.DB.prepare("delete from hits where day < ?").bind(dayOf(now - 400 * 864e5)).run().catch(() => {});
+  return new Response(null, { status: 204, headers: cors });
+}
+/** A site's numbers for the last `days` days (and the same length before, to compare). `q` runs one query: this database's
+ *  own, or (through /cfx/db) a site database on another Cloudflare account. */
+async function siteStats(q: (sql: string, args: unknown[]) => Promise<any[]>, site: string, days: number) {
+  days = Math.max(1, Math.min(365, Math.round(days) || 30));
+  const now = Date.now(), from = dayOf(now - (days - 1) * 864e5), prev = dayOf(now - (2 * days - 1) * 864e5);
+  const W = "from hits where site = ? and day >= ?", top = async (col: string, n: number, extra = "") => (await q(`select ${col} k, count(*) v, count(distinct day || vh) u ${W} ${extra} group by ${col} order by v desc limit ${n}`, [site, from])).map((r) => ({ k: r.k, v: +r.v, u: +r.u }));
+  const [t] = await q(`select count(*) v, count(distinct day || vh) u ${W}`, [site, from]);
+  const [p] = await q("select count(*) v, count(distinct day || vh) u from hits where site = ? and day >= ? and day < ?", [site, prev, from]);
+  const [live] = await q("select count(distinct vh) n from hits where site = ? and ts > ?", [site, now - 5 * 60_000]);
+  const daily = (await q(`select day, count(*) v, count(distinct vh) u ${W} group by day order by day`, [site, from])).map((r) => ({ day: r.day, v: +r.v, u: +r.u }));
+  return { days, from, views: +t?.v || 0, visitors: +t?.u || 0, prevViews: +p?.v || 0, prevVisitors: +p?.u || 0, live: +live?.n || 0, daily,
+    pages: await top("path", 15), refs: await top("ref", 10, "and ref != ''"), sources: await top("src", 10, "and src != ''"), devices: await top("dev", 3), countries: await top("cc", 12, "and cc != ''") };
+}
 /** The Resend the database itself sends with (the Studio's own emails, and every site that has none of its own): the
  *  Studio's Project defaults → Email (Resend) when the database was set up to use them (MAIL_PD), or when it has no key of
  *  its own; otherwise its own key and sender. Read once a minute, and again straight after Project defaults are saved. */
@@ -2016,7 +2060,7 @@ export default {
     const u = new URL(req.url), p = u.pathname.replace(/\/+$/, "") || "/";
     try {
       env = await withStudioMail(env);
-      if (p === "/") return json({ ok: true, service: "site-studio-db", v: V, mail: !!(env.RESEND_API_KEY && env.MAIL_FROM), ...(env.MAIL_PD === "1" ? { mailPd: true } : {}), ...(env.CF_TOKEN && env.CF_ACCOUNT ? { deploy: true, account: env.CF_ACCOUNT } : {}), ...(env.GH_TOKEN ? { gh: true } : {}), ...(env.AI ? { ai: true, pamphlet: 2 } : {}), reviews: true, dq: 1, look: 1, outline: 1, pictures: 1, connect: 2, translate: 4, approvals: 1, accounts: 2, cfx: 4, cfa: 1, google: 1, studioPages: 1, del: 1, enqMail: 3, ...(otherAccounts(env).length ? { more: otherAccounts(env).length } : {}) });
+      if (p === "/") return json({ ok: true, service: "site-studio-db", v: V, mail: !!(env.RESEND_API_KEY && env.MAIL_FROM), ...(env.MAIL_PD === "1" ? { mailPd: true } : {}), ...(env.CF_TOKEN && env.CF_ACCOUNT ? { deploy: true, account: env.CF_ACCOUNT } : {}), ...(env.GH_TOKEN ? { gh: true } : {}), ...(env.AI ? { ai: true, pamphlet: 2 } : {}), reviews: true, analytics: 1, dq: 1, look: 1, outline: 1, pictures: 1, connect: 2, translate: 4, approvals: 1, accounts: 2, cfx: 4, cfa: 1, google: 1, studioPages: 1, del: 1, enqMail: 3, ...(otherAccounts(env).length ? { more: otherAccounts(env).length } : {}) });
 
       // ---- a site's social photo wall, filled by itself (public): GET /wall/<site>?src=instagram|pinterest&pin=<profile or board>&n=12
       // Answers are kept for half an hour, so a busy site asks Instagram or Pinterest twice an hour at most.
@@ -2203,6 +2247,8 @@ export default {
         return json({ email: e, scopes: rows });
       }
 
+      // ---- a published site's page view (built-in analytics): public, nothing that names the visitor is kept
+      if (p === "/a/hit" && req.method === "POST") return recordHit(env, req);
       // ---- public reads for hosted sites: /p/<site>/<path>
       if (p.startsWith("/p/") && req.method === "GET") {
         const [, , site, ...rest] = p.split("/"); const path = decodeURIComponent(rest.join("/"));
@@ -3100,6 +3146,7 @@ export default {
               if (sub === "delete") { await q("delete from enquiries where id = ? and site = ?", [id, site]); return json({ db: dbId, ok: true }); }
               return err(400, "Unknown operation.");
             }
+            if (op === "stats") return json({ db: dbId, stats: await siteStats(q, site, +b.days || 30) });
             if (op === "mem") {
               // The site's sign-in emails (its editors): list, add, remove.
               const sub = String(b.sub || "list");
@@ -3425,6 +3472,11 @@ export default {
         if (p === "/dq/get") { const r: any = await env.DB.prepare("select logo, pdf_name, pdf from design_queries where studio = ? and id = ?").bind(sid, qid).first(); if (!r) return err(404, "Not found."); const pics: Record<string, string[]> = {}; for (const x of ((await env.DB.prepare("select slot, data from design_pics where studio = ? and ref = ? order by slot, idx").bind(sid, qid).all().catch(() => ({ results: [] }))).results || []) as any[]) (pics[x.slot] ||= []).push(x.data); return json({ ...r, pics }); }
         if (p === "/dq/status") { if (!["new", "read", "done"].includes(b.status)) return err(400, "Unknown status."); await env.DB.prepare("update design_queries set status = ? where studio = ? and id = ?").bind(b.status, sid, qid).run(); return json({ ok: true }); }
         await env.DB.prepare("delete from design_pics where studio = ? and ref = ?").bind(sid, qid).run().catch(() => {}); await env.DB.prepare("delete from design_queries where studio = ? and id = ?").bind(sid, qid).run(); return json({ ok: true });
+      }
+      // Built-in analytics: a site's numbers, for its own people (and the Studio's owners, who are members of the sites they publish).
+      if (p === "/a/stats" && scope.startsWith("site:")) {
+        await ensure(env);
+        return json(await siteStats(async (sql, args) => ((await env.DB.prepare(sql).bind(...args).all()).results || []) as any[], scope.slice(5), +(u.searchParams.get("days") || 30)));
       }
       if (p === "/e/list") {
         const site = scope.replace(/^site:/, "");

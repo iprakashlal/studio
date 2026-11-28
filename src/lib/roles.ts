@@ -27,6 +27,7 @@ export const PRIVS: { key: string; label: string; group: string; where: "studio"
   { key: "duplicate", label: "Duplicate projects", group: "Projects", where: "studio" },
   { key: "delete", label: "Delete projects", group: "Projects", where: "studio" },
   { key: "themes", label: "Themes gallery", group: "Features", where: "studio" },
+  { key: "analytics", label: "Analytics (visits to the sites)", group: "Features", where: "studio" },
   { key: "design", label: "Design yourself and its submissions", group: "Features", where: "studio" },
   { key: "approve", label: "Share for approval", group: "Features", where: "studio" },
   { key: "festival", label: "Festival overlay", group: "Features", where: "studio" },
@@ -41,8 +42,8 @@ const only = (...on: string[]): Privs => Object.fromEntries(PRIVS.map((p) => [p.
 /** What each role may do until an Administrator changes it. */
 export const DEFAULT_PRIVS: Record<string, Privs> = {
   owner: ALL(), partner: ALL(),
-  member: only("publishCf", "publishGh", "export", "new", "duplicate", "delete", "themes", "design", "approve", "festival", "edit", "orders", "settings"),
-  developer: only("publishCf", "publishGh", "export", "new", "duplicate", "delete", "themes", "design", "festival", "edit", "settings"),
+  member: only("publishCf", "publishGh", "export", "new", "duplicate", "delete", "themes", "analytics", "design", "approve", "festival", "edit", "orders", "settings"),
+  developer: only("publishCf", "publishGh", "export", "new", "duplicate", "delete", "themes", "analytics", "design", "festival", "edit", "settings"),
   tester: only("export", "new", "duplicate", "themes", "design", "festival", "edit", "orders"),
   demo: only("new", "themes", "edit"),
 };

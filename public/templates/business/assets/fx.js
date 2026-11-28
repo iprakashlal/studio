@@ -812,6 +812,27 @@
     sc.textContent = "(function(block){try{\n" + js + "\n}catch(e){console.error(" + JSON.stringify(name) + ",e)}})(window.__ccBlock);";
     document.body.appendChild(sc); window.__ccBlock = null;
   }
+  /* Built-in analytics: this page view, sent to the site's own database (cms/site.json says which) once per page load.
+     Only when the visitor allows analytics under the site's cookie consent (or the site asks for none), never in the
+     Studio's preview, and not when the site switched it off (content.analytics.on === false). No cookie is set and nothing
+     is stored in the browser; the database keeps the page, the referring site, the device type and the country. */
+  function siteAnalytics(c) {
+    if (PREVIEW || window.__saSent || navigator.webdriver || (c && c.analytics && c.analytics.on === false)) return;
+    if (/^(localhost|127\.|192\.168\.)/.test(location.hostname) || location.protocol === "file:") return;
+    var allowed = function () { var S = window.SiteConsent; try { return !(S && S.state && S.state().asked) || S.has("analytics"); } catch (e) { return true; } };
+    var send = function () {
+      if (window.__saSent || !allowed()) return; window.__saSent = 1;
+      fetch("cms/site.json", { cache: "force-cache" }).then(function (r) { return r.json(); }).then(function (j) {
+        var h = j && (j.host && j.host.kind === "cloudflare" ? j.host : j.signin); if (!h || !h.api || !h.site) return;
+        var q = new URLSearchParams(location.search), w = innerWidth || 1200, key = q.get("p") ? "p" : q.get("s") ? "s" : q.get("product") ? "product" : "";
+        var body = JSON.stringify({ site: h.site, path: location.pathname + (key ? "?" + key + "=" + q.get(key) : ""), ref: document.referrer || "", host: location.hostname, dev: w < 768 ? "mobile" : w < 1100 ? "tablet" : "desktop", src: q.get("utm_source") || q.get("ref") || "" });
+        var url = String(h.api).replace(/\/+$/, "") + "/a/hit";
+        if (!(navigator.sendBeacon && navigator.sendBeacon(url, body))) fetch(url, { method: "POST", body: body, keepalive: true, mode: "cors" }).catch(function () {});
+      }).catch(function () {});
+    };
+    // The consent banner is drawn a moment after the page: wait for it, then count now or once the visitor allows analytics.
+    setTimeout(send, 1200); addEventListener("site:consent", send);
+  }
   function customCode(c, root) {
     if (!c || !root) return;
     Array.prototype.forEach.call(document.querySelectorAll(".cc-site,.cc-block,style[data-cc],script[data-cc]"), function (n) { n.remove(); });
@@ -1581,6 +1602,7 @@
     try { legalBits(opts, root); } catch (e) { /* never worth a broken page */ }
     try { sectionBgs(opts, root); } catch (e) { /* a background is never worth a broken page */ }
     try { customCode(opts.c, root); } catch (e) { /* the page stays as the template draws it */ }
+    try { siteAnalytics(opts.c); } catch (e) { /* counting never breaks the page */ }
     try { pageBg(opts, root); } catch (e) { /* a background is never worth a broken page */ }
     try { logoMotion(opts, root); } catch (e) { /* nor is a moving logo */ }
     try { glassMode(); } catch (e) {}

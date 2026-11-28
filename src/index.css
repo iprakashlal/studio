@@ -224,6 +224,10 @@
 :root[data-layout="spatial"][data-ui="light"] .input { background-color: rgb(255 255 255 / .7); border-color: rgb(30 40 90 / .12); }
 :root[data-layout="spatial"]:not([data-ui="light"]) .card :where(h1, h2, h3, b, strong) { color: rgb(244 247 255); }
 :root[data-layout="spatial"]:not([data-ui="light"]) .text-ink-400, :root[data-layout="spatial"]:not([data-ui="light"]) .text-ink-500 { color: rgb(178 189 214); }
+/* A chosen filter chip (bg-ink-100 + text-ink-950) keeps showing as chosen in every layout: the layouts give chips their own
+   background and text colour, which would otherwise leave light text on a light chip. Neumorphism presses it in instead. */
+:root[data-layout] .chip.bg-ink-100 { background-color: rgb(var(--ink-100, 238 241 246)) !important; border-color: rgb(var(--ink-100, 238 241 246)) !important; color: rgb(var(--ink-950, 11 15 23)) !important; text-shadow: none; }
+:root[data-layout="neu"] .chip.bg-ink-100 { background-color: var(--neu-bg) !important; border-color: transparent !important; color: rgb(var(--brand-500, 91 124 255)) !important; box-shadow: inset 4px 4px 9px var(--neu-lo), inset -3px -3px 8px var(--neu-hi); }
 @media (prefers-reduced-motion: reduce) { :root[data-layout="glass"]::before { animation: none; } }
 
 /* One stack for every notification, centred at the bottom of the page (ui/kit.tsx Dock). */

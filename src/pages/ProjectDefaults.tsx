@@ -11,16 +11,18 @@ import type { Studio, StudioIndex } from "../lib/studio";
 import { MailForm, SmsForm, WhatsAppForm, useStudioWhere, type Where } from "./Connections";
 import { Toggle, useToast } from "../ui/kit";
 import { RichEditor } from "../editor/RichEditor";
+import { StudioEmails } from "./StudioEmails";
+import type { Repo } from "../lib/repo";
 
 const TYPE_NAME: Record<string, string> = { portfolio: "Portfolio", business: "Business", store: "Shop", restaurant: "Restaurant & café", events: "Events" };
 const KEY = "site-studio:pd-tab";
 const read = (k: string, d: string) => { try { return localStorage.getItem(k) || d; } catch { return d; } };
 
-export function ProjectDefaultsTab({ studio, index, onIndex, demo }: { studio: Studio; index: StudioIndex; onIndex: (i: StudioIndex) => void; demo?: boolean }) {
+export function ProjectDefaultsTab({ studio, index, onIndex, demo, repo }: { studio: Studio; index: StudioIndex; onIndex: (i: StudioIndex) => void; demo?: boolean; /** The Studio's own data (its emails are kept there). */ repo: Repo }) {
   const toast = useToast();
   const saved = useMemo(() => cleanPdefs(index.pdefs || {}), [index.pdefs]);
   const [pd, setPd] = useState<ProjectDefaults>(() => clone(saved));
-  const [kind, setKind0] = useState(() => { const k = read(KEY, "business"); return (PD_KINDS as readonly string[]).includes(k) ? k : "business"; });
+  const [kind, setKind0] = useState(() => { const k = read(KEY, "business"); return (PD_KINDS as readonly string[]).includes(k) || k === "studio" ? k : "business"; });
   const secs = pdSections(kind);
   const [sec, setSec] = useState<PdId>(secs[0]);
   const [, setN] = useState(0), bump = () => setN((n) => n + 1);
@@ -69,11 +71,17 @@ export function ProjectDefaultsTab({ studio, index, onIndex, demo }: { studio: S
         {PD_KINDS.map((k) => <button key={k} type="button" role="tab" aria-selected={kind === k} onClick={() => setKind(k)}
           className={`flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-semibold transition ${kind === k ? "bg-brand-500/20 text-ink-100" : "text-ink-400 hover:bg-ink-800 hover:text-ink-100"}`}>
           {TYPE_NAME[k] || TEMPLATES[k]?.name || k}{onCount(k) > 0 && <span className="rounded-full bg-brand-500/30 px-1.5 text-[11px] font-bold text-brand-200">{onCount(k)}</span>}</button>)}
+        <span className="mx-1 w-px self-stretch bg-ink-700" aria-hidden />
+        <button type="button" role="tab" aria-selected={kind === "studio"} onClick={() => setKind("studio")} title="The emails your Studio itself sends"
+          className={`flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-semibold transition ${kind === "studio" ? "bg-brand-500/20 text-ink-100" : "text-ink-400 hover:bg-ink-800 hover:text-ink-100"}`}>Studio</button>
       </div>
         <span className="flex-1" />
+        {kind !== "studio" && <>
         <span className="text-[12.5px] text-ink-400" aria-live="polite">{demo ? "Not saved in the demo." : dirty ? "Unsaved changes" : "All changes saved"}</span>
         <button type="button" className="btn btn-pri" disabled={!dirty || busy || demo} onClick={save}>{busy ? "Saving…" : "Save project defaults"}</button>
+        </>}
       </div>
+      {kind === "studio" ? <StudioEmails repo={repo} demo={demo} /> :
       <div className="grid gap-4 lg:grid-cols-[15rem_minmax(0,1fr)] lg:items-start">
         <nav className="card flex flex-row gap-1 overflow-x-auto p-2 lg:sticky lg:top-32 lg:flex-col" aria-label="Sections">
           {secs.map((id) => { const on = secOn(pd[kind]?.[id]), m = PD_SECTIONS.find((s) => s.id === id)!; return (
@@ -94,7 +102,7 @@ export function ProjectDefaultsTab({ studio, index, onIndex, demo }: { studio: S
           {!secOn(S) ? <p className="rounded-lg border border-dashed border-ink-600 px-3 py-3 text-sm text-ink-400">Switched off: each site keeps its own {meta.label.toLowerCase()}.</p>
             : S.v == null && !(PD_CONN[sec] && sec !== "pay") ? <p className="text-sm text-ink-400">{seeding ? "Loading the standard wording…" : "The standard wording could not be loaded. Reload the page to try again."}</p> : <Body kind={kind} sec={sec} S={S} where={where} bump={bump} demo={demo} />}
         </section>
-      </div>
+      </div>}
     </div>
   );
 }

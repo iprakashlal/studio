@@ -23,7 +23,7 @@ export function MailTemplateEditor({ kind, value, subject, siteName, cf, onSave,
   const html = useMemo(() => (isHtml ? mailHtml(text, vars, sampleBlocks(kind)) : mailMarkup(text, vars, sampleBlocks(kind))), [text, vars, kind, isHtml]);
   const fullDoc = isHtml && /<(html|body)\b/i.test(html);
   const lines = useMemo(() => text.split("\n").length, [text]);
-  const missingCode = kind === "signin" && !/\{code\}/.test(text);
+  const missingCode = (kind === "signin" || kind === "studioSignin" || kind === "diyCode") && !/\{code\}/.test(text);
   const tooLong = text.length > MAIL_TPL_MAX;
 
   // Every change goes through the browser's own editing, so Ctrl Z and Ctrl Y undo it like typing.

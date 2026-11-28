@@ -9,7 +9,7 @@
 // CF_TOKEN + CF_ACCOUNT (optional: lets any signed-in owner publish their sites from any device, see /cf),
 // GH_TOKEN (optional: the same for GitHub Pages sites, see /gh), AI (Workers AI: writes site text, see /ai/write).
 
-type Env = { DB: any; SECRET: string; RESEND_API_KEY?: string; MAIL_FROM?: string; NAME?: string; CF_TOKEN?: string; CF_ACCOUNT?: string; GH_TOKEN?: string; AI?: any };
+type Env = { DB: any; SECRET: string; RESEND_API_KEY?: string; MAIL_FROM?: string; /** "1": the database sends with the Studio's Project defaults email (Resend), not a key of its own. */ MAIL_PD?: string; NAME?: string; CF_TOKEN?: string; CF_ACCOUNT?: string; GH_TOKEN?: string; AI?: any };
 const V = CFDB_VERSION;
 const CHUNK = 900_000;
 const enc = new TextEncoder();
@@ -687,6 +687,21 @@ async function siteMail(env: Env, site: string): Promise<Env> {
   if (!/^[a-z0-9][a-z0-9-]{0,59}$/.test(site)) return env;
   const m = await getSetting(env, "site:" + site, "mail").catch(() => null);
   return m?.on && m.key && m.from ? { ...env, RESEND_API_KEY: String(m.key), MAIL_FROM: String(m.from) } : env;
+}
+/** The Resend the database itself sends with (the Studio's own emails, and every site that has none of its own): the
+ *  Studio's Project defaults → Email (Resend) when the database was set up to use them (MAIL_PD), or when it has no key of
+ *  its own; otherwise its own key and sender. Read once a minute, and again straight after Project defaults are saved. */
+let pdMail: { at: number; v: { key: string; from: string } | null } = { at: 0, v: null };
+async function withStudioMail(env: Env): Promise<Env> {
+  if (env.MAIL_PD !== "1" && env.RESEND_API_KEY && env.MAIL_FROM) return env;
+  if (Date.now() - pdMail.at > 60000) {
+    pdMail = { at: Date.now(), v: null };
+    try {
+      const rows = (await env.DB.prepare("select scope from settings where scope like 'pd:%:studio:%' and name = 'mail' order by updated_at desc").all()).results || [];
+      for (const r of rows as any[]) { const m = await getOwnSetting(env, String(r.scope), "mail"); if (m?.on && m.key && m.from) { pdMail.v = { key: String(m.key), from: String(m.from) }; break; } }
+    } catch { /* no settings yet */ }
+  }
+  return pdMail.v ? { ...env, RESEND_API_KEY: pdMail.v.key, MAIL_FROM: pdMail.v.from } : env;
 }
 /** What a browser may see of a setting: everything but the secrets (those only say whether one is saved). */
 function maskSetting(name: string, v: any) {
@@ -2000,7 +2015,8 @@ export default {
     if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
     const u = new URL(req.url), p = u.pathname.replace(/\/+$/, "") || "/";
     try {
-      if (p === "/") return json({ ok: true, service: "site-studio-db", v: V, mail: !!(env.RESEND_API_KEY && env.MAIL_FROM), ...(env.CF_TOKEN && env.CF_ACCOUNT ? { deploy: true, account: env.CF_ACCOUNT } : {}), ...(env.GH_TOKEN ? { gh: true } : {}), ...(env.AI ? { ai: true, pamphlet: 2 } : {}), reviews: true, dq: 1, look: 1, outline: 1, pictures: 1, connect: 2, translate: 4, approvals: 1, accounts: 2, cfx: 4, cfa: 1, google: 1, studioPages: 1, del: 1, enqMail: 3, ...(otherAccounts(env).length ? { more: otherAccounts(env).length } : {}) });
+      env = await withStudioMail(env);
+      if (p === "/") return json({ ok: true, service: "site-studio-db", v: V, mail: !!(env.RESEND_API_KEY && env.MAIL_FROM), ...(env.MAIL_PD === "1" ? { mailPd: true } : {}), ...(env.CF_TOKEN && env.CF_ACCOUNT ? { deploy: true, account: env.CF_ACCOUNT } : {}), ...(env.GH_TOKEN ? { gh: true } : {}), ...(env.AI ? { ai: true, pamphlet: 2 } : {}), reviews: true, dq: 1, look: 1, outline: 1, pictures: 1, connect: 2, translate: 4, approvals: 1, accounts: 2, cfx: 4, cfa: 1, google: 1, studioPages: 1, del: 1, enqMail: 3, ...(otherAccounts(env).length ? { more: otherAccounts(env).length } : {}) });
 
       // ---- a site's social photo wall, filled by itself (public): GET /wall/<site>?src=instagram|pinterest&pin=<profile or board>&n=12
       // Answers are kept for half an hour, so a busy site asks Instagram or Pinterest twice an hour at most.
@@ -2894,7 +2910,7 @@ export default {
           try { const r: any = await customAI(c).run("", { messages: [{ role: "user", content: "Reply with the single word: ready" }], max_tokens: 20, temperature: 0 }); return json({ ok: true, said: String(r.response || "").trim().slice(0, 80) }); }
           catch (e: any) { return json({ error: String(e?.message || e).slice(0, 300) }); }
         }
-        if (b.value == null) { await putSetting(env, sc, name, null); return json({ ok: true }); }
+        if (b.value == null) { await putSetting(env, sc, name, null); if (name === "mail") pdMail.at = 0; return json({ ok: true }); }
         if (name === "mail" && !sc.startsWith("site:") && !sc.startsWith("pd:")) return err(400, "Site email is set per site.");
         const old = (await getOwnSetting(env, sc, name)) || {}, v: any = {};
         for (const k of S.text) v[k] = String(b.value[k] ?? old[k] ?? "").slice(0, 3000).trim();
@@ -2913,6 +2929,7 @@ export default {
         if (name === "ai" && v.base && !publicUrl(v.base)) return err(400, "The API address must be a public https:// address.");
         if (name.startsWith("tk_") && v.url && !publicUrl(v.url.replace(/\{(awb|courier)\}/g, "x"))) return err(400, "The tracking address must be a public https:// address.");
         await putSetting(env, sc, name, v);
+        if (name === "mail" && sc.startsWith("pd:")) pdMail.at = 0;
         return json({ ok: true, value: maskSetting(name, v) });
       }
       // In a Studio, someone who is not an Administrator has their own space (users/<them>/) and their own projects;

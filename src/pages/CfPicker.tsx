@@ -1,7 +1,7 @@
 // The Cloudflare side of a one-click setup. useCfAccount: the Studio's helper, a pre-filled token link and the
 // account (one token on this device for hosting pages, the database and Workers). useCloudflarePicker adds Resend
 // for sign-in codes, and ensure() creates (or updates) the Studio's database on Cloudflare: D1, its tables and the Worker.
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import type { Relay } from "../lib/relay";
 import { Netlify } from "../lib/netlify";
 import { Cloudflare, CfError, cfDbToken, isCfDbToken, type CfAccount } from "../lib/cloudflare";
@@ -9,6 +9,7 @@ import { CF_DB_TOKEN_PAGE, CFDB_WORKER, cfAccountVault, cfDeployInfo, cfMemToken
 import { useHelper } from "./HelperBox";
 import { CF_OAUTH_SCOPES, CF_OAUTH_SETUP_TOKEN_PAGE, cfMem, cfOauthCfg, cfOauthMint, cfOauthOpen, cfOauthRedirect, cfOauthSetup } from "../lib/cfoauth";
 import { brand } from "../lib/brand";
+import { Toggle } from "../ui/kit";
 
 export type CfAccountHook = ReturnType<typeof useCfAccount>;
 
@@ -339,12 +340,18 @@ export function useCloudflarePicker(studioToken: string, nf: Netlify | null | un
   const acc = shared || own;
   const [resendKey, setResendKey] = useState(""), [mailFrom, setMailFrom] = useState(`${defaultName} <onboarding@resend.dev>`);
   const [prev, setPrev] = useState<CfDbSetup | null>(null);
+  // Send with Settings → Project defaults → Email (Resend) instead of a key typed here. On unless this device already
+  // keeps a key of its own; a database already set up says which it uses.
+  const [usePd, setUsePd] = useState(true), pdId = useId();
   useEffect(() => {
     if (!persist) { setResendKey(""); setPrev(null); return; }
-    cfAccountVault.load(studioToken).then((v) => { if (!v) return; if (v.resendKey) setResendKey(v.resendKey); if (v.mailFrom) setMailFrom(v.mailFrom); if (v.setup) setPrev(v.setup); });
+    cfAccountVault.load(studioToken).then(async (v) => {
+      if (!v) return; if (v.resendKey) { setResendKey(v.resendKey); setUsePd(false); } if (v.mailFrom) setMailFrom(v.mailFrom); if (v.setup) setPrev(v.setup);
+      if (v.setup?.api) try { const h = await (await fetch(v.setup.api + "/?t=" + Date.now(), { cache: "no-store" })).json(); if (h?.mailPd) setUsePd(true); } catch { /* offline */ }
+    });
   }, [studioToken, persist]);
   const fromOk = /<[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+>$|^[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+$/.test(mailFrom.trim());
-  const ready = acc.ready && /^re_/.test(resendKey.trim()) && fromOk;
+  const ready = acc.ready && (usePd || (/^re_/.test(resendKey.trim()) && fromOk));
 
   /** Creates or updates the database; returns it with what's needed to add members. */
   /** `forAccount`: a site's own account. When it isn't the account this device uses for the Studio's database, the
@@ -357,7 +364,7 @@ export function useCloudflarePicker(studioToken: string, nf: Netlify | null | un
       const from = (over?.mailFrom || mailFrom).trim(), key = (over?.resendKey || resendKey).trim();
       if (over?.mailFrom) setMailFrom(from);
       if (over?.resendKey) setResendKey(key);
-      const setup = await setupCfDb(relay, token, { account, resendKey: key, mailFrom: from, name: defaultName, existing: (v0?.setups || []).find((s) => s.account === account.id) || null }, step);
+      const setup = await setupCfDb(relay, token, { account, resendKey: usePd ? "" : key, mailFrom: from, name: defaultName, existing: (v0?.setups || []).find((s) => s.account === account.id) || null, mailPd: usePd, ...(usePd ? { requireMail: false } : {}) }, step);
       if (persist) { const v = await cfAccountVault.load(studioToken); await cfAccountVault.save({ ...(v || { token: "" }), resendKey: key, mailFrom: from, setups: [...(v?.setups || []).filter((s) => s.account !== account.id), setup] }, studioToken); }
       return { setup, relay, token };
     }
@@ -365,7 +372,7 @@ export function useCloudflarePicker(studioToken: string, nf: Netlify | null | un
     const from = (over?.mailFrom || mailFrom).trim(), key = (over?.resendKey || resendKey).trim();
     if (over?.mailFrom) setMailFrom(from);
     if (over?.resendKey) setResendKey(key);
-    const setup = await setupCfDb(relay, token, { account, resendKey: key, mailFrom: from, name: defaultName, existing: prev && prev.account === account.id ? prev : null }, step);
+    const setup = await setupCfDb(relay, token, { account, resendKey: usePd ? "" : key, mailFrom: from, name: defaultName, existing: prev && prev.account === account.id ? prev : null, mailPd: usePd, ...(usePd ? { requireMail: false } : {}) }, step);
     if (persist) { const v = await cfAccountVault.load(studioToken); await cfAccountVault.save({ ...(v || {}), token, account: account.id, resendKey: key, mailFrom: from, setup }, studioToken); setPrev(setup); }
     return { setup, relay, token };
   };
@@ -374,11 +381,15 @@ export function useCloudflarePicker(studioToken: string, nf: Netlify | null | un
     <div className="flex flex-col gap-2.5 text-[13px]">
       {!shared && own.ui}
       {acc.account && <p className="text-ink-300">{prev && prev.account === acc.account.id ? "The Studio's database is already on this account; it'll be updated." : "A free D1 database and Worker will be created on this account."}</p>}
-      <div className="grid gap-2 sm:grid-cols-2">
+      <div className="flex flex-col gap-1.5 rounded-xl border border-ink-700 p-2">
+        <Toggle id={pdId} checked={usePd} onChange={setUsePd} label="Use the Studio's Project defaults for email (Resend)" />
+        <span className="px-1 text-ink-400">{usePd ? "Sign-in codes and the Studio's emails go out through the Resend key and sender set in Settings → Project defaults → Email (Resend), so there's nothing to type here. Until that's filled in, no codes are emailed." : "This database uses its own Resend key and sender, below."}</span>
+      </div>
+      {!usePd && <div className="grid gap-2 sm:grid-cols-2">
         <label className="flex flex-col gap-1"><span className="label">Resend API key (sends sign-in codes)</span><input className="input font-mono text-xs" type="password" autoComplete="off" aria-label="Resend API key for codes" value={resendKey} onChange={(e) => setResendKey(e.target.value)} placeholder="re_…" /></label>
         <label className="flex flex-col gap-1"><span className="label">Codes come from</span><input className="input" aria-label="Sender for codes" value={mailFrom} onChange={(e) => setMailFrom(e.target.value)} /></label>
-      </div>
-      <p className="text-ink-400"><a className="text-brand-300 underline" href="https://resend.com/api-keys" target="_blank" rel="noopener noreferrer">Create a Resend key ↗</a> (free: 3,000 emails a month). <b>onboarding@resend.dev</b> only delivers to your own Resend email; for clients' sign-in, use an address on a domain you verified in Resend.</p>
+      </div>}
+      {!usePd && <p className="text-ink-400"><a className="text-brand-300 underline" href="https://resend.com/api-keys" target="_blank" rel="noopener noreferrer">Create a Resend key ↗</a> (free: 3,000 emails a month). <b>onboarding@resend.dev</b> only delivers to your own Resend email; for clients' sign-in, use an address on a domain you verified in Resend.</p>}
     </div>
   );
   return { ui, ready, ensure, busy: acc.busy, mail: { key: resendKey.trim(), from: mailFrom.trim() } };

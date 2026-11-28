@@ -56,7 +56,7 @@ var CFDB_UPGRADES = [
     "create index if not exists enquiries_ref on enquiries (site, ref)"
   ] }
 ];
-var CFDB_VERSION = 115;
+var CFDB_VERSION = 116;
 var CFDB_WORKER_NAME = "picaffectz-db";
 
 // src/lib/diylook.ts
@@ -1761,6 +1761,25 @@ async function siteMail(env, site) {
   if (!/^[a-z0-9][a-z0-9-]{0,59}$/.test(site)) return env;
   const m = await getSetting(env, "site:" + site, "mail").catch(() => null);
   return m?.on && m.key && m.from ? { ...env, RESEND_API_KEY: String(m.key), MAIL_FROM: String(m.from) } : env;
+}
+var pdMail = { at: 0, v: null };
+async function withStudioMail(env) {
+  if (env.MAIL_PD !== "1" && env.RESEND_API_KEY && env.MAIL_FROM) return env;
+  if (Date.now() - pdMail.at > 6e4) {
+    pdMail = { at: Date.now(), v: null };
+    try {
+      const rows = (await env.DB.prepare("select scope from settings where scope like 'pd:%:studio:%' and name = 'mail' order by updated_at desc").all()).results || [];
+      for (const r of rows) {
+        const m = await getOwnSetting(env, String(r.scope), "mail");
+        if (m?.on && m.key && m.from) {
+          pdMail.v = { key: String(m.key), from: String(m.from) };
+          break;
+        }
+      }
+    } catch {
+    }
+  }
+  return pdMail.v ? { ...env, RESEND_API_KEY: pdMail.v.key, MAIL_FROM: pdMail.v.from } : env;
 }
 function maskSetting(name, v) {
   const S2 = SETTINGS[name], o = {};
@@ -3621,7 +3640,8 @@ var db_worker_default = {
     if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
     const u = new URL(req.url), p = u.pathname.replace(/\/+$/, "") || "/";
     try {
-      if (p === "/") return json({ ok: true, service: "site-studio-db", v: V, mail: !!(env.RESEND_API_KEY && env.MAIL_FROM), ...env.CF_TOKEN && env.CF_ACCOUNT ? { deploy: true, account: env.CF_ACCOUNT } : {}, ...env.GH_TOKEN ? { gh: true } : {}, ...env.AI ? { ai: true, pamphlet: 2 } : {}, reviews: true, dq: 1, look: 1, outline: 1, pictures: 1, connect: 2, translate: 4, approvals: 1, accounts: 2, cfx: 4, cfa: 1, google: 1, studioPages: 1, del: 1, enqMail: 3, ...otherAccounts(env).length ? { more: otherAccounts(env).length } : {} });
+      env = await withStudioMail(env);
+      if (p === "/") return json({ ok: true, service: "site-studio-db", v: V, mail: !!(env.RESEND_API_KEY && env.MAIL_FROM), ...env.MAIL_PD === "1" ? { mailPd: true } : {}, ...env.CF_TOKEN && env.CF_ACCOUNT ? { deploy: true, account: env.CF_ACCOUNT } : {}, ...env.GH_TOKEN ? { gh: true } : {}, ...env.AI ? { ai: true, pamphlet: 2 } : {}, reviews: true, dq: 1, look: 1, outline: 1, pictures: 1, connect: 2, translate: 4, approvals: 1, accounts: 2, cfx: 4, cfa: 1, google: 1, studioPages: 1, del: 1, enqMail: 3, ...otherAccounts(env).length ? { more: otherAccounts(env).length } : {} });
       if (/^\/wall\/[a-z0-9][a-z0-9-]{0,59}$/.test(p) && req.method === "GET") {
         const src = u.searchParams.get("src") === "pinterest" ? "pinterest" : "instagram", pin = String(u.searchParams.get("pin") || "").slice(0, 200), n = Math.max(3, Math.min(24, +(u.searchParams.get("n") || 12) || 12)), handle = src === "instagram" ? igHandle(u.searchParams.get("h")) : "";
         const key = new Request(u.origin + p + "?src=" + src + "&pin=" + encodeURIComponent(pin) + "&n=" + n + "&h=" + handle.toLowerCase()), store = globalThis.caches?.default;
@@ -4866,6 +4886,7 @@ ${body}`)}${paras("Approve or hide it under Reviews in your site's admin page.",
         }
         if (b.value == null) {
           await putSetting(env, sc, name, null);
+          if (name === "mail") pdMail.at = 0;
           return json({ ok: true });
         }
         if (name === "mail" && !sc.startsWith("site:") && !sc.startsWith("pd:")) return err(400, "Site email is set per site.");
@@ -4883,6 +4904,7 @@ ${body}`)}${paras("Approve or hide it under Reviews in your site's admin page.",
         if (name === "ai" && v.base && !publicUrl(v.base)) return err(400, "The API address must be a public https:// address.");
         if (name.startsWith("tk_") && v.url && !publicUrl(v.url.replace(/\{(awb|courier)\}/g, "x"))) return err(400, "The tracking address must be a public https:// address.");
         await putSetting(env, sc, name, v);
+        if (name === "mail" && sc.startsWith("pd:")) pdMail.at = 0;
         return json({ ok: true, value: maskSetting(name, v) });
       }
       const limited = inStudio && !admin, sharedOk = limited ? await can("shared") : true;
